@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 7;
+        public const int GeneratorVersion = 8;
 
         public ulong Seed = 1;
         public int Size = 512;
@@ -26,10 +26,13 @@ namespace Stabby.World
         // Chance an islet joins the cluster: within IsletClusterGap (of the map) of another islet's coast.
         public float IsletClusterChance = 0.8f, IsletClusterGap = 0.06f;
         // The main island always gets a two-ridge valley; these count the second's ranges.
-        public int RangesMin = 1, RangesMax = 2;
+        public int RangesMin = 1, RangesMax = 1;
         public int LandmarksPerIsland = 2;
         // The main valley's lake radius, in main-island radii.
         public float MainLakeRadius = 0.15f;
+        // Small lakes per main or second island, radius in that island's radii.
+        public int PondsMin = 1, PondsMax = 4;
+        public float PondRadiusMin = 0.035f, PondRadiusMax = 0.07f;
 
         public float LatitudeSouth = 25f, LatitudeNorth = 55f;
         public Wind PrevailingWind = Wind.FromWest;

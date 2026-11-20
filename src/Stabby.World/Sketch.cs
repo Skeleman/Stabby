@@ -144,6 +144,7 @@ namespace Stabby.World
             var sites = Rng.Stream(c.Seed, "landmarks");
             var inland = CoastDistance(n, s.Land);
             var shores = Rng.Stream(c.Seed, "shores");
+            var ponds = Rng.Stream(c.Seed, "ponds");
             for (int k = 0; k < s.Landmasses.Count; k++)
             {
                 var m = s.Landmasses[k];
@@ -164,6 +165,11 @@ namespace Stabby.World
                 if (cor == null) cor = RandomCorridor(n, m, s.Land, inland, s.Ranges, ref corridors);
                 if (cor != null) s.Corridors.Add(cor);
                 AddShores(n, m, s, firstRange, cor, ref shores);
+                for (int i = ponds.Range(c.PondsMin, c.PondsMax + 1); i > 0; i--)
+                {
+                    var p = RandomPond(n, c, m, s, inland, ref ponds);
+                    if (p != null) s.Lakes.Add(p);
+                }
                 for (int i = 0; i < c.LandmarksPerIsland; i++)
                 {
                     var l = RandomLandmark(n, m, s.Land, s.Lakes, ref sites);
@@ -421,6 +427,32 @@ namespace Stabby.World
                 }
             }
             return lake;
+        }
+
+        // Ponds sit in lowland: clear of ridges, other lakes and the coast.
+        static LandmassSketch RandomPond(int n, WorldConfig c, LandmassSketch m, WorldSketch s, float[] inland, ref Rng rng)
+        {
+            float r = Math.Max(2f, m.Radius * rng.Range(c.PondRadiusMin, c.PondRadiusMax));
+            for (int attempt = 0; attempt < 40; attempt++)
+            {
+                float x = m.X + m.Radius * rng.Range(-1f, 1f), y = m.Y + m.Radius * rng.Range(-1f, 1f);
+                if (Room(n, inland, x, y) < r + 1) continue;
+                bool clear = true;
+                foreach (var g in s.Ranges)
+                    if (DistanceToPolyline(g.X, g.Y, x, y) < g.Width * 2 + r) { clear = false; break; }
+                foreach (var l in s.Lakes)
+                    foreach (var b in l.Lobes)
+                        if ((b.X - x) * (b.X - x) + (b.Y - y) * (b.Y - y) < (b.Radius + r * 3) * (b.Radius + r * 3)) clear = false;
+                if (!clear) continue;
+                var pond = new LandmassSketch { X = x, Y = y, Radius = r, AxisX = 1, AxisY = 0 };
+                pond.Lobes.Add(new LobeSketch { X = x, Y = y, Radius = r });
+                RandomDirection(ref rng, out float dx, out float dy);
+                float lr = r * rng.Range(0.5f, 0.8f), off = r * rng.Range(0.6f, 0.9f);
+                if (Room(n, inland, x + dx * off, y + dy * off) >= lr + 1)
+                    pond.Lobes.Add(new LobeSketch { X = x + dx * off, Y = y + dy * off, Radius = lr });
+                return pond;
+            }
+            return null;
         }
 
         // A lobe this close to the coast would be carved through to the sea.
