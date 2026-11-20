@@ -95,6 +95,7 @@ namespace Stabby.Viewer.Editor
             var args = Environment.GetCommandLineArgs();
             int at = Array.IndexOf(args, "-stabbySeed");
             if (at >= 0 && at + 1 < args.Length) view.Seed = int.Parse(args[at + 1]);
+            view.BuildBudget = int.MaxValue;
             view.Build();
 
             var w = view.World;
@@ -119,6 +120,10 @@ namespace Stabby.Viewer.Editor
             var peak = Enumerable.Range(0, n * n).OrderByDescending(c => w.Height[c]).First();
             var top = Cell(peak);
             Shot(view, cam, outDir, log, "from-peak", top + new Vector3(0, 40f, 0), new Vector3(span / 2, top.y * 0.6f, span / 2));
+            var slope = Vector3.Lerp(mainPos, new Vector3(top.x, 0, top.z), 0.6f);
+            slope.y = view.GroundHeight(slope) + 30f;
+            var toward = new Vector3(top.x, top.y * 0.8f, top.z);
+            Shot(view, cam, outDir, log, "ground-close", slope, toward);
 
             log.Insert(0, view.Stats().Split('\n')[0] + "\n");
             File.WriteAllText(Path.Combine(outDir, "stats.txt"), log.ToString());

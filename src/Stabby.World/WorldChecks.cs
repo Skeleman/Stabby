@@ -88,7 +88,24 @@ namespace Stabby.World
                     if (!w.Sea[i] && w.Biome[i] < 0 && hy.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
 
             CheckSketch(w, e);
+            CheckDetail(w, e);
             return e;
+        }
+
+        static void CheckDetail(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            var hy = w.Water;
+            var d = new TerrainDetail(w);
+            for (int y = 0; y < n - 1; y++)
+                for (int x = 0; x < n - 1; x++)
+                {
+                    int i = y * n + x;
+                    bool wet = w.Sea[i] || hy.LakeId[i] >= 0 || hy.IsRiver[i];
+                    if (wet && d.HeightAt(x, y) != w.Height[i]) { e.Add($"detail moves water cell {i}"); return; }
+                    if (w.Height[i] > 0 && w.Height[i + 1] > 0 && w.Height[i + n] > 0 && w.Height[i + n + 1] > 0
+                        && d.HeightAt(x + 0.5f, y + 0.5f) <= 0) { e.Add($"detail sinks land below the sea near cell {i}"); return; }
+                }
         }
 
         static void CheckSketch(GeneratedWorld w, List<string> e)
