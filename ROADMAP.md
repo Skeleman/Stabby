@@ -23,6 +23,8 @@ Status words: done, now, next, later, idea.
 | WorldFile.Read validates size, biome count, string lengths and file length before allocating; bad headers throw FormatException so LoadOrGenerate regenerates | done |
 | Wireframe overhang capture (`GameCapture` writes overhang-wire.png) for mesh review | done |
 | TerrainLodJob runs scheduled or less often once chunk counts grow | later |
+| Runtime check: terrain LOD meshes two or more steps finer than wanted are unregistered and destroyed (were kept until exit) | done |
+| Runtime check: the 4 Persistent allocations leaked at exit come from the Netcode package (GhostEntityMapping created by Netcode.Initialize via PrefabRegistryInitSystem), not Stabby; recheck on package updates | upstream |
 
 ## Now: ECS and unmanaged data
 

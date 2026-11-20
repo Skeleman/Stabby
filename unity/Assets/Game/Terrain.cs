@@ -270,7 +270,7 @@ namespace Stabby.Game
         EntitiesGraphicsSystem graphics;
         BatchMaterialID material;
         Ground ground;
-        int coarseApplied, waterApplied, frameVertices, built;
+        int coarseApplied, waterApplied, frameVertices, built, evicted;
         bool ready;
 
         protected override void OnCreate()
@@ -518,6 +518,8 @@ namespace Stabby.Game
                 var ch = chunks[c];
                 if (ch.Want < 0) continue;
                 int want = ch.Want;
+                for (int l = 0; l < want - 1; l++)
+                    if ((ch.Built & (1 << l)) != 0) { Evict(c * TerrainLods.Count + l); ch.Built &= ~(1 << l); chunks[c] = ch; }
                 if ((ch.Built & (1 << want)) == 0 && (ch.Pending & (1 << want)) == 0 && pending.Count < BuildBudget) { Request(c, want); ch = chunks[c]; }
                 int lod = want;
                 if ((ch.Built & (1 << want)) == 0) behind++;
@@ -532,7 +534,15 @@ namespace Stabby.Game
                 lodCounts[lod]++;
             }
             GameStatus.TerrainBehind = behind;
-            GameStatus.Lines["terrain"] = $"terrain chunks {visible}/{chunks.Length} visible, {built} meshes, by LOD {string.Join("/", lodCounts)}";
+            GameStatus.Lines["terrain"] = $"terrain chunks {visible}/{chunks.Length} visible, {built} meshes built, {built - evicted} live, by LOD {string.Join("/", lodCounts)}";
+        }
+
+        void Evict(int slot)
+        {
+            graphics.UnregisterMesh(meshIds[slot]);
+            Object.Destroy(meshes[slot]);
+            meshes[slot] = null;
+            evicted++;
         }
 
         protected override void OnDestroy()
