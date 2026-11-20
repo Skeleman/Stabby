@@ -4,7 +4,7 @@ using Stabby.Cli;
 using Stabby.Content;
 using Stabby.World;
 
-// stabby gen   --seed 7 [--size 512] [--out out/seed7] [--scale 2] [--sketch sketch.json] [--rain 1200]
+// stabby gen   --seed 7 [--size 512] [--out out/seed7] [--scale by size] [--sketch sketch.json] [--rain 1200]
 // stabby sweep [--from 1] [--count 100] [--size 256] [--rain 1200]
 var opts = ParseArgs(args.Skip(1).ToArray());
 var biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
@@ -15,7 +15,7 @@ switch (args.FirstOrDefault())
     case "gen": return Gen();
     case "sweep": return Sweep();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 1] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
