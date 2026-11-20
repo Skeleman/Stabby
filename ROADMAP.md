@@ -43,7 +43,7 @@ their geometry is built.
 | Step 2b: game terrain meshes through the surface-nets fast path in a Burst job, chunk rims pinned to chunk edges with skirts between LODs | done |
 | Step 3: overhangs and arches as feature edits on the solid field, meshed in game chunks (`Features`, `SurfaceNets.Edited`) | done |
 | Step 3b: caves as carve chains with entrances on slopes, ending in a chamber (`Features.Cave`) | done |
-| Cave interiors lit like open ground; darken by depth below the column surface or by baked occlusion | next |
+| Cave and overhang interiors darken by depth below the column surface (vertex alpha scales light in `VertexLit`) | done |
 | Sharp-feature vertex placement (QEF) where carves meet slopes; lips still show soft lattice bumps | next |
 | Player collision against feature edits (capsule vs field) | later |
 

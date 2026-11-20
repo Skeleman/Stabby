@@ -150,7 +150,8 @@ namespace Stabby.Game
                 int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
                 float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
-                p.Color = new float4(col.xyz, 1);
+                float cover = Ground.GridHeight(gx, gy) - p.Pos.y;
+                p.Color = new float4(col.xyz, 1 - 0.85f * math.smoothstep(3f, 30f, cover));
                 p.Strata = new float2(off, col.w);
                 Verts[v] = p;
                 lo = math.min(lo, p.Pos);

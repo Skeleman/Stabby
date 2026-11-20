@@ -43,7 +43,7 @@ Shader "Stabby/VertexLit"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float u = (i.strata.z + i.strata.x) / max(_StabbyStrataPeriod, 1);
                 float3 rock = SAMPLE_TEXTURE2D(_StabbyStrata, sampler_StabbyStrata, float2(u, 0.5)).rgb;
-                float3 c = lerp(i.color.rgb, rock, saturate(i.strata.y)) * (l.color * saturate(dot(n, l.direction)) + ambient);
+                float3 c = lerp(i.color.rgb, rock, saturate(i.strata.y)) * (l.color * saturate(dot(n, l.direction)) + ambient) * i.color.a;
                 return half4(MixFog(c, i.fog), 1);
             }
             ENDHLSL
