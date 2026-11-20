@@ -7,7 +7,6 @@ using UnityEngine;
 
 namespace Stabby.Game
 {
-    // GameObject presentation keeps the spike free of Entities Graphics.
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial class ClientViewSystem : SystemBase

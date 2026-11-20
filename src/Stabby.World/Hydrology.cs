@@ -13,9 +13,6 @@ namespace Stabby.World
         public int Outlet = -1;
     }
 
-    // One river reach between a source or confluence and the next confluence,
-    // lake or sea. Points are cell indices; the last point is shared with the
-    // downstream reach (or is the lake/sea cell it flows into).
     public sealed class RiverSegment
     {
         public int Id;
@@ -41,8 +38,6 @@ namespace Stabby.World
 
         const float SecondsPerYear = 31557600f;
 
-        // Fills pits too small to be lakes into the terrain itself, so terrain
-        // and water agree before anything is extracted.
         public static Hydrology Build(WorldConfig c, float[] h, bool[] sea, float[] precipitationMm, bool[] keepDry)
         {
             int n = c.Size;
@@ -74,8 +69,6 @@ namespace Stabby.World
             return hy;
         }
 
-        // Picks the single spill cell, then routes every other lake cell through
-        // the lake to it, so a lake always has exactly one outflow.
         static void RouteToOutlet(int n, Lake lake, Hydrology hy, float[] surface)
         {
             float best = float.MaxValue;
@@ -142,7 +135,6 @@ namespace Stabby.World
             }
         }
 
-        // Rebuilds lakes and river reaches from the per-cell fields after chunks are patched in.
         public static void Relink(WorldConfig c, bool[] sea, Hydrology hy)
         {
             int n = c.Size;

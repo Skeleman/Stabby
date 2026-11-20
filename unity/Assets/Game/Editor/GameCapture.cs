@@ -10,9 +10,6 @@ using Unity.Transforms;
 
 namespace Stabby.Game.Editor
 {
-    // Batch entry, without -quit: -executeMethod Stabby.Game.Editor.GameCapture.Run
-    // Plays the Game scene (host plus two clients), waits for both to sync the map and
-    // show capsules, then writes shots and stats to out/unity/game.
     [InitializeOnLoad]
     public static class GameCapture
     {
@@ -20,7 +17,6 @@ namespace Stabby.Game.Editor
         const double TimeoutSeconds = 240;
         static int settle = -1;
 
-        // Entering play mode reloads the domain, so the poll re-registers from SessionState.
         static GameCapture()
         {
             if (SessionState.GetBool(Key, false)) EditorApplication.update += Poll;
@@ -103,7 +99,6 @@ namespace Stabby.Game.Editor
             Finish(0);
         }
 
-        // Loopback has near-zero latency, so the owner's predicted capsule should sit within a few ticks of the server's.
         static string Prediction()
         {
             var lines = new System.Collections.Generic.List<string>();

@@ -14,7 +14,6 @@ namespace Stabby.World
         public int[] Biome;
         public string[] BiomeIds;
 
-        // Fingerprint over quantised outputs, for determinism checks.
         public ulong Fingerprint()
         {
             ulong h = 14695981039346656037UL;
@@ -29,9 +28,6 @@ namespace Stabby.World
         }
     }
 
-    // Pipeline: sketch -> provisional climate -> erosion (terrain and drainage
-    // together) -> final climate -> hydrology -> biomes. With UniformRainMm set,
-    // the climate steps use flat rain and biomes are skipped (Biome is null).
     public static class WorldGenerator
     {
         public static GeneratedWorld Generate(WorldConfig c, IReadOnlyList<BiomeDef> biomes, WorldSketch sketch = null)

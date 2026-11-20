@@ -1,11 +1,10 @@
-﻿using System.Diagnostics;
+using System.Globalization;
+using System.Diagnostics;
 using System.Text.Json;
 using Stabby.Cli;
 using Stabby.Content;
 using Stabby.World;
 
-// stabby gen   --seed 7 [--size 512] [--out out/seed7] [--scale by size] [--sketch sketch.json] [--rain 1200]
-// stabby sweep [--from 1] [--count 100] [--size 256] [--rain 1200]
 var opts = ParseArgs(args.Skip(1).ToArray());
 var biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 var json = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -21,12 +20,12 @@ switch (args.FirstOrDefault())
 
 int Gen()
 {
-    var c = Config(ulong.Parse(Opt("seed", "1")), int.Parse(Opt("size", "512")));
+    var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "512"), CultureInfo.InvariantCulture));
     WorldSketch? sketch = null;
     if (opts.TryGetValue("sketch", out var sketchPath))
         sketch = SketchFile.Read(File.ReadAllText(sketchPath), c);
     var dir = Opt("out", Path.Combine("out", "seed" + c.Seed));
-    int scale = int.Parse(Opt("scale", c.Size <= 256 ? "3" : c.Size <= 512 ? "2" : "1"));
+    int scale = int.Parse(Opt("scale", c.Size <= 256 ? "3" : c.Size <= 512 ? "2" : "1"), CultureInfo.InvariantCulture);
     Directory.CreateDirectory(dir);
 
     var sw = Stopwatch.StartNew();
@@ -49,7 +48,6 @@ int Gen()
     else Save(Path.Combine(dir, "sheet.png"), Render.Sheet(sk, map));
 
     File.WriteAllText(Path.Combine(dir, "sketch.json"), SketchFile.Write(w.Sketch, c));
-    // Raw float32 grids for measuring in scripts.
     WriteFloats(Path.Combine(dir, "height.f32"), w.Height);
     WriteFloats(Path.Combine(dir, "cliff.f32"), w.Sketch.Cliff);
     WriteFloats(Path.Combine(dir, "plateau.f32"), w.Sketch.Plateau);
@@ -70,8 +68,8 @@ static void WriteFloats(string path, float[] v)
 
 int Sweep()
 {
-    ulong from = ulong.Parse(Opt("from", "1"));
-    int count = int.Parse(Opt("count", "100")), size = int.Parse(Opt("size", "256"));
+    ulong from = ulong.Parse(Opt("from", "1"), CultureInfo.InvariantCulture);
+    int count = int.Parse(Opt("count", "100"), CultureInfo.InvariantCulture), size = int.Parse(Opt("size", "256"), CultureInfo.InvariantCulture);
     var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
     var times = new System.Collections.Concurrent.ConcurrentBag<long>();
     Parallel.For(0, count, k =>
@@ -98,7 +96,7 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
     return new()
     {
         ["seed"] = w.Config.Seed, ["generatorVersion"] = WorldConfig.GeneratorVersion, ["size"] = n,
-        ["kmAcross"] = n * w.Config.CellMeters / 1000f, ["ms"] = ms, ["fingerprint"] = w.Fingerprint().ToString("x16"),
+        ["kmAcross"] = n * w.Config.CellMeters / 1000f, ["ms"] = ms, ["fingerprint"] = w.Fingerprint().ToString("x16", CultureInfo.InvariantCulture),
         ["landPercent"] = MathF.Round(100f * land / (n * n), 1), ["islands"] = w.Sketch.Landmasses.Count,
         ["ranges"] = w.Sketch.Ranges.Count, ["corridors"] = w.Sketch.Corridors.Count, ["landmarks"] = w.Sketch.Landmarks.Count,
         ["sketchLakes"] = w.Sketch.Lakes.Count,
@@ -107,16 +105,15 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
         ["riverSegments"] = w.Water.Rivers.Count, ["riverKm"] = MathF.Round(riverKm, 1),
         ["maxDischargeM3s"] = MathF.Round(w.Water.DischargeM3s.Where((q, i) => !w.Sea[i]).Max(), 1),
         ["biomePercent"] = shares.ToDictionary(kv => kv.Key, kv => MathF.Round(kv.Value, 1)),
-        ["chunkSize"] = WorldChunks.Size, ["chunkChecksums"] = WorldChunks.Checksums(w).Select(s => s.ToString("x16")).ToArray(),
+        ["chunkSize"] = WorldChunks.Size, ["chunkChecksums"] = WorldChunks.Checksums(w).Select(s => s.ToString("x16", CultureInfo.InvariantCulture)).ToArray(),
         ["violations"] = violations,
     };
 }
 
-// Smaller test worlds keep the island span by using coarser cells.
 WorldConfig Config(ulong seed, int size) => new WorldConfig
 {
     Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size),
-    UniformRainMm = float.Parse(Opt("rain", "0")),
+    UniformRainMm = float.Parse(Opt("rain", "0"), CultureInfo.InvariantCulture),
 };
 
 string Opt(string key, string fallback) => opts.TryGetValue(key, out var v) ? v : fallback;

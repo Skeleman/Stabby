@@ -2,9 +2,6 @@ using System;
 
 namespace Stabby.World
 {
-    // Uplift against stream-power incision (implicit solver, Braun & Willett 2013)
-    // plus hillslope diffusion. Valleys are cut by the same drainage graph that
-    // later becomes the river network, so rivers never need carving afterwards.
     public static class Erosion
     {
         public const float MinLandHeight = 0.5f;
@@ -31,8 +28,6 @@ namespace Stabby.World
                     float m = inland[i] * c.CellMeters;
                     if (s.Cliff[i] > 0)
                     {
-                        // A steppe slanting up inland in low treads; noise under the rounding
-                        // makes the risers wander instead of following the coast.
                         float rise = Math.Max(0, c.CliffRise * Math.Min(1, m / c.CliffTiltMeters)
                             + 0.25f * c.CliffRise * Noise.Fbm(seed ^ 0xC11Fu, x * 12f / n, y * 12f / n, 3));
                         float step = rise / c.CliffStepMeters, tread = (float)Math.Floor(step);
@@ -42,8 +37,6 @@ namespace Stabby.World
                     }
                     float beach = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                     if (beach > 0) h[i] += (Math.Min(h[i], BeachCap(c, m)) - h[i]) * beach;
-                    // Noise alone outweighs a lowland corridor, so its floor is graded to its mouth;
-                    // grading to the nearest coast sends the river out a side bay on lobed islands.
                     if (s.Land[i] && s.Valley[i] > 0)
                     {
                         float floor = 1f + s.ValleyRun[i] * c.CellMeters * CorridorGradient;
@@ -57,8 +50,6 @@ namespace Stabby.World
 
         static float BeachCap(WorldConfig c, float metersInland) => MinLandHeight + c.BeachGrade * metersInland;
 
-        // A shallow shelf, then a slope to the deep; beaches widen the shelf and
-        // cliffs drop almost straight to a deeper foot.
         static float Seabed(WorldConfig c, WorldSketch s, uint seed, int x, int y, float d, float cliff, float beach)
         {
             int n = c.Size;
@@ -70,8 +61,6 @@ namespace Stabby.World
             return Math.Min(-1f, -depth);
         }
 
-        // Each range runs on past its ends as a submerged spur, bending with noise
-        // and sinking until it fades into the seabed.
         static void AddSeaRidges(WorldConfig c, WorldSketch s, float[] h, uint seed)
         {
             int n = c.Size;
@@ -113,8 +102,6 @@ namespace Stabby.World
             }
         }
 
-        // Distance-to-coast creases show as straight seams; a light blur hides them.
-        // Shallows are left alone so beaches keep their gentle shelf.
         static void SmoothSeabed(int n, float[] h, bool[] sea)
         {
             for (int pass = 0; pass < 3; pass++)
@@ -143,15 +130,12 @@ namespace Stabby.World
             int n = c.Size;
             bool[] sea = SeaOf(s.Land);
             float cellArea = c.CellMeters * c.CellMeters;
-            // Erosion takes the rain's pattern but not its amount, so retuning the climate
-            // doesn't reshape the terrain.
             double sum = 0; int land = 0;
             for (int i = 0; i < n * n; i++) if (!sea[i]) { sum += precipitationMm[i]; land++; }
             float scale = land > 0 && sum > 0 ? (float)(c.ErosionRainMm * land / sum) : 0;
             var runoff = new float[n * n];
             for (int i = 0; i < n * n; i++) runoff[i] = sea[i] ? 0 : cellArea * precipitationMm[i] * scale / 1000f;
 
-            // Beaches stay graded to the sea however much uplift and diffusion pile on.
             var beachCap = new float[n * n];
             var slope = new float[n * n];
             var erod = new float[n * n];
@@ -181,8 +165,6 @@ namespace Stabby.World
                     int r = recv[i];
                     if (r == i || sea[i]) continue;
                     if (filled[i] - h[i] > 0.01f) continue;
-                    // The steppe drains seaward across the lip; a cliff's sea is a wall, as in
-                    // Diffuse, so falls leave the face standing instead of grinding it to sea level.
                     float hr = sea[r] ? s.Cliff[i] * h[i] : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
@@ -199,13 +181,6 @@ namespace Stabby.World
 
         const float ShoreCells = 2f, LakeBasinDepth = 25f, FlatGrade = 0.05f;
 
-        // Erosion drains any basin given time, so each sketched lake is cut below its
-        // lowest shore after the run; the band is two cells wide so diagonal flow cannot
-        // slip through. Beds may sink below sea level: raising a low shore instead
-        // leaves flats the outflow would have to climb.
-        // The tableland is levelled after erosion at the mean height of what grew there, but no lower
-        // than TablelandShare of the summit, so it sits up in the mountains. It only fills towards the
-        // summit cone and never cuts it, so the ground climbs from the flat straight onto the peak.
         public static void FlattenTableland(WorldConfig c, WorldSketch s, float[] h)
         {
             int n = c.Size;
@@ -231,7 +206,6 @@ namespace Stabby.World
                         int i = y * n + x;
                         if (s.Plateau[i] <= 0 || !s.Land[i]) continue;
                         float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
-                        // A slight fall away from the centre drains it; low swells keep it from reading as a floor.
                         float top = level * (1 - c.TablelandFall * d)
                             + c.TablelandRelief * (Noise.Fbm(seed, x * 14f / n, y * 14f / n, 3) + 0.3f * Noise.Fbm(seed ^ 0x9E37u, x * 48f / n, y * 48f / n, 4));
                         h[i] += (top - h[i]) * s.Plateau[i] * (top > h[i] ? 1 : 1 - Cone(s, x, y));
@@ -239,7 +213,6 @@ namespace Stabby.World
             }
         }
 
-        // 1 inside the inner half of a summit cone, falling to 0 at its rim.
         static float Cone(WorldSketch s, int x, int y)
         {
             float w = 0;
@@ -277,8 +250,6 @@ namespace Stabby.World
                     }
             }
             if (s.Lakes.Count == 0) return;
-            // Erosion leaves near-flats that the lake's outflow can cross; graded to the
-            // drainage fill, the outflow never rises above the lake's level.
             var sea = SeaOf(s.Land);
             var graded = Drainage.Fill(h, sea, n, 1e-3f);
             for (int i = 0; i < n * n; i++)
@@ -297,8 +268,6 @@ namespace Stabby.World
             return w;
         }
 
-        // Cliff cells see the sea as a wall at their own height and caprock barely creeps,
-        // so diffusion rounds off neither the cliff edge nor the treads behind it.
         static void Diffuse(WorldConfig c, WorldSketch s, float[] caprock, float[] h, bool[] sea)
         {
             int n = c.Size;

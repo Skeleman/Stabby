@@ -1,0 +1,8 @@
+GameScene scene MonoBehaviour that hands the terrain material to presentation
+ServerMapSystem runs managed Stabby.World generation off the main thread
+ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks
+ClientViewSystem GameObject presentation, no Entities Graphics yet
+PlayerPrefabSystem GhostPrefabCreation is managed and runs once
+ServerPlayerSystem spawn reads managed map and Ground; runs once per connection
+PlayerMoveSystem reads managed Ground heights until terrain heights are unmanaged
+ClientInputSystem reads UnityEngine.Input

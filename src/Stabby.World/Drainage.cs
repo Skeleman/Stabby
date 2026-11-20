@@ -2,13 +2,8 @@ using System;
 
 namespace Stabby.World
 {
-    // Flow routing shared by erosion and hydrology, so terrain shaping and the
-    // river network are always computed from the same drainage graph.
     public static class Drainage
     {
-        // Priority-flood (Barnes et al. 2014). With eps > 0 every land cell gets a
-        // strictly downhill path to the sea; with eps = 0 the result is the water
-        // level each depression fills to.
         public static float[] Fill(float[] h, bool[] sea, int n, float eps)
         {
             var filled = (float[])h.Clone();
@@ -45,7 +40,6 @@ namespace Stabby.World
             return filled;
         }
 
-        // D8 steepest descent; sea cells receive themselves.
         public static int[] Receivers(float[] surface, bool[] sea, int n, float cell)
         {
             var recv = new int[n * n];
@@ -68,8 +62,6 @@ namespace Stabby.World
             return recv;
         }
 
-        // Cells ordered downstream-first (Braun & Willett 2013): every cell
-        // appears after its receiver.
         public static int[] Stack(int[] recv, int n)
         {
             int count = n * n;

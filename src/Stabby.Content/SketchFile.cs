@@ -3,8 +3,6 @@ using Stabby.World;
 
 namespace Stabby.Content;
 
-// The hand-editable sketch on disk. Only the authored lists are stored; the
-// derived masks are rebuilt by WorldSketch.Build on load.
 public static class SketchFile
 {
     public const int SchemaVersion = 5;
@@ -55,8 +53,6 @@ public static class SketchFile
         Highlands = s.Highlands.Select(h => new ShoreDto { Kind = h.Plateau ? "plateau" : "peak", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
     }, Options);
 
-    // The file's seed, size and cell size win over the caller's, so an edited sketch
-    // always regenerates the world it was drawn on.
     public static WorldSketch Read(string json, WorldConfig c)
     {
         var d = JsonSerializer.Deserialize<Dto>(json, Options) ?? throw new InvalidDataException("empty sketch");

@@ -2,9 +2,6 @@ using System;
 
 namespace Stabby.World
 {
-    // Fine terrain between cell centres: a clamped Catmull-Rom of the cell heights
-    // plus noise whose amplitude fades to zero near water, so lakes, rivers and
-    // coasts keep exactly the cell heights the drainage graph produced.
     public sealed class TerrainDetail
     {
         public const float WetFadeCells = 3f;
@@ -37,14 +34,12 @@ namespace Stabby.World
                     if (lo <= 0) continue;
                     float a = 2f + 0.12f * (hi - lo);
                     a *= Grid.Smoothstep(0.5f, 0.5f + WetFadeCells, dist[i]);
-                    // Bounded by the lowest neighbour so interpolated ground never dips below the sea.
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
         }
 
         public float Amplitude(int cell) => amp[cell];
 
-        // gx, gy in cell units; cell (x, y) is centred on integer coordinates.
         public float HeightAt(float gx, float gy)
         {
             int x0 = (int)Math.Floor(gx), y0 = (int)Math.Floor(gy);
@@ -74,7 +69,6 @@ namespace Stabby.World
         static float CatmullRom(float p0, float p1, float p2, float p3, float t) =>
             p1 + 0.5f * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
 
-        // Cells from the nearest water edge; river cells start at minus their half width.
         static float[] WetDistance(GeneratedWorld w)
         {
             int n = w.Config.Size;
@@ -93,7 +87,6 @@ namespace Stabby.World
                     int x = i % n, y = i / n;
                     for (int k = 0; k < 8; k++)
                     {
-                        // Forward pass looks at already-visited neighbours only, and the reverse pass the rest.
                         bool back = Grid.DY[k] < 0 || (Grid.DY[k] == 0 && Grid.DX[k] < 0);
                         if (back != (pass == 0)) continue;
                         int nx = x + Grid.DX[k], ny = y + Grid.DY[k];

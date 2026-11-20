@@ -8,8 +8,6 @@ public class WorldTests
 {
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
-    // Same span as the default world at coarser cells, so tests stay fast; below 256
-    // the main island is too few cells wide for the corridor and lake checks.
     static WorldConfig Cfg(ulong seed, int size = 256) =>
         new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) };
 
@@ -124,7 +122,7 @@ public class WorldTests
     {
         var asm = typeof(WorldGenerator).Assembly;
         var refs = asm.GetReferencedAssemblies().Select(r => r.Name ?? "").ToList();
-        Assert.DoesNotContain(refs, r => r.StartsWith("UnityEngine") || r.StartsWith("System.Text.Json"));
+        Assert.DoesNotContain(refs, r => r.StartsWith("UnityEngine", StringComparison.Ordinal) || r.StartsWith("System.Text.Json", StringComparison.Ordinal));
         var banned = new[] { "System.IO.File", "System.IO.Directory", "System.IO.FileStream", "System.Console" };
         foreach (var t in asm.GetTypes())
             foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))

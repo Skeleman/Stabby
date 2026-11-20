@@ -3,8 +3,6 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
-    // SplitMix64. Every generation system takes its own named stream so adding a
-    // draw in one system never shifts another system's results.
     public struct Rng
     {
         ulong state;
@@ -43,8 +41,6 @@ namespace Stabby.World
 
     public static class Noise
     {
-        // Eight fixed gradients instead of sin/cos so results do not depend on the
-        // platform's trig implementation.
         static readonly float[] GX = { 1, -1, 0, 0, 0.70710678f, -0.70710678f, 0.70710678f, -0.70710678f };
         static readonly float[] GY = { 0, 0, 1, -1, 0.70710678f, 0.70710678f, -0.70710678f, -0.70710678f };
 
@@ -110,8 +106,6 @@ namespace Stabby.World
         }
     }
 
-    // Binary min-heap keyed on (height, index). The index tie-break keeps flood
-    // order, and therefore every drainage result, deterministic.
     public sealed class MinHeap
     {
         float[] keys = new float[1024];

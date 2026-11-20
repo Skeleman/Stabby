@@ -2,11 +2,6 @@ using System;
 
 namespace Stabby.World
 {
-    // Long-term climate only: mean temperature and annual precipitation.
-    // Temperature follows a lapse rate; precipitation comes from a moisture sweep
-    // along the prevailing wind that recharges over the sea and rains out on
-    // upslopes, which produces rain shadows behind ranges. Every rate is per metre,
-    // so the same world gets the same climate at any resolution.
     public sealed class ClimateField
     {
         public float[] TemperatureC;
@@ -59,7 +54,6 @@ namespace Stabby.World
                     }
                     else
                     {
-                        // Slope over UpwindMeters upwind, so single-cell bumps don't wring the air out.
                         float rise = Math.Max(0, hi - line_h[Math.Max(0, t - back)]) / (back * c.CellMeters);
                         float rain = moisture * Math.Min(c.MaxRainMm, c.BaseRainMm + c.OrographicRainMm * rise);
                         p[i] = rain;

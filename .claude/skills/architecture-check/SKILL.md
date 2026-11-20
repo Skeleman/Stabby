@@ -22,8 +22,9 @@ broken rule as `file:line - rule N - fix`. Say "clean" if none.
    `Math.Sin/Cos/Atan2` etc. in generation; no new `Math.Pow/Exp`.
 6. **Version.** Anything that changes generated output bumps
    `WorldConfig.GeneratorVersion`. Changes to output with no bump = broken.
-7. **Comments.** Only reason lines (why, not what). Flag narration, banners,
-   commented-out code; trim in touched functions.
+7. **Comments.** None in .cs files; reasons go in the commit message.
+   `tools/Stabby.Lint` (run by the tests) enforces it. Unity Game code is
+   Burst `ISystem`; managed systems need a reasoned line in `lint-allow.txt`.
 8. **LF.** `git ls-files --eol <files>` shows `w/lf` for touched text files.
 
 Also flag: CLI or tests calling generation internals instead of

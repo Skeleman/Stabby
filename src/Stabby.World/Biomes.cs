@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
-    // Loaded from content/biomes.json by the host; the library never reads files.
     public sealed class BiomeDef
     {
         public string Id;
@@ -15,9 +14,6 @@ namespace Stabby.World
 
     public static class Biomes
     {
-        // Picks the biome whose temperature/precipitation window the cell sits
-        // deepest inside. Outside every window, the nearest one still wins, so
-        // no cell is left unclassified.
         public static int[] Classify(IReadOnlyList<BiomeDef> defs, ClimateField climate, bool[] water)
         {
             int count = climate.TemperatureC.Length;
@@ -40,8 +36,6 @@ namespace Stabby.World
             return result;
         }
 
-        // Inside RegionCore of a region's radius its biome always wins; out to
-        // the full radius the edge is ragged noise so regions don't read as circles.
         public const float RegionCore = 0.6f;
 
         public static void ApplyRegions(WorldConfig c, IReadOnlyList<BiomeDef> defs, WorldSketch s, bool[] water, int[] biome)

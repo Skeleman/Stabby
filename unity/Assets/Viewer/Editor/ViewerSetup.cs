@@ -80,7 +80,6 @@ namespace Stabby.Viewer.Editor
             return view;
         }
 
-        // Batch entry: -executeMethod Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]
         public static void Capture()
         {
             int code = 0;

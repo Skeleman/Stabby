@@ -11,12 +11,10 @@ namespace Stabby.Viewer
         public int Size = 512;
         public int ChunkCells = 32;
         public Material Material;
-        // Largest quad edge allowed, as a fraction of screen width; picks each chunk's LOD.
         public float TargetQuadScreen = 0.01f;
         public int BuildBudget = 8;
         public Color Sky = new Color(0.62f, 0.74f, 0.86f);
 
-        // Vertex spacing in cells per LOD.
         static readonly float[] Steps = { 0.25f, 0.5f, 1, 2, 4, 8 };
         static readonly Color SeaColor = new Color(0.16f, 0.36f, 0.55f), LakeColor = new Color(0.22f, 0.47f, 0.68f),
             RiverColor = new Color(0.20f, 0.45f, 0.78f), Sand = new Color(0.78f, 0.72f, 0.52f), Rock = new Color(0.47f, 0.44f, 0.41f);
@@ -209,7 +207,6 @@ namespace Stabby.Viewer
                     tris.Add(a + 1); tris.Add(a + w); tris.Add(a + w + 1);
                 }
 
-            // Skirts hide cracks where neighbouring chunks sit at different LODs.
             float drop = step * cm * 0.5f + 20f;
             var ring = new List<int>();
             for (int i = 0; i < m; i++) ring.Add(i);
@@ -338,7 +335,6 @@ namespace Stabby.Viewer
             go.AddComponent<MeshRenderer>().sharedMaterial = Material;
         }
 
-        // A ribbon must clear the ground across its whole width, up to a few metres of bank.
         float GroundAt(Vector3 p, Vector3 side, float surface)
         {
             float cm = World.Config.CellMeters, top = Size - 1, h = surface;

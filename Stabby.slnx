@@ -8,5 +8,6 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Stabby.Cli/Stabby.Cli.csproj" />
+    <Project Path="tools/Stabby.Lint/Stabby.Lint.csproj" />
   </Folder>
 </Solution>

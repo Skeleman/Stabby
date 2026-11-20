@@ -133,8 +133,6 @@ static class Render
     static uint SeaDepth(GeneratedWorld w, int i) =>
         Lerp(0x4A8FB8, 0x1B3A5C, (float)Math.Sqrt(Math.Min(1f, -w.Height[i] / w.Config.DeepDepth)));
 
-    // The seabed treats land as sea level so cliffs cast no rays offshore, and
-    // its gentler relief is exaggerated to read at all.
     static float Hillshade(GeneratedWorld w, int x, int y, bool seabed = false)
     {
         int n = w.Config.Size;

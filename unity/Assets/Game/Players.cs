@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -8,7 +9,6 @@ using UnityEngine;
 
 namespace Stabby.Game
 {
-    // Built at runtime, identically in every world, so the spike needs no baked subscene.
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
     public partial class PlayerPrefabSystem : SystemBase
     {
@@ -35,10 +35,12 @@ namespace Stabby.Game
         }
     }
 
+    [BurstCompile]
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
-    public partial class ClientGoInGameSystem : SystemBase
+    public partial struct ClientGoInGameSystem : ISystem
     {
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
             foreach (var (_, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithNone<NetworkStreamInGame>().WithEntityAccess())
@@ -46,7 +48,24 @@ namespace Stabby.Game
                 ecb.AddComponent<NetworkStreamInGame>(conn);
                 Rpc.Send(ecb, conn, new GoInGameRpc());
             }
-            ecb.Playback(EntityManager);
+            ecb.Playback(state.EntityManager);
+        }
+    }
+
+    [BurstCompile]
+    [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
+    public partial struct ServerGoInGameSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            var ecb = new EntityCommandBuffer(Allocator.Temp);
+            foreach (var (rx, e) in SystemAPI.Query<RefRO<ReceiveRpcCommandRequest>>().WithAll<GoInGameRpc>().WithEntityAccess())
+            {
+                ecb.AddComponent<NetworkStreamInGame>(rx.ValueRO.SourceConnection);
+                ecb.DestroyEntity(e);
+            }
+            ecb.Playback(state.EntityManager);
         }
     }
 
@@ -58,12 +77,6 @@ namespace Stabby.Game
         protected override void OnUpdate()
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (rx, e) in SystemAPI.Query<RefRO<ReceiveRpcCommandRequest>>().WithAll<GoInGameRpc>().WithEntityAccess())
-            {
-                ecb.AddComponent<NetworkStreamInGame>(rx.ValueRO.SourceConnection);
-                ecb.DestroyEntity(e);
-            }
-
             var maps = World.GetExistingSystemManaged<ServerMapSystem>();
             if (maps.Map != null && maps.MoundCell >= 0 && SystemAPI.TryGetSingleton<PlayerPrefab>(out var prefab) && SystemAPI.ManagedAPI.TryGetSingleton<Ground>(out var ground))
             {
@@ -83,7 +96,6 @@ namespace Stabby.Game
         }
     }
 
-    // Runs on the server and, for the owner's own ghost, on its client; misses roll back to the server state.
     [UpdateInGroup(typeof(PredictedSimulationSystemGroup))]
     public partial class PlayerMoveSystem : SystemBase
     {
@@ -118,7 +130,6 @@ namespace Stabby.Game
                 dir = new float2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
             else
             {
-                // Batch runs and the second client walk a circle so the capture shows motion.
                 float t = (float)SystemAPI.Time.ElapsedTime * 0.4f * (World.Name == GameSettings.ViewClient ? 1 : -1);
                 dir = new float2(math.cos(t), math.sin(t));
             }

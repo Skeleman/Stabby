@@ -4,9 +4,6 @@ using Stabby.World;
 
 namespace Stabby.Content;
 
-// Reads authored definitions from content/ and returns validated runtime
-// objects. Hosts (CLI, tests, later Unity import) go through here, never parse
-// content files themselves.
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
@@ -54,7 +51,7 @@ public static class ContentLoader
             Id = b.Id, Name = b.Name,
             TempMinC = b.TempMinC, TempMaxC = b.TempMaxC,
             PrecipMinMm = b.PrecipMinMm, PrecipMaxMm = b.PrecipMaxMm,
-            Color = uint.Parse(b.Color.TrimStart('#'), NumberStyles.HexNumber),
+            Color = uint.Parse(b.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
         }).ToList();
         var errors = Biomes.Validate(defs);
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));

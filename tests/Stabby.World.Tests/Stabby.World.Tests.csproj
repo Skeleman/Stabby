@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Stabby.World\Stabby.World.csproj" />
     <ProjectReference Include="..\..\src\Stabby.Content\Stabby.Content.csproj" />
+    <ProjectReference Include="..\..\tools\Stabby.Lint\Stabby.Lint.csproj" />
   </ItemGroup>
 
 </Project>

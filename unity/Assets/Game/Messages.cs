@@ -38,7 +38,6 @@ namespace Stabby.Game
 
     public struct Player : IComponentData { }
 
-    // Set once the world's map is ready, so prediction on server and clients reads the same ground.
     public sealed class Ground : IComponentData
     {
         public TerrainDetail Detail;

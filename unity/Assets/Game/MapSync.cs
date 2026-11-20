@@ -15,8 +15,6 @@ namespace Stabby.Game
         public static GeneratedWorld Generate(ulong seed, IReadOnlyList<BiomeDef> defs) =>
             WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, defs);
 
-        // Stands in for the host's edits to the shared world: dry land across a chunk corner,
-        // so even joiners with the right seed have chunks to fetch. Returns the centre cell.
         public static int RaiseMound(GeneratedWorld w, float rise = 5f, int radius = 10)
         {
             int n = w.Config.Size, s = WorldChunks.Size, best = -1;
@@ -172,7 +170,6 @@ namespace Stabby.Game
                     continue;
                 }
                 hostSums = new ulong[i.Chunks];
-                // The second client starts from the wrong seed to prove a full rebuild over the wire.
                 hostSeed = i.Seed;
                 seed = i.Seed + (World.Name == GameSettings.FullStreamClient ? 1UL : 0UL);
                 clock = Stopwatch.StartNew();
@@ -237,7 +234,6 @@ namespace Stabby.Game
         void Finish()
         {
             if (streamed > 0) WorldChunks.Relink(world);
-            // Terrain detail noise is seeded from the config, so a rebuilt map must carry the host's seed.
             world.Config.Seed = hostSeed;
             var mine = WorldChunks.Checksums(world);
             int bad = 0;

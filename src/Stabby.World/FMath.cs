@@ -2,11 +2,8 @@ using System;
 
 namespace Stabby.World
 {
-    // System.Math transcendentals differ between runtimes and CPUs; these use only
-    // IEEE basic ops and bit tricks so every machine generates the same world.
     public static class FMath
     {
-        // fdlibm split of ln 2: Hi has trailing zero bits so k * Hi is exact.
         const double Ln2Hi = 6.93147180369123816490e-01;
         const double Ln2Lo = 1.90821492927058770002e-10;
         const double InvLn2 = 1.44269504088896338700e+00;
@@ -24,7 +21,6 @@ namespace Stabby.World
             long k = (long)(t >= 0 ? t + 0.5 : t - 0.5);
             double r = (x - k * Ln2Hi) - k * Ln2Lo;
 
-            // Taylor to r^15 / 15!: |r| <= 0.35 leaves the tail below 1e-19.
             double p = 1.0 / 1307674368000.0;
             p = p * r + 1.0 / 87178291200.0;
             p = p * r + 1.0 / 6227020800.0;
@@ -61,7 +57,6 @@ namespace Stabby.World
             double m = BitConverter.Int64BitsToDouble((bits & 0x000FFFFFFFFFFFFFL) | 0x3FF0000000000000L);
             if (m > Sqrt2) { m *= 0.5; e++; }
 
-            // atanh series in s = (m-1)/(m+1): |s| <= 0.172, terms to s^25 reach 1e-19.
             double s = (m - 1) / (m + 1);
             double z = s * s;
             double p = 1.0 / 25;

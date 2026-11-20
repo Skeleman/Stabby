@@ -2,11 +2,6 @@ using System;
 
 namespace Stabby.World
 {
-    // A shared world is seed + generator version + sketch. Every peer generates it,
-    // compares per-chunk checksums with the host and receives only chunks that differ,
-    // so peers need not be bitwise deterministic. Chunks hold raw float bits: a chunk
-    // either matches exactly or is replaced exactly, so values never mix within a lake.
-    // Lakes and rivers span chunks; Relink rebuilds them from the patched cells.
     public static class WorldChunks
     {
         public const int Size = 64;
@@ -55,7 +50,6 @@ namespace Stabby.World
             return data;
         }
 
-        // Call Relink once after the last chunk of a batch.
         public static void Unpack(GeneratedWorld w, int cx, int cy, byte[] data)
         {
             int n = w.Config.Size;
@@ -91,7 +85,6 @@ namespace Stabby.World
                     f(y * n + x);
         }
 
-        // Receivers are always a D8 neighbour or the cell itself (8).
         static byte Direction(int n, int i, int r)
         {
             if (r == i) return 8;

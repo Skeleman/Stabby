@@ -3,16 +3,10 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
-    // Rules every generated world must satisfy. Shared by the tests and the CLI
-    // sweep so "passes" means the same thing everywhere.
     public static class WorldChecks
     {
         public const float SurfaceTolerance = 1e-3f;
-        // Share of a corridor's lower three quarters that must have a river or
-        // lake within the corridor's width.
         public const float CorridorFollowShare = 0.7f;
-        // Each main island needs a cliff stretch (coast cells this high) and a beach
-        // (coast cells this low, with water this shallow beside them).
         public const float CliffMinRise = 30f, BeachMaxDepth = 4f;
 
         public static List<string> Run(GeneratedWorld w)
@@ -140,7 +134,6 @@ namespace Stabby.World
                 var notA = new bool[n * n];
                 for (int i = 0; i < n * n; i++) notA[i] = a < 0 || island[i] != a;
                 var dist = WorldSketch.CoastDistance(n, notA);
-                // Landmark pads may add land after the channel was cut.
                 float min = w.Config.ChannelFraction * n - WorldSketch.LandmarkPadCells - 1;
                 for (int k = 1; k < s.Landmasses.Count; k++)
                 {
@@ -211,7 +204,6 @@ namespace Stabby.World
         static void CheckShores(GeneratedWorld w, int[] island, List<string> e)
         {
             int n = w.Config.Size, need = Math.Max(3, n / 40);
-            // A coarse cell spans more of the beach's grade, so its mean height sits higher.
             float beachMax = Erosion.MinLandHeight + 2.5f + w.Config.BeachGrade * w.Config.CellMeters;
             for (int k = 0; k < w.Sketch.Landmasses.Count; k++)
             {
@@ -259,7 +251,6 @@ namespace Stabby.World
             return false;
         }
 
-        // Labels 4-connected land components; sea cells get -1.
         static int[] Components(int n, bool[] sea)
         {
             var id = new int[n * n];

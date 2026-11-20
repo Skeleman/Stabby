@@ -28,8 +28,6 @@ public class ChunkTests
         Assert.Equal(new[] { 2 * WorldChunks.Across(n) + 1 }, Differing(WorldChunks.Checksums(host), WorldChunks.Checksums(peer)));
     }
 
-    // The hardest peer: a different world entirely. Streaming every mismatched chunk
-    // must leave it identical to the host's, lakes and rivers included.
     [Fact]
     public void StreamedChunksRebuildTheHostWorld()
     {

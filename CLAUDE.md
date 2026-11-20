@@ -14,7 +14,9 @@
    Log go through `FMath`, never `System.Math`, so the same seed gives the
    same world on every machine.
 6. Changing generation output bumps `WorldConfig.GeneratorVersion`.
-7. Comments only for reasons, not narration.
+7. No code comments; reasons go in commit messages. `tools/Stabby.Lint` runs
+   in the tests and also requires Unity Game systems to be Burst `ISystem`
+   unless `lint-allow.txt` gives a one-line reason.
 8. Files are LF (`.gitattributes`).
 9. This file is the architecture contract. Foundational changes to it need
    Zach's review; a PreToolUse hook asks before any edit. Stage outputs stay

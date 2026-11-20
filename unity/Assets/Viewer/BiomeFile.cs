@@ -6,7 +6,6 @@ using UnityEngine;
 
 namespace Stabby.Viewer
 {
-    // Stabby.Content targets net10 with System.Text.Json, which Unity lacks, so the viewer reads biomes itself.
     public static class BiomeFile
     {
         [Serializable] class Row { public string id, name, color; public float tempMinC, tempMaxC, precipMinMm, precipMaxMm; }

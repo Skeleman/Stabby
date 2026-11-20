@@ -2,7 +2,6 @@ using System.IO.Compression;
 
 namespace Stabby.Cli;
 
-// Minimal RGB PNG writer so the tool needs no image packages.
 static class Png
 {
     static readonly uint[] Crc = BuildCrc();
