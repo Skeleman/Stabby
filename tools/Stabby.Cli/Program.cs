@@ -14,7 +14,7 @@ switch (args.FirstOrDefault())
     case "gen": return Gen();
     case "sweep": return Sweep();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
@@ -68,20 +68,38 @@ static void WriteFloats(string path, float[] v)
 
 int Sweep()
 {
+    string[] order = { "sketch", "erosion", "climate", "hydrology", "biomes", "checks" };
     ulong from = ulong.Parse(Opt("from", "1"), CultureInfo.InvariantCulture);
     int count = int.Parse(Opt("count", "100"), CultureInfo.InvariantCulture), size = int.Parse(Opt("size", "256"), CultureInfo.InvariantCulture);
     var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
     var times = new System.Collections.Concurrent.ConcurrentBag<long>();
-    Parallel.For(0, count, k =>
+    var stages = new System.Collections.Concurrent.ConcurrentBag<(string, double, long)>();
+    var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", "-1"), CultureInfo.InvariantCulture) };
+    Parallel.For(0, count, par, k =>
     {
         var c = Config(from + (ulong)k, size);
         var sw = Stopwatch.StartNew();
-        var w = WorldGenerator.Generate(c, biomes);
+        double last = 0;
+        long bytes = GC.GetAllocatedBytesForCurrentThread();
+        void Mark(string name)
+        {
+            double now = sw.Elapsed.TotalMilliseconds;
+            long b = GC.GetAllocatedBytesForCurrentThread();
+            stages.Add((name, now - last, b - bytes));
+            (last, bytes) = (now, b);
+        }
+        var w = WorldGenerator.Generate(c, biomes, null, Mark);
         times.Add(sw.ElapsedMilliseconds);
         foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
+        Mark("checks");
     });
     var t = times.OrderBy(x => x).ToArray();
     Console.WriteLine($"{count} seeds at {size}x{size}: median {t[t.Length / 2]} ms, max {t[^1]} ms, {failures.Count} violations");
+    foreach (var g in stages.GroupBy(s => s.Item1).OrderBy(g => Array.IndexOf(order, g.Key)))
+    {
+        var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();
+        Console.WriteLine($"  {g.Key,-10} median {ms[ms.Length / 2],7:F1} ms, max {ms[^1],7:F1} ms, {g.Average(s => s.Item3) / 1048576,7:F1} MB allocated");
+    }
     foreach (var f in failures.OrderBy(x => x).Take(30)) Console.WriteLine("  " + f);
     return failures.IsEmpty ? 0 : 1;
 }

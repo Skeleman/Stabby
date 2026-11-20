@@ -2,13 +2,34 @@ using System;
 
 namespace Stabby.World
 {
+    public sealed class DrainageScratch
+    {
+        public readonly float[] Filled, Acc;
+        public readonly bool[] Done;
+        public readonly int[] Recv, DonorCount, Donors, Fill, Stack;
+        public readonly MinHeap Heap = new MinHeap();
+
+        public DrainageScratch(int n)
+        {
+            int c = n * n;
+            Filled = new float[c]; Acc = new float[c]; Done = new bool[c];
+            Recv = new int[c]; DonorCount = new int[c + 1]; Donors = new int[c]; Fill = new int[c + 1]; Stack = new int[c];
+        }
+    }
+
     public static class Drainage
     {
-        public static float[] Fill(float[] h, bool[] sea, int n, float eps)
+        public static float[] Fill(float[] h, bool[] sea, int n, float eps) =>
+            Fill(h, sea, n, eps, new float[n * n], new bool[n * n], new MinHeap());
+
+        public static float[] Fill(float[] h, bool[] sea, int n, float eps, DrainageScratch s) =>
+            Fill(h, sea, n, eps, s.Filled, s.Done, s.Heap);
+
+        static float[] Fill(float[] h, bool[] sea, int n, float eps, float[] filled, bool[] done, MinHeap heap)
         {
-            var filled = (float[])h.Clone();
-            var done = new bool[n * n];
-            var heap = new MinHeap();
+            Array.Copy(h, filled, h.Length);
+            Array.Clear(done, 0, done.Length);
+            heap.Clear();
             for (int i = 0; i < n * n; i++)
             {
                 if (!sea[i]) continue;
@@ -40,9 +61,11 @@ namespace Stabby.World
             return filled;
         }
 
-        public static int[] Receivers(float[] surface, bool[] sea, int n, float cell)
+        public static int[] Receivers(float[] surface, bool[] sea, int n, float cell) =>
+            Receivers(surface, sea, n, cell, new int[n * n]);
+
+        public static int[] Receivers(float[] surface, bool[] sea, int n, float cell, int[] recv)
         {
-            var recv = new int[n * n];
             for (int i = 0; i < n * n; i++)
             {
                 recv[i] = i;
@@ -62,17 +85,21 @@ namespace Stabby.World
             return recv;
         }
 
-        public static int[] Stack(int[] recv, int n)
+        public static int[] Stack(int[] recv, int n) =>
+            Stack(recv, n, new int[n * n + 1], new int[n * n], new int[n * n + 1], new int[n * n]);
+
+        public static int[] Stack(int[] recv, int n, DrainageScratch s) =>
+            Stack(recv, n, s.DonorCount, s.Donors, s.Fill, s.Stack);
+
+        static int[] Stack(int[] recv, int n, int[] donorCount, int[] donors, int[] fill, int[] stack)
         {
             int count = n * n;
-            var donorCount = new int[count + 1];
+            Array.Clear(donorCount, 0, donorCount.Length);
             for (int i = 0; i < count; i++) if (recv[i] != i) donorCount[recv[i] + 1]++;
             for (int i = 0; i < count; i++) donorCount[i + 1] += donorCount[i];
-            var donors = new int[count];
-            var fill = (int[])donorCount.Clone();
+            Array.Copy(donorCount, fill, donorCount.Length);
             for (int i = 0; i < count; i++) if (recv[i] != i) donors[fill[recv[i]]++] = i;
 
-            var stack = new int[count];
             int head = 0, tail = 0;
             for (int i = 0; i < count; i++) if (recv[i] == i) stack[tail++] = i;
             while (head < tail)
@@ -84,9 +111,12 @@ namespace Stabby.World
             return stack;
         }
 
-        public static float[] Accumulate(int[] stack, int[] recv, float[] weight)
+        public static float[] Accumulate(int[] stack, int[] recv, float[] weight) =>
+            Accumulate(stack, recv, weight, new float[weight.Length]);
+
+        public static float[] Accumulate(int[] stack, int[] recv, float[] weight, float[] acc)
         {
-            var acc = (float[])weight.Clone();
+            Array.Copy(weight, acc, weight.Length);
             for (int s = stack.Length - 1; s >= 0; s--)
             {
                 int i = stack[s];

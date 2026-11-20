@@ -151,12 +151,14 @@ namespace Stabby.World
             }
 
             float dt = c.TimeStepYears;
+            var scratch = new DrainageScratch(n);
+            var src = new float[n * n];
             for (int step = 0; step < c.ErosionSteps; step++)
             {
-                var filled = Drainage.Fill(h, sea, n, 1e-3f);
-                var recv = Drainage.Receivers(filled, sea, n, c.CellMeters);
-                var stack = Drainage.Stack(recv, n);
-                var q = Drainage.Accumulate(stack, recv, runoff);
+                var filled = Drainage.Fill(h, sea, n, 1e-3f, scratch);
+                var recv = Drainage.Receivers(filled, sea, n, c.CellMeters, scratch.Recv);
+                var stack = Drainage.Stack(recv, n, scratch);
+                var q = Drainage.Accumulate(stack, recv, runoff, scratch.Acc);
 
                 for (int i = 0; i < n * n; i++) if (!sea[i]) h[i] += s.Uplift[i] * c.MaxUplift * dt;
 
@@ -173,7 +175,7 @@ namespace Stabby.World
                     h[i] = Math.Min(h[i], hr + slope[i] * len);
                 }
 
-                Diffuse(c, s, caprock, h, sea);
+                Diffuse(c, s, caprock, h, sea, src);
                 for (int i = 0; i < n * n; i++)
                     if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
             }
@@ -268,12 +270,12 @@ namespace Stabby.World
             return w;
         }
 
-        static void Diffuse(WorldConfig c, WorldSketch s, float[] caprock, float[] h, bool[] sea)
+        static void Diffuse(WorldConfig c, WorldSketch s, float[] caprock, float[] h, bool[] sea, float[] src)
         {
             int n = c.Size;
             float k = c.Diffusion * c.TimeStepYears / (c.CellMeters * c.CellMeters);
             if (k > 0.24f) k = 0.24f;
-            var src = (float[])h.Clone();
+            Array.Copy(h, src, h.Length);
             for (int y = 1; y < n - 1; y++)
                 for (int x = 1; x < n - 1; x++)
                 {

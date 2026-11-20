@@ -9,6 +9,25 @@ namespace Stabby.World
         public const float CorridorFollowShare = 0.7f;
         public const float CliffMinRise = 30f, BeachMaxDepth = 4f;
 
+        static int FirstUndrained(GeneratedWorld w)
+        {
+            int n = w.Config.Size;
+            var recv = w.Water.Receiver;
+            var state = new byte[n * n];
+            var path = new List<int>();
+            for (int i = 0; i < n * n; i++)
+            {
+                if (w.Sea[i] || state[i] != 0) continue;
+                path.Clear();
+                int c = i;
+                while (!w.Sea[c] && state[c] == 0) { state[c] = 1; path.Add(c); c = recv[c]; }
+                byte result = w.Sea[c] || state[c] == 2 ? (byte)2 : (byte)3;
+                foreach (int p in path) state[p] = result;
+                if (result == 3) return i;
+            }
+            return -1;
+        }
+
         public static List<string> Run(GeneratedWorld w)
         {
             var e = new List<string>();
@@ -22,13 +41,8 @@ namespace Stabby.World
             for (int i = 0; i < n * n; i++)
                 if (w.Sea[i] && w.Height[i] >= 0) { e.Add($"sea cell {i} is above sea level"); break; }
 
-            for (int i = 0; i < n * n; i++)
-            {
-                if (w.Sea[i]) continue;
-                int c = i, steps = 0;
-                while (!w.Sea[c] && steps++ < n * n) c = hy.Receiver[c];
-                if (!w.Sea[c]) { e.Add($"cell {i} never drains to the sea"); break; }
-            }
+            int bad = FirstUndrained(w);
+            if (bad >= 0) e.Add($"cell {bad} never drains to the sea");
 
             for (int i = 0; i < n * n; i++)
             {

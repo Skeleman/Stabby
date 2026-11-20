@@ -19,8 +19,12 @@ namespace Stabby.World
 
         public static ClimateField Uniform(WorldConfig c, float[] height, float rainMm)
         {
-            var f = Compute(c, height, new bool[height.Length]);
-            for (int i = 0; i < height.Length; i++) f.PrecipitationMm[i] = rainMm;
+            var f = new ClimateField { TemperatureC = new float[height.Length], PrecipitationMm = new float[height.Length] };
+            for (int i = 0; i < height.Length; i++)
+            {
+                f.TemperatureC[i] = c.SeaLevelTempC - c.LapseRatePerMeter * Math.Max(0, height[i]);
+                f.PrecipitationMm[i] = rainMm;
+            }
             return f;
         }
 

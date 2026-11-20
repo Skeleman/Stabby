@@ -3,41 +3,282 @@
   "title": "Stabby world sketch",
   "description": "Written by `stabby gen` as sketch.json; edit and pass back with --sketch. Coordinates are in cells, y up.",
   "type": "object",
-  "required": ["schemaVersion", "seed", "size", "cellMeters", "landmasses", "ranges", "corridors", "regions", "landmarks"],
+  "required": [
+    "schemaVersion",
+    "seed",
+    "size",
+    "cellMeters",
+    "landmasses",
+    "islets",
+    "ranges",
+    "corridors",
+    "regions",
+    "landmarks",
+    "lakes",
+    "shores",
+    "highlands"
+  ],
   "additionalProperties": false,
   "$defs": {
     "line": {
       "type": "object",
-      "required": ["x", "y", "width"],
+      "required": [
+        "x",
+        "y",
+        "width"
+      ],
       "properties": {
-        "x": { "type": "array", "items": { "type": "number" }, "minItems": 2 },
-        "y": { "type": "array", "items": { "type": "number" }, "minItems": 2 },
-        "width": { "type": "number", "exclusiveMinimum": 0 },
-        "strength": { "type": "number" }
+        "x": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2
+        },
+        "y": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "strength": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "circle": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "radius"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "radius": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "mass": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "radius"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "radius": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "lobes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/circle"
+          }
+        }
       }
     }
   },
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "seed": { "type": "integer", "minimum": 0 },
-    "size": { "type": "integer", "minimum": 16 },
-    "cellMeters": { "type": "number", "exclusiveMinimum": 0 },
+    "schemaVersion": {
+      "const": 5
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 16
+    },
+    "cellMeters": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
     "landmasses": {
       "type": "array",
-      "items": { "type": "object", "required": ["x", "y", "radius"], "additionalProperties": false,
-        "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "radius": { "type": "number", "exclusiveMinimum": 0 } } }
+      "items": {
+        "$ref": "#/$defs/mass"
+      }
     },
-    "ranges": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/line" }, { "required": ["strength"] }] } },
-    "corridors": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/line" }, { "not": { "required": ["strength"] } }] } },
+    "islets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mass"
+      }
+    },
+    "ranges": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/line"
+          },
+          {
+            "required": [
+              "strength"
+            ]
+          }
+        ]
+      }
+    },
+    "corridors": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/line"
+          },
+          {
+            "not": {
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        ]
+      }
+    },
     "regions": {
       "type": "array",
-      "items": { "type": "object", "required": ["biome", "x", "y", "radius"], "additionalProperties": false,
-        "properties": { "biome": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" }, "radius": { "type": "number", "exclusiveMinimum": 0 } } }
+      "items": {
+        "type": "object",
+        "required": [
+          "biome",
+          "x",
+          "y",
+          "radius"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "biome": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "radius": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
     },
     "landmarks": {
       "type": "array",
-      "items": { "type": "object", "required": ["kind", "x", "y"], "additionalProperties": false,
-        "properties": { "kind": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" } } }
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "x",
+          "y"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "lakes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mass"
+      }
+    },
+    "shores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "x",
+          "y",
+          "radius"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "cliff",
+              "beach"
+            ]
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "radius": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
+    },
+    "highlands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "x",
+          "y",
+          "radius"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "peak",
+              "plateau"
+            ]
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "radius": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
     }
   }
 }

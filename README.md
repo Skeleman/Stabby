@@ -15,7 +15,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 | Command | Does |
 |---|---|
 | `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
-| `sweep [--from 1] [--count 100] [--size 256] [--rain mm]` | Runs `WorldChecks` on many seeds, prints timings and violations |
+| `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings |
 
 - `gen` writes `map.png`, `sketch.png`, `biomes.png`, `precipitation.png`,
   `sheet.png` (all of them side by side), `sketch.json` and `metrics.json`.
@@ -49,6 +49,21 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
    reaches; terrain, water and rivers share one drainage graph.
 7. **Biomes** classified from climate using `content/biomes.json`.
 8. **Authored regions** from the sketch applied on top.
+
+## Baselines
+
+`sweep --jobs 1`, Release, one desktop core (generator 17). CI (`.github/workflows/ci.yml`)
+runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 512` on every push.
+
+| Stage | 256 (median ms / MB) | 512 (median ms / MB) |
+|---|---|---|
+| sketch | 51 / 3.5 | 203 / 14 |
+| erosion | 273 / 7 | 1139 / 28 |
+| climate | 1 / 1.8 | 6 / 7 |
+| hydrology | 4 / 3.5 | 17 / 14 |
+| biomes | 0.4 / 0.3 | 2 / 1.3 |
+| checks | 9 / 1.2 | 38 / 5 |
+| total | 330 | 1364 |
 
 ## Sharing a world
 

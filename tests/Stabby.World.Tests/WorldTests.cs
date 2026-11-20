@@ -41,6 +41,33 @@ public class WorldTests
     }
 
     [Fact]
+    public void SketchMatchesItsSchema()
+    {
+        var c = Cfg(9);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(SketchFile.Write(WorldGenerator.Generate(c, Biomes).Sketch, c))!.AsObject();
+        var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+        var schema = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(root, "schemas", "sketch.schema.json")))!.AsObject();
+        Assert.Equal(SketchFile.SchemaVersion, (int)schema["properties"]!["schemaVersion"]!["const"]!);
+        var props = schema["properties"]!.AsObject().Select(p => p.Key).OrderBy(k => k).ToList();
+        var required = schema["required"]!.AsArray().Select(r => (string)r!).OrderBy(k => k).ToList();
+        Assert.Equal(props, json.Select(p => p.Key).OrderBy(k => k).ToList());
+        Assert.Equal(props, required);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("not json")]
+    [InlineData("{\"schemaVersion\":1,\"size\":64,\"cellMeters\":90}")]
+    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"bogus\":1}")]
+    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"ranges\":[{\"x\":[1],\"y\":[1],\"width\":2,\"strength\":1}]}")]
+    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"shores\":[{\"kind\":\"lava\",\"x\":1,\"y\":1,\"radius\":2}]}")]
+    public void MalformedSketchIsRejected(string json)
+    {
+        var e = Record.Exception(() => SketchFile.Read(json, Cfg(1, 64)));
+        Assert.True(e is InvalidDataException || e is System.Text.Json.JsonException, e?.GetType().Name ?? "accepted");
+    }
+
+    [Fact]
     public void AuthoredEditsAreHonoured()
     {
         var c = Cfg(11);

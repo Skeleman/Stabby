@@ -11,11 +11,14 @@ public class MathTests
     static double Rel(double got, double want) =>
         want == 0 ? Math.Abs(got) : Math.Abs(got - want) / Math.Abs(want);
 
-    static IEnumerable<double> Uniform(int seed, int count, double lo, double hi)
+    static IEnumerable<double> Unit(int seed)
     {
-        var r = new Random(seed);
-        for (int i = 0; i < count; i++) yield return lo + (hi - lo) * r.NextDouble();
+        var r = Rng.Stream((ulong)seed, "math-test");
+        while (true) yield return (r.NextU64() >> 11) * (1.0 / 9007199254740992.0);
     }
+
+    static IEnumerable<double> Uniform(int seed, int count, double lo, double hi) =>
+        Unit(seed).Take(count).Select(u => lo + (hi - lo) * u);
 
     [Fact]
     public void ExpMatchesMath()
@@ -47,11 +50,12 @@ public class MathTests
     public void PowMatchesMath()
     {
         double worst = 0;
-        var r = new Random(7);
+        var r = Unit(7).GetEnumerator();
+        double Next() { r.MoveNext(); return r.Current; }
         for (int i = 0; i < 300000; i++)
         {
-            double x = i % 3 == 0 ? 1e7 * r.NextDouble() : Math.Pow(10, -6 + 13 * r.NextDouble());
-            double y = 3 * r.NextDouble();
+            double x = i % 3 == 0 ? 1e7 * Next() : Math.Pow(10, -6 + 13 * Next());
+            double y = 3 * Next();
             worst = Math.Max(worst, Rel(FMath.Pow(x, y), Math.Pow(x, y)));
         }
         Assert.True(worst < Tol, $"worst relative error {worst:E3}");
