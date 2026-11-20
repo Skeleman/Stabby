@@ -537,7 +537,7 @@ namespace Stabby.Game
                 p.Bounds.Dispose();
             }
             pending.Clear();
-            if (preparing != null && preparing.IsCompletedSuccessfully) preparing.Result.Look.Dispose();
+            Owned.Release(preparing, p => p.Look.Dispose());
             for (int k = 0; meshes != null && k < meshes.Length; k++)
                 if (meshes[k] != null) Object.Destroy(meshes[k]);
             foreach (var mesh in statics) Object.Destroy(mesh);

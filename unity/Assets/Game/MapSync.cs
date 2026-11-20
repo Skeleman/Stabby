@@ -114,15 +114,16 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (ground.IsCreated) { ground.Dispose(); packed.Dispose(); }
-            else if (gen != null && gen.IsCompletedSuccessfully) { gen.Result.Ground.Dispose(); gen.Result.Packed.Dispose(); }
+            Owned.Release(gen, p => { p.Ground.Dispose(); p.Packed.Dispose(); });
         }
 
         protected override void OnUpdate()
         {
             if (!gen.IsCompleted) return;
             Enabled = false;
-            if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); return; }
+            if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); gen = null; return; }
             var p = gen.Result;
+            gen = null;
             Map = p.Map;
             int mound = p.Mound, n = Map.Config.Size;
             ground = Ground.Create(EntityManager, p.Ground);
@@ -161,7 +162,7 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (ground.IsCreated) ground.Dispose();
-            else if (finish != null && finish.IsCompletedSuccessfully && finish.Result.Item1 == 0) finish.Result.Item2.Dispose();
+            if (Map == null) Owned.Release(finish, r => { if (r.Item1 == 0) r.Item2.Dispose(); });
             if (inbox != Entity.Null && EntityManager.Exists(inbox)) EntityManager.GetComponentData<ChunkInbox>(inbox).Dispose();
         }
 

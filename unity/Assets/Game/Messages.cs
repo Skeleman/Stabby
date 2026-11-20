@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -97,6 +99,15 @@ namespace Stabby.Game
             filled.Dispose();
             em.CreateSingleton(new Ground { Blob = blob });
             return blob;
+        }
+    }
+
+    public static class Owned
+    {
+        public static void Release<T>(Task<T> task, Action<T> dispose)
+        {
+            if (task == null) return;
+            task.ContinueWith(t => { if (t.IsCompletedSuccessfully) dispose(t.Result); }, TaskContinuationOptions.ExecuteSynchronously);
         }
     }
 
