@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stabby world sketch",
+  "description": "Written by `stabby gen` as sketch.json; edit and pass back with --sketch. Coordinates are in cells, y up.",
+  "type": "object",
+  "required": ["schemaVersion", "seed", "size", "cellMeters", "landmasses", "ranges", "corridors", "regions", "landmarks"],
+  "additionalProperties": false,
+  "$defs": {
+    "line": {
+      "type": "object",
+      "required": ["x", "y", "width"],
+      "properties": {
+        "x": { "type": "array", "items": { "type": "number" }, "minItems": 2 },
+        "y": { "type": "array", "items": { "type": "number" }, "minItems": 2 },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "strength": { "type": "number" }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "seed": { "type": "integer", "minimum": 0 },
+    "size": { "type": "integer", "minimum": 16 },
+    "cellMeters": { "type": "number", "exclusiveMinimum": 0 },
+    "landmasses": {
+      "type": "array",
+      "items": { "type": "object", "required": ["x", "y", "radius"], "additionalProperties": false,
+        "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "radius": { "type": "number", "exclusiveMinimum": 0 } } }
+    },
+    "ranges": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/line" }, { "required": ["strength"] }] } },
+    "corridors": { "type": "array", "items": { "allOf": [{ "$ref": "#/$defs/line" }, { "not": { "required": ["strength"] } }] } },
+    "regions": {
+      "type": "array",
+      "items": { "type": "object", "required": ["biome", "x", "y", "radius"], "additionalProperties": false,
+        "properties": { "biome": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" }, "radius": { "type": "number", "exclusiveMinimum": 0 } } }
+    },
+    "landmarks": {
+      "type": "array",
+      "items": { "type": "object", "required": ["kind", "x", "y"], "additionalProperties": false,
+        "properties": { "kind": { "type": "string" }, "x": { "type": "number" }, "y": { "type": "number" } } }
+    }
+  }
+}

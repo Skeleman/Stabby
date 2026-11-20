@@ -40,6 +40,39 @@ namespace Stabby.World
             return result;
         }
 
+        // Inside RegionCore of a region's radius its biome always wins; out to
+        // the full radius the edge is ragged noise so regions don't read as circles.
+        public const float RegionCore = 0.6f;
+
+        public static void ApplyRegions(WorldConfig c, IReadOnlyList<BiomeDef> defs, WorldSketch s, bool[] water, int[] biome)
+        {
+            int n = c.Size;
+            uint seed = Rng.Stream(c.Seed, "region-edge").NextU32();
+            foreach (var r in s.Regions)
+            {
+                int id = IndexOf(defs, r.Biome);
+                if (id < 0) continue;
+                int x0 = Math.Max(0, (int)(r.X - r.Radius)), x1 = Math.Min(n - 1, (int)(r.X + r.Radius) + 1);
+                int y0 = Math.Max(0, (int)(r.Y - r.Radius)), y1 = Math.Min(n - 1, (int)(r.Y + r.Radius) + 1);
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        int i = y * n + x;
+                        if (water[i]) continue;
+                        float dx = x - r.X, dy = y - r.Y;
+                        float d = (float)Math.Sqrt(dx * dx + dy * dy) / r.Radius;
+                        float edge = 0.8f + 0.2f * Noise.Fbm(seed, x * 12f / n, y * 12f / n, 3);
+                        if (d < Math.Max(RegionCore, edge)) biome[i] = id;
+                    }
+            }
+        }
+
+        public static int IndexOf(IReadOnlyList<BiomeDef> defs, string id)
+        {
+            for (int b = 0; b < defs.Count; b++) if (defs[b].Id == id) return b;
+            return -1;
+        }
+
         public static List<string> Validate(IReadOnlyList<BiomeDef> defs)
         {
             var errors = new List<string>();

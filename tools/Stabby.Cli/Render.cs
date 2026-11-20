@@ -20,14 +20,41 @@ static class Render
             return Lerp(0xC9A66B, 0x1F5FA8, (float)Math.Sqrt(t));
         }, false, waterOverlay: false);
 
-    public static (int w, int h, uint[] px) SketchMap(GeneratedWorld w, int scale)
+    public static (int w, int h, uint[] px) SketchMap(GeneratedWorld w, IReadOnlyList<BiomeDef> defs, int scale)
     {
-        var img = Draw(w, scale, i => w.Sketch.Land[i] ? Lerp(0x8FA87A, 0x6B4E3A, w.Sketch.Uplift[i]) : SeaColor, false, waterOverlay: false);
+        var s = w.Sketch;
+        var img = Draw(w, scale, i => s.Land[i] ? Lerp(0x8FA87A, 0x6B4E3A, s.Uplift[i]) : SeaColor, false, waterOverlay: false);
         int n = w.Config.Size;
-        foreach (var r in w.Sketch.Ranges)
-            for (int k = 0; k + 1 < r.X.Length; k++)
-                Line(img, n, scale, r.X[k] + 0.5f, r.Y[k] + 0.5f, r.X[k + 1] + 0.5f, r.Y[k + 1] + 0.5f, 2.5f, 0xC0392B);
+        float px = Math.Max(1.5f, scale * n / 400f);
+        foreach (var r in s.Regions)
+        {
+            var d = defs.FirstOrDefault(b => b.Id == r.Biome);
+            Ring(img, n, scale, r.X + 0.5f, r.Y + 0.5f, r.Radius, px, d?.Color ?? 0xFF00FF);
+        }
+        foreach (var m in s.Landmasses) Ring(img, n, scale, m.X + 0.5f, m.Y + 0.5f, m.Radius, px * 0.6f, 0xF0F0F0);
+        foreach (var r in s.Ranges) Polyline(img, n, scale, r.X, r.Y, px * 1.6f, 0xC0392B);
+        foreach (var r in s.Corridors) Polyline(img, n, scale, r.X, r.Y, Math.Max(px * 1.6f, r.Width * 2 * scale), RiverColor);
+        foreach (var l in s.Landmarks) Line(img, n, scale, l.X + 0.5f, l.Y + 0.5f, l.X + 0.5f, l.Y + 0.5f, px * 4, 0x111111);
         return img;
+    }
+
+    static void Polyline((int w, int h, uint[] px) img, int n, int scale, float[] xs, float[] ys, float thick, uint c)
+    {
+        for (int k = 0; k + 1 < xs.Length; k++)
+            Line(img, n, scale, xs[k] + 0.5f, ys[k] + 0.5f, xs[k + 1] + 0.5f, ys[k + 1] + 0.5f, thick, c);
+    }
+
+    static void Ring((int w, int h, uint[] px) img, int n, int scale, float cx, float cy, float r, float thick, uint c)
+    {
+        const int Steps = 96;
+        float px = cx + r, py = cy;
+        for (int k = 1; k <= Steps; k++)
+        {
+            double a = 2 * Math.PI * k / Steps;
+            float qx = cx + r * (float)Math.Cos(a), qy = cy + r * (float)Math.Sin(a);
+            Line(img, n, scale, px, py, qx, qy, thick, c);
+            px = qx; py = qy;
+        }
     }
 
     public static (int w, int h, uint[] px) Sheet(params (int w, int h, uint[] px)[] tiles)
@@ -71,7 +98,7 @@ static class Render
                 for (int k = 0; k + 1 < r.Cells.Count; k++)
                 {
                     int a = r.Cells[k], b = r.Cells[k + 1];
-                    float thick = Math.Max(1f, r.Width[k] / w.Config.CellMeters * scale * 2f);
+                    float thick = Math.Max(1f, r.Width[k] / w.Config.CellMeters * scale);
                     Line(img, n, scale, a % n + 0.5f, a / n + 0.5f, b % n + 0.5f, b / n + 0.5f, thick, RiverColor);
                 }
         return img;

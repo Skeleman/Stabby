@@ -8,6 +8,7 @@ namespace Stabby.World
     public static class Erosion
     {
         public const float MinLandHeight = 0.5f;
+        public const float CorridorGradient = 0.003f;
 
         public static float[] InitialHeight(WorldConfig c, WorldSketch s)
         {
@@ -21,6 +22,12 @@ namespace Stabby.World
                     h[i] = s.Land[i]
                         ? 2f + s.Uplift[i] * c.InitialRelief + 25f * (1 + Noise.Fbm(seed, x * 16f / n, y * 16f / n, 3))
                         : c.SeaFloor;
+                    // Noise alone outweighs a lowland corridor, so its floor is graded to the coast.
+                    if (s.Land[i] && s.Valley[i] > 0)
+                    {
+                        float floor = 1f + s.Coast[i] * c.CellMeters * CorridorGradient;
+                        h[i] += (Math.Min(h[i], floor) - h[i]) * s.Valley[i];
+                    }
                 }
             return h;
         }

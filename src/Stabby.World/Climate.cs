@@ -31,6 +31,13 @@ namespace Stabby.World
             return f;
         }
 
+        public static ClimateField Uniform(WorldConfig c, float[] height, float rainMm)
+        {
+            var f = Compute(c, height, new bool[height.Length]);
+            for (int i = 0; i < height.Length; i++) f.PrecipitationMm[i] = rainMm;
+            return f;
+        }
+
         static float[] Sweep(WorldConfig c, float[] h, bool[] sea)
         {
             int n = c.Size;

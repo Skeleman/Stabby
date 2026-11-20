@@ -43,14 +43,14 @@ namespace Stabby.World
 
         // Fills pits too small to be lakes into the terrain itself, so terrain
         // and water agree before anything is extracted.
-        public static Hydrology Build(WorldConfig c, float[] h, bool[] sea, float[] precipitationMm)
+        public static Hydrology Build(WorldConfig c, float[] h, bool[] sea, float[] precipitationMm, bool[] keepDry)
         {
             int n = c.Size;
             var hy = new Hydrology();
             var level = Drainage.Fill(h, sea, n, 0f);
             hy.LakeId = new int[n * n];
             for (int i = 0; i < n * n; i++) hy.LakeId[i] = -1;
-            FindLakes(c, h, sea, level, hy);
+            FindLakes(c, h, sea, level, keepDry, hy);
 
             var surface = Drainage.Fill(h, sea, n, 1e-3f);
             hy.WaterSurface = (float[])surface.Clone();
@@ -70,7 +70,7 @@ namespace Stabby.World
             hy.IsRiver = new bool[n * n];
             for (int i = 0; i < n * n; i++)
                 hy.IsRiver[i] = !sea[i] && hy.LakeId[i] < 0 && hy.DischargeM3s[i] >= c.RiverMinDischarge;
-            BuildSegments(n, sea, hy);
+            BuildSegments(c, sea, hy);
             return hy;
         }
 
@@ -103,7 +103,7 @@ namespace Stabby.World
             }
         }
 
-        static void FindLakes(WorldConfig c, float[] h, bool[] sea, float[] level, Hydrology hy)
+        static void FindLakes(WorldConfig c, float[] h, bool[] sea, float[] level, bool[] keepDry, Hydrology hy)
         {
             int n = c.Size;
             var seen = new bool[n * n];
@@ -113,10 +113,12 @@ namespace Stabby.World
                 if (seen[s] || sea[s] || level[s] - h[s] <= 1e-4f) continue;
                 queue.Clear(); queue.Add(s); seen[s] = true;
                 float lv = level[s], maxDepth = 0;
+                bool dry = false;
                 for (int q = 0; q < queue.Count; q++)
                 {
                     int i = queue[q];
                     maxDepth = Math.Max(maxDepth, lv - h[i]);
+                    dry |= keepDry[i];
                     int x = i % n, y = i / n;
                     for (int k = 0; k < 8; k++)
                     {
@@ -127,7 +129,7 @@ namespace Stabby.World
                         seen[j] = true; queue.Add(j);
                     }
                 }
-                if (maxDepth >= c.LakeMinDepth && queue.Count >= c.LakeMinCells)
+                if (!dry && maxDepth >= c.LakeMinDepth && queue.Count >= c.LakeMinCells)
                 {
                     var lake = new Lake { Id = hy.Lakes.Count, Level = lv };
                     foreach (int i in queue) { lake.Cells.Add(i); hy.LakeId[i] = lake.Id; }
@@ -140,8 +142,9 @@ namespace Stabby.World
             }
         }
 
-        static void BuildSegments(int n, bool[] sea, Hydrology hy)
+        static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy)
         {
+            int n = cfg.Size;
             var riverDonors = new int[n * n];
             for (int i = 0; i < n * n; i++)
                 if (hy.IsRiver[i] && hy.Receiver[i] != i) riverDonors[hy.Receiver[i]]++;
@@ -159,11 +162,11 @@ namespace Stabby.World
                 int c = head;
                 while (true)
                 {
-                    Add(seg, hy, c);
+                    Add(cfg, seg, hy, c);
                     int r = hy.Receiver[c];
-                    if (sea[r]) { Add(seg, hy, r); seg.End = RiverEnd.Sea; break; }
-                    if (hy.LakeId[r] >= 0) { Add(seg, hy, r); seg.End = RiverEnd.Lake; seg.LakeId = hy.LakeId[r]; break; }
-                    if (riverDonors[r] >= 2) { Add(seg, hy, r); seg.End = RiverEnd.Junction; seg.Downstream = r; break; }
+                    if (sea[r]) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Sea; break; }
+                    if (hy.LakeId[r] >= 0) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Lake; seg.LakeId = hy.LakeId[r]; break; }
+                    if (riverDonors[r] >= 2) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Junction; seg.Downstream = r; break; }
                     c = r;
                 }
             }
@@ -171,15 +174,15 @@ namespace Stabby.World
                 if (seg.End == RiverEnd.Junction) seg.Downstream = startOf[seg.Downstream];
         }
 
-        static void Add(RiverSegment seg, Hydrology hy, int i)
+        static void Add(WorldConfig c, RiverSegment seg, Hydrology hy, int i)
         {
             float q = hy.DischargeM3s[i];
             seg.Cells.Add(i);
             seg.Surface.Add(hy.WaterSurface[i]);
             seg.Discharge.Add(q);
-            // Leopold hydraulic geometry: width and depth grow as powers of discharge.
-            seg.Width.Add(4f * (float)Math.Pow(q, 0.5));
-            seg.Depth.Add(0.4f * (float)Math.Pow(q, 0.4));
+            float width = c.RiverWidthAtUnitFlow * (float)Math.Pow(q, c.RiverWidthExponent);
+            seg.Width.Add(width);
+            seg.Depth.Add(0.3f + width / 25f);
         }
     }
 }

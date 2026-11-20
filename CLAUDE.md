@@ -16,3 +16,6 @@
 6. Changing generation output bumps `WorldConfig.GeneratorVersion`.
 7. Comments only for reasons, not narration.
 8. Files are LF (`.gitattributes`).
+9. This file is the architecture contract. Foundational changes to it need
+   Zach's review; a PreToolUse hook asks before any edit. Stage outputs stay
+   separable: sketch, terrain + hydrology (`--rain`), then climate and biomes.

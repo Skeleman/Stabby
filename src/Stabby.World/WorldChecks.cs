@@ -8,6 +8,9 @@ namespace Stabby.World
     public static class WorldChecks
     {
         public const float SurfaceTolerance = 1e-3f;
+        // Share of a corridor's lower three quarters that must have a river or
+        // lake within the corridor's width.
+        public const float CorridorFollowShare = 0.7f;
 
         public static List<string> Run(GeneratedWorld w)
         {
@@ -80,10 +83,125 @@ namespace Stabby.World
                     e.Add($"lake {lake.Id} outflow has no river");
             }
 
-            for (int i = 0; i < n * n; i++)
-                if (!w.Sea[i] && w.Biome[i] < 0 && hy.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
+            if (w.Biome != null)
+                for (int i = 0; i < n * n; i++)
+                    if (!w.Sea[i] && w.Biome[i] < 0 && hy.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
 
+            CheckSketch(w, e);
             return e;
+        }
+
+        static void CheckSketch(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            var s = w.Sketch;
+            var hy = w.Water;
+
+            var island = Components(n, w.Sea);
+            for (int k = 0; k < s.Landmasses.Count; k++)
+            {
+                var m = s.Landmasses[k];
+                int a = island[(int)m.Y * n + (int)m.X];
+                if (a < 0) { e.Add($"landmass {k} centre is sea"); continue; }
+                for (int j = 0; j < k; j++)
+                {
+                    var o = s.Landmasses[j];
+                    if (island[(int)o.Y * n + (int)o.X] == a) e.Add($"landmasses {j} and {k} are joined");
+                }
+            }
+
+            for (int k = 0; k < s.Corridors.Count; k++)
+            {
+                var cor = s.Corridors[k];
+                float total = 0;
+                for (int p = 1; p < cor.X.Length; p++) total += Length(cor, p);
+                int samples = 0, near = 0; float along = 0;
+                for (int p = 1; p < cor.X.Length; p++)
+                {
+                    float len = Length(cor, p);
+                    for (float t = 0; t < len; t += 1f)
+                    {
+                        float pos = along + t;
+                        if (pos < 0.25f * total) continue;
+                        float x = cor.X[p - 1] + (cor.X[p] - cor.X[p - 1]) * t / len;
+                        float y = cor.Y[p - 1] + (cor.Y[p] - cor.Y[p - 1]) * t / len;
+                        int cx = (int)x, cy = (int)y;
+                        if (cx < 0 || cy < 0 || cx >= n || cy >= n || w.Sea[cy * n + cx]) continue;
+                        samples++;
+                        if (WaterWithin(n, hy, w.Sea, cx, cy, (int)Math.Ceiling(cor.Width))) near++;
+                    }
+                    along += len;
+                }
+                if (samples > 0 && near < CorridorFollowShare * samples)
+                    e.Add($"corridor {k}: river follows only {near} of {samples} points");
+            }
+
+            if (w.Biome != null)
+                foreach (var r in s.Regions)
+                {
+                    if (Array.IndexOf(w.BiomeIds, r.Biome) < 0) { e.Add($"region biome {r.Biome} is not in the content"); continue; }
+                    int bad = 0, total = 0;
+                    for (int y = Math.Max(0, (int)(r.Y - r.Radius)); y < Math.Min(n, (int)(r.Y + r.Radius) + 1); y++)
+                        for (int x = Math.Max(0, (int)(r.X - r.Radius)); x < Math.Min(n, (int)(r.X + r.Radius) + 1); x++)
+                        {
+                            int i = y * n + x;
+                            float dx = x - r.X, dy = y - r.Y;
+                            if (w.Sea[i] || hy.LakeId[i] >= 0 || dx * dx + dy * dy > Biomes.RegionCore * Biomes.RegionCore * r.Radius * r.Radius) continue;
+                            total++;
+                            if (w.Biome[i] < 0 || w.BiomeIds[w.Biome[i]] != r.Biome) bad++;
+                        }
+                    if (bad > 0) e.Add($"region {r.Biome}: {bad} of {total} core cells have another biome");
+                }
+
+            for (int k = 0; k < s.Landmarks.Count; k++)
+            {
+                var l = s.Landmarks[k];
+                int i = (int)l.Y * n + (int)l.X;
+                if (w.Sea[i]) e.Add($"landmark {k} ({l.Kind}) is in the sea");
+                else if (hy.LakeId[i] >= 0) e.Add($"landmark {k} ({l.Kind}) is under lake {hy.LakeId[i]}");
+            }
+        }
+
+        static float Length(CorridorSketch c, int p)
+        {
+            float dx = c.X[p] - c.X[p - 1], dy = c.Y[p] - c.Y[p - 1];
+            return (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        static bool WaterWithin(int n, Hydrology hy, bool[] sea, int cx, int cy, int r)
+        {
+            for (int y = Math.Max(0, cy - r); y <= Math.Min(n - 1, cy + r); y++)
+                for (int x = Math.Max(0, cx - r); x <= Math.Min(n - 1, cx + r); x++)
+                {
+                    int i = y * n + x;
+                    if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > r * r) continue;
+                    if (hy.IsRiver[i] || hy.LakeId[i] >= 0) return true;
+                }
+            return false;
+        }
+
+        // Labels 4-connected land components; sea cells get -1.
+        static int[] Components(int n, bool[] sea)
+        {
+            var id = new int[n * n];
+            for (int i = 0; i < id.Length; i++) id[i] = -1;
+            var queue = new List<int>();
+            int next = 0;
+            for (int s = 0; s < n * n; s++)
+            {
+                if (sea[s] || id[s] >= 0) continue;
+                queue.Clear(); queue.Add(s); id[s] = next;
+                for (int q = 0; q < queue.Count; q++)
+                {
+                    int i = queue[q], x = i % n, y = i / n;
+                    if (x > 0 && !sea[i - 1] && id[i - 1] < 0) { id[i - 1] = next; queue.Add(i - 1); }
+                    if (x < n - 1 && !sea[i + 1] && id[i + 1] < 0) { id[i + 1] = next; queue.Add(i + 1); }
+                    if (y > 0 && !sea[i - n] && id[i - n] < 0) { id[i - n] = next; queue.Add(i - n); }
+                    if (y < n - 1 && !sea[i + n] && id[i + n] < 0) { id[i + n] = next; queue.Add(i + n); }
+                }
+                next++;
+            }
+            return id;
         }
     }
 }

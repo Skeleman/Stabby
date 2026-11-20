@@ -4,8 +4,8 @@ using Stabby.Cli;
 using Stabby.Content;
 using Stabby.World;
 
-// stabby gen   --seed 7 [--size 256] [--out out/seed7] [--scale 3] [--sketch sketch.json]
-// stabby sweep [--from 1] [--count 100] [--size 128]
+// stabby gen   --seed 7 [--size 512] [--out out/seed7] [--scale 2] [--sketch sketch.json] [--rain 1200]
+// stabby sweep [--from 1] [--count 100] [--size 256] [--rain 1200]
 var opts = ParseArgs(args.Skip(1).ToArray());
 var biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 var json = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -15,23 +15,19 @@ switch (args.FirstOrDefault())
     case "gen": return Gen();
     case "sweep": return Sweep();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 256] [--out dir] [--scale 3] [--sketch file]\n       stabby sweep [--from 1] [--count 100] [--size 128]");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 1] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
 int Gen()
 {
-    var c = new WorldConfig { Seed = ulong.Parse(Opt("seed", "1")), Size = int.Parse(Opt("size", "256")) };
-    var dir = Opt("out", Path.Combine("out", "seed" + c.Seed));
-    int scale = int.Parse(Opt("scale", c.Size <= 256 ? "3" : "2"));
-    Directory.CreateDirectory(dir);
-
+    var c = Config(ulong.Parse(Opt("seed", "1")), int.Parse(Opt("size", "512")));
     WorldSketch? sketch = null;
     if (opts.TryGetValue("sketch", out var sketchPath))
-    {
-        var file = JsonSerializer.Deserialize<SketchFile>(File.ReadAllText(sketchPath), json);
-        sketch = WorldSketch.FromRanges(c, file!.LandFraction, file.Ranges);
-    }
+        sketch = SketchFile.Read(File.ReadAllText(sketchPath), c);
+    var dir = Opt("out", Path.Combine("out", "seed" + c.Seed));
+    int scale = int.Parse(Opt("scale", c.Size <= 256 ? "3" : c.Size <= 512 ? "2" : "1"));
+    Directory.CreateDirectory(dir);
 
     var sw = Stopwatch.StartNew();
     var w = WorldGenerator.Generate(c, biomes, sketch);
@@ -39,17 +35,20 @@ int Gen()
     var violations = WorldChecks.Run(w);
 
     var map = Render.Map(w, scale);
-    var bio = Render.BiomeMap(w, biomes, scale);
-    var rain = Render.Precipitation(w, scale);
-    var sk = Render.SketchMap(w, scale);
+    var sk = Render.SketchMap(w, biomes, scale);
     Save(Path.Combine(dir, "map.png"), map);
-    Save(Path.Combine(dir, "biomes.png"), bio);
-    Save(Path.Combine(dir, "precipitation.png"), rain);
     Save(Path.Combine(dir, "sketch.png"), sk);
-    Save(Path.Combine(dir, "sheet.png"), Render.Sheet(sk, map, rain, bio));
+    if (w.Biome != null)
+    {
+        var bio = Render.BiomeMap(w, biomes, scale);
+        var rain = Render.Precipitation(w, scale);
+        Save(Path.Combine(dir, "biomes.png"), bio);
+        Save(Path.Combine(dir, "precipitation.png"), rain);
+        Save(Path.Combine(dir, "sheet.png"), Render.Sheet(sk, map, rain, bio));
+    }
+    else Save(Path.Combine(dir, "sheet.png"), Render.Sheet(sk, map));
 
-    File.WriteAllText(Path.Combine(dir, "sketch.json"),
-        JsonSerializer.Serialize(new SketchFile { LandFraction = w.Sketch.LandFraction, Ranges = w.Sketch.Ranges }, json));
+    File.WriteAllText(Path.Combine(dir, "sketch.json"), SketchFile.Write(w.Sketch, c));
     var m = Metrics(w, biomes, ms, violations);
     File.WriteAllText(Path.Combine(dir, "metrics.json"), JsonSerializer.Serialize(m, json));
     Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");
@@ -60,12 +59,12 @@ int Gen()
 int Sweep()
 {
     ulong from = ulong.Parse(Opt("from", "1"));
-    int count = int.Parse(Opt("count", "100")), size = int.Parse(Opt("size", "128"));
+    int count = int.Parse(Opt("count", "100")), size = int.Parse(Opt("size", "256"));
     var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
     var times = new System.Collections.Concurrent.ConcurrentBag<long>();
     Parallel.For(0, count, k =>
     {
-        var c = new WorldConfig { Seed = from + (ulong)k, Size = size };
+        var c = Config(from + (ulong)k, size);
         var sw = Stopwatch.StartNew();
         var w = WorldGenerator.Generate(c, biomes);
         times.Add(sw.ElapsedMilliseconds);
@@ -83,12 +82,13 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
     float riverKm = w.Water.Rivers.Sum(r => (r.Cells.Count - 1) * w.Config.CellMeters) / 1000f;
     var shares = new Dictionary<string, float>();
     foreach (var d in defs) shares[d.Id] = 0;
-    for (int i = 0; i < n * n; i++) if (w.Biome[i] >= 0) shares[defs[w.Biome[i]].Id] += 100f / land;
+    if (w.Biome != null) for (int i = 0; i < n * n; i++) if (w.Biome[i] >= 0) shares[defs[w.Biome[i]].Id] += 100f / land;
     return new()
     {
         ["seed"] = w.Config.Seed, ["generatorVersion"] = WorldConfig.GeneratorVersion, ["size"] = n,
         ["kmAcross"] = n * w.Config.CellMeters / 1000f, ["ms"] = ms, ["fingerprint"] = w.Fingerprint().ToString("x16"),
-        ["landPercent"] = MathF.Round(100f * land / (n * n), 1), ["ranges"] = w.Sketch.Ranges.Count,
+        ["landPercent"] = MathF.Round(100f * land / (n * n), 1), ["islands"] = w.Sketch.Landmasses.Count,
+        ["ranges"] = w.Sketch.Ranges.Count, ["corridors"] = w.Sketch.Corridors.Count, ["landmarks"] = w.Sketch.Landmarks.Count,
         ["peakM"] = MathF.Round(w.Height.Max()), ["lakes"] = w.Water.Lakes.Count,
         ["riverSegments"] = w.Water.Rivers.Count, ["riverKm"] = MathF.Round(riverKm, 1),
         ["maxDischargeM3s"] = MathF.Round(w.Water.DischargeM3s.Where((q, i) => !w.Sea[i]).Max(), 1),
@@ -96,6 +96,13 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
         ["violations"] = violations,
     };
 }
+
+// Smaller test worlds keep the island span by using coarser cells.
+WorldConfig Config(ulong seed, int size) => new WorldConfig
+{
+    Seed = seed, Size = size, CellMeters = 60f * 512 / size,
+    UniformRainMm = float.Parse(Opt("rain", "0")),
+};
 
 string Opt(string key, string fallback) => opts.TryGetValue(key, out var v) ? v : fallback;
 
@@ -107,9 +114,3 @@ static Dictionary<string, string> ParseArgs(string[] a)
 }
 
 static void Save(string path, (int w, int h, uint[] px) img) => Png.Write(path, img.w, img.h, img.px);
-
-sealed class SketchFile
-{
-    public float LandFraction;
-    public List<RangeSketch> Ranges = new();
-}

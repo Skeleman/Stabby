@@ -8,8 +8,11 @@ public class WorldTests
 {
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
-    static GeneratedWorld Gen(ulong seed, int size = 128) =>
-        WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size }, Biomes);
+    // Same 30 km span as the default world at coarser cells, so tests stay fast.
+    static WorldConfig Cfg(ulong seed, int size = 128) =>
+        new WorldConfig { Seed = seed, Size = size, CellMeters = 60f * 512 / size };
+
+    static GeneratedWorld Gen(ulong seed, int size = 128) => WorldGenerator.Generate(Cfg(seed, size), Biomes);
 
     [Fact]
     public void HundredSeedsPassEveryCheck()
@@ -32,10 +35,54 @@ public class WorldTests
     [Fact]
     public void EditedSketchRoundTripsToSameWorld()
     {
-        var c = new WorldConfig { Seed = 9, Size = 128 };
+        var c = Cfg(9);
         var a = WorldGenerator.Generate(c, Biomes);
-        var again = WorldSketch.FromRanges(c, a.Sketch.LandFraction, a.Sketch.Ranges);
+        var again = SketchFile.Read(SketchFile.Write(a.Sketch, c), Cfg(1, 64));
         Assert.Equal(a.Fingerprint(), WorldGenerator.Generate(c, Biomes, again).Fingerprint());
+    }
+
+    [Fact]
+    public void AuthoredEditsAreHonoured()
+    {
+        var c = Cfg(11);
+        var s = WorldGenerator.Generate(c, Biomes).Sketch;
+        var big = s.Landmasses[0];
+        s.Regions.Clear();
+        s.Regions.Add(new RegionSketch { Biome = "desert", X = big.X, Y = big.Y, Radius = big.Radius * 0.5f });
+        s.Landmarks.Add(new LandmarkSketch { Kind = "town", X = big.X + big.Radius * 0.3f, Y = big.Y });
+        s.Build(c);
+        var w = WorldGenerator.Generate(c, Biomes, s);
+        Assert.Empty(WorldChecks.Run(w));
+        int n = c.Size, centre = (int)big.Y * n + (int)big.X;
+        if (!w.Sea[centre] && w.Water.LakeId[centre] < 0) Assert.Equal("desert", w.BiomeIds[w.Biome[centre]]);
+    }
+
+    [Fact]
+    public void TerrainStageSkipsClimateAndBiomes()
+    {
+        var c = Cfg(5);
+        c.UniformRainMm = 1200;
+        var w = WorldGenerator.Generate(c, Biomes);
+        Assert.Null(w.Biome);
+        Assert.Empty(WorldChecks.Run(w));
+        Assert.True(w.Water.Rivers.Count > 0);
+    }
+
+    [Fact]
+    public void BiomeContentMatchesSchema()
+    {
+        var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+        using var schema = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "biomes.schema.json")));
+        using var data = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "biomes.json")));
+        var item = schema.RootElement.GetProperty("properties").GetProperty("biomes").GetProperty("items");
+        var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).ToList();
+        var allowed = item.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();
+        foreach (var b in data.RootElement.GetProperty("biomes").EnumerateArray())
+        {
+            var names = b.EnumerateObject().Select(p => p.Name).ToList();
+            Assert.Empty(required.Except(names));
+            Assert.Empty(names.Except(allowed));
+        }
     }
 
     [Fact]
