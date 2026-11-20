@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Stabby.World;
 using UnityEngine;
@@ -15,7 +16,8 @@ namespace Stabby.Viewer
         public Material Material;
         public float TargetQuadScreen = 0.01f;
         public int BuildBudget = 8;
-        public int ApplyBudget = 16;
+        public int ApplyVertices = 150000;
+        public float ApplyMs = 4f;
         public bool Blocking;
         public bool UseMapFile = true;
         public Color Sky = new Color(0.62f, 0.74f, 0.86f);
@@ -34,7 +36,9 @@ namespace Stabby.Viewer
         readonly List<Chunk> chunks = new List<Chunk>();
         Task<Prepared> preparing;
         Prepared prepared;
-        int applied, inFlight;
+        CancellationTokenSource cancel = new CancellationTokenSource();
+        int outstanding, appliedChunks, appliedWater, appliedRivers, frameVertices;
+        readonly Stopwatch frame = new Stopwatch();
 
         sealed class Source
         {
@@ -63,7 +67,7 @@ namespace Stabby.Viewer
         {
             public Source Src;
             public List<ChunkData> Chunks;
-            public MeshData Rivers;
+            public List<MeshData> Rivers;
             public long GenMs, MeshMs;
             public string Source = "";
         }
@@ -89,6 +93,8 @@ namespace Stabby.Viewer
 
         void Update()
         {
+            frame.Restart();
+            frameVertices = 0;
             Pump();
             var cam = Camera.main;
             if (cam != null && Ready) UpdateLod(cam);
@@ -99,13 +105,13 @@ namespace Stabby.Viewer
             var c = new WorldConfig { Seed = (ulong)Seed, Size = Size, CellMeters = WorldConfig.CellMetersFor(Size) };
             int cells = ChunkCells;
             string path = UseMapFile ? MapFile.PathFor(c.Seed, c.Size) : null;
-            Begin(() =>
+            Begin(token =>
             {
                 var sw = Stopwatch.StartNew();
                 var defs = BiomeFile.Load(BiomeFile.DefaultPath);
                 var (world, source) = path != null ? MapFile.LoadOrGenerate(path, BiomeFile.DefaultPath, c, defs, true) : (WorldGenerator.Generate(c, defs), $"generated in {sw.ElapsedMilliseconds} ms");
                 long genMs = sw.ElapsedMilliseconds;
-                var p = Prepare(world, defs, cells);
+                var p = Prepare(world, defs, cells, token);
                 p.GenMs = genMs;
                 p.Source = source;
                 return p;
@@ -115,17 +121,41 @@ namespace Stabby.Viewer
         public void Build(GeneratedWorld world, IReadOnlyList<BiomeDef> defs)
         {
             int cells = ChunkCells;
-            Begin(() => Prepare(world, defs, cells));
+            Begin(token => Prepare(world, defs, cells, token));
         }
 
-        void Begin(Func<Prepared> work)
+        void Begin(Func<CancellationToken, Prepared> work)
         {
             Clear();
             Shader.SetGlobalColor("_StabbySky", Sky * 0.9f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.3f, 0.27f, 0.22f));
-            if (Blocking) { prepared = work(); Pump(); }
-            else preparing = Task.Run(work);
+            if (Blocking) { prepared = work(cancel.Token); Pump(); }
+            else preparing = Run(work);
         }
+
+        public int Outstanding => Volatile.Read(ref outstanding);
+
+        Task<T> Run<T>(Func<CancellationToken, T> work) where T : class
+        {
+            var token = cancel.Token;
+            Interlocked.Increment(ref outstanding);
+            return Task.Run(() =>
+            {
+                try { return token.IsCancellationRequested ? null : work(token); }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { return null; }
+                finally { Interlocked.Decrement(ref outstanding); }
+            });
+        }
+
+        bool Spend(int vertices)
+        {
+            if (Blocking) return true;
+            if (frameVertices > 0 && (frameVertices + vertices > ApplyVertices || frame.Elapsed.TotalMilliseconds > ApplyMs)) return false;
+            frameVertices += vertices;
+            return true;
+        }
+
+        void OnDestroy() => cancel.Cancel();
 
         public void Clear()
         {
@@ -135,9 +165,12 @@ namespace Stabby.Viewer
                 if (Application.isPlaying) Destroy(go); else DestroyImmediate(go);
             }
             chunks.Clear();
+            cancel.Cancel();
+            cancel.Dispose();
+            cancel = new CancellationTokenSource();
             preparing = null;
             prepared = null;
-            applied = inFlight = 0;
+            appliedChunks = appliedWater = appliedRivers = 0;
             Ready = false;
         }
 
@@ -150,7 +183,7 @@ namespace Stabby.Viewer
                 preparing = null;
             }
             if (prepared == null || Ready) return;
-            if (applied == 0)
+            if (appliedChunks == 0)
             {
                 src = prepared.Src;
                 World = src.World;
@@ -162,18 +195,26 @@ namespace Stabby.Viewer
                 BuiltMeshes = 0;
             }
             var sw = Stopwatch.StartNew();
-            int budget = Blocking ? int.MaxValue : ApplyBudget;
-            for (; applied < prepared.Chunks.Count && budget > 0; applied++, budget--)
-                chunks.Add(BuildChunk(prepared.Chunks[applied]));
-            if (applied < prepared.Chunks.Count) { MeshMs += sw.ElapsedMilliseconds; return; }
+            var list = prepared.Chunks;
+            while (appliedChunks < list.Count && Spend(list[appliedChunks].Coarse.Verts.Length))
+                chunks.Add(BuildChunk(list[appliedChunks++]));
+            while (appliedChunks == list.Count && appliedWater < list.Count)
+            {
+                var water = list[appliedWater].Water;
+                if (water != null && !Spend(water.Verts.Length)) break;
+                if (water != null) AttachWater(chunks[appliedWater], water);
+                appliedWater++;
+            }
+            while (appliedWater == list.Count && appliedRivers < prepared.Rivers.Count && Spend(prepared.Rivers[appliedRivers].Verts.Length))
+                Attach("Rivers", transform, ToMesh(prepared.Rivers[appliedRivers++]));
+            if (appliedWater < list.Count || appliedRivers < prepared.Rivers.Count) { MeshMs += sw.ElapsedMilliseconds; return; }
             BuildSea();
-            if (prepared.Rivers != null) Attach("Rivers", transform, ToMesh(prepared.Rivers));
             MeshMs = prepared.MeshMs + MeshMs + sw.ElapsedMilliseconds;
             prepared = null;
             Ready = true;
         }
 
-        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, int cells)
+        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, int cells, CancellationToken token)
         {
             var sw = Stopwatch.StartNew();
             var s = new Source { World = world, Size = world.Config.Size, ChunkCells = cells, Cm = world.Config.CellMeters };
@@ -183,9 +224,10 @@ namespace Stabby.Viewer
             int n = s.Size;
             for (int cy = 0; cy < n; cy += cells)
                 for (int cx = 0; cx < n; cx += cells)
-                    if (HasLand(s, cx, cy))
+                    if (!token.IsCancellationRequested && HasLand(s, cx, cy))
                         list.Add(new ChunkData { X = cx, Y = cy, Coarse = TerrainMesh(s, cx, cy, Steps[Steps.Length - 1]), Water = WaterMesh(s, cx, cy) });
-            return new Prepared { Src = s, Chunks = list, Rivers = RiverMesh(s), MeshMs = sw.ElapsedMilliseconds };
+            token.ThrowIfCancellationRequested();
+            return new Prepared { Src = s, Chunks = list, Rivers = RiverMeshes(s), MeshMs = sw.ElapsedMilliseconds };
         }
 
         public void UpdateLod(Camera cam)
@@ -195,12 +237,11 @@ namespace Stabby.Viewer
             float k = 2f * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
             var eye = cam.transform.position;
             float cm = src.Cm;
-            int apply = Blocking ? int.MaxValue : ApplyBudget;
             VisibleChunks = VisibleTriangles = 0;
             Array.Clear(lodCounts, 0, lodCounts.Length);
             foreach (var ch in chunks)
             {
-                apply -= Collect(ch, apply);
+                Collect(ch);
                 float d = Mathf.Max(1f, Vector3.Distance(eye, ch.Bounds.ClosestPoint(eye)));
                 bool vis = d < cam.farClipPlane && GeometryUtility.TestPlanesAABB(planes, ch.Bounds);
                 ch.Renderer.enabled = vis;
@@ -209,7 +250,7 @@ namespace Stabby.Viewer
                 float allowed = TargetQuadScreen * d * k;
                 int lod = 0;
                 while (lod < Steps.Length - 1 && Steps[lod + 1] * cm <= allowed) lod++;
-                if (ch.Lods[lod] == null && ch.Pending[lod] == null && (Blocking || inFlight < BuildBudget)) Request(ch, lod);
+                if (ch.Lods[lod] == null && ch.Pending[lod] == null && (Blocking || Outstanding < BuildBudget)) Request(ch, lod);
                 while (ch.Lods[lod] == null) lod++;
                 if (lod != ch.Lod) { ch.Filter.sharedMesh = ch.Lods[lod]; ch.Lod = lod; }
                 VisibleChunks++;
@@ -224,24 +265,21 @@ namespace Stabby.Viewer
             int x = ch.X, y = ch.Y;
             float step = Steps[lod];
             if (Blocking) { SetLod(ch, lod, TerrainMesh(s, x, y, step)); return; }
-            ch.Pending[lod] = Task.Run(() => TerrainMesh(s, x, y, step));
-            inFlight++;
+            ch.Pending[lod] = Run(_ => TerrainMesh(s, x, y, step));
         }
 
-        int Collect(Chunk ch, int budget)
+        void Collect(Chunk ch)
         {
-            int used = 0;
-            for (int l = 0; l < Steps.Length && used < budget; l++)
+            for (int l = 0; l < Steps.Length; l++)
             {
                 var t = ch.Pending[l];
                 if (t == null || !t.IsCompleted) continue;
+                if (t.IsFaulted) { ch.Pending[l] = null; UnityEngine.Debug.LogException(t.Exception); continue; }
+                var data = t.Result;
+                if (data != null && !Spend(data.Verts.Length)) return;
                 ch.Pending[l] = null;
-                inFlight--;
-                if (t.IsFaulted) { UnityEngine.Debug.LogException(t.Exception); continue; }
-                SetLod(ch, l, t.Result);
-                used++;
+                if (data != null) SetLod(ch, l, data);
             }
-            return used;
         }
 
         void SetLod(Chunk ch, int lod, MeshData data)
@@ -286,12 +324,13 @@ namespace Stabby.Viewer
             ch.Lod = coarse;
             ch.Renderer = go.AddComponent<MeshRenderer>();
             ch.Renderer.sharedMaterial = Material;
-            if (data.Water != null)
-            {
-                ch.Water = Attach("Water", go.transform, ToMesh(data.Water));
-                ch.WaterTris = data.Water.Tris.Length / 3;
-            }
             return ch;
+        }
+
+        void AttachWater(Chunk ch, MeshData water)
+        {
+            ch.Water = Attach("Water", ch.Filter.transform, ToMesh(water));
+            ch.WaterTris = water.Tris.Length / 3;
         }
 
         MeshRenderer Attach(string name, Transform parent, Mesh mesh)
@@ -427,16 +466,25 @@ namespace Stabby.Viewer
             return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, tris, LakeColor);
         }
 
-        static MeshData RiverMesh(Source s)
+        const int RiverPieceVertices = 16000;
+
+        static List<MeshData> RiverMeshes(Source s)
         {
             int n = s.Size;
             float cm = s.Cm;
             var world = s.World;
+            var pieces = new List<MeshData>();
             var verts = new List<Vector3>();
             var tris = new List<int>();
             foreach (var r in world.Water.Rivers)
             {
                 if (r.Cells.Count < 2) continue;
+                if (verts.Count >= RiverPieceVertices)
+                {
+                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, RiverColor));
+                    verts.Clear();
+                    tris.Clear();
+                }
                 var pts = new List<Vector4>();
                 for (int k = 0; k < r.Cells.Count; k++)
                 {
@@ -461,7 +509,8 @@ namespace Stabby.Viewer
                     tris.Add(v - 1); tris.Add(v); tris.Add(v + 1);
                 }
             }
-            return verts.Count == 0 ? null : Flat("Rivers", verts, tris, RiverColor);
+            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, RiverColor));
+            return pieces;
         }
 
         static float GroundAt(Source s, Vector3 p, Vector3 side, float surface)

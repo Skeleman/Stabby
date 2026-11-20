@@ -16,28 +16,71 @@ namespace Stabby.World
 
         public ulong Fingerprint()
         {
-            ulong h = 14695981039346656037UL;
-            void Mix(ulong v) { h ^= v; h *= 1099511628211UL; }
-            void F(float v) => Mix((ulong)BitConverter.SingleToInt32Bits(v));
-            void Fs(float[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length); foreach (float v in a) F(v); }
-            void Is(int[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length); foreach (int v in a) Mix((ulong)v); }
-            void Bs(bool[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length); foreach (bool v in a) Mix(v ? 1UL : 2UL); }
-            Mix(WorldConfig.GeneratorVersion);
-            Mix(Config.Seed); Mix((ulong)Config.Size); F(Config.CellMeters);
-            Bs(Sketch?.Land); Fs(Sketch?.Uplift); Bs(Sketch?.Landmark);
-            Bs(Sea); Fs(Height);
-            Fs(Climate.TemperatureC); Fs(Climate.PrecipitationMm);
-            Is(Water.Receiver); Fs(Water.WaterSurface); Fs(Water.DischargeM3s); Is(Water.LakeId); Bs(Water.IsRiver);
-            Mix((ulong)Water.Lakes.Count);
-            foreach (var l in Water.Lakes) { F(l.Level); Mix((ulong)l.Outlet); Mix((ulong)l.Cells.Count); }
-            Mix((ulong)Water.Rivers.Count);
+            var f = new Fnv();
+            f.Mix(OutputFingerprint());
+            var k = Sketch;
+            if (k == null) { f.Mix(0); return f.H; }
+            f.Mix((ulong)k.Size);
+            Masses(f, k.Landmasses); Masses(f, k.Islets); Masses(f, k.Lakes);
+            f.Mix((ulong)k.Ranges.Count);
+            foreach (var r in k.Ranges) { f.Fs(r.X); f.Fs(r.Y); f.F(r.Strength); f.F(r.Width); }
+            f.Mix((ulong)k.Corridors.Count);
+            foreach (var r in k.Corridors) { f.Fs(r.X); f.Fs(r.Y); f.F(r.Width); }
+            f.Mix((ulong)k.Regions.Count);
+            foreach (var r in k.Regions) { f.S(r.Biome); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
+            f.Mix((ulong)k.Landmarks.Count);
+            foreach (var r in k.Landmarks) { f.S(r.Kind); f.F(r.X); f.F(r.Y); }
+            f.Mix((ulong)k.Shores.Count);
+            foreach (var r in k.Shores) { f.Mix(r.Cliff ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
+            f.Mix((ulong)k.Highlands.Count);
+            foreach (var r in k.Highlands) { f.Mix(r.Plateau ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
+            f.Bs(k.Land); f.Fs(k.Uplift); f.Bs(k.Landmark); f.Fs(k.Valley); f.Fs(k.Coast);
+            f.Fs(k.ValleyRun); f.Fs(k.Cliff); f.Fs(k.Beach); f.Fs(k.Plateau);
+            return f.H;
+        }
+
+        public ulong OutputFingerprint()
+        {
+            var f = new Fnv();
+            f.Mix(WorldConfig.GeneratorVersion);
+            f.Mix(Config.Seed); f.Mix((ulong)Config.Size); f.F(Config.CellMeters);
+            f.Bs(Sea); f.Fs(Height);
+            f.Fs(Climate.TemperatureC); f.Fs(Climate.PrecipitationMm);
+            f.Is(Water.Receiver); f.Fs(Water.WaterSurface); f.Fs(Water.DischargeM3s); f.Is(Water.LakeId); f.Bs(Water.IsRiver);
+            f.Mix((ulong)Water.Lakes.Count);
+            foreach (var l in Water.Lakes) { f.F(l.Level); f.Mix((ulong)l.Outlet); f.Mix((ulong)l.Cells.Count); }
+            f.Mix((ulong)Water.Rivers.Count);
             foreach (var r in Water.Rivers)
             {
-                Mix((ulong)r.Cells.Count);
-                for (int k = 0; k < r.Cells.Count; k++) { Mix((ulong)r.Cells[k]); F(r.Surface[k]); F(r.Width[k]); F(r.Depth[k]); }
+                f.Mix((ulong)r.Cells.Count);
+                for (int k = 0; k < r.Cells.Count; k++) { f.Mix((ulong)r.Cells[k]); f.F(r.Surface[k]); f.F(r.Width[k]); f.F(r.Depth[k]); }
             }
-            Is(Biome);
-            return h;
+            f.Is(Biome);
+            if (BiomeIds == null) f.Mix(0);
+            else { f.Mix((ulong)BiomeIds.Length); foreach (var id in BiomeIds) f.S(id); }
+            return f.H;
+        }
+
+        static void Masses(Fnv f, List<LandmassSketch> list)
+        {
+            f.Mix((ulong)list.Count);
+            foreach (var m in list)
+            {
+                f.F(m.X); f.F(m.Y); f.F(m.Radius);
+                f.Mix((ulong)m.Lobes.Count);
+                foreach (var l in m.Lobes) { f.F(l.X); f.F(l.Y); f.F(l.Radius); }
+            }
+        }
+
+        sealed class Fnv
+        {
+            public ulong H = 14695981039346656037UL;
+            public void Mix(ulong v) { H ^= v; H *= 1099511628211UL; }
+            public void F(float v) => Mix((ulong)BitConverter.SingleToInt32Bits(v));
+            public void S(string v) { if (v == null) { Mix(0); return; } Mix((ulong)v.Length + 1); foreach (char c in v) Mix(c); }
+            public void Fs(float[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length + 1); foreach (float v in a) F(v); }
+            public void Is(int[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length + 1); foreach (int v in a) Mix((ulong)v); }
+            public void Bs(bool[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length + 1); foreach (bool v in a) Mix(v ? 1UL : 2UL); }
         }
     }
 

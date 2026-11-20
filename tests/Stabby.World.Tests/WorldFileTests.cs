@@ -18,8 +18,7 @@ public class WorldFileTests
         Assert.Equal(host.BiomeIds, loaded.BiomeIds);
         Assert.Equal(WorldChunks.Checksums(host), WorldChunks.Checksums(loaded));
         Assert.Empty(WorldChecks.Run(loaded));
-        host.Sketch = null;
-        Assert.Equal(host.Fingerprint(), loaded.Fingerprint());
+        Assert.Equal(host.OutputFingerprint(), loaded.OutputFingerprint());
     }
 
     [Fact]

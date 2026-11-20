@@ -32,6 +32,18 @@ public class WorldTests
     }
 
     [Fact]
+    public void FingerprintCoversSketchAndBiomeIds()
+    {
+        var w = Gen(42);
+        ulong full = w.Fingerprint(), output = w.OutputFingerprint();
+        w.Sketch.Regions.Add(new RegionSketch { Biome = "x", X = 1, Y = 1, Radius = 1 });
+        Assert.NotEqual(full, w.Fingerprint());
+        Assert.Equal(output, w.OutputFingerprint());
+        w.BiomeIds[0] += "x";
+        Assert.NotEqual(output, w.OutputFingerprint());
+    }
+
+    [Fact]
     public void EditedSketchRoundTripsToSameWorld()
     {
         var c = Cfg(9);

@@ -99,6 +99,9 @@ are in `CLAUDE.md`; project skills live in `.claude/skills/`.
 `unity/` is a Unity 6000.5.8f1 URP project that loads `src/Stabby.World` as a local
 package and draws a generated world: 64-cell chunks with five screen-size LODs and
 skirts, smoothed river ribbons at their generated widths, lakes and a sea plane.
+This is full-world async preparation, not streaming: every chunk is meshed on
+worker tasks, and the main thread applies terrain, water and river pieces within
+`ApplyVertices` and `ApplyMs` per frame. Clearing or reloading cancels stale tasks.
 Open `Assets/Scenes/Viewer.unity` and press Play (RMB look, WASD, Q/E, Shift, wheel);
 Play loads the baked map file like the game does (and bakes it if missing).
 Batch shots and stats always generate, since they read the sketch: `Unity -batchmode -projectPath unity -executeMethod

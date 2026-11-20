@@ -12,6 +12,7 @@ public static class Linter
     const string GameDir = "unity/Assets/Game/";
     const string UnityDir = "unity/Assets/";
     static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete" };
+    static readonly string[] NativeMembers = { "linear", "gamma", "GammaToLinearSpace", "LinearToGammaSpace", "PerlinNoise" };
 
     public static IEnumerable<string> SourceFiles(string repo) =>
         Roots.Select(r => Path.Combine(repo, r)).Where(Directory.Exists)
@@ -102,6 +103,16 @@ public static class Linter
             if (allow.ContainsKey(key)) { used.Add(key); continue; }
             int line = acc.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             yield return $"{file}:{line}: {acc} may block; read Result only after an IsCompleted check in the same method";
+        }
+        foreach (var acc in root.DescendantNodes().OfType<MemberAccessExpressionSyntax>())
+        {
+            string name = acc.Name.Identifier.Text;
+            if (!NativeMembers.Contains(name)) continue;
+            string owner = acc.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
+            string key = $"{owner}.{name}";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = acc.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: {acc} calls native engine code, unsafe on worker threads; use a managed version or list {key} in {AllowFile} with a reason";
         }
     }
 
