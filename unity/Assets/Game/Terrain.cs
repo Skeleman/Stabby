@@ -50,6 +50,46 @@ namespace Stabby.Game
         public static int Indices(int m) => m * m * 6 + 4 * m * 12;
     }
 
+    struct GroundColumns : IColumnField
+    {
+        public Ground Ground;
+        public float StepCells, Top;
+
+        public float Height(int i, int k) => Ground.GridHeight(math.clamp(i * StepCells, 0, Top), math.clamp(k * StepCells, 0, Top));
+    }
+
+    struct TerrainSink : INetsSink
+    {
+        public NativeList<TerrainVertex> Verts;
+        public NativeList<int> Tris;
+        public NativeArray<int> Ints;
+        public NativeArray<float> Floats;
+
+        public void Begin(int ints, int floats)
+        {
+            Verts.Clear();
+            Tris.Clear();
+            Ints = new NativeArray<int>(ints, Allocator.Temp);
+            Floats = new NativeArray<float>(floats, Allocator.Temp);
+        }
+
+        public int GetInt(int k) => Ints[k];
+        public void SetInt(int k, int v) => Ints[k] = v;
+        public float GetFloat(int k) => Floats[k];
+        public void SetFloat(int k, float v) => Floats[k] = v;
+
+        public int AddVertex(float x, float y, float z, float nx, float ny, float nz)
+        {
+            Verts.Add(new TerrainVertex { Pos = new float3(x, y, z), Normal = new float3(nx, ny, nz) });
+            return Verts.Length - 1;
+        }
+
+        public void AddTriangle(int a, int b, int c)
+        {
+            Tris.Add(a); Tris.Add(b); Tris.Add(c);
+        }
+    }
+
     [BurstCompile(CompileSynchronously = true)]
     struct TerrainMeshJob : IJob
     {
@@ -57,72 +97,76 @@ namespace Stabby.Game
         public BlobAssetReference<TerrainLookData> Look;
         public int Cx, Cy, M;
         public float Step;
-        public Mesh.MeshData Mesh;
+        public NativeList<TerrainVertex> Verts;
+        public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
 
         public void Execute()
         {
             ref var g = ref Ground.Blob.Value;
             ref var look = ref Look.Value;
-            int n = g.N, m = M, w = m + 1, gs = m + 3;
-            float cm = g.CellMeters, top = n - 1;
-            var hs = new NativeArray<float>(gs * gs, Allocator.Temp);
-            for (int j = 0; j < gs; j++)
-                for (int i = 0; i < gs; i++)
-                    hs[j * gs + i] = Ground.GridHeight(math.clamp(Cx + (i - 1) * Step, 0, top), math.clamp(Cy + (j - 1) * Step, 0, top));
+            int n = g.N, m = M, w = m + 1;
+            float cm = g.CellMeters, top = n - 1, s = Step * cm;
+            var chunk = new NetsChunk { X0 = (int)(Cx / Step), Z0 = (int)(Cy / Step), Cells = m, StepM = s };
+            var sink = new TerrainSink { Verts = Verts, Tris = Tris };
+            SurfaceNets.Heightfield(new GroundColumns { Ground = Ground, StepCells = Step, Top = top }, chunk, ref sink);
 
-            var verts = Mesh.GetVertexData<TerrainVertex>();
-            var idx = Mesh.GetIndexData<ushort>();
+            float x0m = Cx * cm, z0m = Cy * cm, x1m = x0m + m * s, z1m = z0m + m * s;
+            for (int k = 0; k < w; k++)
+                for (int i = 0; i < w; i++)
+                {
+                    if (i != 0 && k != 0 && i != m && k != m) continue;
+                    int col = 3 * (k * w + i);
+                    for (int v = sink.Ints[col + 2], e = v + sink.Ints[col + 1] - sink.Ints[col]; v < e; v++)
+                    {
+                        var p = Verts[v];
+                        if (i == 0) p.Pos.x = x0m; else if (i == m) p.Pos.x = x1m;
+                        if (k == 0) p.Pos.z = z0m; else if (k == m) p.Pos.z = z1m;
+                        Verts[v] = p;
+                    }
+                }
+
             float3 lo = float.MaxValue, hi = float.MinValue;
-            for (int j = 0; j <= m; j++)
-                for (int i = 0; i <= m; i++)
-                {
-                    float gx = math.min(Cx + i * Step, top), gy = math.min(Cy + j * Step, top);
-                    int c = (j + 1) * gs + i + 1;
-                    float h = hs[c];
-                    var nrm = math.normalize(new float3(hs[c - 1] - hs[c + 1], 2 * Step * cm, hs[c - gs] - hs[c + gs]));
-                    int x0 = math.min((int)gx, n - 2), y0 = math.min((int)gy, n - 2), a = y0 * n + x0;
-                    float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - x0, gy - y0);
-                    var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - x0, gy - y0), h, nrm.y);
-                    var p = new float3(gx * cm, h, gy * cm);
-                    verts[j * w + i] = new TerrainVertex { Pos = p, Normal = nrm, Color = new float4(col.xyz, 1), Strata = new float2(off, col.w) };
-                    lo = math.min(lo, p);
-                    hi = math.max(hi, p);
-                }
-            int t = 0;
-            for (int j = 0; j < m; j++)
-                for (int i = 0; i < m; i++)
-                {
-                    int a = j * w + i;
-                    idx[t++] = (ushort)a; idx[t++] = (ushort)(a + w); idx[t++] = (ushort)(a + 1);
-                    idx[t++] = (ushort)(a + 1); idx[t++] = (ushort)(a + w); idx[t++] = (ushort)(a + w + 1);
-                }
+            for (int v = 0; v < Verts.Length; v++)
+            {
+                var p = Verts[v];
+                float gx = math.clamp(p.Pos.x / cm, 0, top), gy = math.clamp(p.Pos.z / cm, 0, top);
+                int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
+                float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
+                var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
+                p.Color = new float4(col.xyz, 1);
+                p.Strata = new float2(off, col.w);
+                Verts[v] = p;
+                lo = math.min(lo, p.Pos);
+                hi = math.max(hi, p.Pos);
+            }
 
-            int ringCount = 4 * m, first = w * w;
-            float drop = Step * cm * 0.5f + 20f;
+            int ringCount = 4 * m;
             var ring = new NativeArray<int>(ringCount, Allocator.Temp);
             int q = 0;
             for (int i = 0; i < m; i++) ring[q++] = i;
-            for (int j = 0; j < m; j++) ring[q++] = j * w + m;
+            for (int k = 0; k < m; k++) ring[q++] = k * w + m;
             for (int i = m; i > 0; i--) ring[q++] = m * w + i;
-            for (int j = m; j > 0; j--) ring[q++] = j * w;
-            for (int k = 0; k < ringCount; k++)
+            for (int k = m; k > 0; k--) ring[q++] = k * w;
+            float drop = s * 0.5f + 20f;
+            int first = Verts.Length;
+            for (int r = 0; r < ringCount; r++)
             {
-                var v = verts[ring[k]];
+                var v = Verts[sink.Ints[3 * ring[r] + 2]];
                 v.Pos.y -= drop;
-                verts[first + k] = v;
+                Verts.Add(v);
                 lo = math.min(lo, v.Pos);
             }
-            for (int k = 0; k < ringCount; k++)
+            for (int r = 0; r < ringCount; r++)
             {
-                ushort a = (ushort)ring[k], b = (ushort)ring[(k + 1) % ringCount], a2 = (ushort)(first + k), b2 = (ushort)(first + (k + 1) % ringCount);
-                idx[t++] = a; idx[t++] = b; idx[t++] = a2;
-                idx[t++] = b; idx[t++] = b2; idx[t++] = a2;
-                idx[t++] = a; idx[t++] = a2; idx[t++] = b;
-                idx[t++] = b; idx[t++] = a2; idx[t++] = b2;
+                int ca = 3 * ring[r], cb = 3 * ring[(r + 1) % ringCount];
+                int a = sink.Ints[ca + 2] + sink.Ints[ca + 1] - sink.Ints[ca] - 1, b = sink.Ints[cb + 2] + sink.Ints[cb + 1] - sink.Ints[cb] - 1;
+                int a2 = first + r, b2 = first + (r + 1) % ringCount;
+                Tris.Add(a); Tris.Add(b); Tris.Add(a2);
+                Tris.Add(b); Tris.Add(b2); Tris.Add(a2);
+                Tris.Add(a); Tris.Add(a2); Tris.Add(b);
+                Tris.Add(b); Tris.Add(a2); Tris.Add(b2);
             }
-            Mesh.SetSubMesh(0, new SubMeshDescriptor(0, t) { bounds = new Bounds((lo + hi) * 0.5f, hi - lo), vertexCount = verts.Length },
-                MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
             Bounds[0] = lo;
             Bounds[1] = hi;
         }
@@ -180,7 +224,8 @@ namespace Stabby.Game
         {
             public int Chunk, Lod, Vertices;
             public JobHandle Handle;
-            public Mesh.MeshDataArray Data;
+            public NativeList<TerrainVertex> Verts;
+            public NativeList<int> Tris;
             public NativeArray<float3> Bounds;
         }
 
@@ -299,18 +344,11 @@ namespace Stabby.Game
         {
             var ch = chunks[c];
             int m = TerrainLods.Quads(lod), verts = TerrainLods.Vertices(m);
-            var data = Mesh.AllocateWritableMeshData(1);
-            var md = data[0];
-            md.SetVertexBufferParams(verts,
-                new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-                new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3),
-                new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
-                new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2));
-            md.SetIndexBufferParams(TerrainLods.Indices(m), IndexFormat.UInt16);
-            md.subMeshCount = 1;
+            var vl = new NativeList<TerrainVertex>(verts, Allocator.Persistent);
+            var tl = new NativeList<int>(TerrainLods.Indices(m), Allocator.Persistent);
             var bounds = new NativeArray<float3>(2, Allocator.Persistent);
-            var job = new TerrainMeshJob { Ground = ground, Look = look, Cx = ch.Cell.x, Cy = ch.Cell.y, M = m, Step = TerrainLods.Step(lod), Mesh = md, Bounds = bounds };
-            pending.Add(new Pending { Chunk = c, Lod = lod, Vertices = verts, Handle = job.Schedule(), Data = data, Bounds = bounds });
+            var job = new TerrainMeshJob { Ground = ground, Look = look, Cx = ch.Cell.x, Cy = ch.Cell.y, M = m, Step = TerrainLods.Step(lod), Verts = vl, Tris = tl, Bounds = bounds };
+            pending.Add(new Pending { Chunk = c, Lod = lod, Vertices = verts, Handle = job.Schedule(), Verts = vl, Tris = tl, Bounds = bounds });
             ch.Pending |= 1 << lod;
             chunks[c] = ch;
         }
@@ -341,8 +379,15 @@ namespace Stabby.Game
             float3 lo = p.Bounds[0], hi = p.Bounds[1];
             p.Bounds.Dispose();
             var mesh = new Mesh { name = $"Terrain {ch.Cell.x},{ch.Cell.y} x{TerrainLods.Step(p.Lod)}" };
-            Mesh.ApplyAndDisposeWritableMeshData(p.Data, mesh, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+            const MeshUpdateFlags quiet = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers;
+            mesh.SetVertexBufferParams(p.Verts.Length, Layout);
+            mesh.SetVertexBufferData(p.Verts.AsArray(), 0, 0, p.Verts.Length, 0, quiet);
+            mesh.SetIndexBufferParams(p.Tris.Length, IndexFormat.UInt32);
+            mesh.SetIndexBufferData(p.Tris.AsArray(), 0, 0, p.Tris.Length, quiet);
+            mesh.SetSubMesh(0, new SubMeshDescriptor(0, p.Tris.Length) { bounds = new Bounds((lo + hi) * 0.5f, hi - lo), vertexCount = p.Verts.Length }, quiet);
             mesh.bounds = new Bounds((lo + hi) * 0.5f, hi - lo);
+            p.Verts.Dispose();
+            p.Tris.Dispose();
             int slot = p.Chunk * TerrainLods.Count + p.Lod;
             meshes[slot] = mesh;
             meshIds[slot] = graphics.RegisterMesh(mesh);
@@ -360,6 +405,14 @@ namespace Stabby.Game
             }
             chunks[p.Chunk] = ch;
         }
+
+        static readonly VertexAttributeDescriptor[] Layout =
+        {
+            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+        };
 
         Entity Spawn(BatchMeshID mesh, AABB box)
         {
@@ -435,7 +488,8 @@ namespace Stabby.Game
             foreach (var p in pending)
             {
                 p.Handle.Complete();
-                p.Data.Dispose();
+                p.Verts.Dispose();
+                p.Tris.Dispose();
                 p.Bounds.Dispose();
             }
             pending.Clear();
