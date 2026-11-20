@@ -53,16 +53,23 @@ namespace Stabby.Viewer
 
         public void Build()
         {
+            var sw = Stopwatch.StartNew();
+            var defs = BiomeFile.Load(BiomeFile.DefaultPath);
+            var c = new WorldConfig { Seed = (ulong)Seed, Size = Size, CellMeters = WorldConfig.CellMetersFor(Size) };
+            var world = WorldGenerator.Generate(c, defs);
+            GenerateMs = sw.ElapsedMilliseconds;
+            Build(world, defs);
+        }
+
+        public void Build(GeneratedWorld world, IReadOnlyList<BiomeDef> defs)
+        {
             Clear();
             Shader.SetGlobalColor("_StabbySky", Sky * 0.9f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.3f, 0.27f, 0.22f));
             var sw = Stopwatch.StartNew();
-            var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-            var c = new WorldConfig { Seed = (ulong)Seed, Size = Size, CellMeters = 60f * 512 / Size };
-            World = WorldGenerator.Generate(c, defs);
-            GenerateMs = sw.ElapsedMilliseconds;
-            sw.Restart();
-
+            World = world;
+            Seed = (int)world.Config.Seed;
+            Size = world.Config.Size;
             Detail = new TerrainDetail(World);
             baseColors = BaseColors(World, defs);
             BuiltMeshes = 0;

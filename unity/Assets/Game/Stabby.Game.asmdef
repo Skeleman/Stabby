@@ -1,0 +1,17 @@
+{
+    "name": "Stabby.Game",
+    "rootNamespace": "Stabby.Game",
+    "references": [
+        "Stabby.World",
+        "Stabby.Viewer",
+        "Unity.Entities",
+        "Unity.NetCode",
+        "Unity.Networking.Transport",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "Unity.Burst"
+    ],
+    "allowUnsafeCode": false,
+    "autoReferenced": true
+}

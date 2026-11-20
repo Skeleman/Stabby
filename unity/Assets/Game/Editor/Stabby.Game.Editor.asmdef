@@ -1,0 +1,9 @@
+{
+    "name": "Stabby.Game.Editor",
+    "rootNamespace": "Stabby.Game.Editor",
+    "references": [
+        "Stabby.Game"
+    ],
+    "includePlatforms": ["Editor"],
+    "autoReferenced": true
+}
