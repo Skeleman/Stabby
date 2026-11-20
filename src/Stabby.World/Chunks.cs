@@ -6,7 +6,7 @@ namespace Stabby.World
     {
         public const int Size = 64;
         public const int Version = 1;
-        const int CellBytes = 32;
+        public const int CellBytes = 32;
         const byte SeaFlag = 1, RiverFlag = 2;
 
         public static int Across(int n) => (n + Size - 1) / Size;

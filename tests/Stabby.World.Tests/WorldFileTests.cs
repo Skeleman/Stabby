@@ -30,6 +30,20 @@ public class WorldFileTests
         Assert.Throws<FormatException>(() => WorldFile.Read(bytes));
     }
 
+    [Theory]
+    [InlineData(24, int.MaxValue)]
+    [InlineData(24, -5)]
+    [InlineData(28, 0)]
+    [InlineData(32, int.MaxValue)]
+    [InlineData(36, int.MaxValue)]
+    [InlineData(24, 129)]
+    public void MalformedHeadersAreRejectedBeforeAllocating(int offset, int value)
+    {
+        var bytes = WorldFile.Write(WorldGenerator.Generate(new WorldConfig { Seed = 3, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) }, Biomes));
+        BitConverter.GetBytes(value).CopyTo(bytes, offset);
+        Assert.Throws<FormatException>(() => WorldFile.Read(bytes));
+    }
+
     [Fact]
     public void EmptyWorldStreamsToTheHost()
     {

@@ -6,7 +6,7 @@ namespace Stabby.World
 {
     public static class WorldFile
     {
-        public const int Version = 1;
+        public const int Version = 1, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256;
         static readonly byte[] Magic = { (byte)'S', (byte)'T', (byte)'B', (byte)'W' };
 
         public static byte[] Write(GeneratedWorld w)
@@ -40,13 +40,25 @@ namespace Stabby.World
                 throw new FormatException($"world file v{version} generator {gen} chunks v{chunkVersion}, expected v{Version} generator {WorldConfig.GeneratorVersion} chunks v{WorldChunks.Version}");
             ulong seed = (uint)Next(data, ref o) | (ulong)(uint)Next(data, ref o) << 32;
             var c = new WorldConfig { Seed = seed, Size = Next(data, ref o), CellMeters = BitConverter.Int32BitsToSingle(Next(data, ref o)) };
+            if (c.Size < 1 || c.Size > MaxSize) throw new FormatException($"world file size {c.Size} outside 1..{MaxSize}");
+            if (!(c.CellMeters > 0) || float.IsInfinity(c.CellMeters)) throw new FormatException($"world file cell size {c.CellMeters} is not a positive number");
             int ids = Next(data, ref o);
+            if (ids < -1 || ids > MaxBiomes) throw new FormatException($"world file biome count {ids} outside -1..{MaxBiomes}");
             string[] biomeIds = null;
             if (ids >= 0)
             {
                 biomeIds = new string[ids];
-                for (int b = 0; b < ids; b++) { int len = Next(data, ref o); biomeIds[b] = Encoding.UTF8.GetString(data, o, len); o += len; }
+                for (int b = 0; b < ids; b++)
+                {
+                    if (o + 4 > data.Length) throw new FormatException($"world file ends inside biome id {b}");
+                    int len = Next(data, ref o);
+                    if (len < 0 || len > MaxIdBytes || o + len > data.Length) throw new FormatException($"world file biome id {b} has bad length {len}");
+                    biomeIds[b] = Encoding.UTF8.GetString(data, o, len);
+                    o += len;
+                }
             }
+            long expected = o + (long)c.Size * c.Size * WorldChunks.CellBytes;
+            if (expected != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {expected}");
             var w = Empty(c, biomeIds);
             int a = WorldChunks.Across(c.Size);
             for (int k = 0; k < a * a; k++)
