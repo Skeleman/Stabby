@@ -54,6 +54,39 @@ namespace Stabby.Game
         }
     }
 
+    public static class MapFile
+    {
+        public static string PathFor(ulong seed) =>
+            Path.GetFullPath(Path.Combine(UnityEngine.Application.dataPath, "..", "..", "out", "maps", $"seed{seed}-{GameSettings.Size}.stabbymap"));
+
+        public static (GeneratedWorld, string) LoadOrGenerate(string path, string contentPath, ulong seed, IReadOnlyList<BiomeDef> defs, bool save)
+        {
+            var sw = Stopwatch.StartNew();
+            string why = "no map file";
+            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(contentPath)) why = "map file older than biomes.json";
+            else if (File.Exists(path))
+            {
+                var bytes = File.ReadAllBytes(path);
+                int v = WorldFile.GeneratorVersionOf(bytes);
+                if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}";
+                else
+                {
+                    var w = WorldFile.Read(bytes);
+                    if (w.Config.Seed == seed && w.Config.Size == GameSettings.Size) return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms");
+                    why = "map file has another seed or size";
+                }
+            }
+            var g = MapGen.Generate(seed, defs);
+            string note = $"generated in {sw.ElapsedMilliseconds} ms ({why})";
+            if (!save) return (g, note);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllBytes(path + ".tmp", WorldFile.Write(g));
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(path + ".tmp", path);
+            return (g, note + ", saved map file");
+        }
+    }
+
     public static class ChunkZip
     {
         public static byte[] Deflate(byte[] raw)
@@ -81,6 +114,7 @@ namespace Stabby.Game
             public ulong[] Sums;
             public byte[][] Packed;
             public TerrainDetail Detail;
+            public string Source;
         }
 
         Task<Prepared> gen;
@@ -95,10 +129,11 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             var defs = BiomeFile.Load(BiomeFile.DefaultPath);
+            string path = MapFile.PathFor(GameSettings.Seed), content = BiomeFile.DefaultPath;
             gen = Task.Run(() =>
             {
-                var w = MapGen.Generate(GameSettings.Seed, defs);
-                var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
+                var (w, source) = MapFile.LoadOrGenerate(path, content, GameSettings.Seed, defs, true);
+                var p = new Prepared { Map = w, Source = source, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
                 int a = WorldChunks.Across(w.Config.Size);
                 p.Packed = new byte[p.Sums.Length][];
                 for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a));
@@ -117,7 +152,7 @@ namespace Stabby.Game
                 (Map, MoundCell, sums, packed) = (p.Map, p.Mound, p.Sums, p.Packed);
                 Ground.Create(EntityManager, Map, p.Detail);
                 int n = Map.Config.Size;
-                GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed}, {sums.Length} chunks, +5 m mound at cell {MoundCell % n},{MoundCell / n}";
+                GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, {sums.Length} chunks, +5 m mound at cell {MoundCell % n},{MoundCell / n}";
             }
 
             var ecb = new EntityCommandBuffer(Allocator.Temp);
@@ -165,7 +200,8 @@ namespace Stabby.Game
         Task<(int, TerrainDetail)> finish;
         GeneratedWorld world;
         ulong[] mine;
-        ulong seed, hostSeed;
+        ulong hostSeed;
+        string source;
         ulong[] hostSums;
         int sumsIn, stale, streamed, piecesIn;
         long bytesIn, genMs;
@@ -197,13 +233,22 @@ namespace Stabby.Game
                 }
                 hostSums = new ulong[i.Chunks];
                 hostSeed = i.Seed;
-                seed = i.Seed + (World.Name == GameSettings.FullStreamClient ? 1UL : 0UL);
                 clock = Stopwatch.StartNew();
                 var defs = Defs;
-                ulong s = seed;
+                ulong s = i.Seed;
+                bool empty = World.Name == GameSettings.FullStreamClient;
+                string path = MapFile.PathFor(s), content = BiomeFile.DefaultPath;
                 gen = Task.Run(() =>
                 {
-                    var w = MapGen.Generate(s, defs);
+                    GeneratedWorld w;
+                    if (empty)
+                    {
+                        var ids = new string[defs.Count];
+                        for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
+                        w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids);
+                        source = "started empty";
+                    }
+                    else (w, source) = MapFile.LoadOrGenerate(path, content, s, defs, false);
                     return (w, WorldChunks.Checksums(w));
                 });
             }
@@ -286,7 +331,7 @@ namespace Stabby.Game
             if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
             var (bad, detail) = finish.Result;
             Map = world;
-            GameStatus.Lines[World.Name] = $"{World.Name}: generated seed {seed} in {genMs} ms, {stale}/{mine.Length} chunks stale, " +
+            GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
                 $"streamed {streamed} ({bytesIn / 1024} KB deflated in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
             if (bad == 0) { GameStatus.Synced.Add(World.Name); Ground.Create(EntityManager, world, detail); }
             else GameStatus.Failure = GameStatus.Lines[World.Name];

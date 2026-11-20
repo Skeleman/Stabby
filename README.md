@@ -15,6 +15,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 | Command | Does |
 |---|---|
 | `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
+| `bake --seed N [--size 512] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
 | `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings |
 | `scenarios [--out out/scenarios] [--scan 100]` | Generates each named acceptance scenario and writes a review sheet with the witness marked; `--scan` lists which seeds show each one |
 
@@ -35,7 +36,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 | `src/Stabby.World` | Pure generation library (netstandard2.1, no engine, no file access) |
 | `src/Stabby.Content` | Loads and validates `content/*.json` into World types |
 | `content/` | Authored data (biomes) and JSON schemas |
-| `tools/Stabby.Cli` | `gen`, `sweep` and `scenarios` commands, PNG output |
+| `tools/Stabby.Cli` | `gen`, `bake`, `sweep` and `scenarios` commands, PNG output |
 | `tests/Stabby.World.Tests` | Seed sweep, determinism, rain shadow, architecture rules |
 
 ## Pipeline
@@ -105,9 +106,13 @@ Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seed
 ## Unity game prototype
 
 `Assets/Scenes/Game.unity` runs a host and two clients in one process with
-Netcode for Entities. Each client generates the world from the host's seed,
-compares chunk checksums and streams the chunks that differ (deflated);
-`Client2` deliberately generates the wrong seed to exercise a full stream.
+Netcode for Entities. The host loads `out/maps/seed<N>-512.stabbymap`
+(`WorldFile`: raw chunks, rebuilt with `Relink`, about 25 ms) instead of generating
+(about 4 s in Unity). If the file is missing, from another generator version or
+older than `content/biomes.json`, the host generates and saves it, so run
+`stabby bake` after generator changes or let the first run rebake. `Client1`
+loads the same file, compares chunk checksums and streams the chunks that differ
+(deflated); `Client2` starts from an empty world to exercise a full stream.
 Players are predicted capsules walking on the shared terrain.
 Batch run: `Unity -batchmode -projectPath unity -executeMethod
 Stabby.Game.Editor.GameCapture.Run [-stabbySpikes [ms]]` writes

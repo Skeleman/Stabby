@@ -76,6 +76,8 @@ namespace Stabby.World
 
         public static void Relink(GeneratedWorld w) => Hydrology.Relink(w.Config, w.Sea, w.Water);
 
+        public static int Bytes(int n, int cx, int cy) => Cells(n, cx, cy) * CellBytes;
+
         static int Cells(int n, int cx, int cy) => (Math.Min(n, (cx + 1) * Size) - cx * Size) * (Math.Min(n, (cy + 1) * Size) - cy * Size);
 
         static void ForCells(int n, int cx, int cy, Action<int> f)

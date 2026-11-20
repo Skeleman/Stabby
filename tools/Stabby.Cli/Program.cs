@@ -13,6 +13,7 @@ switch (args.FirstOrDefault())
 {
     case "gen": return Gen();
     case "sweep": return Sweep();
+    case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
         Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
@@ -58,6 +59,26 @@ int Gen()
     Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return violations.Count == 0 ? 0 : 1;
+}
+
+int Bake()
+{
+    var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "512"), CultureInfo.InvariantCulture));
+    var path = Opt("out", Path.Combine("out", "maps", $"seed{c.Seed}-{c.Size}.stabbymap"));
+    var sw = Stopwatch.StartNew();
+    var w = WorldGenerator.Generate(c, biomes);
+    long genMs = sw.ElapsedMilliseconds;
+    var violations = WorldChecks.Run(w);
+    var bytes = WorldFile.Write(w);
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+    File.WriteAllBytes(path, bytes);
+    sw.Restart();
+    var back = WorldFile.Read(File.ReadAllBytes(path));
+    long readMs = sw.ElapsedMilliseconds;
+    bool same = WorldChunks.Checksums(back).SequenceEqual(WorldChunks.Checksums(w));
+    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
+    foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
+    return same && violations.Count == 0 ? 0 : 1;
 }
 
 int RunScenarios()

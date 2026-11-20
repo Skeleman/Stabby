@@ -24,7 +24,7 @@ namespace Stabby.World
             void Bs(bool[] a) { if (a == null) { Mix(0); return; } Mix((ulong)a.Length); foreach (bool v in a) Mix(v ? 1UL : 2UL); }
             Mix(WorldConfig.GeneratorVersion);
             Mix(Config.Seed); Mix((ulong)Config.Size); F(Config.CellMeters);
-            Bs(Sketch.Land); Fs(Sketch.Uplift); Bs(Sketch.Landmark);
+            Bs(Sketch?.Land); Fs(Sketch?.Uplift); Bs(Sketch?.Landmark);
             Bs(Sea); Fs(Height);
             Fs(Climate.TemperatureC); Fs(Climate.PrecipitationMm);
             Is(Water.Receiver); Fs(Water.WaterSurface); Fs(Water.DischargeM3s); Is(Water.LakeId); Bs(Water.IsRiver);
