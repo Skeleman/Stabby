@@ -40,12 +40,6 @@ namespace Stabby.World
                             + 3f * Noise.Fbm(seed ^ 0x7AB1u, x * 48f / n, y * 48f / n, 4);
                         h[i] += (top - h[i]) * s.Cliff[i];
                     }
-                    if (s.Plateau[i] > 0)
-                    {
-                        float top = c.HighlandHeight * (1 + 0.12f * Noise.Fbm(seed ^ 0x416Bu, x * 12f / n, y * 12f / n, 3)
-                            + 0.05f * Noise.Fbm(seed ^ 0x9E37u, x * 48f / n, y * 48f / n, 4));
-                        h[i] += (top - h[i]) * s.Plateau[i];
-                    }
                     float beach = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                     if (beach > 0) h[i] += (Math.Min(h[i], BeachCap(c, m)) - h[i]) * beach;
                     // Noise alone outweighs a lowland corridor, so its floor is graded to its mouth;
@@ -162,9 +156,7 @@ namespace Stabby.World
                 float m = s.Coast[i] * c.CellMeters;
                 float w = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                 beachCap[i] = BeachCap(c, m) + (1 - w) * 1e6f;
-                // Caprock reaches out to the tableland rim, so the top ends in an escarpment
-                // instead of fraying back into canyons.
-                caprock[i] = Math.Max(Grid.Smoothstep(0.6f, 1f, s.Cliff[i]), Grid.Smoothstep(0.15f, 0.5f, s.Plateau[i]));
+                caprock[i] = Grid.Smoothstep(0.6f, 1f, s.Cliff[i]);
                 slope[i] = c.MaxSlope * (1 + c.CliffSlope * caprock[i]);
                 erod[i] = c.Erodibility * (1 - c.CaprockHardness * caprock[i]) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
             }
@@ -206,6 +198,55 @@ namespace Stabby.World
         // lowest shore after the run; the band is two cells wide so diagonal flow cannot
         // slip through. Beds may sink below sea level: raising a low shore instead
         // leaves flats the outflow would have to climb.
+        // The tableland is levelled after erosion at the mean height of what grew there, but no lower
+        // than TablelandShare of the summit, so it sits up in the mountains. It only fills towards the
+        // summit cone and never cuts it, so the ground climbs from the flat straight onto the peak.
+        public static void FlattenTableland(WorldConfig c, WorldSketch s, float[] h)
+        {
+            int n = c.Size;
+            uint seed = Rng.Stream(c.Seed, "tableland").NextU32();
+            foreach (var hl in s.Highlands)
+            {
+                if (!hl.Plateau) continue;
+                int r = (int)Math.Ceiling(hl.Radius * 1.5f);
+                int x0 = Math.Max(0, (int)hl.X - r), x1 = Math.Min(n - 1, (int)hl.X + r);
+                int y0 = Math.Max(0, (int)hl.Y - r), y1 = Math.Min(n - 1, (int)hl.Y + r);
+                double sum = 0; int count = 0;
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++)
+                        if (s.Plateau[y * n + x] > 0.9f && Cone(s, x, y) == 0) { sum += h[y * n + x]; count++; }
+                if (count == 0) continue;
+                float summit = 0;
+                for (int i = 0; i < n * n; i++)
+                    if (Cone(s, i % n, i / n) > 0.99f) summit = Math.Max(summit, h[i]);
+                float level = Math.Max((float)(sum / count), c.TablelandShare * summit);
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        int i = y * n + x;
+                        if (s.Plateau[i] <= 0 || !s.Land[i]) continue;
+                        float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                        // A slight fall away from the centre drains it; low swells keep it from reading as a floor.
+                        float top = level * (1 - c.TablelandFall * d)
+                            + c.TablelandRelief * (Noise.Fbm(seed, x * 14f / n, y * 14f / n, 3) + 0.3f * Noise.Fbm(seed ^ 0x9E37u, x * 48f / n, y * 48f / n, 4));
+                        h[i] += (top - h[i]) * s.Plateau[i] * (top > h[i] ? 1 : 1 - Cone(s, x, y));
+                    }
+            }
+        }
+
+        // 1 inside the inner half of a summit cone, falling to 0 at its rim.
+        static float Cone(WorldSketch s, int x, int y)
+        {
+            float w = 0;
+            foreach (var hl in s.Highlands)
+                if (!hl.Plateau)
+                {
+                    float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                    w = Math.Max(w, 1 - Grid.Smoothstep(0.5f, 1f, d));
+                }
+            return w;
+        }
+
         public static void CarveLakes(WorldConfig c, WorldSketch s, float[] h)
         {
             int n = c.Size;

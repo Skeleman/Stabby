@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 13;
+        public const int GeneratorVersion = 14;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).
@@ -57,11 +57,13 @@ namespace Stabby.World
         public float PlateauHeight = 60f, CaprockHardness = 0.995f;
         public float CliffRise = 90f, CliffTiltMeters = 1800f, CliffStepMeters = 18f;
         public float CliffSlope = 3f, CliffFootDepth = 25f;
-        // The main ridges meet at a summit cone (radius in island radii) beside a caprock
-        // tableland HighlandHeight high, and fall to 1 - RangeTaper of their strength at their far ends.
+        // The main ridges start at a summit cone (radius in island radii) beside a tableland
+        // levelled after erosion, and fall to 1 - RangeTaper of their strength and
+        // 1 - RangeNarrowing of their width at their far ends; RangeCrestNoise varies both into peaks.
         // SummitHardness takes that share off the cone's erodibility so it outstands the ridges.
-        public float PeakStrength = 1.8f, PeakRadius = 0.2f, SummitHardness = 0.75f, RangeTaper = 0.55f, ShoulderStrength = 0.8f;
-        public float HighlandHeight = 560f, HighlandRadiusMin = 0.16f, HighlandRadiusMax = 0.24f;
+        public float PeakStrength = 1.8f, PeakRadius = 0.2f, SummitHardness = 0.75f, ShoulderStrength = 0.8f;
+        public float RangeTaper = 0.7f, RangeNarrowing = 0.7f, RangeCrestNoise = 0.35f;
+        public float HighlandRadiusMin = 0.16f, HighlandRadiusMax = 0.24f, TablelandFall = 0.06f, TablelandRelief = 12f, TablelandShare = 0.5f;
         public float BeachGrade = 0.015f, BeachMeters = 675f;
         // Ridges run on under the sea for this share of their length, cresting this deep.
         public float RidgeReach = 1f, RidgeCrestDepth = 6f;

@@ -243,6 +243,19 @@ namespace Stabby.World
                     }
             }
             for (int i = 0; i < n * n; i++) Cliff[i] *= 1f - Beach[i];
+            // The steppe takes no uplift, so where a cliff disc reaches inland to the highlands
+            // it would sink a trench between the summit and the tableland.
+            foreach (var hl in Highlands)
+            {
+                float reach = hl.Plateau ? 1.4f : 1.6f;
+                int r = (int)Math.Ceiling(hl.Radius * (reach + 0.4f));
+                for (int y = Math.Max(0, (int)hl.Y - r); y <= Math.Min(n - 1, (int)hl.Y + r); y++)
+                    for (int x = Math.Max(0, (int)hl.X - r); x <= Math.Min(n - 1, (int)hl.X + r); x++)
+                    {
+                        float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                        Cliff[y * n + x] *= Grid.Smoothstep(reach, reach + 0.4f, d);
+                    }
+            }
         }
 
         void BuildPlateaus(WorldConfig c)
@@ -260,18 +273,6 @@ namespace Stabby.World
                         float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
                         d /= 1 + PlateauEdgeNoise * Noise.Fbm(edge, x * 26f / n, y * 26f / n, 3);
                         Plateau[y * n + x] = Math.Max(Plateau[y * n + x], 1f - Grid.Smoothstep(0.6f, 1f, d));
-                    }
-            }
-            // Caprock takes no uplift, so the summit's cone is kept clear and rises out of the tableland's edge.
-            foreach (var pk in Highlands)
-            {
-                if (pk.Plateau) continue;
-                int r = (int)Math.Ceiling(pk.Radius);
-                for (int y = Math.Max(0, (int)pk.Y - r); y <= Math.Min(n - 1, (int)pk.Y + r); y++)
-                    for (int x = Math.Max(0, (int)pk.X - r); x <= Math.Min(n - 1, (int)pk.X + r); x++)
-                    {
-                        float d = (float)Math.Sqrt((x - pk.X) * (x - pk.X) + (y - pk.Y) * (y - pk.Y)) / pk.Radius;
-                        Plateau[y * n + x] *= Grid.Smoothstep(0.5f, 1f, d);
                     }
             }
         }
@@ -787,11 +788,25 @@ namespace Stabby.World
             Coast = coast;
             Valley = new float[n * n];
             ValleyRun = new float[n * n];
+            uint crest = Rng.Stream(c.Seed, "range-crests").NextU32();
+            // Ranges from a summit start on it, so their crests climb into the cone instead of
+            // stopping short where an inland slide moved it.
             var fromSummit = new bool[Ranges.Count];
+            var rx = new float[Ranges.Count][];
+            var ry = new float[Ranges.Count][];
             for (int k = 0; k < Ranges.Count; k++)
+            {
+                rx[k] = Ranges[k].X; ry[k] = Ranges[k].Y;
                 foreach (var hl in Highlands)
-                    if (!hl.Plateau && (Ranges[k].X[0] - hl.X) * (Ranges[k].X[0] - hl.X) + (Ranges[k].Y[0] - hl.Y) * (Ranges[k].Y[0] - hl.Y) <= 4 * hl.Radius * hl.Radius)
+                    if (!hl.Plateau && !fromSummit[k] && (Ranges[k].X[0] - hl.X) * (Ranges[k].X[0] - hl.X) + (Ranges[k].Y[0] - hl.Y) * (Ranges[k].Y[0] - hl.Y) <= 4 * hl.Radius * hl.Radius)
+                    {
                         fromSummit[k] = true;
+                        rx[k] = new float[Ranges[k].X.Length + 1]; ry[k] = new float[Ranges[k].Y.Length + 1];
+                        rx[k][0] = hl.X; ry[k][0] = hl.Y;
+                        Array.Copy(Ranges[k].X, 0, rx[k], 1, Ranges[k].X.Length);
+                        Array.Copy(Ranges[k].Y, 0, ry[k], 1, Ranges[k].Y.Length);
+                    }
+            }
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {
@@ -801,8 +816,13 @@ namespace Stabby.World
                     for (int k = 0; k < Ranges.Count; k++)
                     {
                         var r = Ranges[k];
-                        float d = DistanceToPolyline(r.X, r.Y, x, y, out float along) / r.Width;
-                        float strength = r.Strength * (fromSummit[k] ? 1 - c.RangeTaper * along : 1);
+                        float dist = DistanceToPolyline(rx[k], ry[k], x, y, out float along);
+                        if (dist > r.Width * 4) continue;
+                        // Crest height is capped by slope times half-width, so the taper narrows the range as well as weakening it.
+                        float peaks = 1 + c.RangeCrestNoise * Noise.Fbm(crest + (uint)k, x * 20f / n, y * 20f / n, 3);
+                        float strength = r.Strength * peaks, width = r.Width * peaks;
+                        if (fromSummit[k]) { strength *= 1.25f - c.RangeTaper * along; width *= 1.7f * (1 - c.RangeNarrowing * along); }
+                        float d = dist / width;
                         u = Math.Max(u, strength * (float)FMath.Exp(-d * d));
                     }
                     foreach (var hl in Highlands)
@@ -812,17 +832,22 @@ namespace Stabby.World
                         u = Math.Max(u, hl.Plateau ? c.ShoulderStrength * (1 - Grid.Smoothstep(0.8f, 1.8f, d))
                             : c.PeakStrength * (1 - Grid.Smoothstep(0, 1, d)));
                     }
+                    // The valley heads at the summit's foot rather than cutting into the cone.
+                    float clear = 1;
+                    foreach (var hl in Highlands)
+                        if (!hl.Plateau)
+                            clear = Math.Min(clear, Grid.Smoothstep(0.6f, 1.2f, (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius));
                     foreach (var cor in Corridors)
                     {
                         float d = DistanceToPolyline(cor.X, cor.Y, x, y) / cor.Width;
-                        float v = (float)FMath.Exp(-d * d);
+                        float v = clear * (float)FMath.Exp(-d * d);
                         u *= 1 - CorridorDepth * v;
                         if (v > Valley[i]) { Valley[i] = v; ValleyRun[i] = RemainingAlong(cor.X, cor.Y, x, y); }
                     }
                     foreach (var lk in Lakes) u *= 1 - LakeDepth * Grid.Smoothstep(-0.8f, 0.2f, lk.Core(x, y));
                     // Caprock barely erodes, so uplift fades exactly as it hardens (Erosion's ramp);
                     // any more would pile up without limit, any less would cut a moat around the rim.
-                    u *= (1 - Grid.Smoothstep(0.6f, 1f, Cliff[i])) * (1 - Grid.Smoothstep(0.15f, 0.5f, Plateau[i]));
+                    u *= 1 - Grid.Smoothstep(0.6f, 1f, Cliff[i]);
                     float taper = Grid.Smoothstep(0, 6, coast[i]);
                     Uplift[i] = Math.Max(0, u) * (taper + (1 - taper) * Cliff[i]);
                 }

@@ -42,6 +42,7 @@ namespace Stabby.World
             bool terrainOnly = c.UniformRainMm > 0;
             var provisional = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             Erosion.Run(c, sketch, h, provisional.PrecipitationMm);
+            Erosion.FlattenTableland(c, sketch, h);
             Erosion.CarveLakes(c, sketch, h);
             var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             var water = Hydrology.Build(c, h, sea, climate.PrecipitationMm, sketch.Landmark);
