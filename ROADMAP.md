@@ -28,6 +28,17 @@ and converts once into native data.
 | Player capsules rendered by Entities Graphics; only the chase camera stays managed | done |
 | Viewer scene stays a managed dev tool | idea |
 
+## Next: unified world geometry
+
+Overhangs, layers, vertical faces, caves and arches share one geometry model
+with the heightfield: the same material library and one global vertex lattice,
+so feature meshes meet ground meshes without seams. Features differ only in how
+their geometry is built.
+
+| Item | Status |
+|---|---|
+| Geometry contract (density = heightfield base + sparse feature edits) proposed for CLAUDE.md | next |
+
 ## Next
 
 - Real streaming when gameplay needs a bigger world: residency around players,
