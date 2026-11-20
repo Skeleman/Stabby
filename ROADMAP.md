@@ -44,7 +44,8 @@ their geometry is built.
 | Step 3: overhangs and arches as feature edits on the solid field, meshed in game chunks (`Features`, `SurfaceNets.Edited`) | done |
 | Step 3b: caves as carve chains with entrances on slopes, ending in a chamber (`Features.Cave`) | done |
 | Cave and overhang interiors darken by depth below the column surface (vertex alpha scales light in `VertexLit`) | done |
-| Sharp-feature vertex placement (QEF) where carves meet slopes; lips still show soft lattice bumps | next |
+| Sharp-feature vertex placement (QEF) in cells touching an edit box (`SurfaceNets.Sharpen`) | done |
+| Overhang lips still show one bump per LOD0 cell (11.25 m): lattice resolution, not placement or quad split (both tried). Options: finer LOD0 near features, or generator shapes that meet slopes steeply | next |
 | Player collision against feature edits (capsule vs field) | later |
 
 ## Next

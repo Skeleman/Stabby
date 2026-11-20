@@ -63,6 +63,14 @@ namespace Stabby.World
         public float StepM;
 
         public float Density(int i, int j, int k) => Features.Apply(Columns, Edits, Columns.Height(i, k) - j * StepM, i, j, k, StepM);
+        public bool Sharp(int i, int j, int k) => Features.Covers(Edits, i * StepM, j * StepM, k * StepM, StepM);
+        public float Base(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
+
+        public float Edit(float d, float x, float y, float z)
+        {
+            for (int q = 0, n = Edits.Count; q < n; q++) d = Edits.At(q).Apply(d, x, y, z);
+            return d;
+        }
     }
 
     public static class Features
@@ -83,10 +91,25 @@ namespace Stabby.World
             bool near = false;
             for (int q = 0; q < count && !near; q++) near = edits.At(q).Contains(x, y, z);
             if (!near) return d;
-            float gx = (columns.Height(i + 1, k) - columns.Height(i - 1, k)) / (2 * s), gz = (columns.Height(i, k + 1) - columns.Height(i, k - 1)) / (2 * s);
-            d /= (float)Math.Sqrt(1 + gx * gx + gz * gz);
+            d = Level(columns, d, i, k, s);
             for (int q = 0; q < count; q++) d = edits.At(q).Apply(d, x, y, z);
             return d;
+        }
+
+        public static float Level<TCols>(TCols columns, float d, int i, int k, float s) where TCols : struct, IColumnField
+        {
+            float gx = (columns.Height(i + 1, k) - columns.Height(i - 1, k)) / (2 * s), gz = (columns.Height(i, k + 1) - columns.Height(i, k - 1)) / (2 * s);
+            return d / (float)Math.Sqrt(1 + gx * gx + gz * gz);
+        }
+
+        public static bool Covers<TEdits>(TEdits edits, float x, float y, float z, float s) where TEdits : struct, IEditList
+        {
+            for (int q = 0, n = edits.Count; q < n; q++)
+            {
+                var e = edits.At(q);
+                if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
+            }
+            return false;
         }
 
         public static int TileOf(FeatureEdit e, float cellMeters)

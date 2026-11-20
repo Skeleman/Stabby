@@ -6,6 +6,9 @@ namespace Stabby.World
     public interface ISolidField
     {
         float Density(int i, int j, int k);
+        bool Sharp(int i, int j, int k);
+        float Base(int i, int j, int k);
+        float Edit(float d, float x, float y, float z);
     }
 
     public interface IColumnField
@@ -30,6 +33,29 @@ namespace Stabby.World
         public float StepM;
 
         public float Density(int i, int j, int k) => Columns.Height(i, k) - j * StepM;
+        public bool Sharp(int i, int j, int k) => false;
+        public float Base(int i, int j, int k) => Density(i, j, k);
+        public float Edit(float d, float x, float y, float z) => d;
+    }
+
+    struct CellField<TField> where TField : struct, ISolidField
+    {
+        public TField F;
+        public float B0, B1, B2, B3, B4, B5, B6, B7, S;
+        public int I, J, K;
+
+        public float At(float u, float v, float w)
+        {
+            float a = B0 + (B1 - B0) * u, b = B2 + (B3 - B2) * u, c = B4 + (B5 - B4) * u, d = B6 + (B7 - B6) * u;
+            float lo = a + (b - a) * v, hi = c + (d - c) * v;
+            return F.Edit(lo + (hi - lo) * w, (I + u) * S, (J + v) * S, (K + w) * S);
+        }
+    }
+
+    struct Qef
+    {
+        public float A00, A01, A02, A11, A12, A22, B0, B1, B2;
+        public int N;
     }
 
     public struct DetailColumns : IColumnField
@@ -161,7 +187,7 @@ namespace Stabby.World
                         float d2 = field.Density(ci, j + 1, ck), d3 = field.Density(ci + 1, j + 1, ck);
                         float d4 = field.Density(ci, j, ck + 1), d5 = field.Density(ci + 1, j, ck + 1);
                         float d6 = field.Density(ci, j + 1, ck + 1), d7 = field.Density(ci + 1, j + 1, ck + 1);
-                        sink.SetInt((k * w + i) * layers + j - jMin, Cell(ref sink, ci, j, ck, c.StepM, d0, d1, d2, d3, d4, d5, d6, d7));
+                        sink.SetInt((k * w + i) * layers + j - jMin, Cell(ref sink, field, ci, j, ck, c.StepM, d0, d1, d2, d3, d4, d5, d6, d7));
                     }
                 }
             for (int k = 1; k < w; k++)
@@ -189,6 +215,7 @@ namespace Stabby.World
         {
             int w = c.Cells + 1, hw = w + 1, bx = c.X0 - 1, bz = c.Z0 - 1, count = edits.Count;
             float s = c.StepM;
+            var solid = new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s };
             sink.Begin(3 * w * w, hw * hw);
             for (int k = 0; k < hw; k++)
                 for (int i = 0; i < hw; i++)
@@ -219,7 +246,7 @@ namespace Stabby.World
                     for (; j < end; j++)
                     {
                         float yb = j * s, yt = (j + 1) * s;
-                        int v = Cell(ref sink, ci, j, ck, s,
+                        int v = Cell(ref sink, solid, ci, j, ck, s,
                             Features.Apply(columns, edits, h00 - yb, ci, j, ck, s), Features.Apply(columns, edits, h10 - yb, ci + 1, j, ck, s),
                             Features.Apply(columns, edits, h00 - yt, ci, j + 1, ck, s), Features.Apply(columns, edits, h10 - yt, ci + 1, j + 1, ck, s),
                             Features.Apply(columns, edits, h01 - yb, ci, j, ck + 1, s), Features.Apply(columns, edits, h11 - yb, ci + 1, j, ck + 1, s),
@@ -269,8 +296,8 @@ namespace Stabby.World
         static int Vertex<TSink>(ref TSink sink, int col, int j) where TSink : struct, INetsSink =>
             sink.GetInt(col + 2) + j - sink.GetInt(col);
 
-        static int Cell<TSink>(ref TSink sink, int ci, int j, int ck, float s, float d0, float d1, float d2, float d3, float d4, float d5, float d6, float d7)
-            where TSink : struct, INetsSink
+        static int Cell<TSink, TField>(ref TSink sink, TField field, int ci, int j, int ck, float s, float d0, float d1, float d2, float d3, float d4, float d5, float d6, float d7)
+            where TSink : struct, INetsSink where TField : struct, ISolidField
         {
             bool a0 = d0 > 0, any = a0 | d1 > 0 | d2 > 0 | d3 > 0 | d4 > 0 | d5 > 0 | d6 > 0 | d7 > 0;
             bool all = a0 & d1 > 0 & d2 > 0 & d3 > 0 & d4 > 0 & d5 > 0 & d6 > 0 & d7 > 0;
@@ -289,13 +316,70 @@ namespace Stabby.World
             Edge(d1, d5, 1, 0, 0, 2, ref sx, ref sy, ref sz, ref n);
             Edge(d2, d6, 0, 1, 0, 2, ref sx, ref sy, ref sz, ref n);
             Edge(d3, d7, 1, 1, 0, 2, ref sx, ref sy, ref sz, ref n);
-            float fx = sx / n, fy = sy / n, fz = sz / n, ux = 1 - fx, uy = 1 - fy, uz = 1 - fz;
+            float fx = sx / n, fy = sy / n, fz = sz / n;
+            if (field.Sharp(ci, j, ck)) Sharpen(field, ci, j, ck, s, d0, d1, d2, d3, d4, d5, d6, d7, ref fx, ref fy, ref fz);
+            float ux = 1 - fx, uy = 1 - fy, uz = 1 - fz;
             float gx = uy * uz * (d1 - d0) + fy * uz * (d3 - d2) + uy * fz * (d5 - d4) + fy * fz * (d7 - d6);
             float gy = ux * uz * (d2 - d0) + fx * uz * (d3 - d1) + ux * fz * (d6 - d4) + fx * fz * (d7 - d5);
             float gz = ux * uy * (d4 - d0) + fx * uy * (d5 - d1) + ux * fy * (d6 - d2) + fx * fy * (d7 - d3);
             float len = (float)Math.Sqrt(gx * gx + gy * gy + gz * gz);
             float inv = len > 0 ? -1f / len : 0;
             return sink.AddVertex((ci + fx) * s, (j + fy) * s, (ck + fz) * s, gx * inv, gy * inv, gz * inv);
+        }
+
+        const float QefPull = 0.05f, QefStep = 0.05f;
+
+        static void Sharpen<TField>(TField field, int ci, int j, int ck, float s, float d0, float d1, float d2, float d3, float d4, float d5, float d6, float d7, ref float fx, ref float fy, ref float fz)
+            where TField : struct, ISolidField
+        {
+            var f = new CellField<TField>
+            {
+                F = field, S = s, I = ci, J = j, K = ck,
+                B0 = field.Base(ci, j, ck), B1 = field.Base(ci + 1, j, ck), B2 = field.Base(ci, j + 1, ck), B3 = field.Base(ci + 1, j + 1, ck),
+                B4 = field.Base(ci, j, ck + 1), B5 = field.Base(ci + 1, j, ck + 1), B6 = field.Base(ci, j + 1, ck + 1), B7 = field.Base(ci + 1, j + 1, ck + 1),
+            };
+            var q = new Qef();
+            Hermite(ref f, ref q, d0, d1, 0, 0, 0, 0);
+            Hermite(ref f, ref q, d2, d3, 0, 1, 0, 0);
+            Hermite(ref f, ref q, d4, d5, 0, 0, 1, 0);
+            Hermite(ref f, ref q, d6, d7, 0, 1, 1, 0);
+            Hermite(ref f, ref q, d0, d2, 0, 0, 0, 1);
+            Hermite(ref f, ref q, d1, d3, 1, 0, 0, 1);
+            Hermite(ref f, ref q, d4, d6, 0, 0, 1, 1);
+            Hermite(ref f, ref q, d5, d7, 1, 0, 1, 1);
+            Hermite(ref f, ref q, d0, d4, 0, 0, 0, 2);
+            Hermite(ref f, ref q, d1, d5, 1, 0, 0, 2);
+            Hermite(ref f, ref q, d2, d6, 0, 1, 0, 2);
+            Hermite(ref f, ref q, d3, d7, 1, 1, 0, 2);
+            if (q.N == 0) return;
+            float a00 = q.A00 + QefPull, a11 = q.A11 + QefPull, a22 = q.A22 + QefPull, a01 = q.A01, a02 = q.A02, a12 = q.A12;
+            float b0 = q.B0 + QefPull * fx, b1 = q.B1 + QefPull * fy, b2 = q.B2 + QefPull * fz;
+            float c00 = a11 * a22 - a12 * a12, c01 = a02 * a12 - a01 * a22, c02 = a01 * a12 - a02 * a11;
+            float det = a00 * c00 + a01 * c01 + a02 * c02;
+            if (!(Math.Abs(det) > 1e-9f)) return;
+            float c11 = a00 * a22 - a02 * a02, c12 = a01 * a02 - a00 * a12, c22 = a00 * a11 - a01 * a01, inv = 1f / det;
+            fx = Clamp01((c00 * b0 + c01 * b1 + c02 * b2) * inv);
+            fy = Clamp01((c01 * b0 + c11 * b1 + c12 * b2) * inv);
+            fz = Clamp01((c02 * b0 + c12 * b1 + c22 * b2) * inv);
+        }
+
+        static float Clamp01(float v) => v < 0 ? 0 : v > 1 ? 1 : v;
+
+        static void Hermite<TField>(ref CellField<TField> f, ref Qef q, float da, float db, int ax, int ay, int az, int axis) where TField : struct, ISolidField
+        {
+            if (da > 0 == db > 0) return;
+            float t = da / (da - db);
+            float px = axis == 0 ? ax + t : ax, py = axis == 1 ? ay + t : ay, pz = axis == 2 ? az + t : az, e = QefStep;
+            float gx = f.At(px + e, py, pz) - f.At(px - e, py, pz);
+            float gy = f.At(px, py + e, pz) - f.At(px, py - e, pz);
+            float gz = f.At(px, py, pz + e) - f.At(px, py, pz - e);
+            float len = (float)Math.Sqrt(gx * gx + gy * gy + gz * gz);
+            if (!(len > 0)) return;
+            gx /= len; gy /= len; gz /= len;
+            float dot = gx * px + gy * py + gz * pz;
+            q.A00 += gx * gx; q.A01 += gx * gy; q.A02 += gx * gz; q.A11 += gy * gy; q.A12 += gy * gz; q.A22 += gz * gz;
+            q.B0 += gx * dot; q.B1 += gy * dot; q.B2 += gz * dot;
+            q.N++;
         }
 
         static void Edge(float da, float db, int ax, int ay, int az, int axis, ref float sx, ref float sy, ref float sz, ref int n)
