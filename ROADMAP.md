@@ -46,6 +46,7 @@ their geometry is built.
 | Cave and overhang interiors darken by depth below the column surface (vertex alpha scales light in `VertexLit`) | done |
 | Sharp-feature vertex placement (QEF) in cells touching an edit box (`SurfaceNets.Sharpen`) | done |
 | Chunks a feature edit touches mesh at a finer LOD0 (0.125 cells, 5.6 m), halving overhang lip bumps; other chunks start at 0.25. Skirts hang from the rim vertex nearest the ground, not the column bottom | done |
+| Surfaces more than a few metres off the heightfield (arches, overhang roofs, cave walls) are rock, never biome coat; interior darkening softened | done |
 | Player collision against feature edits (capsule vs field) | later |
 
 ## Next
