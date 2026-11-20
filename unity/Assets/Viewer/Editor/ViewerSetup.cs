@@ -95,6 +95,7 @@ namespace Stabby.Viewer.Editor
             int at = Array.IndexOf(args, "-stabbySeed");
             if (at >= 0 && at + 1 < args.Length) view.Seed = int.Parse(args[at + 1]);
             view.BuildBudget = int.MaxValue;
+            view.Blocking = true;
             view.Build();
 
             var w = view.World;

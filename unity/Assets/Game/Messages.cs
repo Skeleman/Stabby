@@ -45,10 +45,10 @@ namespace Stabby.Game
 
         public float HeightAt(float x, float z) => math.max(0, Detail.HeightAt(x / CellMeters, z / CellMeters));
 
-        public static Entity Create(EntityManager em, GeneratedWorld w)
+        public static Entity Create(EntityManager em, GeneratedWorld w, TerrainDetail detail)
         {
             var e = em.CreateEntity();
-            em.AddComponentObject(e, new Ground { Detail = new TerrainDetail(w), CellMeters = w.Config.CellMeters, Top = (w.Config.Size - 1) * w.Config.CellMeters });
+            em.AddComponentObject(e, new Ground { Detail = detail, CellMeters = w.Config.CellMeters, Top = (w.Config.Size - 1) * w.Config.CellMeters });
             return e;
         }
     }

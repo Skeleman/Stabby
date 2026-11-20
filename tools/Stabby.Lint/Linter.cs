@@ -10,6 +10,8 @@ public static class Linter
     static readonly string[] Roots = { "src", "tools", "tests", "unity/Assets" };
     static readonly string[] Skip = { "/bin/", "/obj/", "/artifacts/" };
     const string GameDir = "unity/Assets/Game/";
+    const string UnityDir = "unity/Assets/";
+    static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete" };
 
     public static IEnumerable<string> SourceFiles(string repo) =>
         Roots.Select(r => Path.Combine(repo, r)).Where(Directory.Exists)
@@ -55,6 +57,8 @@ public static class Linter
                 problems.Add($"{file}:{c.GetLocation().GetLineSpan().StartLinePosition.Line + 1}: comment (put reasons in the commit message)");
             if (file.StartsWith(GameDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
                 foreach (var p in EcsProblems(file, root, allow, used)) problems.Add(p);
+            if (file.StartsWith(UnityDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
+                foreach (var p in BlockingProblems(file, root, allow, used)) problems.Add(p);
         }
         foreach (var key in allow.Keys.Where(k => !used.Contains(k)))
             problems.Add($"{AllowFile}: '{key}' matches nothing; remove it");
@@ -76,6 +80,38 @@ public static class Linter
                 !type.AttributeLists.SelectMany(a => a.Attributes).Any(a => a.Name.ToString() is "BurstCompile" or "BurstCompileAttribute"))
                 yield return $"{file}:{line}: ISystem {name} lacks [BurstCompile]";
         }
+    }
+
+    static IEnumerable<string> BlockingProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used)
+    {
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax m || !BlockingMembers.Contains(m.Name.Identifier.Text)) continue;
+            string owner = call.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
+            string key = $"{owner}.{m.Name.Identifier.Text}";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: {m} blocks the main thread; poll IsCompleted instead or list {key} in {AllowFile} with a reason";
+        }
+        foreach (var acc in root.DescendantNodes().OfType<MemberAccessExpressionSyntax>())
+        {
+            if (acc.Name.Identifier.Text != "Result" || acc.Parent is InvocationExpressionSyntax) continue;
+            if (IsGuarded(acc)) continue;
+            string owner = acc.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
+            string key = $"{owner}.Result";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = acc.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: {acc} may block; read Result only after an IsCompleted check in the same method";
+        }
+    }
+
+    static bool IsGuarded(MemberAccessExpressionSyntax acc)
+    {
+        var body = acc.Ancestors().FirstOrDefault(a => a is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax or LocalFunctionStatementSyntax);
+        if (body == null) return false;
+        string target = acc.Expression.ToString();
+        return body.DescendantNodes().OfType<MemberAccessExpressionSyntax>()
+            .Any(x => x.Name.Identifier.Text == "IsCompleted" && x.Expression.ToString() == target && x.SpanStart < acc.SpanStart);
     }
 
     public static int Strip(string repo)

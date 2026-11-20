@@ -31,8 +31,9 @@ namespace Stabby.Game
                 view = go.AddComponent<WorldView>();
                 view.Material = scene != null ? scene.TerrainMaterial : null;
                 view.Build(map.Map, map.Defs);
-                GameStatus.TerrainBuilt = true;
             }
+            if (view != null) GameStatus.TerrainBuilt = view.Ready;
+            Frames();
 
             int me = SystemAPI.TryGetSingleton<NetworkId>(out var id) ? id.Value : -1;
             Transform mine = null;
@@ -64,6 +65,18 @@ namespace Stabby.Game
                 cam.transform.position = mine.position + new Vector3(0, 10, -22);
                 cam.transform.LookAt(mine.position + Vector3.up * 2);
             }
+        }
+
+        int frames, slow;
+        float worst;
+
+        void Frames()
+        {
+            if (++frames <= 10) return;
+            float ms = UnityEngine.Time.unscaledDeltaTime * 1000f;
+            if (ms > worst) worst = ms;
+            if (ms > 33f) slow++;
+            GameStatus.Lines["~frames"] = $"frames {frames - 10}, worst {worst:F0} ms, {slow} over 33 ms";
         }
     }
 }

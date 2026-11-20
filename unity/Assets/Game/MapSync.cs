@@ -55,9 +55,18 @@ namespace Stabby.Game
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     public partial class ServerMapSystem : SystemBase
     {
-        Task<(GeneratedWorld, int)> gen;
+        sealed class Prepared
+        {
+            public GeneratedWorld Map;
+            public int Mound;
+            public ulong[] Sums;
+            public byte[][] Packed;
+            public TerrainDetail Detail;
+        }
+
+        Task<Prepared> gen;
         ulong[] sums;
-        readonly Dictionary<int, byte[]> packed = new Dictionary<int, byte[]>();
+        byte[][] packed;
         readonly HashSet<Entity> informed = new HashSet<Entity>();
         readonly Dictionary<Entity, Queue<(int, int)>> outbox = new Dictionary<Entity, Queue<(int, int)>>();
 
@@ -70,7 +79,12 @@ namespace Stabby.Game
             gen = Task.Run(() =>
             {
                 var w = MapGen.Generate(GameSettings.Seed, defs);
-                return (w, MapGen.RaiseMound(w));
+                var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
+                int a = WorldChunks.Across(w.Config.Size);
+                p.Packed = new byte[p.Sums.Length][];
+                for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = WorldChunks.Pack(w, k % a, k / a);
+                p.Detail = new TerrainDetail(w);
+                return p;
             });
         }
 
@@ -80,9 +94,9 @@ namespace Stabby.Game
             {
                 if (!gen.IsCompleted) return;
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
-                (Map, MoundCell) = gen.Result;
-                Ground.Create(EntityManager, Map);
-                sums = WorldChunks.Checksums(Map);
+                var p = gen.Result;
+                (Map, MoundCell, sums, packed) = (p.Map, p.Mound, p.Sums, p.Packed);
+                Ground.Create(EntityManager, Map, p.Detail);
                 int n = Map.Config.Size;
                 GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed}, {sums.Length} chunks, +5 m mound at cell {MoundCell % n},{MoundCell / n}";
             }
@@ -101,7 +115,7 @@ namespace Stabby.Game
                 ecb.DestroyEntity(e);
                 int k = req.ValueRO.Index;
                 if (k < 0 || k >= sums.Length || !outbox.TryGetValue(rx.ValueRO.SourceConnection, out var q)) continue;
-                int pieces = Pieces(Packed(k).Length);
+                int pieces = Pieces(packed[k].Length);
                 for (int p = 0; p < pieces; p++) q.Enqueue((k, p));
             }
 
@@ -112,7 +126,7 @@ namespace Stabby.Game
                 for (int s = 0; s < GameSettings.PiecesPerTick && q.Count > 0; s++)
                 {
                     var (k, p) = q.Dequeue();
-                    var data = Packed(k);
+                    var data = packed[k];
                     int from = p * GameSettings.PieceBytes, to = Math.Min(data.Length, from + GameSettings.PieceBytes);
                     var rpc = new ChunkPieceRpc { Index = k, Piece = p, Pieces = Pieces(data.Length) };
                     for (int b = from; b < to; b++) rpc.Bytes.Add(data[b]);
@@ -123,23 +137,15 @@ namespace Stabby.Game
         }
 
         static int Pieces(int bytes) => (bytes + GameSettings.PieceBytes - 1) / GameSettings.PieceBytes;
-
-        byte[] Packed(int k)
-        {
-            if (!packed.TryGetValue(k, out var data))
-            {
-                int a = WorldChunks.Across(Map.Config.Size);
-                packed[k] = data = WorldChunks.Pack(Map, k % a, k / a);
-            }
-            return data;
-        }
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     public partial class ClientMapSystem : SystemBase
     {
-        Task<GeneratedWorld> gen;
+        Task<(GeneratedWorld, ulong[])> gen;
+        Task<(int, TerrainDetail)> finish;
         GeneratedWorld world;
+        ulong[] mine;
         ulong seed, hostSeed;
         ulong[] hostSums;
         int sumsIn, stale, streamed, piecesIn;
@@ -148,6 +154,7 @@ namespace Stabby.Game
         Stopwatch clock;
         readonly Dictionary<int, byte[][]> parts = new Dictionary<int, byte[][]>();
         readonly HashSet<int> pending = new HashSet<int>();
+        readonly List<(int, byte[])> arrived = new List<(int, byte[])>();
 
         public List<BiomeDef> Defs { get; private set; }
         public GeneratedWorld Map { get; private set; }
@@ -175,7 +182,11 @@ namespace Stabby.Game
                 clock = Stopwatch.StartNew();
                 var defs = Defs;
                 ulong s = seed;
-                gen = Task.Run(() => MapGen.Generate(s, defs));
+                gen = Task.Run(() =>
+                {
+                    var w = MapGen.Generate(s, defs);
+                    return (w, WorldChunks.Checksums(w));
+                });
             }
             foreach (var (sum, e) in SystemAPI.Query<RefRO<ChunkSumRpc>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
             {
@@ -193,18 +204,18 @@ namespace Stabby.Game
             if (world == null && gen != null && gen.IsCompleted)
             {
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; ecb.Playback(EntityManager); return; }
-                world = gen.Result;
+                (world, mine) = gen.Result;
                 genMs = clock.ElapsedMilliseconds;
             }
             if (world != null && !requested && hostSums != null && sumsIn == hostSums.Length)
             {
                 requested = true;
-                var mine = WorldChunks.Checksums(world);
                 for (int k = 0; k < mine.Length; k++)
                     if (mine[k] != hostSums[k]) { pending.Add(k); Rpc.Send(ecb, Entity.Null, new ChunkRequestRpc { Index = k }); }
                 stale = pending.Count;
             }
-            if (requested && Map == null && pending.Count == 0) Finish();
+            if (requested && finish == null && pending.Count == 0) StartFinish();
+            if (finish != null && Map == null) Finish();
             ecb.Playback(EntityManager);
         }
 
@@ -224,24 +235,41 @@ namespace Stabby.Game
             var data = new byte[len];
             int o = 0;
             foreach (var g in got) { Buffer.BlockCopy(g, 0, data, o, g.Length); o += g.Length; }
-            int a = WorldChunks.Across(world.Config.Size);
-            WorldChunks.Unpack(world, p.Index % a, p.Index / a, data);
+            arrived.Add((p.Index, data));
             parts.Remove(p.Index);
             pending.Remove(p.Index);
             streamed++;
         }
 
+        void StartFinish()
+        {
+            var w = world;
+            var got = arrived.ToArray();
+            var host = hostSums;
+            ulong hs = hostSeed;
+            arrived.Clear();
+            finish = Task.Run(() =>
+            {
+                int a = WorldChunks.Across(w.Config.Size);
+                foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, data);
+                if (got.Length > 0) WorldChunks.Relink(w);
+                w.Config.Seed = hs;
+                var sums = WorldChunks.Checksums(w);
+                int bad = 0;
+                for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
+                return (bad, bad == 0 ? new TerrainDetail(w) : null);
+            });
+        }
+
         void Finish()
         {
-            if (streamed > 0) WorldChunks.Relink(world);
-            world.Config.Seed = hostSeed;
-            var mine = WorldChunks.Checksums(world);
-            int bad = 0;
-            for (int k = 0; k < mine.Length; k++) if (mine[k] != hostSums[k]) bad++;
+            if (!finish.IsCompleted) return;
+            if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
+            var (bad, detail) = finish.Result;
             Map = world;
             GameStatus.Lines[World.Name] = $"{World.Name}: generated seed {seed} in {genMs} ms, {stale}/{mine.Length} chunks stale, " +
                 $"streamed {streamed} ({bytesIn / 1024} KB in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
-            if (bad == 0) { GameStatus.Synced.Add(World.Name); Ground.Create(EntityManager, world); }
+            if (bad == 0) { GameStatus.Synced.Add(World.Name); Ground.Create(EntityManager, world, detail); }
             else GameStatus.Failure = GameStatus.Lines[World.Name];
         }
     }
