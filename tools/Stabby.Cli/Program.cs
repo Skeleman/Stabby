@@ -13,6 +13,7 @@ switch (args.FirstOrDefault())
 {
     case "gen": return Gen();
     case "sweep": return Sweep();
+    case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
         Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
@@ -57,6 +58,54 @@ int Gen()
     Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return violations.Count == 0 ? 0 : 1;
+}
+
+int RunScenarios()
+{
+    var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+    var dir = Opt("out", Path.Combine("out", "scenarios"));
+    int failed = 0;
+    foreach (var s in Scenarios.All)
+    {
+        var c = Config(s.Seed, Scenarios.Size);
+        var sketch = s.Sketch == null ? null : ContentLoader.LoadSketch(root, s.Sketch, c);
+        var w = WorldGenerator.Generate(c, biomes, sketch);
+        var violations = WorldChecks.Run(w);
+        int at = s.Find(w), n = c.Size;
+        bool ok = at >= 0 && violations.Count == 0;
+        if (!ok) failed++;
+        var map = Render.Map(w, 3);
+        if (at >= 0) Mark(map, at % n * 3 + 1, (n - 1 - at / n) * 3 + 1);
+        Directory.CreateDirectory(dir);
+        Save(Path.Combine(dir, s.Name + ".png"), Render.Sheet(Render.SketchMap(w, biomes, 3), map, Render.BiomeMap(w, biomes, 3)));
+        Console.WriteLine($"{(ok ? "pass" : "FAIL")} {s.Name}: seed {s.Seed}{(s.Sketch == null ? "" : " + " + s.Sketch)}, witness {(at < 0 ? "none" : $"{at % n},{at / n}")}, {violations.Count} violations");
+    }
+    Console.WriteLine($"sheets -> {dir}");
+    return failed == 0 ? 0 : 1;
+}
+
+int ScanScenarios()
+{
+    int count = int.Parse(Opt("scan", "100"), CultureInfo.InvariantCulture);
+    foreach (var s in Scenarios.All.Where(s => s.Sketch == null))
+    {
+        var hits = new System.Collections.Concurrent.ConcurrentBag<ulong>();
+        Parallel.For(1, count + 1, k =>
+        {
+            var w = WorldGenerator.Generate(Config((ulong)k, Scenarios.Size), biomes);
+            if (s.Find(w) >= 0 && WorldChecks.Run(w).Count == 0) hits.Add((ulong)k);
+        });
+        var h = hits.OrderBy(x => x).ToArray();
+        Console.WriteLine($"{s.Name}: {h.Length}/{count} seeds pass, first {string.Join(" ", h.Take(8))}");
+    }
+    return 0;
+}
+
+static void Mark((int w, int h, uint[] px) img, int x, int y)
+{
+    for (int d = -12; d <= 12; d++)
+        foreach (var (u, v) in new[] { (x + d, y), (x, y + d), (x + d, y + 1), (x + 1, y + d) })
+            if (u >= 0 && v >= 0 && u < img.w && v < img.h && Math.Abs(d) > 3) img.px[v * img.w + u] = 0xFF00FFu;
 }
 
 static void WriteFloats(string path, float[] v)

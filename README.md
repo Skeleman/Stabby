@@ -16,6 +16,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 |---|---|
 | `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
 | `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings |
+| `scenarios [--out out/scenarios] [--scan 100]` | Generates each named acceptance scenario and writes a review sheet with the witness marked; `--scan` lists which seeds show each one |
 
 - `gen` writes `map.png`, `sketch.png`, `biomes.png`, `precipitation.png`,
   `sheet.png` (all of them side by side), `sketch.json` and `metrics.json`.
@@ -34,7 +35,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 | `src/Stabby.World` | Pure generation library (netstandard2.1, no engine, no file access) |
 | `src/Stabby.Content` | Loads and validates `content/*.json` into World types |
 | `content/` | Authored data (biomes) and JSON schemas |
-| `tools/Stabby.Cli` | `gen` and `sweep` commands, PNG output |
+| `tools/Stabby.Cli` | `gen`, `sweep` and `scenarios` commands, PNG output |
 | `tests/Stabby.World.Tests` | Seed sweep, determinism, rain shadow, architecture rules |
 
 ## Pipeline
@@ -64,6 +65,21 @@ runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 5
 | biomes | 0.4 / 0.3 | 2 / 1.3 |
 | checks | 9 / 1.2 | 38 / 5 |
 | total | 330 | 1364 |
+
+## Scenarios
+
+`Scenarios.All` pins one seed per named case at 256; `ScenarioTests` fails if a
+generator change makes one disappear. Rescan with `scenarios --scan 100`, repin,
+and review the new sheets.
+
+| Scenario | Seed | Seeds of 100 showing it |
+|---|---|---|
+| river-through-range | 49 | 1 |
+| river-by-highland | 8 | 7 |
+| lake-outlet-river | 3 | 100 |
+| cliff-meets-beach-or-valley | 5 | 100 |
+| narrow-channel | 4 | 51 |
+| authored-dry-region | 11 + `content/scenarios/authored-dry-region.json` | authored |
 
 ## Sharing a world
 

@@ -57,4 +57,7 @@ public static class ContentLoader
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
         return defs;
     }
+
+    public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
+        SketchFile.Read(File.ReadAllText(Path.Combine(contentRoot, relativePath)), c);
 }
