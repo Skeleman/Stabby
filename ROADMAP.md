@@ -14,6 +14,19 @@ Status words: done, now, next, later, idea.
 | ChunkZip round trip, malformed payloads, inflate size cap | done |
 | Viewer described as full-world async prep, not streaming | done |
 
+## Now: ECS and unmanaged data
+
+Gameplay scales on Burst and worker threads, so runtime data is unmanaged.
+Managed code stays only at boundaries (generation, file load, network transfer)
+and converts once into native data.
+
+| Item | Status |
+|---|---|
+| Terrain heights + detail as a blob; PlayerMoveSystem and ServerPlayerSystem become Burst ISystem | now |
+| Game terrain as chunk entities (Entities Graphics), meshed by Burst jobs with Unity.Mathematics; replaces WorldView in Game | next |
+| Map sync buffers as native containers wherever they run per frame | next |
+| Viewer scene stays a managed dev tool | idea |
+
 ## Next
 
 - Real streaming when gameplay needs a bigger world: residency around players,
