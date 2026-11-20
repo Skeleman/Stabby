@@ -7,7 +7,7 @@ namespace Stabby.Game
         public static readonly Dictionary<string, string> Lines = new Dictionary<string, string>();
         public static readonly HashSet<string> Synced = new HashSet<string>();
         public static int Capsules;
-        public static bool TerrainBuilt;
+        public static bool TerrainBuilt, HoldCamera;
         public static string Failure;
     }
 }

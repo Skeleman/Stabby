@@ -76,7 +76,7 @@ namespace Stabby.Game
             GameStatus.Capsules = shown.CalculateEntityCount();
 
             var cam = Camera.main;
-            if (cam == null || !SystemAPI.TryGetSingleton<NetworkId>(out var me)) return;
+            if (cam == null || GameStatus.HoldCamera || !SystemAPI.TryGetSingleton<NetworkId>(out var me)) return;
             foreach (var (t, owner) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
             {
                 if (owner.ValueRO.NetworkId != me.Value) continue;

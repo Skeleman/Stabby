@@ -41,7 +41,10 @@ their geometry is built.
 | Step 1: material library (`content/materials.json`), strata by world height + regional offset, drawn per pixel by the terrain shader | done |
 | Step 2: field sampler + surface-nets mesher on the global lattice, checked vertex for vertex against the heightfield path (`SurfaceNets`, `WorldChecks`) | done |
 | Step 2b: game terrain meshes through the surface-nets fast path in a Burst job, chunk rims pinned to chunk edges with skirts between LODs | done |
-| Step 3: overhangs and arches as feature edits, then caves | next |
+| Step 3: overhangs and arches as feature edits on the solid field, meshed in game chunks (`Features`, `SurfaceNets.Edited`) | done |
+| Step 3b: caves as carve chains with entrances on slopes | now |
+| Sharp-feature vertex placement (QEF) where carves meet slopes; lips still show soft lattice bumps | next |
+| Player collision against feature edits (capsule vs field) | later |
 
 ## Next
 

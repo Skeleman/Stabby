@@ -7,6 +7,7 @@ using UnityEngine.Rendering;
 using Unity.Entities;
 using Unity.NetCode;
 using Unity.Transforms;
+using Stabby.World;
 
 namespace Stabby.Game.Editor
 {
@@ -15,7 +16,7 @@ namespace Stabby.Game.Editor
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
-        static int settle = -1;
+        static int settle = -1, phase, wait;
         static double playAt = -1;
 
         static GameCapture()
@@ -87,17 +88,36 @@ namespace Stabby.Game.Editor
             }
             bool ready = GameStatus.Synced.Count >= GameSettings.Clients.Length && GameStatus.TerrainBuilt && GameStatus.Capsules >= 2;
             if (!ready) return;
-            if (settle < 0) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
-            if (--settle > 0) return;
+            if (settle == -1) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
+            if (settle > 0 && --settle > 0) return;
 
             var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game"));
             Directory.CreateDirectory(dir);
             var cam = Camera.main;
-            Shot(cam, null, "warmup");
-            Shot(cam, dir, "chase");
-            var focus = cam.transform.position + cam.transform.forward * 24f;
-            cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
-            Shot(cam, dir, "overhead");
+            if (phase == 0)
+            {
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "chase");
+                var focus = cam.transform.position + cam.transform.forward * 24f;
+                cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
+                Shot(cam, dir, "overhead");
+                GameStatus.HoldCamera = true;
+                phase = 1;
+            }
+            while (phase <= 2)
+            {
+                string name = phase == 1 ? "arch" : "overhang";
+                if (wait == 0)
+                {
+                    if (!Aim(cam, phase == 1 ? FeatureEdit.Add : FeatureEdit.Carve)) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                phase++;
+            }
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -143,6 +163,47 @@ namespace Stabby.Game.Editor
             SpikeProbe.Stop();
             SessionState.EraseBool(Key);
             EditorApplication.Exit(code);
+        }
+
+        static bool Aim(Camera cam, int kind)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (q.CalculateEntityCount() != 1) continue;
+                var ground = q.GetSingleton<Ground>();
+                ref var g = ref ground.Blob.Value;
+                int at = -1;
+                for (int k = 0; k < g.Edits.Length && at < 0; k++) if (g.Edits[k].Kind == kind) at = k;
+                if (at < 0) return false;
+                var first = g.Edits[at];
+                var last = kind == FeatureEdit.Add ? g.Edits[at + 4] : first;
+                var a = new Vector3(first.Ax, first.Ay, first.Az);
+                var b = new Vector3(last.Bx, last.By, last.Bz);
+                var mid = (a + b) * 0.5f;
+                var along = new Vector3(b.x - a.x, 0, b.z - a.z);
+                float len = along.magnitude;
+                along /= len;
+                var side = new Vector3(-along.z, 0, along.x);
+                Vector3 eye, target;
+                if (kind == FeatureEdit.Add)
+                {
+                    var top = g.Edits[at + 2];
+                    target = new Vector3(mid.x, (mid.y + top.By) * 0.5f, mid.z);
+                    eye = target + side * len * 1.2f + Vector3.up * len * 0.15f;
+                }
+                else
+                {
+                    if (ground.HeightAt(mid.x + side.x * 60, mid.z + side.z * 60) > ground.HeightAt(mid.x - side.x * 60, mid.z - side.z * 60)) side = -side;
+                    target = mid;
+                    eye = mid + side * 170f + along * 90f + Vector3.up * 35f;
+                }
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 6f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + kind] = $"edit {at} at {mid.x:F0},{mid.y:F0},{mid.z:F0}";
+                return true;
+            }
+            return false;
         }
 
         static void Shot(Camera cam, string dir, string name)

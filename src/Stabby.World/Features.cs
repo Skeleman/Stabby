@@ -7,6 +7,8 @@ namespace Stabby.World
     {
         public const int Add = 0, Carve = 1;
 
+        public const float Blend = 0.25f;
+
         public int Kind;
         public float Ax, Ay, Az, Bx, By, Bz, R;
 
@@ -17,16 +19,20 @@ namespace Stabby.World
         public float MinZ => Math.Min(Az, Bz) - R;
         public float MaxZ => Math.Max(Az, Bz) + R;
 
+        public bool Contains(float x, float y, float z) => x >= MinX && x <= MaxX && y >= MinY && y <= MaxY && z >= MinZ && z <= MaxZ;
+
         public float Apply(float d, float x, float y, float z)
         {
-            if (x < MinX || x > MaxX || y < MinY || y > MaxY || z < MinZ || z > MaxZ) return d;
+            if (!Contains(x, y, z)) return d;
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
             float dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
             if (dist >= R) return d;
-            return Kind == Add ? Math.Max(d, R - dist) : Math.Min(d, dist - R);
+            if (Kind == Add) return Math.Max(d, R - dist);
+            float k = R * Blend, c = dist - (R - 1.25f * k), h = Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * (c - d) / k));
+            return c + (d - c) * h - k * h * (1 - h);
         }
     }
 
@@ -55,7 +61,7 @@ namespace Stabby.World
         public TEdits Edits;
         public float StepM;
 
-        public float Density(int i, int j, int k) => Features.Apply(Edits, Columns.Height(i, k) - j * StepM, i, j, k, StepM);
+        public float Density(int i, int j, int k) => Features.Apply(Columns, Edits, Columns.Height(i, k) - j * StepM, i, j, k, StepM);
     }
 
     public static class Features
@@ -66,11 +72,16 @@ namespace Stabby.World
         public const float OverhangMinDrop = 50f;
         public const float LatticeStepCells = 0.25f, MinRadiusSteps = 1.25f;
 
-        public static float Apply<TEdits>(TEdits edits, float d, int i, int j, int k, float s) where TEdits : struct, IEditList
+        public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
         {
             int count = edits.Count;
             if (count == 0) return d;
             float x = i * s, y = j * s, z = k * s;
+            bool near = false;
+            for (int q = 0; q < count && !near; q++) near = edits.At(q).Contains(x, y, z);
+            if (!near) return d;
+            float gx = (columns.Height(i + 1, k) - columns.Height(i - 1, k)) / (2 * s), gz = (columns.Height(i, k + 1) - columns.Height(i, k - 1)) / (2 * s);
+            d /= (float)Math.Sqrt(1 + gx * gx + gz * gz);
             for (int q = 0; q < count; q++) d = edits.At(q).Apply(d, x, y, z);
             return d;
         }
@@ -122,7 +133,7 @@ namespace Stabby.World
 
         static void Overhang(GeneratedWorld w, TerrainDetail detail, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
-            float roll = r.NextFloat(), radius = r.Range(16f, 26f), length = r.Range(40f, 90f), lift = r.Range(0.2f, 0.5f);
+            float roll = r.NextFloat(), radius = r.Range(28f, 40f), length = r.Range(60f, 120f), lift = r.Range(0.2f, 0.5f);
             if (roll >= OverhangChance) return;
             int n = w.Config.Size, best = -1, bestDir = 0;
             float bestDrop = OverhangMinDrop;

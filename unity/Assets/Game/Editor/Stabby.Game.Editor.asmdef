@@ -3,6 +3,7 @@
     "rootNamespace": "Stabby.Game.Editor",
     "references": [
         "Stabby.Game",
+        "Stabby.World",
         "Unity.Entities",
         "Unity.Collections",
         "Unity.Mathematics",

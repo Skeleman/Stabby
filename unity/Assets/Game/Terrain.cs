@@ -50,6 +50,13 @@ namespace Stabby.Game
         public static int Indices(int m) => m * m * 6 + 4 * m * 12;
     }
 
+    struct NativeEdits : IEditList
+    {
+        public NativeList<FeatureEdit> Items;
+        public int Count => Items.Length;
+        public FeatureEdit At(int k) => Items[k];
+    }
+
     struct GroundColumns : IColumnField
     {
         public Ground Ground;
@@ -109,7 +116,16 @@ namespace Stabby.Game
             float cm = g.CellMeters, top = n - 1, s = Step * cm;
             var chunk = new NetsChunk { X0 = (int)(Cx / Step), Z0 = (int)(Cy / Step), Cells = m, StepM = s };
             var sink = new TerrainSink { Verts = Verts, Tris = Tris };
-            SurfaceNets.Heightfield(new GroundColumns { Ground = Ground, StepCells = Step, Top = top }, chunk, ref sink);
+            var columns = new GroundColumns { Ground = Ground, StepCells = Step, Top = top };
+            var edits = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
+            float cx0 = Cx * cm, cz0 = Cy * cm, cx1 = cx0 + m * s, cz1 = cz0 + m * s;
+            for (int f = 0; f < g.Edits.Length; f++)
+            {
+                var e = g.Edits[f];
+                if (e.R >= 0.75f * s && e.MaxX > cx0 && e.MinX < cx1 && e.MaxZ > cz0 && e.MinZ < cz1) edits.Items.Add(e);
+            }
+            if (edits.Count > 0) SurfaceNets.Edited(columns, edits, chunk, ref sink);
+            else SurfaceNets.Heightfield(columns, chunk, ref sink);
 
             float x0m = Cx * cm, z0m = Cy * cm, x1m = x0m + m * s, z1m = z0m + m * s;
             for (int k = 0; k < w; k++)
@@ -239,7 +255,7 @@ namespace Stabby.Game
         readonly List<Mesh> statics = new List<Mesh>();
         readonly Plane[] planes = new Plane[6];
         readonly int[] lodCounts = new int[TerrainLods.Count];
-        readonly Stopwatch frame = new Stopwatch();
+        readonly Stopwatch frame = new Stopwatch(), since = new Stopwatch();
         EntitiesGraphicsSystem graphics;
         BatchMaterialID material;
         Ground ground;
@@ -274,6 +290,7 @@ namespace Stabby.Game
             var world = map.Map;
             var defs = map.Defs;
             string materials = MaterialFile.DefaultPath;
+            since.Restart();
             preparing = Task.Run(() => Prepare(world, defs, materials));
         }
 
@@ -317,6 +334,7 @@ namespace Stabby.Game
             preparing = null;
             if (!task.IsCompletedSuccessfully) { UnityEngine.Debug.LogException(task.Exception); return; }
             prepared = task.Result;
+            GameStatus.Lines["terrain~prep"] = $"terrain prepared at {since.ElapsedMilliseconds} ms";
             look = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
             prepared.Look.Dispose();
             TerrainLook.ApplyStrata(prepared.Strata);
@@ -437,6 +455,7 @@ namespace Stabby.Game
                 waterApplied++;
             }
             AddStatic(prepared.Sea);
+            GameStatus.Lines["terrain~ready"] = $"terrain ready at {since.ElapsedMilliseconds} ms";
             prepared = null;
             ready = true;
             GameStatus.TerrainBuilt = true;

@@ -44,6 +44,7 @@ namespace Stabby.Game
         public uint Seed;
         public float CellMeters, Top;
         public BlobArray<float> Height, Amp;
+        public BlobArray<FeatureEdit> Edits;
     }
 
     public struct Ground : IComponentData
@@ -84,6 +85,9 @@ namespace Stabby.Game
             var h = b.Allocate(ref root.Height, n * n);
             var a = b.Allocate(ref root.Amp, n * n);
             for (int i = 0; i < n * n; i++) { h[i] = detail.Height(i); a[i] = detail.Amplitude(i); }
+            var edits = Features.Place(w, detail);
+            var e = b.Allocate(ref root.Edits, edits.Length);
+            for (int i = 0; i < edits.Length; i++) e[i] = edits[i];
             return b;
         }
 

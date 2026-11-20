@@ -220,10 +220,10 @@ namespace Stabby.World
                     {
                         float yb = j * s, yt = (j + 1) * s;
                         int v = Cell(ref sink, ci, j, ck, s,
-                            Features.Apply(edits, h00 - yb, ci, j, ck, s), Features.Apply(edits, h10 - yb, ci + 1, j, ck, s),
-                            Features.Apply(edits, h00 - yt, ci, j + 1, ck, s), Features.Apply(edits, h10 - yt, ci + 1, j + 1, ck, s),
-                            Features.Apply(edits, h01 - yb, ci, j, ck + 1, s), Features.Apply(edits, h11 - yb, ci + 1, j, ck + 1, s),
-                            Features.Apply(edits, h01 - yt, ci, j + 1, ck + 1, s), Features.Apply(edits, h11 - yt, ci + 1, j + 1, ck + 1, s));
+                            Features.Apply(columns, edits, h00 - yb, ci, j, ck, s), Features.Apply(columns, edits, h10 - yb, ci + 1, j, ck, s),
+                            Features.Apply(columns, edits, h00 - yt, ci, j + 1, ck, s), Features.Apply(columns, edits, h10 - yt, ci + 1, j + 1, ck, s),
+                            Features.Apply(columns, edits, h01 - yb, ci, j, ck + 1, s), Features.Apply(columns, edits, h11 - yb, ci + 1, j, ck + 1, s),
+                            Features.Apply(columns, edits, h01 - yt, ci, j + 1, ck + 1, s), Features.Apply(columns, edits, h11 - yt, ci + 1, j + 1, ck + 1, s));
                         if (v < 0) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
                         next++;
                     }
@@ -239,10 +239,10 @@ namespace Stabby.World
                     for (int j = jLo; j < jHi; j++)
                     {
                         float yb = j * s;
-                        bool p = Features.Apply(edits, h - yb, ci, j, ck, s) > 0;
-                        if (p != Features.Apply(edits, hx - yb, ci + 1, j, ck, s) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
-                        if (p != Features.Apply(edits, h - (j + 1) * s, ci, j + 1, ck, s) > 0) QuadAt(ref sink, p, cxz, j, cx, j, col, j, cz, j);
-                        if (p != Features.Apply(edits, hz - yb, ci, j, ck + 1, s) > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
+                        bool p = Features.Apply(columns, edits, h - yb, ci, j, ck, s) > 0;
+                        if (p != Features.Apply(columns, edits, hx - yb, ci + 1, j, ck, s) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
+                        if (p != Features.Apply(columns, edits, h - (j + 1) * s, ci, j + 1, ck, s) > 0) QuadAt(ref sink, p, cxz, j, cx, j, col, j, cz, j);
+                        if (p != Features.Apply(columns, edits, hz - yb, ci, j, ck + 1, s) > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
                     }
                 }
         }
