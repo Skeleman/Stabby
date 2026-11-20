@@ -49,6 +49,29 @@ public class SurfaceNetsTests
     }
 
     [Fact]
+    public void EditedPathMatchesGeneralWithCarveAndAdd()
+    {
+        var cols = new HashColumns { Seed = 9, Scale = 6f };
+        var edits = new EditArray
+        {
+            Items = new[]
+            {
+                new FeatureEdit { Kind = FeatureEdit.Carve, Ax = 8, Ay = 2, Az = 10, Bx = 22, By = 3, Bz = 14, R = 5 },
+                new FeatureEdit { Kind = FeatureEdit.Add, Ax = 6, Ay = 4, Az = 6, Bx = 18, By = 16, Bz = 20, R = 4 },
+            },
+        };
+        var c = new NetsChunk { X0 = 0, Z0 = 0, Cells = 14, StepM = 2f };
+        var g = new NetsBuffers();
+        SurfaceNets.General(new EditedSolid<HashColumns, EditArray> { Columns = cols, Edits = edits, StepM = c.StepM }, c, -6, 16, ref g);
+        var f = new NetsBuffers();
+        SurfaceNets.Edited(cols, edits, c, ref f);
+        var h = new NetsBuffers();
+        SurfaceNets.Heightfield(cols, c, ref h);
+        Assert.True(f.SameSurfaceAs(g));
+        Assert.False(f.SameSurfaceAs(h));
+    }
+
+    [Fact]
     public void FlatGroundFacesUp()
     {
         var f = new NetsBuffers();

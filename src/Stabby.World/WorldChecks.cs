@@ -105,6 +105,7 @@ namespace Stabby.World
             if (w.Sketch != null) CheckSketch(w, e);
             CheckDetail(w, e);
             CheckGeometry(w, e);
+            CheckFeatures(w, e);
             return e;
         }
 
@@ -124,7 +125,7 @@ namespace Stabby.World
                 }
         }
 
-        public const float LatticeStepCells = 0.25f;
+        public const float LatticeStepCells = Features.LatticeStepCells;
 
         static void CheckGeometry(GeneratedWorld w, List<string> e)
         {
@@ -139,6 +140,50 @@ namespace Stabby.World
             SurfaceNets.Heightfield(cols, c, ref f);
             if (f.Tris.Count == 0) { e.Add($"heightfield mesher made no triangles near cell {top}"); return; }
             if (!f.SameAs(g)) e.Add($"heightfield mesher differs from the general mesher near cell {top}");
+        }
+
+        static void CheckFeatures(GeneratedWorld w, List<string> e)
+        {
+            var detail = new TerrainDetail(w);
+            var edits = Features.Place(w, detail);
+            float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
+            foreach (var x in edits)
+                if (!Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
+            var list = new EditArray { Items = edits };
+            var cols = new DetailColumns { Detail = detail, StepCells = LatticeStepCells };
+            bool add = false, carve = false;
+            foreach (var x in edits)
+            {
+                if (x.Kind == FeatureEdit.Add ? add : carve) continue;
+                if (x.Kind == FeatureEdit.Add) add = true; else carve = true;
+                float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
+                int tile = Features.TileOf(x, cm);
+                foreach (var y in edits)
+                    if (y.Kind == x.Kind && Features.TileOf(y, cm) == tile)
+                    {
+                        minX = Math.Min(minX, y.MinX); maxX = Math.Max(maxX, y.MaxX);
+                        minZ = Math.Min(minZ, y.MinZ); maxZ = Math.Max(maxZ, y.MaxZ);
+                    }
+                int x0 = (int)Math.Floor(minX / s) - 3, z0 = (int)Math.Floor(minZ / s) - 3;
+                int cells = Math.Max((int)Math.Ceiling(maxX / s) + 3 - x0, (int)Math.Ceiling(maxZ / s) + 3 - z0);
+                var c = new NetsChunk { X0 = x0, Z0 = z0, Cells = cells, StepM = s };
+                SurfaceNets.HeightRange(cols, c, out int jMin, out int jMax);
+                foreach (var y in edits)
+                {
+                    jMin = Math.Min(jMin, (int)Math.Floor(y.MinY / s) - 2);
+                    jMax = Math.Max(jMax, (int)Math.Floor(y.MaxY / s) + 3);
+                }
+                var f = new NetsBuffers();
+                SurfaceNets.Edited(cols, list, c, ref f);
+                var g = new NetsBuffers();
+                SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
+                var h = new NetsBuffers();
+                SurfaceNets.Heightfield(cols, c, ref h);
+                string kind = x.Kind == FeatureEdit.Add ? "arch" : "overhang";
+                if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
+                if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
+                if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
+            }
         }
 
         static void CheckSketch(GeneratedWorld w, List<string> e)

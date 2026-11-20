@@ -25,6 +25,16 @@ public class WorldTests
     }
 
     [Fact]
+    public void GameScaleWorldPlacesFeaturesAndPassesChecks()
+    {
+        var w = Gen(3, 512);
+        Assert.Empty(WorldChecks.Run(w));
+        var edits = Features.Place(w, new TerrainDetail(w));
+        Assert.Contains(edits, e => e.Kind == FeatureEdit.Add);
+        Assert.Contains(edits, e => e.Kind == FeatureEdit.Carve);
+    }
+
+    [Fact]
     public void SameSeedSameWorld()
     {
         Assert.Equal(Gen(42).Fingerprint(), Gen(42).Fingerprint());

@@ -71,6 +71,49 @@ namespace Stabby.World
             Tris.Add(a); Tris.Add(b); Tris.Add(c);
         }
 
+        public bool SameSurfaceAs(NetsBuffers o)
+        {
+            var mine = Faces(this);
+            var theirs = Faces(o);
+            if (mine.Count != theirs.Count) return false;
+            for (int k = 0; k < mine.Count; k++)
+                if (mine[k] != theirs[k]) return false;
+            return true;
+        }
+
+        public bool SameRimAs(NetsBuffers o, int cells)
+        {
+            int w = cells + 1;
+            for (int k = 0; k < w; k++)
+                for (int i = 0; i < w; i++)
+                {
+                    if (i != 0 && k != 0 && i != cells && k != cells) continue;
+                    int col = 3 * (k * w + i), count = ints[col + 1] - ints[col];
+                    if (count != o.ints[col + 1] - o.ints[col] || ints[col] != o.ints[col]) return false;
+                    for (int q = 0; q < count * 6; q++)
+                        if (BitConverter.SingleToInt32Bits(Verts[ints[col + 2] * 6 + q]) != BitConverter.SingleToInt32Bits(o.Verts[o.ints[col + 2] * 6 + q])) return false;
+                }
+            return true;
+        }
+
+        static List<string> Faces(NetsBuffers b)
+        {
+            var list = new List<string>(b.Tris.Count / 3);
+            var v = new string[3];
+            for (int t = 0; t < b.Tris.Count; t += 3)
+            {
+                for (int q = 0; q < 3; q++)
+                {
+                    int o = b.Tris[t + q] * 6;
+                    v[q] = BitConverter.SingleToInt32Bits(b.Verts[o]).ToString("x8", System.Globalization.CultureInfo.InvariantCulture) + BitConverter.SingleToInt32Bits(b.Verts[o + 1]).ToString("x8", System.Globalization.CultureInfo.InvariantCulture) + BitConverter.SingleToInt32Bits(b.Verts[o + 2]).ToString("x8", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                int m = string.CompareOrdinal(v[0], v[1]) <= 0 ? (string.CompareOrdinal(v[0], v[2]) <= 0 ? 0 : 2) : (string.CompareOrdinal(v[1], v[2]) <= 0 ? 1 : 2);
+                list.Add(v[m] + v[(m + 1) % 3] + v[(m + 2) % 3]);
+            }
+            list.Sort(string.CompareOrdinal);
+            return list;
+        }
+
         public bool SameAs(NetsBuffers o)
         {
             if (Verts.Count != o.Verts.Count || Tris.Count != o.Tris.Count) return false;
@@ -138,9 +181,13 @@ namespace Stabby.World
         }
 
         public static void Heightfield<TCols, TSink>(TCols columns, NetsChunk c, ref TSink sink)
-            where TCols : struct, IColumnField where TSink : struct, INetsSink
+            where TCols : struct, IColumnField where TSink : struct, INetsSink =>
+            Edited(columns, default(NoEdits), c, ref sink);
+
+        public static void Edited<TCols, TEdits, TSink>(TCols columns, TEdits edits, NetsChunk c, ref TSink sink)
+            where TCols : struct, IColumnField where TEdits : struct, IEditList where TSink : struct, INetsSink
         {
-            int w = c.Cells + 1, hw = w + 1, bx = c.X0 - 1, bz = c.Z0 - 1;
+            int w = c.Cells + 1, hw = w + 1, bx = c.X0 - 1, bz = c.Z0 - 1, count = edits.Count;
             float s = c.StepM;
             sink.Begin(3 * w * w, hw * hw);
             for (int k = 0; k < hw; k++)
@@ -157,19 +204,34 @@ namespace Stabby.World
                     int j = (int)Math.Floor(lo / s) - 2;
                     while (!AllInside(h00, h10, h01, h11, j - 1, s)) j--;
                     while (AllInside(h00, h10, h01, h11, j, s)) j++;
+                    int end = j;
+                    while (!AllOutside(h00, h10, h01, h11, end, s)) end++;
+                    for (int q = 0; q < count; q++)
+                    {
+                        var e = edits.At(q);
+                        if (e.MaxX < ci * s || e.MinX > (ci + 1) * s || e.MaxZ < ck * s || e.MinZ > (ck + 1) * s) continue;
+                        j = Math.Min(j, (int)Math.Floor(e.MinY / s) - 1);
+                        end = Math.Max(end, (int)Math.Floor(e.MaxY / s) + 2);
+                    }
                     sink.SetInt(col, j);
                     sink.SetInt(col + 2, next);
-                    for (; !AllOutside(h00, h10, h01, h11, j, s); j++)
+                    sink.SetInt(col + 1, end);
+                    for (; j < end; j++)
                     {
                         float yb = j * s, yt = (j + 1) * s;
-                        Cell(ref sink, ci, j, ck, s, h00 - yb, h10 - yb, h00 - yt, h10 - yt, h01 - yb, h11 - yb, h01 - yt, h11 - yt);
+                        int v = Cell(ref sink, ci, j, ck, s,
+                            Features.Apply(edits, h00 - yb, ci, j, ck, s), Features.Apply(edits, h10 - yb, ci + 1, j, ck, s),
+                            Features.Apply(edits, h00 - yt, ci, j + 1, ck, s), Features.Apply(edits, h10 - yt, ci + 1, j + 1, ck, s),
+                            Features.Apply(edits, h01 - yb, ci, j, ck + 1, s), Features.Apply(edits, h11 - yb, ci + 1, j, ck + 1, s),
+                            Features.Apply(edits, h01 - yt, ci, j + 1, ck + 1, s), Features.Apply(edits, h11 - yt, ci + 1, j + 1, ck + 1, s));
+                        if (v < 0) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
                         next++;
                     }
-                    sink.SetInt(col + 1, j);
                 }
             for (int k = 1; k < w; k++)
                 for (int i = 1; i < w; i++)
                 {
+                    int ci = bx + i, ck = bz + k;
                     int col = 3 * (k * w + i), cx = col - 3, cz = col - 3 * w, cxz = cz - 3;
                     int jLo = Math.Min(Math.Min(sink.GetInt(col), sink.GetInt(cx)), Math.Min(sink.GetInt(cz), sink.GetInt(cxz)));
                     int jHi = Math.Max(Math.Max(sink.GetInt(col + 1), sink.GetInt(cx + 1)), Math.Max(sink.GetInt(cz + 1), sink.GetInt(cxz + 1)));
@@ -177,10 +239,10 @@ namespace Stabby.World
                     for (int j = jLo; j < jHi; j++)
                     {
                         float yb = j * s;
-                        bool p = h - yb > 0;
-                        if (p != hx - yb > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
-                        if (p != h - (j + 1) * s > 0) QuadAt(ref sink, p, cxz, j, cx, j, col, j, cz, j);
-                        if (p != hz - yb > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
+                        bool p = Features.Apply(edits, h - yb, ci, j, ck, s) > 0;
+                        if (p != Features.Apply(edits, hx - yb, ci + 1, j, ck, s) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
+                        if (p != Features.Apply(edits, h - (j + 1) * s, ci, j + 1, ck, s) > 0) QuadAt(ref sink, p, cxz, j, cx, j, col, j, cz, j);
+                        if (p != Features.Apply(edits, hz - yb, ci, j, ck + 1, s) > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
                     }
                 }
         }
