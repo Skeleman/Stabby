@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 15;
+        public const int GeneratorVersion = 16;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).

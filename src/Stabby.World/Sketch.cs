@@ -166,7 +166,8 @@ namespace Stabby.World
                 CorridorSketch cor = null;
                 if (k == 0)
                 {
-                    cor = AddValley(n, m, s.Land, inland, s.Ranges, ref ranges);
+                    var bends = Rng.Stream(c.Seed, "valley-bends");
+                    cor = AddValley(n, m, s.Land, inland, s.Ranges, ref ranges, ref bends);
                     var lakes = Rng.Stream(c.Seed, "lakes");
                     if (cor != null) s.Lakes.Add(ValleyLake(n, m, cor, inland, c.MainLakeRadius, ref lakes));
                     if (cor != null) AddHighlands(n, c, m, s, s.Ranges[firstRange], cor, inland);
@@ -392,20 +393,20 @@ namespace Stabby.World
         // Two ridges either side of the island's long axis, loosely parallel or forking
         // from one apex; the corridor runs down the valley between them and on to the
         // nearer end's coast.
-        static CorridorSketch AddValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, ref Rng rng)
+        static CorridorSketch AddValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, ref Rng rng, ref Rng bends)
         {
             // Lobed coasts defeat many draws; the far end is tried as well before giving up.
             for (int attempt = 0; attempt < 16; attempt++)
             {
                 int before = ranges.Count;
-                var cor = TryValley(n, m, land, inland, ranges, attempt % 2 == 1, ref rng);
+                var cor = TryValley(n, m, land, inland, ranges, attempt % 2 == 1, ref rng, ref bends);
                 if (cor != null) return cor;
                 ranges.RemoveRange(before, ranges.Count - before);
             }
             return null;
         }
 
-        static CorridorSketch TryValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, bool far, ref Rng rng)
+        static CorridorSketch TryValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, bool far, ref Rng rng, ref Rng bends)
         {
             float ax = m.AxisX, ay = m.AxisY;
             if ((RunToSea(n, land, m.X, m.Y, -ax, -ay) < RunToSea(n, land, m.X, m.Y, ax, ay)) != far) { ax = -ax; ay = -ay; }
@@ -437,18 +438,39 @@ namespace Stabby.World
             // A forked valley's head would sit under both ridges at the apex.
             int head = fork ? 1 : 0;
             var cx = new List<float>(mx).GetRange(head, Points - head); var cy = new List<float>(my).GetRange(head, Points - head);
-            float step = m.Radius * 0.15f, x = mx[Points - 1], y = my[Points - 1];
-            for (int k = 0; k < 30 && OnLand(n, land, x, y); k++)
-            {
-                x = Math.Max(1, Math.Min(n - 2, x + step * ax));
-                y = Math.Max(1, Math.Min(n - 2, y + step * ay));
-                cx.Add(x); cy.Add(y);
-            }
-            if (!OnLand(n, land, mx[head], my[head]) || OnLand(n, land, x, y)) return null;
-            // The ridges wall the valley in; only the run past them can slip out sideways.
+            if (!OnLand(n, land, mx[head], my[head])) return null;
+            // The graded floor holds the river to this line, so past the ridges it must bend
+            // or the river rules a straight cut to the sea. A bent run that misses the coast
+            // gets more tries, then falls back to the straight one.
             int open = Points - 1 - head;
-            var tail = new CorridorSketch { X = cx.GetRange(open, cx.Count - open).ToArray(), Y = cy.GetRange(open, cy.Count - open).ToArray() };
-            return SkirtsCoast(n, tail, inland) ? null : new CorridorSketch { X = cx.ToArray(), Y = cy.ToArray(), Width = m.Radius * 0.08f };
+            for (int tries = 6; tries >= 0; tries--)
+            {
+                bool bent = tries > 0;
+                var runX = new List<float>(cx); var runY = new List<float>(cy);
+                float step = m.Radius * (bent ? 0.06f : 0.15f), x = mx[Points - 1], y = my[Points - 1], hx = ax, hy = ay;
+                float sway = bends.NextFloat() < 0.5f ? -1 : 1;
+                for (int k = 0; k < (bent ? 75 : 30) && OnLand(n, land, x, y); k++)
+                {
+                    if (bent)
+                    {
+                        if (bends.NextFloat() < 0.3f) sway = -sway;
+                        // The pull back to the axis keeps bends from turning the river around.
+                        float turn = sway * bends.Range(0.25f, 0.55f);
+                        float tx = hx - turn * hy, ty = hy + turn * hx;
+                        hx = tx + 0.15f * (ax - tx); hy = ty + 0.15f * (ay - ty);
+                        float len = (float)Math.Sqrt(hx * hx + hy * hy);
+                        hx /= len; hy /= len;
+                    }
+                    x = Math.Max(1, Math.Min(n - 2, x + step * hx));
+                    y = Math.Max(1, Math.Min(n - 2, y + step * hy));
+                    runX.Add(x); runY.Add(y);
+                }
+                if (OnLand(n, land, x, y)) continue;
+                // The ridges wall the valley in; only the run past them can slip out sideways.
+                var tail = new CorridorSketch { X = runX.GetRange(open, runX.Count - open).ToArray(), Y = runY.GetRange(open, runY.Count - open).ToArray() };
+                if (!SkirtsCoast(n, tail, inland)) return new CorridorSketch { X = runX.ToArray(), Y = runY.ToArray(), Width = m.Radius * 0.08f };
+            }
+            return null;
         }
 
         // The summit sits on the ridges' apex; the tableland abuts it on whichever side,
@@ -583,7 +605,7 @@ namespace Stabby.World
                 {
                     int p = end == 0 ? 0 : g.X.Length - 1;
                     if (NearestCoast(n, mine, g.X[p], g.Y[p], reach, out float sx, out float sy, out float d) && d < best
-                        && !OtherLandNear(n, s.Land, mine, sx, sy, clear) && !NearCorridor(cor, sx, sy, clear))
+                        && !OtherLandNear(n, s.Land, mine, sx, sy, clear) && !NearCorridor(cor, sx, sy, clear) && !UnderHighland(s, sx, sy))
                     { best = d; cx = sx; cy = sy; }
                 }
             }
@@ -595,7 +617,7 @@ namespace Stabby.World
                     float k = RunToSea(n, s.Land, m.X, m.Y, dx, dy);
                     float px = m.X + k * dx, py = m.Y + k * dy;
                     if (turn == 0) { cx = px; cy = py; }
-                    if (!OtherLandNear(n, s.Land, mine, px, py, clear) && !NearCorridor(cor, px, py, clear))
+                    if (!OtherLandNear(n, s.Land, mine, px, py, clear) && !NearCorridor(cor, px, py, clear) && !UnderHighland(s, px, py))
                     { cx = px; cy = py; break; }
                     // 22.5 degrees, written out so generation stays free of trig.
                     float tx = dx * 0.92387953f - dy * 0.38268343f;
@@ -634,6 +656,17 @@ namespace Stabby.World
         }
 
         // Caprock across the valley would dam its river.
+        // Cliffs are cleared around highlands (CliffShores), so a cliff centred there would vanish.
+        static bool UnderHighland(WorldSketch s, float x, float y)
+        {
+            foreach (var hl in s.Highlands)
+            {
+                float r = hl.Radius * (hl.Plateau ? 1.8f : 2f);
+                if ((hl.X - x) * (hl.X - x) + (hl.Y - y) * (hl.Y - y) < r * r) return true;
+            }
+            return false;
+        }
+
         static bool NearCorridor(CorridorSketch cor, float x, float y, float r, int from = 0)
         {
             if (cor == null) return false;
