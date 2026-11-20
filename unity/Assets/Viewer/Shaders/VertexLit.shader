@@ -1,5 +1,6 @@
 Shader "Stabby/VertexLit"
 {
+    Properties { _StitchMask ("Stitch mask", Float) = 0 }
     SubShader
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
@@ -15,19 +16,31 @@ Shader "Stabby/VertexLit"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
+            CBUFFER_START(UnityPerMaterial)
+            float _StitchMask;
+            CBUFFER_END
+
+            #ifdef UNITY_DOTS_INSTANCING_ENABLED
+            UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
+                UNITY_DOTS_INSTANCED_PROP(float, _StitchMask)
+            UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
+            #define _StitchMask UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _StitchMask)
+            #endif
+
             float4 _StabbySky, _StabbyGround;
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float2 strata : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float2 strata : TEXCOORD0; float4 stitch : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float3 strata : TEXCOORD2; };
 
             Varyings vert(Attributes i)
             {
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
-                VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
+                float3 pos = ((uint)i.stitch.w & (uint)_StitchMask) != 0 ? i.stitch.xyz : i.positionOS.xyz;
+                VertexPositionInputs p = GetVertexPositionInputs(pos);
                 o.positionCS = p.positionCS;
                 o.normalWS = TransformObjectToWorldNormal(i.normalOS);
                 o.color = i.color;

@@ -192,6 +192,10 @@ namespace Stabby.World
             return list;
         }
 
+        public int ColumnStart(int col) => ints[3 * col];
+        public int ColumnEnd(int col) => ints[3 * col + 1];
+        public int ColumnBase(int col) => ints[3 * col + 2];
+
         public bool SameAs(NetsBuffers o)
         {
             if (Verts.Count != o.Verts.Count || Tris.Count != o.Tris.Count) return false;
@@ -265,7 +269,7 @@ namespace Stabby.World
         public static void Edited<TCols, TEdits, TSink>(TCols columns, TEdits edits, NetsChunk c, ref TSink sink)
             where TCols : struct, IColumnField where TEdits : struct, IEditList where TSink : struct, INetsSink
         {
-            int w = c.Cells + 1, hw = w + 1, rw = hw + 2, bx = c.X0 - 1, bz = c.Z0 - 1, count = edits.Count, sl = rw * rw;
+            int w = c.Cells + 1, hw = w + 1, rw = hw + 2, bx = c.X0 - 1, bz = c.Z0 - 1, sl = rw * rw;
             float s = c.StepM;
             var solid = new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s };
             sink.Begin(3 * w * w, sl + hw * hw);
@@ -287,32 +291,13 @@ namespace Stabby.World
                     float h01 = H(ref sink, rw, i, k + 1), h11 = H(ref sink, rw, i + 1, k + 1);
                     float l00 = sink.GetFloat(sl + k * hw + i), l10 = sink.GetFloat(sl + k * hw + i + 1);
                     float l01 = sink.GetFloat(sl + (k + 1) * hw + i), l11 = sink.GetFloat(sl + (k + 1) * hw + i + 1);
-                    float lo = Math.Min(Math.Min(h00, h10), Math.Min(h01, h11));
-                    int j = (int)Math.Floor(lo / s) - 2;
-                    while (!AllInside(h00, h10, h01, h11, j - 1, s)) j--;
-                    while (AllInside(h00, h10, h01, h11, j, s)) j++;
-                    int end = j;
-                    while (!AllOutside(h00, h10, h01, h11, end, s)) end++;
-                    for (int q = 0; q < count; q++)
-                    {
-                        var e = edits.At(q);
-                        if (e.MaxX < ci * s || e.MinX > (ci + 1) * s || e.MaxZ < ck * s || e.MinZ > (ck + 1) * s) continue;
-                        j = Math.Min(j, (int)Math.Floor(e.MinY / s) - 1);
-                        end = Math.Max(end, (int)Math.Floor(e.MaxY / s) + 2);
-                    }
+                    Span(edits, h00, h10, h01, h11, s, ci, ck, out int j, out int end);
                     sink.SetInt(col, j);
                     sink.SetInt(col + 2, next);
                     sink.SetInt(col + 1, end);
                     for (; j < end; j++)
                     {
-                        float yb = j * s, yt = (j + 1) * s;
-                        float xa = ci * s, xb = (ci + 1) * s, za = ck * s, zb = (ck + 1) * s;
-                        int v = Cell(ref sink, solid, ci, j, ck, s,
-                            Features.Edit(edits, (h00 - yb) / l00, xa, yb, za), Features.Edit(edits, (h10 - yb) / l10, xb, yb, za),
-                            Features.Edit(edits, (h00 - yt) / l00, xa, yt, za), Features.Edit(edits, (h10 - yt) / l10, xb, yt, za),
-                            Features.Edit(edits, (h01 - yb) / l01, xa, yb, zb), Features.Edit(edits, (h11 - yb) / l11, xb, yb, zb),
-                            Features.Edit(edits, (h01 - yt) / l01, xa, yt, zb), Features.Edit(edits, (h11 - yt) / l11, xb, yt, zb));
-                        if (v < 0) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
+                        Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
                         next++;
                     }
                 }
@@ -335,6 +320,74 @@ namespace Stabby.World
                         if (p != Features.Edit(edits, (hz - yb) / lz, xa, yb, zb) > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
                     }
                 }
+        }
+
+        public static int CoarseVertex<TCols, TEdits>(TCols columns, TEdits edits, float s, int ci, int j, int ck, out float x, out float y, out float z)
+            where TCols : struct, IColumnField where TEdits : struct, IEditList
+        {
+            float h00 = columns.Height(ci, ck), h10 = columns.Height(ci + 1, ck), h01 = columns.Height(ci, ck + 1), h11 = columns.Height(ci + 1, ck + 1);
+            float l00 = Features.Slope(h10, columns.Height(ci - 1, ck), h01, columns.Height(ci, ck - 1), s);
+            float l10 = Features.Slope(columns.Height(ci + 2, ck), h00, h11, columns.Height(ci + 1, ck - 1), s);
+            float l01 = Features.Slope(h11, columns.Height(ci - 1, ck + 1), columns.Height(ci, ck + 2), h00, s);
+            float l11 = Features.Slope(columns.Height(ci + 2, ck + 1), h01, columns.Height(ci + 1, ck + 2), h10, s);
+            Span(edits, h00, h10, h01, h11, s, ci, ck, out int start, out int end);
+            j = Math.Max(start, Math.Min(end - 1, j));
+            var sink = new PointSink();
+            var solid = new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s };
+            int cell = j;
+            for (int d = 0; d < end - start; d++)
+            {
+                int a = j - d, b = j + d;
+                if (a >= start && Emit(ref sink, solid, edits, ci, a, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, false)) { cell = a; break; }
+                if (d > 0 && b < end && Emit(ref sink, solid, edits, ci, b, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, false)) { cell = b; break; }
+                if (d == end - start - 1) Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
+            }
+            x = sink.X; y = sink.Y; z = sink.Z;
+            return cell;
+        }
+
+        struct PointSink : INetsSink
+        {
+            public float X, Y, Z;
+            public void Begin(int ints, int floats) { }
+            public int GetInt(int k) => 0;
+            public void SetInt(int k, int v) { }
+            public float GetFloat(int k) => 0;
+            public void SetFloat(int k, float v) { }
+            public int AddVertex(float x, float y, float z, float nx, float ny, float nz) { X = x; Y = y; Z = z; return 0; }
+            public void AddTriangle(int a, int b, int c) { }
+        }
+
+        static void Span<TEdits>(TEdits edits, float h00, float h10, float h01, float h11, float s, int ci, int ck, out int j, out int end) where TEdits : struct, IEditList
+        {
+            float lo = Math.Min(Math.Min(h00, h10), Math.Min(h01, h11));
+            j = (int)Math.Floor(lo / s) - 2;
+            while (!AllInside(h00, h10, h01, h11, j - 1, s)) j--;
+            while (AllInside(h00, h10, h01, h11, j, s)) j++;
+            end = j;
+            while (!AllOutside(h00, h10, h01, h11, end, s)) end++;
+            for (int q = 0, count = edits.Count; q < count; q++)
+            {
+                var e = edits.At(q);
+                if (e.MaxX < ci * s || e.MinX > (ci + 1) * s || e.MaxZ < ck * s || e.MinZ > (ck + 1) * s) continue;
+                j = Math.Min(j, (int)Math.Floor(e.MinY / s) - 1);
+                end = Math.Max(end, (int)Math.Floor(e.MaxY / s) + 2);
+            }
+        }
+
+        static bool Emit<TSink, TCols, TEdits>(ref TSink sink, EditedSolid<TCols, TEdits> solid, TEdits edits, int ci, int j, int ck, float s,
+            float h00, float h10, float h01, float h11, float l00, float l10, float l01, float l11, bool fill)
+            where TSink : struct, INetsSink where TCols : struct, IColumnField where TEdits : struct, IEditList
+        {
+            float yb = j * s, yt = (j + 1) * s;
+            float xa = ci * s, xb = (ci + 1) * s, za = ck * s, zb = (ck + 1) * s;
+            int v = Cell(ref sink, solid, ci, j, ck, s,
+                Features.Edit(edits, (h00 - yb) / l00, xa, yb, za), Features.Edit(edits, (h10 - yb) / l10, xb, yb, za),
+                Features.Edit(edits, (h00 - yt) / l00, xa, yt, za), Features.Edit(edits, (h10 - yt) / l10, xb, yt, za),
+                Features.Edit(edits, (h01 - yb) / l01, xa, yb, zb), Features.Edit(edits, (h11 - yb) / l11, xb, yb, zb),
+                Features.Edit(edits, (h01 - yt) / l01, xa, yt, zb), Features.Edit(edits, (h11 - yt) / l11, xb, yt, zb));
+            if (v < 0 && fill) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
+            return v >= 0;
         }
 
         static float H<TSink>(ref TSink sink, int rw, int i, int k) where TSink : struct, INetsSink => sink.GetFloat((k + 1) * rw + i + 1);

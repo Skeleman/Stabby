@@ -170,8 +170,11 @@ namespace Stabby.World
                     var meshed = new List<FeatureEdit>();
                     foreach (var x in placed) if (x.MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(x);
                     var f = new NetsBuffers();
-                    if (meshed.Count > 0) SurfaceNets.Edited(cols, new EditArray { Items = meshed.ToArray() }, c, ref f);
+                    var list = new EditArray { Items = meshed.ToArray() };
+                    if (meshed.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
                     else SurfaceNets.Heightfield(cols, c, ref f);
+                    if (meshed.Count > 0 && !StitchTargetsMatch(cols, list, c, f))
+                    { e.Add($"chunk {cx},{cz} at step {step} has border vertices a finer neighbour cannot stitch to"); return; }
                     foreach (int t in f.Tris)
                     {
                         int v = t * 6 + 1;
@@ -180,6 +183,25 @@ namespace Stabby.World
                     }
                 }
             }
+        }
+
+        static bool StitchTargetsMatch(DetailColumns cols, EditArray edits, NetsChunk c, NetsBuffers f)
+        {
+            int w = c.Cells + 1;
+            for (int k = 0; k < w; k++)
+                for (int i = 0; i < w; i++)
+                {
+                    if (i != 0 && k != 0 && i != c.Cells && k != c.Cells && (i + k) % 7 != 0) continue;
+                    int col = k * w + i;
+                    for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
+                    {
+                        int cell = SurfaceNets.CoarseVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z);
+                        if (cell < f.ColumnStart(col) || cell >= f.ColumnEnd(col)) return false;
+                        int v = 6 * (f.ColumnBase(col) + cell - f.ColumnStart(col));
+                        if (x != f.Verts[v] || y != f.Verts[v + 1] || z != f.Verts[v + 2]) return false;
+                    }
+                }
+            return true;
         }
 
         static void CheckFeatures(GeneratedWorld w, List<string> e)
