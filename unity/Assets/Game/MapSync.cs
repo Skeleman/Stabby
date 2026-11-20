@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
@@ -52,6 +54,23 @@ namespace Stabby.Game
         }
     }
 
+    public static class ChunkZip
+    {
+        public static byte[] Deflate(byte[] raw)
+        {
+            var m = new MemoryStream();
+            using (var z = new DeflateStream(m, CompressionLevel.Optimal, true)) z.Write(raw, 0, raw.Length);
+            return m.ToArray();
+        }
+
+        public static byte[] Inflate(byte[] packed)
+        {
+            var m = new MemoryStream();
+            using (var z = new DeflateStream(new MemoryStream(packed), CompressionMode.Decompress)) z.CopyTo(m);
+            return m.ToArray();
+        }
+    }
+
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     public partial class ServerMapSystem : SystemBase
     {
@@ -82,7 +101,7 @@ namespace Stabby.Game
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
                 int a = WorldChunks.Across(w.Config.Size);
                 p.Packed = new byte[p.Sums.Length][];
-                for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = WorldChunks.Pack(w, k % a, k / a);
+                for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a));
                 p.Detail = new TerrainDetail(w);
                 return p;
             });
@@ -251,7 +270,7 @@ namespace Stabby.Game
             finish = Task.Run(() =>
             {
                 int a = WorldChunks.Across(w.Config.Size);
-                foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, data);
+                foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, ChunkZip.Inflate(data));
                 if (got.Length > 0) WorldChunks.Relink(w);
                 w.Config.Seed = hs;
                 var sums = WorldChunks.Checksums(w);
@@ -268,7 +287,7 @@ namespace Stabby.Game
             var (bad, detail) = finish.Result;
             Map = world;
             GameStatus.Lines[World.Name] = $"{World.Name}: generated seed {seed} in {genMs} ms, {stale}/{mine.Length} chunks stale, " +
-                $"streamed {streamed} ({bytesIn / 1024} KB in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
+                $"streamed {streamed} ({bytesIn / 1024} KB deflated in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
             if (bad == 0) { GameStatus.Synced.Add(World.Name); Ground.Create(EntityManager, world, detail); }
             else GameStatus.Failure = GameStatus.Lines[World.Name];
         }
