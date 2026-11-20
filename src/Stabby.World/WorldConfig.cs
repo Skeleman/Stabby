@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 14;
+        public const int GeneratorVersion = 15;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).
@@ -37,12 +37,21 @@ namespace Stabby.World
         public int PondsMin = 1, PondsMax = 4;
         public float PondRadiusMin = 0.035f, PondRadiusMax = 0.07f;
 
-        public float LatitudeSouth = 25f, LatitudeNorth = 55f;
+        // The map spans ~23 km, too little for latitude to matter, so climate varies with height,
+        // wind and shelter only. The lapse rate is steeper than Earth's 0.0065 so a 1.1 km island
+        // still climbs from temperate forest through boreal to tundra on its tableland.
+        public float SeaLevelTempC = 9f, LapseRatePerMeter = 0.014f;
         public Wind PrevailingWind = Wind.FromWest;
+        // Moisture is 1 off the sea. A full charge rains BaseRainMm a year on flat land plus
+        // OrographicRainMm per unit of upwind slope (capped at MaxRainMm), slope measured over UpwindMeters; every metre of rain
+        // a cell takes costs RainoutMm-metres of moisture, and each km of sea restores SeaRecharge.
+        public float BaseRainMm = 750f, OrographicRainMm = 25000f, MaxRainMm = 4000f;
+        public float RainoutMm = 2.4e7f, SeaRecharge = 0.25f, LandRecharge = 0.01f, UpwindMeters = 300f;
 
+        public float ErosionRainMm = 450f;
         public int ErosionSteps = 100;
         public float TimeStepYears = 1e5f;
-        public float MaxUplift = 1.5e-3f;
+        public float MaxUplift = 1.9e-3f;
         public float Erodibility = 2.6e-5f;
         public float AreaExponent = 0.45f;
         public float Diffusion = 0.004f;

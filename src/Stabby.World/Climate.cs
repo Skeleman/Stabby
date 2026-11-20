@@ -3,30 +3,21 @@ using System;
 namespace Stabby.World
 {
     // Long-term climate only: mean temperature and annual precipitation.
-    // Temperature follows latitude and a lapse rate; precipitation comes from a
-    // moisture sweep along the prevailing wind that recharges over the sea and
-    // rains out on upslopes, which produces rain shadows behind ranges.
+    // Temperature follows a lapse rate; precipitation comes from a moisture sweep
+    // along the prevailing wind that recharges over the sea and rains out on
+    // upslopes, which produces rain shadows behind ranges. Every rate is per metre,
+    // so the same world gets the same climate at any resolution.
     public sealed class ClimateField
     {
         public float[] TemperatureC;
         public float[] PrecipitationMm;
 
-        public const float LapseRatePerMeter = 0.0065f;
-
         public static ClimateField Compute(WorldConfig c, float[] height, bool[] sea)
         {
             int n = c.Size;
             var f = new ClimateField { TemperatureC = new float[n * n], PrecipitationMm = new float[n * n] };
-            for (int y = 0; y < n; y++)
-            {
-                float lat = c.LatitudeSouth + (c.LatitudeNorth - c.LatitudeSouth) * y / (n - 1f);
-                float seaLevelT = 28f - 0.6f * (lat - 20f);
-                for (int x = 0; x < n; x++)
-                {
-                    int i = y * n + x;
-                    f.TemperatureC[i] = seaLevelT - LapseRatePerMeter * Math.Max(0, height[i]);
-                }
-            }
+            for (int i = 0; i < n * n; i++)
+                f.TemperatureC[i] = c.SeaLevelTempC - c.LapseRatePerMeter * Math.Max(0, height[i]);
             f.PrecipitationMm = Sweep(c, height, sea);
             return f;
         }
@@ -42,10 +33,12 @@ namespace Stabby.World
         {
             int n = c.Size;
             var p = new float[n * n];
+            float km = c.CellMeters / 1000f;
+            int back = Math.Max(1, (int)Math.Round(c.UpwindMeters / c.CellMeters));
+            var line_h = new float[n];
             for (int line = 0; line < n; line++)
             {
                 float moisture = 1f;
-                float prevH = 0;
                 for (int t = 0; t < n; t++)
                 {
                     int x, y;
@@ -58,22 +51,24 @@ namespace Stabby.World
                     }
                     int i = y * n + x;
                     float hi = Math.Max(0, h[i]);
+                    line_h[t] = hi;
                     if (sea[i])
                     {
-                        moisture = Math.Min(1f, moisture + 0.2f);
-                        p[i] = 900f * moisture;
+                        moisture = Math.Min(1f, moisture + c.SeaRecharge * km);
+                        p[i] = c.BaseRainMm * moisture;
                     }
                     else
                     {
-                        float rise = Math.Max(0, hi - prevH) / c.CellMeters;
-                        float rain = moisture * Math.Min(4500f, 700f + 30000f * rise);
+                        // Slope over UpwindMeters upwind, so single-cell bumps don't wring the air out.
+                        float rise = Math.Max(0, hi - line_h[Math.Max(0, t - back)]) / (back * c.CellMeters);
+                        float rain = moisture * Math.Min(c.MaxRainMm, c.BaseRainMm + c.OrographicRainMm * rise);
                         p[i] = rain;
-                        moisture = Math.Max(0.02f, moisture - rain / 90000f + 0.002f);
+                        moisture = Math.Max(0.05f, Math.Min(1f, moisture - rain * c.CellMeters / c.RainoutMm + c.LandRecharge * km));
                     }
-                    prevH = hi;
                 }
             }
-            return Blur(Blur(p, n, 4), n, 4);
+            int r = Math.Max(1, (int)Math.Round(240f / c.CellMeters));
+            return Blur(Blur(p, n, r), n, r);
         }
 
         static float[] Blur(float[] src, int n, int r)

@@ -42,9 +42,9 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 1. **Sketch** - two islands, mountain ranges, drainage corridors, biome
    regions and town landmarks; editable as `sketch.json`.
 2. **Initial height** from the sketch.
-3. **Provisional climate** - precipitation for erosion.
+3. **Provisional climate** - the rain pattern for erosion (scaled to `ErosionRainMm`, so climate tuning never reshapes terrain).
 4. **Stream-power erosion** (implicit, Braun & Willett 2013).
-5. **Final climate** - temperature and precipitation with rain shadows.
+5. **Final climate** - one maritime climate: temperature falls with height (steep game lapse rate, tundra up top), rain follows the wind with rain shadows; rates are per metre, so any resolution matches.
 6. **Hydrology** - lakes by priority flood, D8 routing, discharge, river
    reaches; terrain, water and rivers share one drainage graph.
 7. **Biomes** classified from climate using `content/biomes.json`.

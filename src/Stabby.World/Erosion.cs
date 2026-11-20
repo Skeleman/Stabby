@@ -143,8 +143,13 @@ namespace Stabby.World
             int n = c.Size;
             bool[] sea = SeaOf(s.Land);
             float cellArea = c.CellMeters * c.CellMeters;
+            // Erosion takes the rain's pattern but not its amount, so retuning the climate
+            // doesn't reshape the terrain.
+            double sum = 0; int land = 0;
+            for (int i = 0; i < n * n; i++) if (!sea[i]) { sum += precipitationMm[i]; land++; }
+            float scale = land > 0 && sum > 0 ? (float)(c.ErosionRainMm * land / sum) : 0;
             var runoff = new float[n * n];
-            for (int i = 0; i < n * n; i++) runoff[i] = sea[i] ? 0 : cellArea * precipitationMm[i] / 1000f;
+            for (int i = 0; i < n * n; i++) runoff[i] = sea[i] ? 0 : cellArea * precipitationMm[i] * scale / 1000f;
 
             // Beaches stay graded to the sea however much uplift and diffusion pile on.
             var beachCap = new float[n * n];
