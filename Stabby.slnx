@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Stabby.Content/Stabby.Content.csproj" />
+    <Project Path="src/Stabby.World/Stabby.World.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Stabby.World.Tests/Stabby.World.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Stabby.Cli/Stabby.Cli.csproj" />
+  </Folder>
+</Solution>

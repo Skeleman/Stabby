@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "biomes": [
+    { "id": "tundra",           "name": "Tundra",               "tempMinC": -25, "tempMaxC": 1,  "precipMinMm": 0,    "precipMaxMm": 2500, "color": "#b9c4c2" },
+    { "id": "boreal",           "name": "Boreal forest",        "tempMinC": -5,  "tempMaxC": 6,  "precipMinMm": 300,  "precipMaxMm": 2500, "color": "#3f6b4a" },
+    { "id": "steppe",           "name": "Steppe",               "tempMinC": 0,   "tempMaxC": 22, "precipMinMm": 250,  "precipMaxMm": 650,  "color": "#b6b46a" },
+    { "id": "temperate-forest", "name": "Temperate forest",     "tempMinC": 4,   "tempMaxC": 20, "precipMinMm": 650,  "precipMaxMm": 2000, "color": "#4f8a3c" },
+    { "id": "temperate-rain",   "name": "Temperate rainforest", "tempMinC": 4,   "tempMaxC": 18, "precipMinMm": 2000, "precipMaxMm": 5000, "color": "#2b6b45" },
+    { "id": "shrubland",        "name": "Shrubland",            "tempMinC": 12,  "tempMaxC": 30, "precipMinMm": 300,  "precipMaxMm": 900,  "color": "#a39552" },
+    { "id": "desert",           "name": "Desert",               "tempMinC": 10,  "tempMaxC": 38, "precipMinMm": 0,    "precipMaxMm": 300,  "color": "#d9c48a" },
+    { "id": "savanna",          "name": "Savanna",              "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 700,  "precipMaxMm": 1500, "color": "#a9ad4f" },
+    { "id": "tropical-forest",  "name": "Tropical forest",      "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 1500, "precipMaxMm": 5000, "color": "#2f7d32" }
+  ]
+}
