@@ -101,7 +101,7 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
 // Smaller test worlds keep the island span by using coarser cells.
 WorldConfig Config(ulong seed, int size) => new WorldConfig
 {
-    Seed = seed, Size = size, CellMeters = 60f * 512 / size,
+    Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size),
     UniformRainMm = float.Parse(Opt("rain", "0")),
 };
 

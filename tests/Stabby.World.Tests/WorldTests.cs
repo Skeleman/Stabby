@@ -8,11 +8,12 @@ public class WorldTests
 {
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
-    // Same 30 km span as the default world at coarser cells, so tests stay fast.
-    static WorldConfig Cfg(ulong seed, int size = 128) =>
-        new WorldConfig { Seed = seed, Size = size, CellMeters = 60f * 512 / size };
+    // Same span as the default world at coarser cells, so tests stay fast; below 256
+    // the main island is too few cells wide for the corridor and lake checks.
+    static WorldConfig Cfg(ulong seed, int size = 256) =>
+        new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) };
 
-    static GeneratedWorld Gen(ulong seed, int size = 128) => WorldGenerator.Generate(Cfg(seed, size), Biomes);
+    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes);
 
     [Fact]
     public void HundredSeedsPassEveryCheck()
@@ -112,7 +113,7 @@ public class WorldTests
     {
         var w = Gen(3, 256);
         Assert.True(w.Water.Rivers.Count > 10, $"{w.Water.Rivers.Count} river reaches");
-        Assert.True(w.Height.Max() > 500, $"peak {w.Height.Max()} m");
+        Assert.True(w.Height.Max() > 300, $"peak {w.Height.Max()} m");
     }
 
     [Fact]

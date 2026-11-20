@@ -140,7 +140,7 @@ static class Render
         float H(int xx, int yy)
         {
             float h = w.Height[Math.Clamp(yy, 0, n - 1) * n + Math.Clamp(xx, 0, n - 1)];
-            return seabed ? 4 * Math.Min(h, 0) : h;
+            return seabed ? 2 * Math.Min(h, 0) : h;
         }
         float dzdx = (H(x + 1, y) - H(x - 1, y)) / (2 * w.Config.CellMeters);
         float dzdy = (H(x, y + 1) - H(x, y - 1)) / (2 * w.Config.CellMeters);
