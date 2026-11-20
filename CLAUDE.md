@@ -5,8 +5,14 @@
    (netstandard2.1, C# 9, no records, no `init`).
 2. One representation per fact. Ownership flows heightfield -> drainage graph
    (`Drainage`: fill, receivers, stack) -> hydrology (water surface, lakes,
-   rivers) -> biomes. Each stage reads the one before it and never derives a
-   second copy.
+   rivers) -> biomes -> features. Each stage reads the one before it and never
+   derives a second copy. World geometry is one solid field: the heightfield
+   base plus an ordered list of sparse feature edits (overhangs, arches,
+   caves) that add or carve solid only inside their bounds. Every mesh samples
+   that field on one global lattice at cell size; chunks no feature touches
+   take the heightfield fast path, which must match the general mesher vertex
+   for vertex. One material library serves every surface: rock strata by world
+   height plus a regional offset, biome coats on upward faces.
 3. Authored data lives in `content/` and is read only by `Stabby.Content`.
 4. Every world invariant lives in `WorldChecks`. Tests and the CLI sweep both
    call it; add a check there before fixing the bug it catches.
