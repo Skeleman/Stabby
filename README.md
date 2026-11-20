@@ -101,3 +101,15 @@ skirts, smoothed river ribbons at their generated widths, lakes and a sea plane.
 Open `Assets/Scenes/Viewer.unity` and press Play (RMB look, WASD, Q/E, Shift, wheel).
 Batch shots and stats: `Unity -batchmode -projectPath unity -executeMethod
 Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seedN/`.
+
+## Unity game prototype
+
+`Assets/Scenes/Game.unity` runs a host and two clients in one process with
+Netcode for Entities. Each client generates the world from the host's seed,
+compares chunk checksums and streams the chunks that differ (deflated);
+`Client2` deliberately generates the wrong seed to exercise a full stream.
+Players are predicted capsules walking on the shared terrain.
+Batch run: `Unity -batchmode -projectPath unity -executeMethod
+Stabby.Game.Editor.GameCapture.Run [-stabbySpikes [ms]]` writes
+`out/unity/game/` (`stats.txt`, chase and overhead shots); `-stabbySpikes`
+lists the top profiler markers for every frame over `ms` (default 33).
