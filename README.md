@@ -53,3 +53,12 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 `WorldChecks` holds every invariant; tests and `sweep` both run it.
 Changing output bumps `WorldConfig.GeneratorVersion`. Rules for contributors
 are in `CLAUDE.md`; project skills live in `.claude/skills/`.
+
+## Unity viewer
+
+`unity/` is a Unity 6000.5.8f1 URP project that loads `src/Stabby.World` as a local
+package and draws a generated world: 64-cell chunks with five screen-size LODs and
+skirts, smoothed river ribbons at their generated widths, lakes and a sea plane.
+Open `Assets/Scenes/Viewer.unity` and press Play (RMB look, WASD, Q/E, Shift, wheel).
+Batch shots and stats: `Unity -batchmode -projectPath unity -executeMethod
+Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seedN/`.

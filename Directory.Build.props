@@ -1,0 +1,6 @@
+<Project>
+  <!-- Keeps bin/obj out of src so Unity can load src/Stabby.World as a package. -->
+  <PropertyGroup>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+  </PropertyGroup>
+</Project>

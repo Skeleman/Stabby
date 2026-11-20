@@ -1,0 +1,6 @@
+{
+  "name": "Stabby.Viewer",
+  "rootNamespace": "Stabby.Viewer",
+  "references": ["Stabby.World"],
+  "autoReferenced": true
+}

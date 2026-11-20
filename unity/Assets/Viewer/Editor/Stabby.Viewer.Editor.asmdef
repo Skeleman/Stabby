@@ -1,0 +1,6 @@
+{
+  "name": "Stabby.Viewer.Editor",
+  "rootNamespace": "Stabby.Viewer.Editor",
+  "references": ["Stabby.Viewer", "Stabby.World", "Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime"],
+  "includePlatforms": ["Editor"]
+}
