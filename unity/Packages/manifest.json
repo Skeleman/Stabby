@@ -36,6 +36,7 @@
     "com.unity.modules.xr": "1.0.0",
     "com.stabby.world": "file:../../src/Stabby.World",
     "com.unity.entities": "6.5.0",
+    "com.unity.entities.graphics": "6.5.0",
     "com.unity.netcode": "6.5.0",
     "com.unity.render-pipelines.universal": "17.5.0",
     "com.unity.transport": "6.5.0"

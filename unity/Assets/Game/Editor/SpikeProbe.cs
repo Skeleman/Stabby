@@ -22,7 +22,7 @@ namespace Stabby.Game.Editor
         {
             if (!On) return;
             if (frame++ % 120 == 0) Scan();
-            var top = recs.Select(r => (r.name, ms: r.rec.LastValue / 1e6)).Where(r => r.ms >= 3).OrderByDescending(r => r.ms).Take(14);
+            var top = recs.Select(r => (r.name, ms: r.rec.LastValue / 1e6)).Where(r => r.ms >= 3).OrderByDescending(r => r.ms).Take(40);
             string now = string.Join(", ", top.Select(r => $"{r.name} {r.ms:F0}"));
             float dt = Time.unscaledDeltaTime * 1000f;
             if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms\n  this: {now}\n  prev: {prev}");

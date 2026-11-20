@@ -93,6 +93,7 @@ namespace Stabby.Game.Editor
             var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game"));
             Directory.CreateDirectory(dir);
             var cam = Camera.main;
+            Shot(cam, null, "warmup");
             Shot(cam, dir, "chase");
             var focus = cam.transform.position + cam.transform.forward * 24f;
             cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
@@ -153,7 +154,7 @@ namespace Stabby.Game.Editor
             var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
             tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
             tex.Apply();
-            File.WriteAllBytes(Path.Combine(dir, name + ".png"), tex.EncodeToPNG());
+            if (dir != null) File.WriteAllBytes(Path.Combine(dir, name + ".png"), tex.EncodeToPNG());
             RenderTexture.active = null;
             cam.targetTexture = null;
             Object.DestroyImmediate(rt);

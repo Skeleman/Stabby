@@ -5,10 +5,12 @@
         "Stabby.World",
         "Stabby.Viewer",
         "Unity.Entities",
+        "Unity.Entities.Graphics",
         "Unity.NetCode",
         "Unity.Networking.Transport",
         "Unity.Collections",
         "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
         "Unity.Transforms",
         "Unity.Burst"
     ],

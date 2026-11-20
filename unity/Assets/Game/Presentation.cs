@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Stabby.Viewer;
 using Unity.Entities;
 using Unity.NetCode;
 using Unity.Transforms;
@@ -14,7 +13,6 @@ namespace Stabby.Game
         static readonly Color[] Colors = { new Color(0.85f, 0.25f, 0.2f), new Color(0.2f, 0.45f, 0.9f), new Color(0.95f, 0.8f, 0.2f), new Color(0.3f, 0.75f, 0.35f) };
         readonly Dictionary<Entity, GameObject> capsules = new Dictionary<Entity, GameObject>();
         readonly HashSet<Entity> seen = new HashSet<Entity>();
-        WorldView view;
 
         protected override void OnCreate()
         {
@@ -23,16 +21,6 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            var map = World.GetExistingSystemManaged<ClientMapSystem>();
-            if (view == null && map.Map != null)
-            {
-                var scene = Object.FindFirstObjectByType<GameScene>();
-                var go = new GameObject("Terrain");
-                view = go.AddComponent<WorldView>();
-                view.Material = scene != null ? scene.TerrainMaterial : null;
-                view.Build(map.Map, map.Defs);
-            }
-            if (view != null) GameStatus.TerrainBuilt = view.Ready;
             Frames();
 
             int me = SystemAPI.TryGetSingleton<NetworkId>(out var id) ? id.Value : -1;

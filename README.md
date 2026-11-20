@@ -118,7 +118,12 @@ older than `content/biomes.json`, the host generates and saves it, so run
 `stabby bake` after generator changes or let the first run rebake. `Client1`
 loads the same file, compares chunk checksums and streams the chunks that differ
 (deflated); `Client2` starts from an empty world to exercise a full stream.
-Players are predicted capsules walking on the shared terrain.
+Players are predicted capsules walking on the shared terrain. The view client
+draws terrain as Entities Graphics chunk entities (32 cells, six LODs chosen
+by screen size), meshed by Burst jobs from the ground blob; water reuses the
+viewer's geometry. The first Entities Graphics frame in the editor costs about
+150 ms (seen with only the sea quad drawn), so `stats.txt` shows two frames
+over 33 ms.
 Batch run: `Unity -batchmode -projectPath unity -executeMethod
 Stabby.Game.Editor.GameCapture.Run [-stabbySpikes [ms]]` writes
 `out/unity/game/` (`stats.txt`, chase and overhead shots); `-stabbySpikes`

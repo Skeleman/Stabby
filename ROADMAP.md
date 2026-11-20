@@ -23,8 +23,8 @@ and converts once into native data.
 | Item | Status |
 |---|---|
 | Terrain heights + detail as a blob; PlayerMoveSystem and ServerPlayerSystem become Burst ISystem | done |
-| Game terrain as chunk entities (Entities Graphics), meshed by Burst jobs with Unity.Mathematics; replaces WorldView in Game | now |
-| Map sync buffers as native containers wherever they run per frame | next |
+| Game terrain as chunk entities (Entities Graphics), meshed by Burst jobs with Unity.Mathematics; replaces WorldView in Game | done |
+| Map sync buffers as native containers wherever they run per frame | now |
 | Viewer scene stays a managed dev tool | idea |
 
 ## Next

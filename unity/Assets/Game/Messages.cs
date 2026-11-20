@@ -58,6 +58,12 @@ namespace Stabby.Game
             return math.max(0, DetailSampler.HeightAt(new Cells { Blob = Blob }, g.N, g.Seed, x / g.CellMeters, z / g.CellMeters));
         }
 
+        public float GridHeight(float gx, float gy)
+        {
+            ref var g = ref Blob.Value;
+            return DetailSampler.HeightAt(new Cells { Blob = Blob }, g.N, g.Seed, gx, gy);
+        }
+
         struct Cells : IDetailCells
         {
             public BlobAssetReference<GroundData> Blob;

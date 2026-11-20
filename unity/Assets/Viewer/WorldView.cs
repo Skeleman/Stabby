@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Stabby.World;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Stabby.Viewer
@@ -23,8 +24,6 @@ namespace Stabby.Viewer
         public Color Sky = new Color(0.62f, 0.74f, 0.86f);
 
         static readonly float[] Steps = { 0.25f, 0.5f, 1, 2, 4, 8 };
-        static readonly Color SeaColor = new Color(0.16f, 0.36f, 0.55f), LakeColor = new Color(0.22f, 0.47f, 0.68f),
-            RiverColor = new Color(0.20f, 0.45f, 0.78f), Sand = new Color(0.78f, 0.72f, 0.52f), Rock = new Color(0.47f, 0.44f, 0.41f);
 
         public GeneratedWorld World { get; private set; }
         public TerrainDetail Detail { get; private set; }
@@ -44,30 +43,22 @@ namespace Stabby.Viewer
         {
             public GeneratedWorld World;
             public TerrainDetail Detail;
-            public Color[] Colors;
+            public float3[] Colors;
             public int Size, ChunkCells;
             public float Cm;
-        }
-
-        sealed class MeshData
-        {
-            public string Name;
-            public Vector3[] Verts, Norms;
-            public Color[] Cols;
-            public int[] Tris;
         }
 
         sealed class ChunkData
         {
             public int X, Y;
-            public MeshData Coarse, Water;
+            public MeshParts Coarse, Water;
         }
 
         sealed class Prepared
         {
             public Source Src;
             public List<ChunkData> Chunks;
-            public List<MeshData> Rivers;
+            public List<MeshParts> Rivers;
             public long GenMs, MeshMs;
             public string Source = "";
         }
@@ -76,7 +67,7 @@ namespace Stabby.Viewer
         {
             public Bounds Bounds;
             public Mesh[] Lods;
-            public Task<MeshData>[] Pending;
+            public Task<MeshParts>[] Pending;
             public int[] Tris;
             public int WaterTris;
             public MeshFilter Filter;
@@ -206,7 +197,7 @@ namespace Stabby.Viewer
                 appliedWater++;
             }
             while (appliedWater == list.Count && appliedRivers < prepared.Rivers.Count && Spend(prepared.Rivers[appliedRivers].Verts.Length))
-                Attach("Rivers", transform, ToMesh(prepared.Rivers[appliedRivers++]));
+                Attach("Rivers", transform, WaterGeometry.ToMesh(prepared.Rivers[appliedRivers++]));
             if (appliedWater < list.Count || appliedRivers < prepared.Rivers.Count) { MeshMs += sw.ElapsedMilliseconds; return; }
             BuildSea();
             MeshMs = prepared.MeshMs + MeshMs + sw.ElapsedMilliseconds;
@@ -219,15 +210,15 @@ namespace Stabby.Viewer
             var sw = Stopwatch.StartNew();
             var s = new Source { World = world, Size = world.Config.Size, ChunkCells = cells, Cm = world.Config.CellMeters };
             s.Detail = new TerrainDetail(world);
-            s.Colors = BaseColors(world, defs);
+            s.Colors = TerrainLook.BaseColors(world, defs);
             var list = new List<ChunkData>();
             int n = s.Size;
             for (int cy = 0; cy < n; cy += cells)
                 for (int cx = 0; cx < n; cx += cells)
                     if (!token.IsCancellationRequested && HasLand(s, cx, cy))
-                        list.Add(new ChunkData { X = cx, Y = cy, Coarse = TerrainMesh(s, cx, cy, Steps[Steps.Length - 1]), Water = WaterMesh(s, cx, cy) });
+                        list.Add(new ChunkData { X = cx, Y = cy, Coarse = TerrainMesh(s, cx, cy, Steps[Steps.Length - 1]), Water = WaterGeometry.Lakes(world, cx, cy, cells) });
             token.ThrowIfCancellationRequested();
-            return new Prepared { Src = s, Chunks = list, Rivers = RiverMeshes(s), MeshMs = sw.ElapsedMilliseconds };
+            return new Prepared { Src = s, Chunks = list, Rivers = WaterGeometry.Rivers(world, s.Detail), MeshMs = sw.ElapsedMilliseconds };
         }
 
         public void UpdateLod(Camera cam)
@@ -282,9 +273,9 @@ namespace Stabby.Viewer
             }
         }
 
-        void SetLod(Chunk ch, int lod, MeshData data)
+        void SetLod(Chunk ch, int lod, MeshParts data)
         {
-            ch.Lods[lod] = ToMesh(data);
+            ch.Lods[lod] = WaterGeometry.ToMesh(data);
             ch.Tris[lod] = data.Tris.Length / 3;
             BuiltMeshes++;
         }
@@ -313,7 +304,7 @@ namespace Stabby.Viewer
         {
             var go = new GameObject($"Chunk {data.X / ChunkCells},{data.Y / ChunkCells}");
             go.transform.SetParent(transform, false);
-            var ch = new Chunk { X = data.X, Y = data.Y, Lods = new Mesh[Steps.Length], Pending = new Task<MeshData>[Steps.Length], Tris = new int[Steps.Length] };
+            var ch = new Chunk { X = data.X, Y = data.Y, Lods = new Mesh[Steps.Length], Pending = new Task<MeshParts>[Steps.Length], Tris = new int[Steps.Length] };
             int coarse = Steps.Length - 1;
             SetLod(ch, coarse, data.Coarse);
             float cm = src.Cm, w = ChunkCells * cm;
@@ -327,9 +318,9 @@ namespace Stabby.Viewer
             return ch;
         }
 
-        void AttachWater(Chunk ch, MeshData water)
+        void AttachWater(Chunk ch, MeshParts water)
         {
-            ch.Water = Attach("Water", ch.Filter.transform, ToMesh(water));
+            ch.Water = Attach("Water", ch.Filter.transform, WaterGeometry.ToMesh(water));
             ch.WaterTris = water.Tris.Length / 3;
         }
 
@@ -343,18 +334,7 @@ namespace Stabby.Viewer
             return r;
         }
 
-        static Mesh ToMesh(MeshData d)
-        {
-            var mesh = new Mesh { name = d.Name, indexFormat = d.Verts.Length > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16 };
-            mesh.SetVertices(d.Verts);
-            mesh.SetNormals(d.Norms);
-            mesh.SetColors(d.Cols);
-            mesh.SetTriangles(d.Tris, 0);
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-
-        static MeshData TerrainMesh(Source s, int cx, int cy, float step)
+        static MeshParts TerrainMesh(Source s, int cx, int cy, float step)
         {
             int n = s.Size, m = Mathf.RoundToInt(s.ChunkCells / step), w = m + 1, g = m + 3;
             float cm = s.Cm, top = n - 1;
@@ -411,156 +391,17 @@ namespace Stabby.Viewer
                 tris[t++] = a; tris[t++] = a2; tris[t++] = b;
                 tris[t++] = b; tris[t++] = a2; tris[t++] = b2;
             }
-            return new MeshData { Name = $"Terrain {cx},{cy} x{step}", Verts = verts, Norms = norms, Cols = cols, Tris = tris };
+            return new MeshParts { Name = $"Terrain {cx},{cy} x{step}", Verts = verts, Norms = norms, Cols = cols, Tris = tris };
         }
-
-        static Color Linear(Color c) => new Color(ToLinear(c.r), ToLinear(c.g), ToLinear(c.b), c.a);
-
-        static float ToLinear(float v) => v <= 0.04045f ? v / 12.92f : Mathf.Pow((v + 0.055f) / 1.055f, 2.4f);
 
         static Color ColorAt(Source s, float gx, float gy, float h, Vector3 nrm)
         {
-            if (h <= 0) return Linear(Color.Lerp(Sand, Sand * 0.6f, Mathf.Clamp01(-h / 30f)));
-            int n = s.Size, x0 = Mathf.Min((int)gx, n - 2), y0 = Mathf.Min((int)gy, n - 2);
-            float tx = gx - x0, ty = gy - y0;
+            int n = s.Size, x0 = Mathf.Min((int)gx, n - 2), y0 = Mathf.Min((int)gy, n - 2), a = y0 * n + x0;
             var bc = s.Colors;
-            var c = Color.Lerp(Color.Lerp(bc[y0 * n + x0], bc[y0 * n + x0 + 1], tx),
-                Color.Lerp(bc[(y0 + 1) * n + x0], bc[(y0 + 1) * n + x0 + 1], tx), ty);
-            float slope = Mathf.Sqrt(Mathf.Max(0, 1 - nrm.y * nrm.y)) / Mathf.Max(nrm.y, 0.05f);
-            c = Color.Lerp(c, Rock, Mathf.Clamp01((slope - 0.45f) / 0.4f));
-            c = Color.Lerp(c, Sand, Mathf.Clamp01(1f - h / 6f));
-            return Linear(c);
+            var c = TerrainLook.Shade(TerrainLook.Bilinear(bc[a], bc[a + 1], bc[a + n], bc[a + n + 1], gx - x0, gy - y0), h, nrm.y);
+            return new Color(c.x, c.y, c.z);
         }
 
-        static MeshData Flat(string name, List<Vector3> verts, List<int> tris, Color color)
-        {
-            var cols = new Color[verts.Count];
-            var up = new Vector3[verts.Count];
-            var lin = Linear(color);
-            for (int k = 0; k < cols.Length; k++) { cols[k] = lin; up[k] = Vector3.up; }
-            return new MeshData { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray() };
-        }
-
-        static MeshData WaterMesh(Source s, int cx, int cy)
-        {
-            int n = s.Size;
-            float cm = s.Cm, half = cm * 0.5f;
-            var world = s.World;
-            var hy = world.Water;
-            var verts = new List<Vector3>();
-            var tris = new List<int>();
-            for (int y = cy; y < Mathf.Min(cy + s.ChunkCells, n); y++)
-                for (int x = cx; x < Mathf.Min(cx + s.ChunkCells, n); x++)
-                {
-                    int c = y * n + x;
-                    if (world.Sea[c] || hy.LakeId[c] < 0) continue;
-                    float h = Mathf.Max(hy.WaterSurface[c], world.Height[c]) + 0.5f;
-                    int b = verts.Count;
-                    verts.Add(new Vector3(x * cm - half, h, y * cm - half));
-                    verts.Add(new Vector3(x * cm - half, h, y * cm + half));
-                    verts.Add(new Vector3(x * cm + half, h, y * cm - half));
-                    verts.Add(new Vector3(x * cm + half, h, y * cm + half));
-                    tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
-                    tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
-                }
-            return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, tris, LakeColor);
-        }
-
-        const int RiverPieceVertices = 16000;
-
-        static List<MeshData> RiverMeshes(Source s)
-        {
-            int n = s.Size;
-            float cm = s.Cm;
-            var world = s.World;
-            var pieces = new List<MeshData>();
-            var verts = new List<Vector3>();
-            var tris = new List<int>();
-            foreach (var r in world.Water.Rivers)
-            {
-                if (r.Cells.Count < 2) continue;
-                if (verts.Count >= RiverPieceVertices)
-                {
-                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, RiverColor));
-                    verts.Clear();
-                    tris.Clear();
-                }
-                var pts = new List<Vector4>();
-                for (int k = 0; k < r.Cells.Count; k++)
-                {
-                    int c = r.Cells[k];
-                    pts.Add(new Vector4(c % n * cm, Mathf.Max(r.Surface[k], world.Height[c]), c / n * cm, r.Width[k]));
-                }
-                for (int it = 0; it < 2; it++) pts = Chaikin(pts);
-                int b = verts.Count;
-                for (int k = 0; k < pts.Count; k++)
-                {
-                    var a = pts[Mathf.Max(k - 1, 0)];
-                    var z = pts[Mathf.Min(k + 1, pts.Count - 1)];
-                    var dir = new Vector3(z.x - a.x, 0, z.z - a.z).normalized;
-                    var side = new Vector3(dir.z, 0, -dir.x) * Mathf.Max(pts[k].w * 0.5f, 6f);
-                    var p = new Vector3(pts[k].x, 0, pts[k].z);
-                    p.y = GroundAt(s, p, side, pts[k].y) + 1f;
-                    verts.Add(p - side);
-                    verts.Add(p + side);
-                    if (k == 0) continue;
-                    int v = b + 2 * k;
-                    tris.Add(v - 2); tris.Add(v); tris.Add(v - 1);
-                    tris.Add(v - 1); tris.Add(v); tris.Add(v + 1);
-                }
-            }
-            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, RiverColor));
-            return pieces;
-        }
-
-        static float GroundAt(Source s, Vector3 p, Vector3 side, float surface)
-        {
-            float cm = s.Cm, top = s.Size - 1, h = surface;
-            for (int k = -1; k <= 1; k++)
-            {
-                var q = p + side * k;
-                h = Mathf.Max(h, Mathf.Min(s.Detail.HeightAt(Mathf.Clamp(q.x / cm, 0, top), Mathf.Clamp(q.z / cm, 0, top)), surface + 3f));
-            }
-            return h;
-        }
-
-        static List<Vector4> Chaikin(List<Vector4> p)
-        {
-            var o = new List<Vector4>(p.Count * 2) { p[0] };
-            for (int k = 0; k + 1 < p.Count; k++)
-            {
-                o.Add(Vector4.Lerp(p[k], p[k + 1], 0.25f));
-                o.Add(Vector4.Lerp(p[k], p[k + 1], 0.75f));
-            }
-            o.Add(p[p.Count - 1]);
-            return o;
-        }
-
-        void BuildSea()
-        {
-            float span = Size * src.Cm, pad = span * 1.5f;
-            var c = Linear(SeaColor);
-            var mesh = new Mesh { name = "Sea" };
-            mesh.vertices = new[]
-            {
-                new Vector3(-pad, 0, -pad), new Vector3(-pad, 0, span + pad),
-                new Vector3(span + pad, 0, -pad), new Vector3(span + pad, 0, span + pad),
-            };
-            mesh.normals = new[] { Vector3.up, Vector3.up, Vector3.up, Vector3.up };
-            mesh.colors = new[] { c, c, c, c };
-            mesh.triangles = new[] { 0, 1, 2, 2, 1, 3 };
-            Attach("Sea", transform, mesh);
-        }
-
-        static Color[] BaseColors(GeneratedWorld w, IReadOnlyList<BiomeDef> defs)
-        {
-            var colors = new Color[w.Height.Length];
-            for (int i = 0; i < colors.Length; i++)
-            {
-                uint u = w.Biome != null && w.Biome[i] >= 0 ? defs[w.Biome[i]].Color : 0x8DAA5Eu;
-                colors[i] = w.Sea[i] ? Sand : new Color(((u >> 16) & 255) / 255f, ((u >> 8) & 255) / 255f, (u & 255) / 255f);
-            }
-            return colors;
-        }
+        void BuildSea() => Attach("Sea", transform, WaterGeometry.ToMesh(WaterGeometry.Sea(Size, src.Cm)));
     }
 }
