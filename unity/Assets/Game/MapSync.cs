@@ -66,15 +66,19 @@ namespace Stabby.Game
             if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(contentPath)) why = "map file older than biomes.json";
             else if (File.Exists(path))
             {
-                var bytes = File.ReadAllBytes(path);
-                int v = WorldFile.GeneratorVersionOf(bytes);
-                if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}";
-                else
+                try
                 {
-                    var w = WorldFile.Read(bytes);
-                    if (w.Config.Seed == seed && w.Config.Size == GameSettings.Size) return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms");
-                    why = "map file has another seed or size";
+                    var bytes = File.ReadAllBytes(path);
+                    int v = WorldFile.GeneratorVersionOf(bytes);
+                    if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}";
+                    else
+                    {
+                        var w = WorldFile.Read(bytes);
+                        if (w.Config.Seed == seed && w.Config.Size == GameSettings.Size) return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms");
+                        why = "map file has another seed or size";
+                    }
                 }
+                catch (Exception e) when (e is FormatException || e is IOException) { why = $"map file unreadable: {e.Message}"; }
             }
             var g = MapGen.Generate(seed, defs);
             string note = $"generated in {sw.ElapsedMilliseconds} ms ({why})";
@@ -132,12 +136,16 @@ namespace Stabby.Game
             string path = MapFile.PathFor(GameSettings.Seed), content = BiomeFile.DefaultPath;
             gen = Task.Run(() =>
             {
+                var sw = Stopwatch.StartNew();
                 var (w, source) = MapFile.LoadOrGenerate(path, content, GameSettings.Seed, defs, true);
-                var p = new Prepared { Map = w, Source = source, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
+                var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
+                long sumsMs = sw.ElapsedMilliseconds;
                 int a = WorldChunks.Across(w.Config.Size);
                 p.Packed = new byte[p.Sums.Length][];
                 for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a));
+                long packMs = sw.ElapsedMilliseconds;
                 p.Detail = new TerrainDetail(w);
+                p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {packMs} ms, detail at {sw.ElapsedMilliseconds} ms";
                 return p;
             });
         }

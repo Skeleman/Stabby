@@ -16,6 +16,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
         static int settle = -1;
+        static double playAt = -1;
 
         static GameCapture()
         {
@@ -76,6 +77,7 @@ namespace Stabby.Game.Editor
                 return;
             }
             if (!EditorApplication.isPlaying) return;
+            if (playAt < 0) playAt = EditorApplication.timeSinceStartup;
             SpikeProbe.Tick();
             if (GameStatus.Failure != null)
             {
@@ -85,7 +87,7 @@ namespace Stabby.Game.Editor
             }
             bool ready = GameStatus.Synced.Count >= GameSettings.Clients.Length && GameStatus.TerrainBuilt && GameStatus.Capsules >= 2;
             if (!ready) return;
-            if (settle < 0) settle = 240;
+            if (settle < 0) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
             if (--settle > 0) return;
 
             var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game"));
