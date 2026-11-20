@@ -21,3 +21,8 @@
 9. This file is the architecture contract. Foundational changes to it need
    Zach's review; a PreToolUse hook asks before any edit. Stage outputs stay
    separable: sketch, terrain + hydrology (`--rain`), then climate and biomes.
+10. Unity code never blocks the main thread on heavy work. Generation, sync,
+    meshing and other bulk work run in tasks or jobs; the main thread only
+    applies finished results within a per-frame budget. `tools/Stabby.Lint`
+    rejects blocking waits and unchecked `Task.Result` in runtime Unity code
+    unless `lint-allow.txt` gives a reason.
