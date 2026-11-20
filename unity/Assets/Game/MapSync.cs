@@ -7,6 +7,7 @@ using Stabby.Viewer;
 using Stabby.World;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.NetCode;
 
 namespace Stabby.Game
@@ -61,7 +62,7 @@ namespace Stabby.Game
             public int Mound;
             public ulong[] Sums;
             public byte[][] Packed;
-            public TerrainDetail Detail;
+            public BlobBuilder Ground;
             public string Source;
         }
 
@@ -73,6 +74,7 @@ namespace Stabby.Game
 
         public GeneratedWorld Map { get; private set; }
         public int MoundCell { get; private set; }
+        BlobAssetReference<GroundData> ground;
 
         protected override void OnCreate()
         {
@@ -88,10 +90,16 @@ namespace Stabby.Game
                 p.Packed = new byte[p.Sums.Length][];
                 for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a));
                 long packMs = sw.ElapsedMilliseconds;
-                p.Detail = new TerrainDetail(w);
+                p.Ground = Ground.Fill(w);
                 p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {packMs} ms, detail at {sw.ElapsedMilliseconds} ms";
                 return p;
             });
+        }
+
+        protected override void OnDestroy()
+        {
+            if (ground.IsCreated) ground.Dispose();
+            else if (gen != null && gen.IsCompletedSuccessfully) gen.Result.Ground.Dispose();
         }
 
         protected override void OnUpdate()
@@ -102,8 +110,9 @@ namespace Stabby.Game
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
                 var p = gen.Result;
                 (Map, MoundCell, sums, packed) = (p.Map, p.Mound, p.Sums, p.Packed);
-                Ground.Create(EntityManager, Map, p.Detail);
+                ground = Ground.Create(EntityManager, p.Ground);
                 int n = Map.Config.Size;
+                if (MoundCell >= 0) EntityManager.CreateSingleton(new SpawnPoint { XZ = new float2(MoundCell % n, MoundCell / n) * Map.Config.CellMeters });
                 GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, {sums.Length} chunks, +5 m mound at cell {MoundCell % n},{MoundCell / n}";
             }
 
@@ -149,7 +158,8 @@ namespace Stabby.Game
     public partial class ClientMapSystem : SystemBase
     {
         Task<(GeneratedWorld, ulong[])> gen;
-        Task<(int, TerrainDetail)> finish;
+        Task<(int, BlobBuilder)> finish;
+        BlobAssetReference<GroundData> ground;
         GeneratedWorld world;
         ulong[] mine;
         ulong hostSeed;
@@ -169,6 +179,12 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             Defs = BiomeFile.Load(BiomeFile.DefaultPath);
+        }
+
+        protected override void OnDestroy()
+        {
+            if (ground.IsCreated) ground.Dispose();
+            else if (finish != null && finish.IsCompletedSuccessfully && finish.Result.Item1 == 0) finish.Result.Item2.Dispose();
         }
 
         protected override void OnUpdate()
@@ -273,7 +289,7 @@ namespace Stabby.Game
                 var sums = WorldChunks.Checksums(w);
                 int bad = 0;
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
-                return (bad, bad == 0 ? new TerrainDetail(w) : null);
+                return (bad, bad == 0 ? Ground.Fill(w) : default);
             });
         }
 
@@ -281,11 +297,11 @@ namespace Stabby.Game
         {
             if (!finish.IsCompleted) return;
             if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
-            var (bad, detail) = finish.Result;
+            var (bad, blob) = finish.Result;
             Map = world;
             GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
                 $"streamed {streamed} ({bytesIn / 1024} KB deflated in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
-            if (bad == 0) { GameStatus.Synced.Add(World.Name); Ground.Create(EntityManager, world, detail); }
+            if (bad == 0) { GameStatus.Synced.Add(World.Name); ground = Ground.Create(EntityManager, blob); }
             else GameStatus.Failure = GameStatus.Lines[World.Name];
         }
     }

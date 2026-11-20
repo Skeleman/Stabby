@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -69,50 +68,59 @@ namespace Stabby.Game
         }
     }
 
+    [BurstCompile]
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
-    public partial class ServerPlayerSystem : SystemBase
+    public partial struct ServerPlayerSystem : ISystem
     {
-        readonly HashSet<int> spawned = new HashSet<int>();
-
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
+            state.RequireForUpdate<Ground>();
+            state.RequireForUpdate<SpawnPoint>();
+            state.RequireForUpdate<PlayerPrefab>();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            var ground = SystemAPI.GetSingleton<Ground>();
+            var spawn = SystemAPI.GetSingleton<SpawnPoint>().XZ;
+            var prefab = SystemAPI.GetSingleton<PlayerPrefab>().Value;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            var maps = World.GetExistingSystemManaged<ServerMapSystem>();
-            if (maps.Map != null && maps.MoundCell >= 0 && SystemAPI.TryGetSingleton<PlayerPrefab>(out var prefab) && SystemAPI.ManagedAPI.TryGetSingleton<Ground>(out var ground))
+            foreach (var (id, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>().WithNone<PlayerSpawned>().WithEntityAccess())
             {
-                int n = maps.Map.Config.Size;
-                foreach (var (id, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>().WithEntityAccess())
-                {
-                    int nid = id.ValueRO.Value;
-                    if (!spawned.Add(nid)) continue;
-                    var p = ecb.Instantiate(prefab.Value);
-                    float x = (maps.MoundCell % n) * ground.CellMeters + nid * 8f, z = (maps.MoundCell / n) * ground.CellMeters;
-                    ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, ground.HeightAt(x, z), z)));
-                    ecb.SetComponent(p, new GhostOwner { NetworkId = nid });
-                    ecb.AppendToBuffer(conn, new LinkedEntityGroup { Value = p });
-                }
+                int nid = id.ValueRO.Value;
+                var p = ecb.Instantiate(prefab);
+                float x = spawn.x + nid * 8f, z = spawn.y;
+                ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, ground.HeightAt(x, z), z)));
+                ecb.SetComponent(p, new GhostOwner { NetworkId = nid });
+                ecb.AppendToBuffer(conn, new LinkedEntityGroup { Value = p });
+                ecb.AddComponent<PlayerSpawned>(conn);
             }
-            ecb.Playback(EntityManager);
+            ecb.Playback(state.EntityManager);
         }
     }
 
+    [BurstCompile]
     [UpdateInGroup(typeof(PredictedSimulationSystemGroup))]
-    public partial class PlayerMoveSystem : SystemBase
+    public partial struct PlayerMoveSystem : ISystem
     {
-        protected override void OnCreate() => RequireForUpdate<Ground>();
+        [BurstCompile]
+        public void OnCreate(ref SystemState state) => state.RequireForUpdate<Ground>();
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            var ground = SystemAPI.ManagedAPI.GetSingleton<Ground>();
-            float dt = SystemAPI.Time.DeltaTime;
+            var ground = SystemAPI.GetSingleton<Ground>();
+            float dt = SystemAPI.Time.DeltaTime, top = ground.Top;
             foreach (var (t, input) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<PlayerInput>>().WithAll<Player, Simulate>())
             {
                 var d = input.ValueRO.Dir;
                 if (math.lengthsq(d) < 1e-4f) continue;
                 d = math.normalizesafe(d);
                 var pos = t.ValueRO.Position;
-                pos.x = math.clamp(pos.x + d.x * GameSettings.WalkSpeed * dt, 0, ground.Top);
-                pos.z = math.clamp(pos.z + d.y * GameSettings.WalkSpeed * dt, 0, ground.Top);
+                pos.x = math.clamp(pos.x + d.x * GameSettings.WalkSpeed * dt, 0, top);
+                pos.z = math.clamp(pos.z + d.y * GameSettings.WalkSpeed * dt, 0, top);
                 pos.y = ground.HeightAt(pos.x, pos.z);
                 t.ValueRW.Position = pos;
                 t.ValueRW.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());

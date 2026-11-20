@@ -122,7 +122,7 @@ public static class Linter
         if (body == null) return false;
         string target = acc.Expression.ToString();
         return body.DescendantNodes().OfType<MemberAccessExpressionSyntax>()
-            .Any(x => x.Name.Identifier.Text == "IsCompleted" && x.Expression.ToString() == target && x.SpanStart < acc.SpanStart);
+            .Any(x => x.Name.Identifier.Text is "IsCompleted" or "IsCompletedSuccessfully" && x.Expression.ToString() == target && x.SpanStart < acc.SpanStart);
     }
 
     public static int Strip(string repo)

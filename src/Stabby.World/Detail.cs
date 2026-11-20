@@ -38,36 +38,22 @@ namespace Stabby.World
                 }
         }
 
+        public int Size => n;
+        public uint Seed => seed;
+        public float Height(int cell) => h[cell];
         public float Amplitude(int cell) => amp[cell];
 
-        public float HeightAt(float gx, float gy)
-        {
-            int x0 = (int)Math.Floor(gx), y0 = (int)Math.Floor(gy);
-            float tx = gx - x0, ty = gy - y0;
-            float r0 = Row(y0 - 1, x0, tx), r1 = Row(y0, x0, tx), r2 = Row(y0 + 1, x0, tx), r3 = Row(y0 + 2, x0, tx);
-            int ax = Clamp(x0), ay = Clamp(y0), bx = Clamp(x0 + 1), by = Clamp(y0 + 1);
-            float c00 = h[ay * n + ax], c10 = h[ay * n + bx], c01 = h[by * n + ax], c11 = h[by * n + bx];
-            float lo = Math.Min(Math.Min(c00, c10), Math.Min(c01, c11)), hi = Math.Max(Math.Max(c00, c10), Math.Max(c01, c11));
-            float b = Math.Max(lo, Math.Min(hi, CatmullRom(r0, r1, r2, r3, ty)));
-
-            float a0 = amp[ay * n + ax] + (amp[ay * n + bx] - amp[ay * n + ax]) * tx;
-            float a1 = amp[by * n + ax] + (amp[by * n + bx] - amp[by * n + ax]) * tx;
-            float a = a0 + (a1 - a0) * ty;
-            if (a <= 0) return b;
-            float f = Noise.Fbm(seed, gx / NoiseWavelengthCells, gy / NoiseWavelengthCells, Octaves);
-            return b + a * Math.Max(-1f, Math.Min(1f, f));
-        }
-
-        float Row(int y, int x0, float t)
-        {
-            int r = Clamp(y) * n;
-            return CatmullRom(h[r + Clamp(x0 - 1)], h[r + Clamp(x0)], h[r + Clamp(x0 + 1)], h[r + Clamp(x0 + 2)], t);
-        }
+        public float HeightAt(float gx, float gy) => DetailSampler.HeightAt(new ArrayCells(h, amp), n, seed, gx, gy);
 
         int Clamp(int v) => v < 0 ? 0 : v >= n ? n - 1 : v;
 
-        static float CatmullRom(float p0, float p1, float p2, float p3, float t) =>
-            p1 + 0.5f * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+        readonly struct ArrayCells : IDetailCells
+        {
+            readonly float[] h, amp;
+            public ArrayCells(float[] h, float[] amp) { this.h = h; this.amp = amp; }
+            public float Height(int i) => h[i];
+            public float Amp(int i) => amp[i];
+        }
 
         static float[] WetDistance(GeneratedWorld w)
         {
@@ -98,5 +84,44 @@ namespace Stabby.World
             }
             return d;
         }
+    }
+
+    public interface IDetailCells
+    {
+        float Height(int i);
+        float Amp(int i);
+    }
+
+    public static class DetailSampler
+    {
+        public static float HeightAt<T>(T c, int n, uint seed, float gx, float gy) where T : struct, IDetailCells
+        {
+            int x0 = (int)Math.Floor(gx), y0 = (int)Math.Floor(gy);
+            float tx = gx - x0, ty = gy - y0;
+            float r0 = Row(c, n, y0 - 1, x0, tx), r1 = Row(c, n, y0, x0, tx), r2 = Row(c, n, y0 + 1, x0, tx), r3 = Row(c, n, y0 + 2, x0, tx);
+            int ax = Clamp(x0, n), ay = Clamp(y0, n), bx = Clamp(x0 + 1, n), by = Clamp(y0 + 1, n);
+            float c00 = c.Height(ay * n + ax), c10 = c.Height(ay * n + bx), c01 = c.Height(by * n + ax), c11 = c.Height(by * n + bx);
+            float lo = Math.Min(Math.Min(c00, c10), Math.Min(c01, c11)), hi = Math.Max(Math.Max(c00, c10), Math.Max(c01, c11));
+            float b = Math.Max(lo, Math.Min(hi, CatmullRom(r0, r1, r2, r3, ty)));
+
+            float a00 = c.Amp(ay * n + ax), a10 = c.Amp(ay * n + bx), a01 = c.Amp(by * n + ax), a11 = c.Amp(by * n + bx);
+            float a0 = a00 + (a10 - a00) * tx;
+            float a1 = a01 + (a11 - a01) * tx;
+            float a = a0 + (a1 - a0) * ty;
+            if (a <= 0) return b;
+            float f = Noise.Fbm(seed, gx / TerrainDetail.NoiseWavelengthCells, gy / TerrainDetail.NoiseWavelengthCells, TerrainDetail.Octaves);
+            return b + a * Math.Max(-1f, Math.Min(1f, f));
+        }
+
+        static float Row<T>(T c, int n, int y, int x0, float t) where T : struct, IDetailCells
+        {
+            int r = Clamp(y, n) * n;
+            return CatmullRom(c.Height(r + Clamp(x0 - 1, n)), c.Height(r + Clamp(x0, n)), c.Height(r + Clamp(x0 + 1, n)), c.Height(r + Clamp(x0 + 2, n)), t);
+        }
+
+        static int Clamp(int v, int n) => v < 0 ? 0 : v >= n ? n - 1 : v;
+
+        static float CatmullRom(float p0, float p1, float p2, float p3, float t) =>
+            p1 + 0.5f * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
     }
 }
