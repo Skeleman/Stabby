@@ -17,6 +17,7 @@ namespace Stabby.Viewer
         public int BuildBudget = 8;
         public int ApplyBudget = 16;
         public bool Blocking;
+        public bool UseMapFile = true;
         public Color Sky = new Color(0.62f, 0.74f, 0.86f);
 
         static readonly float[] Steps = { 0.25f, 0.5f, 1, 2, 4, 8 };
@@ -27,6 +28,7 @@ namespace Stabby.Viewer
         public TerrainDetail Detail { get; private set; }
         public bool Ready { get; private set; }
         public long GenerateMs, MeshMs;
+        public string MapSource = "";
         public int VisibleChunks, VisibleTriangles, BuiltMeshes;
         readonly int[] lodCounts = new int[Steps.Length];
         readonly List<Chunk> chunks = new List<Chunk>();
@@ -63,6 +65,7 @@ namespace Stabby.Viewer
             public List<ChunkData> Chunks;
             public MeshData Rivers;
             public long GenMs, MeshMs;
+            public string Source = "";
         }
 
         sealed class Chunk
@@ -95,14 +98,16 @@ namespace Stabby.Viewer
         {
             var c = new WorldConfig { Seed = (ulong)Seed, Size = Size, CellMeters = WorldConfig.CellMetersFor(Size) };
             int cells = ChunkCells;
+            string path = UseMapFile ? MapFile.PathFor(c.Seed, c.Size) : null;
             Begin(() =>
             {
                 var sw = Stopwatch.StartNew();
                 var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-                var world = WorldGenerator.Generate(c, defs);
+                var (world, source) = path != null ? MapFile.LoadOrGenerate(path, BiomeFile.DefaultPath, c, defs, true) : (WorldGenerator.Generate(c, defs), $"generated in {sw.ElapsedMilliseconds} ms");
                 long genMs = sw.ElapsedMilliseconds;
                 var p = Prepare(world, defs, cells);
                 p.GenMs = genMs;
+                p.Source = source;
                 return p;
             });
         }
@@ -153,6 +158,7 @@ namespace Stabby.Viewer
                 Seed = (int)World.Config.Seed;
                 Size = World.Config.Size;
                 GenerateMs = prepared.GenMs;
+                MapSource = prepared.Source;
                 BuiltMeshes = 0;
             }
             var sw = Stopwatch.StartNew();
@@ -246,7 +252,7 @@ namespace Stabby.Viewer
         }
 
         public string Stats() =>
-            $"seed {Seed} size {Size} cell {World?.Config.CellMeters:F0} m | gen {GenerateMs} ms, meshes {MeshMs} ms, {BuiltMeshes} built\n" +
+            $"seed {Seed} size {Size} cell {World?.Config.CellMeters:F0} m | {MapSource}, meshes {MeshMs} ms, {BuiltMeshes} built\n" +
             $"chunks {VisibleChunks}/{chunks.Count} visible, {VisibleTriangles / 1000f:F0}k tris, by LOD {string.Join("/", lodCounts)}";
 
         public float GroundHeight(Vector3 p)

@@ -14,8 +14,7 @@ namespace Stabby.Game
 {
     public static class MapGen
     {
-        public static GeneratedWorld Generate(ulong seed, IReadOnlyList<BiomeDef> defs) =>
-            WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, defs);
+        public static WorldConfig Config(ulong seed) => new WorldConfig { Seed = seed, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) };
 
         public static int RaiseMound(GeneratedWorld w, float rise = 5f, int radius = 10)
         {
@@ -51,43 +50,6 @@ namespace Stabby.Game
                     if (w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i] || w.Height[i] < 2f) return false;
                 }
             return true;
-        }
-    }
-
-    public static class MapFile
-    {
-        public static string PathFor(ulong seed) =>
-            Path.GetFullPath(Path.Combine(UnityEngine.Application.dataPath, "..", "..", "out", "maps", $"seed{seed}-{GameSettings.Size}.stabbymap"));
-
-        public static (GeneratedWorld, string) LoadOrGenerate(string path, string contentPath, ulong seed, IReadOnlyList<BiomeDef> defs, bool save)
-        {
-            var sw = Stopwatch.StartNew();
-            string why = "no map file";
-            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(contentPath)) why = "map file older than biomes.json";
-            else if (File.Exists(path))
-            {
-                try
-                {
-                    var bytes = File.ReadAllBytes(path);
-                    int v = WorldFile.GeneratorVersionOf(bytes);
-                    if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}";
-                    else
-                    {
-                        var w = WorldFile.Read(bytes);
-                        if (w.Config.Seed == seed && w.Config.Size == GameSettings.Size) return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms");
-                        why = "map file has another seed or size";
-                    }
-                }
-                catch (Exception e) when (e is FormatException || e is IOException) { why = $"map file unreadable: {e.Message}"; }
-            }
-            var g = MapGen.Generate(seed, defs);
-            string note = $"generated in {sw.ElapsedMilliseconds} ms ({why})";
-            if (!save) return (g, note);
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllBytes(path + ".tmp", WorldFile.Write(g));
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(path + ".tmp", path);
-            return (g, note + ", saved map file");
         }
     }
 
@@ -133,11 +95,11 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-            string path = MapFile.PathFor(GameSettings.Seed), content = BiomeFile.DefaultPath;
+            string path = MapFile.PathFor(GameSettings.Seed, GameSettings.Size), content = BiomeFile.DefaultPath;
             gen = Task.Run(() =>
             {
                 var sw = Stopwatch.StartNew();
-                var (w, source) = MapFile.LoadOrGenerate(path, content, GameSettings.Seed, defs, true);
+                var (w, source) = MapFile.LoadOrGenerate(path, content, MapGen.Config(GameSettings.Seed), defs, true);
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
                 long sumsMs = sw.ElapsedMilliseconds;
                 int a = WorldChunks.Across(w.Config.Size);
@@ -245,7 +207,7 @@ namespace Stabby.Game
                 var defs = Defs;
                 ulong s = i.Seed;
                 bool empty = World.Name == GameSettings.FullStreamClient;
-                string path = MapFile.PathFor(s), content = BiomeFile.DefaultPath;
+                string path = MapFile.PathFor(s, GameSettings.Size), content = BiomeFile.DefaultPath;
                 gen = Task.Run(() =>
                 {
                     GeneratedWorld w;
@@ -256,7 +218,7 @@ namespace Stabby.Game
                         w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids);
                         source = "started empty";
                     }
-                    else (w, source) = MapFile.LoadOrGenerate(path, content, s, defs, false);
+                    else (w, source) = MapFile.LoadOrGenerate(path, content, MapGen.Config(s), defs, false);
                     return (w, WorldChunks.Checksums(w));
                 });
             }

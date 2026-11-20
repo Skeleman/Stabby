@@ -102,6 +102,7 @@ namespace Stabby.Viewer.Editor
             if (at >= 0 && at + 1 < args.Length) view.Seed = int.Parse(args[at + 1]);
             view.BuildBudget = int.MaxValue;
             view.Blocking = true;
+            view.UseMapFile = false;
             view.Build();
 
             var w = view.World;
