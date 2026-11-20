@@ -1,8 +1,11 @@
-using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.NetCode;
+using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Stabby.Game
 {
@@ -11,47 +14,75 @@ namespace Stabby.Game
     public partial class ClientViewSystem : SystemBase
     {
         static readonly Color[] Colors = { new Color(0.85f, 0.25f, 0.2f), new Color(0.2f, 0.45f, 0.9f), new Color(0.95f, 0.8f, 0.2f), new Color(0.3f, 0.75f, 0.35f) };
-        readonly Dictionary<Entity, GameObject> capsules = new Dictionary<Entity, GameObject>();
-        readonly HashSet<Entity> seen = new HashSet<Entity>();
+        const float Scale = 1.5f;
+
+        Mesh mesh;
+        Material[] materials;
+        BatchMeshID meshId;
+        BatchMaterialID[] materialIds;
+        AABB bounds;
+        EntityQuery unshown, shown;
 
         protected override void OnCreate()
         {
-            if (World.Name != GameSettings.ViewClient) Enabled = false;
+            if (World.Name != GameSettings.ViewClient) { Enabled = false; return; }
+            unshown = SystemAPI.QueryBuilder().WithAll<Player, GhostOwner, LocalTransform>().WithNone<MaterialMeshInfo>().Build();
+            shown = SystemAPI.QueryBuilder().WithAll<Player, MaterialMeshInfo>().Build();
+        }
+
+        protected override void OnDestroy()
+        {
+            if (mesh != null) Object.Destroy(mesh);
+            if (materials != null) foreach (var m in materials) Object.Destroy(m);
+        }
+
+        void Load()
+        {
+            var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
+            var prim = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            var src = prim.GetComponent<MeshFilter>().sharedMesh;
+            var verts = src.vertices;
+            for (int k = 0; k < verts.Length; k++) verts[k] = verts[k] * Scale + Vector3.up * Scale;
+            mesh = new Mesh { name = "Player capsule", vertices = verts, normals = src.normals, triangles = src.triangles };
+            mesh.RecalculateBounds();
+            Object.Destroy(prim);
+            bounds = new AABB { Center = mesh.bounds.center, Extents = mesh.bounds.extents };
+            meshId = graphics.RegisterMesh(mesh);
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            materials = new Material[Colors.Length];
+            materialIds = new BatchMaterialID[Colors.Length];
+            for (int k = 0; k < Colors.Length; k++)
+            {
+                materials[k] = new Material(shader) { color = Colors[k] };
+                materialIds[k] = graphics.RegisterMaterial(materials[k]);
+            }
         }
 
         protected override void OnUpdate()
         {
             Frames();
-
-            int me = SystemAPI.TryGetSingleton<NetworkId>(out var id) ? id.Value : -1;
-            Transform mine = null;
-            seen.Clear();
-            foreach (var (t, owner, e) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>().WithEntityAccess())
+            if (!unshown.IsEmpty)
             {
-                seen.Add(e);
-                if (!capsules.TryGetValue(e, out var c))
+                if (mesh == null) Load();
+                var es = unshown.ToEntityArray(Allocator.Temp);
+                var desc = new RenderMeshDescription(ShadowCastingMode.On);
+                foreach (var e in es)
                 {
-                    c = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                    c.name = $"Player {owner.ValueRO.NetworkId}";
-                    Object.Destroy(c.GetComponent<Collider>());
-                    var r = c.GetComponent<Renderer>();
-                    r.material = new Material(Shader.Find("Universal Render Pipeline/Lit")) { color = Colors[owner.ValueRO.NetworkId % Colors.Length] };
-                    c.transform.localScale = new Vector3(1.5f, 1.5f, 1.5f);
-                    capsules[e] = c;
+                    int id = EntityManager.GetComponentData<GhostOwner>(e).NetworkId;
+                    RenderMeshUtility.AddComponents(e, EntityManager, desc, new MaterialMeshInfo(materialIds[id % Colors.Length], meshId));
+                    EntityManager.SetComponentData(e, new RenderBounds { Value = bounds });
                 }
-                c.transform.SetPositionAndRotation((Vector3)t.ValueRO.Position + Vector3.up * 1.5f, t.ValueRO.Rotation);
-                if (owner.ValueRO.NetworkId == me) mine = c.transform;
             }
-            var gone = new List<Entity>();
-            foreach (var kv in capsules) if (!seen.Contains(kv.Key)) gone.Add(kv.Key);
-            foreach (var e in gone) { Object.Destroy(capsules[e]); capsules.Remove(e); }
-            GameStatus.Capsules = capsules.Count;
+            GameStatus.Capsules = shown.CalculateEntityCount();
 
             var cam = Camera.main;
-            if (cam != null && mine != null)
+            if (cam == null || !SystemAPI.TryGetSingleton<NetworkId>(out var me)) return;
+            foreach (var (t, owner) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
             {
-                cam.transform.position = mine.position + new Vector3(0, 10, -22);
-                cam.transform.LookAt(mine.position + Vector3.up * 2);
+                if (owner.ValueRO.NetworkId != me.Value) continue;
+                Vector3 p = (Vector3)t.ValueRO.Position + Vector3.up * Scale;
+                cam.transform.position = p + new Vector3(0, 10, -22);
+                cam.transform.LookAt(p + Vector3.up * 2);
             }
         }
 

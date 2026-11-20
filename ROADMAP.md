@@ -25,6 +25,7 @@ and converts once into native data.
 | Terrain heights + detail as a blob; PlayerMoveSystem and ServerPlayerSystem become Burst ISystem | done |
 | Game terrain as chunk entities (Entities Graphics), meshed by Burst jobs with Unity.Mathematics; replaces WorldView in Game | done |
 | Map sync streams from a blob and reassembles into native slots in Burst ISystems; managed only at load and unpack | done |
+| Player capsules rendered by Entities Graphics; only the chase camera stays managed | done |
 | Viewer scene stays a managed dev tool | idea |
 
 ## Next

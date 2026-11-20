@@ -1,7 +1,7 @@
 GameScene scene MonoBehaviour that hands the terrain material to presentation
 ServerMapSystem runs managed Stabby.World generation off the main thread
 ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks
-ClientViewSystem GameObject capsules and chase camera
+ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
 TerrainViewSystem applies Mesh objects and registers them with Entities Graphics
 TerrainViewSystem.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
