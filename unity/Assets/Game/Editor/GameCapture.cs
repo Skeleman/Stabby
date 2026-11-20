@@ -113,9 +113,11 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0) return;
+                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
                 Shot(cam, null, "warmup");
+                if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
                 Shot(cam, dir, name);
+                wait = 0;
                 phase++;
             }
             GameStatus.Lines["~prediction"] = Prediction();

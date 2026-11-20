@@ -37,15 +37,15 @@ namespace Stabby.Game
     {
         public int2 Cell;
         public AABB Box;
-        public int Want, Shown, Built, Pending;
+        public int Want, Shown, Built, Pending, Finest;
         public Entity Entity;
     }
 
     static class TerrainLods
     {
-        public const int Cells = 32, Count = 6, Coarse = Count - 1;
-        public static float Step(int lod) => 0.25f * (1 << lod);
-        public static int Quads(int lod) => (Cells * 4) >> lod;
+        public const int Cells = 32, Count = 7, Coarse = Count - 1;
+        public static float Step(int lod) => 0.125f * (1 << lod);
+        public static int Quads(int lod) => (Cells * 8) >> lod;
         public static int Vertices(int m) => (m + 1) * (m + 1) + 4 * m;
         public static int Indices(int m) => m * m * 6 + 4 * m * 12;
     }
@@ -167,17 +167,26 @@ namespace Stabby.Game
             for (int k = m; k > 0; k--) ring[q++] = k * w;
             float drop = s * 0.5f + 20f;
             int first = Verts.Length;
+            var rim = new NativeArray<int>(ringCount, Allocator.Temp);
             for (int r = 0; r < ringCount; r++)
             {
-                var v = Verts[sink.Ints[3 * ring[r] + 2]];
+                int c = 3 * ring[r], best = sink.Ints[c + 2];
+                float gap = float.MaxValue;
+                for (int u = best, e = u + sink.Ints[c + 1] - sink.Ints[c]; u < e; u++)
+                {
+                    var t = Verts[u].Pos;
+                    float d = math.abs(Ground.GridHeight(math.clamp(t.x / cm, 0, top), math.clamp(t.z / cm, 0, top)) - t.y);
+                    if (d < gap) { gap = d; best = u; }
+                }
+                rim[r] = best;
+                var v = Verts[best];
                 v.Pos.y -= drop;
                 Verts.Add(v);
                 lo = math.min(lo, v.Pos);
             }
             for (int r = 0; r < ringCount; r++)
             {
-                int ca = 3 * ring[r], cb = 3 * ring[(r + 1) % ringCount];
-                int a = sink.Ints[ca + 2] + sink.Ints[ca + 1] - sink.Ints[ca] - 1, b = sink.Ints[cb + 2] + sink.Ints[cb + 1] - sink.Ints[cb] - 1;
+                int a = rim[r], b = rim[(r + 1) % ringCount];
                 int a2 = first + r, b2 = first + (r + 1) % ringCount;
                 Tris.Add(a); Tris.Add(b); Tris.Add(a2);
                 Tris.Add(b); Tris.Add(b2); Tris.Add(a2);
@@ -211,7 +220,7 @@ namespace Stabby.Game
                 if (vis)
                 {
                     float allowed = Allowed * d;
-                    lod = 0;
+                    lod = ch.Finest;
                     while (lod < TerrainLods.Coarse && TerrainLods.Step(lod + 1) * Cm <= allowed) lod++;
                 }
                 ch.Want = lod;
@@ -350,8 +359,21 @@ namespace Stabby.Game
             meshIds = new BatchMeshID[count * TerrainLods.Count];
             for (int c = 0; c < count; c++)
             {
-                chunks[c] = new TerrainChunk { Cell = prepared.Cells[c], Want = -1, Shown = -1, Entity = Entity.Null };
+                var cell = prepared.Cells[c];
+                chunks[c] = new TerrainChunk { Cell = cell, Want = -1, Shown = -1, Finest = Featured(cell) ? 0 : 1, Entity = Entity.Null };
             }
+        }
+
+        bool Featured(int2 cell)
+        {
+            ref var g = ref ground.Blob.Value;
+            float x0 = cell.x * g.CellMeters, z0 = cell.y * g.CellMeters, x1 = x0 + TerrainLods.Cells * g.CellMeters, z1 = z0 + TerrainLods.Cells * g.CellMeters;
+            for (int f = 0; f < g.Edits.Length; f++)
+            {
+                var e = g.Edits[f];
+                if (e.MaxX > x0 && e.MinX < x1 && e.MaxZ > z0 && e.MinZ < z1) return true;
+            }
+            return false;
         }
 
         void Coarse()
@@ -481,7 +503,7 @@ namespace Stabby.Game
             float k2 = 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f);
             new TerrainLodJob { Chunks = chunks, Planes = pl, Eye = cam.transform.position, Allowed = TargetQuadScreen * k2, Far = cam.farClipPlane, Cm = ground.Blob.Value.CellMeters }.Run();
             pl.Dispose();
-            int visible = 0;
+            int visible = 0, behind = 0;
             System.Array.Clear(lodCounts, 0, lodCounts.Length);
             for (int c = 0; c < chunks.Length; c++)
             {
@@ -490,6 +512,7 @@ namespace Stabby.Game
                 int want = ch.Want;
                 if ((ch.Built & (1 << want)) == 0 && (ch.Pending & (1 << want)) == 0 && pending.Count < BuildBudget) { Request(c, want); ch = chunks[c]; }
                 int lod = want;
+                if ((ch.Built & (1 << want)) == 0) behind++;
                 while ((ch.Built & (1 << lod)) == 0) lod++;
                 if (lod != ch.Shown)
                 {
@@ -500,6 +523,7 @@ namespace Stabby.Game
                 visible++;
                 lodCounts[lod]++;
             }
+            GameStatus.TerrainBehind = behind;
             GameStatus.Lines["terrain"] = $"terrain chunks {visible}/{chunks.Length} visible, {built} meshes, by LOD {string.Join("/", lodCounts)}";
         }
 
