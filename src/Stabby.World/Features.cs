@@ -8,7 +8,7 @@ namespace Stabby.World
         public const int Add = 0, Carve = 1;
         public const int Overhang = 0, Arch = 1, Cave = 2;
 
-        public const float Blend = 0.25f;
+        public const float Blend = 0.5f;
 
         public int Kind, Shape;
         public float Ax, Ay, Az, Bx, By, Bz, R;

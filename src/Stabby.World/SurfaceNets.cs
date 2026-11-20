@@ -52,6 +52,58 @@ namespace Stabby.World
         }
     }
 
+    struct Sym
+    {
+        public float A00, A01, A02, A11, A12, A22;
+        public float V00, V01, V02, V10, V11, V12, V20, V21, V22;
+
+        public void Rotate(int p, int r)
+        {
+            float apq = Get(p, r);
+            if (!(Math.Abs(apq) > 1e-12f)) return;
+            float theta = (Get(r, r) - Get(p, p)) / (2 * apq);
+            float t = (theta >= 0 ? 1f : -1f) / (Math.Abs(theta) + (float)Math.Sqrt(theta * theta + 1));
+            float c = 1f / (float)Math.Sqrt(t * t + 1), s = t * c;
+            int o = 3 - p - r;
+            float app = Get(p, p), arr = Get(r, r), aop = Get(o, p), aor = Get(o, r);
+            Set(p, p, app - t * apq);
+            Set(r, r, arr + t * apq);
+            Set(p, r, 0);
+            Set(o, p, c * aop - s * aor);
+            Set(o, r, s * aop + c * aor);
+            for (int k = 0; k < 3; k++)
+            {
+                float vp = GetV(k, p), vr = GetV(k, r);
+                SetV(k, p, c * vp - s * vr);
+                SetV(k, r, s * vp + c * vr);
+            }
+        }
+
+        float Get(int a, int b)
+        {
+            int k = a < b ? a * 3 + b : b * 3 + a;
+            return k == 0 ? A00 : k == 1 ? A01 : k == 2 ? A02 : k == 4 ? A11 : k == 5 ? A12 : A22;
+        }
+
+        void Set(int a, int b, float v)
+        {
+            int k = a < b ? a * 3 + b : b * 3 + a;
+            if (k == 0) A00 = v; else if (k == 1) A01 = v; else if (k == 2) A02 = v; else if (k == 4) A11 = v; else if (k == 5) A12 = v; else A22 = v;
+        }
+
+        float GetV(int a, int b)
+        {
+            int k = a * 3 + b;
+            return k == 0 ? V00 : k == 1 ? V01 : k == 2 ? V02 : k == 3 ? V10 : k == 4 ? V11 : k == 5 ? V12 : k == 6 ? V20 : k == 7 ? V21 : V22;
+        }
+
+        void SetV(int a, int b, float v)
+        {
+            int k = a * 3 + b;
+            if (k == 0) V00 = v; else if (k == 1) V01 = v; else if (k == 2) V02 = v; else if (k == 3) V10 = v; else if (k == 4) V11 = v; else if (k == 5) V12 = v; else if (k == 6) V20 = v; else if (k == 7) V21 = v; else V22 = v;
+        }
+    }
+
     struct Qef
     {
         public float A00, A01, A02, A11, A12, A22, B0, B1, B2;
@@ -327,7 +379,7 @@ namespace Stabby.World
             return sink.AddVertex((ci + fx) * s, (j + fy) * s, (ck + fz) * s, gx * inv, gy * inv, gz * inv);
         }
 
-        const float QefPull = 0.05f, QefStep = 0.05f;
+        const float QefStep = 0.05f, QefDrop = 0.1f;
 
         static void Sharpen<TField>(TField field, int ci, int j, int ck, float s, float d0, float d1, float d2, float d3, float d4, float d5, float d6, float d7, ref float fx, ref float fy, ref float fz)
             where TField : struct, ISolidField
@@ -352,15 +404,22 @@ namespace Stabby.World
             Hermite(ref f, ref q, d2, d6, 0, 1, 0, 2);
             Hermite(ref f, ref q, d3, d7, 1, 1, 0, 2);
             if (q.N == 0) return;
-            float a00 = q.A00 + QefPull, a11 = q.A11 + QefPull, a22 = q.A22 + QefPull, a01 = q.A01, a02 = q.A02, a12 = q.A12;
-            float b0 = q.B0 + QefPull * fx, b1 = q.B1 + QefPull * fy, b2 = q.B2 + QefPull * fz;
-            float c00 = a11 * a22 - a12 * a12, c01 = a02 * a12 - a01 * a22, c02 = a01 * a12 - a02 * a11;
-            float det = a00 * c00 + a01 * c01 + a02 * c02;
-            if (!(Math.Abs(det) > 1e-9f)) return;
-            float c11 = a00 * a22 - a02 * a02, c12 = a01 * a02 - a00 * a12, c22 = a00 * a11 - a01 * a01, inv = 1f / det;
-            fx = Clamp01((c00 * b0 + c01 * b1 + c02 * b2) * inv);
-            fy = Clamp01((c01 * b0 + c11 * b1 + c12 * b2) * inv);
-            fz = Clamp01((c02 * b0 + c12 * b1 + c22 * b2) * inv);
+            float r0 = q.B0 - (q.A00 * fx + q.A01 * fy + q.A02 * fz);
+            float r1 = q.B1 - (q.A01 * fx + q.A11 * fy + q.A12 * fz);
+            float r2 = q.B2 - (q.A02 * fx + q.A12 * fy + q.A22 * fz);
+            var m = new Sym { A00 = q.A00, A01 = q.A01, A02 = q.A02, A11 = q.A11, A12 = q.A12, A22 = q.A22, V00 = 1, V11 = 1, V22 = 1 };
+            for (int sweep = 0; sweep < 6; sweep++)
+            {
+                m.Rotate(0, 1); m.Rotate(0, 2); m.Rotate(1, 2);
+            }
+            float top = Math.Max(Math.Abs(m.A00), Math.Max(Math.Abs(m.A11), Math.Abs(m.A22))), cut = QefDrop * top;
+            float i0 = Math.Abs(m.A00) > cut ? 1f / m.A00 : 0, i1 = Math.Abs(m.A11) > cut ? 1f / m.A11 : 0, i2 = Math.Abs(m.A22) > cut ? 1f / m.A22 : 0;
+            float p0 = (m.V00 * r0 + m.V10 * r1 + m.V20 * r2) * i0;
+            float p1 = (m.V01 * r0 + m.V11 * r1 + m.V21 * r2) * i1;
+            float p2 = (m.V02 * r0 + m.V12 * r1 + m.V22 * r2) * i2;
+            fx = Clamp01(fx + m.V00 * p0 + m.V01 * p1 + m.V02 * p2);
+            fy = Clamp01(fy + m.V10 * p0 + m.V11 * p1 + m.V12 * p2);
+            fz = Clamp01(fz + m.V20 * p0 + m.V21 * p1 + m.V22 * p2);
         }
 
         static float Clamp01(float v) => v < 0 ? 0 : v > 1 ? 1 : v;
