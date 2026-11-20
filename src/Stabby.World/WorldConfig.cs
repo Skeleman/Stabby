@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 2;
+        public const int GeneratorVersion = 3;
 
         public ulong Seed = 1;
         public int Size = 512;

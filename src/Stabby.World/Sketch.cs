@@ -240,12 +240,12 @@ namespace Stabby.World
                     foreach (var r in Ranges)
                     {
                         float d = DistanceToPolyline(r.X, r.Y, x, y) / r.Width;
-                        u = Math.Max(u, r.Strength * (float)Math.Exp(-d * d));
+                        u = Math.Max(u, r.Strength * (float)FMath.Exp(-d * d));
                     }
                     foreach (var cor in Corridors)
                     {
                         float d = DistanceToPolyline(cor.X, cor.Y, x, y) / cor.Width;
-                        float v = (float)Math.Exp(-d * d);
+                        float v = (float)FMath.Exp(-d * d);
                         u *= 1 - CorridorDepth * v;
                         Valley[i] = Math.Max(Valley[i], v);
                     }

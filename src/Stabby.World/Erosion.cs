@@ -58,7 +58,7 @@ namespace Stabby.World
                     float hr = sea[r] ? 0 : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
-                    float f = c.Erodibility * dt * (float)Math.Pow(q[i], c.AreaExponent) / len;
+                    float f = c.Erodibility * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
                     h[i] = Math.Max(hr, (h[i] + f * hr) / (1 + f));
                     h[i] = Math.Min(h[i], hr + c.MaxSlope * len);
                 }

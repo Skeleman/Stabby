@@ -180,7 +180,7 @@ namespace Stabby.World
             seg.Cells.Add(i);
             seg.Surface.Add(hy.WaterSurface[i]);
             seg.Discharge.Add(q);
-            float width = c.RiverWidthAtUnitFlow * (float)Math.Pow(q, c.RiverWidthExponent);
+            float width = c.RiverWidthAtUnitFlow * (float)FMath.Pow(q, c.RiverWidthExponent);
             seg.Width.Add(width);
             seg.Depth.Add(0.3f + width / 25f);
         }
