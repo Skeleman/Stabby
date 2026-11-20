@@ -50,6 +50,14 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 7. **Biomes** classified from climate using `content/biomes.json`.
 8. **Authored regions** from the sketch applied on top.
 
+## Sharing a world
+
+A world is seed + generator version + sketch. Each peer generates it locally and
+compares `WorldChunks.Checksums` (64-cell chunks, also in `metrics.json`) with the
+host's; the host sends `WorldChunks.Pack` for each chunk that differs, the peer
+calls `Unpack` for each and `Relink` once to rebuild lakes and rivers. Chunks carry
+raw float bits, so peers need not be bitwise deterministic.
+
 `WorldChecks` holds every invariant; tests and `sweep` both run it.
 Changing output bumps `WorldConfig.GeneratorVersion`. Rules for contributors
 are in `CLAUDE.md`; project skills live in `.claude/skills/`.

@@ -107,6 +107,7 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
         ["riverSegments"] = w.Water.Rivers.Count, ["riverKm"] = MathF.Round(riverKm, 1),
         ["maxDischargeM3s"] = MathF.Round(w.Water.DischargeM3s.Where((q, i) => !w.Sea[i]).Max(), 1),
         ["biomePercent"] = shares.ToDictionary(kv => kv.Key, kv => MathF.Round(kv.Value, 1)),
+        ["chunkSize"] = WorldChunks.Size, ["chunkChecksums"] = WorldChunks.Checksums(w).Select(s => s.ToString("x16")).ToArray(),
         ["violations"] = violations,
     };
 }

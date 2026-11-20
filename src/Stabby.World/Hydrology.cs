@@ -142,6 +142,25 @@ namespace Stabby.World
             }
         }
 
+        // Rebuilds lakes and river reaches from the per-cell fields after chunks are patched in.
+        public static void Relink(WorldConfig c, bool[] sea, Hydrology hy)
+        {
+            int n = c.Size;
+            hy.Lakes.Clear();
+            hy.Rivers.Clear();
+            for (int i = 0; i < n * n; i++)
+            {
+                int id = hy.LakeId[i];
+                if (id < 0) continue;
+                while (hy.Lakes.Count <= id) hy.Lakes.Add(new Lake { Id = hy.Lakes.Count });
+                var lake = hy.Lakes[id];
+                lake.Cells.Add(i);
+                lake.Level = hy.WaterSurface[i];
+                if (hy.LakeId[hy.Receiver[i]] != id) lake.Outlet = i;
+            }
+            BuildSegments(c, sea, hy);
+        }
+
         static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy)
         {
             int n = cfg.Size;
