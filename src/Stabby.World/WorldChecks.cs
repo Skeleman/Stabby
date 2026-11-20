@@ -11,6 +11,9 @@ namespace Stabby.World
         // Share of a corridor's lower three quarters that must have a river or
         // lake within the corridor's width.
         public const float CorridorFollowShare = 0.7f;
+        // Each main island needs a cliff stretch (coast cells this high) and a beach
+        // (coast cells this low, with water this shallow beside them).
+        public const float CliffMinRise = 30f, BeachMaxDepth = 4f;
 
         public static List<string> Run(GeneratedWorld w)
         {
@@ -21,6 +24,9 @@ namespace Stabby.World
             for (int x = 0; x < n; x++)
                 if (!w.Sea[x] || !w.Sea[(n - 1) * n + x] || !w.Sea[x * n] || !w.Sea[x * n + n - 1])
                 { e.Add("land touches the map border"); break; }
+
+            for (int i = 0; i < n * n; i++)
+                if (w.Sea[i] && w.Height[i] >= 0) { e.Add($"sea cell {i} is above sea level"); break; }
 
             for (int i = 0; i < n * n; i++)
             {
@@ -127,6 +133,7 @@ namespace Stabby.World
                     if (island[(int)o.Y * n + (int)o.X] == a) e.Add($"landmasses {j} and {k} are joined");
                 }
             }
+            CheckShores(w, island, e);
             if (s.Landmasses.Count > 1)
             {
                 int a = island[(int)s.Landmasses[0].Y * n + (int)s.Landmasses[0].X];
@@ -198,6 +205,39 @@ namespace Stabby.World
                 int i = (int)l.Y * n + (int)l.X;
                 if (w.Sea[i]) e.Add($"landmark {k} ({l.Kind}) is in the sea");
                 else if (hy.LakeId[i] >= 0) e.Add($"landmark {k} ({l.Kind}) is under lake {hy.LakeId[i]}");
+            }
+        }
+
+        static void CheckShores(GeneratedWorld w, int[] island, List<string> e)
+        {
+            int n = w.Config.Size, need = Math.Max(3, n / 40);
+            // A coarse cell spans more of the beach's grade, so its mean height sits higher.
+            float beachMax = Erosion.MinLandHeight + 2.5f + w.Config.BeachGrade * w.Config.CellMeters;
+            for (int k = 0; k < w.Sketch.Landmasses.Count; k++)
+            {
+                var m = w.Sketch.Landmasses[k];
+                int a = island[(int)m.Y * n + (int)m.X];
+                if (a < 0) continue;
+                int cliff = 0, beach = 0;
+                for (int y = 1; y < n - 1; y++)
+                    for (int x = 1; x < n - 1; x++)
+                    {
+                        int i = y * n + x;
+                        if (island[i] != a) continue;
+                        bool coast = false, shallow = true;
+                        for (int d = 0; d < 8; d++)
+                        {
+                            int j = (y + Grid.DY[d]) * n + x + Grid.DX[d];
+                            if (!w.Sea[j]) continue;
+                            coast = true;
+                            if (w.Height[j] < -BeachMaxDepth) shallow = false;
+                        }
+                        if (!coast) continue;
+                        if (w.Height[i] >= CliffMinRise) cliff++;
+                        if (w.Height[i] <= beachMax && shallow) beach++;
+                    }
+                if (cliff < need) e.Add($"landmass {k} has {cliff} cliff cells");
+                if (beach < need) e.Add($"landmass {k} has {beach} beach cells");
             }
         }
 

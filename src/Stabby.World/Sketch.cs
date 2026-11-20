@@ -68,6 +68,14 @@ namespace Stabby.World
         public float X, Y;
     }
 
+    // A stretch of coast within Radius of (X, Y) that drops sheer into deep water,
+    // or tapers through a beach into shallows.
+    public sealed class ShoreSketch
+    {
+        public bool Cliff;
+        public float X, Y, Radius;
+    }
+
     // The coarse, editable layer. The lists are authored (generated or by hand);
     // Land and Uplift are derived by Build, so an edit regenerates a consistent
     // world instead of being patched in afterwards.
@@ -83,6 +91,7 @@ namespace Stabby.World
         public List<LandmarkSketch> Landmarks = new List<LandmarkSketch>();
         // Basins that must hold a lake, shaped like islands by their lobes.
         public List<LandmassSketch> Lakes = new List<LandmassSketch>();
+        public List<ShoreSketch> Shores = new List<ShoreSketch>();
 
         public bool[] Land;
         public float[] Uplift;
@@ -90,6 +99,8 @@ namespace Stabby.World
         public float[] Valley, Coast;
         // Cells along the nearest corridor to its mouth.
         public float[] ValleyRun;
+        // Shore weights (0..1) on land and sea alike.
+        public float[] Cliff, Beach;
 
         public const int LandmarkPadCells = 2;
         public const float CorridorDepth = 0.9f, LakeDepth = 0.95f;
@@ -97,6 +108,8 @@ namespace Stabby.World
         const float LakeTownClear = 0.4f, LakeTownCells = 6f, LakeCoastCells = 4f;
         // Coast noise can push land this many radii past a lobe; warp adds up to WarpReach of the map.
         const float CoastReach = 1.45f, WarpReach = 0.045f, Warp = 0.06f;
+        // Islets may sit this many of their radii apart, coast to coast, so they can cluster.
+        const float IsletClear = 0.5f;
 
         public static WorldSketch Generate(WorldConfig c)
         {
@@ -121,7 +134,7 @@ namespace Stabby.World
             int isletCount = islets.Range(c.IsletsMin, c.IsletsMax + 1);
             for (int k = 0; k < isletCount; k++)
             {
-                var islet = RandomIslet(n, c, s, ref islets);
+                var islet = RandomIslet(n, c, s, k > 0 && islets.NextFloat() < c.IsletClusterChance, ref islets);
                 if (islet != null) s.Islets.Add(islet);
             }
             s.Land = s.LandMask(c);
@@ -130,9 +143,11 @@ namespace Stabby.World
             var corridors = Rng.Stream(c.Seed, "corridors");
             var sites = Rng.Stream(c.Seed, "landmarks");
             var inland = CoastDistance(n, s.Land);
+            var shores = Rng.Stream(c.Seed, "shores");
             for (int k = 0; k < s.Landmasses.Count; k++)
             {
                 var m = s.Landmasses[k];
+                int firstRange = s.Ranges.Count;
                 CorridorSketch cor = null;
                 if (k == 0)
                 {
@@ -148,6 +163,7 @@ namespace Stabby.World
                     }
                 if (cor == null) cor = RandomCorridor(n, m, s.Land, inland, s.Ranges, ref corridors);
                 if (cor != null) s.Corridors.Add(cor);
+                AddShores(n, m, s, firstRange, cor, ref shores);
                 for (int i = 0; i < c.LandmarksPerIsland; i++)
                 {
                     var l = RandomLandmark(n, m, s.Land, s.Lakes, ref sites);
@@ -184,7 +200,27 @@ namespace Stabby.World
                         Landmark[y * n + x] = true;
                         Land[y * n + x] = true;
                     }
+            BuildShores();
             BuildUplift(c);
+        }
+
+        void BuildShores()
+        {
+            int n = Size;
+            Cliff = new float[n * n];
+            Beach = new float[n * n];
+            foreach (var sh in Shores)
+            {
+                var w = sh.Cliff ? Cliff : Beach;
+                int r = (int)Math.Ceiling(sh.Radius);
+                for (int y = Math.Max(0, (int)sh.Y - r); y <= Math.Min(n - 1, (int)sh.Y + r); y++)
+                    for (int x = Math.Max(0, (int)sh.X - r); x <= Math.Min(n - 1, (int)sh.X + r); x++)
+                    {
+                        float d = (float)Math.Sqrt((x - sh.X) * (x - sh.X) + (y - sh.Y) * (y - sh.Y)) / sh.Radius;
+                        w[y * n + x] = Math.Max(w[y * n + x], 1f - Grid.Smoothstep(0.6f, 1f, d));
+                    }
+            }
+            for (int i = 0; i < n * n; i++) Cliff[i] *= 1f - Beach[i];
         }
 
         bool[] LandMask(WorldConfig c)
@@ -249,12 +285,12 @@ namespace Stabby.World
             }
         }
 
-        static LandmassSketch RandomIslet(int n, WorldConfig c, WorldSketch s, ref Rng rng)
+        static LandmassSketch RandomIslet(int n, WorldConfig c, WorldSketch s, bool cluster, ref Rng rng)
         {
-            for (int attempt = 0; attempt < 40; attempt++)
+            for (int attempt = 0; attempt < 80; attempt++)
             {
                 float x = n * rng.Range(0.1f, 0.9f), y = n * rng.Range(0.1f, 0.9f), r = n * rng.Range(c.IsletRadiusMin, c.IsletRadiusMax);
-                float clear = 1.9f * r + 3f, nearest = float.MaxValue;
+                float clear = 1.9f * r + 3f, nearest = float.MaxValue, mate = float.MaxValue;
                 bool ok = true;
                 foreach (var m in s.Landmasses)
                 {
@@ -263,8 +299,12 @@ namespace Stabby.World
                     nearest = Math.Min(nearest, g);
                 }
                 foreach (var o in s.Islets)
-                    if (o.Gap(x, y, CoastReach) < clear) ok = false;
-                if (!ok || nearest >= c.IsletSpread * n) continue;
+                {
+                    float g = o.Gap(x, y, CoastReach);
+                    if (g < IsletClear * r + 3f) ok = false;
+                    mate = Math.Min(mate, g);
+                }
+                if (!ok || nearest >= c.IsletSpread * n || (cluster && mate > c.IsletClusterGap * n)) continue;
                 var islet = new LandmassSketch { X = x, Y = y, Radius = r };
                 AddLobes(islet, rng.Range(2, 4), ref rng);
                 return islet;
@@ -397,6 +437,93 @@ namespace Stabby.World
             return k;
         }
 
+        // A cliff where a ridge meets the sea, so the ridge's underwater run starts at
+        // its foot, and a beach at the main river's mouth.
+        static void AddShores(int n, LandmassSketch m, WorldSketch s, int firstRange, CorridorSketch cor, ref Rng rng)
+        {
+            float cx = float.NaN, cy = 0, best = float.MaxValue, reach = m.Radius;
+            var mine = Component(n, s.Land, (int)m.X, (int)m.Y);
+            for (int r = firstRange; r < s.Ranges.Count; r++)
+            {
+                var g = s.Ranges[r];
+                for (int end = 0; end < 2; end++)
+                {
+                    int p = end == 0 ? 0 : g.X.Length - 1;
+                    if (NearestCoast(n, mine, g.X[p], g.Y[p], reach, out float sx, out float sy, out float d) && d < best)
+                    { best = d; cx = sx; cy = sy; }
+                }
+            }
+            if (float.IsNaN(cx))
+            {
+                RandomDirection(ref rng, out float dx, out float dy);
+                float k = RunToSea(n, s.Land, m.X, m.Y, dx, dy);
+                cx = m.X + k * dx; cy = m.Y + k * dy;
+            }
+            var cliff = new ShoreSketch { Cliff = true, X = cx, Y = cy, Radius = m.Radius * rng.Range(0.3f, 0.45f) };
+            s.Shores.Add(cliff);
+            float bx, by;
+            int last = cor == null ? 0 : cor.X.Length - 1;
+            if (cor == null || !NearestCoast(n, mine, cor.X[last], cor.Y[last], reach, out bx, out by, out _))
+            {
+                // Without a river mouth the beach faces away from the cliff.
+                float ax = m.X - cx, ay = m.Y - cy, al = (float)Math.Sqrt(ax * ax + ay * ay);
+                if (al < 1e-3f) return;
+                ax /= al; ay /= al;
+                float k = RunToSea(n, s.Land, m.X, m.Y, ax, ay);
+                bx = m.X + k * ax; by = m.Y + k * ay;
+            }
+            float gap = (float)Math.Sqrt((bx - cx) * (bx - cx) + (by - cy) * (by - cy)) - cliff.Radius;
+            float radius = Math.Min(m.Radius * rng.Range(0.5f, 0.75f), gap);
+            if (radius > m.Radius * 0.2f) s.Shores.Add(new ShoreSketch { X = bx, Y = by, Radius = radius });
+        }
+
+        // Ranges may run past the coast, so shores snap to this island's own edge.
+        static bool NearestCoast(int n, bool[] mine, float x, float y, float reach, out float sx, out float sy, out float dist)
+        {
+            sx = sy = 0; float best = reach * reach;
+            int r = (int)Math.Ceiling(reach), ix = (int)x, iy = (int)y;
+            for (int yy = Math.Max(0, iy - r); yy <= Math.Min(n - 1, iy + r); yy++)
+                for (int xx = Math.Max(0, ix - r); xx <= Math.Min(n - 1, ix + r); xx++)
+                {
+                    if (mine[yy * n + xx] || !NextToLand(n, mine, xx, yy)) continue;
+                    float d = (xx - x) * (xx - x) + (yy - y) * (yy - y);
+                    if (d < best) { best = d; sx = xx; sy = yy; }
+                }
+            dist = (float)Math.Sqrt(best);
+            return best < reach * reach;
+        }
+
+        static bool[] Component(int n, bool[] land, int x, int y)
+        {
+            var mine = new bool[n * n];
+            if (!land[y * n + x]) return mine;
+            var queue = new Queue<int>();
+            queue.Enqueue(y * n + x);
+            mine[y * n + x] = true;
+            while (queue.Count > 0)
+            {
+                int i = queue.Dequeue(), cx = i % n, cy = i / n;
+                for (int k = 0; k < 8; k++)
+                {
+                    int nx = cx + Grid.DX[k], ny = cy + Grid.DY[k], j = ny * n + nx;
+                    if (nx < 0 || ny < 0 || nx >= n || ny >= n || mine[j] || !land[j]) continue;
+                    mine[j] = true;
+                    queue.Enqueue(j);
+                }
+            }
+            return mine;
+        }
+
+        static bool NextToLand(int n, bool[] land, int x, int y)
+        {
+            for (int k = 0; k < 8; k++)
+            {
+                int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
+                if (nx >= 0 && ny >= 0 && nx < n && ny < n && land[ny * n + nx]) return true;
+            }
+            return false;
+        }
+
         // Walks from the island's interior toward the sea and stops at the coast.
         static CorridorSketch RandomCorridor(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, ref Rng rng)
         {
@@ -514,7 +641,10 @@ namespace Stabby.World
                         if (v > Valley[i]) { Valley[i] = v; ValleyRun[i] = RemainingAlong(cor.X, cor.Y, x, y); }
                     }
                     foreach (var lk in Lakes) u *= 1 - LakeDepth * Grid.Smoothstep(-0.8f, 0.2f, lk.Core(x, y));
-                    Uplift[i] = Math.Max(0, u) * Grid.Smoothstep(0, 6, coast[i]);
+                    float band = Cliff[i] * (1 - Grid.Smoothstep(0.5f, 1f, coast[i] * c.CellMeters / c.CliffMeters));
+                    u = Math.Max(u, c.CliffUplift * band);
+                    float taper = Grid.Smoothstep(0, 6, coast[i]);
+                    Uplift[i] = Math.Max(0, u) * (taper + (1 - taper) * Cliff[i]);
                 }
         }
 

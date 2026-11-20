@@ -38,6 +38,7 @@ static class Render
         }
         foreach (var m in s.Lakes)
             foreach (var l in m.Lobes) Ring(img, n, scale, l.X + 0.5f, l.Y + 0.5f, l.Radius, px, LakeColor);
+        foreach (var h in s.Shores) Ring(img, n, scale, h.X + 0.5f, h.Y + 0.5f, h.Radius, px, h.Cliff ? 0x7A3B2Eu : 0xE8D49Au);
         foreach (var r in s.Ranges) Polyline(img, n, scale, r.X, r.Y, px * 1.6f, 0xC0392B);
         foreach (var r in s.Corridors) Polyline(img, n, scale, r.X, r.Y, Math.Max(px * 1.6f, r.Width * 2 * scale), RiverColor);
         foreach (var l in s.Landmarks) Line(img, n, scale, l.X + 0.5f, l.Y + 0.5f, l.X + 0.5f, l.Y + 0.5f, px * 4, 0x111111);
@@ -87,7 +88,7 @@ static class Render
             {
                 int i = y * n + x;
                 uint c;
-                if (waterOverlay && w.Sea[i]) c = SeaColor;
+                if (waterOverlay && w.Sea[i]) c = Mul(SeaDepth(w, i), 0.5f + 0.5f * Hillshade(w, x, y, seabed: true));
                 else if (waterOverlay && hy.LakeId[i] >= 0) c = LakeColor;
                 else
                 {
@@ -128,10 +129,19 @@ static class Render
         }
     }
 
-    static float Hillshade(GeneratedWorld w, int x, int y)
+    static uint SeaDepth(GeneratedWorld w, int i) =>
+        Lerp(0x4A8FB8, 0x1B3A5C, (float)Math.Sqrt(Math.Min(1f, -w.Height[i] / w.Config.DeepDepth)));
+
+    // The seabed treats land as sea level so cliffs cast no rays offshore, and
+    // its gentler relief is exaggerated to read at all.
+    static float Hillshade(GeneratedWorld w, int x, int y, bool seabed = false)
     {
         int n = w.Config.Size;
-        float H(int xx, int yy) => w.Height[Math.Clamp(yy, 0, n - 1) * n + Math.Clamp(xx, 0, n - 1)];
+        float H(int xx, int yy)
+        {
+            float h = w.Height[Math.Clamp(yy, 0, n - 1) * n + Math.Clamp(xx, 0, n - 1)];
+            return seabed ? 4 * Math.Min(h, 0) : h;
+        }
         float dzdx = (H(x + 1, y) - H(x - 1, y)) / (2 * w.Config.CellMeters);
         float dzdy = (H(x, y + 1) - H(x, y - 1)) / (2 * w.Config.CellMeters);
         float nx = -dzdx * 2, ny = -dzdy * 2, nz = 1;

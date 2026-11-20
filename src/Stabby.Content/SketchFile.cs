@@ -7,7 +7,7 @@ namespace Stabby.Content;
 // derived masks are rebuilt by WorldSketch.Build on load.
 public static class SketchFile
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     sealed class Dto
     {
@@ -22,12 +22,14 @@ public static class SketchFile
         public List<RegionDto> Regions { get; set; } = new();
         public List<LandmarkDto> Landmarks { get; set; } = new();
         public List<LandmassDto> Lakes { get; set; } = new();
+        public List<ShoreDto> Shores { get; set; } = new();
     }
 
     sealed class LandmassDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } public List<LobeDto>? Lobes { get; set; } }
     sealed class LobeDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
     sealed class LineDto { public float[] X { get; set; } = []; public float[] Y { get; set; } = []; public float Width { get; set; } public float? Strength { get; set; } }
     sealed class RegionDto { public string Biome { get; set; } = ""; public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
+    sealed class ShoreDto { public string Kind { get; set; } = ""; public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
     sealed class LandmarkDto { public string Kind { get; set; } = ""; public float X { get; set; } public float Y { get; set; } }
 
     static readonly JsonSerializerOptions Options = new()
@@ -48,6 +50,7 @@ public static class SketchFile
         Regions = s.Regions.Select(r => new RegionDto { Biome = r.Biome, X = r.X, Y = r.Y, Radius = r.Radius }).ToList(),
         Landmarks = s.Landmarks.Select(l => new LandmarkDto { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
         Lakes = s.Lakes.Select(ToDto).ToList(),
+        Shores = s.Shores.Select(h => new ShoreDto { Kind = h.Cliff ? "cliff" : "beach", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
     }, Options);
 
     // The file's seed, size and cell size win over the caller's, so an edited sketch
@@ -62,6 +65,7 @@ public static class SketchFile
             if (l.X.Length < 2 || l.X.Length != l.Y.Length) errors.Add("a line needs matching x and y with at least 2 points");
         if (d.Ranges.Any(r => r.Strength is null)) errors.Add("ranges need strength");
         if (d.Corridors.Any(r => r.Strength is not null)) errors.Add("corridors have no strength");
+        if (d.Shores.Any(h => h.Kind != "cliff" && h.Kind != "beach")) errors.Add("shore kind is cliff or beach");
         if (errors.Count > 0) throw new InvalidDataException(string.Join("; ", errors));
 
         c.Seed = d.Seed; c.Size = d.Size; c.CellMeters = d.CellMeters;
@@ -74,6 +78,7 @@ public static class SketchFile
             Regions = d.Regions.Select(r => new RegionSketch { Biome = r.Biome, X = r.X, Y = r.Y, Radius = r.Radius }).ToList(),
             Landmarks = d.Landmarks.Select(l => new LandmarkSketch { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
             Lakes = d.Lakes.Select(FromDto).ToList(),
+            Shores = d.Shores.Select(h => new ShoreSketch { Cliff = h.Kind == "cliff", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
         };
         s.Build(c);
         return s;
