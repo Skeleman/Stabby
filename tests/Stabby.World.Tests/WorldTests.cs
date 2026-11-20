@@ -157,6 +157,41 @@ public class WorldTests
     public void BiomeContentLoads() => Assert.Equal(9, Biomes.Count);
 
     [Fact]
+    public void MaterialContentMatchesSchema()
+    {
+        var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+        using var schema = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "materials.schema.json")));
+        using var data = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "materials.json")));
+        var top = schema.RootElement;
+        var topNames = data.RootElement.EnumerateObject().Select(p => p.Name).ToList();
+        Assert.Empty(top.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).Except(topNames));
+        Assert.Empty(topNames.Except(top.GetProperty("properties").EnumerateObject().Select(p => p.Name)));
+        var item = top.GetProperty("properties").GetProperty("strata").GetProperty("items");
+        var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).ToList();
+        var allowed = item.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();
+        foreach (var b in data.RootElement.GetProperty("strata").EnumerateArray())
+        {
+            var names = b.EnumerateObject().Select(p => p.Name).ToList();
+            Assert.Empty(required.Except(names));
+            Assert.Empty(names.Except(allowed));
+        }
+    }
+
+    [Fact]
+    public void StrataBandsFollowThickness()
+    {
+        var lib = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
+        var bands = lib.Bands(0.5f);
+        Assert.Equal((int)Math.Round(lib.PeriodM / 0.5f), bands.Length);
+        for (int s = 0; s < lib.Strata.Count; s++)
+            Assert.Equal((int)Math.Round(lib.Strata[s].ThicknessM / 0.5f), bands.Count(b => b == s));
+        var w = Gen(3);
+        var a = lib.Offsets(w);
+        Assert.Equal(a, lib.Offsets(w));
+        Assert.Contains(a, v => Math.Abs(v) > 1f);
+    }
+
+    [Fact]
     public void WorldLibraryHasNoEngineOrFileDependencies()
     {
         var asm = typeof(WorldGenerator).Assembly;

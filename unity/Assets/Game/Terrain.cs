@@ -22,6 +22,7 @@ namespace Stabby.Game
     {
         public int N;
         public BlobArray<float3> Colors;
+        public BlobArray<float> Offsets;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -29,6 +30,7 @@ namespace Stabby.Game
     {
         public float3 Pos, Normal;
         public float4 Color;
+        public float2 Strata;
     }
 
     struct TerrainChunk
@@ -80,9 +82,10 @@ namespace Stabby.Game
                     float h = hs[c];
                     var nrm = math.normalize(new float3(hs[c - 1] - hs[c + 1], 2 * Step * cm, hs[c - gs] - hs[c + gs]));
                     int x0 = math.min((int)gx, n - 2), y0 = math.min((int)gy, n - 2), a = y0 * n + x0;
+                    float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - x0, gy - y0);
                     var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - x0, gy - y0), h, nrm.y);
                     var p = new float3(gx * cm, h, gy * cm);
-                    verts[j * w + i] = new TerrainVertex { Pos = p, Normal = nrm, Color = new float4(col, 1) };
+                    verts[j * w + i] = new TerrainVertex { Pos = p, Normal = nrm, Color = new float4(col.xyz, 1), Strata = new float2(off, col.w) };
                     lo = math.min(lo, p);
                     hi = math.max(hi, p);
                 }
@@ -170,6 +173,7 @@ namespace Stabby.Game
             public List<int2> Cells;
             public List<MeshParts> Lakes, Rivers;
             public MeshParts Sea;
+            public StrataLook Strata;
         }
 
         struct Pending
@@ -224,10 +228,11 @@ namespace Stabby.Game
             if (map.Map == null || !SystemAPI.TryGetSingleton(out ground)) return;
             var world = map.Map;
             var defs = map.Defs;
-            preparing = Task.Run(() => Prepare(world, defs));
+            string materials = MaterialFile.DefaultPath;
+            preparing = Task.Run(() => Prepare(world, defs, materials));
         }
 
-        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs)
+        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, string materials)
         {
             int n = world.Config.Size, cells = TerrainLods.Cells;
             var p = new Prepared { Cells = new List<int2>(), Lakes = new List<MeshParts>() };
@@ -246,6 +251,9 @@ namespace Stabby.Game
             root.N = n;
             var arr = p.Look.Allocate(ref root.Colors, colors.Length);
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
+            p.Strata = TerrainLook.Strata(world, MaterialFile.Load(materials));
+            var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
+            for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
             return p;
         }
 
@@ -266,6 +274,7 @@ namespace Stabby.Game
             prepared = task.Result;
             look = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
             prepared.Look.Dispose();
+            TerrainLook.ApplyStrata(prepared.Strata);
             Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.9f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.3f, 0.27f, 0.22f));
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
@@ -295,7 +304,8 @@ namespace Stabby.Game
             md.SetVertexBufferParams(verts,
                 new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
                 new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3),
-                new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4));
+                new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+                new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2));
             md.SetIndexBufferParams(TerrainLods.Indices(m), IndexFormat.UInt16);
             md.subMeshCount = 1;
             var bounds = new NativeArray<float3>(2, Allocator.Persistent);

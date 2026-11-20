@@ -44,6 +44,7 @@ namespace Stabby.Viewer
             public GeneratedWorld World;
             public TerrainDetail Detail;
             public float3[] Colors;
+            public StrataLook Strata;
             public int Size, ChunkCells;
             public float Cm;
         }
@@ -95,14 +96,14 @@ namespace Stabby.Viewer
         {
             var c = new WorldConfig { Seed = (ulong)Seed, Size = Size, CellMeters = WorldConfig.CellMetersFor(Size) };
             int cells = ChunkCells;
-            string path = UseMapFile ? MapFile.PathFor(c.Seed, c.Size) : null;
+            string path = UseMapFile ? MapFile.PathFor(c.Seed, c.Size) : null, materials = MaterialFile.DefaultPath;
             Begin(token =>
             {
                 var sw = Stopwatch.StartNew();
                 var defs = BiomeFile.Load(BiomeFile.DefaultPath);
                 var (world, source) = path != null ? MapFile.LoadOrGenerate(path, BiomeFile.DefaultPath, c, defs, true) : (WorldGenerator.Generate(c, defs), $"generated in {sw.ElapsedMilliseconds} ms");
                 long genMs = sw.ElapsedMilliseconds;
-                var p = Prepare(world, defs, cells, token);
+                var p = Prepare(world, defs, materials, cells, token);
                 p.GenMs = genMs;
                 p.Source = source;
                 return p;
@@ -112,7 +113,8 @@ namespace Stabby.Viewer
         public void Build(GeneratedWorld world, IReadOnlyList<BiomeDef> defs)
         {
             int cells = ChunkCells;
-            Begin(token => Prepare(world, defs, cells, token));
+            string materials = MaterialFile.DefaultPath;
+            Begin(token => Prepare(world, defs, materials, cells, token));
         }
 
         void Begin(Func<CancellationToken, Prepared> work)
@@ -177,6 +179,7 @@ namespace Stabby.Viewer
             if (appliedChunks == 0)
             {
                 src = prepared.Src;
+                TerrainLook.ApplyStrata(src.Strata);
                 World = src.World;
                 Detail = src.Detail;
                 Seed = (int)World.Config.Seed;
@@ -205,12 +208,13 @@ namespace Stabby.Viewer
             Ready = true;
         }
 
-        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, int cells, CancellationToken token)
+        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, string materials, int cells, CancellationToken token)
         {
             var sw = Stopwatch.StartNew();
             var s = new Source { World = world, Size = world.Config.Size, ChunkCells = cells, Cm = world.Config.CellMeters };
             s.Detail = new TerrainDetail(world);
             s.Colors = TerrainLook.BaseColors(world, defs);
+            s.Strata = TerrainLook.Strata(world, MaterialFile.Load(materials));
             var list = new List<ChunkData>();
             int n = s.Size;
             for (int cy = 0; cy < n; cy += cells)
@@ -347,6 +351,7 @@ namespace Stabby.Viewer
             var verts = new Vector3[total];
             var norms = new Vector3[total];
             var cols = new Color[total];
+            var uvs = new Vector2[total];
             var tris = new int[m * m * 6 + ringCount * 12];
             for (int j = 0; j <= m; j++)
                 for (int i = 0; i <= m; i++)
@@ -357,7 +362,7 @@ namespace Stabby.Viewer
                     var nrm = new Vector3(hs[c - 1] - hs[c + 1], 2 * step * cm, hs[c - g] - hs[c + g]).normalized;
                     verts[v] = new Vector3(gx * cm, h, gy * cm);
                     norms[v] = nrm;
-                    cols[v] = ColorAt(s, gx, gy, h, nrm);
+                    (cols[v], uvs[v]) = ColorAt(s, gx, gy, h, nrm);
                 }
             int t = 0;
             for (int j = 0; j < m; j++)
@@ -382,6 +387,7 @@ namespace Stabby.Viewer
                 verts[first + k] = verts[r] - new Vector3(0, drop, 0);
                 norms[first + k] = norms[r];
                 cols[first + k] = cols[r];
+                uvs[first + k] = uvs[r];
             }
             for (int k = 0; k < ringCount; k++)
             {
@@ -391,15 +397,16 @@ namespace Stabby.Viewer
                 tris[t++] = a; tris[t++] = a2; tris[t++] = b;
                 tris[t++] = b; tris[t++] = a2; tris[t++] = b2;
             }
-            return new MeshParts { Name = $"Terrain {cx},{cy} x{step}", Verts = verts, Norms = norms, Cols = cols, Tris = tris };
+            return new MeshParts { Name = $"Terrain {cx},{cy} x{step}", Verts = verts, Norms = norms, Cols = cols, Uvs = uvs, Tris = tris };
         }
 
-        static Color ColorAt(Source s, float gx, float gy, float h, Vector3 nrm)
+        static (Color, Vector2) ColorAt(Source s, float gx, float gy, float h, Vector3 nrm)
         {
             int n = s.Size, x0 = Mathf.Min((int)gx, n - 2), y0 = Mathf.Min((int)gy, n - 2), a = y0 * n + x0;
             var bc = s.Colors;
+            var off = s.Strata.Offsets;
             var c = TerrainLook.Shade(TerrainLook.Bilinear(bc[a], bc[a + 1], bc[a + n], bc[a + n + 1], gx - x0, gy - y0), h, nrm.y);
-            return new Color(c.x, c.y, c.z);
+            return (new Color(c.x, c.y, c.z), new Vector2(TerrainLook.Bilinear(off[a], off[a + 1], off[a + n], off[a + n + 1], gx - x0, gy - y0), c.w));
         }
 
         void BuildSea() => Attach("Sea", transform, WaterGeometry.ToMesh(WaterGeometry.Sea(Size, src.Cm)));

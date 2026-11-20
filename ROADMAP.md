@@ -37,7 +37,10 @@ their geometry is built.
 
 | Item | Status |
 |---|---|
-| Geometry contract (density = heightfield base + sparse feature edits) proposed for CLAUDE.md | next |
+| Geometry contract (one solid field: heightfield base + sparse feature edits) in CLAUDE.md rule 2 | done |
+| Step 1: material library (`content/materials.json`), strata by world height + regional offset, drawn per pixel by the terrain shader | done |
+| Step 2: field sampler + surface-nets mesher on the global lattice, checked vertex for vertex against the heightfield path | next |
+| Step 3: overhangs and arches as feature edits, then caves | planned |
 
 ## Next
 

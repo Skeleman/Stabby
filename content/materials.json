@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "offsetAmplitudeM": 18,
+  "offsetWavelengthM": 2400,
+  "tiltPerKm": 6,
+  "strata": [
+    { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8c8a83", "thicknessM": 14 },
+    { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#9a6248", "thicknessM": 6 },
+    { "id": "buff-sandstone", "name": "Buff sandstone",  "color": "#b49a72", "thicknessM": 9 },
+    { "id": "dark-shale",     "name": "Dark shale",      "color": "#55504d", "thicknessM": 3 },
+    { "id": "ochre-siltstone","name": "Ochre siltstone", "color": "#a3814f", "thicknessM": 7 },
+    { "id": "pale-chalk",     "name": "Pale chalk",      "color": "#c2bdb1", "thicknessM": 4 },
+    { "id": "basalt",         "name": "Basalt",          "color": "#4a4a4f", "thicknessM": 11 },
+    { "id": "rust-mudstone",  "name": "Rust mudstone",   "color": "#7f5a45", "thicknessM": 5 }
+  ]
+}

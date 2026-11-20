@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stabby material library",
+  "type": "object",
+  "required": ["schemaVersion", "offsetAmplitudeM", "offsetWavelengthM", "tiltPerKm", "strata"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "offsetAmplitudeM": { "type": "number", "minimum": 0 },
+    "offsetWavelengthM": { "type": "number", "exclusiveMinimum": 0 },
+    "tiltPerKm": { "type": "number", "minimum": 0 },
+    "strata": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "color", "thicknessM"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+          "name": { "type": "string" },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "thicknessM": { "type": "number", "minimum": 0.5, "maximum": 500 }
+        }
+      }
+    }
+  }
+}

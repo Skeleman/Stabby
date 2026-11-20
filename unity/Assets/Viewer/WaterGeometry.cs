@@ -10,6 +10,7 @@ namespace Stabby.Viewer
         public string Name;
         public Vector3[] Verts, Norms;
         public Color[] Cols;
+        public Vector2[] Uvs;
         public int[] Tris;
     }
 
@@ -23,6 +24,7 @@ namespace Stabby.Viewer
             mesh.SetVertices(d.Verts);
             mesh.SetNormals(d.Norms);
             mesh.SetColors(d.Cols);
+            if (d.Uvs != null) mesh.SetUVs(0, d.Uvs);
             mesh.SetTriangles(d.Tris, 0);
             mesh.RecalculateBounds();
             return mesh;

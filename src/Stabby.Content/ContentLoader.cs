@@ -7,6 +7,24 @@ namespace Stabby.Content;
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
+    public const int MaterialSchemaVersion = 1;
+
+    sealed class MaterialFile
+    {
+        public int SchemaVersion { get; set; }
+        public float OffsetAmplitudeM { get; set; }
+        public float OffsetWavelengthM { get; set; }
+        public float TiltPerKm { get; set; }
+        public List<StratumEntry> Strata { get; set; } = new();
+    }
+
+    sealed class StratumEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Color { get; set; } = "#ff00ff";
+        public float ThicknessM { get; set; }
+    }
 
     sealed class BiomeFile
     {
@@ -56,6 +74,27 @@ public static class ContentLoader
         var errors = Biomes.Validate(defs);
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
         return defs;
+    }
+
+    public static MaterialLibrary LoadMaterials(string contentRoot)
+    {
+        var path = Path.Combine(contentRoot, "materials.json");
+        var file = JsonSerializer.Deserialize<MaterialFile>(File.ReadAllText(path), Options)
+                   ?? throw new InvalidDataException(path + " is empty");
+        if (file.SchemaVersion != MaterialSchemaVersion)
+            throw new InvalidDataException($"{path}: schemaVersion {file.SchemaVersion}, expected {MaterialSchemaVersion}");
+        var lib = new MaterialLibrary
+        {
+            OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
+            Strata = file.Strata.Select(s => new StratumDef
+            {
+                Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM,
+                Color = uint.Parse(s.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
+            }).ToList(),
+        };
+        var errors = MaterialLibrary.Validate(lib);
+        if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
+        return lib;
     }
 
     public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
