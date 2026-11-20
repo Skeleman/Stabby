@@ -101,6 +101,7 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
         ["ranges"] = w.Sketch.Ranges.Count, ["corridors"] = w.Sketch.Corridors.Count, ["landmarks"] = w.Sketch.Landmarks.Count,
         ["sketchLakes"] = w.Sketch.Lakes.Count,
         ["peakM"] = MathF.Round(w.Height.Max()), ["lakes"] = w.Water.Lakes.Count,
+        ["largestLakeKm2"] = MathF.Round(w.Water.Lakes.Select(l => l.Cells.Count).DefaultIfEmpty(0).Max() * w.Config.CellMeters * w.Config.CellMeters / 1e6f, 2),
         ["riverSegments"] = w.Water.Rivers.Count, ["riverKm"] = MathF.Round(riverKm, 1),
         ["maxDischargeM3s"] = MathF.Round(w.Water.DischargeM3s.Where((q, i) => !w.Sea[i]).Max(), 1),
         ["biomePercent"] = shares.ToDictionary(kv => kv.Key, kv => MathF.Round(kv.Value, 1)),

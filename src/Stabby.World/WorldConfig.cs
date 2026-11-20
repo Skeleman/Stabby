@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 10;
+        public const int GeneratorVersion = 11;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).
@@ -32,7 +32,7 @@ namespace Stabby.World
         public int RangesMin = 1, RangesMax = 1;
         public int LandmarksPerIsland = 2;
         // The main valley's lake radius, in main-island radii.
-        public float MainLakeRadius = 0.15f;
+        public float MainLakeRadius = 0.125f;
         // Small lakes per main or second island, radius in that island's radii.
         public int PondsMin = 1, PondsMax = 4;
         public float PondRadiusMin = 0.035f, PondRadiusMax = 0.07f;
