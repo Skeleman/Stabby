@@ -473,7 +473,7 @@ namespace Stabby.World
         // its foot, and a beach at the main river's mouth.
         static void AddShores(int n, LandmassSketch m, WorldSketch s, int firstRange, CorridorSketch cor, ref Rng rng)
         {
-            float cx = float.NaN, cy = 0, best = float.MaxValue, reach = m.Radius;
+            float cx = float.NaN, cy = 0, best = float.MaxValue, reach = m.Radius, clear = m.Radius * 0.55f;
             var mine = Component(n, s.Land, (int)m.X, (int)m.Y);
             for (int r = firstRange; r < s.Ranges.Count; r++)
             {
@@ -481,17 +481,27 @@ namespace Stabby.World
                 for (int end = 0; end < 2; end++)
                 {
                     int p = end == 0 ? 0 : g.X.Length - 1;
-                    if (NearestCoast(n, mine, g.X[p], g.Y[p], reach, out float sx, out float sy, out float d) && d < best)
+                    if (NearestCoast(n, mine, g.X[p], g.Y[p], reach, out float sx, out float sy, out float d) && d < best
+                        && !OtherLandNear(n, s.Land, mine, sx, sy, clear) && !NearCorridor(cor, sx, sy, clear))
                     { best = d; cx = sx; cy = sy; }
                 }
             }
             if (float.IsNaN(cx))
             {
                 RandomDirection(ref rng, out float dx, out float dy);
-                float k = RunToSea(n, s.Land, m.X, m.Y, dx, dy);
-                cx = m.X + k * dx; cy = m.Y + k * dy;
+                for (int turn = 0; turn < 16; turn++)
+                {
+                    float k = RunToSea(n, s.Land, m.X, m.Y, dx, dy);
+                    float px = m.X + k * dx, py = m.Y + k * dy;
+                    if (turn == 0) { cx = px; cy = py; }
+                    if (!OtherLandNear(n, s.Land, mine, px, py, clear) && !NearCorridor(cor, px, py, clear))
+                    { cx = px; cy = py; break; }
+                    // 22.5 degrees, written out so generation stays free of trig.
+                    float tx = dx * 0.92387953f - dy * 0.38268343f;
+                    dy = dx * 0.38268343f + dy * 0.92387953f; dx = tx;
+                }
             }
-            var cliff = new ShoreSketch { Cliff = true, X = cx, Y = cy, Radius = m.Radius * rng.Range(0.3f, 0.45f) };
+            var cliff = new ShoreSketch { Cliff = true, X = cx, Y = cy, Radius = m.Radius * rng.Range(0.4f, 0.55f) };
             s.Shores.Add(cliff);
             float bx, by;
             int last = cor == null ? 0 : cor.X.Length - 1;
@@ -507,6 +517,29 @@ namespace Stabby.World
             float gap = (float)Math.Sqrt((bx - cx) * (bx - cx) + (by - cy) * (by - cy)) - cliff.Radius;
             float radius = Math.Min(m.Radius * rng.Range(0.5f, 0.75f), gap);
             if (radius > m.Radius * 0.2f) s.Shores.Add(new ShoreSketch { X = bx, Y = by, Radius = radius });
+        }
+
+        // A cliff across a narrow channel would face land, not open sea.
+        static bool OtherLandNear(int n, bool[] land, bool[] mine, float x, float y, float r)
+        {
+            int ri = (int)Math.Ceiling(r);
+            for (int yy = Math.Max(0, (int)y - ri); yy <= Math.Min(n - 1, (int)y + ri); yy++)
+                for (int xx = Math.Max(0, (int)x - ri); xx <= Math.Min(n - 1, (int)x + ri); xx++)
+                {
+                    int i = yy * n + xx;
+                    if (land[i] && !mine[i] && (xx - x) * (xx - x) + (yy - y) * (yy - y) <= r * r) return true;
+                }
+            return false;
+        }
+
+        // Caprock across the valley would dam its river.
+        static bool NearCorridor(CorridorSketch cor, float x, float y, float r)
+        {
+            if (cor == null) return false;
+            float rr = r + cor.Width;
+            for (int k = 0; k < cor.X.Length; k++)
+                if ((cor.X[k] - x) * (cor.X[k] - x) + (cor.Y[k] - y) * (cor.Y[k] - y) <= rr * rr) return true;
+            return false;
         }
 
         // Ranges may run past the coast, so shores snap to this island's own edge.
@@ -673,8 +706,8 @@ namespace Stabby.World
                         if (v > Valley[i]) { Valley[i] = v; ValleyRun[i] = RemainingAlong(cor.X, cor.Y, x, y); }
                     }
                     foreach (var lk in Lakes) u *= 1 - LakeDepth * Grid.Smoothstep(-0.8f, 0.2f, lk.Core(x, y));
-                    float band = Cliff[i] * (1 - Grid.Smoothstep(0.5f, 1f, coast[i] * c.CellMeters / c.CliffMeters));
-                    u = Math.Max(u, c.CliffUplift * band);
+                    // Caprock barely erodes, so any uplift on it would pile up without limit.
+                    u *= 1 - Cliff[i];
                     float taper = Grid.Smoothstep(0, 6, coast[i]);
                     Uplift[i] = Math.Max(0, u) * (taper + (1 - taper) * Cliff[i]);
                 }

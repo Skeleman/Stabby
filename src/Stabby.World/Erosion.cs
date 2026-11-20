@@ -29,11 +29,11 @@ namespace Stabby.World
                     }
                     h[i] = 2f + s.Uplift[i] * c.InitialRelief + 25f * (1 + Noise.Fbm(seed, x * 16f / n, y * 16f / n, 3));
                     float m = inland[i] * c.CellMeters;
-                    float cliff = s.Cliff[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.CliffMeters));
-                    if (cliff > 0)
+                    if (s.Cliff[i] > 0)
                     {
-                        float top = c.CliffHeight * (1 + 0.3f * Noise.Fbm(seed ^ 0xC11Fu, x * 24f / n, y * 24f / n, 3));
-                        h[i] += (Math.Max(h[i], top) - h[i]) * cliff;
+                        float top = c.PlateauHeight * (1 + 0.15f * Noise.Fbm(seed ^ 0xC11Fu, x * 12f / n, y * 12f / n, 3)
+                            + 0.12f * Noise.Fbm(seed ^ 0x7AB1u, x * 48f / n, y * 48f / n, 4));
+                        h[i] += (top - h[i]) * s.Cliff[i];
                     }
                     float beach = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                     if (beach > 0) h[i] += (Math.Min(h[i], BeachCap(c, m)) - h[i]) * beach;
@@ -144,12 +144,15 @@ namespace Stabby.World
             // Beaches stay graded to the sea however much uplift and diffusion pile on.
             var beachCap = new float[n * n];
             var slope = new float[n * n];
+            var erod = new float[n * n];
             for (int i = 0; i < n * n; i++)
             {
                 float m = s.Coast[i] * c.CellMeters;
                 float w = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                 beachCap[i] = BeachCap(c, m) + (1 - w) * 1e6f;
-                slope[i] = c.MaxSlope * (1 + c.CliffSlope * s.Cliff[i]);
+                float core = Grid.Smoothstep(0.6f, 1f, s.Cliff[i]);
+                slope[i] = c.MaxSlope * (1 + c.CliffSlope * core);
+                erod[i] = c.Erodibility * (1 - c.CaprockHardness * core);
             }
 
             float dt = c.TimeStepYears;
@@ -170,7 +173,7 @@ namespace Stabby.World
                     float hr = sea[r] ? 0 : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
-                    float f = c.Erodibility * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
+                    float f = erod[i] * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
                     h[i] = Math.Max(hr, (h[i] + f * hr) / (1 + f));
                     h[i] = Math.Min(h[i], hr + slope[i] * len);
                 }

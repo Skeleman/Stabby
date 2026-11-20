@@ -49,11 +49,21 @@ int Gen()
     else Save(Path.Combine(dir, "sheet.png"), Render.Sheet(sk, map));
 
     File.WriteAllText(Path.Combine(dir, "sketch.json"), SketchFile.Write(w.Sketch, c));
+    // Raw float32 grids for measuring in scripts.
+    WriteFloats(Path.Combine(dir, "height.f32"), w.Height);
+    WriteFloats(Path.Combine(dir, "cliff.f32"), w.Sketch.Cliff);
     var m = Metrics(w, biomes, ms, violations);
     File.WriteAllText(Path.Combine(dir, "metrics.json"), JsonSerializer.Serialize(m, json));
     Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return violations.Count == 0 ? 0 : 1;
+}
+
+static void WriteFloats(string path, float[] v)
+{
+    var b = new byte[v.Length * 4];
+    Buffer.BlockCopy(v, 0, b, 0, b.Length);
+    File.WriteAllBytes(path, b);
 }
 
 int Sweep()
