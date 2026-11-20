@@ -104,12 +104,12 @@ namespace Stabby.Game.Editor
                 GameStatus.HoldCamera = true;
                 phase = 1;
             }
-            while (phase <= 2)
+            while (phase <= 4)
             {
-                string name = phase == 1 ? "arch" : "overhang";
+                string name = phase == 1 ? "arch" : phase == 2 ? "overhang" : phase == 3 ? "cave" : "cave-inside";
                 if (wait == 0)
                 {
-                    if (!Aim(cam, phase == 1 ? FeatureEdit.Add : FeatureEdit.Carve)) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
+                    if (!Aim(cam, phase == 1 ? FeatureEdit.Arch : phase == 2 ? FeatureEdit.Overhang : FeatureEdit.Cave, phase == 4)) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -165,7 +165,7 @@ namespace Stabby.Game.Editor
             EditorApplication.Exit(code);
         }
 
-        static bool Aim(Camera cam, int kind)
+        static bool Aim(Camera cam, int shape, bool inside)
         {
             foreach (var w in Unity.Entities.World.All)
             {
@@ -174,10 +174,10 @@ namespace Stabby.Game.Editor
                 var ground = q.GetSingleton<Ground>();
                 ref var g = ref ground.Blob.Value;
                 int at = -1;
-                for (int k = 0; k < g.Edits.Length && at < 0; k++) if (g.Edits[k].Kind == kind) at = k;
+                for (int k = 0; k < g.Edits.Length && at < 0; k++) if (g.Edits[k].Shape == shape) at = k;
                 if (at < 0) return false;
                 var first = g.Edits[at];
-                var last = kind == FeatureEdit.Add ? g.Edits[at + 4] : first;
+                var last = shape == FeatureEdit.Arch ? g.Edits[at + 4] : first;
                 var a = new Vector3(first.Ax, first.Ay, first.Az);
                 var b = new Vector3(last.Bx, last.By, last.Bz);
                 var mid = (a + b) * 0.5f;
@@ -186,11 +186,24 @@ namespace Stabby.Game.Editor
                 along /= len;
                 var side = new Vector3(-along.z, 0, along.x);
                 Vector3 eye, target;
-                if (kind == FeatureEdit.Add)
+                if (shape == FeatureEdit.Arch)
                 {
                     var top = g.Edits[at + 2];
                     target = new Vector3(mid.x, (mid.y + top.By) * 0.5f, mid.z);
                     eye = target + side * len * 1.2f + Vector3.up * len * 0.15f;
+                }
+                else if (inside)
+                {
+                    eye = new Vector3(first.Bx, first.By, first.Bz);
+                    target = a + Vector3.up * 4f;
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                    GameStatus.Lines["~aim inside"] = $"edit {at} from {eye.x:F0},{eye.y:F0},{eye.z:F0}";
+                    return true;
+                }
+                else if (shape == FeatureEdit.Cave)
+                {
+                    target = a + along * 30f;
+                    eye = a - along * 110f + side * 40f + Vector3.up * 20f;
                 }
                 else
                 {
@@ -200,7 +213,7 @@ namespace Stabby.Game.Editor
                 }
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~aim " + kind] = $"edit {at} at {mid.x:F0},{mid.y:F0},{mid.z:F0}";
+                GameStatus.Lines["~aim " + shape] = $"edit {at} at {mid.x:F0},{mid.y:F0},{mid.z:F0}";
                 return true;
             }
             return false;

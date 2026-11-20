@@ -6,10 +6,11 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
+        public const int Overhang = 0, Arch = 1, Cave = 2;
 
         public const float Blend = 0.25f;
 
-        public int Kind;
+        public int Kind, Shape;
         public float Ax, Ay, Az, Bx, By, Bz, R;
 
         public float MinX => Math.Min(Ax, Bx) - R;
@@ -70,6 +71,8 @@ namespace Stabby.World
         public const int MarginCells = 3;
         public const float OverhangChance = 0.6f, ArchChance = 0.3f;
         public const float OverhangMinDrop = 50f;
+        public const float CaveChance = 0.35f, CaveMinDrop = 30f, CaveRoof = 12f;
+        public const int CavePieces = 5;
         public const float LatticeStepCells = 0.25f, MinRadiusSteps = 1.25f;
 
         public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
@@ -105,7 +108,7 @@ namespace Stabby.World
             var list = new List<FeatureEdit>();
             if (w.Biome == null || 16f < MinRadiusSteps * LatticeStepCells * w.Config.CellMeters) return list.ToArray();
             int tiles = w.Config.Size / TileCells;
-            ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64();
+            ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "caves").NextU64();
             var tile = new List<FeatureEdit>();
             for (int ty = 0; ty < tiles; ty++)
                 for (int tx = 0; tx < tiles; tx++)
@@ -118,6 +121,10 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(ra + t));
                     tile.Clear();
                     Arch(w, detail, tx, ty, ref r, tile);
+                    Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rc + t));
+                    tile.Clear();
+                    Cave(w, detail, tx, ty, ref r, tile);
                     Keep(w, tile, list);
                 }
             return list.ToArray();
@@ -161,7 +168,7 @@ namespace Stabby.World
             float half = length * 0.5f;
             output.Add(new FeatureEdit
             {
-                Kind = FeatureEdit.Carve, R = radius,
+                Kind = FeatureEdit.Carve, Shape = FeatureEdit.Overhang, R = radius,
                 Ax = cx * cm - gz * half, Az = cz * cm + gx * half, Ay = y0,
                 Bx = cx * cm + gz * half, Bz = cz * cm - gx * half, By = y0,
             });
@@ -192,9 +199,71 @@ namespace Stabby.World
             {
                 float t = s / (float)Pieces, u = 1 - t;
                 float nx = ax + (bx - ax) * t, nz = az + (bz - az) * t, ny = u * u * y0 + 2 * u * t * ctrl + t * t * y1;
-                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, R = radius, Ax = lx * cm, Ay = ly, Az = lz * cm, Bx = nx * cm, By = ny, Bz = nz * cm });
+                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Arch, R = radius, Ax = lx * cm, Ay = ly, Az = lz * cm, Bx = nx * cm, By = ny, Bz = nz * cm });
                 lx = nx; ly = ny; lz = nz;
             }
+        }
+
+        static void Cave(GeneratedWorld w, TerrainDetail detail, int tx, int ty, ref Rng r, List<FeatureEdit> output)
+        {
+            float roll = r.NextFloat(), pick = r.NextFloat(), radius = r.Range(16f, 21f), descent = r.Range(0.08f, 0.22f), chamber = r.Range(1.3f, 1.7f);
+            var lengths = new float[CavePieces];
+            var turns = new float[CavePieces];
+            for (int s = 0; s < CavePieces; s++) { lengths[s] = r.Range(50f, 90f); turns[s] = r.Range(-0.6f, 0.6f); }
+            if (roll >= CaveChance) return;
+            int n = w.Config.Size, count = 0, best = -1, bestDir = 0;
+            for (int pass = 0; pass < 2 && best < 0; pass++)
+            {
+                int want = (int)(pick * count);
+                for (int y = ty * TileCells + MarginCells; y < (ty + 1) * TileCells - MarginCells && best < 0; y++)
+                    for (int x = tx * TileCells + MarginCells; x < (tx + 1) * TileCells - MarginCells && best < 0; x++)
+                    {
+                        int i = y * n + x, dir = Steepest(w, i);
+                        if (dir < 0) continue;
+                        if (pass == 0) count++;
+                        else if (want-- == 0) { best = i; bestDir = dir; }
+                    }
+                if (count == 0) return;
+            }
+            float cm = w.Config.CellMeters, inv = 1f / Grid.Dist[bestDir];
+            float hx = -Grid.DX[bestDir] * inv, hz = -Grid.DY[bestDir] * inv;
+            float ax = best % n - 0.5f * hx, az = best / n - 0.5f * hz, ay = detail.HeightAt(ax, az);
+            int start = output.Count;
+            for (int s = 0; s < CavePieces; s++)
+            {
+                if (s > 0)
+                {
+                    float ox = -hz, oz = hx;
+                    hx += ox * turns[s]; hz += oz * turns[s];
+                    float l = (float)Math.Sqrt(hx * hx + hz * hz);
+                    hx /= l; hz /= l;
+                }
+                float step = lengths[s] / cm, bx = ax + hx * step, bz = az + hz * step, by = s == 0 ? ay : ay - lengths[s] * descent;
+                if (detail.HeightAt(bx, bz) < by + radius + CaveRoof) break;
+                if (s > 0 && detail.HeightAt((ax + bx) * 0.5f, (az + bz) * 0.5f) < (ay + by) * 0.5f + radius + CaveRoof) break;
+                var e = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = FeatureEdit.Cave, R = radius, Ax = ax * cm, Ay = ay, Az = az * cm, Bx = bx * cm, By = by, Bz = bz * cm };
+                if (!Inside(e, cm)) break;
+                output.Add(e);
+                ax = bx; ay = by; az = bz;
+            }
+            if (output.Count - start < 2) { output.RemoveRange(start, output.Count - start); return; }
+            float big = radius * chamber, reach = big * 0.6f / cm;
+            var room = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = FeatureEdit.Cave, R = big, Ax = ax * cm, Ay = ay, Az = az * cm, Bx = (ax + hx * reach) * cm, By = ay, Bz = (az + hz * reach) * cm };
+            if (detail.HeightAt(ax + hx * reach, az + hz * reach) >= ay + big + CaveRoof && detail.HeightAt(ax, az) >= ay + big + CaveRoof && Inside(room, cm)) output.Add(room);
+        }
+
+        static int Steepest(GeneratedWorld w, int i)
+        {
+            if (!Dry(w, i)) return -1;
+            int n = w.Config.Size, dir = -1;
+            float most = CaveMinDrop;
+            for (int k = 0; k < 8; k++)
+            {
+                int j = i + Grid.DY[k] * n + Grid.DX[k];
+                float drop = (w.Height[i] - w.Height[j]) / Grid.Dist[k];
+                if (drop > most && Dry(w, j)) { most = drop; dir = k; }
+            }
+            return dir;
         }
     }
 }

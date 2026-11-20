@@ -149,18 +149,19 @@ namespace Stabby.World
             float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
             foreach (var x in edits)
                 if (!Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
-            var list = new EditArray { Items = edits };
             var cols = new DetailColumns { Detail = detail, StepCells = LatticeStepCells };
-            bool add = false, carve = false;
+            var seen = new bool[3];
             foreach (var x in edits)
             {
-                if (x.Kind == FeatureEdit.Add ? add : carve) continue;
-                if (x.Kind == FeatureEdit.Add) add = true; else carve = true;
+                if (seen[x.Shape]) continue;
+                seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
+                var group = new List<FeatureEdit>();
                 foreach (var y in edits)
-                    if (y.Kind == x.Kind && Features.TileOf(y, cm) == tile)
+                    if (y.Shape == x.Shape && Features.TileOf(y, cm) == tile)
                     {
+                        group.Add(y);
                         minX = Math.Min(minX, y.MinX); maxX = Math.Max(maxX, y.MaxX);
                         minZ = Math.Min(minZ, y.MinZ); maxZ = Math.Max(maxZ, y.MaxZ);
                     }
@@ -168,7 +169,8 @@ namespace Stabby.World
                 int cells = Math.Max((int)Math.Ceiling(maxX / s) + 3 - x0, (int)Math.Ceiling(maxZ / s) + 3 - z0);
                 var c = new NetsChunk { X0 = x0, Z0 = z0, Cells = cells, StepM = s };
                 SurfaceNets.HeightRange(cols, c, out int jMin, out int jMax);
-                foreach (var y in edits)
+                var list = new EditArray { Items = group.ToArray() };
+                foreach (var y in group)
                 {
                     jMin = Math.Min(jMin, (int)Math.Floor(y.MinY / s) - 2);
                     jMax = Math.Max(jMax, (int)Math.Floor(y.MaxY / s) + 3);
@@ -179,10 +181,17 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Kind == FeatureEdit.Add ? "arch" : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
+                if (x.Shape == FeatureEdit.Cave)
+                {
+                    int bi = (int)Math.Round(x.Bx / s), bj = (int)Math.Round(x.By / s), bk = (int)Math.Round(x.Bz / s);
+                    var solid = new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s };
+                    if (solid.Density(bi, bj, bk) >= 0) e.Add($"cave at {x.Ax:F0},{x.Az:F0} is not hollow at its first bend");
+                    if (cols.Height(bi, bk) < x.By + x.R) e.Add($"cave at {x.Ax:F0},{x.Az:F0} has no roof at its first bend");
+                }
             }
         }
 
