@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
@@ -50,23 +49,6 @@ namespace Stabby.Game
                     if (w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i] || w.Height[i] < 2f) return false;
                 }
             return true;
-        }
-    }
-
-    public static class ChunkZip
-    {
-        public static byte[] Deflate(byte[] raw)
-        {
-            var m = new MemoryStream();
-            using (var z = new DeflateStream(m, CompressionLevel.Optimal, true)) z.Write(raw, 0, raw.Length);
-            return m.ToArray();
-        }
-
-        public static byte[] Inflate(byte[] packed)
-        {
-            var m = new MemoryStream();
-            using (var z = new DeflateStream(new MemoryStream(packed), CompressionMode.Decompress)) z.CopyTo(m);
-            return m.ToArray();
         }
     }
 
@@ -285,7 +267,7 @@ namespace Stabby.Game
             finish = Task.Run(() =>
             {
                 int a = WorldChunks.Across(w.Config.Size);
-                foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, ChunkZip.Inflate(data));
+                foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, ChunkZip.Inflate(data, WorldChunks.Bytes(w.Config.Size, k % a, k / a)));
                 if (got.Length > 0) WorldChunks.Relink(w);
                 w.Config.Seed = hs;
                 var sums = WorldChunks.Checksums(w);
