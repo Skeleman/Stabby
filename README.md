@@ -23,8 +23,8 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
   back with `--sketch` to regenerate from the hand-adjusted sketch.
 - `--rain mm` stops after terrain and hydrology with uniform rainfall: no
   climate, no biomes. Useful for isolating erosion and rivers.
-- `--size` changes resolution, not extent: every size spans about 30 km
-  (default 512 cells of 60 m); smaller sizes use coarser cells.
+- `--size` changes resolution, not extent: every size spans about 23 km
+  (default 512 cells of 45 m); smaller sizes use coarser cells.
 - `--scale` sets PNG pixels per cell (default 3 at 256 and below, 2 at 512, 1 above).
 
 ## Layout
@@ -45,7 +45,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 3. **Provisional climate** - the rain pattern for erosion (scaled to `ErosionRainMm`, so climate tuning never reshapes terrain).
 4. **Stream-power erosion** (implicit, Braun & Willett 2013).
 5. **Final climate** - one maritime climate: temperature falls with height (steep game lapse rate, tundra up top), rain follows the wind with rain shadows; rates are per metre, so any resolution matches.
-6. **Hydrology** - lakes by priority flood, D8 routing, discharge, river
+6. **Hydrology** - lakes by priority flood (pits under 1.5 ha or 1.5 m deep fill in), D8 routing, discharge, river
    reaches; terrain, water and rivers share one drainage graph.
 7. **Biomes** classified from climate using `content/biomes.json`.
 8. **Authored regions** from the sketch applied on top.
