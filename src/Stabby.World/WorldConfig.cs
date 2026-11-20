@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 4;
+        public const int GeneratorVersion = 5;
 
         public ulong Seed = 1;
         public int Size = 512;
@@ -18,10 +18,13 @@ namespace Stabby.World
         public int MainLobes = 6, SecondLobes = 4;
         // Narrowest sea between the main islands, as a share of the map.
         public float ChannelFraction = 0.08f;
-        // Islets sit within IsletSpread of a main island's reach.
-        public int IsletsMin = 6, IsletsMax = 12;
-        public float IsletRadiusMin = 0.015f, IsletRadiusMax = 0.05f, IsletSpread = 0.14f;
-        public int RangesMin = 2, RangesMax = 3;
+        // Minor islands, about 5-8% of the main island's area, within IsletSpread
+        // of a main island's reach.
+        public int IsletsMin = 3, IsletsMax = 5;
+        public float IsletRadiusMin = 0.05f, IsletRadiusMax = 0.075f, IsletSpread = 0.22f;
+        public float IsletRidgeChance = 0.5f;
+        // The main island always gets a two-ridge valley; these count the second's ranges.
+        public int RangesMin = 1, RangesMax = 2;
         public int LandmarksPerIsland = 2;
 
         public float LatitudeSouth = 25f, LatitudeNorth = 55f;

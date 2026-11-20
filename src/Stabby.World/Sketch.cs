@@ -10,6 +10,8 @@ namespace Stabby.World
     {
         public float X, Y, Radius;
         public List<LobeSketch> Lobes = new List<LobeSketch>();
+        // Unit direction the lobes stretch along; not saved, only placement uses it.
+        public float AxisX = 1, AxisY;
 
         public float Core(float x, float y)
         {
@@ -127,19 +129,31 @@ namespace Stabby.World
             for (int k = 0; k < s.Landmasses.Count; k++)
             {
                 var m = s.Landmasses[k];
-                int count = k == 0 ? ranges.Range(c.RangesMin, c.RangesMax + 1) : ranges.Range(1, c.RangesMin + 1);
-                for (int i = 0; i < count; i++)
-                {
-                    var r = RandomRange(n, m, s.Land, ref ranges);
-                    if (r != null) s.Ranges.Add(r);
-                }
-                var cor = RandomCorridor(n, m, s.Land, inland, s.Ranges, ref corridors);
+                CorridorSketch cor = null;
+                if (k == 0) cor = AddValley(n, m, s.Land, inland, s.Ranges, ref ranges);
+                else
+                    for (int i = ranges.Range(c.RangesMin, c.RangesMax + 1); i > 0; i--)
+                    {
+                        var r = RandomRange(n, m, s.Land, ref ranges);
+                        if (r != null) s.Ranges.Add(r);
+                    }
+                if (cor == null) cor = RandomCorridor(n, m, s.Land, inland, s.Ranges, ref corridors);
                 if (cor != null) s.Corridors.Add(cor);
                 for (int i = 0; i < c.LandmarksPerIsland; i++)
                 {
                     var l = RandomLandmark(n, m, s.Land, ref sites);
                     if (l != null) s.Landmarks.Add(l);
                 }
+            }
+            foreach (var m in s.Islets)
+            {
+                if (ranges.NextFloat() < c.IsletRidgeChance)
+                {
+                    var r = RandomRange(n, m, s.Land, ref ranges);
+                    if (r != null) s.Ranges.Add(r);
+                }
+                var l = RandomLandmark(n, m, s.Land, ref sites);
+                if (l != null) s.Landmarks.Add(l);
             }
             s.Build(c);
             return s;
@@ -210,6 +224,7 @@ namespace Stabby.World
         {
             m.Lobes.Add(new LobeSketch { X = m.X, Y = m.Y, Radius = m.Radius * 0.7f });
             RandomDirection(ref rng, out float ax, out float ay);
+            m.AxisX = ax; m.AxisY = ay;
             for (int k = 1; k < count; k++)
             {
                 RandomDirection(ref rng, out float dx, out float dy);
@@ -269,6 +284,52 @@ namespace Stabby.World
                 return new RangeSketch { X = xs, Y = ys, Strength = rng.Range(0.6f, 1f), Width = m.Radius * rng.Range(0.1f, 0.2f) };
             }
             return null;
+        }
+
+        // Two ridges either side of the island's long axis; the corridor runs down
+        // the valley between them and on to the nearer end's coast.
+        static CorridorSketch AddValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, ref Rng rng)
+        {
+            float ax = m.AxisX, ay = m.AxisY;
+            if (RunToSea(n, land, m.X, m.Y, -ax, -ay) < RunToSea(n, land, m.X, m.Y, ax, ay)) { ax = -ax; ay = -ay; }
+            float px = -ay, py = ax;
+            float half = m.Radius * rng.Range(0.3f, 0.38f);
+            float back = m.Radius * rng.Range(0.55f, 0.8f), front = m.Radius * rng.Range(0.45f, 0.7f);
+            const int Points = 5;
+            var mx = new float[Points]; var my = new float[Points];
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float dx = ax, dy = ay;
+                Turn(ref rng, 0.08f, ref dx, ref dy);
+                float ox = m.X + side * half * px, oy = m.Y + side * half * py;
+                var xs = new float[Points]; var ys = new float[Points];
+                for (int p = 0; p < Points; p++)
+                {
+                    float t = -back + (back + front) * p / (Points - 1), wobble = m.Radius * rng.Range(-0.04f, 0.04f);
+                    xs[p] = Math.Max(4, Math.Min(n - 5, ox + t * dx + wobble * px));
+                    ys[p] = Math.Max(4, Math.Min(n - 5, oy + t * dy + wobble * py));
+                    mx[p] += xs[p] * 0.5f; my[p] += ys[p] * 0.5f;
+                }
+                ranges.Add(new RangeSketch { X = xs, Y = ys, Strength = rng.Range(0.75f, 1f), Width = m.Radius * rng.Range(0.1f, 0.14f) });
+            }
+            var cx = new List<float>(mx); var cy = new List<float>(my);
+            float step = m.Radius * 0.15f, x = mx[Points - 1], y = my[Points - 1];
+            for (int k = 0; k < 30 && OnLand(n, land, x, y); k++)
+            {
+                x = Math.Max(1, Math.Min(n - 2, x + step * ax));
+                y = Math.Max(1, Math.Min(n - 2, y + step * ay));
+                cx.Add(x); cy.Add(y);
+            }
+            if (!OnLand(n, land, mx[0], my[0]) || OnLand(n, land, x, y)) return null;
+            var cor = new CorridorSketch { X = cx.ToArray(), Y = cy.ToArray(), Width = m.Radius * 0.08f };
+            return SkirtsCoast(n, cor, inland) ? null : cor;
+        }
+
+        static float RunToSea(int n, bool[] land, float x, float y, float dx, float dy)
+        {
+            int k = 0;
+            while (k < n && OnLand(n, land, x + k * dx, y + k * dy)) k++;
+            return k;
         }
 
         // Walks from the island's interior toward the sea and stops at the coast.
