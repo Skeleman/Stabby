@@ -14,6 +14,16 @@ Status words: done, now, next, later, idea.
 | ChunkZip round trip, malformed payloads, inflate size cap | done |
 | Viewer described as full-world async prep, not streaming | done |
 
+## Audit 2 (baseline ae55841)
+
+| Item | Status |
+|---|---|
+| Background tasks in ServerMapSystem, ClientMapSystem and TerrainViewSystem own their native blobs: cancelled on system destroy, and a task finishing after destroy disposes its own result without blocking the main thread | todo |
+| Terrain chunk render bounds from the blob's height range over the chunk (plus detail and feature edit boxes), not the first coarse mesh; a check that every LOD fits | todo |
+| WorldFile.Read validates size, biome count, string lengths and file length before allocating; bad headers throw FormatException so LoadOrGenerate regenerates | todo |
+| Wireframe overhang capture (`GameCapture` writes overhang-wire.png) for mesh review | done |
+| TerrainLodJob runs scheduled or less often once chunk counts grow | later |
+
 ## Now: ECS and unmanaged data
 
 Gameplay scales on Burst and worker threads, so runtime data is unmanaged.

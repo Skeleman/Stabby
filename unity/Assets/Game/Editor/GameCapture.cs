@@ -117,6 +117,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
                 Shot(cam, dir, name);
+                if (phase == 2) Wire(cam, dir, name + "-wire");
                 wait = 0;
                 phase++;
             }
@@ -219,6 +220,17 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static void Wire(Camera cam, string dir, string name)
+        {
+            System.Action<ScriptableRenderContext, Camera> on = (c, k) => GL.wireframe = true, off = (c, k) => GL.wireframe = false;
+            RenderPipelineManager.beginCameraRendering += on;
+            RenderPipelineManager.endCameraRendering += off;
+            Shot(cam, dir, name);
+            RenderPipelineManager.beginCameraRendering -= on;
+            RenderPipelineManager.endCameraRendering -= off;
+            GL.wireframe = false;
         }
 
         static void Shot(Camera cam, string dir, string name)
