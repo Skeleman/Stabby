@@ -126,6 +126,24 @@ namespace Stabby.World
                     if (island[(int)o.Y * n + (int)o.X] == a) e.Add($"landmasses {j} and {k} are joined");
                 }
             }
+            if (s.Landmasses.Count > 1)
+            {
+                int a = island[(int)s.Landmasses[0].Y * n + (int)s.Landmasses[0].X];
+                var notA = new bool[n * n];
+                for (int i = 0; i < n * n; i++) notA[i] = a < 0 || island[i] != a;
+                var dist = WorldSketch.CoastDistance(n, notA);
+                // Landmark pads may add land after the channel was cut.
+                float min = w.Config.ChannelFraction * n - WorldSketch.LandmarkPadCells - 1;
+                for (int k = 1; k < s.Landmasses.Count; k++)
+                {
+                    var m = s.Landmasses[k];
+                    int b = island[(int)m.Y * n + (int)m.X];
+                    if (b < 0 || b == a) continue;
+                    float gap = float.MaxValue;
+                    for (int i = 0; i < n * n; i++) if (island[i] == b) gap = Math.Min(gap, dist[i]);
+                    if (gap < min) e.Add($"channel between landmasses 0 and {k} is {gap:F0} cells");
+                }
+            }
 
             for (int k = 0; k < s.Corridors.Count; k++)
             {

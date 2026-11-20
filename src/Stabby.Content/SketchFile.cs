@@ -7,7 +7,7 @@ namespace Stabby.Content;
 // derived masks are rebuilt by WorldSketch.Build on load.
 public static class SketchFile
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     sealed class Dto
     {
@@ -16,13 +16,15 @@ public static class SketchFile
         public int Size { get; set; }
         public float CellMeters { get; set; }
         public List<LandmassDto> Landmasses { get; set; } = new();
+        public List<LandmassDto> Islets { get; set; } = new();
         public List<LineDto> Ranges { get; set; } = new();
         public List<LineDto> Corridors { get; set; } = new();
         public List<RegionDto> Regions { get; set; } = new();
         public List<LandmarkDto> Landmarks { get; set; } = new();
     }
 
-    sealed class LandmassDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
+    sealed class LandmassDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } public List<LobeDto>? Lobes { get; set; } }
+    sealed class LobeDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
     sealed class LineDto { public float[] X { get; set; } = []; public float[] Y { get; set; } = []; public float Width { get; set; } public float? Strength { get; set; } }
     sealed class RegionDto { public string Biome { get; set; } = ""; public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
     sealed class LandmarkDto { public string Kind { get; set; } = ""; public float X { get; set; } public float Y { get; set; } }
@@ -38,7 +40,8 @@ public static class SketchFile
     public static string Write(WorldSketch s, WorldConfig c) => JsonSerializer.Serialize(new Dto
     {
         SchemaVersion = SchemaVersion, Seed = c.Seed, Size = s.Size, CellMeters = c.CellMeters,
-        Landmasses = s.Landmasses.Select(m => new LandmassDto { X = m.X, Y = m.Y, Radius = m.Radius }).ToList(),
+        Landmasses = s.Landmasses.Select(ToDto).ToList(),
+        Islets = s.Islets.Select(ToDto).ToList(),
         Ranges = s.Ranges.Select(r => new LineDto { X = r.X, Y = r.Y, Width = r.Width, Strength = r.Strength }).ToList(),
         Corridors = s.Corridors.Select(r => new LineDto { X = r.X, Y = r.Y, Width = r.Width }).ToList(),
         Regions = s.Regions.Select(r => new RegionDto { Biome = r.Biome, X = r.X, Y = r.Y, Radius = r.Radius }).ToList(),
@@ -62,7 +65,8 @@ public static class SketchFile
         c.Seed = d.Seed; c.Size = d.Size; c.CellMeters = d.CellMeters;
         var s = new WorldSketch
         {
-            Landmasses = d.Landmasses.Select(m => new LandmassSketch { X = m.X, Y = m.Y, Radius = m.Radius }).ToList(),
+            Landmasses = d.Landmasses.Select(FromDto).ToList(),
+            Islets = d.Islets.Select(FromDto).ToList(),
             Ranges = d.Ranges.Select(r => new RangeSketch { X = r.X, Y = r.Y, Width = r.Width, Strength = r.Strength!.Value }).ToList(),
             Corridors = d.Corridors.Select(r => new CorridorSketch { X = r.X, Y = r.Y, Width = r.Width }).ToList(),
             Regions = d.Regions.Select(r => new RegionSketch { Biome = r.Biome, X = r.X, Y = r.Y, Radius = r.Radius }).ToList(),
@@ -71,4 +75,16 @@ public static class SketchFile
         s.Build(c);
         return s;
     }
+
+    static LandmassDto ToDto(LandmassSketch m) => new()
+    {
+        X = m.X, Y = m.Y, Radius = m.Radius,
+        Lobes = m.Lobes.Count == 0 ? null : m.Lobes.Select(l => new LobeDto { X = l.X, Y = l.Y, Radius = l.Radius }).ToList(),
+    };
+
+    static LandmassSketch FromDto(LandmassDto d) => new()
+    {
+        X = d.X, Y = d.Y, Radius = d.Radius,
+        Lobes = (d.Lobes ?? new()).Select(l => new LobeSketch { X = l.X, Y = l.Y, Radius = l.Radius }).ToList(),
+    };
 }
