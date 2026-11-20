@@ -59,7 +59,8 @@ namespace Stabby.Game.Editor
 
         public static void Run()
         {
-            BuildScene();
+            if (File.Exists(ScenePath)) EditorSceneManager.OpenScene(ScenePath);
+            else BuildScene();
             SessionState.SetFloat(StartKey, (float)EditorApplication.timeSinceStartup);
             SessionState.SetBool(Key, true);
             EditorApplication.update += Poll;
@@ -75,6 +76,7 @@ namespace Stabby.Game.Editor
                 return;
             }
             if (!EditorApplication.isPlaying) return;
+            SpikeProbe.Tick();
             if (GameStatus.Failure != null)
             {
                 Debug.LogError("GameCapture: " + GameStatus.Failure + "\n" + Status());
@@ -94,6 +96,7 @@ namespace Stabby.Game.Editor
             cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
             Shot(cam, dir, "overhead");
             GameStatus.Lines["~prediction"] = Prediction();
+            GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
             Debug.Log("GameCapture:\n" + Status());
             Finish(0);
@@ -134,6 +137,7 @@ namespace Stabby.Game.Editor
         static void Finish(int code)
         {
             EditorApplication.update -= Poll;
+            SpikeProbe.Stop();
             SessionState.EraseBool(Key);
             EditorApplication.Exit(code);
         }

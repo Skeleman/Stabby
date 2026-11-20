@@ -88,9 +88,15 @@ namespace Stabby.Viewer.Editor
             EditorApplication.Exit(code);
         }
 
+        static WorldView OpenScene()
+        {
+            EditorSceneManager.OpenScene(ScenePath);
+            return UnityEngine.Object.FindFirstObjectByType<WorldView>();
+        }
+
         static void CaptureShots()
         {
-            var view = BuildScene();
+            var view = File.Exists(ScenePath) ? OpenScene() : BuildScene();
             var args = Environment.GetCommandLineArgs();
             int at = Array.IndexOf(args, "-stabbySeed");
             if (at >= 0 && at + 1 < args.Length) view.Seed = int.Parse(args[at + 1]);
