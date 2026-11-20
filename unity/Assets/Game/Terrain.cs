@@ -122,7 +122,7 @@ namespace Stabby.Game
             for (int f = 0; f < g.Edits.Length; f++)
             {
                 var e = g.Edits[f];
-                if (e.R >= 0.75f * s && e.MaxX > cx0 && e.MinX < cx1 && e.MaxZ > cz0 && e.MinZ < cz1) edits.Items.Add(e);
+                if (e.MeshedIn(s, cx0, cz0, cx1, cz1)) edits.Items.Add(e);
             }
             if (edits.Count > 0) SurfaceNets.Edited(columns, edits, chunk, ref sink);
             else SurfaceNets.Heightfield(columns, chunk, ref sink);
@@ -241,6 +241,7 @@ namespace Stabby.Game
         {
             public BlobBuilder Look;
             public List<int2> Cells;
+            public List<AABB> Boxes;
             public List<MeshParts> Lakes, Rivers;
             public MeshParts Sea;
             public StrataLook Strata;
@@ -300,22 +301,30 @@ namespace Stabby.Game
             var world = map.Map;
             var defs = map.Defs;
             string materials = MaterialFile.DefaultPath;
+            ref var src = ref ground.Blob.Value.Edits;
+            var edits = new FeatureEdit[src.Length];
+            for (int f = 0; f < edits.Length; f++) edits[f] = src[f];
             since.Restart();
-            preparing = Task.Run(() => Prepare(world, defs, materials));
+            preparing = Task.Run(() => Prepare(world, defs, materials, edits));
         }
 
-        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, string materials)
+        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits)
         {
             int n = world.Config.Size, cells = TerrainLods.Cells;
-            var p = new Prepared { Cells = new List<int2>(), Lakes = new List<MeshParts>() };
+            float cm = world.Config.CellMeters, coarse = TerrainLods.Step(TerrainLods.Coarse), skirt = coarse * cm * 0.5f + 20f, w = cells * cm;
+            var detail = new TerrainDetail(world);
+            var all = new EditArray { Items = edits };
+            var p = new Prepared { Cells = new List<int2>(), Boxes = new List<AABB>(), Lakes = new List<MeshParts>() };
             for (int cy = 0; cy < n; cy += cells)
                 for (int cx = 0; cx < n; cx += cells)
                     if (HasLand(world, cx, cy))
                     {
                         p.Cells.Add(new int2(cx, cy));
+                        detail.ChunkRange(all, cm, cx, cy, cells, coarse, out float lo, out float hi);
+                        p.Boxes.Add(new MinMaxAABB { Min = new float3(cx * cm, lo - skirt, cy * cm), Max = new float3(cx * cm + w, hi, cy * cm + w) });
                         p.Lakes.Add(WaterGeometry.Lakes(world, cx, cy, cells));
                     }
-            p.Rivers = WaterGeometry.Rivers(world, new TerrainDetail(world));
+            p.Rivers = WaterGeometry.Rivers(world, detail);
             p.Sea = WaterGeometry.Sea(n, world.Config.CellMeters);
             var colors = TerrainLook.BaseColors(world, defs);
             p.Look = new BlobBuilder(Allocator.Persistent);
@@ -360,7 +369,7 @@ namespace Stabby.Game
             for (int c = 0; c < count; c++)
             {
                 var cell = prepared.Cells[c];
-                chunks[c] = new TerrainChunk { Cell = cell, Want = -1, Shown = -1, Finest = Featured(cell) ? 0 : 1, Entity = Entity.Null };
+                chunks[c] = new TerrainChunk { Cell = cell, Box = prepared.Boxes[c], Want = -1, Shown = -1, Finest = Featured(cell) ? 0 : 1, Entity = Entity.Null };
             }
         }
 
@@ -435,11 +444,10 @@ namespace Stabby.Game
             built++;
             ch.Pending &= ~(1 << p.Lod);
             ch.Built |= 1 << p.Lod;
+            MinMaxAABB box = ch.Box;
+            if (math.any(lo < box.Min - 0.01f) || math.any(hi > box.Max + 0.01f)) UnityEngine.Debug.LogWarning($"terrain chunk {ch.Cell} lod {p.Lod} mesh {lo}..{hi} outside bounds {box.Min}..{box.Max}");
             if (ch.Entity == Entity.Null)
             {
-                float w = TerrainLods.Cells * ground.Blob.Value.CellMeters;
-                var min = new float3(ch.Cell.x * ground.Blob.Value.CellMeters, lo.y - 40f, ch.Cell.y * ground.Blob.Value.CellMeters);
-                ch.Box = new MinMaxAABB { Min = min, Max = new float3(min.x + w, hi.y + 40f, min.z + w) };
                 ch.Entity = Spawn(meshIds[slot], ch.Box);
                 ch.Shown = p.Lod;
                 coarseApplied++;

@@ -45,6 +45,20 @@ namespace Stabby.World
 
         public float HeightAt(float gx, float gy) => DetailSampler.HeightAt(new ArrayCells(h, amp), n, seed, gx, gy);
 
+        public void ChunkRange<TEdits>(TEdits edits, float cm, int x0, int z0, int size, float padCells, out float lo, out float hi) where TEdits : struct, IEditList
+        {
+            int p = (int)Math.Ceiling(padCells) + 1;
+            DetailSampler.Range(new ArrayCells(h, amp), n, x0 - p, z0 - p, x0 + size + p, z0 + size + p, out lo, out hi);
+            float pad = padCells * cm, ax = x0 * cm, az = z0 * cm, bx = (x0 + size) * cm, bz = (z0 + size) * cm;
+            for (int q = 0, count = edits.Count; q < count; q++)
+            {
+                var e = edits.At(q);
+                if (e.MaxX < ax || e.MinX > bx || e.MaxZ < az || e.MinZ > bz) continue;
+                lo = Math.Min(lo, e.MinY); hi = Math.Max(hi, e.MaxY);
+            }
+            lo -= pad; hi += pad;
+        }
+
         int Clamp(int v) => v < 0 ? 0 : v >= n ? n - 1 : v;
 
         readonly struct ArrayCells : IDetailCells
@@ -111,6 +125,20 @@ namespace Stabby.World
             if (a <= 0) return b;
             float f = Noise.Fbm(seed, gx / TerrainDetail.NoiseWavelengthCells, gy / TerrainDetail.NoiseWavelengthCells, TerrainDetail.Octaves);
             return b + a * Math.Max(-1f, Math.Min(1f, f));
+        }
+
+        public static void Range<T>(T c, int n, int x0, int y0, int x1, int y1, out float lo, out float hi) where T : struct, IDetailCells
+        {
+            lo = float.MaxValue; hi = float.MinValue;
+            float amp = 0;
+            for (int y = Clamp(y0, n), ye = Clamp(y1, n); y <= ye; y++)
+                for (int x = Clamp(x0, n), xe = Clamp(x1, n); x <= xe; x++)
+                {
+                    int i = y * n + x;
+                    float h = c.Height(i);
+                    lo = Math.Min(lo, h); hi = Math.Max(hi, h); amp = Math.Max(amp, c.Amp(i));
+                }
+            lo -= amp; hi += amp;
         }
 
         static float Row<T>(T c, int n, int y, int x0, float t) where T : struct, IDetailCells

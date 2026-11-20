@@ -142,10 +142,51 @@ namespace Stabby.World
             if (!f.SameAs(g)) e.Add($"heightfield mesher differs from the general mesher near cell {top}");
         }
 
+        public const int ChunkCells = 32;
+        public static readonly float[] ChunkSteps = { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f, 8f };
+
+        static void CheckChunkBounds(GeneratedWorld w, FeatureEdit[] placed, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, coarse = ChunkSteps[ChunkSteps.Length - 1];
+            var detail = new TerrainDetail(w);
+            var all = new EditArray { Items = placed };
+            var origins = new List<(int, int)>();
+            int top = 0;
+            for (int i = 1; i < w.Height.Length; i++) if (w.Height[i] > w.Height[top]) top = i;
+            origins.Add((top % n / ChunkCells * ChunkCells, top / n / ChunkCells * ChunkCells));
+            if (placed.Length > 0) origins.Add(((int)(placed[0].Ax / cm) / ChunkCells * ChunkCells, (int)(placed[0].Az / cm) / ChunkCells * ChunkCells));
+            for (int o = 0; o < origins.Count; o++)
+            {
+                var (cx, cz) = origins[o];
+                detail.ChunkRange(all, cm, cx, cz, ChunkCells, coarse, out float lo, out float hi);
+                foreach (float step in ChunkSteps)
+                {
+                    if (step < 0.5f && o == 0) continue;
+                    int m = (int)(ChunkCells / step);
+                    var cols = new DetailColumns { Detail = detail, StepCells = step };
+                    var c = new NetsChunk { X0 = (int)(cx / step), Z0 = (int)(cz / step), Cells = m, StepM = step * cm };
+                    float sm = step * cm, x0 = cx * cm, z0 = cz * cm, x1 = x0 + ChunkCells * cm, z1 = z0 + ChunkCells * cm;
+                    var meshed = new List<FeatureEdit>();
+                    foreach (var x in placed) if (x.MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(x);
+                    var f = new NetsBuffers();
+                    if (meshed.Count > 0) SurfaceNets.Edited(cols, new EditArray { Items = meshed.ToArray() }, c, ref f);
+                    else SurfaceNets.Heightfield(cols, c, ref f);
+                    foreach (int t in f.Tris)
+                    {
+                        int v = t * 6 + 1;
+                        if (f.Verts[v] < lo || f.Verts[v] > hi)
+                        { e.Add($"bounds {lo:F0}..{hi:F0} miss vertex {f.Verts[v - 1]:F0},{f.Verts[v]:F0},{f.Verts[v + 1]:F0} of chunk {cx},{cz} at step {step}"); return; }
+                    }
+                }
+            }
+        }
+
         static void CheckFeatures(GeneratedWorld w, List<string> e)
         {
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail);
+            CheckChunkBounds(w, edits, e);
             float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
             foreach (var x in edits)
                 if (!Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
