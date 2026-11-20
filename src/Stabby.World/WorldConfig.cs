@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 5;
+        public const int GeneratorVersion = 6;
 
         public ulong Seed = 1;
         public int Size = 512;
@@ -26,6 +26,8 @@ namespace Stabby.World
         // The main island always gets a two-ridge valley; these count the second's ranges.
         public int RangesMin = 1, RangesMax = 2;
         public int LandmarksPerIsland = 2;
+        // The main valley's lake radius, in main-island radii.
+        public float MainLakeRadius = 0.15f;
 
         public float LatitudeSouth = 25f, LatitudeNorth = 55f;
         public Wind PrevailingWind = Wind.FromWest;

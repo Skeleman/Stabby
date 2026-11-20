@@ -81,6 +81,8 @@ namespace Stabby.World
         public List<CorridorSketch> Corridors = new List<CorridorSketch>();
         public List<RegionSketch> Regions = new List<RegionSketch>();
         public List<LandmarkSketch> Landmarks = new List<LandmarkSketch>();
+        // Basins that must hold a lake, shaped like islands by their lobes.
+        public List<LandmassSketch> Lakes = new List<LandmassSketch>();
 
         public bool[] Land;
         public float[] Uplift;
@@ -90,7 +92,9 @@ namespace Stabby.World
         public float[] ValleyRun;
 
         public const int LandmarkPadCells = 2;
-        public const float CorridorDepth = 0.9f;
+        public const float CorridorDepth = 0.9f, LakeDepth = 0.95f;
+        // Towns keep this many lake radii from a lake's centre lobe edge, so a pad never dams it dry.
+        const float LakeTownClear = 0.4f, LakeTownCells = 6f, LakeCoastCells = 4f;
         // Coast noise can push land this many radii past a lobe; warp adds up to WarpReach of the map.
         const float CoastReach = 1.45f, WarpReach = 0.045f, Warp = 0.06f;
 
@@ -130,7 +134,12 @@ namespace Stabby.World
             {
                 var m = s.Landmasses[k];
                 CorridorSketch cor = null;
-                if (k == 0) cor = AddValley(n, m, s.Land, inland, s.Ranges, ref ranges);
+                if (k == 0)
+                {
+                    cor = AddValley(n, m, s.Land, inland, s.Ranges, ref ranges);
+                    var lakes = Rng.Stream(c.Seed, "lakes");
+                    if (cor != null) s.Lakes.Add(ValleyLake(n, m, cor, inland, c.MainLakeRadius, ref lakes));
+                }
                 else
                     for (int i = ranges.Range(c.RangesMin, c.RangesMax + 1); i > 0; i--)
                     {
@@ -141,7 +150,7 @@ namespace Stabby.World
                 if (cor != null) s.Corridors.Add(cor);
                 for (int i = 0; i < c.LandmarksPerIsland; i++)
                 {
-                    var l = RandomLandmark(n, m, s.Land, ref sites);
+                    var l = RandomLandmark(n, m, s.Land, s.Lakes, ref sites);
                     if (l != null) s.Landmarks.Add(l);
                 }
             }
@@ -152,7 +161,7 @@ namespace Stabby.World
                     var r = RandomRange(n, m, s.Land, ref ranges);
                     if (r != null) s.Ranges.Add(r);
                 }
-                var l = RandomLandmark(n, m, s.Land, ref sites);
+                var l = RandomLandmark(n, m, s.Land, s.Lakes, ref sites);
                 if (l != null) s.Landmarks.Add(l);
             }
             s.Build(c);
@@ -286,33 +295,52 @@ namespace Stabby.World
             return null;
         }
 
-        // Two ridges either side of the island's long axis; the corridor runs down
-        // the valley between them and on to the nearer end's coast.
+        // Two ridges either side of the island's long axis, loosely parallel or forking
+        // from one apex; the corridor runs down the valley between them and on to the
+        // nearer end's coast.
         static CorridorSketch AddValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, ref Rng rng)
         {
+            // Lobed coasts defeat many draws; the far end is tried as well before giving up.
+            for (int attempt = 0; attempt < 16; attempt++)
+            {
+                int before = ranges.Count;
+                var cor = TryValley(n, m, land, inland, ranges, attempt % 2 == 1, ref rng);
+                if (cor != null) return cor;
+                ranges.RemoveRange(before, ranges.Count - before);
+            }
+            return null;
+        }
+
+        static CorridorSketch TryValley(int n, LandmassSketch m, bool[] land, float[] inland, List<RangeSketch> ranges, bool far, ref Rng rng)
+        {
             float ax = m.AxisX, ay = m.AxisY;
-            if (RunToSea(n, land, m.X, m.Y, -ax, -ay) < RunToSea(n, land, m.X, m.Y, ax, ay)) { ax = -ax; ay = -ay; }
+            if ((RunToSea(n, land, m.X, m.Y, -ax, -ay) < RunToSea(n, land, m.X, m.Y, ax, ay)) != far) { ax = -ax; ay = -ay; }
             float px = -ay, py = ax;
             float half = m.Radius * rng.Range(0.3f, 0.38f);
             float back = m.Radius * rng.Range(0.55f, 0.8f), front = m.Radius * rng.Range(0.45f, 0.7f);
+            bool fork = rng.NextFloat() < 0.5f;
             const int Points = 5;
             var mx = new float[Points]; var my = new float[Points];
             for (int side = -1; side <= 1; side += 2)
             {
                 float dx = ax, dy = ay;
-                Turn(ref rng, 0.08f, ref dx, ref dy);
-                float ox = m.X + side * half * px, oy = m.Y + side * half * py;
+                Turn(ref rng, fork ? 0.06f : 0.15f, ref dx, ref dy);
+                // A fork measures from the shared apex, so both ridges meet there exactly.
+                float ox = fork ? m.X - back * ax : m.X, oy = fork ? m.Y - back * ay : m.Y, t0 = fork ? 0 : -back;
                 var xs = new float[Points]; var ys = new float[Points];
                 for (int p = 0; p < Points; p++)
                 {
-                    float t = -back + (back + front) * p / (Points - 1), wobble = m.Radius * rng.Range(-0.04f, 0.04f);
-                    xs[p] = Math.Max(4, Math.Min(n - 5, ox + t * dx + wobble * px));
-                    ys[p] = Math.Max(4, Math.Min(n - 5, oy + t * dy + wobble * py));
+                    float f = (float)p / (Points - 1), t = t0 + (back + front) * f;
+                    float off = side * half * (fork ? 1.5f * f : 1f) + (fork && p == 0 ? 0 : m.Radius * rng.Range(-0.07f, 0.07f));
+                    xs[p] = Math.Max(4, Math.Min(n - 5, ox + t * dx + off * px));
+                    ys[p] = Math.Max(4, Math.Min(n - 5, oy + t * dy + off * py));
                     mx[p] += xs[p] * 0.5f; my[p] += ys[p] * 0.5f;
                 }
                 ranges.Add(new RangeSketch { X = xs, Y = ys, Strength = rng.Range(0.75f, 1f), Width = m.Radius * rng.Range(0.1f, 0.14f) });
             }
-            var cx = new List<float>(mx); var cy = new List<float>(my);
+            // A forked valley's head would sit under both ridges at the apex.
+            int head = fork ? 1 : 0;
+            var cx = new List<float>(mx).GetRange(head, Points - head); var cy = new List<float>(my).GetRange(head, Points - head);
             float step = m.Radius * 0.15f, x = mx[Points - 1], y = my[Points - 1];
             for (int k = 0; k < 30 && OnLand(n, land, x, y); k++)
             {
@@ -320,9 +348,46 @@ namespace Stabby.World
                 y = Math.Max(1, Math.Min(n - 2, y + step * ay));
                 cx.Add(x); cy.Add(y);
             }
-            if (!OnLand(n, land, mx[0], my[0]) || OnLand(n, land, x, y)) return null;
-            var cor = new CorridorSketch { X = cx.ToArray(), Y = cy.ToArray(), Width = m.Radius * 0.08f };
-            return SkirtsCoast(n, cor, inland) ? null : cor;
+            if (!OnLand(n, land, mx[head], my[head]) || OnLand(n, land, x, y)) return null;
+            // The ridges wall the valley in; only the run past them can slip out sideways.
+            int open = Points - 1 - head;
+            var tail = new CorridorSketch { X = cx.GetRange(open, cx.Count - open).ToArray(), Y = cy.GetRange(open, cy.Count - open).ToArray() };
+            return SkirtsCoast(n, tail, inland) ? null : new CorridorSketch { X = cx.ToArray(), Y = cy.ToArray(), Width = m.Radius * 0.08f };
+        }
+
+        // A lake strung along the upper valley, lobes tapering towards both ends.
+        static LandmassSketch ValleyLake(int n, LandmassSketch m, CorridorSketch cor, float[] inland, float size, ref Rng rng)
+        {
+            int a = Math.Min(1, cor.X.Length - 2);
+            float t = rng.Range(0.2f, 0.8f);
+            float x = cor.X[a] + (cor.X[a + 1] - cor.X[a]) * t, y = cor.Y[a] + (cor.Y[a + 1] - cor.Y[a]) * t;
+            float dx = cor.X[a + 1] - cor.X[a], dy = cor.Y[a + 1] - cor.Y[a], len = (float)Math.Sqrt(dx * dx + dy * dy);
+            dx /= len; dy /= len;
+            float r = Math.Max(2f, Math.Min(m.Radius * size * rng.Range(0.8f, 1.1f), Room(n, inland, x, y)));
+            var lake = new LandmassSketch { X = x, Y = y, Radius = r, AxisX = dx, AxisY = dy };
+            lake.Lobes.Add(new LobeSketch { X = x, Y = y, Radius = r });
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float along = 0, lr = r;
+                for (int k = rng.Range(1, 3); k > 0; k--)
+                {
+                    float next = lr * rng.Range(0.6f, 0.85f);
+                    along += (lr + next) * rng.Range(0.55f, 0.75f);
+                    lr = next;
+                    float across = r * rng.Range(-0.35f, 0.35f);
+                    float lx = x + side * along * dx - across * dy, ly = y + side * along * dy + across * dx;
+                    if (lr > Room(n, inland, lx, ly)) break;
+                    lake.Lobes.Add(new LobeSketch { X = lx, Y = ly, Radius = lr });
+                }
+            }
+            return lake;
+        }
+
+        // A lobe this close to the coast would be carved through to the sea.
+        static float Room(int n, float[] inland, float x, float y)
+        {
+            int ix = (int)x, iy = (int)y;
+            return ix < 0 || iy < 0 || ix >= n || iy >= n ? 0 : inland[iy * n + ix] - LakeCoastCells;
         }
 
         static float RunToSea(int n, bool[] land, float x, float y, float dx, float dy)
@@ -388,12 +453,14 @@ namespace Stabby.World
             return false;
         }
 
-        static LandmarkSketch RandomLandmark(int n, LandmassSketch m, bool[] land, ref Rng rng)
+        static LandmarkSketch RandomLandmark(int n, LandmassSketch m, bool[] land, List<LandmassSketch> lakes, ref Rng rng)
         {
             for (int attempt = 0; attempt < 50; attempt++)
             {
                 float x = m.X + m.Radius * rng.Range(-0.7f, 0.7f), y = m.Y + m.Radius * rng.Range(-0.7f, 0.7f);
-                if (OnLand(n, land, x, y)) return new LandmarkSketch { Kind = "town", X = (int)x, Y = (int)y };
+                bool wet = false;
+                foreach (var lk in lakes) wet |= lk.Core(x, y) > -LakeTownClear || lk.Gap(x, y, 1) < LakeTownCells;
+                if (!wet && OnLand(n, land, x, y)) return new LandmarkSketch { Kind = "town", X = (int)x, Y = (int)y };
             }
             return null;
         }
@@ -446,6 +513,7 @@ namespace Stabby.World
                         u *= 1 - CorridorDepth * v;
                         if (v > Valley[i]) { Valley[i] = v; ValleyRun[i] = RemainingAlong(cor.X, cor.Y, x, y); }
                     }
+                    foreach (var lk in Lakes) u *= 1 - LakeDepth * Grid.Smoothstep(-0.8f, 0.2f, lk.Core(x, y));
                     Uplift[i] = Math.Max(0, u) * Grid.Smoothstep(0, 6, coast[i]);
                 }
         }

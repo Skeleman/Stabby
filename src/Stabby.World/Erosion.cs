@@ -69,6 +69,45 @@ namespace Stabby.World
             }
         }
 
+        const float ShoreCells = 2f, LakeBasinDepth = 25f, FlatGrade = 0.05f;
+
+        // Erosion drains any basin given time, so each sketched lake is cut below its
+        // lowest shore after the run; the band is two cells wide so diagonal flow cannot
+        // slip through. Beds may sink below sea level: raising a low shore instead
+        // leaves flats the outflow would have to climb.
+        public static void CarveLakes(WorldConfig c, WorldSketch s, float[] h)
+        {
+            int n = c.Size;
+            foreach (var lake in s.Lakes)
+            {
+                int x0 = Math.Max(1, (int)(lake.X - 3 * lake.Radius)), x1 = Math.Min(n - 2, (int)(lake.X + 3 * lake.Radius));
+                int y0 = Math.Max(1, (int)(lake.Y - 3 * lake.Radius)), y1 = Math.Min(n - 2, (int)(lake.Y + 3 * lake.Radius));
+                float level = float.MaxValue;
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        float g = lake.Gap(x, y, 1);
+                        if (g >= 0 && g < ShoreCells && s.Land[y * n + x]) level = Math.Min(level, h[y * n + x]);
+                    }
+                if (level == float.MaxValue) continue;
+                for (int y = y0; y <= y1; y++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        float g = lake.Gap(x, y, 1);
+                        int i = y * n + x;
+                        if (g >= 0 || !s.Land[i]) continue;
+                        h[i] = Math.Min(h[i], level - 1f - LakeBasinDepth * Math.Min(1f, -3f * g / lake.Radius));
+                    }
+            }
+            if (s.Lakes.Count == 0) return;
+            // Erosion leaves near-flats that the lake's outflow can cross; graded to the
+            // drainage fill, the outflow never rises above the lake's level.
+            var sea = SeaOf(s.Land);
+            var graded = Drainage.Fill(h, sea, n, 1e-3f);
+            for (int i = 0; i < n * n; i++)
+                if (!sea[i] && graded[i] > h[i] && graded[i] - h[i] < FlatGrade) h[i] = graded[i];
+        }
+
         static void Diffuse(WorldConfig c, float[] h, bool[] sea)
         {
             int n = c.Size;

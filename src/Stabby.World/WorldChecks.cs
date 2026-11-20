@@ -76,6 +76,7 @@ namespace Stabby.World
                     if (w.Height[i] > lake.Level + SurfaceTolerance) e.Add($"lake {lake.Id} cell {i} above its surface");
                 }
                 if (outlets != 1) e.Add($"lake {lake.Id} has {outlets} outlets");
+                if (lake.Level < Erosion.MinLandHeight) e.Add($"lake {lake.Id} lies at sea level");
                 int below = hy.Receiver[lake.Outlet];
                 if (!w.Sea[below] && hy.WaterSurface[below] > lake.Level + SurfaceTolerance)
                     e.Add($"lake {lake.Id} spills uphill");
@@ -187,6 +188,9 @@ namespace Stabby.World
                         }
                     if (bad > 0) e.Add($"region {r.Biome}: {bad} of {total} core cells have another biome");
                 }
+
+            for (int k = 0; k < s.Lakes.Count; k++)
+                if (hy.LakeId[(int)s.Lakes[k].Y * n + (int)s.Lakes[k].X] < 0) e.Add($"sketched lake {k} is dry");
 
             for (int k = 0; k < s.Landmarks.Count; k++)
             {

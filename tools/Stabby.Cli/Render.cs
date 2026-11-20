@@ -36,6 +36,8 @@ static class Render
             if (m.Lobes.Count == 0) Ring(img, n, scale, m.X + 0.5f, m.Y + 0.5f, m.Radius, px * 0.6f, 0xF0F0F0);
             foreach (var l in m.Lobes) Ring(img, n, scale, l.X + 0.5f, l.Y + 0.5f, l.Radius, px * 0.6f, 0xF0F0F0);
         }
+        foreach (var m in s.Lakes)
+            foreach (var l in m.Lobes) Ring(img, n, scale, l.X + 0.5f, l.Y + 0.5f, l.Radius, px, LakeColor);
         foreach (var r in s.Ranges) Polyline(img, n, scale, r.X, r.Y, px * 1.6f, 0xC0392B);
         foreach (var r in s.Corridors) Polyline(img, n, scale, r.X, r.Y, Math.Max(px * 1.6f, r.Width * 2 * scale), RiverColor);
         foreach (var l in s.Landmarks) Line(img, n, scale, l.X + 0.5f, l.Y + 0.5f, l.X + 0.5f, l.Y + 0.5f, px * 4, 0x111111);

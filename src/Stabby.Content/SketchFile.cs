@@ -7,7 +7,7 @@ namespace Stabby.Content;
 // derived masks are rebuilt by WorldSketch.Build on load.
 public static class SketchFile
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     sealed class Dto
     {
@@ -21,6 +21,7 @@ public static class SketchFile
         public List<LineDto> Corridors { get; set; } = new();
         public List<RegionDto> Regions { get; set; } = new();
         public List<LandmarkDto> Landmarks { get; set; } = new();
+        public List<LandmassDto> Lakes { get; set; } = new();
     }
 
     sealed class LandmassDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } public List<LobeDto>? Lobes { get; set; } }
@@ -46,6 +47,7 @@ public static class SketchFile
         Corridors = s.Corridors.Select(r => new LineDto { X = r.X, Y = r.Y, Width = r.Width }).ToList(),
         Regions = s.Regions.Select(r => new RegionDto { Biome = r.Biome, X = r.X, Y = r.Y, Radius = r.Radius }).ToList(),
         Landmarks = s.Landmarks.Select(l => new LandmarkDto { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
+        Lakes = s.Lakes.Select(ToDto).ToList(),
     }, Options);
 
     // The file's seed, size and cell size win over the caller's, so an edited sketch
@@ -71,6 +73,7 @@ public static class SketchFile
             Corridors = d.Corridors.Select(r => new CorridorSketch { X = r.X, Y = r.Y, Width = r.Width }).ToList(),
             Regions = d.Regions.Select(r => new RegionSketch { Biome = r.Biome, X = r.X, Y = r.Y, Radius = r.Radius }).ToList(),
             Landmarks = d.Landmarks.Select(l => new LandmarkSketch { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
+            Lakes = d.Lakes.Select(FromDto).ToList(),
         };
         s.Build(c);
         return s;
