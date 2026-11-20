@@ -17,13 +17,17 @@ namespace Stabby.Game
             var e = EntityManager.CreateEntity();
             EntityManager.AddComponentData(e, LocalTransform.Identity);
             EntityManager.AddComponentData(e, new GhostOwner());
+            EntityManager.AddComponentData(e, default(GhostOwnerIsLocal));
+            EntityManager.AddComponentData(e, new AutoCommandTarget { Enabled = true });
             EntityManager.AddComponentData(e, new Player());
+            EntityManager.AddComponentData(e, new PlayerInput());
+            EntityManager.AddBuffer<InputBufferData<PlayerInput>>(e);
             GhostPrefabCreation.ConvertToGhostPrefab(EntityManager, e, new GhostPrefabCreation.Config
             {
                 Name = "Player",
                 Importance = 1,
                 SupportedGhostModes = GhostModeMask.All,
-                DefaultGhostMode = GhostMode.Interpolated,
+                DefaultGhostMode = GhostMode.OwnerPredicted,
                 OptimizationMode = GhostOptimizationMode.Dynamic,
             });
             EntityManager.CreateSingleton(new PlayerPrefab { Value = e });
@@ -49,8 +53,7 @@ namespace Stabby.Game
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     public partial class ServerPlayerSystem : SystemBase
     {
-        readonly Dictionary<int, Entity> players = new Dictionary<int, Entity>();
-        readonly Dictionary<int, float2> dirs = new Dictionary<int, float2>();
+        readonly HashSet<int> spawned = new HashSet<int>();
 
         protected override void OnUpdate()
         {
@@ -60,58 +63,54 @@ namespace Stabby.Game
                 ecb.AddComponent<NetworkStreamInGame>(rx.ValueRO.SourceConnection);
                 ecb.DestroyEntity(e);
             }
-            foreach (var (move, rx, e) in SystemAPI.Query<RefRO<MoveRpc>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
-            {
-                if (SystemAPI.HasComponent<NetworkId>(rx.ValueRO.SourceConnection))
-                    dirs[SystemAPI.GetComponent<NetworkId>(rx.ValueRO.SourceConnection).Value] = move.ValueRO.Dir;
-                ecb.DestroyEntity(e);
-            }
 
             var maps = World.GetExistingSystemManaged<ServerMapSystem>();
-            if (maps.Map != null && maps.MoundCell >= 0 && SystemAPI.TryGetSingleton<PlayerPrefab>(out var prefab))
+            if (maps.Map != null && maps.MoundCell >= 0 && SystemAPI.TryGetSingleton<PlayerPrefab>(out var prefab) && SystemAPI.ManagedAPI.TryGetSingleton<Ground>(out var ground))
             {
                 int n = maps.Map.Config.Size;
-                float cm = maps.Map.Config.CellMeters;
-                foreach (var id in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>())
+                foreach (var (id, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>().WithEntityAccess())
                 {
                     int nid = id.ValueRO.Value;
-                    if (players.ContainsKey(nid)) continue;
+                    if (!spawned.Add(nid)) continue;
                     var p = ecb.Instantiate(prefab.Value);
-                    float x = (maps.MoundCell % n) * cm + nid * 8f, z = (maps.MoundCell / n) * cm;
-                    ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, Ground(maps, x, z), z)));
+                    float x = (maps.MoundCell % n) * ground.CellMeters + nid * 8f, z = (maps.MoundCell / n) * ground.CellMeters;
+                    ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, ground.HeightAt(x, z), z)));
                     ecb.SetComponent(p, new GhostOwner { NetworkId = nid });
-                    players[nid] = Entity.Null;
+                    ecb.AppendToBuffer(conn, new LinkedEntityGroup { Value = p });
                 }
             }
             ecb.Playback(EntityManager);
+        }
+    }
 
-            if (maps.Map == null) return;
-            float dt = SystemAPI.Time.DeltaTime, top = (maps.Map.Config.Size - 1) * maps.Map.Config.CellMeters;
-            foreach (var (t, owner) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
+    // Runs on the server and, for the owner's own ghost, on its client; misses roll back to the server state.
+    [UpdateInGroup(typeof(PredictedSimulationSystemGroup))]
+    public partial class PlayerMoveSystem : SystemBase
+    {
+        protected override void OnCreate() => RequireForUpdate<Ground>();
+
+        protected override void OnUpdate()
+        {
+            var ground = SystemAPI.ManagedAPI.GetSingleton<Ground>();
+            float dt = SystemAPI.Time.DeltaTime;
+            foreach (var (t, input) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<PlayerInput>>().WithAll<Player, Simulate>())
             {
-                if (!dirs.TryGetValue(owner.ValueRO.NetworkId, out var d) || math.lengthsq(d) < 1e-4f) continue;
+                var d = input.ValueRO.Dir;
+                if (math.lengthsq(d) < 1e-4f) continue;
                 d = math.normalizesafe(d);
                 var pos = t.ValueRO.Position;
-                pos.x = math.clamp(pos.x + d.x * GameSettings.WalkSpeed * dt, 0, top);
-                pos.z = math.clamp(pos.z + d.y * GameSettings.WalkSpeed * dt, 0, top);
-                pos.y = Ground(maps, pos.x, pos.z);
+                pos.x = math.clamp(pos.x + d.x * GameSettings.WalkSpeed * dt, 0, ground.Top);
+                pos.z = math.clamp(pos.z + d.y * GameSettings.WalkSpeed * dt, 0, ground.Top);
+                pos.y = ground.HeightAt(pos.x, pos.z);
                 t.ValueRW.Position = pos;
                 t.ValueRW.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());
             }
         }
-
-        static float Ground(ServerMapSystem maps, float x, float z)
-        {
-            float cm = maps.Map.Config.CellMeters;
-            return math.max(0, maps.Detail.HeightAt(x / cm, z / cm));
-        }
     }
 
-    [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
-    public partial class ClientMoveSystem : SystemBase
+    [UpdateInGroup(typeof(GhostInputSystemGroup))]
+    public partial class ClientInputSystem : SystemBase
     {
-        protected override void OnCreate() => RequireForUpdate<NetworkStreamInGame>();
-
         protected override void OnUpdate()
         {
             float2 dir;
@@ -123,9 +122,8 @@ namespace Stabby.Game
                 float t = (float)SystemAPI.Time.ElapsedTime * 0.4f * (World.Name == GameSettings.ViewClient ? 1 : -1);
                 dir = new float2(math.cos(t), math.sin(t));
             }
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            Rpc.Send(ecb, Entity.Null, new MoveRpc { Dir = dir });
-            ecb.Playback(EntityManager);
+            foreach (var input in SystemAPI.Query<RefRW<PlayerInput>>().WithAll<GhostOwnerIsLocal>())
+                input.ValueRW.Dir = dir;
         }
     }
 }

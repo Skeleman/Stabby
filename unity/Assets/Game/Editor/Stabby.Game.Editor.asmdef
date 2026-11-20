@@ -2,7 +2,13 @@
     "name": "Stabby.Game.Editor",
     "rootNamespace": "Stabby.Game.Editor",
     "references": [
-        "Stabby.Game"
+        "Stabby.Game",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "Unity.NetCode",
+        "Unity.Burst"
     ],
     "includePlatforms": ["Editor"],
     "autoReferenced": true

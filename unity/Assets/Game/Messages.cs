@@ -2,6 +2,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.NetCode;
+using Stabby.World;
 
 namespace Stabby.Game
 {
@@ -30,14 +31,27 @@ namespace Stabby.Game
         [GhostFixedListCapacity(Capacity = 1024)] public FixedList4096Bytes<byte> Bytes;
     }
 
-    public struct MoveRpc : IRpcCommand
+    public struct PlayerInput : IInputComponentData
     {
         public float2 Dir;
     }
 
-    public struct Player : IComponentData
+    public struct Player : IComponentData { }
+
+    // Set once the world's map is ready, so prediction on server and clients reads the same ground.
+    public sealed class Ground : IComponentData
     {
-        public float2 Dir;
+        public TerrainDetail Detail;
+        public float CellMeters, Top;
+
+        public float HeightAt(float x, float z) => math.max(0, Detail.HeightAt(x / CellMeters, z / CellMeters));
+
+        public static Entity Create(EntityManager em, GeneratedWorld w)
+        {
+            var e = em.CreateEntity();
+            em.AddComponentObject(e, new Ground { Detail = new TerrainDetail(w), CellMeters = w.Config.CellMeters, Top = (w.Config.Size - 1) * w.Config.CellMeters });
+            return e;
+        }
     }
 
     public struct PlayerPrefab : IComponentData

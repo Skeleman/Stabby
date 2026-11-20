@@ -4,6 +4,9 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Unity.Entities;
+using Unity.NetCode;
+using Unity.Transforms;
 
 namespace Stabby.Game.Editor
 {
@@ -94,9 +97,39 @@ namespace Stabby.Game.Editor
             var focus = cam.transform.position + cam.transform.forward * 24f;
             cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
             Shot(cam, dir, "overhead");
+            GameStatus.Lines["~prediction"] = Prediction();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
             Debug.Log("GameCapture:\n" + Status());
             Finish(0);
+        }
+
+        // Loopback has near-zero latency, so the owner's predicted capsule should sit within a few ticks of the server's.
+        static string Prediction()
+        {
+            var lines = new System.Collections.Generic.List<string>();
+            Unity.Entities.World server = null;
+            var clients = new System.Collections.Generic.List<Unity.Entities.World>();
+            for (int i = 0; i < Unity.Entities.World.All.Count; i++)
+            {
+                var w = Unity.Entities.World.All[i];
+                if (w.IsServer()) server = w;
+                else if (w.IsClient()) clients.Add(w);
+            }
+            if (server == null) return "prediction: no server world";
+            foreach (var client in clients)
+            {
+                var q = client.EntityManager.CreateEntityQuery(typeof(Player), typeof(GhostOwner), typeof(LocalTransform), typeof(PredictedGhost));
+                foreach (var e in q.ToEntityArray(Unity.Collections.Allocator.Temp))
+                {
+                    int owner = client.EntityManager.GetComponentData<GhostOwner>(e).NetworkId;
+                    var p = client.EntityManager.GetComponentData<LocalTransform>(e).Position;
+                    var sq = server.EntityManager.CreateEntityQuery(typeof(Player), typeof(GhostOwner), typeof(LocalTransform));
+                    foreach (var s in sq.ToEntityArray(Unity.Collections.Allocator.Temp))
+                        if (server.EntityManager.GetComponentData<GhostOwner>(s).NetworkId == owner)
+                            lines.Add($"{client.Name}: predicts own player {owner}, {Unity.Mathematics.math.distance(p, server.EntityManager.GetComponentData<LocalTransform>(s).Position):0.00} m ahead of the server");
+                }
+            }
+            return lines.Count > 0 ? string.Join("\n", lines) : "prediction: no predicted ghosts";
         }
 
         static string Status() =>

@@ -64,7 +64,6 @@ namespace Stabby.Game
         readonly Dictionary<Entity, Queue<(int, int)>> outbox = new Dictionary<Entity, Queue<(int, int)>>();
 
         public GeneratedWorld Map { get; private set; }
-        public TerrainDetail Detail { get; private set; }
         public int MoundCell { get; private set; }
 
         protected override void OnCreate()
@@ -84,7 +83,7 @@ namespace Stabby.Game
                 if (!gen.IsCompleted) return;
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
                 (Map, MoundCell) = gen.Result;
-                Detail = new TerrainDetail(Map);
+                Ground.Create(EntityManager, Map);
                 sums = WorldChunks.Checksums(Map);
                 int n = Map.Config.Size;
                 GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed}, {sums.Length} chunks, +5 m mound at cell {MoundCell % n},{MoundCell / n}";
@@ -143,7 +142,7 @@ namespace Stabby.Game
     {
         Task<GeneratedWorld> gen;
         GeneratedWorld world;
-        ulong seed;
+        ulong seed, hostSeed;
         ulong[] hostSums;
         int sumsIn, stale, streamed, piecesIn;
         long bytesIn, genMs;
@@ -174,6 +173,7 @@ namespace Stabby.Game
                 }
                 hostSums = new ulong[i.Chunks];
                 // The second client starts from the wrong seed to prove a full rebuild over the wire.
+                hostSeed = i.Seed;
                 seed = i.Seed + (World.Name == GameSettings.FullStreamClient ? 1UL : 0UL);
                 clock = Stopwatch.StartNew();
                 var defs = Defs;
@@ -237,13 +237,15 @@ namespace Stabby.Game
         void Finish()
         {
             if (streamed > 0) WorldChunks.Relink(world);
+            // Terrain detail noise is seeded from the config, so a rebuilt map must carry the host's seed.
+            world.Config.Seed = hostSeed;
             var mine = WorldChunks.Checksums(world);
             int bad = 0;
             for (int k = 0; k < mine.Length; k++) if (mine[k] != hostSums[k]) bad++;
             Map = world;
             GameStatus.Lines[World.Name] = $"{World.Name}: generated seed {seed} in {genMs} ms, {stale}/{mine.Length} chunks stale, " +
                 $"streamed {streamed} ({bytesIn / 1024} KB in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
-            if (bad == 0) GameStatus.Synced.Add(World.Name);
+            if (bad == 0) { GameStatus.Synced.Add(World.Name); Ground.Create(EntityManager, world); }
             else GameStatus.Failure = GameStatus.Lines[World.Name];
         }
     }
