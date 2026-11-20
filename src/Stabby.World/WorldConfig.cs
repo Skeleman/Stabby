@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 16;
+        public const int GeneratorVersion = 17;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).
@@ -77,8 +77,10 @@ namespace Stabby.World
         // Ridges run on under the sea for this share of their length, cresting this deep.
         public float RidgeReach = 1f, RidgeCrestDepth = 6f;
 
-        public float LakeMinDepth = 1f;
-        public int LakeMinCells = 3;
+        // Area in m2, so a world keeps the same lakes at any resolution; shallower or
+        // smaller pits fill in rather than dotting the land with ponds.
+        public float LakeMinDepth = 1.5f;
+        public float LakeMinAreaM2 = 15000f;
         public float RiverMinDischarge = 0.028f;
         // Rivers drawn far wider than their catchments justify (Zach 11-20):
         // width = RiverWidthAtUnitFlow * Q^RiverWidthExponent, Q in m3/s.

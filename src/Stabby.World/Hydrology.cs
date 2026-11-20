@@ -129,7 +129,7 @@ namespace Stabby.World
                         seen[j] = true; queue.Add(j);
                     }
                 }
-                if (!dry && maxDepth >= c.LakeMinDepth && queue.Count >= c.LakeMinCells)
+                if (!dry && maxDepth >= c.LakeMinDepth && queue.Count * c.CellMeters * c.CellMeters >= c.LakeMinAreaM2)
                 {
                     var lake = new Lake { Id = hy.Lakes.Count, Level = lv };
                     foreach (int i in queue) { lake.Cells.Add(i); hy.LakeId[i] = lake.Id; }
