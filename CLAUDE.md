@@ -28,4 +28,6 @@
     meshing and other bulk work run in tasks or jobs; the main thread only
     applies finished results within a per-frame budget. `tools/Stabby.Lint`
     rejects blocking waits and unchecked `Task.Result` in runtime Unity code
-    unless `lint-allow.txt` gives a reason.
+    unless `lint-allow.txt` gives a reason. Runtime game data is unmanaged
+    (ECS components, blobs, native containers) so Burst and jobs can use it;
+    managed code stays at load and network boundaries and converts once.
