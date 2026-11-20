@@ -3,16 +3,19 @@
 1. `Stabby.World` never references UnityEngine, System.IO file APIs, Console or
    System.Text.Json. A test enforces it. It must compile in Unity unchanged
    (netstandard2.1, C# 9, no records, no `init`).
-2. One representation per fact. Terrain, water surface and rivers all come from
-   the same drainage graph (`Drainage`); never derive a second copy.
+2. One representation per fact. Ownership flows heightfield -> drainage graph
+   (`Drainage`: fill, receivers, stack) -> hydrology (water surface, lakes,
+   rivers) -> biomes. Each stage reads the one before it and never derives a
+   second copy.
 3. Authored data lives in `content/` and is read only by `Stabby.Content`.
 4. Every world invariant lives in `WorldChecks`. Tests and the CLI sweep both
    call it; add a check there before fixing the bug it catches.
 5. Randomness only through `Rng.Stream(seed, "name")`, one named stream per
-   purpose, so adding a stream never shifts another. No `System.Random`,
-   no trig in generation paths (cross-platform float drift). Pow, Exp and
-   Log go through `FMath`, never `System.Math`, so the same seed gives the
-   same world on every machine.
+   purpose, so adding a stream never shifts another. No `System.Random`, no
+   trig in generation paths; Pow, Exp and Log go through `FMath`. Same seed +
+   generator version is bit-identical on the same runtime and CPU
+   architecture; small float drift across platforms is allowed, and host
+   chunk sync (`WorldChunks`) corrects it.
 6. Changing generation output bumps `WorldConfig.GeneratorVersion`.
 7. No code comments; reasons go in commit messages. `tools/Stabby.Lint` runs
    in the tests and also requires Unity Game systems to be Burst `ISystem`
