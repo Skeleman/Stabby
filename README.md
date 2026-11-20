@@ -56,16 +56,17 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 `sweep --jobs 1`, Release, one desktop core (generator 17). CI (`.github/workflows/ci.yml`)
 runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 512` on every push.
+The 1024 column is 5 seeds; cost grows about linearly with cell count, and checks stay under 3%.
 
-| Stage | 256 (median ms / MB) | 512 (median ms / MB) |
-|---|---|---|
-| sketch | 51 / 3.5 | 203 / 14 |
-| erosion | 273 / 7 | 1139 / 28 |
-| climate | 1 / 1.8 | 6 / 7 |
-| hydrology | 4 / 3.5 | 17 / 14 |
-| biomes | 0.4 / 0.3 | 2 / 1.3 |
-| checks | 9 / 1.2 | 38 / 5 |
-| total | 330 | 1364 |
+| Stage | 256 (median ms / MB) | 512 (median ms / MB) | 1024 (median ms / MB) |
+|---|---|---|---|
+| sketch | 51 / 3.5 | 203 / 14 | 837 / 55 |
+| erosion | 273 / 7 | 1139 / 28 | 4927 / 111 |
+| climate | 1 / 1.8 | 6 / 7 | 45 / 28 |
+| hydrology | 4 / 3.5 | 17 / 14 | 74 / 54 |
+| biomes | 0.4 / 0.3 | 2 / 1.3 | 7 / 5 |
+| checks | 9 / 1.2 | 38 / 5 | 152 / 20 |
+| total | 330 | 1364 | 5946 |
 
 ## Scenarios
 
@@ -74,7 +75,7 @@ generator change makes one disappear. Rescan with `scenarios --scan 100`, repin,
 and review the new sheets.
 
 | Scenario | Seed | Seeds of 100 showing it |
-|---|---|---|
+|---|---|---|---|
 | river-through-range | 49 | 1 |
 | river-by-highland | 8 | 7 |
 | lake-outlet-river | 3 | 100 |
