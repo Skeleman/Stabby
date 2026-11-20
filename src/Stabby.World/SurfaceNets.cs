@@ -32,7 +32,7 @@ namespace Stabby.World
         public T Columns;
         public float StepM;
 
-        public float Density(int i, int j, int k) => Columns.Height(i, k) - j * StepM;
+        public float Density(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
         public bool Sharp(int i, int j, int k) => false;
         public float Base(int i, int j, int k) => Density(i, j, k);
         public float Edit(float d, float x, float y, float z) => d;
@@ -265,20 +265,28 @@ namespace Stabby.World
         public static void Edited<TCols, TEdits, TSink>(TCols columns, TEdits edits, NetsChunk c, ref TSink sink)
             where TCols : struct, IColumnField where TEdits : struct, IEditList where TSink : struct, INetsSink
         {
-            int w = c.Cells + 1, hw = w + 1, bx = c.X0 - 1, bz = c.Z0 - 1, count = edits.Count;
+            int w = c.Cells + 1, hw = w + 1, rw = hw + 2, bx = c.X0 - 1, bz = c.Z0 - 1, count = edits.Count, sl = rw * rw;
             float s = c.StepM;
             var solid = new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s };
-            sink.Begin(3 * w * w, hw * hw);
+            sink.Begin(3 * w * w, sl + hw * hw);
+            for (int k = 0; k < rw; k++)
+                for (int i = 0; i < rw; i++)
+                    sink.SetFloat(k * rw + i, columns.Height(bx - 1 + i, bz - 1 + k));
             for (int k = 0; k < hw; k++)
                 for (int i = 0; i < hw; i++)
-                    sink.SetFloat(k * hw + i, columns.Height(bx + i, bz + k));
+                {
+                    int r = (k + 1) * rw + i + 1;
+                    sink.SetFloat(sl + k * hw + i, Features.Slope(sink.GetFloat(r + 1), sink.GetFloat(r - 1), sink.GetFloat(r + rw), sink.GetFloat(r - rw), s));
+                }
             int next = 0;
             for (int k = 0; k < w; k++)
                 for (int i = 0; i < w; i++)
                 {
                     int ci = bx + i, ck = bz + k, col = 3 * (k * w + i);
-                    float h00 = sink.GetFloat(k * hw + i), h10 = sink.GetFloat(k * hw + i + 1);
-                    float h01 = sink.GetFloat((k + 1) * hw + i), h11 = sink.GetFloat((k + 1) * hw + i + 1);
+                    float h00 = H(ref sink, rw, i, k), h10 = H(ref sink, rw, i + 1, k);
+                    float h01 = H(ref sink, rw, i, k + 1), h11 = H(ref sink, rw, i + 1, k + 1);
+                    float l00 = sink.GetFloat(sl + k * hw + i), l10 = sink.GetFloat(sl + k * hw + i + 1);
+                    float l01 = sink.GetFloat(sl + (k + 1) * hw + i), l11 = sink.GetFloat(sl + (k + 1) * hw + i + 1);
                     float lo = Math.Min(Math.Min(h00, h10), Math.Min(h01, h11));
                     int j = (int)Math.Floor(lo / s) - 2;
                     while (!AllInside(h00, h10, h01, h11, j - 1, s)) j--;
@@ -298,11 +306,12 @@ namespace Stabby.World
                     for (; j < end; j++)
                     {
                         float yb = j * s, yt = (j + 1) * s;
+                        float xa = ci * s, xb = (ci + 1) * s, za = ck * s, zb = (ck + 1) * s;
                         int v = Cell(ref sink, solid, ci, j, ck, s,
-                            Features.Apply(columns, edits, h00 - yb, ci, j, ck, s), Features.Apply(columns, edits, h10 - yb, ci + 1, j, ck, s),
-                            Features.Apply(columns, edits, h00 - yt, ci, j + 1, ck, s), Features.Apply(columns, edits, h10 - yt, ci + 1, j + 1, ck, s),
-                            Features.Apply(columns, edits, h01 - yb, ci, j, ck + 1, s), Features.Apply(columns, edits, h11 - yb, ci + 1, j, ck + 1, s),
-                            Features.Apply(columns, edits, h01 - yt, ci, j + 1, ck + 1, s), Features.Apply(columns, edits, h11 - yt, ci + 1, j + 1, ck + 1, s));
+                            Features.Edit(edits, (h00 - yb) / l00, xa, yb, za), Features.Edit(edits, (h10 - yb) / l10, xb, yb, za),
+                            Features.Edit(edits, (h00 - yt) / l00, xa, yt, za), Features.Edit(edits, (h10 - yt) / l10, xb, yt, za),
+                            Features.Edit(edits, (h01 - yb) / l01, xa, yb, zb), Features.Edit(edits, (h11 - yb) / l11, xb, yb, zb),
+                            Features.Edit(edits, (h01 - yt) / l01, xa, yt, zb), Features.Edit(edits, (h11 - yt) / l11, xb, yt, zb));
                         if (v < 0) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
                         next++;
                     }
@@ -314,17 +323,21 @@ namespace Stabby.World
                     int col = 3 * (k * w + i), cx = col - 3, cz = col - 3 * w, cxz = cz - 3;
                     int jLo = Math.Min(Math.Min(sink.GetInt(col), sink.GetInt(cx)), Math.Min(sink.GetInt(cz), sink.GetInt(cxz)));
                     int jHi = Math.Max(Math.Max(sink.GetInt(col + 1), sink.GetInt(cx + 1)), Math.Max(sink.GetInt(cz + 1), sink.GetInt(cxz + 1)));
-                    float h = sink.GetFloat(k * hw + i), hx = sink.GetFloat(k * hw + i + 1), hz = sink.GetFloat((k + 1) * hw + i);
+                    float h = H(ref sink, rw, i, k), hx = H(ref sink, rw, i + 1, k), hz = H(ref sink, rw, i, k + 1);
+                    float l = sink.GetFloat(sl + k * hw + i), lx = sink.GetFloat(sl + k * hw + i + 1), lz = sink.GetFloat(sl + (k + 1) * hw + i);
+                    float xa = ci * s, xb = (ci + 1) * s, za = ck * s, zb = (ck + 1) * s;
                     for (int j = jLo; j < jHi; j++)
                     {
-                        float yb = j * s;
-                        bool p = Features.Apply(columns, edits, h - yb, ci, j, ck, s) > 0;
-                        if (p != Features.Apply(columns, edits, hx - yb, ci + 1, j, ck, s) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
-                        if (p != Features.Apply(columns, edits, h - (j + 1) * s, ci, j + 1, ck, s) > 0) QuadAt(ref sink, p, cxz, j, cx, j, col, j, cz, j);
-                        if (p != Features.Apply(columns, edits, hz - yb, ci, j, ck + 1, s) > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
+                        float yb = j * s, yt = (j + 1) * s;
+                        bool p = Features.Edit(edits, (h - yb) / l, xa, yb, za) > 0;
+                        if (p != Features.Edit(edits, (hx - yb) / lx, xb, yb, za) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
+                        if (p != Features.Edit(edits, (h - yt) / l, xa, yt, za) > 0) QuadAt(ref sink, p, cxz, j, cx, j, col, j, cz, j);
+                        if (p != Features.Edit(edits, (hz - yb) / lz, xa, yb, zb) > 0) QuadAt(ref sink, p, cx, j - 1, col, j - 1, col, j, cx, j);
                     }
                 }
         }
+
+        static float H<TSink>(ref TSink sink, int rw, int i, int k) where TSink : struct, INetsSink => sink.GetFloat((k + 1) * rw + i + 1);
 
         static bool AllInside(float a, float b, float c, float d, int j, float s)
         {

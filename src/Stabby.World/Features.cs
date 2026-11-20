@@ -66,11 +66,7 @@ namespace Stabby.World
         public bool Sharp(int i, int j, int k) => Features.Covers(Edits, i * StepM, j * StepM, k * StepM, StepM);
         public float Base(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
 
-        public float Edit(float d, float x, float y, float z)
-        {
-            for (int q = 0, n = Edits.Count; q < n; q++) d = Edits.At(q).Apply(d, x, y, z);
-            return d;
-        }
+        public float Edit(float d, float x, float y, float z) => Features.Edit(Edits, d, x, y, z);
     }
 
     public static class Features
@@ -84,22 +80,21 @@ namespace Stabby.World
         public const float LatticeStepCells = 0.25f, MinRadiusSteps = 1.25f;
 
         public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
+            => Edit(edits, Level(columns, d, i, k, s), i * s, j * s, k * s);
+
+        public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z) where TEdits : struct, IEditList
         {
-            int count = edits.Count;
-            if (count == 0) return d;
-            float x = i * s, y = j * s, z = k * s;
-            bool near = false;
-            for (int q = 0; q < count && !near; q++) near = edits.At(q).Contains(x, y, z);
-            if (!near) return d;
-            d = Level(columns, d, i, k, s);
-            for (int q = 0; q < count; q++) d = edits.At(q).Apply(d, x, y, z);
+            for (int q = 0, n = edits.Count; q < n; q++) d = edits.At(q).Apply(d, x, y, z);
             return d;
         }
 
         public static float Level<TCols>(TCols columns, float d, int i, int k, float s) where TCols : struct, IColumnField
+            => d / Slope(columns.Height(i + 1, k), columns.Height(i - 1, k), columns.Height(i, k + 1), columns.Height(i, k - 1), s);
+
+        public static float Slope(float xp, float xm, float zp, float zm, float s)
         {
-            float gx = (columns.Height(i + 1, k) - columns.Height(i - 1, k)) / (2 * s), gz = (columns.Height(i, k + 1) - columns.Height(i, k - 1)) / (2 * s);
-            return d / (float)Math.Sqrt(1 + gx * gx + gz * gz);
+            float gx = (xp - xm) / (2 * s), gz = (zp - zm) / (2 * s);
+            return (float)Math.Sqrt(1 + gx * gx + gz * gz);
         }
 
         public static bool Covers<TEdits>(TEdits edits, float x, float y, float z, float s) where TEdits : struct, IEditList
