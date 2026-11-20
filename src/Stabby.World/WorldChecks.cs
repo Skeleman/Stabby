@@ -104,6 +104,7 @@ namespace Stabby.World
 
             if (w.Sketch != null) CheckSketch(w, e);
             CheckDetail(w, e);
+            CheckGeometry(w, e);
             return e;
         }
 
@@ -121,6 +122,23 @@ namespace Stabby.World
                     if (w.Height[i] > 0 && w.Height[i + 1] > 0 && w.Height[i + n] > 0 && w.Height[i + n + 1] > 0
                         && d.HeightAt(x + 0.5f, y + 0.5f) <= 0) { e.Add($"detail sinks land below the sea near cell {i}"); return; }
                 }
+        }
+
+        public const float LatticeStepCells = 0.25f;
+
+        static void CheckGeometry(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size, top = 0;
+            for (int i = 1; i < w.Height.Length; i++) if (w.Height[i] > w.Height[top]) top = i;
+            var cols = new DetailColumns { Detail = new TerrainDetail(w), StepCells = LatticeStepCells };
+            var c = new NetsChunk { X0 = (int)(top % n / LatticeStepCells) - 8, Z0 = (int)(top / n / LatticeStepCells) - 8, Cells = 16, StepM = LatticeStepCells * w.Config.CellMeters };
+            SurfaceNets.HeightRange(cols, c, out int jMin, out int jMax);
+            var g = new NetsBuffers();
+            SurfaceNets.General(new HeightSolid<DetailColumns> { Columns = cols, StepM = c.StepM }, c, jMin, jMax, ref g);
+            var f = new NetsBuffers();
+            SurfaceNets.Heightfield(cols, c, ref f);
+            if (f.Tris.Count == 0) { e.Add($"heightfield mesher made no triangles near cell {top}"); return; }
+            if (!f.SameAs(g)) e.Add($"heightfield mesher differs from the general mesher near cell {top}");
         }
 
         static void CheckSketch(GeneratedWorld w, List<string> e)
