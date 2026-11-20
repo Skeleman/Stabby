@@ -262,6 +262,18 @@ namespace Stabby.World
                         Plateau[y * n + x] = Math.Max(Plateau[y * n + x], 1f - Grid.Smoothstep(0.6f, 1f, d));
                     }
             }
+            // Caprock takes no uplift, so the summit's cone is kept clear and rises out of the tableland's edge.
+            foreach (var pk in Highlands)
+            {
+                if (pk.Plateau) continue;
+                int r = (int)Math.Ceiling(pk.Radius);
+                for (int y = Math.Max(0, (int)pk.Y - r); y <= Math.Min(n - 1, (int)pk.Y + r); y++)
+                    for (int x = Math.Max(0, (int)pk.X - r); x <= Math.Min(n - 1, (int)pk.X + r); x++)
+                    {
+                        float d = (float)Math.Sqrt((x - pk.X) * (x - pk.X) + (y - pk.Y) * (y - pk.Y)) / pk.Radius;
+                        Plateau[y * n + x] *= Grid.Smoothstep(0.5f, 1f, d);
+                    }
+            }
         }
 
         bool[] LandMask(WorldConfig c)
@@ -466,8 +478,10 @@ namespace Stabby.World
                 if (facing > -0.2f)
                     for (float r = want; r >= m.Radius * c.HighlandRadiusMin * 0.5f; r *= 0.85f)
                     {
-                        float x = ax + dx * (r + pr * 0.7f), y = ay + dy * (r + pr * 0.7f);
-                        if (Room(n, inland, x, y) < r * HighlandCoastClear || NearCorridor(cor, x, y, r)) continue;
+                        // The noisy edge leaves a flat core about 0.7 r across, butted against the summit's
+                        // inner cone; the corridor head may touch it, since its river only starts there.
+                        float x = ax + dx * (r * 0.75f + pr * 0.5f), y = ay + dy * (r * 0.75f + pr * 0.5f);
+                        if (Room(n, inland, x, y) < r * HighlandCoastClear || NearCorridor(cor, x, y, r * 0.7f, 1)) continue;
                         bool clear = true;
                         foreach (var l in s.Lakes)
                             foreach (var b in l.Lobes)
@@ -619,11 +633,11 @@ namespace Stabby.World
         }
 
         // Caprock across the valley would dam its river.
-        static bool NearCorridor(CorridorSketch cor, float x, float y, float r)
+        static bool NearCorridor(CorridorSketch cor, float x, float y, float r, int from = 0)
         {
             if (cor == null) return false;
             float rr = r + cor.Width;
-            for (int k = 0; k < cor.X.Length; k++)
+            for (int k = from; k < cor.X.Length; k++)
                 if ((cor.X[k] - x) * (cor.X[k] - x) + (cor.Y[k] - y) * (cor.Y[k] - y) <= rr * rr) return true;
             return false;
         }
@@ -773,23 +787,31 @@ namespace Stabby.World
             Coast = coast;
             Valley = new float[n * n];
             ValleyRun = new float[n * n];
+            var fromSummit = new bool[Ranges.Count];
+            for (int k = 0; k < Ranges.Count; k++)
+                foreach (var hl in Highlands)
+                    if (!hl.Plateau && (Ranges[k].X[0] - hl.X) * (Ranges[k].X[0] - hl.X) + (Ranges[k].Y[0] - hl.Y) * (Ranges[k].Y[0] - hl.Y) <= 4 * hl.Radius * hl.Radius)
+                        fromSummit[k] = true;
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
                     if (!Land[i]) continue;
                     float u = 0.1f + 0.1f * Noise.Fbm(detail, x * 8f / n, y * 8f / n, 4);
-                    foreach (var r in Ranges)
+                    for (int k = 0; k < Ranges.Count; k++)
                     {
-                        float d = DistanceToPolyline(r.X, r.Y, x, y) / r.Width;
-                        u = Math.Max(u, r.Strength * (float)FMath.Exp(-d * d));
+                        var r = Ranges[k];
+                        float d = DistanceToPolyline(r.X, r.Y, x, y, out float along) / r.Width;
+                        float strength = r.Strength * (fromSummit[k] ? 1 - c.RangeTaper * along : 1);
+                        u = Math.Max(u, strength * (float)FMath.Exp(-d * d));
                     }
                     foreach (var hl in Highlands)
-                        if (!hl.Plateau)
-                        {
-                            float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
-                            u = Math.Max(u, c.PeakStrength * (1 - Grid.Smoothstep(0, 1, d)));
-                        }
+                    {
+                        float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                        // Mountain shoulders climb to the tableland's rim, so it sits in the range instead of on a pedestal.
+                        u = Math.Max(u, hl.Plateau ? c.ShoulderStrength * (1 - Grid.Smoothstep(0.8f, 1.8f, d))
+                            : c.PeakStrength * (1 - Grid.Smoothstep(0, 1, d)));
+                    }
                     foreach (var cor in Corridors)
                     {
                         float d = DistanceToPolyline(cor.X, cor.Y, x, y) / cor.Width;
@@ -798,24 +820,31 @@ namespace Stabby.World
                         if (v > Valley[i]) { Valley[i] = v; ValleyRun[i] = RemainingAlong(cor.X, cor.Y, x, y); }
                     }
                     foreach (var lk in Lakes) u *= 1 - LakeDepth * Grid.Smoothstep(-0.8f, 0.2f, lk.Core(x, y));
-                    // Caprock barely erodes, so any uplift on it would pile up without limit.
-                    u *= (1 - Cliff[i]) * (1 - Grid.Smoothstep(0, 0.5f, Plateau[i]));
+                    // Caprock barely erodes, so uplift fades exactly as it hardens (Erosion's ramp);
+                    // any more would pile up without limit, any less would cut a moat around the rim.
+                    u *= (1 - Grid.Smoothstep(0.6f, 1f, Cliff[i])) * (1 - Grid.Smoothstep(0.15f, 0.5f, Plateau[i]));
                     float taper = Grid.Smoothstep(0, 6, coast[i]);
                     Uplift[i] = Math.Max(0, u) * (taper + (1 - taper) * Cliff[i]);
                 }
         }
 
-        public static float DistanceToPolyline(float[] xs, float[] ys, float px, float py)
+        public static float DistanceToPolyline(float[] xs, float[] ys, float px, float py) => DistanceToPolyline(xs, ys, px, py, out _);
+
+        // along: where the nearest point falls, as a share of the polyline's length.
+        public static float DistanceToPolyline(float[] xs, float[] ys, float px, float py, out float along)
         {
+            float total = 0, at = 0;
             float best = float.MaxValue;
             for (int i = 0; i + 1 < xs.Length; i++)
             {
                 float ax = xs[i], ay = ys[i], bx = xs[i + 1] - ax, by = ys[i + 1] - ay;
                 float len2 = bx * bx + by * by;
                 float t = len2 > 0 ? Math.Max(0, Math.Min(1, ((px - ax) * bx + (py - ay) * by) / len2)) : 0;
-                float dx = px - (ax + t * bx), dy = py - (ay + t * by);
-                best = Math.Min(best, dx * dx + dy * dy);
+                float dx = px - (ax + t * bx), dy = py - (ay + t * by), len = (float)Math.Sqrt(len2);
+                if (dx * dx + dy * dy < best) { best = dx * dx + dy * dy; at = total + t * len; }
+                total += len;
             }
+            along = total > 0 ? at / total : 0;
             return (float)Math.Sqrt(best);
         }
 

@@ -31,8 +31,13 @@ namespace Stabby.World
                     float m = inland[i] * c.CellMeters;
                     if (s.Cliff[i] > 0)
                     {
-                        float top = c.PlateauHeight * (1 + 0.15f * Noise.Fbm(seed ^ 0xC11Fu, x * 12f / n, y * 12f / n, 3)
-                            + 0.12f * Noise.Fbm(seed ^ 0x7AB1u, x * 48f / n, y * 48f / n, 4));
+                        // A steppe slanting up inland in low treads; noise under the rounding
+                        // makes the risers wander instead of following the coast.
+                        float rise = Math.Max(0, c.CliffRise * Math.Min(1, m / c.CliffTiltMeters)
+                            + 0.25f * c.CliffRise * Noise.Fbm(seed ^ 0xC11Fu, x * 12f / n, y * 12f / n, 3));
+                        float step = rise / c.CliffStepMeters, tread = (float)Math.Floor(step);
+                        float top = c.PlateauHeight + c.CliffStepMeters * (tread + Grid.Smoothstep(0.7f, 1f, step - tread))
+                            + 3f * Noise.Fbm(seed ^ 0x7AB1u, x * 48f / n, y * 48f / n, 4);
                         h[i] += (top - h[i]) * s.Cliff[i];
                     }
                     if (s.Plateau[i] > 0)
@@ -151,16 +156,17 @@ namespace Stabby.World
             var beachCap = new float[n * n];
             var slope = new float[n * n];
             var erod = new float[n * n];
+            var caprock = new float[n * n];
             for (int i = 0; i < n * n; i++)
             {
                 float m = s.Coast[i] * c.CellMeters;
                 float w = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                 beachCap[i] = BeachCap(c, m) + (1 - w) * 1e6f;
-                // Tableland caprock reaches out to its rim, so the top ends in an escarpment
+                // Caprock reaches out to the tableland rim, so the top ends in an escarpment
                 // instead of fraying back into canyons.
-                float core = Math.Max(Grid.Smoothstep(0.6f, 1f, s.Cliff[i]), Grid.Smoothstep(0.15f, 0.5f, s.Plateau[i]));
-                slope[i] = c.MaxSlope * (1 + c.CliffSlope * core);
-                erod[i] = c.Erodibility * (1 - c.CaprockHardness * core) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
+                caprock[i] = Math.Max(Grid.Smoothstep(0.6f, 1f, s.Cliff[i]), Grid.Smoothstep(0.15f, 0.5f, s.Plateau[i]));
+                slope[i] = c.MaxSlope * (1 + c.CliffSlope * caprock[i]);
+                erod[i] = c.Erodibility * (1 - c.CaprockHardness * caprock[i]) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
             }
 
             float dt = c.TimeStepYears;
@@ -178,7 +184,9 @@ namespace Stabby.World
                     int r = recv[i];
                     if (r == i || sea[i]) continue;
                     if (filled[i] - h[i] > 0.01f) continue;
-                    float hr = sea[r] ? 0 : h[r];
+                    // The steppe drains seaward across the lip; a cliff's sea is a wall, as in
+                    // Diffuse, so falls leave the face standing instead of grinding it to sea level.
+                    float hr = sea[r] ? s.Cliff[i] * h[i] : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
                     float f = erod[i] * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
@@ -186,7 +194,7 @@ namespace Stabby.World
                     h[i] = Math.Min(h[i], hr + slope[i] * len);
                 }
 
-                Diffuse(c, s, h, sea);
+                Diffuse(c, s, caprock, h, sea);
                 for (int i = 0; i < n * n; i++)
                     if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
             }
@@ -243,9 +251,9 @@ namespace Stabby.World
             return w;
         }
 
-        // Cliff cells see the sea as a wall at their own height, and tableland caprock
-        // barely creeps, so diffusion rounds neither off.
-        static void Diffuse(WorldConfig c, WorldSketch s, float[] h, bool[] sea)
+        // Cliff cells see the sea as a wall at their own height and caprock barely creeps,
+        // so diffusion rounds off neither the cliff edge nor the treads behind it.
+        static void Diffuse(WorldConfig c, WorldSketch s, float[] caprock, float[] h, bool[] sea)
         {
             int n = c.Size;
             float k = c.Diffusion * c.TimeStepYears / (c.CellMeters * c.CellMeters);
@@ -261,7 +269,7 @@ namespace Stabby.World
                     lap += (sea[i + 1] ? wall : src[i + 1]) - src[i];
                     lap += (sea[i - n] ? wall : src[i - n]) - src[i];
                     lap += (sea[i + n] ? wall : src[i + n]) - src[i];
-                    h[i] = src[i] + k * (1 - Grid.Smoothstep(0.15f, 0.5f, s.Plateau[i])) * lap;
+                    h[i] = src[i] + k * (1 - caprock[i]) * lap;
                 }
         }
 

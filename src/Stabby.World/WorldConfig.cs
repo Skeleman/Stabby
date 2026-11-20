@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 12;
+        public const int GeneratorVersion = 13;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).
@@ -51,15 +51,17 @@ namespace Stabby.World
         // Seabed: a shelf ShelfDepth deep and ShelfMeters wide, then a slope down to
         // DeepDepth; beaches double the shelf, cliffs nearly remove it.
         public float ShelfDepth = 40f, ShelfMeters = 900f, SlopeMeters = 2250f, DeepDepth = 300f;
-        // A cliff shore is a raised tableland that ends at the sea in a cliff face; hard
-        // caprock (CaprockHardness off erodibility) keeps its top flat under erosion.
-        public float PlateauHeight = 90f, CaprockHardness = 0.995f;
+        // A cliff shore is a raised steppe, PlateauHeight at the cliff and CliffRise more
+        // CliffTiltMeters inland, in treads CliffStepMeters high; hard caprock
+        // (CaprockHardness off erodibility) keeps that shape under erosion.
+        public float PlateauHeight = 60f, CaprockHardness = 0.995f;
+        public float CliffRise = 90f, CliffTiltMeters = 1800f, CliffStepMeters = 18f;
         public float CliffSlope = 3f, CliffFootDepth = 25f;
         // The main ridges meet at a summit cone (radius in island radii) beside a caprock
-        // tableland HighlandHeight high.
+        // tableland HighlandHeight high, and fall to 1 - RangeTaper of their strength at their far ends.
         // SummitHardness takes that share off the cone's erodibility so it outstands the ridges.
-        public float PeakStrength = 1.8f, PeakRadius = 0.2f, SummitHardness = 0.75f;
-        public float HighlandHeight = 380f, HighlandRadiusMin = 0.16f, HighlandRadiusMax = 0.24f;
+        public float PeakStrength = 1.8f, PeakRadius = 0.2f, SummitHardness = 0.75f, RangeTaper = 0.55f, ShoulderStrength = 0.8f;
+        public float HighlandHeight = 560f, HighlandRadiusMin = 0.16f, HighlandRadiusMax = 0.24f;
         public float BeachGrade = 0.015f, BeachMeters = 675f;
         // Ridges run on under the sea for this share of their length, cresting this deep.
         public float RidgeReach = 1f, RidgeCrestDepth = 6f;
