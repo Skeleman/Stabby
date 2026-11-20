@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
@@ -60,21 +59,15 @@ namespace Stabby.Game
         {
             public GeneratedWorld Map;
             public int Mound;
-            public ulong[] Sums;
-            public byte[][] Packed;
-            public BlobBuilder Ground;
+            public BlobBuilder Packed, Ground;
             public string Source;
         }
 
         Task<Prepared> gen;
-        ulong[] sums;
-        byte[][] packed;
-        readonly HashSet<Entity> informed = new HashSet<Entity>();
-        readonly Dictionary<Entity, Queue<(int, int)>> outbox = new Dictionary<Entity, Queue<(int, int)>>();
+        BlobAssetReference<GroundData> ground;
+        BlobAssetReference<PackedChunks> packed;
 
         public GeneratedWorld Map { get; private set; }
-        public int MoundCell { get; private set; }
-        BlobAssetReference<GroundData> ground;
 
         protected override void OnCreate()
         {
@@ -84,74 +77,61 @@ namespace Stabby.Game
             {
                 var sw = Stopwatch.StartNew();
                 var (w, source) = MapFile.LoadOrGenerate(path, content, MapGen.Config(GameSettings.Seed), defs, true);
-                var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w), Sums = WorldChunks.Checksums(w) };
+                var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
+                var sums = WorldChunks.Checksums(w);
                 long sumsMs = sw.ElapsedMilliseconds;
-                int a = WorldChunks.Across(w.Config.Size);
-                p.Packed = new byte[p.Sums.Length][];
-                for (int k = 0; k < p.Packed.Length; k++) p.Packed[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a));
+                p.Packed = Pack(w, sums);
                 long packMs = sw.ElapsedMilliseconds;
                 p.Ground = Ground.Fill(w);
-                p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {packMs} ms, detail at {sw.ElapsedMilliseconds} ms";
+                p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {packMs} ms, detail at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
                 return p;
             });
         }
 
+        static BlobBuilder Pack(GeneratedWorld w, ulong[] sums)
+        {
+            int a = WorldChunks.Across(w.Config.Size), total = 0;
+            var zipped = new byte[sums.Length][];
+            for (int k = 0; k < zipped.Length; k++) { zipped[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a)); total += zipped[k].Length; }
+            var b = new BlobBuilder(Allocator.Persistent);
+            ref var root = ref b.ConstructRoot<PackedChunks>();
+            root.Seed = w.Config.Seed;
+            root.Size = w.Config.Size;
+            var s = b.Allocate(ref root.Sums, sums.Length);
+            var r = b.Allocate(ref root.Ranges, sums.Length);
+            var bytes = b.Allocate(ref root.Bytes, total);
+            int at = 0;
+            for (int k = 0; k < zipped.Length; k++)
+            {
+                s[k] = sums[k];
+                r[k] = new int2(at, zipped[k].Length);
+                for (int j = 0; j < zipped[k].Length; j++) bytes[at + j] = zipped[k][j];
+                at += zipped[k].Length;
+            }
+            return b;
+        }
+
         protected override void OnDestroy()
         {
-            if (ground.IsCreated) ground.Dispose();
-            else if (gen != null && gen.IsCompletedSuccessfully) gen.Result.Ground.Dispose();
+            if (ground.IsCreated) { ground.Dispose(); packed.Dispose(); }
+            else if (gen != null && gen.IsCompletedSuccessfully) { gen.Result.Ground.Dispose(); gen.Result.Packed.Dispose(); }
         }
 
         protected override void OnUpdate()
         {
-            if (Map == null)
-            {
-                if (!gen.IsCompleted) return;
-                if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
-                var p = gen.Result;
-                (Map, MoundCell, sums, packed) = (p.Map, p.Mound, p.Sums, p.Packed);
-                ground = Ground.Create(EntityManager, p.Ground);
-                int n = Map.Config.Size;
-                if (MoundCell >= 0) EntityManager.CreateSingleton(new SpawnPoint { XZ = new float2(MoundCell % n, MoundCell / n) * Map.Config.CellMeters });
-                GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, {sums.Length} chunks, +5 m mound at cell {MoundCell % n},{MoundCell / n}";
-            }
-
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (_, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>().WithEntityAccess())
-            {
-                if (!informed.Add(conn)) continue;
-                Rpc.Send(ecb, conn, new WorldInfoRpc { Seed = GameSettings.Seed, Version = WorldConfig.GeneratorVersion, Size = Map.Config.Size, Chunks = sums.Length });
-                for (int k = 0; k < sums.Length; k++) Rpc.Send(ecb, conn, new ChunkSumRpc { Index = k, Sum = sums[k] });
-                outbox[conn] = new Queue<(int, int)>();
-            }
-
-            foreach (var (req, rx, e) in SystemAPI.Query<RefRO<ChunkRequestRpc>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
-            {
-                ecb.DestroyEntity(e);
-                int k = req.ValueRO.Index;
-                if (k < 0 || k >= sums.Length || !outbox.TryGetValue(rx.ValueRO.SourceConnection, out var q)) continue;
-                int pieces = Pieces(packed[k].Length);
-                for (int p = 0; p < pieces; p++) q.Enqueue((k, p));
-            }
-
-            foreach (var kv in outbox)
-            {
-                var q = kv.Value;
-                if (!EntityManager.Exists(kv.Key)) { q.Clear(); continue; }
-                for (int s = 0; s < GameSettings.PiecesPerTick && q.Count > 0; s++)
-                {
-                    var (k, p) = q.Dequeue();
-                    var data = packed[k];
-                    int from = p * GameSettings.PieceBytes, to = Math.Min(data.Length, from + GameSettings.PieceBytes);
-                    var rpc = new ChunkPieceRpc { Index = k, Piece = p, Pieces = Pieces(data.Length) };
-                    for (int b = from; b < to; b++) rpc.Bytes.Add(data[b]);
-                    Rpc.Send(ecb, kv.Key, rpc);
-                }
-            }
-            ecb.Playback(EntityManager);
+            if (!gen.IsCompleted) return;
+            Enabled = false;
+            if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); return; }
+            var p = gen.Result;
+            Map = p.Map;
+            int mound = p.Mound, n = Map.Config.Size;
+            ground = Ground.Create(EntityManager, p.Ground);
+            packed = p.Packed.CreateBlobAssetReference<PackedChunks>(Allocator.Persistent);
+            p.Packed.Dispose();
+            if (mound >= 0) EntityManager.CreateSingleton(new SpawnPoint { XZ = new float2(mound % n, mound / n) * Map.Config.CellMeters });
+            EntityManager.CreateSingleton(new ChunkStore { Blob = packed });
+            GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, +5 m mound at cell {mound % n},{mound / n}";
         }
-
-        static int Pieces(int bytes) => (bytes + GameSettings.PieceBytes - 1) / GameSettings.PieceBytes;
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
@@ -164,14 +144,11 @@ namespace Stabby.Game
         ulong[] mine;
         ulong hostSeed;
         string source;
-        ulong[] hostSums;
-        int sumsIn, stale, streamed, piecesIn;
-        long bytesIn, genMs;
+        int stale;
+        long genMs;
         bool requested;
         Stopwatch clock;
-        readonly Dictionary<int, byte[][]> parts = new Dictionary<int, byte[][]>();
-        readonly HashSet<int> pending = new HashSet<int>();
-        readonly List<(int, byte[])> arrived = new List<(int, byte[])>();
+        Entity inbox;
 
         public List<BiomeDef> Defs { get; private set; }
         public GeneratedWorld Map { get; private set; }
@@ -185,21 +162,24 @@ namespace Stabby.Game
         {
             if (ground.IsCreated) ground.Dispose();
             else if (finish != null && finish.IsCompletedSuccessfully && finish.Result.Item1 == 0) finish.Result.Item2.Dispose();
+            if (inbox != Entity.Null && EntityManager.Exists(inbox)) EntityManager.GetComponentData<ChunkInbox>(inbox).Dispose();
         }
 
         protected override void OnUpdate()
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            int chunks = -1;
             foreach (var (info, e) in SystemAPI.Query<RefRO<WorldInfoRpc>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
             {
                 ecb.DestroyEntity(e);
                 var i = info.ValueRO;
+                if (gen != null) continue;
                 if (i.Version != WorldConfig.GeneratorVersion || i.Size != GameSettings.Size)
                 {
                     GameStatus.Failure = $"{World.Name}: host runs generator {i.Version} size {i.Size}, this peer {WorldConfig.GeneratorVersion} size {GameSettings.Size}";
                     continue;
                 }
-                hostSums = new ulong[i.Chunks];
+                chunks = i.Chunks;
                 hostSeed = i.Seed;
                 clock = Stopwatch.StartNew();
                 var defs = Defs;
@@ -220,71 +200,58 @@ namespace Stabby.Game
                     return (w, WorldChunks.Checksums(w));
                 });
             }
-            foreach (var (sum, e) in SystemAPI.Query<RefRO<ChunkSumRpc>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
-            {
-                ecb.DestroyEntity(e);
-                if (hostSums == null) continue;
-                hostSums[sum.ValueRO.Index] = sum.ValueRO.Sum;
-                sumsIn++;
-            }
-            foreach (var (piece, e) in SystemAPI.Query<RefRO<ChunkPieceRpc>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
-            {
-                ecb.DestroyEntity(e);
-                Receive(piece.ValueRO);
-            }
+            ecb.Playback(EntityManager);
+            if (chunks >= 0)
+                inbox = EntityManager.CreateSingleton(new ChunkInbox
+                {
+                    HostSums = new NativeArray<ulong>(chunks, Allocator.Persistent),
+                    Slots = new NativeArray<ChunkSlot>(chunks, Allocator.Persistent),
+                    Arena = new NativeList<byte>(Allocator.Persistent),
+                });
 
             if (world == null && gen != null && gen.IsCompleted)
             {
-                if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; ecb.Playback(EntityManager); return; }
+                if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
                 (world, mine) = gen.Result;
                 genMs = clock.ElapsedMilliseconds;
             }
-            if (world != null && !requested && hostSums != null && sumsIn == hostSums.Length)
+            if (inbox == Entity.Null || world == null) return;
+            var box = EntityManager.GetComponentData<ChunkInbox>(inbox);
+            if (!requested && box.SumsIn == box.HostSums.Length)
             {
                 requested = true;
+                var send = new EntityCommandBuffer(Allocator.Temp);
                 for (int k = 0; k < mine.Length; k++)
-                    if (mine[k] != hostSums[k]) { pending.Add(k); Rpc.Send(ecb, Entity.Null, new ChunkRequestRpc { Index = k }); }
-                stale = pending.Count;
+                {
+                    if (mine[k] == box.HostSums[k]) continue;
+                    box.Slots[k] = new ChunkSlot { Wanted = true };
+                    stale++;
+                    Rpc.Send(send, Entity.Null, new ChunkRequestRpc { Index = k });
+                }
+                box.Remaining = stale;
+                EntityManager.SetComponentData(inbox, box);
+                send.Playback(EntityManager);
             }
-            if (requested && finish == null && pending.Count == 0) StartFinish();
-            if (finish != null && Map == null) Finish();
-            ecb.Playback(EntityManager);
+            if (requested && finish == null && box.Remaining == 0) StartFinish(box);
+            if (finish != null && Map == null) Finish(box);
         }
 
-        void Receive(in ChunkPieceRpc p)
-        {
-            if (world == null || !pending.Contains(p.Index)) return;
-            piecesIn++;
-            bytesIn += p.Bytes.Length;
-            if (!parts.TryGetValue(p.Index, out var got)) parts[p.Index] = got = new byte[p.Pieces][];
-            var b = new byte[p.Bytes.Length];
-            for (int j = 0; j < b.Length; j++) b[j] = p.Bytes[j];
-            got[p.Piece] = b;
-            foreach (var g in got) if (g == null) return;
-
-            int len = 0;
-            foreach (var g in got) len += g.Length;
-            var data = new byte[len];
-            int o = 0;
-            foreach (var g in got) { Buffer.BlockCopy(g, 0, data, o, g.Length); o += g.Length; }
-            arrived.Add((p.Index, data));
-            parts.Remove(p.Index);
-            pending.Remove(p.Index);
-            streamed++;
-        }
-
-        void StartFinish()
+        void StartFinish(ChunkInbox box)
         {
             var w = world;
-            var got = arrived.ToArray();
-            var host = hostSums;
+            var host = box.HostSums.ToArray();
+            var got = new List<(int, byte[])>();
+            for (int k = 0; k < box.Slots.Length; k++)
+            {
+                int len = box.Length(k);
+                if (len > 0) got.Add((k, box.Arena.AsArray().GetSubArray(box.Slots[k].Start, len).ToArray()));
+            }
             ulong hs = hostSeed;
-            arrived.Clear();
             finish = Task.Run(() =>
             {
                 int a = WorldChunks.Across(w.Config.Size);
                 foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, ChunkZip.Inflate(data, WorldChunks.Bytes(w.Config.Size, k % a, k / a)));
-                if (got.Length > 0) WorldChunks.Relink(w);
+                if (got.Count > 0) WorldChunks.Relink(w);
                 w.Config.Seed = hs;
                 var sums = WorldChunks.Checksums(w);
                 int bad = 0;
@@ -293,14 +260,14 @@ namespace Stabby.Game
             });
         }
 
-        void Finish()
+        void Finish(ChunkInbox box)
         {
             if (!finish.IsCompleted) return;
             if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
             var (bad, blob) = finish.Result;
             Map = world;
             GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
-                $"streamed {streamed} ({bytesIn / 1024} KB deflated in {piecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
+                $"streamed {box.Streamed} ({box.BytesIn / 1024} KB deflated in {box.PiecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
             if (bad == 0) { GameStatus.Synced.Add(World.Name); ground = Ground.Create(EntityManager, blob); }
             else GameStatus.Failure = GameStatus.Lines[World.Name];
         }
