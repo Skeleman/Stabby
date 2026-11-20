@@ -35,6 +35,12 @@ namespace Stabby.World
                             + 0.12f * Noise.Fbm(seed ^ 0x7AB1u, x * 48f / n, y * 48f / n, 4));
                         h[i] += (top - h[i]) * s.Cliff[i];
                     }
+                    if (s.Plateau[i] > 0)
+                    {
+                        float top = c.HighlandHeight * (1 + 0.12f * Noise.Fbm(seed ^ 0x416Bu, x * 12f / n, y * 12f / n, 3)
+                            + 0.05f * Noise.Fbm(seed ^ 0x9E37u, x * 48f / n, y * 48f / n, 4));
+                        h[i] += (top - h[i]) * s.Plateau[i];
+                    }
                     float beach = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                     if (beach > 0) h[i] += (Math.Min(h[i], BeachCap(c, m)) - h[i]) * beach;
                     // Noise alone outweighs a lowland corridor, so its floor is graded to its mouth;
@@ -150,9 +156,11 @@ namespace Stabby.World
                 float m = s.Coast[i] * c.CellMeters;
                 float w = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
                 beachCap[i] = BeachCap(c, m) + (1 - w) * 1e6f;
-                float core = Grid.Smoothstep(0.6f, 1f, s.Cliff[i]);
+                // Tableland caprock reaches out to its rim, so the top ends in an escarpment
+                // instead of fraying back into canyons.
+                float core = Math.Max(Grid.Smoothstep(0.6f, 1f, s.Cliff[i]), Grid.Smoothstep(0.15f, 0.5f, s.Plateau[i]));
                 slope[i] = c.MaxSlope * (1 + c.CliffSlope * core);
-                erod[i] = c.Erodibility * (1 - c.CaprockHardness * core);
+                erod[i] = c.Erodibility * (1 - c.CaprockHardness * core) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
             }
 
             float dt = c.TimeStepYears;
@@ -223,8 +231,20 @@ namespace Stabby.World
                 if (!sea[i] && graded[i] > h[i] && graded[i] - h[i] < FlatGrade) h[i] = graded[i];
         }
 
-        // Cliff cells see the sea as a wall at their own height, so diffusion
-        // does not round them off.
+        static float SummitCore(WorldSketch s, int x, int y)
+        {
+            float w = 0;
+            foreach (var hl in s.Highlands)
+                if (!hl.Plateau)
+                {
+                    float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                    w = Math.Max(w, 1 - Grid.Smoothstep(0.3f, 1f, d));
+                }
+            return w;
+        }
+
+        // Cliff cells see the sea as a wall at their own height, and tableland caprock
+        // barely creeps, so diffusion rounds neither off.
         static void Diffuse(WorldConfig c, WorldSketch s, float[] h, bool[] sea)
         {
             int n = c.Size;
@@ -241,7 +261,7 @@ namespace Stabby.World
                     lap += (sea[i + 1] ? wall : src[i + 1]) - src[i];
                     lap += (sea[i - n] ? wall : src[i - n]) - src[i];
                     lap += (sea[i + n] ? wall : src[i + n]) - src[i];
-                    h[i] = src[i] + k * lap;
+                    h[i] = src[i] + k * (1 - Grid.Smoothstep(0.15f, 0.5f, s.Plateau[i])) * lap;
                 }
         }
 

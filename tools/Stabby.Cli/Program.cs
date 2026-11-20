@@ -52,6 +52,8 @@ int Gen()
     // Raw float32 grids for measuring in scripts.
     WriteFloats(Path.Combine(dir, "height.f32"), w.Height);
     WriteFloats(Path.Combine(dir, "cliff.f32"), w.Sketch.Cliff);
+    WriteFloats(Path.Combine(dir, "plateau.f32"), w.Sketch.Plateau);
+    WriteFloats(Path.Combine(dir, "uplift.f32"), w.Sketch.Uplift);
     var m = Metrics(w, biomes, ms, violations);
     File.WriteAllText(Path.Combine(dir, "metrics.json"), JsonSerializer.Serialize(m, json));
     Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");

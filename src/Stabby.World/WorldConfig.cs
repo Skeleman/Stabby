@@ -5,7 +5,7 @@ namespace Stabby.World
     // Grid y grows northward. Heights are metres, time is years, precipitation is mm/yr.
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 11;
+        public const int GeneratorVersion = 12;
 
         public ulong Seed = 1;
         // The main island is about 12 km across, between Punchy's 8 and the old 16 (Zach 11-20).
@@ -55,6 +55,11 @@ namespace Stabby.World
         // caprock (CaprockHardness off erodibility) keeps its top flat under erosion.
         public float PlateauHeight = 90f, CaprockHardness = 0.995f;
         public float CliffSlope = 3f, CliffFootDepth = 25f;
+        // The main ridges meet at a summit cone (radius in island radii) beside a caprock
+        // tableland HighlandHeight high.
+        // SummitHardness takes that share off the cone's erodibility so it outstands the ridges.
+        public float PeakStrength = 1.8f, PeakRadius = 0.2f, SummitHardness = 0.75f;
+        public float HighlandHeight = 380f, HighlandRadiusMin = 0.16f, HighlandRadiusMax = 0.24f;
         public float BeachGrade = 0.015f, BeachMeters = 675f;
         // Ridges run on under the sea for this share of their length, cresting this deep.
         public float RidgeReach = 1f, RidgeCrestDepth = 6f;

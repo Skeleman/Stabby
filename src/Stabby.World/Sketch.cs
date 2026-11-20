@@ -76,6 +76,13 @@ namespace Stabby.World
         public float X, Y, Radius;
     }
 
+    // A summit cone where ranges meet, or a flat caprock tableland up among them.
+    public sealed class HighlandSketch
+    {
+        public bool Plateau;
+        public float X, Y, Radius;
+    }
+
     // The coarse, editable layer. The lists are authored (generated or by hand);
     // Land and Uplift are derived by Build, so an edit regenerates a consistent
     // world instead of being patched in afterwards.
@@ -92,6 +99,7 @@ namespace Stabby.World
         // Basins that must hold a lake, shaped like islands by their lobes.
         public List<LandmassSketch> Lakes = new List<LandmassSketch>();
         public List<ShoreSketch> Shores = new List<ShoreSketch>();
+        public List<HighlandSketch> Highlands = new List<HighlandSketch>();
 
         public bool[] Land;
         public float[] Uplift;
@@ -101,6 +109,8 @@ namespace Stabby.World
         public float[] ValleyRun;
         // Shore weights (0..1) on land and sea alike.
         public float[] Cliff, Beach;
+        // Highland tableland weight (0..1).
+        public float[] Plateau;
 
         public const int LandmarkPadCells = 2;
         public const float CorridorDepth = 0.9f, LakeDepth = 0.95f;
@@ -110,6 +120,10 @@ namespace Stabby.World
         const float CoastReach = 1.45f, WarpReach = 0.045f, Warp = 0.06f;
         // Islets may sit this many of their radii apart, coast to coast, so they can cluster.
         const float IsletClear = 0.5f;
+        // A tableland keeps this many of its radii from the coast, so it never ends in a sea cliff.
+        const float HighlandCoastClear = 1.1f;
+        // Share of its radius a tableland's rim wanders in or out, so it reads as eroded rock, not a disc.
+        const float PlateauEdgeNoise = 0.4f;
 
         public static WorldSketch Generate(WorldConfig c)
         {
@@ -155,6 +169,7 @@ namespace Stabby.World
                     cor = AddValley(n, m, s.Land, inland, s.Ranges, ref ranges);
                     var lakes = Rng.Stream(c.Seed, "lakes");
                     if (cor != null) s.Lakes.Add(ValleyLake(n, m, cor, inland, c.MainLakeRadius, ref lakes));
+                    if (cor != null) AddHighlands(n, c, m, s, s.Ranges[firstRange], cor, inland);
                 }
                 else
                     for (int i = ranges.Range(c.RangesMin, c.RangesMax + 1); i > 0; i--)
@@ -207,6 +222,7 @@ namespace Stabby.World
                         Land[y * n + x] = true;
                     }
             BuildShores();
+            BuildPlateaus(c);
             BuildUplift(c);
         }
 
@@ -227,6 +243,25 @@ namespace Stabby.World
                     }
             }
             for (int i = 0; i < n * n; i++) Cliff[i] *= 1f - Beach[i];
+        }
+
+        void BuildPlateaus(WorldConfig c)
+        {
+            int n = Size;
+            Plateau = new float[n * n];
+            uint edge = Rng.Stream(c.Seed, "plateau-edge").NextU32();
+            foreach (var hl in Highlands)
+            {
+                if (!hl.Plateau) continue;
+                int r = (int)Math.Ceiling(hl.Radius * (1 + PlateauEdgeNoise));
+                for (int y = Math.Max(0, (int)hl.Y - r); y <= Math.Min(n - 1, (int)hl.Y + r); y++)
+                    for (int x = Math.Max(0, (int)hl.X - r); x <= Math.Min(n - 1, (int)hl.X + r); x++)
+                    {
+                        float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                        d /= 1 + PlateauEdgeNoise * Noise.Fbm(edge, x * 26f / n, y * 26f / n, 3);
+                        Plateau[y * n + x] = Math.Max(Plateau[y * n + x], 1f - Grid.Smoothstep(0.6f, 1f, d));
+                    }
+            }
         }
 
         bool[] LandMask(WorldConfig c)
@@ -364,7 +399,9 @@ namespace Stabby.World
             float px = -ay, py = ax;
             float half = m.Radius * rng.Range(0.3f, 0.38f);
             float back = m.Radius * rng.Range(0.55f, 0.8f), front = m.Radius * rng.Range(0.45f, 0.7f);
-            bool fork = rng.NextFloat() < 0.5f;
+            // Both ridges always rise to one apex, the island's summit (Zach 11-20).
+            rng.NextFloat();
+            const bool fork = true;
             const int Points = 5;
             var mx = new float[Points]; var my = new float[Points];
             for (int side = -1; side <= 1; side += 2)
@@ -399,6 +436,52 @@ namespace Stabby.World
             int open = Points - 1 - head;
             var tail = new CorridorSketch { X = cx.GetRange(open, cx.Count - open).ToArray(), Y = cy.GetRange(open, cy.Count - open).ToArray() };
             return SkirtsCoast(n, tail, inland) ? null : new CorridorSketch { X = cx.ToArray(), Y = cy.ToArray(), Width = m.Radius * 0.08f };
+        }
+
+        // The summit sits on the ridges' apex; the tableland abuts it on whichever side,
+        // preferring the back, has room away from the coast, valley and lake.
+        static void AddHighlands(int n, WorldConfig c, LandmassSketch m, WorldSketch s, RangeSketch ridge, CorridorSketch cor, float[] inland)
+        {
+            float ax = ridge.X[0], ay = ridge.Y[0];
+            float bx = ax - cor.X[cor.X.Length - 1], by = ay - cor.Y[cor.Y.Length - 1];
+            float len = (float)Math.Sqrt(bx * bx + by * by);
+            if (len < 1e-3f) return;
+            bx /= len; by /= len;
+            // An apex near the coast slides inland so the whole cone stands on land.
+            float pr = m.Radius * c.PeakRadius;
+            for (int k = 0; k < 40 && Room(n, inland, ax, ay) < pr * 1.5f; k++)
+            {
+                float tx = m.X - ax, ty = m.Y - ay, tl = (float)Math.Sqrt(tx * tx + ty * ty);
+                if (tl < 1) break;
+                ax += tx / tl; ay += ty / tl;
+            }
+            s.Highlands.Add(new HighlandSketch { X = ax, Y = ay, Radius = pr });
+            var rng = Rng.Stream(c.Seed, "highlands");
+            float want = m.Radius * rng.Range(c.HighlandRadiusMin, c.HighlandRadiusMax);
+            float best = 0, bestX = 0, bestY = 0, bestR = 0;
+            float dx = bx, dy = by;
+            for (int k = 0; k < 16; k++)
+            {
+                float facing = dx * bx + dy * by;
+                if (facing > -0.2f)
+                    for (float r = want; r >= m.Radius * c.HighlandRadiusMin * 0.5f; r *= 0.85f)
+                    {
+                        float x = ax + dx * (r + pr * 0.7f), y = ay + dy * (r + pr * 0.7f);
+                        if (Room(n, inland, x, y) < r * HighlandCoastClear || NearCorridor(cor, x, y, r)) continue;
+                        bool clear = true;
+                        foreach (var l in s.Lakes)
+                            foreach (var b in l.Lobes)
+                                if ((b.X - x) * (b.X - x) + (b.Y - y) * (b.Y - y) < (b.Radius + r) * (b.Radius + r)) clear = false;
+                        if (!clear) continue;
+                        float score = r * (1.5f + facing);
+                        if (score > best) { best = score; bestX = x; bestY = y; bestR = r; }
+                        break;
+                    }
+                // 22.5 degrees, written out so generation stays free of trig.
+                float tx = dx * 0.92387953f - dy * 0.38268343f;
+                dy = dx * 0.38268343f + dy * 0.92387953f; dx = tx;
+            }
+            if (bestR > 0) s.Highlands.Add(new HighlandSketch { Plateau = true, X = bestX, Y = bestY, Radius = bestR });
         }
 
         // A lake strung along the upper valley, lobes tapering towards both ends.
@@ -443,6 +526,9 @@ namespace Stabby.World
                 foreach (var l in s.Lakes)
                     foreach (var b in l.Lobes)
                         if ((b.X - x) * (b.X - x) + (b.Y - y) * (b.Y - y) < (b.Radius + r * 3) * (b.Radius + r * 3)) clear = false;
+                // Tableland height overrides the basin a pond needs.
+                foreach (var h in s.Highlands)
+                    if (h.Plateau && (h.X - x) * (h.X - x) + (h.Y - y) * (h.Y - y) < (h.Radius + r * 2) * (h.Radius + r * 2)) clear = false;
                 if (!clear) continue;
                 var pond = new LandmassSketch { X = x, Y = y, Radius = r, AxisX = 1, AxisY = 0 };
                 pond.Lobes.Add(new LobeSketch { X = x, Y = y, Radius = r });
@@ -698,6 +784,12 @@ namespace Stabby.World
                         float d = DistanceToPolyline(r.X, r.Y, x, y) / r.Width;
                         u = Math.Max(u, r.Strength * (float)FMath.Exp(-d * d));
                     }
+                    foreach (var hl in Highlands)
+                        if (!hl.Plateau)
+                        {
+                            float d = (float)Math.Sqrt((x - hl.X) * (x - hl.X) + (y - hl.Y) * (y - hl.Y)) / hl.Radius;
+                            u = Math.Max(u, c.PeakStrength * (1 - Grid.Smoothstep(0, 1, d)));
+                        }
                     foreach (var cor in Corridors)
                     {
                         float d = DistanceToPolyline(cor.X, cor.Y, x, y) / cor.Width;
@@ -707,7 +799,7 @@ namespace Stabby.World
                     }
                     foreach (var lk in Lakes) u *= 1 - LakeDepth * Grid.Smoothstep(-0.8f, 0.2f, lk.Core(x, y));
                     // Caprock barely erodes, so any uplift on it would pile up without limit.
-                    u *= 1 - Cliff[i];
+                    u *= (1 - Cliff[i]) * (1 - Grid.Smoothstep(0, 0.5f, Plateau[i]));
                     float taper = Grid.Smoothstep(0, 6, coast[i]);
                     Uplift[i] = Math.Max(0, u) * (taper + (1 - taper) * Cliff[i]);
                 }

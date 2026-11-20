@@ -7,7 +7,7 @@ namespace Stabby.Content;
 // derived masks are rebuilt by WorldSketch.Build on load.
 public static class SketchFile
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
     sealed class Dto
     {
@@ -23,6 +23,7 @@ public static class SketchFile
         public List<LandmarkDto> Landmarks { get; set; } = new();
         public List<LandmassDto> Lakes { get; set; } = new();
         public List<ShoreDto> Shores { get; set; } = new();
+        public List<ShoreDto> Highlands { get; set; } = new();
     }
 
     sealed class LandmassDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } public List<LobeDto>? Lobes { get; set; } }
@@ -51,6 +52,7 @@ public static class SketchFile
         Landmarks = s.Landmarks.Select(l => new LandmarkDto { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
         Lakes = s.Lakes.Select(ToDto).ToList(),
         Shores = s.Shores.Select(h => new ShoreDto { Kind = h.Cliff ? "cliff" : "beach", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
+        Highlands = s.Highlands.Select(h => new ShoreDto { Kind = h.Plateau ? "plateau" : "peak", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
     }, Options);
 
     // The file's seed, size and cell size win over the caller's, so an edited sketch
@@ -66,6 +68,7 @@ public static class SketchFile
         if (d.Ranges.Any(r => r.Strength is null)) errors.Add("ranges need strength");
         if (d.Corridors.Any(r => r.Strength is not null)) errors.Add("corridors have no strength");
         if (d.Shores.Any(h => h.Kind != "cliff" && h.Kind != "beach")) errors.Add("shore kind is cliff or beach");
+        if (d.Highlands.Any(h => h.Kind != "peak" && h.Kind != "plateau")) errors.Add("highland kind is peak or plateau");
         if (errors.Count > 0) throw new InvalidDataException(string.Join("; ", errors));
 
         c.Seed = d.Seed; c.Size = d.Size; c.CellMeters = d.CellMeters;
@@ -79,6 +82,7 @@ public static class SketchFile
             Landmarks = d.Landmarks.Select(l => new LandmarkSketch { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
             Lakes = d.Lakes.Select(FromDto).ToList(),
             Shores = d.Shores.Select(h => new ShoreSketch { Cliff = h.Kind == "cliff", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
+            Highlands = d.Highlands.Select(h => new HighlandSketch { Plateau = h.Kind == "plateau", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
         };
         s.Build(c);
         return s;
