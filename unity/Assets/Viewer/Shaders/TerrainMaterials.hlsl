@@ -288,7 +288,7 @@ float3 TmBlade(float2 p, float2 d, float f, float3 w, out float2 grad)
 float3 TmGrassGreen(float3 base)
 {
     float lum = dot(base, float3(0.2126, 0.7152, 0.0722));
-    return lerp(lum.xxx, base, 0.75) * float3(0.97, 0.94, 0.83);
+    return lerp(lum.xxx, base, 0.58) * float3(0.97, 0.93, 0.78);
 }
 
 TmOut TmGrass(float3 wp, float3 base, float fp, float4 A, float4 B)

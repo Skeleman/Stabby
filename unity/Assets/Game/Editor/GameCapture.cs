@@ -150,7 +150,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "rock" ? 7 : only == "coast" ? 9 : 1;
+                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : 1;
             }
             while (phase <= 6)
             {
@@ -234,6 +234,12 @@ namespace Stabby.Game.Editor
                     cam.transform.SetPositionAndRotation(mp, Quaternion.LookRotation(gf - new Vector3(0, 0.2f, 0)));
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "grass-meadow");
+                    if (only == "grass")
+                    {
+                        File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                        Finish(0);
+                        return;
+                    }
                 }
                 if (phase == 9)
                 {

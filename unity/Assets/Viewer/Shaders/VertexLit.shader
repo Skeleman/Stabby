@@ -92,7 +92,10 @@ Shader "Stabby/VertexLit"
                 [branch] if (_StabbyGrassFar.x > 0 && tmGrass > 0.01)
                 {
                     float2 xa = i.xz + TmOrigin(_WorldSpaceCameraPos);
-                    float far = smoothstep(0.7, 1, distance(float3(xa.x, h, xa.y), _WorldSpaceCameraPos) / _StabbyGrassFar.x);
+                    float dr = distance(float3(xa.x, h, xa.y), _WorldSpaceCameraPos) / _StabbyGrassFar.x;
+                    float far = smoothstep(0.7, 1, dr);
+                    float3 bt = lerp(dot(m.albedo, float3(0.2126, 0.7152, 0.0722)).xxx, m.albedo, 0.74) * float3(1.0, 0.96, 0.86);
+                    m.albedo = lerp(m.albedo, bt, tmGrass * smoothstep(0.4, 1, dr));
                     float gust = WindGust(xa, _Time.y);
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
