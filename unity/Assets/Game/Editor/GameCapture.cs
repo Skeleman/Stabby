@@ -153,11 +153,19 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : 1;
             }
             if (phase == 50)
             {
                 if (job == null) job = CliffTour(cam, dir);
+                if (job.MoveNext()) return;
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
+            }
+            if (phase == 120)
+            {
+                if (job == null) job = ScaleTour(cam, dir);
                 if (job.MoveNext()) return;
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -788,6 +796,41 @@ namespace Stabby.Game.Editor
         static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f, 0.65f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.15f, 0.04f };
         static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5, 6 };
         static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close", "oak-close" };
+
+        static System.Collections.IEnumerator ScaleTour(Camera cam, string dir)
+        {
+            var pose = System.Environment.GetEnvironmentVariable("STABBY_SCALE_POSE")?.Split(',').Select(v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (pose != null && pose.Length == 7) cam.transform.SetPositionAndRotation(new Vector3(pose[0], pose[1], pose[2]), new Quaternion(pose[3], pose[4], pose[5], pose[6]));
+            else if (!AimFoliage(cam, 1)) { GameStatus.Lines["~scale"] = "scale: no forest found"; yield break; }
+            var at = cam.transform;
+            GameStatus.Lines["~scale pose"] = string.Format(System.Globalization.CultureInfo.InvariantCulture, "scale pose {0:F2},{1:F2},{2:F2},{3:F5},{4:F5},{5:F5},{6:F5}", at.position.x, at.position.y, at.position.z, at.rotation.x, at.rotation.y, at.rotation.z, at.rotation.w);
+            var settle = System.Diagnostics.Stopwatch.StartNew();
+            int frames = 0;
+            for (; frames < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && settle.Elapsed.TotalSeconds < 150); frames++) yield return null;
+            GameStatus.Lines["~scale settle"] = $"scale settle: {frames} frames, {settle.Elapsed.TotalSeconds:F1} s, objects pending {ObjectViewSystem.Pending}, terrain behind {GameStatus.TerrainBehind}";
+            while (!ObjectScale.Sample("still forest")) yield return null;
+            GameStatus.Lines["~scale lod"] = ObjectScale.Forced();
+            GameStatus.Lines["~scale memory"] = ObjectScale.Memory();
+            GameStatus.Lines["~objects draw"] = DrawStats();
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "scale-forest");
+            GameStatus.Lines["~bench scale forest"] = Bench(cam, "forest with grass, shadows, terrain and water");
+            GameStatus.Lines["~bench scale forest shadows"] = ShadowBench(cam, "forest", true);
+            GameStatus.Lines["~bench trees"] = FoliageBench(cam, "trees filling the view");
+            var p = at.position;
+            var fwd = Vector3.ProjectOnPlane(at.forward, Vector3.up).normalized;
+            float rise = p.y - GroundHeight(p.x, p.z);
+            do
+            {
+                p += fwd * 2f;
+                p.y = GroundHeight(p.x, p.z) + rise;
+                at.position = p;
+                yield return null;
+            }
+            while (!ObjectScale.Sample("walking 2 m per frame"));
+            GameStatus.Lines["~scale"] = ObjectScale.Report();
+            ObjectScale.Stop();
+        }
 
         static bool AimFoliage(Camera cam, int range)
         {
