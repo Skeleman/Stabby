@@ -59,15 +59,22 @@ namespace Stabby.Game
         {
             public GeneratedWorld Map;
             public int Mound;
-            public BlobBuilder Packed, Ground;
+            public BlobBuilder Packed;
+            public Task<GroundParts> Fill;
+            public long FillMs;
             public string Source;
         }
 
         Task<Prepared> gen;
+        Prepared prepared;
         BlobAssetReference<GroundData> ground;
         BlobAssetReference<PackedChunks> packed;
+        BlobBake<PackedChunks> packBake;
+        BlobBake<GroundData> groundBake;
+        GroundParts filled;
 
         public GeneratedWorld Map { get; private set; }
+        public GroundParts Parts { get; private set; }
 
         protected override void OnCreate()
         {
@@ -81,21 +88,36 @@ namespace Stabby.Game
                 var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.Seed), defs, lib, true);
                 w.Objects = objects;
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
+                p.Fill = Task.Run(() =>
+                {
+                    var g = Ground.Fill(w);
+                    p.FillMs = sw.ElapsedMilliseconds;
+                    return g;
+                });
                 var sums = WorldChunks.Checksums(w);
                 long sumsMs = sw.ElapsedMilliseconds;
                 p.Packed = Pack(w, sums);
-                long packMs = sw.ElapsedMilliseconds;
-                p.Ground = Ground.Fill(w);
-                p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {packMs} ms, detail at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
+                p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
                 return p;
             });
+        }
+
+        sealed class Buffers
+        {
+            public readonly byte[] Raw = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+            public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
         }
 
         static BlobBuilder Pack(GeneratedWorld w, ulong[] sums)
         {
             int a = WorldChunks.Across(w.Config.Size), total = 0;
             var zipped = new byte[sums.Length][];
-            for (int k = 0; k < zipped.Length; k++) { zipped[k] = ChunkZip.Deflate(WorldChunks.Pack(w, k % a, k / a)); total += zipped[k].Length; }
+            Parallel.For(0, a, () => new Buffers(), (cy, _, u) =>
+            {
+                for (int cx = 0; cx < a; cx++) zipped[cy * a + cx] = ChunkZip.Deflate(u.Raw, WorldChunks.Pack(w, cx, cy, u.Raw, 0), u.Scratch);
+                return u;
+            }, _ => { });
+            for (int k = 0; k < zipped.Length; k++) total += zipped[k].Length;
             var b = new BlobBuilder(Allocator.Persistent);
             ref var root = ref b.ConstructRoot<PackedChunks>();
             root.Seed = w.Config.Seed;
@@ -108,8 +130,9 @@ namespace Stabby.Game
             {
                 s[k] = sums[k];
                 r[k] = new int2(at, zipped[k].Length);
-                for (int j = 0; j < zipped[k].Length; j++) bytes[at + j] = zipped[k][j];
-                at += zipped[k].Length;
+                var z = zipped[k];
+                for (int j = 0; j < z.Length; j++) bytes[at + j] = z[j];
+                at += z.Length;
             }
             return b;
         }
@@ -117,34 +140,66 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             EntityManager.CompleteAllTrackedJobs();
-            if (ground.IsCreated) { ground.Dispose(); packed.Dispose(); }
-            Owned.Release(gen, p => { p.Ground.Dispose(); p.Packed.Dispose(); });
+            packBake.Release();
+            groundBake.Release();
+            if (packed.IsCreated) packed.Dispose();
+            if (ground.IsCreated) ground.Dispose();
+            else if (prepared != null && filled == null) Owned.Release(prepared.Fill, g => g.Blob.Dispose());
+            Owned.Release(gen, p => { p.Packed.Dispose(); Owned.Release(p.Fill, g => g.Blob.Dispose()); });
         }
 
         protected override void OnUpdate()
         {
-            if (!gen.IsCompleted) return;
+            if (gen != null)
+            {
+                if (!gen.IsCompleted) return;
+                if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); gen = null; Enabled = false; return; }
+                prepared = gen.Result;
+                gen = null;
+                packBake = BlobBake<PackedChunks>.Start(prepared.Packed);
+            }
+            if (packBake.Started)
+            {
+                if (!packBake.IsCompleted) return;
+                packed = packBake.Take();
+                int n = prepared.Map.Config.Size, mound = prepared.Mound;
+                if (mound >= 0) EntityManager.CreateSingleton(new SpawnPoint { XZ = new float2(mound % n, mound / n) * prepared.Map.Config.CellMeters });
+                EntityManager.CreateSingleton(new ChunkStore { Blob = packed });
+            }
+            var p = prepared;
+            if (filled == null)
+            {
+                if (!p.Fill.IsCompleted) return;
+                if (p.Fill.IsFaulted) { Enabled = false; prepared = null; GameStatus.Failure = p.Fill.Exception.ToString(); return; }
+                filled = p.Fill.Result;
+                groundBake = BlobBake<GroundData>.Start(filled.Blob);
+            }
+            if (!groundBake.IsCompleted) return;
             Enabled = false;
-            if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); gen = null; return; }
-            var p = gen.Result;
-            gen = null;
+            prepared = null;
+            Parts = filled;
+            ground = Ground.Create(EntityManager, groundBake.Take());
             Map = p.Map;
-            int mound = p.Mound, n = Map.Config.Size;
-            ground = Ground.Create(EntityManager, p.Ground);
-            packed = p.Packed.CreateBlobAssetReference<PackedChunks>(Allocator.Persistent);
-            p.Packed.Dispose();
-            if (mound >= 0) EntityManager.CreateSingleton(new SpawnPoint { XZ = new float2(mound % n, mound / n) * Map.Config.CellMeters });
-            EntityManager.CreateSingleton(new ChunkStore { Blob = packed });
-            GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, +5 m mound at cell {mound % n},{mound / n}";
+            int size = Map.Config.Size;
+            GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, detail at {p.FillMs} ms, +5 m mound at cell {p.Mound % size},{p.Mound / size}";
         }
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     public partial class ClientMapSystem : SystemBase
     {
+        sealed class Buffers
+        {
+            public byte[] Packed = new byte[0];
+            public readonly byte[] Raw = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+            public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+        }
+
         Task<(GeneratedWorld, ulong[])> gen;
-        Task<(int, BlobBuilder)> finish;
+        Task<(int, GroundParts)> finish;
         BlobAssetReference<GroundData> ground;
+        BlobBake<GroundData> groundBake;
+        GroundParts synced;
         GeneratedWorld world;
         ulong[] mine;
         ulong hostSeed;
@@ -159,6 +214,7 @@ namespace Stabby.Game
         public MaterialLibrary Materials { get; private set; }
         public ObjectLibrary Objects { get; private set; }
         public GeneratedWorld Map { get; private set; }
+        public GroundParts Parts { get; private set; }
 
         protected override void OnCreate()
         {
@@ -170,8 +226,9 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             EntityManager.CompleteAllTrackedJobs();
+            groundBake.Release();
             if (ground.IsCreated) ground.Dispose();
-            if (Map == null) Owned.Release(finish, r => { if (r.Item1 == 0) r.Item2.Dispose(); });
+            if (Map == null && synced == null) Owned.Release(finish, r => { if (r.Item1 == 0) r.Item2.Blob.Dispose(); });
             if (inbox != Entity.Null && EntityManager.Exists(inbox)) EntityManager.GetComponentData<ChunkInbox>(inbox).Dispose();
         }
 
@@ -253,36 +310,50 @@ namespace Stabby.Game
         {
             var w = world;
             var host = box.HostSums.ToArray();
-            var got = new List<(int, byte[])>();
-            for (int k = 0; k < box.Slots.Length; k++)
-            {
-                int len = box.Length(k);
-                if (len > 0) got.Add((k, box.Arena.AsArray().GetSubArray(box.Slots[k].Start, len).ToArray()));
-            }
+            var slots = box.Slots.ToArray();
+            var arena = box.Arena.AsArray();
             ulong hs = hostSeed;
             finish = Task.Run(() =>
             {
-                int a = WorldChunks.Across(w.Config.Size);
-                foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, ChunkZip.Inflate(data, WorldChunks.Bytes(w.Config.Size, k % a, k / a)));
+                int n = w.Config.Size, a = WorldChunks.Across(n);
+                var got = new List<int>();
+                for (int k = 0; k < slots.Length; k++) if (slots[k].Pieces > 0) got.Add(k);
+                Parallel.For(0, got.Count, () => new Buffers(), (j, _, u) =>
+                {
+                    int k = got[j], cx = k % a, cy = k / a, len = ChunkInbox.Length(slots[k]);
+                    if (u.Packed.Length < len) u.Packed = new byte[len];
+                    NativeArray<byte>.Copy(arena, slots[k].Start, u.Packed, 0, len);
+                    ChunkZip.Inflate(u.Packed, 0, len, WorldChunks.Bytes(n, cx, cy), u.Scratch, u.Raw);
+                    WorldChunks.Unpack(w, cx, cy, u.Raw, 0);
+                    return u;
+                }, _ => { });
                 w.Config.Seed = hs;
                 if (got.Count > 0) WorldChunks.Relink(w);
                 var sums = WorldChunks.Checksums(w);
                 int bad = 0;
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
-                return (bad, bad == 0 ? Ground.Fill(w) : default);
+                return (bad, bad == 0 ? Ground.Fill(w) : null);
             });
         }
 
         void Finish(ChunkInbox box)
         {
-            if (!finish.IsCompleted) return;
-            if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
-            var (bad, blob) = finish.Result;
+            if (synced == null)
+            {
+                if (!finish.IsCompleted) return;
+                if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
+                var (bad, parts) = finish.Result;
+                GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
+                    $"streamed {box.Streamed} ({box.BytesIn / 1024} KB deflated in {box.PiecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
+                if (bad != 0) { Map = world; GameStatus.Failure = GameStatus.Lines[World.Name]; return; }
+                synced = parts;
+                groundBake = BlobBake<GroundData>.Start(parts.Blob);
+            }
+            if (!groundBake.IsCompleted) return;
+            ground = Ground.Create(EntityManager, groundBake.Take());
+            GameStatus.Synced.Add(World.Name);
+            Parts = synced;
             Map = world;
-            GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
-                $"streamed {box.Streamed} ({box.BytesIn / 1024} KB deflated in {box.PiecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
-            if (bad == 0) { GameStatus.Synced.Add(World.Name); ground = Ground.Create(EntityManager, blob); }
-            else GameStatus.Failure = GameStatus.Lines[World.Name];
         }
     }
 }

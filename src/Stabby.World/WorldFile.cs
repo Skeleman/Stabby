@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -61,16 +62,9 @@ namespace Stabby.World
             if (expected != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {expected}");
             var w = Empty(c, biomeIds, materials);
             int a = WorldChunks.Across(c.Size);
-            for (int k = 0; k < a * a; k++)
-            {
-                int len = WorldChunks.Bytes(c.Size, k % a, k / a);
-                if (o + len > data.Length) throw new FormatException($"world file ends inside chunk {k}");
-                var ch = new byte[len];
-                Buffer.BlockCopy(data, o, ch, 0, len);
-                WorldChunks.Unpack(w, k % a, k / a, ch);
-                o += len;
-            }
-            if (o != data.Length) throw new FormatException($"world file has {data.Length - o} trailing bytes");
+            var at = new int[a * a];
+            for (int k = 0; k < a * a; k++) { at[k] = o; o += WorldChunks.Bytes(c.Size, k % a, k / a); }
+            Parallel.For(0, a * a, k => WorldChunks.Unpack(w, k % a, k / a, data, at[k]));
             WorldChunks.Relink(w);
             return w;
         }

@@ -602,6 +602,7 @@ namespace Stabby.Game
         IEnumerator<bool> upload;
         const int UploadBytes = 2 << 20;
         BlobAssetReference<TerrainLookData> look, lookReady;
+        BlobBake<TerrainLookData> lookBake;
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
         NativeHashSet<int> split, drawn;
@@ -691,23 +692,20 @@ namespace Stabby.Game
         void Begin()
         {
             var map = World.GetExistingSystemManaged<ClientMapSystem>();
-            if (map.Map == null || !SystemAPI.TryGetSingleton(out ground)) return;
+            if (map.Map == null || map.Parts == null || !SystemAPI.TryGetSingleton(out ground)) return;
             var world = map.Map;
+            var parts = map.Parts;
             var defs = map.Defs;
             quads = map.Objects?.Terrain ?? quads;
             string materials = MaterialFile.DefaultPath;
-            ref var src = ref ground.Blob.Value.Edits;
-            var edits = new FeatureEdit[src.Length];
-            for (int f = 0; f < edits.Length; f++) edits[f] = src[f];
             since.Restart();
-            preparing = Task.Run(() => Prepare(world, defs, materials, edits));
+            preparing = Task.Run(() => Prepare(world, parts.Detail, defs, materials, parts.Edits));
         }
 
-        static Prepared Prepare(GeneratedWorld world, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits)
+        static Prepared Prepare(GeneratedWorld world, TerrainDetail detail, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits)
         {
             int n = world.Config.Size;
             float cm = world.Config.CellMeters;
-            var detail = new TerrainDetail(world);
             var p = new Prepared { Lakes = new List<MeshParts>() };
             Pyramid(world, detail, edits, p);
             for (int cy = 0; cy < n; cy += LakeCells)
@@ -805,10 +803,11 @@ namespace Stabby.Game
             if (!task.IsCompletedSuccessfully) { UnityEngine.Debug.LogException(task.Exception); yield break; }
             prepared = task.Result;
             GameStatus.Lines["terrain~prep"] = $"terrain prepared at {since.ElapsedMilliseconds} ms";
-            lookReady = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
-            prepared.Look.Dispose();
+            lookBake = BlobBake<TerrainLookData>.Start(prepared.Look);
             yield return "blob";
             foreach (string step in TerrainLook.StrataSteps(prepared.Strata)) yield return step;
+            while (!lookBake.IsCompleted) yield return "blob wait";
+            lookReady = lookBake.Take();
             Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.45f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.14f, 0.14f, 0.13f));
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
@@ -1254,6 +1253,7 @@ namespace Stabby.Game
             pending.Clear();
             if (layout.IsCreated) layout.Dispose();
             Owned.Release(preparing, p => p.Look.Dispose());
+            lookBake.Release();
             foreach (var mesh in meshes.Values) UnityEngine.Object.Destroy(mesh);
             foreach (var mesh in statics) UnityEngine.Object.Destroy(mesh);
             if (tree.Offset.IsCreated) { tree.Offset.Dispose(); tree.Dim.Dispose(); tree.Range.Dispose(); }
