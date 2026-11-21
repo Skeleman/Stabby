@@ -1,14 +1,19 @@
 #ifndef STABBY_TERRAIN_MATERIALS
 #define STABBY_TERRAIN_MATERIALS
 
+#include "Assets/Viewer/Shaders/Look.hlsl"
+
 float4 _StabbySurface, _StabbyStrataWobble, _StabbyRockA, _StabbyRockB, _StabbyRockC, _StabbyCoatUV;
-float4 _StabbyCoatA[4], _StabbyCoatB[4];
+float4 _StabbyCoatA[4], _StabbyCoatB[4], _StabbyCoatRough;
 float _StabbyDetailOff;
 TEXTURE2D(_StabbyCoat);
 SAMPLER(sampler_StabbyCoat);
+TEXTURE2D(_StabbyWaterLevel);
+SAMPLER(sampler_StabbyWaterLevel);
 
 static float3 tmO;
 static float tmGrass;
+static float tmRough;
 
 struct TmOut { float3 albedo; float3 grad; };
 
@@ -191,9 +196,10 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     TmOut o;
     o.grad = g + bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw);
     float speck = smoothstep(-0.6, 0.6, fine.x) - 0.5;
-    float3 c = st.rgb * (1 + ra.x * gw * grain.x) * (1 + ra.x * 0.9 * fw2 * speck) * (1 + 0.12 * TmFade(_StabbyRockB.x, fp) * (TmHash(int2((int)bed, 11)) * 2 - 1));
+    float3 sc = lerp(st.rgb, dot(st.rgb, float3(0.2126, 0.7152, 0.0722)) * float3(1.07, 1, 0.88), 0.85 * stone);
+    float3 c = sc * (1 + ra.x * gw * grain.x) * (1 + ra.x * 0.9 * fw2 * speck) * (1 + 0.12 * layered * TmFade(_StabbyRockB.x, fp) * (TmHash(int2((int)bed, 11)) * 2 - 1));
     c *= 1 - 0.5 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4));
-    c *= 1 + 0.3 * bump.x * ra.w;
+    c *= 1 + 0.3 * (1 - 0.5 * stone) * bump.x * ra.w;
     float steep = saturate(1 - n.y * n.y);
     float t = dot(q.xz + tmO.xz, normalize(float2(-n.z, n.x) + 1e-5)), fs = steep * TmFade(1.3, fp);
     c *= 1 - 0.14 * fs * layered * saturate(TmN2(float2(t * 1.3, q.y * 0.08), fs).x);
@@ -203,6 +209,10 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         float4 weather = TmLN3(q, 0.9, 3.3, fwt);
         float4 gate = TmLN3(q, 0.22, 7.7, fcr);
         float4 crack = TmLN3(q, 0.45, 23.1, fcr);
+        float ft = TmFade(0.15, fp);
+        float tint = ft * TmLN3(q, 0.15, 29.3, ft).x;
+        c *= 1 + stone * 0.12 * tint * float3(1.1, 1, 0.8);
+        c *= 1 - stone * 0.12 * fs * saturate(TmN2(float2(t * 2.1, q.y * 0.12) + 9.7, fs).x);
         float w = 0.035, ax = abs(crack.x), tc = saturate(ax / w), cg = fcr * smoothstep(-0.1, 0.3, gate.x);
         float seam = (1 - tc * tc * (3 - 2 * tc)) * cg;
         float dl = cg * 6 * tc * (1 - tc) / w * (crack.x < 0 ? -1 : 1) * TmQ(0.45);
@@ -212,6 +222,7 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         o.grad += stone * 0.25 * fwt * weather.yzw;
     }
     o.albedo = c;
+    tmRough = LookRough() + _StabbyLook.w * (0.55 - hard + 0.4 * gw * grain.x);
     return o;
 }
 
@@ -232,7 +243,7 @@ float3 TmBlade(float2 p, float2 d, float f, float3 w, out float2 grad)
 float3 TmGrassGreen(float3 base)
 {
     float lum = dot(base, float3(0.2126, 0.7152, 0.0722));
-    return lerp(lum.xxx, base, 0.75) * float3(1.03, 1, 0.88);
+    return lerp(lum.xxx, base, 0.75) * float3(0.97, 0.94, 0.83);
 }
 
 TmOut TmGrass(float3 wp, float3 base, float fp, float4 A, float4 B)
@@ -253,6 +264,8 @@ TmOut TmGrass(float3 wp, float3 base, float fp, float4 A, float4 B)
     float3 g2 = float3(bump.y + B.x * (fc * clump.y + 0.5 * ft * tuft.y), 0, bump.z + B.x * (fc * clump.z + 0.5 * ft * tuft.z));
     g2 += A.z * fb * float3(bg.x, 0, bg.y);
     float3 green = TmGrassGreen(base);
+    float hv = fc * clump.x + 0.5 * TmNoise2(pa * _StabbyStrataWobble.w * 1.3 + 23.7).x;
+    green *= 1 + 0.06 * hv * float3(1, 0.15, -1);
     float w = _StabbyStrataWobble.w;
     float hn = 0.65 * TmNoise2(pa * w * 2.7 + 5.3).x + 0.35 * TmNoise2(pa * w * 0.6 + 1.9).x;
     float3 c = green * (1 + B.w * 2.5 * hn);
@@ -329,20 +342,16 @@ TmOut TmSoil(float3 wp, float3 n, float3 v, float3 base, float fp, float4 A, flo
 
 TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, float4 A, float4 B)
 {
-    float2 p = wp.xz, wind = _StabbySurface.zw, side = float2(-wind.y, wind.x);
-    float2 pa = p + tmO.xz;
-    float k0 = dot(tmO.xz, wind) * B.y + 0.3 * dot(tmO.xz, side) * B.y * 0.05;
-    k0 -= floor(k0);
-    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(B.y * 6, fp);
-    float3 warp = TmN2(pa * B.y * 0.12 + 13.1, calm);
-    float s = dot(p, wind) * B.y + k0 + 1.5 * warp.x + 0.3 * dot(p, side) * B.y * 0.05, fr = frac(s);
-    float fm = fr * (1 - fr);
-    float2 ds = wind + 1.5 * warp.yz * 0.12 + 0.015 * side;
+    float2 p = wp.xz, wind = _StabbySurface.zw;
+    float f = B.y * 0.3, k0 = frac(dot(tmO.xz, wind) * f);
+    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(f * 4, fp);
+    float3 warp = TmN2((p + tmO.xz) * f * 0.1 + 13.1, calm);
+    float ripple = B.x * calm * 4 * cos(6.2831853 * (dot(p, wind) * f + k0 + 0.5 * warp.x));
     float3 bump = TmFbm2(p, A.y, A.x, 3, fp);
     float fg = TmFade(A.w, fp);
     float3 grain = TmLN2(p, A.w, 2.9, fg);
     float3 patch = TmLN2(p, 0.15, 17.3, 1);
-    float2 g = bump.yz + B.x * calm * 32 * fm * (1 - 2 * fr) * ds + 0.3 * A.z * fg * grain.yz;
+    float2 g = bump.yz + ripple * (wind + 0.05 * f * warp.yz) + 0.3 * A.z * fg * grain.yz;
     float3 sand = lerp(base, ToLinear(_StabbySand.rgb), 0.5 + 0.5 * shore);
     float3 c = sand * (1 + A.z * fg * grain.x) * (1 + B.w * patch.x);
     TmOut o;
@@ -406,6 +415,27 @@ float4 TmFleck(float2 p, float2x2 m, float f, float fp, int salt, float rMin, fl
     return w * float4(in1 * (hs.x * 2 - 1), mul(gq, m), in1);
 }
 
+void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float stone, float m)
+{
+    float fm = TmFade(0.6, fp), fl = TmFade(5.2, fp);
+    float4 patch = TmLN3(wp, 0.6, 51.3, fm);
+    float4 spot = TmLN3(wp, 5.2, 61.7, fl);
+    float top = smoothstep(0.45, 0.9, n.y), wet = cw.x + 0.4 * cw.y, dry = cw.z + 0.5 * cw.y;
+    float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.25 * fl * spot.x);
+    float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fl * smoothstep(0.45, 0.65, spot.x) * smoothstep(-0.2, 0.3, patch.x) * (1 - moss);
+    float grey = stone * saturate(0.4 + 0.4 * dry + 0.3 * wet) * smoothstep(-0.5, 0.3, n.y) * fl * smoothstep(0.5, 0.7, -spot.x) * smoothstep(-0.3, 0.2, -patch.x) * (1 - moss);
+    float dust = stone * dry * top * fm * smoothstep(0, 0.5, patch.x) * (1 - moss);
+    float frost = stone * cw.w * smoothstep(0.55, 0.85, n.y);
+    float3 mossC = lerp(float3(0.045, 0.07, 0.02), float3(0.09, 0.11, 0.03), saturate(0.5 + fl * spot.x));
+    o.albedo = lerp(o.albedo, m * mossC, moss);
+    o.albedo = lerp(o.albedo, m * float3(0.3, 0.31, 0.22), 0.55 * lichen);
+    o.albedo = lerp(o.albedo, m * float3(0.36, 0.36, 0.34), 0.5 * grey);
+    o.albedo = lerp(o.albedo, m * ToLinear(_StabbySand.rgb), 0.3 * dust);
+    o.albedo = lerp(o.albedo, m * float3(0.75, 0.79, 0.84), frost);
+    o.grad *= 1 - 0.6 * moss - frost;
+    tmRough = lerp(tmRough, _StabbyCoatRough.w, frost) + _StabbyLook.w * (moss + 0.5 * lichen);
+}
+
 TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix, float stone)
 {
     float3 grassColor = coatColor;
@@ -436,6 +466,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float sl = min(n.y, face);
     float m = saturate(max((rockMix - 0.5) * 1.6 + 0.5 + br, 1 - smoothstep(0.5, 0.72, sl + 0.4 * br)));
     TmOut o;
+    tmRough = LookRough();
     [branch] if (_StabbyDetailOff > 0)
     {
         float3 st = SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
@@ -447,22 +478,9 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     o.grad = 0;
     tmGrass = 0;
     if (m > 0.01) TmAdd(o, TmRock(wp, n, v, fp, off, dux, duy, stone), m);
-    [branch] if (stone > 0.01)
-    {
-        float fm = TmFade(0.6, fp), fl = TmFade(5.2, fp);
-        float4 patch = TmLN3(wp, 0.6, 51.3, fm);
-        float4 spot = TmLN3(wp, 5.2, 61.7, fl);
-        float top = smoothstep(0.45, 0.9, n.y), wet = cw.x + 0.4 * cw.y;
-        float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.25 * fl * spot.x);
-        float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fl * smoothstep(0.45, 0.65, spot.x) * smoothstep(-0.2, 0.3, patch.x) * (1 - moss);
-        float frost = stone * cw.w * smoothstep(0.55, 0.85, n.y);
-        float3 mossC = lerp(float3(0.045, 0.07, 0.02), float3(0.09, 0.11, 0.03), saturate(0.5 + fl * spot.x));
-        o.albedo = lerp(o.albedo, m * mossC, moss);
-        o.albedo = lerp(o.albedo, m * float3(0.3, 0.31, 0.22), 0.55 * lichen);
-        o.albedo = lerp(o.albedo, m * float3(0.75, 0.79, 0.84), frost);
-        o.grad *= 1 - 0.6 * moss - frost;
-    }
+    [branch] if (stone > 0.01) TmStoneCover(o, wp, n, cw, fp, stone, m);
     float c = 1 - m;
+    tmRough = m * tmRough + c * (dot(cw, _StabbyCoatRough) + 0.5 * _StabbyLook.w * br);
     if (c > 0.01)
     {
         TmOut k;
@@ -492,18 +510,21 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         o.grad += c * up * k.grad;
     }
     float wet = 0;
-    [branch] if (wp.y < 2.4)
+    float hw = wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
+    [branch] if (hw < 2.4)
     {
         float fw = TmFade(0.8, fp);
         float3 tide = TmLN2(wp.xz, 0.11, 7.7, 1);
         float3 dry = TmLN2(wp.xz, 0.8, 29.1, fw);
-        float t = saturate(wp.y / (1.75 + 0.35 * tide.x));
+        float t = saturate(hw / (1.75 + 0.35 * tide.x));
         float edge = smoothstep(0.2, 1, t);
         wet = (1 - smoothstep(0.12, 1, t)) * saturate(1 + edge * (0.5 * fw * dry.x + 0.35 * tide.x));
         o.albedo *= 1 - 0.38 * wet;
+        tmRough *= 1 - 0.55 * wet;
     }
     float3 g = (o.grad - n * dot(o.grad, n)) * (1 - 0.5 * wet);
     o.grad = normalize(n - g);
+    tmRough = saturate(tmRough);
     return o;
 }
 

@@ -17,8 +17,9 @@ Shader "Stabby/Water"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Assets/Viewer/Shaders/Look.hlsl"
 
-            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbySky, _StabbyFieldUV;
             float4 _StabbyWaterDeep, _StabbyWaterShallow, _StabbyWaterWave, _StabbyWaterSwell, _StabbyWaterFlow;
             TEXTURE2D(_StabbySlope);
             SAMPLER(sampler_StabbySlope);
@@ -89,9 +90,7 @@ Shader "Stabby/Water"
                 float2 fuv = i.positionWS.xz * _StabbyFieldUV.x + _StabbyFieldUV.y;
                 float field = max(0, i.positionWS.y - SAMPLE_TEXTURE2D(_StabbyBed, sampler_StabbyBed, fuv).r);
                 float far = i.color.a > 0.25 ? saturate(dist * _StabbyWaterSwell.z - 1) : 0;
-                float sd = max(0, i.positionWS.y - bed.y);
-                float miss = smoothstep(1, 4, (sd - field) / (1 + 0.25 * field));
-                float depth = lerp(sd, field, max(far, miss));
+                float depth = lerp(max(0, i.positionWS.y - bed.y), field, far);
 
                 float4 wv = _StabbyWaterWave;
                 float t = _Time.y * wv.y;
@@ -120,7 +119,7 @@ Shader "Stabby/Water"
                 float3 n = normalize(float3(-g.x, 1, -g.y));
 
                 float k = saturate(depth * _StabbyWaterDeep.w);
-                float3 body = lerp(_StabbyWaterShallow.rgb, _StabbyWaterDeep.rgb, k * (2 - k));
+                float3 body = LookColor(lerp(_StabbyWaterShallow.rgb, _StabbyWaterDeep.rgb, k * (2 - k)), 1.3);
 
                 Light l = GetMainLight();
                 float3 sky = _StabbySky.rgb;
@@ -152,11 +151,6 @@ Shader "Stabby/Water"
 
                 float alpha = lerp(lerp(0.8, 0.97, k), 1, fres * 0.6) * saturate(depth * _StabbyWaterShallow.w);
                 alpha = saturate(max(alpha, foam * 0.7 * saturate(depth / 0.15)));
-                float3 sand = _StabbySand.rgb;
-                sand = sand <= 0.04045 ? sand / 12.92 : pow((sand + 0.055) / 1.055, 2.4);
-                float3 floorC = sand * lerp(0.62, 0.45, saturate(depth / 30)) * (l.color * saturate(l.direction.y) + lerp(_StabbyGround.rgb, sky, 0.75));
-                c = lerp(c, lerp(floorC, c, alpha), miss);
-                alpha = lerp(alpha, 1, miss);
                 return half4(MixFog(c, i.fog), alpha);
             }
             ENDHLSL

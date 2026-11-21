@@ -35,6 +35,7 @@ namespace Stabby.Game
         public int Mesh, Def;
         public float Radius, Ground, Size;
         public bool Shadow;
+        public ulong Id;
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
@@ -71,6 +72,7 @@ namespace Stabby.Game
         Mesh[] meshes;
         BatchMeshID[] meshIds;
         int registered;
+        public const int FoliageLayer = 8;
         Material material, foliageMaterial;
         BatchMaterialID materialId, foliageMaterialId;
         Entity castPrefab, flatPrefab, castFoliagePrefab, flatFoliagePrefab;
@@ -121,6 +123,7 @@ namespace Stabby.Game
             if (ranges.IsCreated) ranges.Dispose();
             if (spawned.IsCreated) spawned.Dispose();
             if (tileEntities.IsCreated) tileEntities.Dispose();
+            DisposeHidden();
             if (loaded.IsCreated) loaded.Dispose();
             if (meshes != null) foreach (var m in meshes) if (m != null) UnityEngine.Object.Destroy(m);
             if (material != null) UnityEngine.Object.Destroy(material);
@@ -265,8 +268,6 @@ namespace Stabby.Game
                 meshIds[registered] = graphics.RegisterMesh(m);
             }
             if (registered < meshes.Length) return false;
-            material = new Material(Shader.Find("Stabby/Object")) { name = "Stabby objects", enableInstancing = true };
-            materialId = graphics.RegisterMaterial(material);
             castPrefab = Prefab(ShadowCastingMode.On, materialId, false);
             flatPrefab = Prefab(ShadowCastingMode.Off, materialId, false);
             if (atlas != null)
@@ -283,7 +284,7 @@ namespace Stabby.Game
         Entity Prefab(ShadowCastingMode shadows, BatchMaterialID mat, bool foliage)
         {
             var e = EntityManager.CreateEntity();
-            RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(shadows, true, MotionVectorGenerationMode.ForceNoMotion), new MaterialMeshInfo(mat, meshIds[0]));
+            RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(shadows, true, MotionVectorGenerationMode.ForceNoMotion, foliage ? FoliageLayer : 0), new MaterialMeshInfo(mat, meshIds[0]));
             if (foliage) EntityManager.AddComponentData(e, new ObjectLeaf { Value = new float4(0.2f, 0.3f, 0.1f, 2) });
             EntityManager.AddComponentData(e, new ObjectColor { Value = new float4(1, 1, 1, 0) });
             EntityManager.AddComponentData(e, new ObjectFade { Value = new float4(1, 1, 0, 0) });
@@ -331,6 +332,7 @@ namespace Stabby.Game
                 {
                     M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
                     Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = o.Y + def.Placement.Sink * o.Size, Size = o.Size,
+                    Id = o.Id,
                 };
             }
             order.Dispose();
@@ -444,7 +446,8 @@ namespace Stabby.Game
         void SpawnTile(long key, NativeArray<ObjectSpawn> parts, int3 range)
         {
             var counts = new int[4];
-            for (int k = 0; k < range.y; k++) counts[Group(parts[range.x + k])]++;
+            int shown = 0;
+            for (int k = 0; k < range.y; k++) if (!Hidden(parts[range.x + k].Id)) { shown++; counts[Group(parts[range.x + k])]++; }
             var prefabs = new[] { flatPrefab, castPrefab, flatFoliagePrefab, castFoliagePrefab };
             var made = new NativeArray<Entity>[4];
             for (int g = 0; g < 4; g++) made[g] = EntityManager.Instantiate(prefabs[g], counts[g], Allocator.Temp);
@@ -452,6 +455,7 @@ namespace Stabby.Game
             for (int k = 0; k < range.y; k++)
             {
                 var s = parts[range.x + k];
+                if (Hidden(s.Id)) continue;
                 int group = Group(s);
                 var e = made[group][at[group]++];
                 var kind = kinds[s.Def];
@@ -475,14 +479,30 @@ namespace Stabby.Game
                 liveByDef[s.Def]++;
             }
             spawned.Add(key);
-            liveEntities += range.y;
+            liveEntities += shown;
             foreach (var arr in made) arr.Dispose();
         }
 
         int Group(in ObjectSpawn s) => (s.Shadow ? 1 : 0) + (foliageMaterial != null && foliageMesh[s.Mesh] ? 2 : 0);
 
+        bool Warm()
+        {
+            if (material == null)
+            {
+                material = new Material(Shader.Find("Stabby/Object")) { name = "Stabby objects", enableInstancing = true };
+                return false;
+            }
+            if (materialId == BatchMaterialID.Null)
+            {
+                materialId = World.GetExistingSystemManaged<EntitiesGraphicsSystem>().RegisterMaterial(material);
+                return false;
+            }
+            return true;
+        }
+
         protected override void OnUpdate()
         {
+            if (!Warm()) return;
             if (field == null && !Prepare()) return;
             if (!Register()) return;
             var cam = Camera.main;

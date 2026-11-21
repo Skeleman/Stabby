@@ -11,10 +11,12 @@ Shader "Stabby/GrassBlade"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma target 4.5
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
+            #include "Assets/Viewer/Shaders/Look.hlsl"
 
             struct Blade { float4 p0; uint4 q; };
             StructuredBuffer<Blade> _Blades;
@@ -62,11 +64,13 @@ Shader "Stabby/GrassBlade"
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
-                Light l = GetMainLight();
+                Light l = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
+                l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - i.positionWS);
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
-                float3 c = i.color * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * i.look.y;
+                float occ = 1 - 0.45 * i.look.z * (1 - smoothstep(0, 0.5, i.look.x));
+                float3 c = (LookColor(i.color, 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
                 return half4(MixFog(c, i.look.w), 1);
             }
             ENDHLSL

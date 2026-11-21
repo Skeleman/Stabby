@@ -14,9 +14,10 @@ namespace Stabby.Viewer
         public float[] Hardness;
         public float PeriodM;
         public byte[] Coat;
+        public float[] WaterLevel;
         public int N;
         public float CellM;
-        public Vector4 Surface, Wobble, RockA, RockB, RockC;
+        public Vector4 Surface, Wobble, RockA, RockB, RockC, Look, CoatRough;
         public Vector4[] CoatA, CoatB;
         public Vector4[] Water;
     }
@@ -36,7 +37,7 @@ namespace Stabby.Viewer
 
         public const int FieldTexelsPerCell = 4, FieldMax = 2048;
 
-        static Texture2D strataTexture, coatTexture, slopeTexture, bedTexture, biomeTexture;
+        static Texture2D strataTexture, coatTexture, levelTexture, slopeTexture, bedTexture, biomeTexture;
 
         public static float3 Sand => new float3(0.86f, 0.80f, 0.62f);
 
@@ -70,6 +71,11 @@ namespace Stabby.Viewer
             coatTexture.Apply(false, true);
             Shader.SetGlobalTexture("_StabbyStrata", strataTexture);
             Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
+            if (levelTexture != null) UnityEngine.Object.Destroy(levelTexture);
+            levelTexture = new Texture2D(s.N, s.N, TextureFormat.RFloat, false, true) { name = "WaterLevel", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            levelTexture.SetPixelData(s.WaterLevel, 0);
+            levelTexture.Apply(false, true);
+            Shader.SetGlobalTexture("_StabbyWaterLevel", levelTexture);
             Shader.SetGlobalFloat("_StabbyStrataPeriod", s.PeriodM);
             Shader.SetGlobalVector("_StabbyCoatUV", new Vector4(1f / (s.CellM * s.N), 0.5f / s.N, 0, 0));
             Shader.SetGlobalVector("_StabbySurface", s.Surface);
@@ -77,6 +83,8 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyRockA", s.RockA);
             Shader.SetGlobalVector("_StabbyRockB", s.RockB);
             Shader.SetGlobalVector("_StabbyRockC", s.RockC);
+            Shader.SetGlobalVector("_StabbyLook", s.Look);
+            Shader.SetGlobalVector("_StabbyCoatRough", s.CoatRough);
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
             Shader.SetGlobalVector("_StabbyWaterDeep", s.Water[0]);
@@ -206,24 +214,49 @@ namespace Stabby.Viewer
             float wind = math.radians(d.WindDeg);
             var coatA = new Vector4[d.Coats.Length];
             var coatB = new Vector4[d.Coats.Length];
+            var coatR = Vector4.zero;
             for (int k = 0; k < d.Coats.Length; k++)
             {
                 var c = d.Coats[k];
                 coatA[k] = new Vector4(c.BumpAmp, 1f / c.BumpWavelengthM, c.GrainAmp, 1f / c.GrainWavelengthM);
                 coatB[k] = new Vector4(c.FeatureAmp, 1f / c.FeatureWavelengthM, c.Parallax, c.AlbedoVar);
+                coatR[k] = c.Roughness;
             }
             return new StrataLook
             {
                 Offsets = lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
-                Coat = d.CoatWeights(w), N = w.Config.Size, CellM = w.Config.CellMeters,
+                Coat = d.CoatWeights(w), WaterLevel = WaterLevel(w), N = w.Config.Size, CellM = w.Config.CellMeters,
                 Surface = new Vector4(d.FadePixels, 1f / d.ParallaxFootprintM, math.sin(wind), math.cos(wind)),
                 Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),
                 RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),
                 RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
                 RockC = new Vector4(r.Parallax, 0, 0, 0),
+                Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, lib.Look.RoughnessVar),
+                CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,
                 Water = WaterLook(lib.Water),
             };
+        }
+
+        public static float[] WaterLevel(GeneratedWorld w)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var level = new float[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                    level[y * n + x] = math.max(0, WaterGeometry.LakeHeight(w, x, y));
+            foreach (var r in w.Water.Rivers)
+                for (int k = 0; k < r.Cells.Count; k++)
+                {
+                    float s = Hydrology.Stage(w.Config, r, k) + WaterGeometry.RiverLift;
+                    int reach = (int)math.ceil(math.max(r.Width[k] * 0.5f, 6f) / cm);
+                    int cx = (int)math.round(r.X[k]), cy = (int)math.round(r.Y[k]);
+                    for (int y = math.max(cy - reach, 0); y <= math.min(cy + reach, n - 1); y++)
+                        for (int x = math.max(cx - reach, 0); x <= math.min(cx + reach, n - 1); x++)
+                            level[y * n + x] = math.max(level[y * n + x], s);
+                }
+            return level;
         }
 
         static Vector4[] WaterLook(WaterDef w)

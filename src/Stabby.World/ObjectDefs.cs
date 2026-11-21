@@ -60,6 +60,8 @@ namespace Stabby.World
         public string Id, Name, Kind;
         public uint Color;
         public int Variants = 1;
+        public string Verb;
+        public float ReachM;
         public List<ObjectPart> Parts = new List<ObjectPart>();
         public ObjectPlacement Placement = new ObjectPlacement();
 
@@ -92,6 +94,11 @@ namespace Stabby.World
         public bool PartShadows(ObjectDef d, ObjectPart p) => p.Shadows >= 0 ? p.Shadows == 1 : KindOf(d).Shadows;
 
         public static readonly string[] KindNames = { "static", "interactive", "animated", "structure" };
+        public static readonly string[] Verbs = { "take", "cut" };
+        public const string Interactive = "interactive";
+        public const int MaxDefs = 256;
+
+        public bool IsInteractive(int def) => Objects[def].Kind == Interactive;
 
         public static List<string> Validate(ObjectLibrary lib, IReadOnlyList<string> biomeIds = null)
         {
@@ -116,6 +123,9 @@ namespace Stabby.World
                 if (!kinds.Contains(d.Kind ?? "")) errors.Add(d.Id + ": kind " + d.Kind + " is not defined");
                 if (d.Variants < 1 || d.Variants > 16) errors.Add(d.Id + ": variants must be 1-16");
                 if (d.Parts.Count == 0) errors.Add(d.Id + ": needs at least one part");
+                if (d.Kind == Interactive && (Array.IndexOf(Verbs, d.Verb ?? "") < 0 || d.ReachM <= 0 || d.ReachM > 10))
+                    errors.Add(d.Id + ": interactive objects need interact verb take/cut and reachM above 0, at most 10");
+                if (d.Kind != Interactive && !string.IsNullOrEmpty(d.Verb)) errors.Add(d.Id + ": only interactive objects take interact");
                 foreach (var p in d.Parts)
                 {
                     if (p.Shape < 0 || p.Shape >= ObjectPart.Shapes) errors.Add(d.Id + ": part " + p.Id + " has an unknown shape");
@@ -148,6 +158,7 @@ namespace Stabby.World
                     foreach (var b in pl.Biomes)
                         if (!Contains(biomeIds, b)) errors.Add(d.Id + ": unknown biome " + b);
             }
+            if (lib.Objects.Count > MaxDefs) errors.Add("at most " + MaxDefs + " object defs");
             lib.Terrain.Validate(errors);
             lib.Foliage.Validate(errors);
             return errors;

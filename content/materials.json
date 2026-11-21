@@ -3,6 +3,10 @@
   "offsetAmplitudeM": 18,
   "offsetWavelengthM": 2400,
   "tiltPerKm": 6,
+  "look": {
+    "noiseContrast": 0.12, "albedoVar": 0.08, "detailWavelengthM": 0.05,
+    "saturation": 0.65, "roughness": 0.85, "specular": 0.04, "roughnessVar": 0.12
+  },
   "water": {
     "deepColor": "#295c8c", "shallowColor": "#7cadb1",
     "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,
@@ -24,34 +28,34 @@
     "coats": {
       "grass": {
         "biomes": ["boreal", "steppe", "temperate-forest", "temperate-rain", "savanna", "tropical-forest", "wetland", "mangrove"],
-        "bumpAmp": 0.06, "bumpWavelengthM": 1.6, "grainAmp": 0.12, "grainWavelengthM": 0.07,
-        "featureAmp": 0.12, "featureWavelengthM": 0.8, "parallax": 0, "albedoVar": 0.08
+        "bumpAmp": 0.06, "bumpWavelengthM": 1.6, "grainWavelengthM": 0.07,
+        "featureAmp": 0.12, "featureWavelengthM": 0.8, "parallax": 0
       },
       "soil": {
         "biomes": ["shrubland", "alpine"],
-        "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.15, "grainWavelengthM": 0.05,
-        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.1
+        "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.15,
+        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.1, "roughness": 0.9
       },
       "sand": {
         "biomes": ["desert", "cold-desert"],
-        "bumpAmp": 0.035, "bumpWavelengthM": 6, "grainAmp": 0.12, "grainWavelengthM": 0.02,
-        "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06
+        "bumpAmp": 0.035, "bumpWavelengthM": 6, "grainWavelengthM": 0.02,
+        "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06, "roughness": 0.92
       },
       "snow": {
         "biomes": ["tundra"],
-        "bumpAmp": 0.3, "bumpWavelengthM": 4, "grainAmp": 0.12, "grainWavelengthM": 0.03,
-        "featureAmp": 0.35, "featureWavelengthM": 1.2, "parallax": 0, "albedoVar": 0.08
+        "bumpAmp": 0.3, "bumpWavelengthM": 4, "grainWavelengthM": 0.03,
+        "featureAmp": 0.35, "featureWavelengthM": 1.2, "parallax": 0, "roughness": 0.6
       }
     }
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8c8a83", "thicknessM": 14, "hardness": 0.85 },
-    { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#9a6248", "thicknessM": 6, "hardness": 0.5 },
-    { "id": "buff-sandstone", "name": "Buff sandstone",  "color": "#b49a72", "thicknessM": 9, "hardness": 0.55 },
+    { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#89685c", "thicknessM": 6, "hardness": 0.5 },
+    { "id": "buff-sandstone", "name": "Buff sandstone",  "color": "#af9b7f", "thicknessM": 9, "hardness": 0.55 },
     { "id": "dark-shale",     "name": "Dark shale",      "color": "#6b6661", "thicknessM": 3, "hardness": 0.05 },
-    { "id": "ochre-siltstone","name": "Ochre siltstone", "color": "#a3814f", "thicknessM": 7, "hardness": 0.3 },
+    { "id": "ochre-siltstone","name": "Ochre siltstone", "color": "#98836a", "thicknessM": 7, "hardness": 0.3 },
     { "id": "pale-chalk",     "name": "Pale chalk",      "color": "#c2bdb1", "thicknessM": 4, "hardness": 0.4 },
     { "id": "basalt",         "name": "Basalt",          "color": "#5e5e62", "thicknessM": 11, "hardness": 0.92 },
-    { "id": "rust-mudstone",  "name": "Rust mudstone",   "color": "#7f5a45", "thicknessM": 5, "hardness": 0.1 }
+    { "id": "rust-mudstone",  "name": "Rust mudstone",   "color": "#735e54", "thicknessM": 5, "hardness": 0.1 }
   ]
 }
