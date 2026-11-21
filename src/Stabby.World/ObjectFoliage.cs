@@ -88,6 +88,14 @@ namespace Stabby.World
             public readonly List<float> P = new List<float>(), N = new List<float>(), U = new List<float>(), W = new List<float>();
             public readonly List<int> I = new List<int>();
             public int Count => P.Count / 3;
+            [ThreadStatic] static Out shared;
+
+            public static Out Shared()
+            {
+                var o = shared ??= new Out();
+                o.P.Clear(); o.N.Clear(); o.U.Clear(); o.W.Clear(); o.I.Clear();
+                return o;
+            }
 
             public void Add(V p, V n, float u, float v, float ao, float leaf, float bend, float flutter, float phase, float flutterPhase)
             {
@@ -186,20 +194,18 @@ namespace Stabby.World
             float u0 = (cell % CellsAcross) * du + e, u1 = u0 + du - 2 * e;
             float v0 = (cell / CellsAcross) * du + e, v1 = v0 + du - 2 * e;
             if (flip) { float tmp = u0; u0 = u1; u1 = tmp; }
-            var corners = new[] { foot - right, foot + right, foot + right + lift, foot - right + lift };
-            float[] us = { u0, u1, u1, u0 }, vs = { v0, v0, v1, v1 }, fl = { 0.15f, 0.15f, 1f, 1f };
             int first = o.Count;
             float cluster = phase * 7.13f, tag = 1f + 0.3f * (0.75f * (2f * (cluster - (float)Math.Floor(cluster)) - 1f) + 0.25f * (2f * flutterPhase - 1f));
             for (int k = 0; k < 4; k++)
             {
-                var p = corners[k];
+                var p = k == 0 ? foot - right : k == 1 ? foot + right : k == 2 ? foot + right + lift : foot - right + lift;
                 var radial = (p - center).Norm();
                 var f = V.Dot(face, radial) < 0 ? -face : face;
                 var n = (f * 0.35f + radial * 0.65f).Norm();
                 var d = p - center;
                 float h = d.Flat / Math.Max(1e-3f, crownH), y = d.Y / Math.Max(1e-3f, crownV);
                 float depth = Math.Min(1f, h * h + y * y), lit = 0.7f + 0.3f * Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * y));
-                o.Add(p, n, us[k], vs[k], aoLow + (1f - aoLow) * depth * lit, tag, bend, fl[k], phase, flutterPhase);
+                o.Add(p, n, k == 0 || k == 3 ? u0 : u1, k < 2 ? v0 : v1, aoLow + (1f - aoLow) * depth * lit, tag, bend, k < 2 ? 0.15f : 1f, phase, flutterPhase);
             }
             o.Tri(first, first + 1, first + 2);
             o.Tri(first, first + 2, first + 3);
@@ -370,7 +376,7 @@ namespace Stabby.World
                     }
             crownH += 0.5f * st.Card;
             crownV += 0.5f * st.Card;
-            var o = new Out();
+            var o = Out.Shared();
             var sides = st.Sides[lod];
             foreach (var l in limbs) Tube(o, l, sides[Math.Min(sides.Length - 1, l.Depth)], st.DarkWood);
             var rng = new Rng(Rng.Mix(key ^ 0x3C6EF372FE94F82BUL));
