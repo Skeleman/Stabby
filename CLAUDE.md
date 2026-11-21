@@ -50,8 +50,11 @@
     shared with movement. Interactive objects keep stable ids and change only
     through host-authoritative deltas. Wind and animation run on the GPU and
     fade by screen size; structures merge their pieces per LOD. Assets are
-    built in code: surface detail is shader-based (procedural normals, cheap
-    parallax), and textures hold only heightfield data and shared noise.
+    built in code. Material surfaces are shaders (procedural normals, cheap
+    parallax) so files stay small, surfaces scale and materials share
+    features. Textures hold only heightfield data, shared noise, and
+    code-generated atlases for repeated, distinct patterns such as leaves and
+    lettering.
 12. Every detail threshold is a screen size (Punchy's DetailPolicy). One
     engine-free `Detail` gives `ScreenSize(sizeM, distanceM, ppm)`: an
     object's approximate size over its 3D distance from the camera, in

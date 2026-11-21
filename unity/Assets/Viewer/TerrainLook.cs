@@ -38,7 +38,7 @@ namespace Stabby.Viewer
 
         static Texture2D strataTexture, coatTexture, slopeTexture, bedTexture, biomeTexture;
 
-        public static float3 Sand => new float3(0.78f, 0.72f, 0.52f);
+        public static float3 Sand => new float3(0.86f, 0.80f, 0.62f);
 
         public static float3 ToLinear(float3 c) => math.select(math.pow((c + 0.055f) / 1.055f, 2.4f), c / 12.92f, c <= 0.04045f);
 
