@@ -82,6 +82,8 @@ namespace Stabby.World
         public const float CaveHollow = 1f - 1.25f * FeatureEdit.Blend;
         public const int CavePieces = 4, CavePaths = 3;
         public const float LatticeStepCells = 0.25f, MinRadiusSteps = 1.25f;
+        public const float UndercutChance = 0.5f, UndercutMinDrop = 30f, UndercutContrast = 0.12f, UndercutStep = 15f;
+        public const int UndercutReach = 3;
 
         public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
             => Edit(edits, Level(columns, d, i, k, s), i * s, j * s, k * s);
@@ -129,8 +131,12 @@ namespace Stabby.World
         {
             var list = new List<FeatureEdit>();
             if (w.Biome == null || 16f < MinRadiusSteps * LatticeStepCells * w.Config.CellMeters) return list.ToArray();
+            if (w.Materials == null) throw new InvalidOperationException("feature placement needs the material library");
+            var strata = new StrataField(w.Config, w.Materials);
             int tiles = w.Config.Size / TileCells;
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "caves").NextU64();
+            ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
+            int from = 0;
             var tile = new List<FeatureEdit>();
             for (int ty = 0; ty < tiles; ty++)
                 for (int tx = 0; tx < tiles; tx++)
@@ -148,6 +154,11 @@ namespace Stabby.World
                     tile.Clear();
                     Cave(w, detail, tx, ty, ref r, tile);
                     Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(ru + t));
+                    tile.Clear();
+                    Undercut(w, detail, strata, tx, ty, ref r, tile);
+                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
+                    from = list.Count;
                 }
             return list.ToArray();
         }
@@ -156,6 +167,16 @@ namespace Stabby.World
         {
             foreach (var e in tile) if (!Inside(e, w.Config.CellMeters)) return;
             list.AddRange(tile);
+        }
+
+        static bool Overlaps(FeatureEdit e, List<FeatureEdit> list, int from)
+        {
+            for (int q = from; q < list.Count; q++)
+            {
+                var o = list[q];
+                if (e.MinX < o.MaxX && e.MaxX > o.MinX && e.MinY < o.MaxY && e.MaxY > o.MinY && e.MinZ < o.MaxZ && e.MaxZ > o.MinZ) return true;
+            }
+            return false;
         }
 
         static bool Dry(GeneratedWorld w, int i) => !w.Sea[i] && w.Water.LakeId[i] < 0 && !w.Water.IsRiver[i] && w.Height[i] > 0;
@@ -185,6 +206,63 @@ namespace Stabby.World
             float foot = detail.HeightAt(fx, fz);
             float inset = radius * 0.6f / cm, cx = fx - gx * inset, cz = fz - gz * inset;
             float y0 = foot + radius * lift;
+            if (detail.HeightAt(cx, cz) < y0 + radius * 0.3f) return;
+            if (detail.HeightAt(cx - gx * radius / cm, cz - gz * radius / cm) < y0 + radius + 8f) return;
+            float half = length * 0.5f;
+            output.Add(new FeatureEdit
+            {
+                Kind = FeatureEdit.Carve, Shape = FeatureEdit.Overhang, R = radius,
+                Ax = cx * cm - gz * half, Az = cz * cm + gx * half, Ay = y0,
+                Bx = cx * cm + gz * half, Bz = cz * cm - gx * half, By = y0,
+            });
+        }
+
+        static void Undercut(GeneratedWorld w, TerrainDetail detail, StrataField strata, int tx, int ty, ref Rng r, List<FeatureEdit> output)
+        {
+            float roll = r.NextFloat(), radius = r.Range(16f, 22f), length = r.Range(80f, 140f);
+            if (roll >= UndercutChance) return;
+            int n = w.Config.Size, best = -1, bestDir = 0;
+            float bestDrop = UndercutMinDrop;
+            for (int y = ty * TileCells + MarginCells; y < (ty + 1) * TileCells - MarginCells; y++)
+                for (int x = tx * TileCells + MarginCells; x < (tx + 1) * TileCells - MarginCells; x++)
+                {
+                    int i = y * n + x;
+                    if (!Dry(w, i)) continue;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        int j = i + Grid.DY[k] * n + Grid.DX[k];
+                        float drop = (w.Height[i] - w.Height[j]) / Grid.Dist[k];
+                        if (drop > bestDrop && Dry(w, j)) { bestDrop = drop; best = i; bestDir = k; }
+                    }
+                }
+            if (best < 0) return;
+            float cm = w.Config.CellMeters, inv = 1f / Grid.Dist[bestDir];
+            float gx = Grid.DX[bestDir] * inv, gz = Grid.DY[bestDir] * inv;
+            float bx = best % n, bz = best / n, foot = w.Height[best], top = foot;
+            for (int s = 1; s <= UndercutReach; s++)
+            {
+                float h = detail.HeightAt(bx + gx * s, bz + gz * s);
+                if (foot - h < UndercutStep) break;
+                foot = h;
+            }
+            for (int s = 1; s <= UndercutReach; s++)
+            {
+                float h = detail.HeightAt(bx - gx * s, bz - gz * s);
+                if (h - top < UndercutStep) break;
+                top = h;
+            }
+            float y0 = 0, score = UndercutContrast;
+            for (float y = foot + 0.5f * radius; y <= top - 1.2f * radius; y += 1f)
+            {
+                float cap = 0;
+                for (int s = 0; s <= 4; s++) cap += strata.Hardness(best, y + radius * (0.6f + 0.25f * s));
+                float v = cap / 5f - strata.Hardness(best, y);
+                if (v > score) { score = v; y0 = y; }
+            }
+            if (score <= UndercutContrast) return;
+            float fx = bx + gx * UndercutReach, fz = bz + gz * UndercutReach;
+            for (int s = 0; s < 20 * UndercutReach && detail.HeightAt(fx, fz) < y0; s++) { fx -= gx * 0.1f; fz -= gz * 0.1f; }
+            float inset = radius * 0.6f / cm, cx = fx - gx * inset, cz = fz - gz * inset;
             if (detail.HeightAt(cx, cz) < y0 + radius * 0.3f) return;
             if (detail.HeightAt(cx - gx * radius / cm, cz - gz * radius / cm) < y0 + radius + 8f) return;
             float half = length * 0.5f;

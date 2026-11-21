@@ -74,7 +74,7 @@ int Bake()
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
     File.WriteAllBytes(path, bytes);
     sw.Restart();
-    var back = WorldFile.Read(File.ReadAllBytes(path));
+    var back = WorldFile.Read(File.ReadAllBytes(path), materials);
     long readMs = sw.ElapsedMilliseconds;
     bool same = WorldChunks.Checksums(back).SequenceEqual(WorldChunks.Checksums(w));
     Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");

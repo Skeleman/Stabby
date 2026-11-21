@@ -26,7 +26,7 @@ namespace Stabby.Viewer
                     if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}";
                     else
                     {
-                        var w = WorldFile.Read(bytes);
+                        var w = WorldFile.Read(bytes, materials);
                         if (w.Config.Seed == c.Seed && w.Config.Size == c.Size) return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms");
                         why = "map file has another seed or size";
                     }

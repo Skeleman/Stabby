@@ -31,7 +31,7 @@ namespace Stabby.World
 
         public static int GeneratorVersionOf(byte[] data) => data.Length >= 12 && HasMagic(data) ? GetInt(data, 8) : -1;
 
-        public static GeneratedWorld Read(byte[] data)
+        public static GeneratedWorld Read(byte[] data, MaterialLibrary materials)
         {
             if (data.Length < 36 || !HasMagic(data)) throw new FormatException("not a Stabby world file");
             int o = 4;
@@ -59,7 +59,7 @@ namespace Stabby.World
             }
             long expected = o + (long)c.Size * c.Size * WorldChunks.CellBytes;
             if (expected != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {expected}");
-            var w = Empty(c, biomeIds);
+            var w = Empty(c, biomeIds, materials);
             int a = WorldChunks.Across(c.Size);
             for (int k = 0; k < a * a; k++)
             {
@@ -75,7 +75,7 @@ namespace Stabby.World
             return w;
         }
 
-        public static GeneratedWorld Empty(WorldConfig c, string[] biomeIds)
+        public static GeneratedWorld Empty(WorldConfig c, string[] biomeIds, MaterialLibrary materials)
         {
             int cells = c.Size * c.Size;
             var hy = new Hydrology
@@ -88,7 +88,7 @@ namespace Stabby.World
             {
                 Config = c, Sea = new bool[cells], Height = new float[cells], Water = hy,
                 Climate = new ClimateField { TemperatureC = new float[cells], PrecipitationMm = new float[cells] },
-                Biome = biomeIds == null ? null : new int[cells], BiomeIds = biomeIds,
+                Biome = biomeIds == null ? null : new int[cells], BiomeIds = biomeIds, Materials = materials,
             };
         }
 

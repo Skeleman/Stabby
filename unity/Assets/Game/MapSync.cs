@@ -198,7 +198,7 @@ namespace Stabby.Game
                     {
                         var ids = new string[defs.Count];
                         for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
-                        w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids);
+                        w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids, lib);
                         source = "started empty";
                     }
                     else (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);

@@ -150,7 +150,7 @@ namespace Stabby.World
                 erod[i] = c.Erodibility * (1 - c.CaprockHardness * caprock[i]) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
             }
 
-            var strata = new Strata(c, lib);
+            var strata = new StrataField(c, lib);
             var hard = new float[n * n];
             float dt = c.TimeStepYears;
             var scratch = new DrainageScratch(n);
@@ -292,43 +292,6 @@ namespace Stabby.World
                     h[i] = src[i] + k * (1 - caprock[i]) * (1 - hard[i]) * lap;
                 }
         }
-
-        sealed class Strata
-        {
-            readonly float[] off, band;
-            readonly float period, norm;
-
-            public Strata(WorldConfig c, MaterialLibrary lib)
-            {
-                off = lib.Offsets(c);
-                period = lib.PeriodM;
-                var ids = lib.Bands(BandStepM);
-                int n = ids.Length, reach = (int)(BandBlendM / BandStepM);
-                band = new float[n];
-                for (int k = 0; k < n; k++)
-                {
-                    float sum = 0;
-                    for (int d = -reach; d <= reach; d++) sum += lib.Strata[ids[((k + d) % n + n) % n]].Hardness;
-                    band[k] = sum / (2 * reach + 1) * c.StrataContrast;
-                }
-                double soft = 0, total = 0;
-                foreach (var st in lib.Strata) { soft += (1 - st.Hardness * c.StrataContrast) * st.ThicknessM; total += st.ThicknessM; }
-                norm = (float)(total / soft);
-            }
-
-            public float Hardness(int i, float h)
-            {
-                float u = (h + off[i]) / period;
-                u = (u - (float)Math.Floor(u)) * band.Length;
-                int k = Math.Min(band.Length - 1, (int)u);
-                float t = u - k;
-                return band[k] + (band[(k + 1) % band.Length] - band[k]) * t;
-            }
-
-            public float Softness(float hard) => (1 - hard) * norm;
-        }
-
-        const float BandStepM = 0.5f, BandBlendM = 4f;
 
         public static bool[] SeaOf(bool[] land)
         {

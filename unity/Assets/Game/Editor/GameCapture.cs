@@ -17,6 +17,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
         static int settle = -1, phase, wait;
+        const float UndercutMaxR = 25f;
         static double playAt = -1;
 
         static GameCapture()
@@ -105,12 +106,12 @@ namespace Stabby.Game.Editor
                 GameStatus.HoldCamera = true;
                 phase = 1;
             }
-            while (phase <= 5)
+            while (phase <= 6)
             {
-                string name = phase == 1 ? "arch" : phase == 2 ? "overhang" : phase == 3 ? "cave" : phase == 4 ? "cave-inside" : "river";
+                string name = phase == 1 ? "arch" : phase == 2 ? "overhang" : phase == 3 ? "cave" : phase == 4 ? "cave-inside" : phase == 5 ? "river" : "undercut";
                 if (wait == 0)
                 {
-                    if (!(phase == 5 ? River(cam) : Aim(cam, phase == 1 ? FeatureEdit.Arch : phase == 2 ? FeatureEdit.Overhang : FeatureEdit.Cave, phase == 4))) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
+                    if (!(phase == 5 ? River(cam) : Aim(cam, phase == 1 ? FeatureEdit.Arch : phase == 3 || phase == 4 ? FeatureEdit.Cave : FeatureEdit.Overhang, phase == 4, phase == 6))) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -192,7 +193,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static bool Aim(Camera cam, int shape, bool inside)
+        static bool Aim(Camera cam, int shape, bool inside, bool undercut)
         {
             foreach (var w in Unity.Entities.World.All)
             {
@@ -201,7 +202,7 @@ namespace Stabby.Game.Editor
                 var ground = q.GetSingleton<Ground>();
                 ref var g = ref ground.Blob.Value;
                 int at = -1;
-                for (int k = 0; k < g.Edits.Length && at < 0; k++) if (g.Edits[k].Shape == shape) at = k;
+                for (int k = 0; k < g.Edits.Length && at < 0; k++) if (g.Edits[k].Shape == shape && (shape != FeatureEdit.Overhang || (g.Edits[k].R < UndercutMaxR) == undercut)) at = k;
                 if (at < 0) return false;
                 var first = g.Edits[at];
                 var last = shape == FeatureEdit.Arch ? g.Edits[at + 4] : first;
@@ -238,7 +239,7 @@ namespace Stabby.Game.Editor
                 {
                     if (ground.HeightAt(mid.x + side.x * 60, mid.z + side.z * 60) > ground.HeightAt(mid.x - side.x * 60, mid.z - side.z * 60)) side = -side;
                     target = mid;
-                    eye = mid + side * 170f + along * 90f + Vector3.up * 35f;
+                    eye = undercut ? mid + side * 110f + along * 50f + Vector3.up * 15f : mid + side * 170f + along * 90f + Vector3.up * 35f;
                 }
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));

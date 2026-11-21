@@ -13,7 +13,7 @@ public class WorldFileTests
     {
         var host = WorldGenerator.Generate(new WorldConfig { Seed = 42, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, Materials);
         var bytes = WorldFile.Write(host);
-        var loaded = WorldFile.Read(bytes);
+        var loaded = WorldFile.Read(bytes, Materials);
 
         Assert.Equal(WorldConfig.GeneratorVersion, WorldFile.GeneratorVersionOf(bytes));
         Assert.Equal(host.BiomeIds, loaded.BiomeIds);
@@ -26,9 +26,9 @@ public class WorldFileTests
     public void StaleOrTruncatedFilesAreRejected()
     {
         var bytes = WorldFile.Write(WorldGenerator.Generate(new WorldConfig { Seed = 3, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) }, Biomes, Materials));
-        Assert.Throws<FormatException>(() => WorldFile.Read(bytes[..^1]));
+        Assert.Throws<FormatException>(() => WorldFile.Read(bytes[..^1], Materials));
         bytes[8] ^= 1;
-        Assert.Throws<FormatException>(() => WorldFile.Read(bytes));
+        Assert.Throws<FormatException>(() => WorldFile.Read(bytes, Materials));
     }
 
     [Theory]
@@ -42,14 +42,14 @@ public class WorldFileTests
     {
         var bytes = WorldFile.Write(WorldGenerator.Generate(new WorldConfig { Seed = 3, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) }, Biomes, Materials));
         BitConverter.GetBytes(value).CopyTo(bytes, offset);
-        Assert.Throws<FormatException>(() => WorldFile.Read(bytes));
+        Assert.Throws<FormatException>(() => WorldFile.Read(bytes, Materials));
     }
 
     [Fact]
     public void EmptyWorldStreamsToTheHost()
     {
         var host = WorldGenerator.Generate(new WorldConfig { Seed = 42, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) }, Biomes, Materials);
-        var peer = WorldFile.Empty(new WorldConfig { Seed = 42, Size = 128, CellMeters = host.Config.CellMeters }, host.BiomeIds);
+        var peer = WorldFile.Empty(new WorldConfig { Seed = 42, Size = 128, CellMeters = host.Config.CellMeters }, host.BiomeIds, Materials);
         int a = WorldChunks.Across(128);
         for (int k = 0; k < a * a; k++) WorldChunks.Unpack(peer, k % a, k / a, WorldChunks.Pack(host, k % a, k / a));
         WorldChunks.Relink(peer);

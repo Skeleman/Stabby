@@ -13,6 +13,7 @@ namespace Stabby.World
         public Hydrology Water;
         public int[] Biome;
         public string[] BiomeIds;
+        public MaterialLibrary Materials;
 
         public ulong Fingerprint()
         {
@@ -103,7 +104,7 @@ namespace Stabby.World
             var water = Hydrology.Build(c, h, sea, climate.PrecipitationMm, sketch.Landmark);
             stage?.Invoke("hydrology");
 
-            var w = new GeneratedWorld { Config = c, Sketch = sketch, Sea = sea, Height = h, Climate = climate, Water = water };
+            var w = new GeneratedWorld { Config = c, Sketch = sketch, Sea = sea, Height = h, Climate = climate, Water = water, Materials = materials };
             if (terrainOnly) return w;
             var wet = new bool[h.Length];
             for (int i = 0; i < h.Length; i++) wet[i] = sea[i] || water.LakeId[i] >= 0;

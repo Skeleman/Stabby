@@ -99,4 +99,40 @@ namespace Stabby.World
             return errors;
         }
     }
+
+    public sealed class StrataField
+    {
+        const float BandStepM = 0.5f, BandBlendM = 4f;
+        readonly float[] off, band;
+        readonly float period, norm;
+
+        public StrataField(WorldConfig c, MaterialLibrary lib)
+        {
+            off = lib.Offsets(c);
+            period = lib.PeriodM;
+            var ids = lib.Bands(BandStepM);
+            int n = ids.Length, reach = (int)(BandBlendM / BandStepM);
+            band = new float[n];
+            for (int k = 0; k < n; k++)
+            {
+                float sum = 0;
+                for (int d = -reach; d <= reach; d++) sum += lib.Strata[ids[((k + d) % n + n) % n]].Hardness;
+                band[k] = sum / (2 * reach + 1) * c.StrataContrast;
+            }
+            double soft = 0, total = 0;
+            foreach (var st in lib.Strata) { soft += (1 - st.Hardness * c.StrataContrast) * st.ThicknessM; total += st.ThicknessM; }
+            norm = (float)(total / soft);
+        }
+
+        public float Hardness(int i, float h)
+        {
+            float u = (h + off[i]) / period;
+            u = (u - (float)Math.Floor(u)) * band.Length;
+            int k = Math.Min(band.Length - 1, (int)u);
+            float t = u - k;
+            return band[k] + (band[(k + 1) % band.Length] - band[k]) * t;
+        }
+
+        public float Softness(float hard) => (1 - hard) * norm;
+    }
 }
