@@ -114,6 +114,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
+            EntityManager.CompleteAllTrackedJobs();
             if (ground.IsCreated) { ground.Dispose(); packed.Dispose(); }
             Owned.Release(gen, p => { p.Ground.Dispose(); p.Packed.Dispose(); });
         }
@@ -164,6 +165,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
+            EntityManager.CompleteAllTrackedJobs();
             if (ground.IsCreated) ground.Dispose();
             if (Map == null) Owned.Release(finish, r => { if (r.Item1 == 0) r.Item2.Dispose(); });
             if (inbox != Entity.Null && EntityManager.Exists(inbox)) EntityManager.GetComponentData<ChunkInbox>(inbox).Dispose();

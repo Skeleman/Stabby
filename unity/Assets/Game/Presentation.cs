@@ -97,7 +97,7 @@ namespace Stabby.Game
             if (UnityEngine.Time.frameCount - GameStatus.ToolFrame <= 1) GameStatus.ToolFrames++;
             else
             {
-                if (ms > worst) { worst = ms; worstWhy = $"frame {frames - 10}, {GameStatus.TerrainFrame}, gc {System.GC.CollectionCount(0)}"; }
+                if (ms > worst) { worst = ms; worstWhy = $"frame {frames - 10}, terrain {GameStatus.TerrainMs:F1} ms {GameStatus.TerrainStage}, {GameStatus.TerrainVertices} vertices, gc {System.GC.CollectionCount(0)}"; }
                 if (ms > 33f) slow++;
                 if (GameStatus.TerrainBuilt && ms > worstPlay) worstPlay = ms;
             }
