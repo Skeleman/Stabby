@@ -439,6 +439,12 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
             while (phase >= 60 && phase < 60 + 2 * ForestShots.Length)
             {
                 int fk = (phase - 60) / 2;
@@ -1158,6 +1164,11 @@ namespace Stabby.Game.Editor
                 }
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
                 GameStatus.Lines["~aim beach " + kind] = $"{BeachShots[kind]} beach at {target.x:F0},{target.y:F1},{target.z:F0}, sea toward {bestDir.x:F2},{bestDir.y:F2}, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
+
         static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };
 
         static bool AimForest(Camera cam, string id, bool mid)
