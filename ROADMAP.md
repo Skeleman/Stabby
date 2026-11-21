@@ -131,6 +131,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | done |
 | Grass follow-ups: no grass on submerged beds (done), blade shadows, profiler to confirm chase/far cost with blades on and off | wip (b/grass-followups) |
 | Objects step 3: interactive objects (loose stone, brushwood) with stable chunk+index ids (GeneratorVersion 37); host-authoritative removal deltas per chunk, replicated to clients and late joiners, collision columns cleared in place; E to take/cut with a status line; `ObjectDeltaCheck` two-client check | done |
+| Objects perf: the ~43 ms spike when objects first stream in was the editor compiling the `Stabby/Object` shader variant inside `new Material` and `RegisterMaterial` (46 + 58 ms cold); both now run one per frame during load, before terrain is built. Column buffers already reuse one scratch list per chunk | wip |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
 
 ## Next

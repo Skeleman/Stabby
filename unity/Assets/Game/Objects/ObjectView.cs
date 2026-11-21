@@ -226,8 +226,6 @@ namespace Stabby.Game
                 meshIds[registered] = graphics.RegisterMesh(m);
             }
             if (registered < meshes.Length) return false;
-            material = new Material(Shader.Find("Stabby/Object")) { name = "Stabby objects", enableInstancing = true };
-            materialId = graphics.RegisterMaterial(material);
             castPrefab = Prefab(ShadowCastingMode.On);
             flatPrefab = Prefab(ShadowCastingMode.Off);
             return true;
@@ -427,8 +425,24 @@ namespace Stabby.Game
             b.Dispose();
         }
 
+        bool Warm()
+        {
+            if (material == null)
+            {
+                material = new Material(Shader.Find("Stabby/Object")) { name = "Stabby objects", enableInstancing = true };
+                return false;
+            }
+            if (materialId == BatchMaterialID.Null)
+            {
+                materialId = World.GetExistingSystemManaged<EntitiesGraphicsSystem>().RegisterMaterial(material);
+                return false;
+            }
+            return true;
+        }
+
         protected override void OnUpdate()
         {
+            if (!Warm()) return;
             if (field == null && !Prepare()) return;
             if (!Register()) return;
             var cam = Camera.main;
