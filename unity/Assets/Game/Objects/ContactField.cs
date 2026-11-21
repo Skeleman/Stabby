@@ -102,11 +102,12 @@ namespace Stabby.Game
                         columns.Clear();
                         field.ColumnsOf(o, columns);
                         float low = o.Y + 0.35f + 0.1f * o.Size;
-                        float foot = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure ? Structures.FootReach * o.Size : 0f;
+                        bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
+                        float foot = built ? Structures.FootReach * o.Size : 0f;
                         foreach (var c in columns)
                         {
                             if (c.Bottom > low) continue;
-                            Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot));
+                            Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot), built);
                             count++;
                         }
                     }
@@ -114,9 +115,10 @@ namespace Stabby.Game
             return new Splat { Data = data, X0 = x0, Z0 = z0, TexelM = texelM, Columns = count, Ms = sw.ElapsedMilliseconds };
         }
 
-        static void Stamp(byte[] data, float x0, float z0, float texelM, float x, float z, float r)
+        static void Stamp(byte[] data, float x0, float z0, float texelM, float x, float z, float r, bool built)
         {
-            float pad = Mathf.Clamp(0.25f + 0.35f * r, 0.25f, 0.9f), outer = r + pad, soft = pad + 0.3f * r;
+            float pad = built ? Mathf.Clamp(0.25f + 0.35f * r, 0.25f, 0.9f) : Mathf.Clamp(0.12f + 0.12f * r, 0.12f, 0.35f);
+            float outer = r + pad, soft = pad + (built ? 0.3f : 0.25f) * r;
             int ia = Math.Max(0, (int)((x - outer - x0) / texelM)), ib = Math.Min(Res - 1, (int)((x + outer - x0) / texelM) + 1);
             int ja = Math.Max(0, (int)((z - outer - z0) / texelM)), jb = Math.Min(Res - 1, (int)((z + outer - z0) / texelM) + 1);
             for (int j = ja; j <= jb; j++)
