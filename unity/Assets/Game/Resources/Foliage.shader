@@ -54,6 +54,11 @@ Shader "Stabby/Foliage"
             return (m[(q.x << 2) | q.y] + 0.5) / 16.0;
         }
 
+        float LeafCut(float ao, float j)
+        {
+            return 0.5 + 0.2 * saturate((ao - 0.72) * 3.6) * (0.55 + 0.45 * j);
+        }
+
         struct FoliageIn
         {
             float4 positionOS : POSITION;
@@ -261,10 +266,12 @@ Shader "Stabby/Foliage"
                 else if (leaf)
                 {
                     float4 a = SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy);
+                    float j = (i.uv.w - 1) * 3.333;
+                    float cut = LeafCut(i.uv.z, j);
                     alpha = a.a;
-                    clip(a.a - 0.5);
-                    float shade = a.r * 1.5;
-                    float hue = a.g - 0.5;
+                    clip(a.a - cut);
+                    float shade = a.r * 1.5 * (1 + 0.16 * j);
+                    float hue = a.g - 0.5 + 0.3 * j;
                     float3 leafColor = _Leaf.rgb * (1 + hue * float3(0.9, 0.35, -0.7));
                     albedo = lerp(leafColor * shade, _BaseColor.rgb * shade * 1.3, a.b);
                     trans = 1 - a.b;
@@ -303,11 +310,13 @@ Shader "Stabby/Foliage"
                 float groundAo = lerp(0.6, 1, smoothstep(0, min(1.2, 0.5 * size), above));
                 ao *= groundAo;
                 float ndl = dot(n, l.direction);
-                float diffuse = lerp(saturate(ndl), saturate((ndl + 0.45) / 1.45), imp ? trans : leaf ? 1 : 0);
+                float diffuse = lerp(saturate(ndl), saturate((ndl + 0.6) / 1.6), imp ? trans : leaf ? 1 : 0);
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
-                float back = pow(saturate(dot(-v, l.direction)), 4) * 0.55 + saturate(-ndl) * 0.2;
+                float vl = saturate(dot(-v, l.direction));
+                float back = vl * vl * vl * 0.8 + saturate(-ndl) * 0.35;
                 float3 direct = l.color * l.shadowAttenuation;
-                float3 c = albedo * (direct * diffuse * lerp(0.55, 1, ao) + ambient * ao) + albedo * _Leaf.rgb * 2.2 * direct * back * trans * ao;
+                float3 glow = l.color * lerp(0.25, 1, l.shadowAttenuation) * lerp(0.4, 1, ao);
+                float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) + ambient * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.25, 1.3, 0.45) * 1.6 * glow * back * trans;
                 return half4(MixFog(c, i.fog), alpha);
             }
             ENDHLSL
@@ -360,7 +369,7 @@ Shader "Stabby/Foliage"
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
                 clip(min(fade.y - 0.5, fade.x - Bayer(i.positionCS.xy)));
-                [branch] if (i.uv.w > 0.5 && i.uv.w < 1.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - 0.5);
+                [branch] if (i.uv.w > 0.5 && i.uv.w < 1.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - LeafCut(i.uv.z, (i.uv.w - 1) * 3.333));
                 return 0;
             }
             ENDHLSL
@@ -424,8 +433,9 @@ Shader "Stabby/Foliage"
                 [branch] if (i.uv.w > 0.5)
                 {
                     float4 t = SAMPLE_TEXTURE2D_LOD(_LeafAtlas, sampler_LeafAtlas, i.uv.xy, 0);
-                    clip(t.a - 0.5);
-                    a = half4(t.rgb, 1);
+                    float j = (i.uv.w - 1) * 3.333;
+                    clip(t.a - LeafCut(i.uv.z, j));
+                    a = half4(saturate(t.r * (1 + 0.16 * j)), saturate(t.g + 0.3 * j), t.b, 1);
                 }
                 o.a = a;
                 o.b = half4(normalize(i.normalOS) * 0.5 + 0.5, i.uv.z);
