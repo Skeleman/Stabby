@@ -5,6 +5,7 @@ namespace Stabby.Game
     public static class GameStatus
     {
         public static readonly Dictionary<string, string> Lines = new Dictionary<string, string>();
+        public static readonly Dictionary<string, System.Func<string>> Live = new Dictionary<string, System.Func<string>>();
         public static readonly HashSet<string> Synced = new HashSet<string>();
         public static int Capsules, TerrainBehind, ToolFrame = -100, ToolFrames, TerrainVertices;
         public static float TerrainMs;
@@ -18,6 +19,7 @@ namespace Stabby.Game
 
         public static void PutFrames()
         {
+            foreach (var kv in Live) Lines[kv.Key] = kv.Value();
             if (Frames > 0) Lines["~frames"] = $"frames {Frames}, worst {WorstMs:F0} ms ({WorstWhy}), {SlowFrames} over 33 ms, worst after terrain built {WorstPlayMs:F0} ms, {ToolFrames} capture frames left out";
         }
     }

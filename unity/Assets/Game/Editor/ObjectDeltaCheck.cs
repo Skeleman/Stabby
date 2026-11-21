@@ -226,6 +226,7 @@ namespace Stabby.Game.Editor
         {
             EditorApplication.update -= Poll;
             SessionState.EraseBool(Key);
+            GameStatus.PutFrames();
             string status = string.Join("\n", GameStatus.Lines.Where(kv => kv.Key.Contains("object")).OrderBy(kv => kv.Key).Select(kv => kv.Value));
             Debug.Log("ObjectDeltaCheck " + (code == 0 ? "passed" : "failed") + "\n" + string.Join("\n", log) + "\n" + status);
             EditorApplication.Exit(code);

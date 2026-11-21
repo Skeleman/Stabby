@@ -96,6 +96,27 @@ public class ObjectTests
     }
 
     [Fact]
+    public void PlaceIntoMatchesCachedAndFreshPlacement()
+    {
+        var w = Gen(4);
+        var detail = new TerrainDetail(w);
+        var edits = Features.Place(w, detail);
+        var cached = new ObjectField(w, detail, edits, Objects);
+        var fresh = new ObjectField(w, detail, edits, Objects);
+        var list = new List<ObjectInstance>();
+        int n = fresh.ChunksAcross;
+        foreach (var (cx, cz) in new[] { (0, 0), (n / 2, n / 2), (n / 3, 2 * n / 3), (n - 1, n - 1), (n / 2, n / 2) })
+        {
+            fresh.PlaceInto(cx, cz, list);
+            var expect = cached.Chunk(cx, cz);
+            Assert.Equal(expect, list.ToArray());
+            Assert.Equal(expect, fresh.Place(cx, cz));
+            cached.PlaceInto(cx, cz, list);
+            Assert.Equal(expect, list.ToArray());
+        }
+    }
+
+    [Fact]
     public void ObjectPlacementIsDeterministicAndVaried()
     {
         var w = Gen(4);
