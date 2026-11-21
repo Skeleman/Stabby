@@ -722,17 +722,27 @@ namespace Stabby.Game.Editor
                 float best = float.MaxValue;
                 for (int cz = 0; cz < field.ChunksAcross; cz++)
                     for (int cx = 0; cx < field.ChunksAcross; cx++)
-                        foreach (var o in field.Chunk(cx, cz))
+                    {
+                        var chunk = field.Chunk(cx, cz);
+                        foreach (var o in chunk)
                         {
                             if (!field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsStructure(p.Shape))) continue;
-                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude - (field.Library.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall ? 400f : 0f);
+                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            if (field.Library.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall)
+                            {
+                                int run = 0;
+                                foreach (var b in chunk)
+                                    if (b.Def == o.Def && (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z) < 36f * o.Size * o.Size) run++;
+                                score -= run >= 4 ? 400f + 40f * run : 0f;
+                            }
                             if (score < best) { best = score; pick = o; }
                         }
+                    }
                 if (best == float.MaxValue) return false;
                 var target = new Vector3(pick.X, pick.Y + pick.Size * 0.1f, pick.Z);
                 var across = new Vector3(2 * (pick.Qx * pick.Qz + pick.Qw * pick.Qy), 0, 1 - 2 * (pick.Qx * pick.Qx + pick.Qy * pick.Qy)).normalized;
                 var along = new Vector3(across.z, 0, -across.x);
-                float back = close ? 0.75f * pick.Size : 18f * Mathf.Max(1f, 0.25f * pick.Size);
+                float back = close ? 0.75f * pick.Size : 30f * Mathf.Max(1f, 0.25f * pick.Size);
                 var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : 0.3f * back);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);

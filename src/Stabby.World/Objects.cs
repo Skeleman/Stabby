@@ -217,9 +217,9 @@ namespace Stabby.World
             {
                 float roll = rng.NextFloat(), turn = rng.NextFloat() < 0.5f ? -1f : 1f, wander = rng.Range(-0.1f, 0.1f);
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
-                bool gate = rng.NextFloat() < pl.ChainGate;
+                bool gate = rng.NextFloat() < pl.ChainGate, corner = roll < pl.ChainCorner;
                 float bx = ex, bz = ez;
-                if (roll < pl.ChainCorner)
+                if (corner)
                 {
                     bx -= ux * 0.5f * thick; bz -= uz * 0.5f * thick;
                     float t = ux; ux = -uz * turn; uz = t * turn;
@@ -244,7 +244,7 @@ namespace Stabby.World
                 if (gate) { ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span; continue; }
                 bool placed = false;
                 float ax = ux, az = uz, sbx = bx, sbz = bz;
-                for (int tries = 0; tries < 3 && !placed; tries++)
+                for (int tries = 0; tries < (corner ? 1 : 3) && !placed; tries++)
                 {
                     if (tries > 0)
                     {

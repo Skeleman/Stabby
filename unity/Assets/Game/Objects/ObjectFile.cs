@@ -14,6 +14,7 @@ namespace Stabby.Game
         {
             public string[] biomes; public float perHectare, slopeMin, slopeMax = 10f, hardnessMin, hardnessMax = 1f, sizeMinM = 1f, sizeMaxM = 1f;
             public int clusterCount = 1; public float clusterRadiusM, sink, alignToSlope, footRiseM, footReachM = 12f, editMinSizeM;
+            public int chainMin = 1, chainMax = 1; public float chainCorner, chainGate;
             public Density[] biomeDensity;
         }
         [Serializable] class Density { public string biome; public float scale = 1f; }
@@ -81,6 +82,7 @@ namespace Stabby.Game
                     HardnessMin = pl.hardnessMin, HardnessMax = pl.hardnessMax, SizeMinM = pl.sizeMinM, SizeMaxM = pl.sizeMaxM,
                     ClusterCount = pl.clusterCount, ClusterRadiusM = pl.clusterRadiusM, Sink = pl.sink, AlignToSlope = pl.alignToSlope,
                     FootRiseM = pl.footRiseM, FootReachM = pl.footReachM, EditMinSizeM = pl.editMinSizeM,
+                    ChainMin = pl.chainMin, ChainMax = pl.chainMax, ChainCorner = pl.chainCorner, ChainGate = pl.chainGate,
                 };
                 foreach (var bd in pl.biomeDensity ?? Array.Empty<Density>()) def.Placement.BiomeDensity.Add(new BiomeDensity { Biome = bd.biome, Scale = bd.scale });
                 lib.Objects.Add(def);
