@@ -12,6 +12,7 @@ Shader "Stabby/VertexLit"
             #pragma fragment frag
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -91,9 +92,12 @@ Shader "Stabby/VertexLit"
                 {
                     float2 xc = (i.xz + TmOrigin(_WorldSpaceCameraPos)) * _StabbyFieldUV.x + _StabbyFieldUV.y;
                     float du = 3 * _StabbyFieldUV.y, d = du / _StabbyFieldUV.x;
-                    float sx = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc + float2(du, 0), 0).r - SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc - float2(du, 0), 0).r;
-                    float sz = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc + float2(0, du), 0).g - SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc - float2(0, du), 0).g;
-                    tmCurv = (sx + sz) / (2 * d);
+                    float2 ge = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc + float2(du, 0), 0).rg, gw = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc - float2(du, 0), 0).rg;
+                    float2 gn = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc + float2(0, du), 0).rg, gs = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xc - float2(0, du), 0).rg;
+                    tmCurv = (ge.x - gw.x + gn.y - gs.y) / (2 * d);
+                    float2 gm = 0.25 * (ge + gw + gn + gs);
+                    float gl = length(gm), coh = gl / max(0.25 * (length(ge) + length(gw) + length(gn) + length(gs)), 1e-5);
+                    tmShore = float4(gm / max(gl, 1e-5), gl, smoothstep(0.004, 0.014, gl) * smoothstep(0.32, 0.18, gl) * smoothstep(0.82, 0.96, coh));
                 }
                 TmOut m = TmEvaluate(float3(i.xz.x, h, i.xz.y), n, color, off, mix, stone);
                 n = m.grad;
@@ -109,7 +113,8 @@ Shader "Stabby/VertexLit"
                 }
                 float2 xv = i.xz + TmOrigin(_WorldSpaceCameraPos);
                 m.albedo = ContactGround(m.albedo, xv, h);
-                Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x, h, xv.y)));
+                float2 sj = 0.08 * float2(TmL2(xv, 0.9, 113.1).x, TmL2(xv, 0.9, 117.9).x) + 0.03 * float2(TmL2(xv, 3.1, 121.3).x, TmL2(xv, 3.1, 125.7).x);
+                Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)));
                 l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);

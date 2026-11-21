@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
@@ -236,6 +239,7 @@ namespace Stabby.Game
         {
             public readonly byte[] Raw = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
             public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+            public readonly MemoryStream Row = new MemoryStream();
         }
 
         public static void Shed(GeneratedWorld w)
@@ -248,13 +252,17 @@ namespace Stabby.Game
         static BlobBuilder Pack(GeneratedWorld w, ulong[] sums)
         {
             int a = WorldChunks.Across(w.Config.Size), total = 0;
-            var zipped = new byte[sums.Length][];
-            Parallel.For(0, a, () => new Buffers(), (cy, _, u) =>
+            var rows = new byte[a][];
+            var lengths = new int[sums.Length];
+            var pool = new ConcurrentBag<Buffers>();
+            Parallel.For(0, a, () => pool.TryTake(out var spare) ? spare : new Buffers(), (cy, _, u) =>
             {
-                for (int cx = 0; cx < a; cx++) zipped[cy * a + cx] = ChunkZip.Deflate(u.Raw, WorldChunks.Pack(w, cx, cy, u.Raw, 0), u.Scratch);
+                u.Row.SetLength(0);
+                for (int cx = 0; cx < a; cx++) lengths[cy * a + cx] = ChunkZip.Deflate(u.Raw, WorldChunks.Pack(w, cx, cy, u.Raw, 0), u.Scratch, u.Row);
+                rows[cy] = u.Row.ToArray();
                 return u;
-            }, _ => { });
-            for (int k = 0; k < zipped.Length; k++) total += zipped[k].Length;
+            }, pool.Add);
+            for (int cy = 0; cy < a; cy++) total += rows[cy].Length;
             var b = new BlobBuilder(Allocator.Persistent);
             ref var root = ref b.ConstructRoot<PackedChunks>();
             root.Seed = w.Config.Seed;
@@ -263,11 +271,16 @@ namespace Stabby.Game
             var r = b.Allocate(ref root.Ranges, sums.Length);
             var bytes = b.Allocate(ref root.Bytes, total);
             int at = 0;
-            for (int k = 0; k < zipped.Length; k++)
+            for (int k = 0; k < sums.Length; k++)
             {
                 s[k] = sums[k];
-                r[k] = new int2(at, zipped[k].Length);
-                var z = zipped[k];
+                r[k] = new int2(at, lengths[k]);
+                at += lengths[k];
+            }
+            at = 0;
+            for (int cy = 0; cy < a; cy++)
+            {
+                var z = rows[cy];
                 for (int j = 0; j < z.Length; j++) bytes[at + j] = z[j];
                 at += z.Length;
             }
@@ -336,7 +349,7 @@ namespace Stabby.Game
         }
 
         Task<(GeneratedWorld, ulong[], WorldStore.Entry)> gen;
-        Task<(int, GroundParts, WorldStore.Entry)> finish;
+        Task<(int, GroundParts, WorldStore.Entry, GeneratedWorld)> finish;
         WorldStore.Entry shared, borrowed;
         BlobAssetReference<GroundData> ground;
         BlobBake<GroundData> groundBake;
@@ -459,15 +472,13 @@ namespace Stabby.Game
                     source = "borrowed the host world";
                     return (null, local.Sums, local);
                 }
-                GeneratedWorld w;
                 if (empty)
                 {
-                    var ids = new string[defs.Count];
-                    for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
-                    w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids, lib);
                     source = "started empty";
+                    return (null, WorldChunks.EmptyChecksums(GameSettings.Size, true), null);
                 }
-                else (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
+                var (w, note) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
+                source = note;
                 w.Objects = objects;
                 return (w, WorldChunks.Checksums(w), null);
             });
@@ -480,12 +491,35 @@ namespace Stabby.Game
             var slots = box.Slots.ToArray();
             var arena = box.Arena.AsArray();
             ulong hs = hostSeed;
-            finish = Task.Run<(int, GroundParts, WorldStore.Entry)>(() =>
+            var defs = Defs;
+            var lib = Materials;
+            var objects = Objects;
+            finish = Task.Run<(int, GroundParts, WorldStore.Entry, GeneratedWorld)>(() =>
             {
-                int n = w.Config.Size, a = WorldChunks.Across(n);
+                int n = GameSettings.Size, a = WorldChunks.Across(n);
                 var got = new List<int>();
                 for (int k = 0; k < slots.Length; k++) if (slots[k].Pieces > 0) got.Add(k);
-                Parallel.For(0, got.Count, () => new Buffers(), (j, _, u) =>
+                var pool = new ConcurrentBag<Buffers>();
+                if (w == null)
+                {
+                    int differ = 0;
+                    Parallel.For(0, got.Count, () => pool.TryTake(out var spare) ? spare : new Buffers(), (j, _, u) =>
+                    {
+                        int k = got[j], cx = k % a, cy = k / a, len = ChunkInbox.Length(slots[k]), raw = WorldChunks.Bytes(n, cx, cy);
+                        if (u.Packed.Length < len) u.Packed = new byte[len];
+                        NativeArray<byte>.Copy(arena, slots[k].Start, u.Packed, 0, len);
+                        ChunkZip.Inflate(u.Packed, 0, len, raw, u.Scratch, u.Raw);
+                        if (WorldChunks.Checksum(u.Raw, raw) != host[k]) Interlocked.Increment(ref differ);
+                        return u;
+                    }, pool.Add);
+                    var hostWorld = differ == 0 ? WorldStore.Find(host) : null;
+                    if (hostWorld != null) return (0, null, hostWorld, null);
+                    var ids = new string[defs.Count];
+                    for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
+                    w = WorldFile.Empty(new WorldConfig { Seed = hs, Size = n, CellMeters = WorldConfig.CellMetersFor(n) }, ids, lib);
+                    w.Objects = objects;
+                }
+                Parallel.For(0, got.Count, () => pool.TryTake(out var spare) ? spare : new Buffers(), (j, _, u) =>
                 {
                     int k = got[j], cx = k % a, cy = k / a, len = ChunkInbox.Length(slots[k]);
                     if (u.Packed.Length < len) u.Packed = new byte[len];
@@ -493,17 +527,17 @@ namespace Stabby.Game
                     ChunkZip.Inflate(u.Packed, 0, len, WorldChunks.Bytes(n, cx, cy), u.Scratch, u.Raw);
                     WorldChunks.Unpack(w, cx, cy, u.Raw, 0);
                     return u;
-                }, _ => { });
+                }, pool.Add);
                 w.Config.Seed = hs;
                 if (got.Count > 0) WorldChunks.Relink(w);
                 var sums = WorldChunks.Checksums(w);
                 int bad = 0;
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
-                if (bad != 0) return (bad, null, null);
+                if (bad != 0) return (bad, null, null, w);
                 var found = WorldStore.Find(sums);
-                if (found != null) return (0, null, found);
+                if (found != null) return (0, null, found, null);
                 ServerMapSystem.Shed(w);
-                return (0, Ground.Fill(w), null);
+                return (0, Ground.Fill(w), null, w);
             });
         }
 
@@ -513,7 +547,8 @@ namespace Stabby.Game
             {
                 if (!finish.IsCompleted) return;
                 if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
-                var (bad, parts, found) = finish.Result;
+                var (bad, parts, found, made) = finish.Result;
+                if (made != null) world = made;
                 GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
                     $"streamed {box.Streamed} ({box.BytesIn / 1024} KB deflated in {box.PiecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
                 if (bad != 0) { Map = world; GameStatus.Failure = GameStatus.Lines[World.Name]; return; }

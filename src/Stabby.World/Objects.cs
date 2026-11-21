@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -480,7 +481,9 @@ namespace Stabby.World
 
         public List<ObjectColumn> Columns()
         {
-            var rows = ColumnRows();
+            var rows = new List<ObjectColumn>[across];
+            for (int k = 0; k < across; k++) rows[k] = new List<ObjectColumn>();
+            ColumnRows((cz, columns) => rows[cz].AddRange(columns));
             int total = 0;
             foreach (var r in rows) total += r.Count;
             var list = new List<ObjectColumn>(total);
@@ -488,24 +491,27 @@ namespace Stabby.World
             return list;
         }
 
-        public List<ObjectColumn>[] ColumnRows()
+        public void ColumnRows(ColumnSink sink)
         {
-            var rows = new List<ObjectColumn>[across];
-            Parallel.For(0, across, cz =>
+            var pool = new ConcurrentBag<(List<ObjectColumn>, List<ObjectInstance>)>();
+            Parallel.For(0, across, () => pool.TryTake(out var p) ? p : (new List<ObjectColumn>(), new List<ObjectInstance>()), (cz, _, t) =>
             {
-                var row = new List<ObjectColumn>();
-                var scratch = new List<ObjectInstance>();
+                var (columns, scratch) = t;
                 for (int cx = 0; cx < across; cx++)
                 {
+                    columns.Clear();
                     var held = chunks[cz * across + cx];
-                    if (held != null) { foreach (var o in held) AddColumns(lib, shapes, o, row); continue; }
-                    scratch.Clear();
-                    PlaceInto(cx, cz, true, scratch, null);
-                    foreach (var o in scratch) AddColumns(lib, shapes, o, row);
+                    if (held != null) foreach (var o in held) AddColumns(lib, shapes, o, columns);
+                    else
+                    {
+                        scratch.Clear();
+                        PlaceInto(cx, cz, true, scratch, null);
+                        foreach (var o in scratch) AddColumns(lib, shapes, o, columns);
+                    }
+                    if (columns.Count > 0) sink(cz, columns);
                 }
-                rows[cz] = row;
-            });
-            return rows;
+                return t;
+            }, pool.Add);
         }
 
         public static void AddColumns(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
@@ -557,6 +563,8 @@ namespace Stabby.World
             rz = vz + q.Qw * tz + (q.Qx * ty - q.Qy * tx);
         }
     }
+
+    public delegate void ColumnSink(int row, List<ObjectColumn> columns);
 
     public sealed class PartShapes
     {

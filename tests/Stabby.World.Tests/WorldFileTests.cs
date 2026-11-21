@@ -56,4 +56,14 @@ public class WorldFileTests
         Assert.Equal(WorldChunks.Checksums(host), WorldChunks.Checksums(peer));
         Assert.Empty(WorldChecks.Run(peer));
     }
+
+    [Theory]
+    [InlineData(128)]
+    [InlineData(100)]
+    public void EmptyChecksumsMatchAnEmptyWorld(int size)
+    {
+        var ids = Biomes.Select(b => b.Id).ToArray();
+        var empty = WorldFile.Empty(new WorldConfig { Seed = 7, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, ids, Materials);
+        Assert.Equal(WorldChunks.Checksums(empty), WorldChunks.EmptyChecksums(size, true));
+    }
 }
