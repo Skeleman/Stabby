@@ -60,8 +60,17 @@ namespace Stabby.Game
             public GeneratedWorld Map;
             public GroundParts Parts;
             public BlobAssetReference<GroundData> Ground;
+            public Task<SharedObjects> Objects;
             public int Refs;
             public bool Failed;
+        }
+
+        public sealed class SharedObjects
+        {
+            public ObjectField Field;
+            public byte[] Columns;
+            public int Count;
+            public long Ms;
         }
 
         static readonly List<Entry> entries = new List<Entry>();
@@ -89,6 +98,11 @@ namespace Stabby.Game
             lock (entries) { failed = e.Failed; return e.Ground.IsCreated; }
         }
 
+        public static Task<SharedObjects> Objects(Entry e, Func<SharedObjects> build)
+        {
+            lock (entries) return e.Objects ??= Task.Run(build);
+        }
+
         public static Entry Find(ulong[] sums)
         {
             lock (entries)
@@ -108,6 +122,7 @@ namespace Stabby.Game
                 e.Ground = default;
                 e.Map = null;
                 e.Parts = null;
+                e.Objects = null;
             }
         }
 
@@ -142,6 +157,7 @@ namespace Stabby.Game
         GroundParts filled;
         WorldStore.Entry entry;
 
+        public WorldStore.Entry Shared => entry;
         public GeneratedWorld Map { get; private set; }
         public GroundParts Parts { get; private set; }
 
@@ -289,6 +305,7 @@ namespace Stabby.Game
         public ObjectLibrary Objects { get; private set; }
         public GeneratedWorld Map { get; private set; }
         public GroundParts Parts { get; private set; }
+        public WorldStore.Entry Shared => shared;
 
         protected override void OnCreate()
         {
