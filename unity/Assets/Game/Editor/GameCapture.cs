@@ -190,6 +190,7 @@ namespace Stabby.Game.Editor
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
                 if (phase == 7)
                 {
+                    lows.Add(("rock", cam.transform.position, cam.transform.rotation));
                     lows.Add(("cliff", cam.transform.position, cam.transform.rotation));
                     Vector3 fwd = cam.transform.forward, at = cam.transform.position + fwd * 12f, back = cam.transform.position - new Vector3(fwd.x, 0, fwd.z).normalized * 30f + Vector3.up * 10f;
                     lows.Add(("cliff-wide", back, Quaternion.LookRotation(at - back)));
@@ -198,6 +199,7 @@ namespace Stabby.Game.Editor
                 {
                     GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
                     GameStatus.Lines["~bench grass blades"] = GrassViewSystem.Counts();
+                    lows.Add(("grass", cam.transform.position, cam.transform.rotation));
                     GrassViewSystem.Rescatter = true;
                     GameStatus.Lines["~bench grass moving"] = Bench(cam, "grass close-up rescattering grass every frame");
                     GrassViewSystem.Rescatter = false;
@@ -852,15 +854,22 @@ namespace Stabby.Game.Editor
             foreach (var (name, pos, rot) in lows)
             {
                 cam.transform.SetPositionAndRotation(pos, rot);
-                sun.transform.rotation = Quaternion.Euler(14f, rot.eulerAngles.y + 100f, 0);
+                sun.transform.rotation = name == "rock" ? keep : Quaternion.Euler(name == "grass" ? 6f : 14f, rot.eulerAngles.y + (name == "grass" ? 160f : 100f), 0);
                 for (var w = Settle(180); w.MoveNext();) yield return null;
-                for (int c = 0; c < 2; c++)
+                string[] tags = name == "rock" ? new[] { "-nocast", "-cast", "-detailoff", "-nojoints" } : new[] { "-low-nocast", "-low", "-low-detailoff", "-low-nojoints" };
+                var rockB = Shader.GetGlobalVector("_StabbyRockB");
+                for (int c = 0; c < (name == "cliff" || name == "rock" ? tags.Length : 2); c++)
                 {
-                    TerrainViewSystem.Casting = c == 1;
+                    TerrainViewSystem.Casting = c > 0;
+                    bool rock = name == "rock";
+                    Shader.SetGlobalFloat("_StabbyDetailOff", c == 2 ? 1 : 0);
                     for (var w = Settle(4); w.MoveNext();) yield return null;
+                    Shader.SetGlobalVector("_StabbyRockB", c == 3 ? new Vector4(rockB.x, rockB.y, rockB.z, 0) : rockB);
                     Shot(cam, null, "warmup");
-                    Shot(cam, dir, name + (c == 0 ? "-low-nocast" : "-low"));
+                    Shot(cam, dir, (rock ? "close-rock" : name) + tags[c]);
                 }
+                Shader.SetGlobalFloat("_StabbyDetailOff", 0);
+                Shader.SetGlobalVector("_StabbyRockB", rockB);
             }
             sun.transform.rotation = keep;
             TerrainViewSystem.Casting = true;
