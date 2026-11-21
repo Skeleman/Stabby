@@ -191,7 +191,7 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     TmOut o;
     o.grad = g + bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw);
     float speck = smoothstep(-0.6, 0.6, fine.x) - 0.5;
-    float3 sc = lerp(st.rgb, dot(st.rgb, float3(0.2126, 0.7152, 0.0722)) * float3(1.07, 1, 0.88), 0.75 * stone);
+    float3 sc = lerp(st.rgb, dot(st.rgb, float3(0.2126, 0.7152, 0.0722)) * float3(1.07, 1, 0.88), 0.85 * stone);
     float3 c = sc * (1 + ra.x * gw * grain.x) * (1 + ra.x * 0.9 * fw2 * speck) * (1 + 0.12 * layered * TmFade(_StabbyRockB.x, fp) * (TmHash(int2((int)bed, 11)) * 2 - 1));
     c *= 1 - 0.5 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4));
     c *= 1 + 0.3 * (1 - 0.5 * stone) * bump.x * ra.w;
