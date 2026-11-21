@@ -36,7 +36,7 @@ namespace Stabby.Game
         public float4x4 M;
         public float4 Color;
         public int Mesh, Def;
-        public float Radius;
+        public float Radius, Ground, Size;
         public bool Shadow;
     }
 
@@ -285,7 +285,7 @@ namespace Stabby.Game
                 parts[i] = new ObjectSpawn
                 {
                     M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
-                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part),
+                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = o.Y + def.Placement.Sink * o.Size, Size = o.Size,
                 };
             }
             order.Dispose();
@@ -414,7 +414,7 @@ namespace Stabby.Game
                 EntityManager.SetComponentData(e, new RenderBounds { Value = meshSet.Bounds[s.Mesh] });
                 EntityManager.SetComponentData(e, new MaterialMeshInfo(materialId, meshIds[m]));
                 EntityManager.SetComponentData(e, new ObjectColor { Value = s.Color });
-                EntityManager.SetComponentData(e, new ObjectFade { Value = new float4(1, s.Shadow ? 1 : 0, 0, 0) });
+                EntityManager.SetComponentData(e, new ObjectFade { Value = new float4(1, s.Shadow ? 1 : 0, s.Ground, s.Size) });
                 EntityManager.SetComponentData(e, new ObjectLod
                 {
                     L0 = meshIds[m], L1 = meshIds[m + math.min(1, lods - 1)], L2 = meshIds[m + math.min(2, lods - 1)],
@@ -507,8 +507,9 @@ namespace Stabby.Game
                 var id = s > lod.Lod1 ? lod.L0 : s > lod.Lod2 ? lod.L1 : lod.L2;
                 var m = Mmi[e];
                 if (m.MeshID.value != id.value) { m.MeshID = id; Mmi[e] = m; }
-                var f = new float4(math.round(math.saturate((s - lod.Fade) / (0.5f * lod.Fade)) * 16f) / 16f, s > lod.ShadowScreen ? 1 : 0, 0, 0);
-                if (math.any(Fade[e].Value != f)) Fade[e] = new ObjectFade { Value = f };
+                var old = Fade[e].Value;
+                var f = new float4(math.round(math.saturate((s - lod.Fade) / (0.5f * lod.Fade)) * 16f) / 16f, s > lod.ShadowScreen ? 1 : 0, old.z, old.w);
+                if (math.any(old != f)) Fade[e] = new ObjectFade { Value = f };
             }
         }
     }
