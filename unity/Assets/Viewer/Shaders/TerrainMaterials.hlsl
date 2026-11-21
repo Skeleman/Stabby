@@ -390,7 +390,11 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     cw = lerp(cw, float4(0, 0, 1, 0), shore);
     cw = saturate(cw * (1 + 0.8 * fj * (1 - shore) * float4(jn.x, -jn.x, jn.x * 0.5, -jn.x)));
     cw /= max(dot(cw, 1), 1e-3);
-    float m = saturate((rockMix - 0.5) * 1.6 + 0.5 + 0.3 * fj * jn.x);
+    float fk = TmFade(1.3, fp);
+    float3 jk = TmN2(wa * 1.3 + 13.9, fk);
+    float br = 0.3 * fj * jn.x + 0.35 * fk * jk.x;
+    float sl = min(n.y, face);
+    float m = saturate(max((rockMix - 0.5) * 1.6 + 0.5 + br, 1 - smoothstep(0.5, 0.72, sl + 0.4 * br)));
     TmOut o;
     [branch] if (_StabbyDetailOff > 0)
     {
@@ -414,7 +418,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         if (cw.w > 0.02) TmAdd(k, TmSnow(wp, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += coatColor * (1 - kept);
-        float up = saturate((min(n.y, face) - 0.35) / 0.35);
+        float up = saturate((sl - 0.3) / 0.25);
         o.albedo += c * lerp(coatColor, k.albedo, up);
         o.grad += c * up * k.grad;
     }

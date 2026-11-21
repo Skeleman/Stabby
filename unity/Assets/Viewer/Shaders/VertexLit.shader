@@ -35,6 +35,8 @@ Shader "Stabby/VertexLit"
             SAMPLER(sampler_StabbySlope);
             TEXTURE2D(_StabbyBiome);
             SAMPLER(sampler_StabbyBiome);
+            TEXTURE2D(_StabbyBed);
+            SAMPLER(sampler_StabbyBed);
 
             float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
 
@@ -87,6 +89,12 @@ Shader "Stabby/VertexLit"
                     color = lerp(color, fc, f);
                     off = lerp(off, bo.a, f);
                     mix = lerp(mix, fr, f);
+                }
+                if (f < 1)
+                {
+                    float2 xa = i.xz + TmOrigin(_WorldSpaceCameraPos);
+                    float bed = SAMPLE_TEXTURE2D_LOD(_StabbyBed, sampler_StabbyBed, xa * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).r;
+                    mix = lerp(mix, min(mix, 0.5), (1 - f) * smoothstep(0.8, 0.97, n.y) * smoothstep(-1, 0, h - bed));
                 }
                 TmOut m = TmEvaluate(float3(i.xz.x, h, i.xz.y), n, color, off, mix);
                 n = m.grad;
