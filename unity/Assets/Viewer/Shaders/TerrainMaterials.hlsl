@@ -233,12 +233,15 @@ float TmCragPlane(float u, float y, float fp, float hard, float mass, out float2
     g = amp * (f1 * 5.0 * s1 * b1.yz * float2(1.0 / 18, 1.0 / 110) + f2 * 1.7 * s2 * b2.yz * float2(1.0 / 6.5, 1.0 / 38) + f3 * 0.22 * fl.yz * float2(1.0 / 1.7, 1.0 / 11));
     float gully = f1 * (1 - smoothstep(0.02, 0.3, abs(b1.x))) + 0.6 * f2 * (1 - smoothstep(0.02, 0.25, abs(b2.x)));
     float ff = TmFade(1.0 / 9, fp), fs = TmFade(1.0 / 2.6, fp);
-    float2 c1 = floor(float2(u * (1.0 / 9) + 0.35 * b2.x, y * (1.0 / 12) + 0.35 * fl.x));
-    float2 c2 = floor(float2(u * (1.0 / 2.6) + 0.3 * fl.x, y * (1.0 / 3.2) + 0.3 * b2.x));
+    float3 fw = TmNoise2(float2(u * (1.0 / 3.3), y * (1.0 / 4.1)) + 27.1);
+    float2 p1 = float2(u * (1.0 / 9) + 0.35 * b2.x + 0.12 * fw.x, y * (1.0 / 12) + 0.35 * fl.x + 0.1 * fw.y);
+    float2 p2 = float2(u * (1.0 / 2.6) + 0.3 * fl.x + 0.15 * fw.y, y * (1.0 / 3.2) + 0.3 * b2.x + 0.15 * fw.x);
+    float2 c1 = floor(p1), c2 = floor(p2), e1 = min(p1 - c1, 1 - p1 + c1), e2 = min(p2 - c2, 1 - p2 + c2);
+    float k1 = smoothstep(0, 0.1 + 0.07 * fw.x, min(e1.x, e1.y)), k2 = smoothstep(0, 0.12 + 0.08 * fw.y, min(e2.x, e2.y));
     int2 i1 = (int2)c1, i2 = (int2)c2;
     float2 t1 = float2(TmHash(int3(i1, 41)), TmHash(int3(i1, 43))) - 0.5;
     float2 t2 = float2(TmHash(int3(i2, 47)), TmHash(int3(i2, 53))) - 0.5;
-    g += ff * lerp(0.45, 0.8, mass) * t1 + fs * lerp(0.15, 0.4, mass) * t2;
+    g += ff * k1 * lerp(0.45, 0.8, mass) * t1 + fs * k2 * lerp(0.15, 0.4, mass) * t2;
     tone = ff * 0.1 * (TmHash(int3(i1, 59)) - 0.5) + fs * 0.05 * (TmHash(int3(i2, 61)) - 0.5);
     float xj = u * (1.0 / 4.6) + 0.3 * TmNoise2(float2(y * (1.0 / 6), u * (1.0 / 30)) + 91.3).x + 0.12 * TmNoise2(float2(y * (1.0 / 1.7), u * (1.0 / 9)) + 15.9).x + 0.06 * fl.x;
     float ij = floor(xj + 0.5), e = xj - ij;
