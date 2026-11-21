@@ -131,13 +131,13 @@ namespace Stabby.World
 
         static float Dist(float x, float y) => (float)Math.Sqrt(x * x + y * y);
 
-        public static void Run(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, float[] precipitationMm)
+        public static void Run(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, Func<WorldConfig, float[], bool[], float[]> rain)
         {
             int n = c.Size, m = c.ErosionSize;
             int fine = Math.Min(c.FineSteps, c.ErosionSteps);
             if (m <= 0 || n <= m || n % m != 0)
             {
-                Steps(c, s, lib, h, precipitationMm, c.ErosionSteps);
+                Steps(c, s, lib, h, rain(c, h, SeaOf(s.Land)), c.ErosionSteps);
                 return;
             }
             int f = n / m;
@@ -146,29 +146,30 @@ namespace Stabby.World
             cc.CellMeters = c.CellMeters * f;
             var cs = Coarse(s, f, m);
             var hc = new float[m * m];
-            var pc = new float[m * m];
-            for (int cy = 0; cy < m; cy++)
+            Parallel.For(0, m, cy =>
+            {
                 for (int cx = 0; cx < m; cx++)
                 {
                     int ci = cy * m + cx;
                     bool land = cs.Land[ci];
-                    double sum = 0, rain = 0; int count = 0;
+                    double sum = 0; int count = 0;
                     for (int dy = 0; dy < f; dy++)
                         for (int dx = 0; dx < f; dx++)
                         {
                             int i = (cy * f + dy) * n + cx * f + dx;
-                            rain += precipitationMm[i];
                             if (s.Land[i] != land) continue;
                             sum += h[i]; count++;
                         }
                     hc[ci] = (float)(sum / count);
-                    pc[ci] = (float)(rain / (f * f));
                 }
+            });
+            var pc = rain(cc, hc, SeaOf(cs.Land));
             var start = (float[])hc.Clone();
             Steps(cc, cs, lib, hc, pc, c.ErosionSteps - fine);
             for (int i = 0; i < m * m; i++) hc[i] = cs.Land[i] ? hc[i] - start[i] : 0;
+            var p = fine > 0 ? new float[n * n] : null;
             float half = (f - 1) * 0.5f;
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
             {
                 float v = Math.Max(0, Math.Min(m - 1, (y - half) / f));
                 int y0 = Math.Min(m - 2, (int)v);
@@ -176,16 +177,21 @@ namespace Stabby.World
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
-                    if (!s.Land[i]) continue;
                     float u = Math.Max(0, Math.Min(m - 1, (x - half) / f));
                     int x0 = Math.Min(m - 2, (int)u);
                     float tx = u - x0;
                     int a = y0 * m + x0;
+                    if (p != null)
+                    {
+                        float pt = pc[a] + (pc[a + 1] - pc[a]) * tx, pb = pc[a + m] + (pc[a + m + 1] - pc[a + m]) * tx;
+                        p[i] = pt + (pb - pt) * ty;
+                    }
+                    if (!s.Land[i]) continue;
                     float top = hc[a] + (hc[a + 1] - hc[a]) * tx, bottom = hc[a + m] + (hc[a + m + 1] - hc[a + m]) * tx;
                     h[i] += top + (bottom - top) * ty;
                 }
-            }
-            if (fine > 0) Steps(c, s, lib, h, precipitationMm, fine);
+            });
+            if (fine > 0) Steps(c, s, lib, h, p, fine);
             else
                 for (int i = 0; i < n * n; i++)
                     if (s.Land[i]) h[i] = Math.Max(MinLandHeight, h[i]);
@@ -202,7 +208,8 @@ namespace Stabby.World
             float half = (f - 1) * 0.5f, area = f * f;
             foreach (var hl in s.Highlands)
                 cs.Highlands.Add(new HighlandSketch { Plateau = hl.Plateau, X = (hl.X - half) / f, Y = (hl.Y - half) / f, Radius = hl.Radius / f });
-            for (int cy = 0; cy < m; cy++)
+            Parallel.For(0, m, cy =>
+            {
                 for (int cx = 0; cx < m; cx++)
                 {
                     int land = 0;
@@ -219,6 +226,7 @@ namespace Stabby.World
                     cs.Uplift[ci] = up / area; cs.Coast[ci] = coast / area / f;
                     cs.Beach[ci] = beach / area; cs.Cliff[ci] = cliff / area;
                 }
+            });
             return cs;
         }
 

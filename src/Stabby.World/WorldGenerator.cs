@@ -94,8 +94,7 @@ namespace Stabby.World
             var sea = Erosion.SeaOf(sketch.Land);
             var h = Erosion.InitialHeight(c, sketch);
             bool terrainOnly = c.UniformRainMm > 0;
-            var provisional = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
-            Erosion.Run(c, sketch, materials, h, provisional.PrecipitationMm);
+            Erosion.Run(c, sketch, materials, h, (rc, rh, rs) => (terrainOnly ? ClimateField.Uniform(rc, rh, rc.UniformRainMm) : ClimateField.Compute(rc, rh, rs)).PrecipitationMm);
             Erosion.FlattenTableland(c, sketch, h);
             Erosion.CarveLakes(c, sketch, h);
             stage?.Invoke("erosion");
