@@ -22,7 +22,7 @@ namespace Stabby.Viewer.Editor
             var data = ScriptableObject.CreateInstance<UniversalRendererData>();
             AssetDatabase.CreateAsset(data, SettingsDir + "/Renderer.asset");
             var asset = UniversalRenderPipelineAsset.Create(data);
-            asset.shadowDistance = 0;
+            asset.shadowDistance = 60;
             AssetDatabase.CreateAsset(asset, SettingsDir + "/URP.asset");
             GraphicsSettings.defaultRenderPipeline = asset;
             int current = QualitySettings.GetQualityLevel();
@@ -53,6 +53,7 @@ namespace Stabby.Viewer.Editor
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.intensity = 0.8f;
+            sun.shadows = LightShadows.Hard;
             sun.color = new Color(1f, 0.96f, 0.88f);
             sun.transform.rotation = Quaternion.Euler(38f, 140f, 0);
 
