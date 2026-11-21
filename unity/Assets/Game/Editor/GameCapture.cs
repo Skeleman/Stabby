@@ -230,6 +230,12 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     if (wait < 0) GameStatus.Lines["~objects wait"] = $"objects waited {-wait} extra frames";
                     Shot(cam, dir, "objects");
+                    var sunFlat = Vector3.ProjectOnPlane(Object.FindFirstObjectByType<Light>().transform.forward, Vector3.up).normalized;
+                    var objRot = cam.transform.rotation;
+                    cam.transform.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(-sunFlat, Vector3.up) + Vector3.up * cam.transform.forward.y);
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "objects-shadows");
+                    cam.transform.rotation = objRot;
                     GameStatus.Lines["~objects draw"] = DrawStats();
                     wait = 0;
                     phase++;
