@@ -196,15 +196,24 @@ namespace Stabby.World
                     float ax = x0 + rng.NextFloat() * sx, az = z0 + rng.NextFloat() * sz;
                     bool open = Open(d, ax, az) && (!foot || Foot(pl, ax, az));
                     if (foot && !open) continue;
+                    float fx = 0, fz = 0, fan = 0;
+                    if (pl.FanM > 0) fan = Fan(pl, ax, az, out fx, out fz);
                     for (int m = 0; m < pl.ClusterCount; m++)
                     {
                         float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), t = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
                         int variant = (int)(rng.NextU32() % (uint)lib.Objects[d].Variants);
                         if (!open) continue;
-                        float px = m == 0 ? ax : ax + ox * pl.ClusterRadiusM, pz = m == 0 ? az : az + oz * pl.ClusterRadiusM;
+                        float px = m == 0 ? ax : ax + ox * pl.ClusterRadiusM, pz = m == 0 ? az : az + oz * pl.ClusterRadiusM, grade = 1f;
+                        if (fan > 0 && m > 0)
+                        {
+                            float along = 0.15f + 0.85f * Math.Abs(oz), reach = along * fan, side = ox * (0.2f + 0.8f * along) * 0.55f * reach;
+                            px = ax + fx * reach - fz * side;
+                            pz = az + fz * reach + fx * side;
+                            grade = 0.7f + 0.6f * along;
+                        }
                         if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz) continue;
                         if (Density(d, px, pz) < 1f && thin.NextFloat() >= Density(d, px, pz)) continue;
-                        float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t;
+                        float size = (pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t) * grade;
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
                         if (!Accept(d, px, pz, size, qa, qb, out var o)) continue;
                         o.Variant = variant;
@@ -333,6 +342,30 @@ namespace Stabby.World
                 if (rise > best) { best = rise; below = y - GroundAt(detail, cm, x - ux, z - uz); }
             }
             return best >= pl.FootRiseM && below < 0.5f * best;
+        }
+
+        float Fan(ObjectPlacement pl, float x, float z, out float fx, out float fz)
+        {
+            float r = pl.FootReachM, diag = 0.70710678f, y = GroundAt(detail, cm, x, z), best = float.MinValue;
+            int top = 0;
+            Span<float> rise = stackalloc float[8];
+            for (int k = 0; k < 8; k++)
+            {
+                FanDir(k, diag, out float ux, out float uz);
+                rise[k] = GroundAt(detail, cm, x + ux * r, z + uz * r) - y;
+                if (rise[k] > best) { best = rise[k]; top = k; }
+            }
+            FanDir(top, diag, out fx, out fz);
+            fx = -fx; fz = -fz;
+            bool gully = best > 0 && rise[(top + 1) & 7] > 0.7f * best && rise[(top + 7) & 7] > 0.7f * best;
+            return gully ? 1.6f * pl.FanM : pl.FanM;
+        }
+
+        static void FanDir(int k, float diag, out float ux, out float uz)
+        {
+            int a = k & 7;
+            ux = a == 0 ? 1 : a == 4 ? -1 : a == 2 || a == 6 ? 0 : a < 2 || a > 6 ? diag : -diag;
+            uz = a == 2 ? 1 : a == 6 ? -1 : a == 0 || a == 4 ? 0 : a < 4 ? diag : -diag;
         }
 
         bool Open(int d, float x, float z)

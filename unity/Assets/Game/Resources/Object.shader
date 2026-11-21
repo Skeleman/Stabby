@@ -233,7 +233,15 @@ Shader "Stabby/Object"
                 {
                     float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).a;
                     float period = max(_StabbyStrataPeriod, 1);
+                    int3 cell = int3(floor(i.origin * 4.1));
+                    float h1 = TmHash(cell), h2 = TmHash(cell + int3(7, 3, 5));
+                    float3 tilt = normalize(float3(h1 - 0.5, 1.1, h2 - 0.5));
+                    off += i.tone.x > 0.25 ? 0 : (0.15 + 0.7 * h2) * period + dot(wp - i.origin, tilt) - (wp.y - i.origin.y);
                     float u0 = (wp.y + off) / period;
+                    float3 band = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), 0).rgb, mean = 0;
+                    [unroll] for (int k = 1; k < 6; k++) mean += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(u0 + k * 0.1667, 0.5), 0).rgb;
+                    mean = (mean + band) * 0.1667;
+                    float3 pull = lerp(1, clamp((mean + 0.02) / (band + 0.02), 0.6, 1.6), 0.6);
                     float2 dux = float2(ddx(u0), 0), duy = float2(ddy(u0), 0);
                     [branch] if (_StabbyDetailOff > 0)
                         albedo = SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
@@ -245,11 +253,17 @@ Shader "Stabby/Object"
                         TmOut m = TmRock(wp - tmO + piece, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy, 1);
                         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wp.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
                         TmStoneCover(m, wp - tmO, n, cw / max(dot(cw, 1), 1e-3), fp, 1, 1);
-                        float3 g = m.grad - n * dot(m.grad, n);
+                        float3 q = wp - tmO;
+                        float bf = TmFade(2.9, fp);
+                        float4 lump = TmNoise3(q * 0.7 + h1 * 13.1, int3(0, 0, 0)), nub = TmNoise3(q * 2.9 + 5.3, int3(0, 0, 0));
+                        float3 g = m.grad + 0.1 * lump.yzw * 0.7 + 0.05 * bf * nub.yzw * 2.9;
+                        g -= n * dot(g, n);
                         n = normalize(n - g);
-                        albedo = m.albedo;
+                        float crust = smoothstep(0.15, 0.7, n.y) * bf * smoothstep(0.25, 0.6, nub.x + 0.6 * lump.x) * (1 - saturate(2 * (cw.x + 0.4 * cw.y) / max(dot(cw, 1), 1e-3)));
+                        float lum = dot(m.albedo, float3(0.2126, 0.7152, 0.0722));
+                        albedo = lerp(m.albedo, lum * lerp(float3(1.1, 1.12, 0.92), float3(1.35, 1.1, 0.62), h1 * h1), 0.35 * crust);
                     }
-                    albedo *= base.rgb;
+                    albedo *= base.rgb * pull;
                     [branch] if (i.tone.x > 0.25) occ = Dressed(albedo, i.tone, wp - tmO);
                 }
                 else
