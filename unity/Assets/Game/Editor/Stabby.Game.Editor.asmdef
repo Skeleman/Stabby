@@ -5,6 +5,7 @@
         "Stabby.Game",
         "Stabby.World",
         "Unity.Entities",
+        "Unity.Entities.Graphics",
         "Unity.Collections",
         "Unity.Mathematics",
         "Unity.Transforms",

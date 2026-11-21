@@ -165,15 +165,84 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     if (wait < 0) GameStatus.Lines["~objects wait"] = $"objects waited {-wait} extra frames";
                     Shot(cam, dir, "objects");
+                    GameStatus.Lines["~objects draw"] = DrawStats();
                     wait = 0;
                     phase++;
                 }
+            }
+            if (phase == 12)
+            {
+                if (tourStop < 0)
+                {
+                    framesBeforeTour = GameStatus.Lines.TryGetValue("~frames", out var f) ? f : "";
+                    tourStop = 0;
+                }
+                if (tourStop < TourStops)
+                {
+                    if (wait == 0)
+                    {
+                        if (!TourMove(cam, tourStop)) { tourStop = TourStops; return; }
+                        wait = 30;
+                        return;
+                    }
+                    if (--wait > 0 || (ObjectViewSystem.Pending > 0 && wait > -300)) return;
+                    tourParts.Add(ObjectViewSystem.PartsHeld);
+                    tourChunks.Add(ObjectViewSystem.ChunksHeld);
+                    tourLive.Add(ObjectViewSystem.LiveEntities);
+                    wait = 0;
+                    if (++tourStop < TourStops) return;
+                }
+                GameStatus.Lines["~objects tour"] = tourParts.Count == 0 ? "objects tour: no stops" :
+                    $"objects tour: {tourParts.Count} stops over {TourStops * TourStepM / 1000f:F0} km, parts held per stop {string.Join("/", tourParts)} (max {tourParts.Max()}), chunks held {string.Join("/", tourChunks)}, entities {string.Join("/", tourLive)}, {ObjectViewSystem.ChunksUnloaded} unloaded";
+                if (GameStatus.Lines.TryGetValue("~frames", out var after)) GameStatus.Lines["~frames tour"] = "during tour: " + after;
+                GameStatus.Lines["~frames"] = framesBeforeTour;
+                phase++;
             }
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
             Debug.Log("GameCapture:\n" + Status());
             Finish(0);
+        }
+
+        const int TourStops = 8;
+        const float TourStepM = 1500f;
+        static int tourStop = -1;
+        static string framesBeforeTour = "";
+        static readonly System.Collections.Generic.List<int> tourParts = new System.Collections.Generic.List<int>(), tourChunks = new System.Collections.Generic.List<int>(), tourLive = new System.Collections.Generic.List<int>();
+
+        static bool TourMove(Camera cam, int stop)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                if (w.Name != GameSettings.ViewClient) continue;
+                var map = w.GetExistingSystemManaged<ClientMapSystem>().Map;
+                float size = map.Config.Size * map.Config.CellMeters, margin = 1000f;
+                var dir = new Vector3(size * 0.5f - home.x, 0, size * 0.5f - home.z);
+                dir = dir.sqrMagnitude > 1f ? dir.normalized : Vector3.right;
+                var p = home + dir * (TourStepM * (stop + 1));
+                p.x = Mathf.Clamp(p.x, margin, size - margin);
+                p.z = Mathf.Clamp(p.z, margin, size - margin);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                p.y = Mathf.Max(ground.HeightAt(p.x, p.z), 0f) + 40f;
+                cam.transform.SetPositionAndRotation(p, Quaternion.LookRotation(dir - new Vector3(0, 0.3f, 0)));
+                return true;
+            }
+            return false;
+        }
+
+        static string DrawStats()
+        {
+            var lines = new System.Collections.Generic.List<string> { $"objects draw: {ObjectViewSystem.LiveEntities} object entities ({ObjectViewSystem.PerDef()})" };
+            foreach (var w in Unity.Entities.World.All)
+            {
+                if (w.Name != GameSettings.ViewClient) continue;
+                var eg = w.GetExistingSystemManaged<Unity.Rendering.EntitiesGraphicsSystem>();
+                if (eg == null) continue;
+                var st = eg.Stats;
+                lines.Add($"entities graphics (all entities, all views): {st.RenderedInstanceCount} instances rendered, {st.DrawCommandCount} draw commands, {st.DrawRangeCount} draw ranges, {st.BatchCount} batches, {st.ChunkTotal} chunks, {st.BytesGPUMemoryUsed / (1024 * 1024)} MB GPU");
+            }
+            return string.Join("\n", lines);
         }
 
         static string Prediction()
