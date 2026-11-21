@@ -51,25 +51,155 @@ namespace Stabby.World
             foreach (var p in Layout(shape, key).Pieces)
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
-                var m = ObjectMeshes.Rock(p.Key, TierRock[tier]);
-                var u = Bounds(m.Positions);
-                for (int v = 0; v < u.Length; v += 3)
+                bool cut = p.Q >= Faceted;
+                float[] u;
+                int[] idx;
+                if (cut)
                 {
-                    float inf = Math.Max(Math.Abs(u[v]), Math.Max(Math.Abs(u[v + 1]), Math.Abs(u[v + 2])));
-                    if (inf < 1e-4f) continue;
-                    float k = 1 + p.Q * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
-                    u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
+                    u = Block(p.Key, p.Q < StoneSquare, out idx);
+                }
+                else
+                {
+                    var m = ObjectMeshes.Rock(p.Key, TierRock[tier]);
+                    idx = m.Indices;
+                    u = Bounds(m.Positions);
+                    for (int v = 0; v < u.Length; v += 3)
+                    {
+                        float inf = Math.Max(Math.Abs(u[v]), Math.Max(Math.Abs(u[v + 1]), Math.Abs(u[v + 2])));
+                        if (inf < 1e-4f) continue;
+                        float k = 1 + p.Q * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
+                        u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
+                    }
                 }
                 u = Bounds(u);
-                int first = b.P.Count / 3;
+                var w = new float[u.Length];
                 for (int v = 0; v < u.Length; v += 3)
                 {
                     float y = 0.5f * (u[v + 1] + 1) * p.Sy, x = 0.5f * u[v] * p.Sx + p.L * (y - 0.5f * p.Sy), z = 0.5f * u[v + 2] * p.Sz;
-                    b.Add(p.X + p.C * x - p.S * z, p.Y + y, p.Z + p.S * x + p.C * z);
+                    w[v] = p.X + p.C * x - p.S * z; w[v + 1] = p.Y + y; w[v + 2] = p.Z + p.S * x + p.C * z;
                 }
-                foreach (int i in m.Indices) b.I.Add(first + i);
+                if (cut)
+                    foreach (int i in idx) b.I.Add(b.Add(w[i * 3], w[i * 3 + 1], w[i * 3 + 2]));
+                else
+                {
+                    int first = b.P.Count / 3;
+                    for (int v = 0; v < w.Length; v += 3) b.Add(w[v], w[v + 1], w[v + 2]);
+                    foreach (int i in idx) b.I.Add(first + i);
+                }
             }
             return b.Finish();
+        }
+
+        static float[] Block(ulong key, bool slab, out int[] idx)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0x2C1B3C6D4E5F6071UL));
+            var polys = new List<float[]>();
+            for (int f = 0; f < 6; f++)
+            {
+                int ax = f >> 1, ua = (ax + 1) % 3, va = (ax + 2) % 3;
+                float sg = (f & 1) == 0 ? 1 : -1;
+                var q = new float[12];
+                float[] cu = { -1, 1, 1, -1 }, cv = { -1, -1, 1, 1 };
+                for (int k = 0; k < 4; k++)
+                {
+                    int c = sg > 0 ? k : 3 - k;
+                    q[k * 3 + ax] = sg; q[k * 3 + ua] = cu[c]; q[k * 3 + va] = cv[c];
+                }
+                polys.Add(q);
+            }
+            float tilt = slab ? 0.05f : 0.12f;
+            for (int f = 0; f < 6; f++)
+            {
+                if (slab && f == 2) continue;
+                var n = new float[3];
+                int ax = f >> 1;
+                for (int k = 0; k < 3; k++) n[k] = k == ax ? ((f & 1) == 0 ? 1 : -1) : rng.Range(-tilt, tilt);
+                float len = (float)Math.Sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+                n[0] /= len; n[1] /= len; n[2] /= len;
+                Clip(polys, n[0], n[1], n[2], Math.Abs(n[ax]) - Math.Abs(n[(ax + 1) % 3]) - Math.Abs(n[(ax + 2) % 3]));
+            }
+            int cuts = slab ? rng.Range(0, 2) : rng.Range(1, 4);
+            for (int k = 0; k < cuts; k++)
+            {
+                float nx = rng.Range(-1f, 1f), ny = rng.Range(-0.6f, 1f), nz = rng.Range(-1f, 1f);
+                float len = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                if (len < 1e-3f) continue;
+                nx /= len; ny /= len; nz /= len;
+                Clip(polys, nx, ny, nz, (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(slab ? 0.92f : 0.74f, 0.97f));
+            }
+            var pos = new List<float>();
+            var ind = new List<int>();
+            foreach (var poly in polys)
+            {
+                int first = pos.Count / 3, count = poly.Length / 3;
+                pos.AddRange(poly);
+                for (int k = 1; k + 1 < count; k++) { ind.Add(first); ind.Add(first + k); ind.Add(first + k + 1); }
+            }
+            idx = ind.ToArray();
+            return pos.ToArray();
+        }
+
+        static void Clip(List<float[]> polys, float nx, float ny, float nz, float d)
+        {
+            var cap = new List<float>();
+            for (int pi = polys.Count - 1; pi >= 0; pi--)
+            {
+                var poly = polys[pi];
+                int count = poly.Length / 3;
+                var outp = new List<float>();
+                for (int k = 0; k < count; k++)
+                {
+                    int a = k * 3, b = (k + 1) % count * 3;
+                    float da = poly[a] * nx + poly[a + 1] * ny + poly[a + 2] * nz - d;
+                    float db = poly[b] * nx + poly[b + 1] * ny + poly[b + 2] * nz - d;
+                    if (da <= 0) { outp.Add(poly[a]); outp.Add(poly[a + 1]); outp.Add(poly[a + 2]); }
+                    if ((da <= 0) != (db <= 0))
+                    {
+                        float t = da / (da - db);
+                        float x = poly[a] + t * (poly[b] - poly[a]), y = poly[a + 1] + t * (poly[b + 1] - poly[a + 1]), z = poly[a + 2] + t * (poly[b + 2] - poly[a + 2]);
+                        outp.Add(x); outp.Add(y); outp.Add(z);
+                        cap.Add(x); cap.Add(y); cap.Add(z);
+                    }
+                }
+                if (outp.Count >= 9) polys[pi] = outp.ToArray();
+                else polys.RemoveAt(pi);
+            }
+            var pts = new List<float>();
+            for (int k = 0; k < cap.Count; k += 3)
+            {
+                bool dup = false;
+                for (int j = 0; j < pts.Count && !dup; j += 3)
+                    dup = Math.Abs(pts[j] - cap[k]) + Math.Abs(pts[j + 1] - cap[k + 1]) + Math.Abs(pts[j + 2] - cap[k + 2]) < 1e-5f;
+                if (!dup) { pts.Add(cap[k]); pts.Add(cap[k + 1]); pts.Add(cap[k + 2]); }
+            }
+            int m = pts.Count / 3;
+            if (m < 3) return;
+            float cx = 0, cy = 0, cz = 0;
+            for (int k = 0; k < m; k++) { cx += pts[k * 3]; cy += pts[k * 3 + 1]; cz += pts[k * 3 + 2]; }
+            cx /= m; cy /= m; cz /= m;
+            float ex, ey, ez;
+            if (Math.Abs(nx) < 0.9f) { ex = 0; ey = nz; ez = -ny; } else { ex = -nz; ey = 0; ez = nx; }
+            float el = (float)Math.Sqrt(ex * ex + ey * ey + ez * ez);
+            ex /= el; ey /= el; ez /= el;
+            float fx = ny * ez - nz * ey, fy = nz * ex - nx * ez, fz = nx * ey - ny * ex;
+            var order = new int[m];
+            var ang = new float[m];
+            for (int k = 0; k < m; k++)
+            {
+                float px = pts[k * 3] - cx, py = pts[k * 3 + 1] - cy, pz = pts[k * 3 + 2] - cz;
+                float u = px * ex + py * ey + pz * ez, v = px * fx + py * fy + pz * fz;
+                float r = Math.Abs(u) + Math.Abs(v);
+                float g = r < 1e-9f ? 0 : v / r;
+                ang[k] = u >= 0 ? (v >= 0 ? g : 4 + g) : 2 - g;
+                order[k] = k;
+            }
+            Array.Sort(ang, order);
+            var c2 = new float[m * 3];
+            for (int k = 0; k < m; k++)
+            {
+                c2[k * 3] = pts[order[k] * 3]; c2[k * 3 + 1] = pts[order[k] * 3 + 1]; c2[k * 3 + 2] = pts[order[k] * 3 + 2];
+            }
+            polys.Add(c2);
         }
 
         static float[] Bounds(float[] pos)
@@ -161,7 +291,7 @@ namespace Stabby.World
             }
         }
 
-        const float StoneSquare = 0.92f, SlabSquare = 0.95f;
+        const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f;
 
         static void Course(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w)
         {
@@ -196,9 +326,9 @@ namespace Stabby.World
                     for (int side = -1; side <= 1; side += 2)
                     {
                         if (rng.NextFloat() < 0.35f) continue;
-                        float hs = ch * rng.Range(0.18f, 0.32f), hz = w * rng.Range(0.16f, 0.26f);
+                        float hs = ch * rng.Range(0.14f, 0.24f), hz = w * rng.Range(0.12f, 0.2f);
                         int dir = rng.Range(0, 16);
-                        Add(l, key, t + rng.Range(-0.2f, 0.2f) * ch, yb + ch * rng.Range(0.1f, 0.65f), side * (0.5f * w - 0.5f * hz - 0.003f), hs * rng.Range(1f, 1.6f), hs, hz, Cos16(dir), Sin16(dir), 0, 0, 0.6f);
+                        Add(l, key, t + rng.Range(-0.2f, 0.2f) * ch, yb + ch * rng.Range(0.1f, 0.65f), side * (0.5f * w - 0.5f * hz - 0.012f), hs * rng.Range(1f, 1.6f), hs, hz, Cos16(dir), Sin16(dir), 0, 0, 0.6f);
                     }
             }
         }
@@ -213,18 +343,16 @@ namespace Stabby.World
 
         static void Cope(StructureLayout l, ulong key, ref Rng rng, float gapA, float gapB, float a, float e, float h, float w)
         {
-            float t = a, lean = rng.Range(-0.2f, 0.2f);
+            float t = a, lean = rng.Range(-0.12f, 0.12f), tall = rng.Range(0.036f, 0.046f);
             while (e - t > 0.012f)
             {
-                lean = Math.Max(-0.35f, Math.Min(0.35f, lean + rng.Range(-0.09f, 0.09f)));
-                bool flat = rng.NextFloat() < 0.07f;
-                float th = flat ? rng.Range(0.035f, 0.06f) : rng.Range(0.008f, 0.02f);
-                float sy = flat ? rng.Range(0.01f, 0.016f) : rng.Range(0.03f, 0.06f);
-                float sz = w * rng.Range(0.85f, 1.2f), xc = t + 0.5f * th;
-                Yaw(ref rng, 0.12f, out float c, out float s);
+                lean = Math.Max(-0.15f, Math.Min(0.15f, lean + rng.Range(-0.03f, 0.03f)));
+                float th = rng.Range(0.012f, 0.02f), sy = tall * rng.Range(0.94f, 1.04f);
+                float sz = w * rng.Range(0.9f, 1.05f), xc = t + 0.5f * th;
+                Yaw(ref rng, 0.04f, out float c, out float s);
                 if (xc < gapA - 0.5f * th || xc > gapB + 0.5f * th)
-                    Add(l, key, xc, h - 0.004f, rng.Range(-0.004f, 0.004f), th, sy, sz, c, s, 0, 0, SlabSquare, flat ? 0 : lean);
-                t += th * rng.Range(0.7f, 0.9f);
+                    Add(l, key, xc, h - 0.004f, rng.Range(-0.002f, 0.002f), th, sy, sz, c, s, 0, 0, SlabSquare, lean);
+                t += th * rng.Range(0.97f, 1.03f);
             }
             t = a;
             while (e - t > 0.012f)
