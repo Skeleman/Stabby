@@ -166,14 +166,14 @@
       "placement": { "perHectare": 0, "bank": "drift", "perHundredM": 1.2, "slopeMax": 1.2, "sizeMinM": 3, "sizeMaxM": 6.5, "sink": 0.08, "alignToSlope": 1 }
     },
     {
-      "id": "river-gravel", "name": "River gravel", "kind": "static", "color": "#8f877a", "variants": 6,
-      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.45, 1], "solid": "off", "shadows": "off" } ],
-      "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 320, "slopeMax": 1.4, "sizeMinM": 0.06, "sizeMaxM": 0.2, "clusterCount": 20, "clusterRadiusM": 3, "sink": 0.3, "alignToSlope": 0.95 }
+      "id": "river-gravel", "name": "River gravel", "kind": "static", "color": "#6e685e", "variants": 6,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
+      "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 320, "slopeMax": 1.4, "sizeMinM": 0.08, "sizeMaxM": 0.26, "clusterCount": 20, "clusterRadiusM": 3, "sink": 0.08, "alignToSlope": 0.95 }
     },
     {
-      "id": "river-cobble", "name": "River cobble", "kind": "static", "color": "#878176", "variants": 6,
+      "id": "river-cobble", "name": "River cobble", "kind": "static", "color": "#76716a", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.55, 1], "solid": "off", "shadows": "off" } ],
-      "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 70, "slopeMax": 1.4, "sizeMinM": 0.2, "sizeMaxM": 0.5, "clusterCount": 7, "clusterRadiusM": 2.5, "sink": 0.25, "alignToSlope": 0.9 }
+      "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 70, "slopeMax": 1.4, "sizeMinM": 0.2, "sizeMaxM": 0.5, "clusterCount": 7, "clusterRadiusM": 2.5, "sink": 0.12, "alignToSlope": 0.9 }
     },
     {
       "id": "wet-stone", "name": "Mossy wet stone", "kind": "static", "color": "#6c7363", "variants": 8,
