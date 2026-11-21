@@ -12,13 +12,15 @@ namespace Stabby.World
         public bool Shadows = true;
         public float ShadowPixels = 32.4f;
         public bool Wind, Animated;
+        public float SwayPixels = 16.2f, FlutterPixels = 54f;
         public bool Solid = true;
     }
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shapes = 3;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Shapes = 6;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer" };
+        public static bool IsFoliage(int shape) => shape >= Shrub;
 
         public string Id;
         public int Shape;
@@ -27,6 +29,8 @@ namespace Stabby.World
         public int Solid = -1, Shadows = -1;
         public uint Color;
         public bool HasColor;
+        public uint LeafColor;
+        public bool HasLeafColor;
     }
 
     public sealed class ObjectPlacement
@@ -125,6 +129,7 @@ namespace Stabby.World
                 foreach (var p in d.Parts)
                 {
                     if (p.Shape < 0 || p.Shape >= ObjectPart.Shapes) errors.Add(d.Id + ": part " + p.Id + " has an unknown shape");
+                    if (ObjectPart.IsFoliage(p.Shape) && !p.HasLeafColor) errors.Add(d.Id + ": part " + p.Id + " needs a leafColor");
                     if (p.ScaleX <= 0 || p.ScaleY <= 0 || p.ScaleZ <= 0) errors.Add(d.Id + ": part " + p.Id + " scale must be above 0");
                 }
                 var pl = d.Placement;
