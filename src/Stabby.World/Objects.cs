@@ -7,6 +7,15 @@ namespace Stabby.World
     {
         public int Def, Variant;
         public float X, Y, Z, Qx, Qy, Qz, Qw, Size;
+        public ulong Id;
+    }
+
+    public static class ObjectIds
+    {
+        public static ulong Make(int chunk, int def, int ordinal) => ((ulong)(uint)chunk << 40) | ((ulong)(uint)def << 32) | (uint)ordinal;
+        public static int Chunk(ulong id) => (int)(id >> 40);
+        public static int Def(ulong id) => (int)((id >> 32) & 0xff);
+        public static int Ordinal(ulong id) => (int)(uint)id;
     }
 
     public sealed class ObjectField
@@ -149,9 +158,11 @@ namespace Stabby.World
             float x0 = cx * span, z0 = cz * span;
             float sx = Math.Min(span, worldM - x0), sz = Math.Min(span, worldM - z0);
             if (sx <= 0 || sz <= 0) return;
-            ulong chunkKey = Rng.Mix((ulong)(cz * across + cx) + 1);
+            int chunk = cz * across + cx;
+            ulong chunkKey = Rng.Mix((ulong)chunk + 1);
             for (int d = 0; d < lib.Objects.Count; d++)
             {
+                int ordinal = 0;
                 var pl = lib.Objects[d].Placement;
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
                 bool foot = pl.FootRiseM > 0;
@@ -176,6 +187,7 @@ namespace Stabby.World
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
                         if (!Accept(d, px, pz, size, qa, qb, out var o)) continue;
                         o.Variant = variant;
+                        o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
                     }
