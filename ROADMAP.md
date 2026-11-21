@@ -187,9 +187,22 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 - Generator features resume after the audit: caves, cliffs and river overhaul
   carried over from Punchy, more biomes.
 
+## Gameplay (Zach's three pillars; Punchy's gameplay is the reference)
+
+- Exploration: a world dense with detail, secrets and one-off discoveries:
+  landmarks, rare creatures, giant creatures, mysterious structures, scenic
+  vistas. Built on the object, structure kit and blueprint stages (rule 11),
+  each discovery type placed from its own stream. | planned
+- Character interactivity: NPCs, animals and creatures act on their own
+  desires and interact with each other and the player. One shared desire and
+  behaviour system serves every agent; NPCs add ownership of items and
+  structures, households and family ties, and dialogue about themselves,
+  their background and culture. Theft and trespass follow from ownership.
+  Burst ECS systems, host-authoritative. | planned
+- Combat: not defined yet, waits until the other two take shape. | later
+
 ## Later
 
-- ECS gameplay on Netcode: interaction, creatures, settlements, as Burst systems.
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
 - Map editing on top of `sketch.json`.
 - Dungeons about 4x the size of caves, built on the same carve edits (idea).
