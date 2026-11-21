@@ -28,19 +28,20 @@ namespace Stabby.World
         public float BumpAmp, BumpWavelengthM;
         public float GrainAmp, GrainWavelengthM;
         public float FeatureAmp, FeatureWavelengthM;
-        public float Parallax, AlbedoVar;
+        public float Parallax, AlbedoVar, Roughness = float.NaN;
     }
 
     public sealed class LookDef
     {
         public float NoiseContrast = 0.12f, AlbedoVar = 0.08f, DetailWavelengthM = 0.05f;
-        public float Saturation = 0.65f, Roughness = 0.85f, Specular = 0.04f;
+        public float Saturation = 0.65f, Roughness = 0.85f, Specular = 0.04f, RoughnessVar;
 
         public void Fill(CoatDef c)
         {
             if (float.IsNaN(c.GrainAmp)) c.GrainAmp = NoiseContrast;
             if (float.IsNaN(c.GrainWavelengthM)) c.GrainWavelengthM = DetailWavelengthM;
             if (float.IsNaN(c.AlbedoVar)) c.AlbedoVar = AlbedoVar;
+            if (float.IsNaN(c.Roughness)) c.Roughness = Roughness;
         }
     }
 
@@ -160,6 +161,7 @@ namespace Stabby.World
                 Amp(errors, "look.saturation", look.Saturation);
                 Amp(errors, "look.roughness", look.Roughness);
                 Amp(errors, "look.specular", look.Specular);
+                Amp(errors, "look.roughnessVar", look.RoughnessVar);
             }
             if (lib.Strata.Count == 0) errors.Add("strata: at least one stratum required");
             var ids = new HashSet<string>();
@@ -209,6 +211,7 @@ namespace Stabby.World
                     Amp(errors, n + ".grainAmp", c.GrainAmp);
                     Amp(errors, n + ".featureAmp", c.FeatureAmp);
                     Amp(errors, n + ".albedoVar", c.AlbedoVar);
+                    Amp(errors, n + ".roughness", c.Roughness);
                     Len(errors, n + ".bumpWavelengthM", c.BumpWavelengthM);
                     Len(errors, n + ".grainWavelengthM", c.GrainWavelengthM);
                     Len(errors, n + ".featureWavelengthM", c.FeatureWavelengthM);
