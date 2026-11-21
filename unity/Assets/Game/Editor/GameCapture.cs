@@ -321,7 +321,7 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 18 && phase <= 21)
+            while (phase >= 18 && phase <= 22)
             {
                 string name = FoliageShots[phase - 18];
                 if (wait == 0)
@@ -647,9 +647,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f };
-        static readonly int[] FoliageRanges = { 0, 4, 1, 2 };
-        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far" };
+        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.05f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -666,16 +666,16 @@ namespace Stabby.Game.Editor
                     {
                         if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
                         foreach (var o in field.Chunk(cx, cz))
-                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 5 ? p.Shape == ObjectPart.Conifer : range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
                     }
                 if (near.Count == 0) return false;
-                bool scaled = range == 0 || range == 4;
+                bool scaled = range == 0 || range >= 4;
                 ObjectInstance pick = default;
                 int crowd = 0;
                 var cells = new System.Collections.Generic.Dictionary<long, int>();
                 long Cell(float x, float z) => ((long)Mathf.FloorToInt(x / 12f) << 32) ^ (uint)Mathf.FloorToInt(z / 12f);
                 foreach (var o in near) { long c = Cell(o.X, o.Z); cells.TryGetValue(c, out int k); cells[c] = k + 1; }
-                bool clear = range == 1 || range == 4;
+                bool clear = range == 1 || range >= 4;
                 if (clear) scaled = true;
                 var ranked = new System.Collections.Generic.List<(float score, ObjectInstance o, int around)>();
                 foreach (var o in near)
