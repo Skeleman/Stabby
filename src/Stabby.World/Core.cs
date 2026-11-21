@@ -108,46 +108,45 @@ namespace Stabby.World
 
     public sealed class MinHeap
     {
-        float[] keys = new float[1024];
-        int[] vals = new int[1024];
+        ulong[] items = new ulong[1024];
         public int Count { get; private set; }
 
         public void Clear() => Count = 0;
 
-        static bool Less(float ka, int va, float kb, int vb) => ka < kb || (ka == kb && va < vb);
-
         public void Push(float key, int val)
         {
-            if (Count == keys.Length)
-            {
-                Array.Resize(ref keys, Count * 2);
-                Array.Resize(ref vals, Count * 2);
-            }
+            if (Count == items.Length) Array.Resize(ref items, Count * 2);
+            uint b = (uint)BitConverter.SingleToInt32Bits(key + 0f);
+            b ^= (b & 0x80000000u) != 0 ? 0xFFFFFFFFu : 0x80000000u;
+            ulong item = ((ulong)b << 32) | (uint)val;
             int i = Count++;
             while (i > 0)
             {
                 int p = (i - 1) >> 1;
-                if (!Less(key, val, keys[p], vals[p])) break;
-                keys[i] = keys[p]; vals[i] = vals[p]; i = p;
+                if (item >= items[p]) break;
+                items[i] = items[p]; i = p;
             }
-            keys[i] = key; vals[i] = val;
+            items[i] = item;
         }
 
         public int Pop(out float key)
         {
-            int top = vals[0]; key = keys[0];
-            float k = keys[--Count]; int v = vals[Count];
+            ulong top = items[0];
+            ulong last = items[--Count];
             int i = 0;
             while (true)
             {
                 int l = 2 * i + 1;
                 if (l >= Count) break;
-                int c = (l + 1 < Count && Less(keys[l + 1], vals[l + 1], keys[l], vals[l])) ? l + 1 : l;
-                if (!Less(keys[c], vals[c], k, v)) break;
-                keys[i] = keys[c]; vals[i] = vals[c]; i = c;
+                int c = l + 1 < Count && items[l + 1] < items[l] ? l + 1 : l;
+                if (items[c] >= last) break;
+                items[i] = items[c]; i = c;
             }
-            keys[i] = k; vals[i] = v;
-            return top;
+            items[i] = last;
+            uint b = (uint)(top >> 32);
+            b ^= (b & 0x80000000u) != 0 ? 0x80000000u : 0xFFFFFFFFu;
+            key = BitConverter.Int32BitsToSingle((int)b);
+            return (int)(uint)top;
         }
     }
 }

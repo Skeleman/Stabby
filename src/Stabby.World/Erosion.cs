@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -15,7 +16,8 @@ namespace Stabby.World
             var sea = SeaOf(s.Land);
             var offshore = WorldSketch.CoastDistance(n, sea);
             var inland = s.Coast;
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
@@ -43,6 +45,7 @@ namespace Stabby.World
                         h[i] += (Math.Min(h[i], floor) - h[i]) * s.Valley[i];
                     }
                 }
+            });
             AddSeaRidges(c, s, h, seed ^ 0x51DEu);
             SmoothSeabed(n, h, sea);
             return h;
@@ -104,10 +107,12 @@ namespace Stabby.World
 
         static void SmoothSeabed(int n, float[] h, bool[] sea)
         {
+            var src = new float[h.Length];
             for (int pass = 0; pass < 3; pass++)
             {
-                var src = (float[])h.Clone();
-                for (int y = 1; y < n - 1; y++)
+                Array.Copy(h, src, h.Length);
+                Parallel.For(1, n - 1, y =>
+                {
                     for (int x = 1; x < n - 1; x++)
                     {
                         int i = y * n + x;
@@ -120,6 +125,7 @@ namespace Stabby.World
                         }
                         h[i] = Math.Min(-1f, (src[i] + sum) / (1 + count));
                     }
+                });
             }
         }
 
@@ -231,7 +237,7 @@ namespace Stabby.World
             var slope = new float[n * n];
             var erod = new float[n * n];
             var caprock = new float[n * n];
-            for (int i = 0; i < n * n; i++)
+            Parallel.For(0, n * n, i =>
             {
                 float m = s.Coast[i] * c.CellMeters;
                 float w = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
@@ -239,7 +245,7 @@ namespace Stabby.World
                 caprock[i] = Grid.Smoothstep(0.6f, 1f, s.Cliff[i]);
                 slope[i] = c.MaxSlope * (1 + c.CliffSlope * caprock[i]);
                 erod[i] = c.Erodibility * (1 - c.CaprockHardness * caprock[i]) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
-            }
+            });
 
             var strata = new StrataField(c, lib);
             var hard = new float[n * n];
@@ -253,8 +259,18 @@ namespace Stabby.World
                 var stack = Drainage.Stack(recv, n, scratch);
                 var q = Drainage.Accumulate(stack, recv, runoff, scratch.Acc);
 
-                for (int i = 0; i < n * n; i++) if (!sea[i]) h[i] += s.Uplift[i] * c.MaxUplift * dt;
-                for (int i = 0; i < n * n; i++) hard[i] = sea[i] ? 0 : strata.Hardness(i, h[i]);
+                var kf = src;
+                Parallel.For(0, n, y =>
+                {
+                    for (int i = y * n, end = i + n; i < end; i++)
+                    {
+                        if (sea[i]) { hard[i] = 0; continue; }
+                        h[i] += s.Uplift[i] * c.MaxUplift * dt;
+                        hard[i] = strata.Hardness(i, h[i]);
+                        int r = recv[i];
+                        if (r != i) kf[i] = erod[i] * strata.Softness(hard[i]) * dt * (float)FMath.Pow(q[i], c.AreaExponent) / Drainage.StepLength(n, i, r, c.CellMeters);
+                    }
+                });
 
                 foreach (int i in stack)
                 {
@@ -264,14 +280,17 @@ namespace Stabby.World
                     float hr = sea[r] ? s.Cliff[i] * h[i] : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
-                    float f = erod[i] * strata.Softness(hard[i]) * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
+                    float f = kf[i];
                     h[i] = Math.Max(hr, (h[i] + f * hr) / (1 + f));
                     h[i] = Math.Min(h[i], hr + slope[i] * (1 + c.StrataSlope * hard[i]) * len);
                 }
 
                 Diffuse(c, s, caprock, hard, h, sea, src);
-                for (int i = 0; i < n * n; i++)
-                    if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
+                Parallel.For(0, n, y =>
+                {
+                    for (int i = y * n, end = i + n; i < end; i++)
+                        if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
+                });
             }
         }
 
@@ -370,7 +389,8 @@ namespace Stabby.World
             float k = c.Diffusion * c.TimeStepYears / (c.CellMeters * c.CellMeters);
             if (k > 0.24f) k = 0.24f;
             Array.Copy(h, src, h.Length);
-            for (int y = 1; y < n - 1; y++)
+            Parallel.For(1, n - 1, y =>
+            {
                 for (int x = 1; x < n - 1; x++)
                 {
                     int i = y * n + x;
@@ -382,6 +402,7 @@ namespace Stabby.World
                     lap += (sea[i + n] ? wall : src[i + n]) - src[i];
                     h[i] = src[i] + k * (1 - caprock[i]) * (1 - hard[i]) * lap;
                 }
+            });
         }
 
         public static bool[] SeaOf(bool[] land)
