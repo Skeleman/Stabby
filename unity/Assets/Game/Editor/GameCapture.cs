@@ -1314,11 +1314,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        public static float Sedimentary(float off)
-        {
-            float p = off / 40f, t = Mathf.Abs(p - Mathf.Floor(p) - 0.5f) * 2f;
-            return Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.3f, 0.7f, t));
-        }
+        public static float Sedimentary(float off) => MaterialLibrary.Sedimentary(off);
 
         static System.Collections.IEnumerator CliffTour(Camera cam, string dir)
         {
@@ -1373,6 +1369,38 @@ namespace Stabby.Game.Editor
                     for (var w = Settle(180); w.MoveNext();) yield return null;
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "cliff-" + kinds[k] + "-" + range[r]);
+                }
+                var crest = target;
+                for (float s = 5f; s < 600f; s += 5f)
+                {
+                    var p = target - dn * s;
+                    p.y = ground.HeightAt(p.x, p.z);
+                    if (p.y < crest.y + 1f && s > 30f) break;
+                    if (p.y > crest.y) crest = p;
+                }
+                float[] sky = { 120f, 400f };
+                string[] skyName = { "skyline-mid", "skyline-far" };
+                for (int r = 0; r < 2; r++)
+                {
+                    var eye = Vector3.zero;
+                    float best = float.MaxValue;
+                    for (int a = -6; a <= 6; a++)
+                    {
+                        var e = crest + Quaternion.Euler(0, a * 12f, 0) * dn * sky[r];
+                        float g = ground.HeightAt(e.x, e.z) + 1.8f;
+                        e.y = g;
+                        for (float t = 0.03f; t < 0.95f; t += 0.01f)
+                        {
+                            float px = e.x + (crest.x - e.x) * t, pz = e.z + (crest.z - e.z) * t;
+                            e.y = Mathf.Max(e.y, (ground.HeightAt(px, pz) + 1.5f - t * crest.y) / (1 - t));
+                        }
+                        float cost = e.y - g + Mathf.Abs(a) * 2f + Mathf.Max(0, e.y - crest.y + 5f) * 10f;
+                        if (cost < best) { best = cost; eye = e; }
+                    }
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(crest + Vector3.up * 2f - eye));
+                    for (var w = Settle(180); w.MoveNext();) yield return null;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "cliff-" + kinds[k] + "-" + skyName[r]);
                 }
             }
         }

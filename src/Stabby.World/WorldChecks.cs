@@ -319,6 +319,7 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckStructures(w, detail, grid, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
+            CheckCliffFoot(w, detail, edits, e);
             if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             foreach (var x in edits)
                 if (x.Shape != FeatureEdit.Boulder && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
@@ -428,6 +429,75 @@ namespace Stabby.World
                 float floor = p.By - p.R * Features.CaveHollow;
                 if (Math.Abs(y - floor) > 0.25f * p.R) { e.Add($"walker in cave at {p.Ax:F0},{p.Az:F0} ends at height {y:F1}, floor is {floor:F1}"); return; }
             }
+        }
+
+        public const float CliffSlope = 1.1f, FootSlope = 0.35f, FootWalkM = 24f;
+        public const int CliffFeet = 160;
+
+        static void CheckCliffFoot(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, s = LatticeStepM;
+            var h = w.Height;
+            var ground = new DetailGround { Detail = detail };
+            var none = new EditArray { Items = Array.Empty<FeatureEdit>() };
+            int cliffs = 0;
+            for (int i = n + 1; i < n * n - n - 1; i++)
+            {
+                int x = i % n;
+                if (x == 0 || x == n - 1 || h[i] <= 0) continue;
+                float gx = (h[i + 1] - h[i - 1]) / (2 * cm), gz = (h[i + n] - h[i - n]) / (2 * cm);
+                if (gx * gx + gz * gz > CliffSlope * CliffSlope) cliffs++;
+            }
+            if (cliffs == 0) return;
+            int stride = Math.Max(1, cliffs / CliffFeet), seen = 0;
+            for (int i = n + 1; i < n * n - n - 1; i++)
+            {
+                int ix = i % n;
+                if (ix == 0 || ix == n - 1 || h[i] <= 0) continue;
+                float gx = (h[i + 1] - h[i - 1]) / (2 * cm), gz = (h[i + n] - h[i - n]) / (2 * cm), g2 = gx * gx + gz * gz;
+                if (g2 <= CliffSlope * CliffSlope || seen++ % stride != 0) continue;
+                float inv = 1f / (float)Math.Sqrt(g2), dx = -gx * inv, dz = -gz * inv;
+                float fx = ix * cm, fz = i / n * cm;
+                bool found = false;
+                for (int t = 0; t < 200 && !found; t++, fx += 2f * dx, fz += 2f * dz)
+                    found = BaseSlope(detail, fx, fz) < FootSlope;
+                if (!found || !FootClear(w, detail, edits, fx, fz, -dz, dx)) continue;
+                float px = fx + 0.5f * FootWalkM * dz, pz = fz - 0.5f * FootWalkM * dx, py = detail.Sample(px, pz);
+                int steps = (int)(FootWalkM / WalkStride);
+                float sx = -dz * WalkStride, sz = dx * WalkStride, fall = Walk.FallSpeed * WalkStride / 6f;
+                for (int t = 0; t < steps; t++)
+                {
+                    float ox = px, oz = pz;
+                    Walk.Step(ground, none, s, ref px, ref py, ref pz, sx, sz, fall);
+                    if (Math.Abs(px - ox - sx) > 1e-3f || Math.Abs(pz - oz - sz) > 1e-3f) { e.Add($"walker at the cliff foot near {fx:F0},{fz:F0} is stopped at {px:F0},{py:F0},{pz:F0}"); return; }
+                }
+            }
+        }
+
+        static float BaseSlope(TerrainDetail d, float x, float z)
+        {
+            const float r = 2f;
+            float gx = (d.Smooth(x + r, z) - d.Smooth(x - r, z)) / (2 * r), gz = (d.Smooth(x, z + r) - d.Smooth(x, z - r)) / (2 * r);
+            return (float)Math.Sqrt(gx * gx + gz * gz);
+        }
+
+        static bool FootClear(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, float fx, float fz, float ux, float uz)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, half = 0.5f * FootWalkM;
+            for (float t = -half - 2f; t <= half + 2f; t += 1f)
+            {
+                float x = fx + ux * t, z = fz + uz * t;
+                if (x < cm || z < cm || x > (n - 2) * cm || z > (n - 2) * cm) return false;
+                int cell = NearField.CellOf(x, z, cm, n);
+                if (w.Sea[cell] || (w.Water != null && w.Water.LakeId[cell] >= 0)) return false;
+                if (detail.Cells.PieceStart(cell) != detail.Cells.PieceStart(cell + 1)) return false;
+                if (BaseSlope(detail, x, z) > FootSlope + 0.1f) return false;
+                foreach (var f in edits)
+                    if (x >= f.MinX - 2f && x <= f.MaxX + 2f && z >= f.MinZ - 2f && z <= f.MaxZ + 2f) return false;
+            }
+            return true;
         }
 
         static float CaveFloor<TSolid>(TSolid solid, int i, int k, float centre, float s) where TSolid : struct, ISolidField
