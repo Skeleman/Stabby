@@ -132,6 +132,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Grass follow-ups: no grass on submerged beds (done), sun shadows at 60 m (1 cascade, 2048) received by terrain and blades, +0.2-0.4 ms; terrain boulders and cliffs do not cast yet, blades never cast | done |
 | Objects step 3: interactive objects (loose stone, brushwood) with stable chunk+index ids (GeneratorVersion 37); host-authoritative removal deltas per chunk, replicated to clients and late joiners, collision columns cleared in place; E to take/cut with a status line; `ObjectDeltaCheck` two-client check | done |
 | Objects perf: the ~43 ms spike when objects first stream in was the editor compiling the `Stabby/Object` shader variant inside `new Material` and `RegisterMaterial` (46 + 58 ms cold); both now run one per frame during load, before terrain is built. Column buffers already reuse one scratch list per chunk | done |
+| Play spikes: capsule materials and mesh now load one step per frame from frame 11 (was one 170 ms batch with RegisterMaterial on first spawn); what is left on the first-spawn frame is Entities Graphics init (70-85 ms cold, 22 ms warm), load phase only. NetworkReceive Malloc/Free not reproduced in 9 runs, load phase only. Worst frame after terrain built 16-22 ms on a quiet machine; runs alongside other editors show 30-80 ms descheduling stalls. `SpikeProbe` tags spikes after terrain built | done |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
 
 ## Next
