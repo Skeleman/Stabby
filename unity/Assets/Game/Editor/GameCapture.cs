@@ -150,7 +150,15 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : 1;
+                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : 1;
+            }
+            if (phase == 50)
+            {
+                if (job == null) job = CliffTour(cam, dir);
+                if (job.MoveNext()) return;
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             while (phase <= 6)
             {
@@ -1045,6 +1053,69 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        public static float Sedimentary(float off)
+        {
+            float p = off / 40f, t = Mathf.Abs(p - Mathf.Floor(p) - 0.5f) * 2f;
+            return Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.3f, 0.7f, t));
+        }
+
+        static System.Collections.IEnumerator CliffTour(Camera cam, string dir)
+        {
+            ClientMapSystem sys = null;
+            Ground ground = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var s = w.GetExistingSystemManaged<ClientMapSystem>();
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (s?.Map == null || s.Materials == null || q.CalculateEntityCount() != 1) continue;
+                sys = s;
+                ground = q.GetSingleton<Ground>();
+                break;
+            }
+            if (sys == null) { GameStatus.Lines["~cliffs"] = "no map"; yield break; }
+            var map = sys.Map;
+            var offs = sys.Materials.Offsets(map.Config);
+            int n = map.Config.Size;
+            float cm = map.Config.CellMeters;
+            var picks = new int[] { -1, -1 };
+            var downs = new Vector2[2];
+            var dist = new float[] { float.MaxValue, float.MaxValue };
+            for (int z = 2; z < n - 2; z++)
+                for (int x = 2; x < n - 2; x++)
+                {
+                    int i = z * n + x;
+                    if (map.Sea[i] || map.Height[i] < 3) continue;
+                    float gx = (map.Height[i + 1] - map.Height[i - 1]) / (2 * cm), gz = (map.Height[i + n] - map.Height[i - n]) / (2 * cm), s = Mathf.Sqrt(gx * gx + gz * gz);
+                    if (s < 1.1f) continue;
+                    float sed = Sedimentary(offs[i]);
+                    int k = sed > 0.9f ? 0 : sed < 0.1f ? 1 : -1;
+                    if (k < 0) continue;
+                    float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                    if (d < dist[k]) { dist[k] = d; picks[k] = i; downs[k] = new Vector2(-gx, -gz).normalized; }
+                }
+            string[] kinds = { "sed", "massive" };
+            float[] back = { 3.5f, 14f, 50f, 250f }, up = { 0.6f, 2f, 12f, 60f };
+            string[] range = { "close", "near", "mid", "far" };
+            for (int k = 0; k < 2; k++)
+            {
+                if (picks[k] < 0) { GameStatus.Lines["~cliff " + kinds[k]] = "no " + kinds[k] + " cliff found"; continue; }
+                var target = new Vector3(picks[k] % n * cm, 0, picks[k] / n * cm);
+                target.y = ground.HeightAt(target.x, target.z);
+                var dn = new Vector3(downs[k].x, 0, downs[k].y);
+                GameStatus.Lines["~cliff " + kinds[k]] = $"{kinds[k]} cliff at {target.x:F0},{target.y:F0},{target.z:F0}, offset {offs[picks[k]]:F1}, {Mathf.Sqrt(dist[k]):F0} m from the player";
+                for (int r = 0; r < 4; r++)
+                {
+                    var eye = target + dn * back[r] + Vector3.up * up[r];
+                    eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.5f);
+                    var look = target + Vector3.up * (r == 0 ? 1.5f : r == 3 ? 0f : 4f);
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                    for (var w = Settle(180); w.MoveNext();) yield return null;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "cliff-" + kinds[k] + "-" + range[r]);
+                }
+            }
         }
 
         static string Bench(Camera cam, string label)
