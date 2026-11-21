@@ -8,7 +8,7 @@ namespace Stabby.Game
 {
     public static class ObjectFile
     {
-        [Serializable] class Kind { public string id; public int lods = 3; public float[] lodPixels; public float fadePixels = 6.48f, shadowPixels = 32.4f, swayPixels = 16.2f, flutterPixels = 54f; public bool shadows = true, wind, animated, solid = true; }
+        [Serializable] class Kind { public string id; public int lods = 3; public float[] lodPixels; public float fadePixels = 6.48f, shadowPixels = 32.4f, swayPixels = 16.2f, flutterPixels = 54f, impostorPixels; public bool shadows = true, wind, animated, solid = true; }
         [Serializable] class Part { public string id, shape, solid = "", shadows = "", color = "", leafColor = ""; public float[] offset, scale; }
         [Serializable] class Place
         {
@@ -53,7 +53,7 @@ namespace Stabby.Game
                 lib.Kinds.Add(new ObjectKind
                 {
                     Id = k.id, Lods = k.lods, LodPixels = k.lodPixels ?? Array.Empty<float>(), FadePixels = k.fadePixels,
-                    Shadows = k.shadows, ShadowPixels = k.shadowPixels, Wind = k.wind, SwayPixels = k.swayPixels, FlutterPixels = k.flutterPixels, Animated = k.animated, Solid = k.solid,
+                    Shadows = k.shadows, ShadowPixels = k.shadowPixels, Wind = k.wind, SwayPixels = k.swayPixels, FlutterPixels = k.flutterPixels, ImpostorPixels = k.impostorPixels, Animated = k.animated, Solid = k.solid,
                 });
             foreach (var o in dto.objects ?? Array.Empty<Obj>())
             {
