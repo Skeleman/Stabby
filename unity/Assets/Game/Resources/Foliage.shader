@@ -54,6 +54,11 @@ Shader "Stabby/Foliage"
             return (m[(q.x << 2) | q.y] + 0.5) / 16.0;
         }
 
+        float LeafCut(float ao, float j)
+        {
+            return 0.5 + 0.2 * saturate((ao - 0.72) * 3.6) * (0.55 + 0.45 * j);
+        }
+
         struct FoliageIn
         {
             float4 positionOS : POSITION;
@@ -129,8 +134,14 @@ Shader "Stabby/Foliage"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            float4 _StabbySky, _StabbyGround, _StabbySand;
+            float _StabbyStrataPeriod;
+            TEXTURE2D(_StabbyStrata);
+            SAMPLER(sampler_StabbyStrata);
 
-            float4 _StabbySky, _StabbyGround;
+            float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
+
+            #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
 
             struct Varyings
             {
@@ -164,9 +175,59 @@ Shader "Stabby/Foliage"
                 return o;
             }
 
-            float BarkNoise(float2 p)
+            float BarkFade(float freq, float fp) { return saturate(2 - 4 * freq * fp); }
+
+            float2 SmoothD(float e0, float e1, float x)
             {
-                return 0.6 * WindNoise(p) + 0.4 * WindNoise(p * 2.7 + 13.1);
+                float t = saturate((x - e0) / (e1 - e0));
+                return float2(t * t * (3 - 2 * t), 6 * t * (1 - t) / (e1 - e0));
+            }
+
+            float3 OakBark(float2 m, float fp, out float tone)
+            {
+                float3 w = TmNoise2(m * float2(2.2, 0.5) + 3.7);
+                float2 q = float2(m.x * 11 + 1.1 * w.x, m.y * 1.3);
+                float3 a = TmNoise2(q);
+                float2 s = SmoothD(0.03, 0.3, abs(a.x));
+                float2 dq = s.y * sign(a.x) * a.yz;
+                float2 g = float2(dq.x * (11 + 2.42 * w.y), dq.x * 0.55 * w.z + dq.y * 1.3);
+                float h = s.x;
+                float fc = BarkFade(9, fp);
+                float3 c = TmNoise2(m * float2(3, 7) + 11.3);
+                float2 k = SmoothD(0.8, 0.96, 1 - abs(c.x));
+                h -= 0.5 * fc * s.x * k.x;
+                g += 0.5 * fc * s.x * k.y * sign(c.x) * c.yz * float2(3, 7);
+                float ff = BarkFade(28, fp);
+                float3 f = TmNoise2(m * float2(28, 12) + 5.1);
+                h += 0.12 * ff * f.x;
+                g += 0.12 * ff * f.yz * float2(28, 12);
+                tone = h;
+                return float3(h, g * BarkFade(11, fp));
+            }
+
+            float3 SpruceBark(float2 m, float fp, out float tone, out float fresh)
+            {
+                float3 w = TmNoise2(m * float2(1.3, 0.6) + 9.1);
+                float2 q = m * float2(8, 5.5) + 0.35 * w.x;
+                float row = floor(q.y);
+                q.x += TmHash(int2((int)row, 71));
+                float2 cell = floor(q), f = q - cell;
+                float r = TmHash((int2)cell + int2(0, 1931));
+                float2 lx = SmoothD(0, 0.1, min(f.x, 1 - f.x)), ly = SmoothD(0, 0.16, min(f.y, 1 - f.y));
+                lx.y *= sign(0.5 - f.x);
+                ly.y *= sign(0.5 - f.y);
+                float tilt = 0.55 + 0.45 * (1 - f.y) * (0.5 + r);
+                float h = lx.x * ly.x * tilt;
+                float2 df = float2(lx.y * ly.x * tilt, lx.x * ly.y * tilt - lx.x * ly.x * 0.45 * (0.5 + r));
+                float2 wg = 0.35 * w.yz * float2(1.3, 0.6);
+                float2 g = df.x * (float2(8, 0) + wg) + df.y * (float2(0, 5.5) + wg);
+                float ff = BarkFade(14, fp);
+                float3 fn = TmNoise2(m * float2(14, 9) + 2.3);
+                h += 0.08 * ff * fn.x;
+                g += 0.08 * ff * fn.yz * float2(14, 9);
+                tone = lx.x * ly.x * (0.8 + 0.35 * r) + 0.1 * fn.x;
+                fresh = smoothstep(0.72, 0.95, r) * lx.x * ly.x;
+                return float3(h, g * BarkFade(8, fp));
             }
 
             half4 frag(Varyings i) : SV_Target
@@ -185,6 +246,10 @@ Shader "Stabby/Foliage"
                 float3 albedo;
                 float trans = 0, ao = 1;
                 float alpha = 1;
+                float2 m = i.uv.xy * size, dm1 = ddx(m), dm2 = ddy(m);
+                float3 dp1 = ddx(wp), dp2 = ddy(wp);
+                Light l = GetMainLight(TransformWorldToShadowCoord(wp));
+                float above = max(wp.y - fade.z, 0);
                 [branch] if (imp)
                 {
                     float4 a = SAMPLE_TEXTURE2D(_ImpA, sampler_ImpA, i.uv.xy);
@@ -201,10 +266,12 @@ Shader "Stabby/Foliage"
                 else if (leaf)
                 {
                     float4 a = SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy);
+                    float j = (i.uv.w - 1) * 3.333;
+                    float cut = LeafCut(i.uv.z, j);
                     alpha = a.a;
-                    clip(a.a - 0.5);
-                    float shade = a.r * 1.5;
-                    float hue = a.g - 0.5;
+                    clip(a.a - cut);
+                    float shade = a.r * 1.5 * (1 + 0.16 * j);
+                    float hue = a.g - 0.5 + 0.3 * j;
                     float3 leafColor = _Leaf.rgb * (1 + hue * float3(0.9, 0.35, -0.7));
                     albedo = lerp(leafColor * shade, _BaseColor.rgb * shade * 1.3, a.b);
                     trans = 1 - a.b;
@@ -212,22 +279,44 @@ Shader "Stabby/Foliage"
                 }
                 else
                 {
-                    float2 p = float2(i.uv.x * size * 7, i.uv.y * size * 1.6);
-                    float ridge = 1 - abs(BarkNoise(p) * 2 - 1);
-                    float fine = BarkNoise(p * float2(3.1, 4.3) + 5.7);
-                    albedo = _BaseColor.rgb * (0.55 + 0.45 * ridge + 0.2 * fine);
-                    ao = i.uv.z;
+                    float fp = max(length(dm1), length(dm2));
+                    bool spruce = i.uv.w > 0.125;
+                    float tone, fresh = 0;
+                    float3 b = spruce ? SpruceBark(m, fp, tone, fresh) : OakBark(m, fp, tone);
+                    float3 lw = float3(0.2126, 0.7152, 0.0722);
+                    albedo = _BaseColor.rgb * (spruce ? 0.62 + 0.5 * tone : 0.5 + 0.6 * tone);
+                    albedo = spruce ? lerp(albedo, albedo * float3(1.35, 0.95, 0.75), fresh) : lerp(albedo, dot(albedo, lw) * float3(1.04, 1, 0.94), 0.4 * saturate(tone));
+                    float moss = 0;
+                    [branch] if (above < 2.6)
+                    {
+                        float3 sideN = normalize(float3(n.x, 0, n.z) + 1e-4), ld = normalize(float3(l.direction.x, 0, l.direction.z) + 1e-4);
+                        float shadeSide = 0.5 - 0.5 * dot(sideN, ld);
+                        float4 mn = TmNoise3(wp * 2.3, int3(0, 0, 0)), mf = TmNoise3(wp * 9.1 + 17.3, int3(0, 0, 0));
+                        float reach = lerp(0.25, 1.6, shadeSide) + 0.45 * mn.x;
+                        moss = saturate((reach - above) * 3 + 0.5 * mf.x) * smoothstep(0.15, 0.6, shadeSide + 0.35 * mn.x) * (spruce ? 0.8 : lerp(1.3, 0.7, saturate(tone)));
+                        moss = saturate(moss);
+                        albedo = lerp(albedo, float3(0.15, 0.19, 0.065) * (0.85 + 0.3 * mf.x), moss);
+                    }
+                    float4 lc = TmNoise3(wp * 4.7 + 31.1, int3(0, 0, 0));
+                    float lic = smoothstep(0.42, 0.62, lc.x) * (spruce ? 0.35 : 0.55) * (1 - moss) * BarkFade(4.7, fp);
+                    albedo = lerp(albedo, dot(albedo, lw) * float3(0.9, 1.03, 0.78) * (2.1 + 0.3 * lc.y), 0.6 * lic);
+                    float3 dp2perp = cross(dp2, n), dp1perp = cross(n, dp1);
+                    float3 T = dp2perp * dm1.x + dp1perp * dm2.x, B = dp2perp * dm1.y + dp1perp * dm2.y;
+                    float inv = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-12));
+                    float depth = (spruce ? 0.012 : 0.01) * (1 - 0.6 * moss);
+                    n = normalize(n - depth * inv * (T * b.y + B * b.z));
+                    ao = i.uv.z * (spruce ? 0.8 + 0.2 * tone : 0.7 + 0.3 * saturate(tone));
                 }
-                float above = max(wp.y - fade.z, 0);
                 float groundAo = lerp(0.6, 1, smoothstep(0, min(1.2, 0.5 * size), above));
                 ao *= groundAo;
-                Light l = GetMainLight(TransformWorldToShadowCoord(wp));
                 float ndl = dot(n, l.direction);
-                float diffuse = lerp(saturate(ndl), saturate((ndl + 0.45) / 1.45), imp ? trans : leaf ? 1 : 0);
+                float diffuse = lerp(saturate(ndl), saturate((ndl + 0.6) / 1.6), imp ? trans : leaf ? 1 : 0);
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
-                float back = pow(saturate(dot(-v, l.direction)), 4) * 0.55 + saturate(-ndl) * 0.2;
+                float vl = saturate(dot(-v, l.direction));
+                float back = vl * vl * vl * 0.8 + saturate(-ndl) * 0.35;
                 float3 direct = l.color * l.shadowAttenuation;
-                float3 c = albedo * (direct * diffuse * lerp(0.55, 1, ao) + ambient * ao) + albedo * _Leaf.rgb * 2.2 * direct * back * trans * ao;
+                float3 glow = l.color * lerp(0.25, 1, l.shadowAttenuation) * lerp(0.4, 1, ao);
+                float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) + ambient * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.25, 1.3, 0.45) * 1.6 * glow * back * trans;
                 return half4(MixFog(c, i.fog), alpha);
             }
             ENDHLSL
@@ -280,7 +369,7 @@ Shader "Stabby/Foliage"
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
                 clip(min(fade.y - 0.5, fade.x - Bayer(i.positionCS.xy)));
-                [branch] if (i.uv.w > 0.5 && i.uv.w < 1.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - 0.5);
+                [branch] if (i.uv.w > 0.5 && i.uv.w < 1.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - LeafCut(i.uv.z, (i.uv.w - 1) * 3.333));
                 return 0;
             }
             ENDHLSL
@@ -344,8 +433,9 @@ Shader "Stabby/Foliage"
                 [branch] if (i.uv.w > 0.5)
                 {
                     float4 t = SAMPLE_TEXTURE2D_LOD(_LeafAtlas, sampler_LeafAtlas, i.uv.xy, 0);
-                    clip(t.a - 0.5);
-                    a = half4(t.rgb, 1);
+                    float j = (i.uv.w - 1) * 3.333;
+                    clip(t.a - LeafCut(i.uv.z, j));
+                    a = half4(saturate(t.r * (1 + 0.16 * j)), saturate(t.g + 0.3 * j), t.b, 1);
                 }
                 o.a = a;
                 o.b = half4(normalize(i.normalOS) * 0.5 + 0.5, i.uv.z);

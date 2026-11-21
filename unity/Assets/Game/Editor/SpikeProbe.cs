@@ -18,7 +18,9 @@ namespace Stabby.Game.Editor
         static readonly List<string> report = new List<string>();
         static int frame, gcRuns, builtSpikes, loadSpikes;
         static long gcBuilt, gcBefore, gcPlay;
-        static int playFrames;
+        static int playFrames, gcSpikes;
+        static float gcWorst;
+        static string gcWorstAt = "";
         static ProfilerRecorder gcFrame;
         const int Segment = 2400;
         static int recorded, resumes;
@@ -64,6 +66,16 @@ namespace Stabby.Game.Editor
             if (cur.Length < recs.Count) { Array.Resize(ref cur, recs.Count); Array.Resize(ref last, recs.Count); }
             for (int r = 0; r < recs.Count; r++) cur[r] = recs[r].rec.LastValue;
             float dt = Time.unscaledDeltaTime * 1000f;
+            if (frame > 10 && dt > Limit && !GameStatus.AfterTool)
+            {
+                float gcMs = 0;
+                for (int r = 0; r < recs.Count; r++) if (recs[r].name.StartsWith("GC.Collect", StringComparison.Ordinal) || recs[r].name.StartsWith("GarbageCollector.", StringComparison.Ordinal)) gcMs = Math.Max(gcMs, cur[r] / 1e6f);
+                if (collected || gcMs >= 1)
+                {
+                    gcSpikes++;
+                    if (gcMs > gcWorst) { gcWorst = gcMs; gcWorstAt = $"frame {frame} {dt:F0} ms"; }
+                }
+            }
             if (frame > 10 && dt > Limit && !GameStatus.AfterTool && (GameStatus.TerrainBuilt ? builtSpikes++ : loadSpikes++) < 40) report.Add($"frame {frame}{(GameStatus.TerrainBuilt ? " built" : "")} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
             (cur, last) = (last, cur);
         }
@@ -73,7 +85,7 @@ namespace Stabby.Game.Editor
         static string Top(long[] ns) =>
             string.Join(", ", Enumerable.Range(0, recs.Count).Select(r => (recs[r].name, ms: ns[r] / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80).Select(r => $"{r.name} {r.ms:F0}"));
 
-        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections, {gcPlayRuns} in play frames\ntour: {gcTour / 1024 / System.Math.Max(1, tourFrames)} KB per frame over {tourFrames} frames, {gcTourRuns} collections\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
+        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections, {gcPlayRuns} in play frames\ntour: {gcTour / 1024 / System.Math.Max(1, tourFrames)} KB per frame over {tourFrames} frames, {gcTourRuns} collections\nGC spikes: {gcSpikes} frames over {Limit:F0} ms with a collection or collect marker, worst collect marker {gcWorst:F0} ms at {gcWorstAt}\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
 
         static float Arg()
         {

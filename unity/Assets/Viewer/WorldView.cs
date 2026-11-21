@@ -96,12 +96,12 @@ namespace Stabby.Viewer
         {
             var c = new WorldConfig { Seed = (ulong)Seed, Size = Size, CellMeters = WorldConfig.CellMetersFor(Size) };
             int cells = ChunkCells;
-            string path = UseMapFile ? MapFile.PathFor(c.Seed, c.Size) : null, materials = MaterialFile.DefaultPath;
+            string path = UseMapFile ? MapFile.PathFor(c.Seed, c.Size) : null, materials = ContentFiles.MaterialsPath;
             Begin(token =>
             {
                 var sw = Stopwatch.StartNew();
-                var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-                var lib = MaterialFile.Load(materials);
+                var defs = ContentFiles.Biomes();
+                var lib = ContentFiles.Materials(materials);
                 var (world, source) = path != null ? MapFile.LoadOrGenerate(path, c, defs, lib, true) : (WorldGenerator.Generate(c, defs, lib), $"generated in {sw.ElapsedMilliseconds} ms");
                 long genMs = sw.ElapsedMilliseconds;
                 var p = Prepare(world, defs, materials, cells, token);
@@ -114,7 +114,7 @@ namespace Stabby.Viewer
         public void Build(GeneratedWorld world, IReadOnlyList<BiomeDef> defs)
         {
             int cells = ChunkCells;
-            string materials = MaterialFile.DefaultPath;
+            string materials = ContentFiles.MaterialsPath;
             Begin(token => Prepare(world, defs, materials, cells, token));
         }
 
@@ -215,7 +215,7 @@ namespace Stabby.Viewer
             var s = new Source { World = world, Size = world.Config.Size, ChunkCells = cells, Cm = world.Config.CellMeters };
             s.Detail = new TerrainDetail(world);
             s.Colors = TerrainLook.BaseColors(world, defs);
-            s.Strata = TerrainLook.Strata(world, MaterialFile.Load(materials));
+            s.Strata = TerrainLook.Strata(world, ContentFiles.Materials(materials));
             var list = new List<ChunkData>();
             int n = s.Size;
             for (int cy = 0; cy < n; cy += cells)

@@ -18,30 +18,29 @@ namespace Stabby.World
             n = w.Config.Size;
             cm = w.Config.CellMeters;
             var h = w.Height;
-            float[] dist = null, offsets = null, bands;
+            float[] amp = null, offsets = null, bands;
             List<RiverPiece> pieces = null;
             int[] index = null, items = null;
             bool strata = w.Materials != null && w.Materials.Strata.Count > 0;
             Parallel.Invoke(
-                () => dist = WetDistance(w),
+                () => amp = WetDistance(w),
                 () => offsets = strata ? w.Materials.Offsets(w.Config) : new float[n * n],
                 () => { pieces = NearField.Pieces(w); NearField.Index(pieces, n, cm, out index, out items); });
-            var amp = new float[n * n];
             Parallel.For(0, n, y =>
             {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
-                    float lo = float.MaxValue, hi = float.MinValue;
+                    float dist = amp[i], lo = float.MaxValue, hi = float.MinValue;
                     for (int dy = -1; dy <= 1; dy++)
                         for (int dx = -1; dx <= 1; dx++)
                         {
                             float v = h[Clamp(y + dy) * n + Clamp(x + dx)];
                             lo = Math.Min(lo, v); hi = Math.Max(hi, v);
                         }
-                    if (lo <= 0) continue;
+                    if (lo <= 0) { amp[i] = 0; continue; }
                     float a = 2f + 0.12f * (hi - lo);
-                    a *= Grid.Smoothstep(0.5f, 0.5f + WetFadeCells, dist[i]);
+                    a *= Grid.Smoothstep(0.5f, 0.5f + WetFadeCells, dist);
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
             });
@@ -71,6 +70,7 @@ namespace Stabby.World
         public uint CoastSeed => cells.CoastSeed;
         public float Height(int cell) => cells.Height(cell);
         public float Amplitude(int cell) => cells.Amp(cell);
+        public float[] Offsets => cells.Offsets;
 
         public float Sample(float x, float z) => NearField.Sample(cells, x, z);
         public float Smooth(float x, float z) => NearField.Smooth(cells, x, z);
@@ -146,6 +146,7 @@ namespace Stabby.World
         public float Height(int i) => h[i];
         public float Amp(int i) => amp[i];
         public float Offset(int i) => off[i];
+        public float[] Offsets => off;
         public float Band(int k) => bands[k];
         public int PieceStart(int cell) => start[cell];
         public int PieceAt(int k) => items[k];

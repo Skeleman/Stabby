@@ -1,0 +1,7 @@
+{
+  "name": "com.stabby.content",
+  "version": "0.1.0",
+  "displayName": "Stabby Content",
+  "description": "Engine-free loaders for authored content JSON, shared by the CLI, tests and the Unity client.",
+  "unity": "6000.5"
+}
