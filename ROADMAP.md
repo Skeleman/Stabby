@@ -93,7 +93,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 |---|---|
 | Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (`NearField.Sample`, 64-quad nodes over 9 levels with 2:1 balance; GeneratorVersion 35) | done |
 | Erosion speed: coarse-to-fine erosion (512 grid for all but the last 8 steps) and parallel row loops; 2048 generates in ~5 s (erosion 3 s), 4096 in ~19 s but its checks crash in Features.Dry/Arch (arch endpoints unclamped) | done (e7d12e3) |
-| Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | wip (b/grid-2048) |
+| Base grid to 2048 (11.25 m cells), GeneratorVersion 38; Features scale drop thresholds and arch endpoints with cell size (4096 checks no longer crash); 4096 stays opt-in (29 s, checks 64 s, 2 violations) | done (b/grid-2048) |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Water pass 2 (Zach): square pattern along the sea edge; sea, lakes and rivers share one water definition, differing only in flow and swell (`materials.json` `water`, one shader keyed by vertex colour; soft gradient-noise foam, lake shore ring) | done |
 | Water cost: fine wave octave skipped past its fade distance, foam noise skipped away from shores; GPU profile of water and terrain shaders at several resolutions and distances before more effects (water coast 0.9/1.0 ms at 1080p, 1.3/1.8 at 2160p) | done |
