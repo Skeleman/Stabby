@@ -19,7 +19,6 @@ namespace Stabby.Viewer
         public int N;
         public float CellM;
         public Vector4 Surface, Wobble, RockA, RockB, RockC, Look, CoatRough;
-        public const float RockTypePeriodM = 40f;
         public Vector4[] CoatA, CoatB;
         public Vector4[] Water;
     }
@@ -303,7 +302,7 @@ namespace Stabby.Viewer
                 Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),
                 RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),
                 RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
-                RockC = new Vector4(r.Parallax, 1f / StrataLook.RockTypePeriodM, 1, 0),
+                RockC = new Vector4(r.Parallax, 1f / MaterialLibrary.RockTypePeriodM, 1, 0),
                 Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, lib.Look.RoughnessVar),
                 CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,

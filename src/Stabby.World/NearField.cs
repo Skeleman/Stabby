@@ -16,6 +16,7 @@ namespace Stabby.World
         uint GullySeed { get; }
         uint RockSeed { get; }
         uint CoastSeed { get; }
+        uint CragSeed { get; }
         float Height(int i);
         float Amp(int i);
         float Offset(int i);
@@ -32,6 +33,8 @@ namespace Stabby.World
         public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
         public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f;
         public const float CoastWarpCells = 0.5f, CoastWaveCells = 2.5f, CoastBandM = 3f, CoastPin = 0.35f;
+        public const float CragFrac = 0.5f, CragMaxM = 10f, CragSlopeLo = 0.35f, CragSlopeHi = 1.2f, CragGridLo = 0.1f, CragGridHi = 0.25f, CragProbeM = 3f, CragAlongM = 50f, CragAcrossM = 18f, CragJutM = 24f;
+        public const float CragWarpM = 9f, CragWarpWaveM = 40f, LedgePeriodM = 6.5f, LedgeWarpM = 1.5f, LedgeWarpWaveM = 35f, LedgeRagM = 0.15f, LedgeRagWaveM = 4f, LedgeStrikeM = 70f;
         public const int MacroOctaves = 5, Chaikin = 2;
         public const int NodeQuads = 64, NodeLevels = 9;
 
@@ -141,7 +144,7 @@ namespace Stabby.World
             d = (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        public const float DetailReach = 1.35f;
+        public const float DetailReach = 1.35f + CragFrac;
 
         public static void Range<T>(T c, float x0, float z0, float x1, float z1, out float lo, out float hi) where T : struct, INearCells
         {
@@ -281,7 +284,52 @@ namespace Stabby.World
                 fine += ga * Math.Max(-1f, Math.Min(1f, g / wsum));
             }
             if (ra > 0) fine += ra * Math.Max(-1f, Math.Min(1f, Noise.Fbm(c.RockSeed, x / RockM, z / RockM, 2)));
+            float ca = Math.Min(CragMaxM, CragFrac * a) * Grid.Smoothstep(CragGridLo, CragGridHi, slope) * (0.4f + 0.6f * hard);
+            if (ca > 0)
+            {
+                float px = x / cm, pz = z / cm, r = CragProbeM / cm;
+                float local = (Base(c, px - r * dx, pz - r * dz) - Base(c, px + r * dx, pz + r * dz)) / (2 * CragProbeM);
+                ca *= Grid.Smoothstep(CragSlopeLo, CragSlopeHi, local);
+                if (ca > 0) fine += Crag(c, x, z, b + off, dx, dz, MaterialLibrary.Sedimentary(off), ca);
+            }
             return fine;
+        }
+
+        static float Crag<T>(T c, float x, float z, float strat, float dx, float dz, float sed, float ca) where T : struct, INearCells
+        {
+            uint s = c.CragSeed;
+            float wu = x / CragWarpWaveM, wv = z / CragWarpWaveM;
+            float wx = x + CragWarpM * Noise.Gradient(s + 1u, wu, wv), wz = z + CragWarpM * Noise.Gradient(s + 2u, wu + 31.7f, wv - 17.3f);
+            float r = 0;
+            if (sed < 1)
+            {
+                float wsum = 1e-4f, m = 0;
+                for (int i = 0; i < 4; i++)
+                {
+                    float ux = i == 0 ? 1f : i == 2 ? 0f : i == 1 ? 0.70710678f : -0.70710678f;
+                    float uz = i == 0 ? 0f : i == 2 ? 1f : 0.70710678f;
+                    float dot = ux * dx + uz * dz, w = dot * dot * dot * dot;
+                    if (w < 1e-3f) continue;
+                    float u = (wx * ux + wz * uz) / CragAlongM, v = (wz * ux - wx * uz) / CragAcrossM;
+                    uint k = s + 16u + (uint)i * 0x9E3779B9u;
+                    float g = Noise.Gradient(k, u, v) + 0.35f * Noise.Gradient(k + 3u, 2.3f * u, 2.3f * v) + 0.1f * Noise.Gradient(k + 5u, 4.1f * u, 4.1f * v);
+                    float p = Grid.Smoothstep(-0.3f, 0.4f, g) * 2f - 1f;
+                    float jut = Math.Max(-1f, Math.Min(1f, Noise.Gradient(k + 7u, (wx * ux + wz * uz) / CragJutM, v * (CragAcrossM / CragJutM))));
+                    m += w * p * (0.6f + 0.4f * jut);
+                    wsum += w;
+                }
+                r += (1 - sed) * m / wsum;
+            }
+            if (sed > 0)
+            {
+                float t = (strat + LedgeWarpM * Noise.Gradient(s + 41u, x / LedgeWarpWaveM, z / LedgeWarpWaveM) + LedgeRagM * Noise.Gradient(s + 43u, x / LedgeRagWaveM, z / LedgeRagWaveM)) / LedgePeriodM;
+                float f = t - (float)Math.Floor(t);
+                float sharp = 0.7f + 0.1f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(s + 45u, x / LedgeWarpWaveM + 9.1f, z / LedgeWarpWaveM - 4.3f)));
+                float g = Grid.Smoothstep(1 - sharp, 1, f);
+                float on = Grid.Smoothstep(-0.3f, 0.4f, Noise.Gradient(s + 47u, x / LedgeStrikeM, z / LedgeStrikeM));
+                r += sed * on * Math.Min(1f, LedgePeriodM / ca) * (g - f + 0.5f * (1 - sharp));
+            }
+            return ca * Math.Max(-1f, Math.Min(1f, r));
         }
 
         static float Dx<T>(T c, int x, int z) where T : struct, INearCells

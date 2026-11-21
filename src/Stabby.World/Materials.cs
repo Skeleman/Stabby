@@ -90,6 +90,14 @@ namespace Stabby.World
 
     public sealed class MaterialLibrary
     {
+        public const float RockTypePeriodM = 40f;
+
+        public static float Sedimentary(float offset)
+        {
+            float p = offset / RockTypePeriodM;
+            return Grid.Smoothstep(0.3f, 0.7f, Math.Abs(p - (float)Math.Floor(p) - 0.5f) * 2f);
+        }
+
         public SurfaceDetail Surface = new SurfaceDetail();
         public WaterDef Water = new WaterDef();
         public LookDef Look = new LookDef();
