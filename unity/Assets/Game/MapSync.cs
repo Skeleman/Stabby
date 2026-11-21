@@ -69,9 +69,42 @@ namespace Stabby.Game
         public sealed class SharedObjects
         {
             public ObjectField Field;
-            public byte[] Columns;
-            public int Count;
+            public NativeArray<int> Starts;
+            public NativeArray<ObjectColumn> Items;
+            public float Cell, Max;
             public long Ms;
+            bool disposed;
+
+            public int Count => Items.Length;
+
+            public bool Build(out BlobBuilder b)
+            {
+                lock (this)
+                {
+                    b = default;
+                    if (disposed) return false;
+                    b = new BlobBuilder(Allocator.Persistent);
+                    ref var root = ref b.ConstructRoot<ObjectColumnData>();
+                    root.Cell = Cell;
+                    root.Max = Max;
+                    var starts = b.Allocate(ref root.Starts, Starts.Length);
+                    for (int k = 0; k < Starts.Length; k++) starts[k] = Starts[k];
+                    var items = b.Allocate(ref root.Items, Items.Length);
+                    for (int k = 0; k < Items.Length; k++) items[k] = Items[k];
+                    return true;
+                }
+            }
+
+            public void Dispose()
+            {
+                lock (this)
+                {
+                    if (disposed) return;
+                    disposed = true;
+                    Starts.Dispose();
+                    Items.Dispose();
+                }
+            }
         }
 
         static readonly List<Entry> entries = new List<Entry>();
@@ -131,6 +164,7 @@ namespace Stabby.Game
                 e.Ground = default;
                 e.Map = null;
                 e.Parts = null;
+                Owned.Release(e.Objects, o => o.Dispose());
                 e.Objects = null;
             }
         }
@@ -192,6 +226,7 @@ namespace Stabby.Game
                 p.Entry = WorldStore.Offer(w, sums, path);
                 long sumsMs = sw.ElapsedMilliseconds;
                 p.Packed = Pack(w, sums);
+                Shed(w);
                 p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
                 return p;
             });
@@ -201,6 +236,13 @@ namespace Stabby.Game
         {
             public readonly byte[] Raw = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
             public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+        }
+
+        public static void Shed(GeneratedWorld w)
+        {
+            w.Climate = null;
+            w.Water.Receiver = null;
+            w.Water.DischargeM3s = null;
         }
 
         static BlobBuilder Pack(GeneratedWorld w, ulong[] sums)
@@ -343,7 +385,7 @@ namespace Stabby.Game
             {
                 ecb.DestroyEntity(e);
                 var i = info.ValueRO;
-                if (gen != null) continue;
+                if (gen != null || mine != null) continue;
                 if (i.Version != WorldConfig.GeneratorVersion || i.Size != GameSettings.Size)
                 {
                     GameStatus.Failure = $"{World.Name}: host runs generator {i.Version} size {i.Size}, this peer {WorldConfig.GeneratorVersion} size {GameSettings.Size}";
@@ -367,6 +409,7 @@ namespace Stabby.Game
             {
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
                 (world, mine, borrowed) = gen.Result;
+                gen = null;
                 genMs = clock.ElapsedMilliseconds;
             }
             if (inbox == Entity.Null || mine == null) return;
@@ -437,7 +480,7 @@ namespace Stabby.Game
             var slots = box.Slots.ToArray();
             var arena = box.Arena.AsArray();
             ulong hs = hostSeed;
-            finish = Task.Run(() =>
+            finish = Task.Run<(int, GroundParts, WorldStore.Entry)>(() =>
             {
                 int n = w.Config.Size, a = WorldChunks.Across(n);
                 var got = new List<int>();
@@ -458,7 +501,9 @@ namespace Stabby.Game
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
                 if (bad != 0) return (bad, null, null);
                 var found = WorldStore.Find(sums);
-                return (0, found == null ? Ground.Fill(w) : null, found);
+                if (found != null) return (0, null, found);
+                ServerMapSystem.Shed(w);
+                return (0, Ground.Fill(w), null);
             });
         }
 
