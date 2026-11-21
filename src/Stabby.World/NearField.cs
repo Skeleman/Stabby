@@ -120,9 +120,10 @@ namespace Stabby.World
             for (int i = 0; i < n * n; i++) counts[i + 1] += counts[i];
             start = counts;
             items = new int[counts[n * n]];
-            var fill = new int[n * n];
             for (int p = 0; p < pieces.Count; p++)
-                foreach (int c in cells[p]) items[start[c] + fill[c]++] = p;
+                foreach (int c in cells[p]) items[start[c]++] = p;
+            for (int i = n * n; i > 0; i--) start[i] = start[i - 1];
+            start[0] = 0;
         }
 
         static float StageGradient(RiverPiece q)
