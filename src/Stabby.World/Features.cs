@@ -342,7 +342,8 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             float mx = (tx + px) * TileCells, mz = (ty + pz) * TileCells, half = span * 0.5f / cm;
             float ax = mx - dx * half, az = mz - dz * half, bx = mx + dx * half, bz = mz + dz * half;
-            if (Math.Min(Math.Min(ax, az), Math.Min(bx, bz)) < 0 || Math.Max(Math.Max(ax, az), Math.Max(bx, bz)) > n - 1) return;
+            float pad = MarginCells + radius / cm, x0 = tx * TileCells + pad, x1 = (tx + 1) * TileCells - pad, z0 = ty * TileCells + pad, z1 = (ty + 1) * TileCells - pad;
+            if (Math.Min(ax, bx) < x0 || Math.Max(ax, bx) > x1 || Math.Min(az, bz) < z0 || Math.Max(az, bz) > z1) return;
             if (!Dry(w, (int)az * n + (int)ax) || !Dry(w, (int)bz * n + (int)bx) || !Dry(w, (int)mz * n + (int)mx)) return;
             float ha = detail.HeightAt(ax, az), hb = detail.HeightAt(bx, bz);
             float ground = Math.Max(ha, hb);
