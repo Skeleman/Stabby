@@ -398,17 +398,22 @@ float3 TmMicro(float2 p, float fp)
     return float3(0.4 * s.x + 0.6 * c.x + 0.4 * g.x, d);
 }
 
-float TmFleck(float2 p, float2x2 m, float f, float fp)
+float4 TmFleck(float2 p, float2x2 m, float f, float fp, int salt, float rMin, float rMax, float share)
 {
     float w = TmFade(4 * f, fp);
     if (w <= 0) return 0;
     float2 q = mul(m, p) * f, fl = floor(q);
     int2 c = (int2)fl + (int2)(mul(m, tmO.xz) * f);
-    float h = TmHash(int3(c, 23)) * 2 - 1;
-    float2 ctr = 0.3 + 0.4 * float2(TmHash(int3(c, 24)), TmHash(int3(c, 25)));
-    float r = 0.18 + 0.2 * TmHash(int3(c, 26)), aa = fp * f;
-    float d = length(q - fl - ctr);
-    return w * h * saturate((r - d) / max(aa, 0.05) + 0.5);
+    float4 hs = float4(TmHash(int3(c, salt)), TmHash(int3(c, salt + 1)), TmHash(int3(c, salt + 2)), TmHash(int3(c, salt + 3)));
+    if (hs.w > share) return 0;
+    float2 u = normalize(TmGrad(c + int2(salt, 0)) + 1e-4), e = q - fl - (0.3 + 0.4 * hs.xy);
+    float r = lerp(rMin, rMax, hs.z * hs.z), st = 1 + hs.w / share;
+    float2 a = float2(dot(e, u), dot(e, float2(-u.y, u.x)) * st);
+    float2 e2 = e - u * r * 0.6;
+    float d = min(length(a), 1.3 * length(e2));
+    float in1 = saturate((r - d) / max(fp * f, 0.04) + 0.5);
+    float2 gq = -e * in1 / r;
+    return w * float4(in1 * (hs.x * 2 - 1), mul(gq, m), in1);
 }
 
 TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix, float stone)
@@ -480,7 +485,14 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         k.albedo *= 1 + 0.1 * mr.x;
         k.grad += float3(mr.y, 0, mr.z);
         float bare = saturate(cw.y + cw.z) * (1 - cw.x);
-        if (bare > 0.01) k.albedo *= 1 + bare * (0.3 * TmFleck(wp.xz, float2x2(1, 0, 0, 1), 37, fp) + 0.25 * TmFleck(wp.xz, float2x2(1, 0.5, -0.5, 1), 15, fp));
+        [branch] if (bare > 0.01)
+        {
+            float4 g1 = TmFleck(wp.xz, float2x2(1, 0, 0, 1), 41, fp, 23, 0.12, 0.32, 1);
+            float4 g2 = TmFleck(wp.xz, float2x2(1, 0.5, -0.5, 1), 13, fp, 31, 0.15, 0.38, 0.55);
+            float4 g3 = TmFleck(wp.xz, float2x2(1, -0.75, 0.75, 1), 19, fp, 37, 0.12, 0.25, 0.12);
+            k.albedo *= 1 + bare * (0.06 * g1.x + 0.05 * g2.x - 0.12 * g3.w);
+            k.grad += bare * 0.12 * float3(g2.y, 0, g2.z);
+        }
         float up = saturate((sl - 0.3) / 0.25);
         o.albedo += c * lerp(coatColor, k.albedo, up);
         o.grad += c * up * k.grad;
