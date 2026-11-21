@@ -34,8 +34,8 @@ namespace Stabby.Viewer
         const float SlopeRange = 0.1f;
         const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
         public const float FallMinDrop = 0.3f;
-        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistLift = 0.35f, MistPerPool = 0.5f, MistPerDrop = 0.25f;
-        const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 4;
+        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerPool = 0.5f, MistPerDrop = 0.25f, MistPhase = 0.618034f;
+        const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 8;
         const float CurtainRowStep = 2f;
         static readonly Vector4 NoPool = new Vector4(-1e5f, 0, 0, 0);
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
@@ -202,18 +202,19 @@ namespace Stabby.Viewer
                     Tris.Add(v - 2); Tris.Add(v - 1); Tris.Add(v);
                     Tris.Add(v - 1); Tris.Add(v + 1); Tris.Add(v);
                 }
-                int mists = Mathf.Clamp(Mathf.RoundToInt(f.Width / MistPerWidth), 1, MistMax);
+                int mists = Mathf.Clamp(Mathf.RoundToInt(f.Width / MistPerWidth + f.Drop / MistPerHeight + MistPerFlow * Mathf.Sqrt(f.Discharge)), 1, MistMax);
                 float radius = Mathf.Clamp(MistPerPool * f.PoolRadius + MistPerDrop * f.Drop, 2.5f, 14f);
-                var foot = new Vector3(f.BaseX, f.BaseY + MistLift * radius, f.BaseZ) + fwd * (0.3f * radius);
+                var foot = new Vector3(f.BaseX, f.BaseY, f.BaseZ) + fwd * (0.3f * radius);
                 for (int m = 0; m < mists; m++)
                 {
-                    var c = foot + side * ((m + 0.5f) / mists * 2 - 1) * 0.8f;
+                    var c = foot + side * ((m + 0.5f) / mists * 2 - 1) * 0.7f;
+                    float phase = Mathf.Repeat(m * MistPhase + along * 0.0137f, 1f);
                     int q = Verts.Count;
                     for (int corner = 0; corner < 4; corner++)
                     {
                         Verts.Add(c);
                         Cols.Add(flow);
-                        Chan.Add(Vector2.zero);
+                        Chan.Add(new Vector2(phase, f.Drop));
                         Reach.Add(reach);
                         Fall.Add(new Vector4((corner & 1) * 2 - 1, (corner >> 1) * 2 - 1, radius, 2));
                     }
