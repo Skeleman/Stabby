@@ -93,6 +93,14 @@ namespace Stabby.Game.Editor
 
         static void Poll()
         {
+            PollBody();
+            SpikeProbe.Exit();
+        }
+
+        static string dir;
+
+        static void PollBody()
+        {
             if (EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) > TimeoutSeconds)
             {
                 Debug.LogError("GameCapture: timed out\n" + Status());
@@ -115,8 +123,7 @@ namespace Stabby.Game.Editor
             if (settle > 0 && --settle > 0) return;
             if (phase == 0 && GameStatus.TerrainBehind > 0 && chaseWait < 1800) { chaseWait++; return; }
 
-            var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game"));
-            Directory.CreateDirectory(dir);
+            if (dir == null) { dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game")); Directory.CreateDirectory(dir); }
             var cam = Camera.main;
             if (phase == 0)
             {
@@ -273,6 +280,7 @@ namespace Stabby.Game.Editor
             if (phase == 12)
             {
                 if (tourStop < 0) tourStop = 0;
+                SpikeProbe.Touring = true;
                 if (tourStop < TourStops)
                 {
                     if (wait == 0)
@@ -290,6 +298,7 @@ namespace Stabby.Game.Editor
                 }
                 GameStatus.Lines["~objects tour"] = tourParts.Count == 0 ? "objects tour: no stops" :
                     $"objects tour: {tourParts.Count} stops over {TourStops * TourStepM / 1000f:F0} km, parts held per stop {string.Join("/", tourParts)} (max {tourParts.Max()}), chunks held {string.Join("/", tourChunks)}, entities {string.Join("/", tourLive)}, {ObjectViewSystem.ChunksUnloaded} unloaded";
+                SpikeProbe.Touring = false;
                 GameStatus.PutFrames();
                 if (GameStatus.Lines.TryGetValue("~frames", out var after)) GameStatus.Lines["~frames tour"] = "during tour: " + after;
                 phase++;
