@@ -36,6 +36,7 @@ namespace Stabby.Game.Editor
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.intensity = 0.8f;
+            sun.shadows = LightShadows.Hard;
             sun.color = new Color(1f, 0.96f, 0.88f);
             sun.transform.rotation = Quaternion.Euler(38f, 140f, 0);
 
@@ -123,6 +124,7 @@ namespace Stabby.Game.Editor
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
                 GameStatus.Lines["~bench chase blades"] = GrassViewSystem.Counts();
+                GameStatus.Lines["~bench chase shadows"] = ShadowBench(cam, "chase", true);
                 GrassViewSystem.Rescatter = true;
                 GameStatus.Lines["~bench chase moving"] = Bench(cam, "chase rescattering grass every frame");
                 GrassViewSystem.Rescatter = false;
@@ -137,6 +139,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, "far");
                 GameStatus.Lines["~bench far"] = Bench(cam, "far");
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
+                GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
                 phase = 1;
             }
@@ -184,6 +187,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
+                if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
                 if (phase == 8)
                 {
                     GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
@@ -201,6 +205,15 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "grass-fade");
                 }
+                if (phase == 9)
+                {
+                    var sf = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                    var sp = cam.transform.position - sf * 15f;
+                    sp.y = GroundHeight(sp.x, sp.z) + 2.5f;
+                    cam.transform.SetPositionAndRotation(sp, Quaternion.LookRotation(sf - new Vector3(0, 0.12f, 0)));
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "sand-far");
+                }
                 wait = 0;
                 phase++;
             }
@@ -217,6 +230,12 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     if (wait < 0) GameStatus.Lines["~objects wait"] = $"objects waited {-wait} extra frames";
                     Shot(cam, dir, "objects");
+                    var sunFlat = Vector3.ProjectOnPlane(Object.FindFirstObjectByType<Light>().transform.forward, Vector3.up).normalized;
+                    var objRot = cam.transform.rotation;
+                    cam.transform.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(-sunFlat, Vector3.up) + Vector3.up * cam.transform.forward.y);
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "objects-shadows");
+                    cam.transform.rotation = objRot;
                     GameStatus.Lines["~objects draw"] = DrawStats();
                     wait = 0;
                     phase++;
@@ -259,6 +278,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 14) GameStatus.Lines["~bench water"] = Bench(cam, "water coast");
+                if (phase == 14) GameStatus.Lines["~bench water shadows"] = ShadowBench(cam, "water coast", false);
                 if (phase == 15) GameStatus.Lines["~bench water far"] = Bench(cam, "water far coast");
                 wait = 0;
                 phase++;
@@ -676,6 +696,27 @@ namespace Stabby.Game.Editor
                 sb.Append($" {h}p {b:F2}/{f:F2}");
             }
             if (GameStatus.Lines.TryGetValue("terrain", out var t)) sb.Append("; ").Append(t);
+            return sb.ToString();
+        }
+
+        static string ShadowBench(Camera cam, string label, bool blades)
+        {
+            var sun = Object.FindFirstObjectByType<Light>();
+            var modes = new[] { LightShadows.None, LightShadows.Hard };
+            var sb = new System.Text.StringBuilder($"bench {label} 1080p shadows off/on (ms, full):");
+            for (int pass = 0; pass < (blades ? 2 : 1); pass++)
+            {
+                GrassViewSystem.Paused = pass == 1;
+                var ms = new double[2];
+                for (int k = 0; k < 4; k++)
+                {
+                    sun.shadows = modes[k & 1];
+                    ms[k & 1] += BenchAt(cam, 1920, 1080) / 2;
+                }
+                sb.Append(pass == 0 ? " blades on " : ", blades off ").Append($"{ms[0]:F2}/{ms[1]:F2}");
+            }
+            GrassViewSystem.Paused = false;
+            sun.shadows = LightShadows.Hard;
             return sb.ToString();
         }
 

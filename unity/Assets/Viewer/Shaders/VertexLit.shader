@@ -11,6 +11,7 @@ Shader "Stabby/VertexLit"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -108,8 +109,9 @@ Shader "Stabby/VertexLit"
                     float gust = WindGust(xa, _Time.y);
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
-                Light l = GetMainLight();
                 float2 xv = i.xz + TmOrigin(_WorldSpaceCameraPos);
+                Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x, h, xv.y)));
+                l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float3 c = (LookColor(m.albedo, 1) * (l.color * saturate(dot(n, l.direction)) + ambient) + LookSheen(n, v, l.direction, l.color, tmRough)) * ao;

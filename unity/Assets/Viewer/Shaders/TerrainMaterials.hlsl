@@ -358,20 +358,16 @@ TmOut TmSoil(float3 wp, float3 n, float3 v, float3 base, float fp, float4 A, flo
 
 TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, float4 A, float4 B)
 {
-    float2 p = wp.xz, wind = _StabbySurface.zw, side = float2(-wind.y, wind.x);
-    float2 pa = p + tmO.xz;
-    float k0 = dot(tmO.xz, wind) * B.y + 0.3 * dot(tmO.xz, side) * B.y * 0.05;
-    k0 -= floor(k0);
-    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(B.y * 6, fp);
-    float3 warp = TmN2(pa * B.y * 0.12 + 13.1, calm);
-    float s = dot(p, wind) * B.y + k0 + 1.5 * warp.x + 0.3 * dot(p, side) * B.y * 0.05, fr = frac(s);
-    float fm = fr * (1 - fr);
-    float2 ds = wind + 1.5 * warp.yz * 0.12 + 0.015 * side;
+    float2 p = wp.xz, wind = _StabbySurface.zw;
+    float f = B.y * 0.3, k0 = frac(dot(tmO.xz, wind) * f);
+    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(f * 4, fp);
+    float3 warp = TmN2((p + tmO.xz) * f * 0.1 + 13.1, calm);
+    float ripple = B.x * calm * 4 * cos(6.2831853 * (dot(p, wind) * f + k0 + 0.5 * warp.x));
     float3 bump = TmFbm2(p, A.y, A.x, 3, fp);
     float fg = TmFade(A.w, fp);
     float3 grain = TmLN2(p, A.w, 2.9, fg);
     float3 patch = TmLN2(p, 0.15, 17.3, 1);
-    float2 g = bump.yz + B.x * calm * 32 * fm * (1 - 2 * fr) * ds + 0.3 * A.z * fg * grain.yz;
+    float2 g = bump.yz + ripple * (wind + 0.05 * f * warp.yz) + 0.3 * A.z * fg * grain.yz;
     float3 sand = lerp(base, ToLinear(_StabbySand.rgb), 0.5 + 0.5 * shore);
     float3 c = sand * (1 + A.z * fg * grain.x) * (1 + B.w * patch.x);
     TmOut o;
