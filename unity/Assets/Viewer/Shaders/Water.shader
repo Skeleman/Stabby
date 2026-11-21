@@ -17,6 +17,7 @@ Shader "Stabby/Water"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Assets/Viewer/Shaders/Look.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
             float4 _StabbyWaterDeep, _StabbyWaterShallow, _StabbyWaterWave, _StabbyWaterSwell, _StabbyWaterFlow;
@@ -120,7 +121,7 @@ Shader "Stabby/Water"
                 float3 n = normalize(float3(-g.x, 1, -g.y));
 
                 float k = saturate(depth * _StabbyWaterDeep.w);
-                float3 body = lerp(_StabbyWaterShallow.rgb, _StabbyWaterDeep.rgb, k * (2 - k));
+                float3 body = LookColor(lerp(_StabbyWaterShallow.rgb, _StabbyWaterDeep.rgb, k * (2 - k)), 1.3);
 
                 Light l = GetMainLight();
                 float3 sky = _StabbySky.rgb;
