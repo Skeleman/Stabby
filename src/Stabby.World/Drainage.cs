@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -42,15 +43,21 @@ namespace Stabby.World
                     if (!sea[ny * n + nx]) { heap.Push(filled[i], i); break; }
                 }
             }
+            Span<int> off = stackalloc int[8];
+            for (int k = 0; k < 8; k++) off[k] = Grid.DY[k] * n + Grid.DX[k];
             while (heap.Count > 0)
             {
                 int c = heap.Pop(out float level);
-                int x = c % n, y = c / n;
+                int y = c / n, x = c - y * n;
+                bool inner = x > 0 && y > 0 && x < n - 1 && y < n - 1;
                 for (int k = 0; k < 8; k++)
                 {
-                    int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
-                    if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-                    int j = ny * n + nx;
+                    int j = c + off[k];
+                    if (!inner)
+                    {
+                        int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
+                        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                    }
                     if (done[j]) continue;
                     done[j] = true;
                     float min = sea[c] ? filled[j] : level + eps;
@@ -66,22 +73,25 @@ namespace Stabby.World
 
         public static int[] Receivers(float[] surface, bool[] sea, int n, float cell, int[] recv)
         {
-            for (int i = 0; i < n * n; i++)
+            Parallel.For(0, n, y =>
             {
-                recv[i] = i;
-                if (sea[i]) continue;
-                int x = i % n, y = i / n;
-                float best = 0;
-                for (int k = 0; k < 8; k++)
+                for (int x = 0; x < n; x++)
                 {
-                    int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
-                    if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-                    int j = ny * n + nx;
-                    float slope = (surface[i] - surface[j]) / (Grid.Dist[k] * cell);
-                    if (sea[j]) slope = Math.Max(slope, 1e-6f);
-                    if (slope > best) { best = slope; recv[i] = j; }
+                    int i = y * n + x;
+                    recv[i] = i;
+                    if (sea[i]) continue;
+                    float best = 0;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
+                        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                        int j = ny * n + nx;
+                        float slope = (surface[i] - surface[j]) / (Grid.Dist[k] * cell);
+                        if (sea[j]) slope = Math.Max(slope, 1e-6f);
+                        if (slope > best) { best = slope; recv[i] = j; }
+                    }
                 }
-            }
+            });
             return recv;
         }
 

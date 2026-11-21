@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -15,7 +16,8 @@ namespace Stabby.World
             var sea = SeaOf(s.Land);
             var offshore = WorldSketch.CoastDistance(n, sea);
             var inland = s.Coast;
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
@@ -43,6 +45,7 @@ namespace Stabby.World
                         h[i] += (Math.Min(h[i], floor) - h[i]) * s.Valley[i];
                     }
                 }
+            });
             AddSeaRidges(c, s, h, seed ^ 0x51DEu);
             SmoothSeabed(n, h, sea);
             return h;
@@ -104,10 +107,12 @@ namespace Stabby.World
 
         static void SmoothSeabed(int n, float[] h, bool[] sea)
         {
+            var src = new float[h.Length];
             for (int pass = 0; pass < 3; pass++)
             {
-                var src = (float[])h.Clone();
-                for (int y = 1; y < n - 1; y++)
+                Array.Copy(h, src, h.Length);
+                Parallel.For(1, n - 1, y =>
+                {
                     for (int x = 1; x < n - 1; x++)
                     {
                         int i = y * n + x;
@@ -120,12 +125,112 @@ namespace Stabby.World
                         }
                         h[i] = Math.Min(-1f, (src[i] + sum) / (1 + count));
                     }
+                });
             }
         }
 
         static float Dist(float x, float y) => (float)Math.Sqrt(x * x + y * y);
 
-        public static void Run(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, float[] precipitationMm)
+        public static void Run(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, Func<WorldConfig, float[], bool[], float[]> rain)
+        {
+            int n = c.Size, m = c.ErosionSize;
+            int fine = Math.Min(c.FineSteps, c.ErosionSteps);
+            if (m <= 0 || n <= m || n % m != 0)
+            {
+                Steps(c, s, lib, h, rain(c, h, SeaOf(s.Land)), c.ErosionSteps);
+                return;
+            }
+            int f = n / m;
+            var cc = c.Clone();
+            cc.Size = m;
+            cc.CellMeters = c.CellMeters * f;
+            var cs = Coarse(s, f, m);
+            var hc = new float[m * m];
+            Parallel.For(0, m, cy =>
+            {
+                for (int cx = 0; cx < m; cx++)
+                {
+                    int ci = cy * m + cx;
+                    bool land = cs.Land[ci];
+                    double sum = 0; int count = 0;
+                    for (int dy = 0; dy < f; dy++)
+                        for (int dx = 0; dx < f; dx++)
+                        {
+                            int i = (cy * f + dy) * n + cx * f + dx;
+                            if (s.Land[i] != land) continue;
+                            sum += h[i]; count++;
+                        }
+                    hc[ci] = (float)(sum / count);
+                }
+            });
+            var pc = rain(cc, hc, SeaOf(cs.Land));
+            var start = (float[])hc.Clone();
+            Steps(cc, cs, lib, hc, pc, c.ErosionSteps - fine);
+            for (int i = 0; i < m * m; i++) hc[i] = cs.Land[i] ? hc[i] - start[i] : 0;
+            var p = fine > 0 ? new float[n * n] : null;
+            float half = (f - 1) * 0.5f;
+            Parallel.For(0, n, y =>
+            {
+                float v = Math.Max(0, Math.Min(m - 1, (y - half) / f));
+                int y0 = Math.Min(m - 2, (int)v);
+                float ty = v - y0;
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x;
+                    float u = Math.Max(0, Math.Min(m - 1, (x - half) / f));
+                    int x0 = Math.Min(m - 2, (int)u);
+                    float tx = u - x0;
+                    int a = y0 * m + x0;
+                    if (p != null)
+                    {
+                        float pt = pc[a] + (pc[a + 1] - pc[a]) * tx, pb = pc[a + m] + (pc[a + m + 1] - pc[a + m]) * tx;
+                        p[i] = pt + (pb - pt) * ty;
+                    }
+                    if (!s.Land[i]) continue;
+                    float top = hc[a] + (hc[a + 1] - hc[a]) * tx, bottom = hc[a + m] + (hc[a + m + 1] - hc[a + m]) * tx;
+                    h[i] += top + (bottom - top) * ty;
+                }
+            });
+            if (fine > 0) Steps(c, s, lib, h, p, fine);
+            else
+                for (int i = 0; i < n * n; i++)
+                    if (s.Land[i]) h[i] = Math.Max(MinLandHeight, h[i]);
+        }
+
+        static WorldSketch Coarse(WorldSketch s, int f, int m)
+        {
+            int n = s.Size;
+            var cs = new WorldSketch
+            {
+                Size = m, Land = new bool[m * m], Uplift = new float[m * m], Coast = new float[m * m],
+                Beach = new float[m * m], Cliff = new float[m * m],
+            };
+            float half = (f - 1) * 0.5f, area = f * f;
+            foreach (var hl in s.Highlands)
+                cs.Highlands.Add(new HighlandSketch { Plateau = hl.Plateau, X = (hl.X - half) / f, Y = (hl.Y - half) / f, Radius = hl.Radius / f });
+            Parallel.For(0, m, cy =>
+            {
+                for (int cx = 0; cx < m; cx++)
+                {
+                    int land = 0;
+                    float up = 0, coast = 0, beach = 0, cliff = 0;
+                    for (int dy = 0; dy < f; dy++)
+                        for (int dx = 0; dx < f; dx++)
+                        {
+                            int i = (cy * f + dy) * n + cx * f + dx;
+                            if (s.Land[i]) land++;
+                            up += s.Uplift[i]; coast += s.Coast[i]; beach += s.Beach[i]; cliff += s.Cliff[i];
+                        }
+                    int ci = cy * m + cx;
+                    cs.Land[ci] = 2 * land > f * f;
+                    cs.Uplift[ci] = up / area; cs.Coast[ci] = coast / area / f;
+                    cs.Beach[ci] = beach / area; cs.Cliff[ci] = cliff / area;
+                }
+            });
+            return cs;
+        }
+
+        static void Steps(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, float[] precipitationMm, int steps)
         {
             int n = c.Size;
             bool[] sea = SeaOf(s.Land);
@@ -140,7 +245,7 @@ namespace Stabby.World
             var slope = new float[n * n];
             var erod = new float[n * n];
             var caprock = new float[n * n];
-            for (int i = 0; i < n * n; i++)
+            Parallel.For(0, n * n, i =>
             {
                 float m = s.Coast[i] * c.CellMeters;
                 float w = s.Beach[i] * (1 - Grid.Smoothstep(0.5f, 1f, m / c.BeachMeters));
@@ -148,22 +253,32 @@ namespace Stabby.World
                 caprock[i] = Grid.Smoothstep(0.6f, 1f, s.Cliff[i]);
                 slope[i] = c.MaxSlope * (1 + c.CliffSlope * caprock[i]);
                 erod[i] = c.Erodibility * (1 - c.CaprockHardness * caprock[i]) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
-            }
+            });
 
             var strata = new StrataField(c, lib);
             var hard = new float[n * n];
             float dt = c.TimeStepYears;
             var scratch = new DrainageScratch(n);
             var src = new float[n * n];
-            for (int step = 0; step < c.ErosionSteps; step++)
+            for (int step = 0; step < steps; step++)
             {
                 var filled = Drainage.Fill(h, sea, n, 1e-3f, scratch);
                 var recv = Drainage.Receivers(filled, sea, n, c.CellMeters, scratch.Recv);
                 var stack = Drainage.Stack(recv, n, scratch);
                 var q = Drainage.Accumulate(stack, recv, runoff, scratch.Acc);
 
-                for (int i = 0; i < n * n; i++) if (!sea[i]) h[i] += s.Uplift[i] * c.MaxUplift * dt;
-                for (int i = 0; i < n * n; i++) hard[i] = sea[i] ? 0 : strata.Hardness(i, h[i]);
+                var kf = src;
+                Parallel.For(0, n, y =>
+                {
+                    for (int i = y * n, end = i + n; i < end; i++)
+                    {
+                        if (sea[i]) { hard[i] = 0; continue; }
+                        h[i] += s.Uplift[i] * c.MaxUplift * dt;
+                        hard[i] = strata.Hardness(i, h[i]);
+                        int r = recv[i];
+                        if (r != i) kf[i] = erod[i] * strata.Softness(hard[i]) * dt * (float)FMath.Pow(q[i], c.AreaExponent) / Drainage.StepLength(n, i, r, c.CellMeters);
+                    }
+                });
 
                 foreach (int i in stack)
                 {
@@ -173,14 +288,17 @@ namespace Stabby.World
                     float hr = sea[r] ? s.Cliff[i] * h[i] : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
-                    float f = erod[i] * strata.Softness(hard[i]) * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
+                    float f = kf[i];
                     h[i] = Math.Max(hr, (h[i] + f * hr) / (1 + f));
                     h[i] = Math.Min(h[i], hr + slope[i] * (1 + c.StrataSlope * hard[i]) * len);
                 }
 
                 Diffuse(c, s, caprock, hard, h, sea, src);
-                for (int i = 0; i < n * n; i++)
-                    if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
+                Parallel.For(0, n, y =>
+                {
+                    for (int i = y * n, end = i + n; i < end; i++)
+                        if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
+                });
             }
         }
 
@@ -279,7 +397,8 @@ namespace Stabby.World
             float k = c.Diffusion * c.TimeStepYears / (c.CellMeters * c.CellMeters);
             if (k > 0.24f) k = 0.24f;
             Array.Copy(h, src, h.Length);
-            for (int y = 1; y < n - 1; y++)
+            Parallel.For(1, n - 1, y =>
+            {
                 for (int x = 1; x < n - 1; x++)
                 {
                     int i = y * n + x;
@@ -291,6 +410,7 @@ namespace Stabby.World
                     lap += (sea[i + n] ? wall : src[i + n]) - src[i];
                     h[i] = src[i] + k * (1 - caprock[i]) * (1 - hard[i]) * lap;
                 }
+            });
         }
 
         public static bool[] SeaOf(bool[] land)
