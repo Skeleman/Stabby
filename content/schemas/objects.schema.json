@@ -113,7 +113,7 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
