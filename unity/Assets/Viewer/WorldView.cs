@@ -223,7 +223,7 @@ namespace Stabby.Viewer
                     if (!token.IsCancellationRequested && HasLand(s, cx, cy))
                         list.Add(new ChunkData { X = cx, Y = cy, Coarse = TerrainMesh(s, cx, cy, Steps[Steps.Length - 1]), Water = WaterGeometry.Lakes(world, cx, cy, cells) });
             token.ThrowIfCancellationRequested();
-            return new Prepared { Src = s, Chunks = list, Rivers = WaterGeometry.Rivers(world, s.Detail), MeshMs = sw.ElapsedMilliseconds };
+            return new Prepared { Src = s, Chunks = list, Rivers = WaterGeometry.Rivers(world), MeshMs = sw.ElapsedMilliseconds };
         }
 
         public void UpdateLod(Camera cam)

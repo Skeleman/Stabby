@@ -17,6 +17,7 @@ namespace Stabby.Viewer
     public static class WaterGeometry
     {
         const int RiverPieceVertices = 16000;
+        const float RiverLift = 0.1f;
 
         public static Mesh ToMesh(MeshParts d)
         {
@@ -54,9 +55,8 @@ namespace Stabby.Viewer
             return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, tris, TerrainLook.Lake);
         }
 
-        public static List<MeshParts> Rivers(GeneratedWorld world, TerrainDetail detail)
+        public static List<MeshParts> Rivers(GeneratedWorld world)
         {
-            int n = world.Config.Size;
             float cm = world.Config.CellMeters;
             var pieces = new List<MeshParts>();
             var verts = new List<Vector3>();
@@ -72,10 +72,7 @@ namespace Stabby.Viewer
                 }
                 var pts = new List<Vector4>();
                 for (int k = 0; k < r.Cells.Count; k++)
-                {
-                    int c = r.Cells[k];
-                    pts.Add(new Vector4(r.X[k] * cm, Mathf.Max(r.Surface[k], world.Height[c]), r.Y[k] * cm, r.Width[k]));
-                }
+                    pts.Add(new Vector4(r.X[k] * cm, Hydrology.Stage(world.Config, r, k), r.Y[k] * cm, r.Width[k]));
                 for (int it = 0; it < 2; it++) pts = Chaikin(pts);
                 int b = verts.Count;
                 for (int k = 0; k < pts.Count; k++)
@@ -85,7 +82,7 @@ namespace Stabby.Viewer
                     var dir = new Vector3(z.x - a.x, 0, z.z - a.z).normalized;
                     var side = new Vector3(dir.z, 0, -dir.x) * Mathf.Max(pts[k].w * 0.5f, 6f);
                     var p = new Vector3(pts[k].x, 0, pts[k].z);
-                    p.y = GroundAt(detail, n, cm, p, side, pts[k].y) + 0.5f;
+                    p.y = pts[k].y + RiverLift;
                     verts.Add(p - side);
                     verts.Add(p + side);
                     if (k == 0) continue;
@@ -117,17 +114,6 @@ namespace Stabby.Viewer
             var lin = new Color(l.x, l.y, l.z);
             for (int k = 0; k < cols.Length; k++) { cols[k] = lin; up[k] = Vector3.up; }
             return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray() };
-        }
-
-        static float GroundAt(TerrainDetail detail, int n, float cm, Vector3 p, Vector3 side, float surface)
-        {
-            float top = n - 1, h = surface;
-            for (int k = -1; k <= 1; k++)
-            {
-                var q = p + side * k;
-                h = Mathf.Max(h, Mathf.Min(detail.HeightAt(Mathf.Clamp(q.x / cm, 0, top), Mathf.Clamp(q.z / cm, 0, top)), surface + 3f));
-            }
-            return h;
         }
 
         static List<Vector4> Chaikin(List<Vector4> p)

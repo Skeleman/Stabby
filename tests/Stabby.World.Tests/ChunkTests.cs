@@ -40,8 +40,8 @@ public class ChunkTests
         var stale = Differing(hostSums, WorldChunks.Checksums(peer));
         Assert.NotEmpty(stale);
         foreach (int k in stale) WorldChunks.Unpack(peer, k % a, k / a, WorldChunks.Pack(host, k % a, k / a));
-        WorldChunks.Relink(peer);
         peer.Config.Seed = host.Config.Seed;
+        WorldChunks.Relink(peer);
 
         Assert.Equal(hostSums, WorldChunks.Checksums(peer));
         Assert.Equal(host.Fingerprint(), peer.Fingerprint());

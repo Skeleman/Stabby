@@ -418,7 +418,7 @@ namespace Stabby.Game
                         p.Boxes.Add(new MinMaxAABB { Min = new float3(cx * cm, lo - skirt, cy * cm), Max = new float3(cx * cm + w, hi, cy * cm + w) });
                         p.Lakes.Add(WaterGeometry.Lakes(world, cx, cy, cells));
                     }
-            p.Rivers = WaterGeometry.Rivers(world, detail);
+            p.Rivers = WaterGeometry.Rivers(world);
             p.Sea = WaterGeometry.Sea(n, world.Config.CellMeters);
             var colors = TerrainLook.BaseColors(world, defs);
             p.Look = new BlobBuilder(Allocator.Persistent);

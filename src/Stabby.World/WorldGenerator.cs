@@ -54,7 +54,7 @@ namespace Stabby.World
             foreach (var r in Water.Rivers)
             {
                 f.Mix((ulong)r.Cells.Count);
-                for (int k = 0; k < r.Cells.Count; k++) { f.Mix((ulong)r.Cells[k]); f.F(r.Surface[k]); f.F(r.Width[k]); f.F(r.Depth[k]); }
+                for (int k = 0; k < r.Cells.Count; k++) { f.Mix((ulong)r.Cells[k]); f.F(r.Surface[k]); f.F(r.Width[k]); f.F(r.Depth[k]); f.F(r.X[k]); f.F(r.Y[k]); }
             }
             f.Is(Biome);
             if (BiomeIds == null) f.Mix(0);

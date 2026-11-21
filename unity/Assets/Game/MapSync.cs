@@ -256,8 +256,8 @@ namespace Stabby.Game
             {
                 int a = WorldChunks.Across(w.Config.Size);
                 foreach (var (k, data) in got) WorldChunks.Unpack(w, k % a, k / a, ChunkZip.Inflate(data, WorldChunks.Bytes(w.Config.Size, k % a, k / a)));
-                if (got.Count > 0) WorldChunks.Relink(w);
                 w.Config.Seed = hs;
+                if (got.Count > 0) WorldChunks.Relink(w);
                 var sums = WorldChunks.Checksums(w);
                 int bad = 0;
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;

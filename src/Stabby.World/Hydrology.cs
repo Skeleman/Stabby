@@ -185,10 +185,11 @@ namespace Stabby.World
                 }
             }
             uint meander = Rng.Stream(cfg.Seed, "meander").NextU32();
+            uint wobble = Rng.Stream(cfg.Seed, "riverwobble").NextU32();
             foreach (var seg in hy.Rivers)
             {
                 if (seg.End == RiverEnd.Junction) seg.Downstream = startOf[seg.Downstream];
-                Shape(cfg, seg, meander);
+                Shape(cfg, seg, meander, wobble);
             }
         }
 
@@ -199,9 +200,15 @@ namespace Stabby.World
             seg.Discharge.Add(hy.DischargeM3s[i]);
         }
 
+        public static float Stage(WorldConfig c, RiverSegment s, int k)
+        {
+            float bed = Math.Max(Erosion.MinLandHeight, s.Surface[k] - s.Depth[k]);
+            return s.Surface[k] - c.RiverStageFraction * Math.Max(0, s.Surface[k] - bed);
+        }
+
         public static float ReachCells(WorldConfig c, float width) => Math.Max(c.MeanderMaxCells, c.MeanderReachHalfWidths * 0.5f * width / c.CellMeters);
 
-        static void Shape(WorldConfig c, RiverSegment seg, uint seed)
+        static void Shape(WorldConfig c, RiverSegment seg, uint seed, uint wobble)
         {
             int n = c.Size, count = seg.Cells.Count;
             var along = new float[count];
@@ -211,6 +218,8 @@ namespace Stabby.World
                 along[k] = along[k - 1] + (a % n != b % n && a / n != b / n ? 1.41421356f : 1f);
             }
             float total = along[count - 1];
+            int head = seg.Cells[0];
+            float lane = head * 0.618034f;
             var flats = new float[count];
             for (int k = 0; k < count; k++)
             {
@@ -219,6 +228,8 @@ namespace Stabby.World
                 float slope = run > 0 ? Math.Max(0, seg.Surface[lo] - seg.Surface[hi]) / run : 0;
                 flats[k] = 1f - Grid.Smoothstep(0, c.RiverFlatSlope, slope);
                 float width = c.RiverWidthAtUnitFlow * (float)FMath.Pow(seg.Discharge[k], c.RiverWidthExponent) * (1f + c.RiverLowlandWiden * flats[k]);
+                float swell = along[k] * c.CellMeters / Math.Max(c.CellMeters, c.RiverWobbleWavelengthWidths * width);
+                width *= 1f + c.RiverWidthWobble * Math.Max(-1f, Math.Min(1f, Noise.Gradient(wobble, swell, lane)));
                 seg.Width.Add(width);
                 seg.Depth.Add(0.3f + width / 25f);
             }
@@ -237,7 +248,6 @@ namespace Stabby.World
                 sx[k] = wx / ws; sy[k] = wy / ws;
             }
             float phase = 0;
-            int head = seg.Cells[0];
             for (int k = 0; k < count; k++)
             {
                 float width = seg.Width[k];
@@ -248,7 +258,9 @@ namespace Stabby.World
                 float taper = Grid.Smoothstep(0, MeanderTaperCells, along[k]) * Grid.Smoothstep(0, MeanderTaperCells, total - along[k]);
                 float reach = ReachCells(c, width);
                 float amp = Math.Min(Math.Min(reach, wave * 0.25f), c.MeanderWidths * width / c.CellMeters) * flats[k] * taper;
-                float o = len > 0 ? amp * Math.Max(-1f, Math.Min(1f, Noise.Gradient(seed, phase, head * 0.618034f))) / len : 0;
+                float o = len > 0 ? amp * Math.Max(-1f, Math.Min(1f, Noise.Gradient(seed, phase, lane))) / len : 0;
+                float jit = along[k] * c.CellMeters / Math.Max(c.CellMeters, c.RiverJitterWavelengthWidths * width);
+                o += len > 0 ? c.RiverJitterWidths * width / c.CellMeters * taper * Math.Max(-1f, Math.Min(1f, Noise.Gradient(wobble, jit, lane + 37.1f))) / len : 0;
                 int cell = seg.Cells[k];
                 float ox = sx[k] - dy * o - cell % n, oy = sy[k] + dx * o - cell / n, off = (float)Math.Sqrt(ox * ox + oy * oy);
                 if (off > reach) { ox *= reach / off; oy *= reach / off; }
@@ -282,7 +294,7 @@ namespace Stabby.World
                             float surface = seg.Surface[k] + (seg.Surface[k + 1] - seg.Surface[k]) * t;
                             float depth = seg.Depth[k] + (seg.Depth[k + 1] - seg.Depth[k]) * t;
                             float target;
-                            if (d < wet) { float u = d / wet; target = surface - depth * (1 - u * u); }
+                            if (d < wet) { float u = d / wet, u2 = u * u; target = surface - depth * (1 - u2 * u2); }
                             else
                             {
                                 float rise = c.RiverBankRise + seg.Width[k] * 0.02f;
@@ -302,6 +314,6 @@ namespace Stabby.World
 
         const int SlopeReach = 3;
         const float MeanderTaperCells = 3f;
-        const int SmoothMinCells = 2, SmoothMaxCells = 6;
+        const int SmoothMinCells = 3, SmoothMaxCells = 12;
     }
 }
