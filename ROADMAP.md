@@ -101,7 +101,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Terrain surface pass 2: grass less saturated with crisp near grain instead of smeared bumps, rock sharper up close, dark shale band lighter, sand blotches, camera-relative coordinates for detail precision far from origin | done |
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
 | Close grass reads as saturated green fur: real blades now cover it within 45 m (objects step 2 grass). Faint sand crest dashes at 4-8 m remain | later |
-| Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
+| Flat untextured green wall in chase and overhead shots (mesh, not material): gone with the near-field lattice; chase and overhead clean in every capture since | done (7fa335e) |
 | Chunk-sized holes at chunk edges: gone with the near-field lattice; thin green streaks were steep edge-row facets (edge vertices snapped half a cell), fixed by sampling the continuous surface on node edges | done |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
 | Far shoreline: sea and lake depth past 120-240 m read a smooth bed-height field (`_StabbyBed`, 11 m texels, mipped) instead of far terrain facets; +0.1 ms at 1080p, `coast-far` capture shot | done |
