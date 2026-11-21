@@ -53,8 +53,33 @@ namespace Stabby.Viewer
             return new float4(ToLinear(c), math.saturate((slope - 0.25f) / 0.35f) * (1 - shore));
         }
 
+        public const int ApplySteps = 3;
+
         public static void ApplyStrata(StrataLook s)
         {
+            for (int step = 0; step < ApplySteps; step++) ApplyStrata(s, step);
+        }
+
+        public static void ApplyStrata(StrataLook s, int step)
+        {
+            if (step == 1)
+            {
+                if (coatTexture != null) UnityEngine.Object.Destroy(coatTexture);
+                coatTexture = new Texture2D(s.N, s.N, TextureFormat.RGBA32, false, true) { name = "Coats", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                coatTexture.SetPixelData(s.Coat, 0);
+                coatTexture.Apply(false, true);
+                Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
+                return;
+            }
+            if (step == 2)
+            {
+                if (levelTexture != null) UnityEngine.Object.Destroy(levelTexture);
+                levelTexture = new Texture2D(s.N, s.N, TextureFormat.RFloat, false, true) { name = "WaterLevel", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                levelTexture.SetPixelData(s.WaterLevel, 0);
+                levelTexture.Apply(false, true);
+                Shader.SetGlobalTexture("_StabbyWaterLevel", levelTexture);
+                return;
+            }
             if (strataTexture == null) strataTexture = new Texture2D(s.Bands.Length, 1, TextureFormat.RGBA32, true, true) { name = "Strata", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
             else strataTexture.Reinitialize(s.Bands.Length, 1);
             var px = new Color32[s.Bands.Length];
@@ -65,17 +90,7 @@ namespace Stabby.Viewer
             }
             strataTexture.SetPixels32(px);
             strataTexture.Apply(true);
-            if (coatTexture != null) UnityEngine.Object.Destroy(coatTexture);
-            coatTexture = new Texture2D(s.N, s.N, TextureFormat.RGBA32, false, true) { name = "Coats", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            coatTexture.SetPixelData(s.Coat, 0);
-            coatTexture.Apply(false, true);
             Shader.SetGlobalTexture("_StabbyStrata", strataTexture);
-            Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
-            if (levelTexture != null) UnityEngine.Object.Destroy(levelTexture);
-            levelTexture = new Texture2D(s.N, s.N, TextureFormat.RFloat, false, true) { name = "WaterLevel", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-            levelTexture.SetPixelData(s.WaterLevel, 0);
-            levelTexture.Apply(false, true);
-            Shader.SetGlobalTexture("_StabbyWaterLevel", levelTexture);
             Shader.SetGlobalFloat("_StabbyStrataPeriod", s.PeriodM);
             Shader.SetGlobalVector("_StabbyCoatUV", new Vector4(1f / (s.CellM * s.N), 0.5f / s.N, 0, 0));
             Shader.SetGlobalVector("_StabbySurface", s.Surface);
@@ -184,20 +199,33 @@ namespace Stabby.Viewer
 
         public static void ApplyField(FieldLook f)
         {
-            if (slopeTexture != null) UnityEngine.Object.Destroy(slopeTexture);
-            if (bedTexture != null) UnityEngine.Object.Destroy(bedTexture);
+            for (int step = 0; step < ApplySteps; step++) ApplyField(f, step);
+        }
+
+        public static void ApplyField(FieldLook f, int step)
+        {
+            if (step == 0)
+            {
+                if (slopeTexture != null) UnityEngine.Object.Destroy(slopeTexture);
+                slopeTexture = new Texture2D(f.Res, f.Res, TextureFormat.RGHalf, f.Slopes.Length, true) { name = "Slopes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
+                for (int m = 0; m < f.Slopes.Length; m++) slopeTexture.SetPixelData(f.Slopes[m], m);
+                slopeTexture.Apply(false, true);
+                Shader.SetGlobalTexture("_StabbySlope", slopeTexture);
+                return;
+            }
+            if (step == 1)
+            {
+                if (bedTexture != null) UnityEngine.Object.Destroy(bedTexture);
+                bedTexture = new Texture2D(f.Res, f.Res, TextureFormat.RFloat, f.Bed.Length, true) { name = "Bed", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+                for (int m = 0; m < f.Bed.Length; m++) bedTexture.SetPixelData(f.Bed[m], m);
+                bedTexture.Apply(false, true);
+                Shader.SetGlobalTexture("_StabbyBed", bedTexture);
+                return;
+            }
             if (biomeTexture != null) UnityEngine.Object.Destroy(biomeTexture);
-            slopeTexture = new Texture2D(f.Res, f.Res, TextureFormat.RGHalf, f.Slopes.Length, true) { name = "Slopes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
-            for (int m = 0; m < f.Slopes.Length; m++) slopeTexture.SetPixelData(f.Slopes[m], m);
-            slopeTexture.Apply(false, true);
-            bedTexture = new Texture2D(f.Res, f.Res, TextureFormat.RFloat, f.Bed.Length, true) { name = "Bed", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
-            for (int m = 0; m < f.Bed.Length; m++) bedTexture.SetPixelData(f.Bed[m], m);
-            bedTexture.Apply(false, true);
             biomeTexture = new Texture2D(f.N, f.N, TextureFormat.RGBAHalf, false, true) { name = "Biomes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             biomeTexture.SetPixelData(f.Biome, 0);
             biomeTexture.Apply(false, true);
-            Shader.SetGlobalTexture("_StabbySlope", slopeTexture);
-            Shader.SetGlobalTexture("_StabbyBed", bedTexture);
             Shader.SetGlobalTexture("_StabbyBiome", biomeTexture);
             Shader.SetGlobalVector("_StabbyFieldUV", new Vector4(1f / (f.TexelM * f.Res), 0.5f / f.Res, 1f / (f.CellM * f.N), 0.5f / f.N));
             Shader.SetGlobalVector("_StabbySand", new Vector4(Sand.x, Sand.y, Sand.z, 0));
