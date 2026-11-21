@@ -42,6 +42,7 @@ namespace Stabby.World
             lod = Math.Max(0, Math.Min(MaxLods - 1, lod));
             if (ObjectPart.IsStructure(shape)) return Structures.Build(shape, key, lod);
             if (shape == ObjectPart.Shrub) return ObjectFoliage.Shrub(key, lod);
+            if (shape == ObjectPart.Reed) return ObjectFoliage.Reed(key, lod);
             if (shape == ObjectPart.Broadleaf) return ObjectFoliage.Broadleaf(key, lod);
             if (shape == ObjectPart.Conifer) return ObjectFoliage.Conifer(key, lod);
             if (shape == ObjectPart.Log) return Log(key, lod, aspect > 0 ? aspect : 0.11f, ends);

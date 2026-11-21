@@ -363,6 +363,8 @@ public static class ContentLoader
         public int ChainMax { get; set; } = 1;
         public float ChainCorner { get; set; }
         public float ChainGate { get; set; }
+        public string? Bank { get; set; }
+        public float PerHundredM { get; set; }
         public List<BiomeDensityEntry> BiomeDensity { get; set; } = new();
     }
 
@@ -417,7 +419,7 @@ public static class ContentLoader
                 HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
                 FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
-                ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate,
+                ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);

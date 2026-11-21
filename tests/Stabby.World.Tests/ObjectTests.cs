@@ -426,4 +426,19 @@ public class ObjectTests
         Assert.True(talusFoot * 2 > perDef[talus] * 0.4f * 2 && talusFoot * (double)perDef[rock] > 5.0 * rockFoot * perDef[talus], report);
         Assert.True(sparseCells == 0 || rockSparse / (double)sparseCells < 0.4 * rockDense / denseCells, report);
     }
+
+    [Fact]
+    public void RiverBanksGrowReedsBarsDriftAndWetStones()
+    {
+        var w = Gen(5, 512);
+        var detail = new TerrainDetail(w);
+        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        var ids = new[] { "reeds", "driftwood", "drift-root", "river-gravel", "river-cobble", "wet-stone" };
+        var perDef = new int[Objects.Objects.Count];
+        foreach (var o in Enumerable.Range(0, field.ChunksAcross * field.ChunksAcross).SelectMany(c => field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross)))
+            perDef[o.Def]++;
+        string report = string.Join(", ", ids.Select(id => id + " " + perDef[Objects.Objects.FindIndex(o => o.Id == id)]));
+        foreach (var id in ids) Assert.True(perDef[Objects.Objects.FindIndex(o => o.Id == id)] > 0, report);
+        Assert.Empty(WorldChecks.Run(w));
+    }
 }

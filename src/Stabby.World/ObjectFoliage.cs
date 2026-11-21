@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class ObjectFoliage
     {
         public const int CellsAcross = 2;
-        public const int BroadLeaves = 0, Needles = 1, ShrubLeaves = 2, RoundLeaves = 3;
+        public const int BroadLeaves = 0, Needles = 1, ShrubLeaves = 2, Reeds = 3;
         public const float TrunkRadius = 0.022f;
         static readonly float[] SideCos = { -0.5f, 0f, 0.30901699f, 0.5f, 0.6234898f, 0.70710678f };
         static readonly float[] SideSin = { 0.8660254f, 1f, 0.95105652f, 0.8660254f, 0.7818315f, 0.70710678f };
@@ -210,6 +210,46 @@ namespace Stabby.World
             }
             o.Tri(first, first + 1, first + 2);
             o.Tri(first, first + 2, first + 3);
+        }
+
+        public static ObjectMesh Reed(ulong key, int lod)
+        {
+            int[] counts = { 9, 6, 3 }, rows = { 3, 2, 1 };
+            lod = Math.Max(0, Math.Min(counts.Length - 1, lod));
+            var rng = new Rng(Rng.Mix(key ^ 0x4F1BBCDCBFA53E0BUL));
+            var o = Out.Shared();
+            float grow = (float)Math.Sqrt(counts[0] / (float)counts[lod]), du = 1f / CellsAcross, e = 0.004f;
+            float u0 = (Reeds % CellsAcross) * du + e, v0 = (Reeds / CellsAcross) * du + e, span = du - 2 * e;
+            int r = rows[lod];
+            for (int c = 0; c < counts[0]; c++)
+            {
+                var face = Flat(ref rng);
+                var lean = Flat(ref rng) * rng.Range(0.04f, 0.2f);
+                var foot = new V(rng.Range(-0.14f, 0.14f), 0, rng.Range(-0.14f, 0.14f));
+                float h = rng.Range(0.7f, 1f), width = rng.Range(0.42f, 0.6f) * Math.Min(1.6f, grow), phase = rng.NextFloat(), flutterPhase = rng.NextFloat();
+                bool flip = rng.NextFloat() < 0.5f;
+                if (c >= counts[lod]) continue;
+                var right = new V(-face.Z, 0, face.X) * (0.5f * width * h);
+                var outward = new V(foot.X, 0, foot.Z).Length > 1e-3f ? new V(foot.X, 0, foot.Z).Norm() : face;
+                float tag = 1f + 0.15f * (2f * phase - 1f);
+                int first = o.Count;
+                for (int k = 0; k <= r; k++)
+                {
+                    float y = k / (float)r;
+                    var mid = foot + new V(0, h * y, 0) + lean * (h * y * y);
+                    var n = (face * 0.4f + outward * 0.45f + new V(0, 0.35f + 0.3f * y, 0)).Norm();
+                    float v = v0 + span * y, ao = 0.3f + 0.7f * y, bend = y * y, flutter = 0.15f + 0.85f * y;
+                    o.Add(mid - right, n, flip ? u0 + span : u0, v, ao, tag, bend, flutter, phase, flutterPhase);
+                    o.Add(mid + right, n, flip ? u0 : u0 + span, v, ao, tag, bend, flutter, phase, flutterPhase);
+                }
+                for (int k = 0; k < r; k++)
+                {
+                    int a = first + 2 * k;
+                    o.Tri(a, a + 1, a + 3);
+                    o.Tri(a, a + 3, a + 2);
+                }
+            }
+            return o.Finish(1f);
         }
 
         static Limb Grow(ref Rng rng, V start, V dir, float length, int points, float r0, float r1, float curl, V pull, float bend0, float bend1, float phase, int depth)

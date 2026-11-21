@@ -19,7 +19,7 @@ namespace Stabby.World
         public static int Ordinal(ulong id) => (int)(uint)id;
     }
 
-    public sealed class ObjectField
+    public sealed partial class ObjectField
     {
         public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f;
         public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
@@ -30,13 +30,13 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
         readonly float[][] seats;
         readonly ulong[] key;
-        readonly int[] blockStart, blockItems;
+        readonly int[] blockStart, blockItems, bankSite, bankStart, bankItems;
         readonly FeatureEdit[] edits;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly ObjectInstance[][] chunks;
@@ -56,6 +56,8 @@ namespace Stabby.World
             structureStream = Rng.Stream(w.Config.Seed, "structures").NextU64();
             structureThinStream = Rng.Stream(w.Config.Seed, "structures-thin").NextU64();
             chainStream = Rng.Stream(w.Config.Seed, "structures-chain").NextU64();
+            bankStream = Rng.Stream(w.Config.Seed, "objects-bank").NextU64();
+            lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -81,6 +83,7 @@ namespace Stabby.World
                 seats[d] = Seats(def);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
             }
+            BankIndex(detail, lib, across, cm, out bankSite, out bankStart, out bankItems);
             foreach (var r in w.Water.Rivers)
                 for (int k = 0; k + 1 < r.X.Count; k++)
                 {
@@ -192,6 +195,11 @@ namespace Stabby.World
             {
                 int ordinal = 0;
                 var pl = lib.Objects[d].Placement;
+                if (bankSite[d] >= 0)
+                {
+                    if (boulders == null && (!solidOnly || AnySolid(d))) PlaceBank(d, chunk, chunkKey, x0, z0, sx, sz, list);
+                    continue;
+                }
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
                 bool foot = pl.FootRiseM > 0, built = seats[d] != null;
                 var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : built ? structureStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
@@ -382,10 +390,10 @@ namespace Stabby.World
             return b >= 0 && density[d][b] > 0;
         }
 
-        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o)
+        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false)
         {
             o = default;
-            if (!Open(d, x, z)) return false;
+            if (!bank && !Open(d, x, z)) return false;
             var pl = lib.Objects[d].Placement;
             int gx = Cell(x), gz = Cell(z), i = gz * n + gx;
             float r = footprint[d] * size;
@@ -397,7 +405,7 @@ namespace Stabby.World
             if (slope < pl.SlopeMin || slope > pl.SlopeMax) return false;
             float hard = strata.Hardness(i, y) / contrast;
             if (hard < pl.HardnessMin || hard > pl.HardnessMax) return false;
-            if (!Clear(i, gx, gz, x, y, z, r)) return false;
+            if (!Clear(i, gx, gz, x, y, z, r, bank)) return false;
             float nx = -gxs * pl.AlignToSlope, nz = -gzs * pl.AlignToSlope, nl = (float)Math.Sqrt(nx * nx + 1 + nz * nz);
             nx /= nl; nz /= nl;
             float ny = 1f / nl;
@@ -442,7 +450,7 @@ namespace Stabby.World
             }
         }
 
-        bool Clear(int i, int gx, int gz, float x, float y, float z, float r)
+        bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank)
         {
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
@@ -452,7 +460,7 @@ namespace Stabby.World
                     int j = az * n + ax;
                     if (w.Sea[j] && (j == i || y < ShoreClearM)) return false;
                     int lake = w.Water.LakeId[j];
-                    if (lake >= 0 && (j == i || y < w.Water.Lakes[lake].Level + ShoreClearM)) return false;
+                    if (!bank && lake >= 0 && (j == i || y < w.Water.Lakes[lake].Level + ShoreClearM)) return false;
                 }
             for (int k = blockStart[i]; k < blockStart[i + 1]; k++)
             {
@@ -463,6 +471,7 @@ namespace Stabby.World
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;
                     continue;
                 }
+                if (bank) continue;
                 float dist = Distance(item, x, z), hw = phw[item];
                 if (dist < hw + r + RiverClearM) return false;
                 if (dist < 2 * hw + r + BankReachM && y < psurf[item] + ShoreClearM) return false;
