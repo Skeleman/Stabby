@@ -112,7 +112,7 @@ Shader "Stabby/Object"
                 float radius = max(length(rc), 1e-3);
                 float capN = isLog ? abs(nOS.x) : nOS.y;
                 float3 wood = lerp(ToLinear(float3(0.6, 0.55, 0.47)), ToLinear(float3(0.52, 0.51, 0.48)), tone.w);
-                float mossMask = tone.y * smoothstep(0.2, 0.75, n.y) * smoothstep(-0.1, 0.35, TmNoise2(local.xz * 5 + along * 2).x + 0.3 * TmNoise2(local.xz * 17).x);
+                float mossMask = tone.y * smoothstep(0.2, 0.75, n.y) * smoothstep(-0.25, 0.3, TmNoise2(float2(along * 2.2 + rc.y * 1.5, rc.x * 3.1 - rc.y * 2.3)).x + 0.35 * TmNoise2(float2(along * 7.3, rc.x * 9.7 + rc.y * 5.1)).x);
                 float3 moss = ToLinear(float3(0.33, 0.38, 0.2)) * (0.8 + 0.3 * TmNoise2(local.xz * 23).x);
                 if (capN > 0.7)
                 {
