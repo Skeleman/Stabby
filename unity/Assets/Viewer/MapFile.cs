@@ -15,8 +15,8 @@ namespace Stabby.Viewer
         {
             var sw = Stopwatch.StartNew();
             string why = "no map file";
-            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(BiomeFile.DefaultPath)) why = "map file older than biomes.json";
-            else if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(MaterialFile.DefaultPath)) why = "map file older than materials.json";
+            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(ContentFiles.BiomesPath)) why = "map file older than biomes.json";
+            else if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(ContentFiles.MaterialsPath)) why = "map file older than materials.json";
             else if (File.Exists(path))
             {
                 try

@@ -45,12 +45,7 @@ namespace Stabby.Game
         public ObjectField Field { get; private set; }
         public ObjectLibrary Library => lib;
 
-        protected override void OnCreate()
-        {
-            var ids = new System.Collections.Generic.List<string>();
-            foreach (var b in BiomeFile.Load(BiomeFile.DefaultPath)) ids.Add(b.Id);
-            lib = ObjectFile.Load(ObjectFile.DefaultPath, ids);
-        }
+        protected override void OnCreate() => lib = ContentFiles.Objects(ContentFiles.Biomes());
 
         protected override void OnDestroy()
         {
