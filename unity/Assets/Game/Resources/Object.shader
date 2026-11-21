@@ -323,59 +323,34 @@ Shader "Stabby/Object"
                 float shade = 0;
                 if (mat == 4)
                 {
-                    int code = (int)(th.w * 131072), ck = (int)(th.w * 4194304);
-                    int cs = code & 127, mode = (code >> 7) & 7, hsL = (code >> 10) & 7, hbL = code >> 13;
-                    bool rg = mode == 3, verge = mode >= 4, course = mode == 0;
-                    float yf = th.x, L = th.y, fpa = th.z * _StabbySurface.x, sk = TmHash(int3(ck, 5, 9)) * 97;
-                    float hf = verge ? 0.55 : saturate(hbL / 15.0 + saturate(yf) * (hsL + 1) / 8.0);
+                    float yf = th.x, L = th.y, fpa = th.z * _StabbySurface.x, sk = th.w * 977;
+                    int ck = (int)(th.w * 65536);
                     float3 ac = cross(g, n);
                     ac *= rsqrt(max(dot(ac, ac), 1e-8));
                     float su = dot(q, ac), sv = dot(q, g), dn = max(dot(v, n), 0.2);
-                    float al = rg ? sv : verge ? su + sv : su;
-                    float butt = rg ? smoothstep(0.6, 0.8, abs(dot(n, g))) : smoothstep(-0.25, -0.55, dot(n, g)), face = 1 - butt;
-                    bool side = abs(n.y) < 0.9, under = n.y < -0.9 && !rg && mode != 2;
+                    float ridge = smoothstep(0.35, 0.15, abs(g.y));
+                    float butt = smoothstep(-0.25, -0.55, dot(n, g)) * (1 - ridge), face = (1 - butt) * (1 - ridge);
                     float fa = saturate(2.5 - 137.5 * fpa), fb = saturate(2.5 - 275 * fpa), fc = saturate(2.5 - 45 * fpa);
-                    float bu = al / 0.32 + 0.2 * TmNoise2(float2(sv * 0.45, al * 0.6) + sk).x;
+                    float bu = su / 0.32 + 0.2 * TmNoise2(float2(sv * 0.45, su * 0.6) + sk).x;
                     float bf = frac(bu);
                     int bi = (int)floor(bu);
                     float h1 = TmHash(int3(bi, ck, 1)), h2 = TmHash(int3(bi, ck, 2)), h3 = TmHash(int3(bi, ck, 3)), h4 = TmHash(int3(bi, ck, 4));
-                    float s1 = al + (h2 - 0.5) * 0.175 * sv + 0.015 * TmNoise2(float2(al * 2.3, sv * 0.5) + sk + 3.7).x;
+                    float s1 = su + (h2 - 0.5) * 0.175 * sv + 0.015 * TmNoise2(float2(su * 2.3, sv * 0.5) + sk + 3.7).x;
                     float3 n1 = TmNoise2(float2(s1 * 55, sv * 2.75) + h1 * 17);
                     float pd = 0.012 * fa * (0.5 - 0.5 * n1.x);
                     s1 -= dot(v, ac) / dn * pd;
-                    float d = yf * L - dot(v, g) / dn * pd * face * (rg ? 0 : 1);
+                    float d = yf * L - dot(v, g) / dn * pd * face;
                     n1 = TmNoise2(float2(s1 * 55, sv * 2.75) + h1 * 17);
                     float3 n2 = TmNoise2(float2(s1 * 110, sv * 6.1) + h3 * 23 + 5.3);
                     float str2 = 0.6 * n1.x * fa + 0.4 * n2.x * fb;
-                    float fd = saturate(2.5 - 60 * fpa);
-                    float wob = (0.06 + 0.08 * TmHash(int3(ck, 7, 1))) * (0.5 + 0.5 * TmNoise2(float2(al * 1.3, 0.7) + sk).x) + 0.1 * (0.5 + 0.5 * TmNoise2(float2(al * 2.6, 3.3) + sk).x) + 0.05 * (0.5 + 0.5 * TmNoise2(float2(al * 6.3, 8.7) + sk).x) + 0.04 * (0.5 + 0.5 * TmNoise2(float2(al * 11.3, 6.1) + sk).x) * fc;
-                    float fr = (0.025 + 0.05 * h3 + 0.02 * n2.x) * fd * (0.6 + 0.4 * n1.x);
-                    float cut = wob + fr, dm = -yf * L, roll = 0;
-                    if (side)
-                    {
-                        clip(d - cut + 0.001);
-                        roll = (1 - smoothstep(0, 0.3, d - cut)) * face;
-                    }
-                    else if (under)
-                    {
-                        clip(dm - cut * 0.8 + 0.001);
-                        if (course) clip(L * (0.16 - 0.07 * TmNoise2(float2(al * 2.7, 9.1) + sk).x) - dm);
-                    }
-                    float lip = course ? smoothstep(0.25, 0.57, yf + 0.05 * n1.x + 0.04 * h1) * face * (side ? 1 : 0) : 0;
-                    float pn = TmNoise2(float2(su, sv) * 0.75 + 11.3).x + 0.5 * TmNoise2(float2(su, sv) * 1.9 + 4.7).x;
-                    float patch = 0.75 * smoothstep(0.1, 0.65, pn + 0.25 * (h1 - 0.5)) * (0.75 + 0.25 * n1.x * fa);
-                    a = lerp(ToLinear(float3(0.42, 0.37, 0.30)), ToLinear(float3(0.60, 0.49, 0.30)), patch) * (0.9 + 0.18 * (0.5 + 0.5 * TmNoise2(float2(al * 2.1, sv * 0.35) + sk + 1.9).x)) * (1 + 0.5 * str2);
-                    float seam = smoothstep(0.06, 0.0, min(bf, 1 - bf) + 0.03 * n2.x) * fc * 0.25;
-                    a *= (1 - 0.3 * seam) * (1 - 0.15 * lip * lip) * (1 - 0.15 * pow(roll, 1.5));
-                    if (mode == 2) a *= 0.86;
-                    float rs = smoothstep(0.35, 1, hf) * smoothstep(0.0, 0.5, TmNoise2(float2(al * 2.2, sv * 0.25) + 19.1).x + 0.3 * TmNoise2(float2(al * 7.3, sv * 0.6) + 2.9).x);
-                    a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)) * float3(0.92, 0.93, 0.95), 0.55 * rs);
-                    if (cs > 0)
-                    {
-                        float suc = (cs - 64) * 0.1, wc = smoothstep(0.5, 0.1, abs(su - suc + 0.12 * TmNoise2(float2(sv * 0.8, 1.3)).x));
-                        float soot = wc * smoothstep(0.3, 0.95, hf) * (0.6 + 0.4 * TmNoise2(float2(su * 6.1, sv * 0.4) + 7.7).x);
-                        a = lerp(a, a * float3(0.42, 0.40, 0.38), saturate(soot));
-                    }
+                    float hem = (0.025 + 0.05 * h3 + 0.02 * n2.x) * face;
+                    clip(d - hem * fa * (0.6 + 0.4 * n1.x) + 0.001);
+                    float lip = smoothstep(L * 0.84 - 0.14, L * 0.84, d + 0.03 * n1.x + 0.02 * h1) * face;
+                    float pn = TmNoise2(float2(su * 0.45, sv * 0.35) + 11.3).x;
+                    float patch = smoothstep(0.45, 0.65, 0.55 * pn + 0.5 * h1 + 0.05) * (1 - 0.5 * ridge);
+                    a = lerp(ToLinear(float3(0.42, 0.37, 0.30)), ToLinear(float3(0.62, 0.50, 0.30)), patch) * (0.88 + 0.22 * h4) * (1 + 0.5 * str2);
+                    float seam = smoothstep(0.06, 0.0, min(bf, 1 - bf) + 0.03 * n2.x) * fc;
+                    a *= (1 - 0.3 * seam) * (1 - 0.45 * lip) * (1 - 0.2 * smoothstep(hem * 1.6 + 0.01, hem, d) * face);
                     Light ml = GetMainLight();
                     float4 mn = TmNoise3(q * 2.2 + 5.7, int3(0, 0, 0));
                     float moss = smoothstep(0.1, -0.2, dot(n, ml.direction)) * smoothstep(0.25, 0.75, 0.8 * mn.x + 0.35 * lip + 0.2 * (1 - open)) * fm;
@@ -383,12 +358,12 @@ Shader "Stabby/Object"
                     float4 st = TmNoise3(q * 180 + sk, int3(0, 0, 0));
                     float fe = TmFade(180, fp);
                     float3 ab = ToLinear(float3(0.40, 0.34, 0.25)) * (0.75 + 0.45 * smoothstep(0.1, 0.5, st.x) * fe - 0.4 * smoothstep(-0.1, -0.5, st.x) * fe) * (0.9 + 0.2 * h4);
-                    a = lerp(a, lerp(a * 0.85, ab, fc), butt);
+                    a = lerp(a, ab, butt);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.15);
                     float gs = 0.6 * n1.y * 55 * fa + 0.4 * n2.y * 110 * fb;
-                    grad = ac * (0.003 * gs - 0.1 * (bf - 0.5) * fc) + g * 0.6 * roll * roll * (rg ? 0 : 1) + ac * (rg ? 0.3 * roll * roll : 0);
+                    grad = ac * (0.003 * gs - 0.2 * (bf - 0.5) * fc) + g * 0.3 * (1 - smoothstep(0.0, 0.12, d)) * face;
                     grad = lerp(grad, st.yzw * 0.15 * fe, butt);
-                    shade = 0.3 * lip * lip;
+                    shade = 0.5 * lip;
                 }
                 else if (mat == 3)
                 {
@@ -446,12 +421,9 @@ Shader "Stabby/Object"
                 tmRough = LookRough();
                 float3 gn = normalize(i.grain), qo = wp - i.origin, acr = cross(gn, n);
                 acr *= rsqrt(max(dot(acr, acr), 1e-8));
-                float yf = i.tone.w - i.seed, suq = dot(qo, acr);
-                float2 dyf = float2(ddx(yf), ddy(yf));
-                float3 qa = ddx(qo), qb = ddy(qo);
-                float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
-                float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
-                float4 th = float4(yf, gy < 1e-6 ? 12 : clamp(rsqrt(gy), 0.02, 12), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
+                float yf = i.tone.w - i.seed, svq = dot(qo, gn), suq = dot(qo, acr);
+                float2 dyf = float2(ddx(yf), ddy(yf)), dsv = float2(ddx(svq), ddy(svq));
+                float4 th = float4(yf, clamp(dot(dsv, dyf) / max(dot(dyf, dyf), 1e-10), 0.05, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
                 [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), occ);
                 else if (base.a < 0.5)
                 {

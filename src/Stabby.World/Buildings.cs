@@ -88,7 +88,7 @@ namespace Stabby.World
                 Box(l, key, f, 0.5f * (hx - 0.15f + cut), 0.5f, z, hx - 0.15f - cut - 0.01f, 0.05f, w, Plank, GX, 0, 0);
             }
 
-            Roof(l, key, f, hx, hz, rr, y0, y1, verge, nf, sc * (hx + 0.45f));
+            Roof(l, key, ref rng, f, hx, hz, rr, y0, y1, verge, nf);
             Gables(l, key, f, hx, hz, rr, sc);
             Chimney(l, key, ref rng, f, sc * (hx + 0.45f), y1, ytop);
             Hearth(l, key, ref rng, f, sc, hx);
@@ -210,56 +210,45 @@ namespace Stabby.World
             }
         }
 
-        const float Lap = 0.55f;
-        const int StrawCourse = 0, StrawHem = 1, StrawPlain = 2, StrawRidge = 3, StrawVerge = 4;
-
-        static void Roof(StructureLayout l, ulong key, in Frame f, float hx, float hz, float rr, float y0, float y1, float verge, int nf, float cx)
+        static void Roof(StructureLayout l, ulong key, ref Rng rng, in Frame f, float hx, float hz, float rr, float y0, float y1, float verge, int nf)
         {
             var tr = Rng.Stream(key, "thatch");
-            float rw = hx + verge, ym = 0.5f * (y0 + y1), sz = 0.45f / rr, h = y1 - y0, yr = y1 - 0.45f, st = y1 - 0.45f / (1 - Lap);
-            const int bands = 5;
-            var cut = new float[bands];
+            float rw = hx + verge, ym = 0.5f * (y0 + y1), sz = 0.45f / rr;
+            const int bands = 8;
+            var cut = new float[bands + 1];
             for (int sg = -1; sg <= 1; sg += 2)
             {
-                float bt = -sg / rr, sc = sg * cx;
-                Straw(l, key, f, 0, y0, sg * (hz + 0.5f * sz - (ym - Plate) / rr), 2 * rw, h, sz, GV, 0, 2, StrawPlain, 0, 1, sc, bt, 0);
-                float sum = 0;
-                for (int k = 0; k < bands - 1; k++) { cut[k] = sum; sum += tr.Range(0.85f, 1.15f); }
-                for (int k = 0; k < bands - 1; k++) cut[k] = y0 + (st - y0) * cut[k] / sum;
-                cut[bands - 1] = st;
+                float bt = -sg / rr;
+                Box(l, key, f, 0, y0, sg * (hz + 0.5f * sz - (ym - Plate) / rr), 2 * rw, y1 - y0, sz, Thatch, GV, 1, 2, 1, 0, 0, bt);
+                cut[0] = 0;
+                for (int k = 1; k <= bands; k++) cut[k] = cut[k - 1] + tr.Range(0.75f, 1.25f);
                 for (int k = 0; k < bands; k++)
                 {
-                    float s = cut[k], top = k < bands - 1 ? s + (cut[k + 1] - s) / Lap : y1;
-                    float a = s + (k == 0 ? 0 : -0.04f + tr.Range(-0.03f, 0.02f)), th = sz * tr.Range(0.85f, 0.95f), hg = top - a, yk = 0.5f * (a + top);
-                    Straw(l, key, f, 0, a, sg * (hz + 0.725f * th - (yk - Plate) / rr), 2 * rw + 0.02f, hg, 1.05f * th, GV, 0, 0, StrawCourse, (a - y0) / h, hg / h, sc, bt, 0.4f * th / hg);
-                    if (k > 0) continue;
-                    float hh = tr.Range(0.26f, 0.34f), dp = 1.45f * th + 0.02f, zo = hz + 1.45f * th - 0.04f - (a - Plate) / rr;
-                    Straw(l, key, f, 0, a - hh, sg * (zo - 0.5f * dp), 2 * rw + 0.4f, hh + 0.02f, dp, GV, 0, 0, StrawHem, 0, 0.1f, sc, bt, -1 / rr);
+                    bool eave = k == 0;
+                    float a = y0 + (y1 - y0) * cut[k] / cut[bands] - (eave ? 0 : 0.08f), b = y0 + (y1 - y0) * cut[k + 1] / cut[bands];
+                    float x = -rw;
+                    while (x < rw)
+                    {
+                        float x1 = Math.Min(x + (eave ? tr.Range(0.35f, 0.7f) : tr.Range(0.9f, 1.6f)), rw);
+                        if (rw - x1 < (eave ? 0.2f : 0.4f)) x1 = rw;
+                        float th = sz * tr.Range(1f, 1.2f) * (eave ? 1.3f : 1), ya = a + (eave ? tr.Range(-0.09f, 0.03f) : tr.Range(-0.035f, 0.025f)), yk = 0.5f * (ya + b);
+                        Box(l, key, f, 0.5f * (x + x1), ya, sg * (hz + 0.5f * th - (yk - Plate) / rr), x1 - x + 0.02f, b - ya, 1.05f * th, Thatch, GV, 0, 0, 1, 0, 0, bt, 0.2f * th / (b - ya));
+                        x = x1;
+                    }
                 }
-                float tv = 1.6f * sz, yv = 0.5f * (y0 - 0.06f + y1);
-                for (int s = -1; s <= 1; s += 2)
-                {
-                    int vm = StrawVerge + (s < 0 ? 0 : 1);
-                    Straw(l, key, f, s * (rw - 0.08f), y0 - 0.06f, sg * (hz + 0.5f * tv - (yv - Plate) / rr), 0.42f, y1 - y0 + 0.06f, tv, GV, 0, 0, vm, 0, 1, sc, bt, 0);
-                    Straw(l, key, f, s * (rw + 0.1f), y0 - 0.03f, sg * (hz + 0.425f * tv - (yv - Plate) / rr), 0.16f, y1 - y0 + 0.03f, 0.85f * tv, GV, 0, 0, vm, 0, 1, sc, bt, 0);
-                }
-                float szb = 0.3f / rr, szr = 0.15f / rr, zl = 1.25f * sz + 0.08f;
+                float szb = 0.3f / rr, szr = 0.15f / rr;
                 for (int s = -1; s <= 1; s += 2)
                     Box(l, key, f, s * (rw - 0.03f), y0, sg * (hz - 0.5f * szb - (ym - Plate) / rr), 0.05f, y1 - y0, szb, Plank, GV, 0, 1, 1, 0, 0, bt);
                 for (float x = -hx + 0.3f; x < hx; x += 0.6f)
                     Box(l, key, f, x, y0, sg * (hz - 0.5f * szr - (ym - Plate) / rr), 0.1f, y1 - y0, szr, Timber, GV, 0, 0, 1, 0, 0, bt);
                 Box(l, key, f, 0, Plate + 0.5f * hz * rr - 0.33f, sg * 0.5f * hz, 2 * hx, 0.18f, 0.18f, Timber, GX, 0, 0);
-                for (int j = 0; j < 2; j++)
-                {
-                    float yl = yr + 0.1f + 0.3f * j;
-                    Box(l, key, f, 0, yl, sg * ((y1 - yl) / rr + zl), 2 * rw + 0.2f, 0.045f, 0.045f, Timber, GX, 0, 0);
-                }
             }
-            float wb = 2 * (0.45f / rr + 1.25f * sz + 0.06f), wt = 2 * (1.25f * sz + 0.06f - 0.15f / rr);
-            Straw(l, key, f, 0, yr, 0, 2 * rw + 0.3f, 0.6f, 0.5f * (wb + wt), GX, 0, 2, StrawRidge, 0.9f, 0.15f, float.NaN, 0, 1 / rr);
-            Straw(l, key, f, 0, y1 + 0.15f, 0, 2 * rw + 0.35f, 0.25f, 0.625f * wt, GX, 0, 0, StrawRidge, 1, 0.1f, float.NaN, 0, 0.7f * wt);
+            Box(l, key, f, 0, y1 - 0.1f, 0, 2 * rw + 0.1f, 0.4f, 2 * sz + 0.3f, Thatch, GX, 0, 2);
+            float rd = sz + 0.32f;
+            Box(l, key, f, 0, y1 + 0.22f, 0, 2 * rw + 0.15f, 0.22f, 0.8f * rd, Thatch, GX, 0, 0, 1, 0, 0, 0, 0.2f * rd / 0.22f);
+            float wb = 2 * sz + 0.36f, wt = 0.6f * rd + 0.04f;
             for (float x = -rw + tr.Range(0.25f, 0.4f); x < rw - 0.15f; x += tr.Range(0.5f, 0.7f))
-                Box(l, key, f, x, yr + 0.06f, 0, 0.06f, 0.54f, 0.5f * (wb + wt) + 0.04f - 0.06f / rr, Timber, GZ, 0, 0, 1, 0, 0, 0, 1 / rr);
+                Box(l, key, f, x, y1 - 0.12f, 0, 0.06f, 0.59f, 0.5f * (wb + wt), Timber, GZ, 0, 0, 1, 0, 0, 0, (wb - wt) / (2 * 0.59f));
             Box(l, key, f, 0, y1 - 0.37f, 0, 2 * hx + 0.2f, 0.22f, 0.2f, Timber, GX, 0, 0);
             for (int i = 1; i < nf; i++)
             {
@@ -267,26 +256,6 @@ namespace Stabby.World
                 Box(l, key, f, x, Plate, 0, 0.22f, 0.24f, 2 * hz + 0.1f, Timber, GZ, 0, 0);
                 Box(l, key, f, x, Plate + 0.24f, 0, 0.18f, y1 - 0.37f - Plate - 0.24f, 0.18f, Timber, GV, 0, 0);
             }
-        }
-
-        static void Straw(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float sx, float sy, float sz, int g, int lo, int hi, int mode, float hb, float hs, float sc, float batter, float taper)
-        {
-            int n = l.Pieces.Count;
-            Box(l, key, f, x, y, z, sx, sy, sz, Thatch, g, lo, hi, 1, 0, 0, batter, taper);
-            if (l.Pieces.Count == n) return;
-            int b = Math.Max(0, Math.Min(15, (int)Math.Round(hb * 15))), s = Math.Max(0, Math.Min(7, (int)Math.Round(hs * 8) - 1));
-            int c = float.IsNaN(sc) ? 0 : Math.Max(1, Math.Min(127, 64 + (int)Math.Round(sc / 0.1f)));
-            var p = l.Pieces[n];
-            p.Q = ((b * 8 + s) * 8 + mode) * 128 + c;
-            l.Pieces[n] = p;
-        }
-
-        static float StrawFace(in StructurePiece p, float[] u, int k)
-        {
-            int face = k >> 2, mode = (int)p.Q / 128 % 8;
-            if (face == 3 && p.B != 0) return u[k * 3 + 2] * p.B < 0 ? 0 : -1;
-            if (face >= 4 && mode >= StrawVerge) return (mode == StrawVerge ? -u[k * 3] : u[k * 3]) > 0 ? 0 : 1;
-            return 0.5f * (u[k * 3 + 1] + 1);
         }
 
         static void Gables(StructureLayout l, ulong key, in Frame f, float hx, float hz, float rr, float sc)
