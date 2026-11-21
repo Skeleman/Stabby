@@ -65,8 +65,8 @@ namespace Stabby.World
 
         static readonly Style ShrubStyle = new Style
         {
-            Cell = ShrubLeaves, Card = 0.3f, Along = 0.45f, Lift = 0.35f, Jitter = 0.45f, From = 0.18f, AoLow = 0.25f,
-            Counts = new[] { 70, 28, 11 }, Sides = new[] { new[] { 5, 3 }, new[] { 3, 0 }, new[] { 0, 0 } },
+            Cell = ShrubLeaves, Card = 0.34f, Along = 0.4f, Lift = 0.3f, Jitter = 0.5f, From = 0.12f, AoLow = 0.3f,
+            Counts = new[] { 140, 52, 18 }, Sides = new[] { new[] { 5, 3 }, new[] { 3, 0 }, new[] { 0, 0 } },
         };
 
         static readonly Style BroadleafStyle = new Style

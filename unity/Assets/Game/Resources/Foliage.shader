@@ -1,0 +1,238 @@
+Shader "Stabby/Foliage"
+{
+    Properties
+    {
+        _BaseColor ("Bark", Color) = (1, 1, 1, 3)
+        _Leaf ("Leaf", Vector) = (0.2, 0.3, 0.1, 2)
+        _Fade ("Fade", Vector) = (1, 1, 0, 1)
+        _LeafAtlas ("Leaf atlas", 2D) = "white" {}
+    }
+    SubShader
+    {
+        Tags { "RenderType" = "TransparentCutout" "Queue" = "AlphaTest" "RenderPipeline" = "UniversalPipeline" }
+
+        HLSLINCLUDE
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Assets/Game/Grass/Wind.hlsl"
+
+        CBUFFER_START(UnityPerMaterial)
+        float4 _BaseColor;
+        float4 _Leaf;
+        float4 _Fade;
+        CBUFFER_END
+
+        #ifdef UNITY_DOTS_INSTANCING_ENABLED
+        UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
+            UNITY_DOTS_INSTANCED_PROP(float4, _BaseColor)
+            UNITY_DOTS_INSTANCED_PROP(float4, _Leaf)
+            UNITY_DOTS_INSTANCED_PROP(float4, _Fade)
+        UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
+        #define _BaseColor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _BaseColor)
+        #define _Leaf UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _Leaf)
+        #define _Fade UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _Fade)
+        #endif
+
+        float _StabbyFoliageOff;
+        TEXTURE2D(_LeafAtlas);
+        SAMPLER(sampler_LeafAtlas);
+
+        float Bayer(float2 p)
+        {
+            uint2 q = (uint2)p & 3u;
+            static const float m[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+            return (m[(q.x << 2) | q.y] + 0.5) / 16.0;
+        }
+
+        struct FoliageIn
+        {
+            float4 positionOS : POSITION;
+            float3 normalOS : NORMAL;
+            float4 uv : TEXCOORD0;
+            float4 wind : TEXCOORD1;
+            UNITY_VERTEX_INPUT_INSTANCE_ID
+        };
+
+        float3 FoliageWind(FoliageIn i, out float3 normalWS)
+        {
+            float3 wp = TransformObjectToWorld(i.positionOS.xyz);
+            normalWS = TransformObjectToWorldNormal(i.normalOS);
+            float w = _Leaf.w;
+            float sway = saturate(w), flutter = saturate(w - 1);
+            [branch] if (sway <= 0) return wp;
+            float3 root = UNITY_MATRIX_M._m03_m13_m23;
+            float size = max(_Fade.w, 0.1);
+            float seed = frac(dot(root.xz, float2(0.1373, 0.2719)));
+            float t = _Time.y;
+            float hz = _StabbyWind.w * rsqrt(max(size, 0.5)) * 1.6;
+            float2 push = WindPush(root.xz, t, seed);
+            float slow = sin(6.2831853 * (hz * t + seed));
+            float h = saturate(i.positionOS.y);
+            float2 trunk = push * (0.75 + 0.25 * slow) * (h * h) * size * 0.05;
+            float gust = WindGust(root.xz, t);
+            float2 dir = _StabbyWind.xy;
+            float2 side = float2(-dir.y, dir.x);
+            float bend = i.wind.x;
+            float bph = 6.2831853 * (hz * 2.3 * t + i.wind.z);
+            float amp = size * (0.012 + 0.03 * (_StabbyWind.z + _StabbyGust.z * gust));
+            float2 limb = (dir * (0.6 + 0.4 * sin(bph)) + side * 0.5 * sin(bph * 0.73 + 1.7)) * bend * amp;
+            float bob = sin(bph * 1.1 + 0.6) * bend * amp * 0.35;
+            float3 off = float3(trunk.x + limb.x, bob - 0.5 * dot(trunk, trunk) / max(size, 0.1), trunk.y + limb.y) * sway;
+            [branch] if (flutter > 0 && i.uv.w > 0.5)
+            {
+                float fph = 6.2831853 * (t * (3.1 + 1.7 * i.wind.w) + i.wind.w * 11.0);
+                float fl = i.wind.y * flutter * size * (0.004 + 0.012 * gust) * (sin(fph) + 0.5 * sin(fph * 2.37 + 1.3));
+                off += normalWS * fl;
+            }
+            return wp + off;
+        }
+        ENDHLSL
+
+        Pass
+        {
+            Tags { "LightMode" = "UniversalForward" }
+            Cull Off
+            AlphaToMask On
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_fog
+            #pragma multi_compile_instancing
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+            float4 _StabbySky, _StabbyGround;
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalWS : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+                float4 uv : TEXCOORD2;
+                float fog : TEXCOORD3;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            Varyings vert(FoliageIn i)
+            {
+                Varyings o;
+                UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_TRANSFER_INSTANCE_ID(i, o);
+                float3 n;
+                float3 wp = FoliageWind(i, n);
+                o.positionWS = wp;
+                o.positionCS = _StabbyFoliageOff > 0 ? float4(0, 0, -2, 1) : TransformWorldToHClip(wp);
+                o.normalWS = n;
+                o.uv = i.uv;
+                o.fog = ComputeFogFactor(o.positionCS.z);
+                return o;
+            }
+
+            float BarkNoise(float2 p)
+            {
+                return 0.6 * WindNoise(p) + 0.4 * WindNoise(p * 2.7 + 13.1);
+            }
+
+            half4 frag(Varyings i) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(i);
+                float4 fade = _Fade;
+                clip(fade.x - Bayer(i.positionCS.xy));
+                float size = max(fade.w, 0.1);
+                float3 wp = i.positionWS;
+                float3 n = normalize(i.normalWS);
+                float3 v = normalize(_WorldSpaceCameraPos - wp);
+                bool leaf = i.uv.w > 0.5;
+                float3 albedo;
+                float trans = 0, ao = 1;
+                float alpha = 1;
+                [branch] if (leaf)
+                {
+                    float4 a = SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy);
+                    alpha = a.a;
+                    clip(a.a - 0.5);
+                    float shade = a.r * 1.5;
+                    float hue = a.g - 0.5;
+                    float3 leafColor = _Leaf.rgb * (1 + hue * float3(0.9, 0.35, -0.7));
+                    albedo = lerp(leafColor * shade, _BaseColor.rgb * shade * 1.3, a.b);
+                    trans = 1 - a.b;
+                    ao = i.uv.z;
+                }
+                else
+                {
+                    float2 p = float2(i.uv.x * size * 7, i.uv.y * size * 1.6);
+                    float ridge = 1 - abs(BarkNoise(p) * 2 - 1);
+                    float fine = BarkNoise(p * float2(3.1, 4.3) + 5.7);
+                    albedo = _BaseColor.rgb * (0.55 + 0.45 * ridge + 0.2 * fine);
+                    ao = i.uv.z;
+                }
+                float above = max(wp.y - fade.z, 0);
+                float groundAo = lerp(0.6, 1, smoothstep(0, min(1.2, 0.5 * size), above));
+                ao *= groundAo;
+                Light l = GetMainLight(TransformWorldToShadowCoord(wp));
+                float ndl = dot(n, l.direction);
+                float diffuse = leaf ? saturate((ndl + 0.45) / 1.45) : saturate(ndl);
+                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
+                float back = pow(saturate(dot(-v, l.direction)), 4) * 0.55 + saturate(-ndl) * 0.2;
+                float3 direct = l.color * l.shadowAttenuation;
+                float3 c = albedo * (direct * diffuse * lerp(0.55, 1, ao) + ambient * ao) + albedo * _Leaf.rgb * 2.2 * direct * back * trans * ao;
+                return half4(MixFog(c, i.fog), alpha);
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Off
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            float3 _LightDirection;
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float4 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            Varyings vert(FoliageIn i)
+            {
+                Varyings o;
+                UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_TRANSFER_INSTANCE_ID(i, o);
+                float3 wn;
+                float3 wp = FoliageWind(i, wn);
+                float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, wn, _LightDirection));
+                #if UNITY_REVERSED_Z
+                cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                o.positionCS = _StabbyFoliageOff > 0 ? float4(0, 0, -2, 1) : cs;
+                o.uv = i.uv;
+                return o;
+            }
+
+            half4 frag(Varyings i) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(i);
+                float4 fade = _Fade;
+                clip(min(fade.y - 0.5, fade.x - Bayer(i.positionCS.xy)));
+                [branch] if (i.uv.w > 0.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - 0.5);
+                return 0;
+            }
+            ENDHLSL
+        }
+    }
+}

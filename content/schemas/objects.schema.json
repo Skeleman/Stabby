@@ -73,6 +73,8 @@
           "shadows": { "type": "boolean" },
           "shadowPixels": { "type": "number", "minimum": 0 },
           "wind": { "type": "boolean" },
+          "swayPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
+          "flutterPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
           "animated": { "type": "boolean" },
           "solid": { "type": "boolean" }
         }

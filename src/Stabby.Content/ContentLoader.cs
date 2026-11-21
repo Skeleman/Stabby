@@ -282,6 +282,8 @@ public static class ContentLoader
         public bool Shadows { get; set; }
         public float ShadowPixels { get; set; }
         public bool Wind { get; set; }
+        public float SwayPixels { get; set; } = 16.2f;
+        public float FlutterPixels { get; set; } = 54f;
         public bool Animated { get; set; }
         public bool Solid { get; set; }
     }
@@ -350,7 +352,7 @@ public static class ContentLoader
             lib.Kinds.Add(new ObjectKind
             {
                 Id = k.Id, Lods = k.Lods, LodPixels = k.LodPixels, FadePixels = k.FadePixels,
-                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, Wind = k.Wind, Animated = k.Animated, Solid = k.Solid,
+                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, Animated = k.Animated, Solid = k.Solid,
             });
         foreach (var o in file.Objects)
         {

@@ -12,6 +12,7 @@ namespace Stabby.World
         public bool Shadows = true;
         public float ShadowPixels = 32.4f;
         public bool Wind, Animated;
+        public float SwayPixels = 16.2f, FlutterPixels = 54f;
         public bool Solid = true;
     }
 

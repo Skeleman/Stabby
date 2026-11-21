@@ -276,6 +276,22 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            while (phase >= 18 && phase <= 20)
+            {
+                string name = phase == 18 ? "foliage-close" : phase == 19 ? "foliage-mid" : "foliage-far";
+                if (wait == 0)
+                {
+                    if (!AimFoliage(cam, phase - 18)) { GameStatus.Lines["~" + name] = "no foliage placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 19) GameStatus.Lines["~bench foliage"] = FoliageBench(cam);
+                wait = 0;
+                phase++;
+            }
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -522,6 +538,58 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static readonly float[] FoliageBack = { 2.4f, 14f, 60f }, FoliageUp = { 0.5f, 3f, 14f };
+
+        static bool AimFoliage(Camera cam, int range)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var map = w.GetExistingSystemManaged<ClientMapSystem>().Map;
+                float span = WorldChunks.Size * map.Config.CellMeters, best = float.MaxValue;
+                int n = field.ChunksAcross;
+                var near = new System.Collections.Generic.List<ObjectInstance>();
+                for (int cz = 0; cz < n; cz++)
+                    for (int cx = 0; cx < n; cx++)
+                    {
+                        if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
+                        foreach (var o in field.Chunk(cx, cz))
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                    }
+                if (near.Count == 0) return false;
+                ObjectInstance pick = default;
+                int crowd = 0;
+                var cells = new System.Collections.Generic.Dictionary<long, int>();
+                long Cell(float x, float z) => ((long)Mathf.FloorToInt(x / 12f) << 32) ^ (uint)Mathf.FloorToInt(z / 12f);
+                foreach (var o in near) { long c = Cell(o.X, o.Z); cells.TryGetValue(c, out int k); cells[c] = k + 1; }
+                foreach (var o in near)
+                {
+                    int around = cells[Cell(o.X, o.Z)];
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude - 40f * Mathf.Min(around, 12) - 30f * o.Size;
+                    if (score < best) { best = score; pick = o; crowd = around; }
+                }
+                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.45f, pick.Z);
+                float back = FoliageBack[range] * (range == 0 ? Mathf.Max(1f, pick.Size) : 1f);
+                var eye = target + new Vector3(-0.77f, 0, -0.64f) * back + Vector3.up * FoliageUp[range] * (range == 0 ? Mathf.Max(1f, pick.Size) : 1f);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.2f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim foliage " + range] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0} with {crowd} foliage in its 12 m cell, eye {back:F0} m back";
+                return true;
+            }
+            return false;
+        }
+
+        static string FoliageBench(Camera cam)
+        {
+            Shader.SetGlobalFloat("_StabbyFoliageOff", 1);
+            double off = BenchAt(cam, 1920, 1080);
+            Shader.SetGlobalFloat("_StabbyFoliageOff", 0);
+            double on = BenchAt(cam, 1920, 1080);
+            return $"bench foliage mid view 1080p (ms, foliage hidden/drawn): {off:F2}/{on:F2}, foliage {on - off:F2} ms";
         }
 
         static bool AimBoulder(Camera cam, bool close)
