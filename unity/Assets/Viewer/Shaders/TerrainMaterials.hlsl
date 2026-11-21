@@ -211,8 +211,9 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     c *= 1 + flam * (0.1 * lt - 0.12 * pt);
     float fm = TmFade(ra.y * 5, fp);
     float4 mn = TmLN3(q, ra.y * 5, 43.1, fm);
-    float lgt = fm * smoothstep(0.5, 0.62, mn.x), drk = fm * smoothstep(0.5, 0.62, -mn.x);
-    c = lerp(c, dot(c, lw) * 1.6, 0.4 * lgt) * (1 - 0.35 * drk);
+    float dm = fm * lerp(0.1, 1.8, smoothstep(-0.25, 0.35, 0.6 * drift.x + 0.4 * drift2.x)), gs = gw * grain.x * 0.5;
+    float lgt = dm * (1 + gs) * smoothstep(0.5, 0.66, mn.x), drk = dm * (1 - gs) * smoothstep(0.5, 0.66, -mn.x);
+    c = lerp(c, dot(c, lw) * 1.6, 0.2 * lgt) * (1 - 0.17 * drk);
     c *= 1 - 0.5 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4));
     c *= 1 + 0.3 * (1 - 0.5 * stone) * bump.x * ra.w;
     float up = saturate(n.y), dn = saturate((0.05 - n.y) * 2.5);
