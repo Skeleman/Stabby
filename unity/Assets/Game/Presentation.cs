@@ -86,22 +86,20 @@ namespace Stabby.Game
             }
         }
 
-        int frames, slow;
-        float worst, worstPlay;
-        string worstWhy;
+        int frames;
 
         void Frames()
         {
             if (++frames <= 10) return;
+            GameStatus.Frames = frames - 10;
             float ms = UnityEngine.Time.unscaledDeltaTime * 1000f;
-            if (UnityEngine.Time.frameCount - GameStatus.ToolFrame <= 1) GameStatus.ToolFrames++;
+            if (UnityEngine.Time.frameCount - GameStatus.ToolFrame <= 2) GameStatus.ToolFrames++;
             else
             {
-                if (ms > worst) { worst = ms; worstWhy = $"frame {frames - 10}, terrain {GameStatus.TerrainMs:F1} ms {GameStatus.TerrainStage}, {GameStatus.TerrainVertices} vertices, gc {System.GC.CollectionCount(0)}"; }
-                if (ms > 33f) slow++;
-                if (GameStatus.TerrainBuilt && ms > worstPlay) worstPlay = ms;
+                if (ms > GameStatus.WorstMs) { GameStatus.WorstMs = ms; GameStatus.WorstWhy = $"frame {frames - 10}, terrain {GameStatus.TerrainMs:F1} ms {GameStatus.TerrainStage}, {GameStatus.TerrainVertices} vertices, gc {System.GC.CollectionCount(0)}"; }
+                if (ms > 33f) GameStatus.SlowFrames++;
+                if (GameStatus.TerrainBuilt && ms > GameStatus.WorstPlayMs) GameStatus.WorstPlayMs = ms;
             }
-            GameStatus.Lines["~frames"] = $"frames {frames - 10}, worst {worst:F0} ms ({worstWhy}), {slow} over 33 ms, worst after terrain built {worstPlay:F0} ms, {GameStatus.ToolFrames} capture frames left out";
         }
     }
 }

@@ -17,7 +17,8 @@ namespace Stabby.Viewer
     public static class WaterGeometry
     {
         const int RiverPieceVertices = 16000;
-        const float RiverLift = 0.1f, LakeLift = 0.5f, SlopeRange = 0.1f;
+        public const float RiverLift = 0.1f;
+        const float LakeLift = 0.5f, SlopeRange = 0.1f;
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
         public static Mesh ToMesh(MeshParts d)
@@ -36,28 +37,13 @@ namespace Stabby.Viewer
         {
             int n = world.Config.Size;
             float cm = world.Config.CellMeters, half = cm * 0.5f;
-            var hy = world.Water;
             var verts = new List<Vector3>();
             var tris = new List<int>();
             for (int y = cy; y < Mathf.Min(cy + cells, n); y++)
                 for (int x = cx; x < Mathf.Min(cx + cells, n); x++)
                 {
-                    int c = y * n + x;
-                    if (world.Sea[c]) continue;
-                    float h;
-                    if (hy.LakeId[c] >= 0) h = Mathf.Max(hy.WaterSurface[c], world.Height[c]) + LakeLift;
-                    else
-                    {
-                        h = float.MinValue;
-                        for (int k = 0; k < 8; k++)
-                        {
-                            int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
-                            if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-                            int o = ny * n + nx;
-                            if (!world.Sea[o] && hy.LakeId[o] >= 0 && world.Height[c] >= hy.WaterSurface[o]) h = Mathf.Max(h, hy.WaterSurface[o] + LakeLift);
-                        }
-                        if (h == float.MinValue) continue;
-                    }
+                    float h = LakeHeight(world, x, y);
+                    if (h == float.MinValue) continue;
                     int b = verts.Count;
                     verts.Add(new Vector3(x * cm - half, h, y * cm - half));
                     verts.Add(new Vector3(x * cm - half, h, y * cm + half));
@@ -67,6 +53,23 @@ namespace Stabby.Viewer
                     tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
                 }
             return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
+        }
+
+        public static float LakeHeight(GeneratedWorld world, int x, int y)
+        {
+            int n = world.Config.Size, c = y * n + x;
+            var hy = world.Water;
+            if (world.Sea[c]) return float.MinValue;
+            if (hy.LakeId[c] >= 0) return Mathf.Max(hy.WaterSurface[c], world.Height[c]) + LakeLift;
+            float h = float.MinValue;
+            for (int k = 0; k < 8; k++)
+            {
+                int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
+                if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                int o = ny * n + nx;
+                if (!world.Sea[o] && hy.LakeId[o] >= 0 && world.Height[c] >= hy.WaterSurface[o]) h = Mathf.Max(h, hy.WaterSurface[o] + LakeLift);
+            }
+            return h;
         }
 
         public static List<MeshParts> Rivers(GeneratedWorld world)

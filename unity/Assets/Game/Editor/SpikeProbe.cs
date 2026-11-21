@@ -16,9 +16,9 @@ namespace Stabby.Game.Editor
         static readonly List<(string name, ProfilerRecorder rec)> recs = new List<(string, ProfilerRecorder)>();
         static readonly HashSet<string> names = new HashSet<string>();
         static readonly List<string> report = new List<string>();
-        static string prev = "";
         static int frame, gcRuns;
-        static long gcBuilt, gcBefore;
+        static long gcBuilt, gcBefore, gcPlay;
+        static int playFrames;
         static ProfilerRecorder gcFrame;
 
         static readonly bool Record = Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
@@ -35,18 +35,24 @@ namespace Stabby.Game.Editor
             if (!gcFrame.Valid) gcFrame = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
             long gc = gcFrame.LastValue;
             if (GameStatus.TerrainBuilt) gcBuilt += gc; else gcBefore += gc;
+            if (GameStatus.TerrainBuilt && Time.frameCount - GameStatus.ToolFrame > 2) { gcPlay += gc; playFrames++; }
             int runs = GC.CollectionCount(0);
             bool collected = runs != gcRuns;
             gcRuns = runs;
             if (frame++ % (frame < 300 ? 5 : 120) == 0) Scan();
-            var top = recs.Select(r => (r.name, ms: r.rec.LastValue / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80);
-            string now = string.Join(", ", top.Select(r => $"{r.name} {r.ms:F0}"));
+            if (cur.Length < recs.Count) { Array.Resize(ref cur, recs.Count); Array.Resize(ref last, recs.Count); }
+            for (int r = 0; r < recs.Count; r++) cur[r] = recs[r].rec.LastValue;
             float dt = Time.unscaledDeltaTime * 1000f;
-            if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {now}\n  prev: {prev}");
-            prev = now;
+            if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
+            (cur, last) = (last, cur);
         }
 
-        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcRuns} collections\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
+        static long[] cur = new long[0], last = new long[0];
+
+        static string Top(long[] ns) =>
+            string.Join(", ", Enumerable.Range(0, recs.Count).Select(r => (recs[r].name, ms: ns[r] / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80).Select(r => $"{r.name} {r.ms:F0}"));
+
+        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
 
         static float Arg()
         {

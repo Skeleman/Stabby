@@ -17,6 +17,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
         static int settle = -1, phase, wait, smooth;
+        static bool bank;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
 
@@ -141,11 +142,13 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) { if (wait == 0) wait = -1; return; }
                 Shot(cam, null, "warmup");
                 if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
-                Shot(cam, dir, name);
+                Shot(cam, dir, phase == 5 && bank ? "riverbank" : name);
                 if (phase == 2) Wire(cam, dir, name + "-wire");
+                if (phase == 5 && bank && GameStatus.Lines.TryGetValue("~grass view", out var gv)) GameStatus.Lines["~riverbank grass"] = "riverbank " + gv;
+                if (phase == 5 && !bank && Bank(cam)) { bank = true; wait = 180; return; }
                 wait = 0;
                 phase++;
             }
@@ -210,11 +213,7 @@ namespace Stabby.Game.Editor
             }
             if (phase == 12)
             {
-                if (tourStop < 0)
-                {
-                    framesBeforeTour = GameStatus.Lines.TryGetValue("~frames", out var f) ? f : "";
-                    tourStop = 0;
-                }
+                if (tourStop < 0) tourStop = 0;
                 if (tourStop < TourStops)
                 {
                     if (wait == 0)
@@ -232,8 +231,8 @@ namespace Stabby.Game.Editor
                 }
                 GameStatus.Lines["~objects tour"] = tourParts.Count == 0 ? "objects tour: no stops" :
                     $"objects tour: {tourParts.Count} stops over {TourStops * TourStepM / 1000f:F0} km, parts held per stop {string.Join("/", tourParts)} (max {tourParts.Max()}), chunks held {string.Join("/", tourChunks)}, entities {string.Join("/", tourLive)}, {ObjectViewSystem.ChunksUnloaded} unloaded";
+                GameStatus.PutFrames();
                 if (GameStatus.Lines.TryGetValue("~frames", out var after)) GameStatus.Lines["~frames tour"] = "during tour: " + after;
-                GameStatus.Lines["~frames"] = framesBeforeTour;
                 phase++;
             }
             while (phase >= 13 && phase <= 15)
@@ -263,7 +262,6 @@ namespace Stabby.Game.Editor
         const int TourStops = 8;
         const float TourStepM = 1500f;
         static int tourStop = -1;
-        static string framesBeforeTour = "";
         static readonly System.Collections.Generic.List<int> tourParts = new System.Collections.Generic.List<int>(), tourChunks = new System.Collections.Generic.List<int>(), tourLive = new System.Collections.Generic.List<int>();
 
         static bool TourMove(Camera cam, int stop)
@@ -328,9 +326,12 @@ namespace Stabby.Game.Editor
             return lines.Count > 0 ? string.Join("\n", lines) : "prediction: no predicted ghosts";
         }
 
-        static string Status() =>
-            string.Join("\n", GameStatus.Lines.OrderBy(kv => kv.Key).Select(kv => kv.Value)) +
+        static string Status()
+        {
+            GameStatus.PutFrames();
+            return string.Join("\n", GameStatus.Lines.OrderBy(kv => kv.Key).Select(kv => kv.Value)) +
             $"\ncapsules {GameStatus.Capsules}, terrain {(GameStatus.TerrainBuilt ? "built" : "missing")}\n";
+        }
 
         static void Finish(int code)
         {
@@ -393,6 +394,41 @@ namespace Stabby.Game.Editor
                 var eye = target - along * 160f + side * 70f + Vector3.up * 70f;
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim river"] = $"river width {best.Width[k]:F0} m at {target.x:F0},{target.z:F0}";
+                return true;
+            }
+            return false;
+        }
+
+        static bool Bank(Camera cam)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var sys = w.GetExistingSystemManaged<ClientMapSystem>();
+                var map = sys?.Map;
+                if (map == null || map.Biome == null || sys.Materials?.Surface == null) continue;
+                int n = map.Config.Size;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                Vector3 target = default, eye = default;
+                foreach (var r in map.Water.Rivers)
+                    for (int k = 4; k + 4 < r.X.Count; k += 4)
+                    {
+                        var along = new Vector3(r.X[k + 4] - r.X[k - 4], 0, r.Y[k + 4] - r.Y[k - 4]).normalized;
+                        var side = new Vector3(-along.z, 0, along.x);
+                        var edge = new Vector3(r.X[k] * cm, r.Surface[k], r.Y[k] * cm) + side * (r.Width[k] * 0.5f);
+                        var dry = edge + side * 20f;
+                        int i = NearField.CellOf(dry.x, dry.z, cm, n);
+                        if (map.Sea[i] || map.Water.LakeId[i] >= 0 || map.Biome[i] < 0 || sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) != 0) continue;
+                        float d = (new Vector2(edge.x, edge.z) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (d >= bestD) continue;
+                        bestD = d;
+                        target = edge - side * 2f;
+                        eye = edge + side * 7f + along * 2f;
+                    }
+                if (bestD == float.MaxValue) return false;
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), target.y) + 2.5f;
+                target.y = Mathf.Max(GroundHeight(target.x, target.z), target.y);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim riverbank"] = $"grass riverbank at {target.x:F0},{target.y:F0},{target.z:F0} from {eye.x:F0},{eye.y:F0},{eye.z:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
                 return true;
             }
             return false;
