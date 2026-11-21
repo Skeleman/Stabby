@@ -61,6 +61,7 @@ their geometry is built.
 | Surfaces more than a few metres off the heightfield (arches, overhang roofs, cave walls) are rock, never biome coat; interior darkening softened | done |
 | Lip dimples: QEF solve truncated to large eigenvalues, carve fillet widened to half the radius, and slope leveling applied to every lattice corner (it ran only inside edit boxes, so the box border on steep faces got a uniform row of shifted vertices) | done |
 | LOD stitching: fine border vertices carry their coarse neighbour's vertex (`SurfaceNets.CoarseVertex`, checked bitwise in `WorldChecks`) and the shader collapses onto it when that side or corner is coarser; visible neighbours stay within one LOD | done |
+| Cave rework: tunnels twice as wide, 1-3 main paths branching after the mouth on a gentle grade (no steps or pits, checked in `WorldChecks.CheckCavePaths`), steeper side chambers off the main path, rooms at path ends | done |
 | Per-cell refinement: subdivide only lattice cells that touch a feature edit, stitched to the coarse neighbours, instead of whole chunks at a finer step | idea |
 | Player collision against feature edits (capsule vs field) | later |
 
@@ -78,5 +79,6 @@ their geometry is built.
 - ECS gameplay on Netcode: interaction, creatures, settlements, as Burst systems.
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
 - Map editing on top of `sketch.json`.
+- Dungeons about 4x the size of caves, built on the same carve edits (idea).
 
 Not planned yet: a general job framework (Task.Run plus cancellation covers current needs).

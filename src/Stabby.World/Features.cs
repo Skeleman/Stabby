@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Shapes = 4;
 
         public const float Blend = 0.5f;
 
@@ -78,8 +78,9 @@ namespace Stabby.World
         public const int MarginCells = 3;
         public const float OverhangChance = 0.6f, ArchChance = 0.3f;
         public const float OverhangMinDrop = 50f;
-        public const float CaveChance = 0.35f, CaveMinDrop = 30f, CaveRoof = 12f;
-        public const int CavePieces = 5;
+        public const float CaveChance = 0.35f, CaveMinDrop = 30f, CaveRoof = 12f, CaveGrade = 0.18f, CaveSideChance = 0.4f;
+        public const float CaveHollow = 1f - 1.25f * FeatureEdit.Blend;
+        public const int CavePieces = 4, CavePaths = 3;
         public const float LatticeStepCells = 0.25f, MinRadiusSteps = 1.25f;
 
         public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
@@ -225,12 +226,77 @@ namespace Stabby.World
             }
         }
 
+        struct CavePiece
+        {
+            public float Length, Turn, Grade, Side, SideTurn, SideGrade, SideLength;
+        }
+
+        struct CaveBuild
+        {
+            public TerrainDetail Detail;
+            public float Cm, R, Chamber;
+            public List<FeatureEdit> Output;
+
+            public bool Covered(float x, float y, float z, float r) => Detail.HeightAt(x, z) >= y + r + CaveRoof;
+
+            public bool Add(int shape, float r, float ax, float ay, float az, float bx, float by, float bz)
+            {
+                if (!Covered(bx, by, bz, r) || !Covered((ax + bx) * 0.5f, (ay + by) * 0.5f, (az + bz) * 0.5f, r)) return false;
+                var e = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = shape, R = r, Ax = ax * Cm, Ay = ay, Az = az * Cm, Bx = bx * Cm, By = by, Bz = bz * Cm };
+                if (!Inside(e, Cm)) return false;
+                Output.Add(e);
+                return true;
+            }
+
+            public void Room(float x, float y, float z, float hx, float hz, float r)
+            {
+                float big = r * Chamber, reach = big * 0.6f / Cm, lift = (big - r) * CaveHollow;
+                if (Covered(x, y + lift, z, big)) Add(FeatureEdit.CaveRoom, big, x, y + lift, z, x + hx * reach, y + lift, z + hz * reach);
+            }
+        }
+
+        static void Turn(ref float hx, ref float hz, float t)
+        {
+            float ox = -hz, oz = hx;
+            hx += ox * t; hz += oz * t;
+            float l = (float)Math.Sqrt(hx * hx + hz * hz);
+            hx /= l; hz /= l;
+        }
+
+        static int Path(ref CaveBuild c, CavePiece[] plan, int p, int first, ref float x, ref float y, ref float z, ref float hx, ref float hz)
+        {
+            int made = 0;
+            for (int s = first; s < CavePieces; s++)
+            {
+                var q = plan[p * CavePieces + s];
+                if (s > 0) Turn(ref hx, ref hz, q.Turn);
+                float step = q.Length / c.Cm, bx = x + hx * step, bz = z + hz * step, by = y - q.Length * q.Grade;
+                if (!c.Add(FeatureEdit.Cave, c.R, x, y, z, bx, by, bz)) break;
+                x = bx; y = by; z = bz;
+                made++;
+                if (q.Side >= CaveSideChance) continue;
+                float sx = hx, sz = hz;
+                Turn(ref sx, ref sz, 1.5f * q.SideTurn);
+                float r = c.R * 0.85f, stub = c.R / c.Cm, ex = x + sx * stub, ez = z + sz * stub;
+                float fx = ex + sx * q.SideLength / c.Cm, fz = ez + sz * q.SideLength / c.Cm, fy = y + q.SideGrade * q.SideLength;
+                int mark = c.Output.Count;
+                if (c.Add(FeatureEdit.CaveRoom, r, x, y, z, ex, y, ez) && c.Add(FeatureEdit.CaveRoom, r, ex, y, ez, fx, fy, fz)) c.Room(fx, fy, fz, sx, sz, r);
+                else c.Output.RemoveRange(mark, c.Output.Count - mark);
+            }
+            return made;
+        }
+
         static void Cave(GeneratedWorld w, TerrainDetail detail, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
-            float roll = r.NextFloat(), pick = r.NextFloat(), radius = r.Range(16f, 21f), descent = r.Range(0.08f, 0.22f), chamber = r.Range(1.3f, 1.7f);
-            var lengths = new float[CavePieces];
-            var turns = new float[CavePieces];
-            for (int s = 0; s < CavePieces; s++) { lengths[s] = r.Range(50f, 90f); turns[s] = r.Range(-0.6f, 0.6f); }
+            float roll = r.NextFloat(), pick = r.NextFloat(), radius = r.Range(30f, 38f), chamber = r.Range(1.3f, 1.6f), spread = r.Range(0.7f, 1.1f);
+            int paths = Math.Min(CavePaths, 1 + (int)(r.NextFloat() * CavePaths));
+            var plan = new CavePiece[CavePaths * CavePieces];
+            for (int q = 0; q < plan.Length; q++)
+                plan[q] = new CavePiece
+                {
+                    Length = r.Range(70f, 120f), Turn = r.Range(-0.5f, 0.5f), Grade = r.Range(-0.4f, 1f) * CaveGrade,
+                    Side = r.NextFloat(), SideTurn = r.NextFloat() < 0.5f ? -1f : 1f, SideGrade = r.Range(-1f, 1f), SideLength = r.Range(40f, 70f),
+                };
             if (roll >= CaveChance) return;
             int n = w.Config.Size, count = 0, best = -1, bestDir = 0;
             for (int pass = 0; pass < 2 && best < 0; pass++)
@@ -248,29 +314,19 @@ namespace Stabby.World
             }
             float cm = w.Config.CellMeters, inv = 1f / Grid.Dist[bestDir];
             float hx = -Grid.DX[bestDir] * inv, hz = -Grid.DY[bestDir] * inv;
-            float ax = best % n - 0.5f * hx, az = best / n - 0.5f * hz, ay = detail.HeightAt(ax, az);
+            float ax = best % n - 0.5f * hx, az = best / n - 0.5f * hz, ay = detail.HeightAt(ax, az) + 0.9f * radius * CaveHollow;
+            var c = new CaveBuild { Detail = detail, Cm = cm, R = radius, Chamber = chamber, Output = output };
             int start = output.Count;
-            for (int s = 0; s < CavePieces; s++)
+            var mouth = plan[0];
+            float bx = ax + hx * mouth.Length / cm, bz = az + hz * mouth.Length / cm, by = ay - mouth.Length * mouth.Grade;
+            if (!c.Add(FeatureEdit.Cave, radius, ax, ay, az, bx, by, bz)) return;
+            for (int p = 0; p < paths; p++)
             {
-                if (s > 0)
-                {
-                    float ox = -hz, oz = hx;
-                    hx += ox * turns[s]; hz += oz * turns[s];
-                    float l = (float)Math.Sqrt(hx * hx + hz * hz);
-                    hx /= l; hz /= l;
-                }
-                float step = lengths[s] / cm, bx = ax + hx * step, bz = az + hz * step, by = s == 0 ? ay : ay - lengths[s] * descent;
-                if (detail.HeightAt(bx, bz) < by + radius + CaveRoof) break;
-                if (s > 0 && detail.HeightAt((ax + bx) * 0.5f, (az + bz) * 0.5f) < (ay + by) * 0.5f + radius + CaveRoof) break;
-                var e = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = FeatureEdit.Cave, R = radius, Ax = ax * cm, Ay = ay, Az = az * cm, Bx = bx * cm, By = by, Bz = bz * cm };
-                if (!Inside(e, cm)) break;
-                output.Add(e);
-                ax = bx; ay = by; az = bz;
+                float x = bx, y = by, z = bz, dx = hx, dz = hz;
+                if (p > 0) Turn(ref dx, ref dz, p == 1 ? spread : -spread);
+                if (Path(ref c, plan, p, 1, ref x, ref y, ref z, ref dx, ref dz) > 0) c.Room(x, y, z, dx, dz, radius);
+                else if (p == 0) { output.RemoveRange(start, output.Count - start); return; }
             }
-            if (output.Count - start < 2) { output.RemoveRange(start, output.Count - start); return; }
-            float big = radius * chamber, reach = big * 0.6f / cm;
-            var room = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = FeatureEdit.Cave, R = big, Ax = ax * cm, Ay = ay, Az = az * cm, Bx = (ax + hx * reach) * cm, By = ay, Bz = (az + hz * reach) * cm };
-            if (detail.HeightAt(ax + hx * reach, az + hz * reach) >= ay + big + CaveRoof && detail.HeightAt(ax, az) >= ay + big + CaveRoof && Inside(room, cm)) output.Add(room);
         }
 
         static int Steepest(GeneratedWorld w, int i)

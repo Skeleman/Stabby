@@ -197,8 +197,10 @@ namespace Stabby.Game.Editor
                 }
                 else if (inside)
                 {
-                    eye = new Vector3(first.Bx, first.By, first.Bz);
-                    target = a + Vector3.up * 4f;
+                    var next = g.Edits[at + 1];
+                    float lift = 4f - first.R * Features.CaveHollow;
+                    eye = new Vector3(first.Ax, first.Ay + lift, first.Az) + (b - a) * 0.6f;
+                    target = new Vector3(next.Bx, next.By + lift, next.Bz);
                     cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                     GameStatus.Lines["~aim inside"] = $"edit {at} from {eye.x:F0},{eye.y:F0},{eye.z:F0}";
                     return true;

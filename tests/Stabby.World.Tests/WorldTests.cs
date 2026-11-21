@@ -33,6 +33,7 @@ public class WorldTests
         Assert.Contains(edits, e => e.Kind == FeatureEdit.Add);
         Assert.Contains(edits, e => e.Shape == FeatureEdit.Overhang);
         Assert.Contains(edits, e => e.Shape == FeatureEdit.Cave);
+        Assert.Contains(edits, e => e.Shape == FeatureEdit.CaveRoom);
     }
 
     [Fact]
