@@ -33,6 +33,7 @@ namespace Stabby.World
             public float Bend0, Bend1, Phase;
             public int Depth;
             public bool Bare;
+            public float Leafy = 1;
             public float Bend(float t) => Bend0 + (Bend1 - Bend0) * t * (float)Math.Sqrt(t);
             public V At(float t, out V dir)
             {
@@ -73,7 +74,7 @@ namespace Stabby.World
 
         static readonly Style BroadleafStyle = new Style
         {
-            Cell = BroadLeaves, Card = 0.075f, Along = 0.3f, Lift = 0.25f, Jitter = 0.6f, From = 0.05f, AoLow = 0.22f, MinLeafDepth = 1, Uniform = true,
+            Cell = BroadLeaves, Card = 0.075f, Along = 0.3f, Lift = 0.25f, Jitter = 0.6f, From = 0.25f, AoLow = 0.22f, MinLeafDepth = 1, Uniform = true,
             Counts = new[] { 1500, 440, 120 }, Sides = new[] { new[] { 7, 5, 4, 3 }, new[] { 5, 3, 0, 0 }, new[] { 4, 0, 0, 0 } },
         };
 
@@ -274,18 +275,22 @@ namespace Stabby.World
         public static ObjectMesh Broadleaf(ulong key, int lod)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x9B05688C2B3E6C1FUL));
+            var form = new Rng(Rng.Mix(key ^ 0x2545F4914F6CDD1DUL));
             var limbs = new List<Limb>();
-            float bole = rng.Range(0.3f, 0.42f);
+            var heavy = Flat(ref form);
+            float lean = form.Range(0.25f, 0.6f), widen = form.Range(0.7f, 1.35f), gappy = form.Range(0.15f, 0.35f);
+            float bole = rng.Range(0.3f, 0.42f) * form.Range(0.75f, 1.25f);
             var trunk = Grow(ref rng, new V(0, 0, 0), new V(0, 1, 0), bole, 5, TrunkRadius * 1.25f, TrunkRadius * 0.8f, 0.04f, new V(0, 0.4f, 0), 0, 0.05f, rng.NextFloat(), 0);
             limbs.Add(trunk);
             var top = trunk.P[trunk.P.Count - 1];
-            int leaders = rng.Range(2, 4);
+            int leaders = rng.Range(2, 4) + (form.NextFloat() < 0.35f ? 1 : 0);
             var spin = Flat(ref rng);
             for (int k = 0; k < leaders; k++)
             {
-                var side = Around(spin, (k + rng.Range(-0.15f, 0.15f)) / leaders);
-                var d = (new V(0, 1, 0) + side * rng.Range(0.5f, 0.9f)).Norm();
-                var leader = Grow(ref rng, top, d, rng.Range(0.34f, 0.46f), 5, TrunkRadius * 0.75f, 0.004f, 0.08f, new V(0, 0.25f, 0), 0.05f, 0.35f, rng.NextFloat(), 1);
+                var side = Around(spin, (k + rng.Range(-0.15f, 0.15f) + form.Range(-0.2f, 0.2f)) / leaders);
+                float pull = V.Dot(side, heavy), reachK = 1f + lean * pull * form.Range(0.6f, 1.4f);
+                var d = (new V(0, 1, 0) + side * (rng.Range(0.5f, 0.9f) * widen * (1f + 0.35f * lean * pull))).Norm();
+                var leader = Grow(ref rng, top, d, rng.Range(0.34f, 0.46f) * reachK * form.Range(0.75f, 1.2f), 5, TrunkRadius * 0.75f, 0.004f, 0.08f + 0.06f * form.NextFloat(), new V(0, 0.25f, 0), 0.05f, 0.35f, rng.NextFloat(), 1);
                 limbs.Add(leader);
                 int branches = rng.Range(8, 12);
                 for (int b = 0; b < branches; b++)
@@ -295,12 +300,24 @@ namespace Stabby.World
                     var outward = new V(at.X, 0, at.Z);
                     outward = outward.Flat > 0.02f ? outward.Norm() : Flat(ref rng);
                     var bd = (outward + Flat(ref rng) * 0.7f + new V(0, rng.Range(-0.1f, 0.8f) + 0.6f * t, 0)).Norm();
-                    float len = rng.Range(0.18f, 0.3f) * (1.2f - 0.6f * t);
+                    float fill = form.NextFloat(), heft = 1f + lean * V.Dot(outward, heavy);
+                    bool bare = fill < gappy;
+                    float len = rng.Range(0.18f, 0.3f) * (1.2f - 0.6f * t) * heft * form.Range(0.65f, 1.35f) * (bare ? 1.15f : 1f);
                     var branch = Grow(ref rng, at, bd, len, 4, leader.Radius(t) * 0.7f, 0.003f, 0.12f, new V(0, -0.15f, 0), leader.Bend(t), 0.85f, rng.NextFloat(), 2);
                     limbs.Add(branch);
+                    int first = limbs.Count;
                     Twigs(ref rng, limbs, branch, 5, 0.15f, 0.95f, 0.06f, 0.12f, 0.75f, new V(0, 0.1f, 0), 1.1f);
+                    float leafy = bare ? 0 : 0.25f + 1.6f * (fill - gappy) * (fill - gappy) / ((1 - gappy) * (1 - gappy)) * heft;
+                    branch.Bare = bare;
+                    branch.Leafy = leafy * 0.3f;
+                    for (int q = first; q < limbs.Count; q++)
+                    {
+                        limbs[q].Bare = bare;
+                        limbs[q].Leafy = leafy;
+                    }
                 }
                 Twigs(ref rng, limbs, leader, 4, 0.3f, 0.95f, 0.06f, 0.1f, 0.8f, new V(0, 0.1f, 0), 0.9f);
+                leader.Leafy = 0.15f;
             }
             for (int b = 0; b < 2; b++)
             {
@@ -360,7 +377,7 @@ namespace Stabby.World
                     maxR = Math.Max(maxR, p.Flat);
                 }
                 if (limbs[i].Depth < st.MinLeafDepth || limbs[i].Bare) continue;
-                weights[i] = limbs[i].Length() * (limbs[i].Depth == 0 ? 0.7f : limbs[i].Depth < st.MinLeafDepth + 1 && st.Uniform ? 0.6f : 1f);
+                weights[i] = limbs[i].Leafy * limbs[i].Length() * (limbs[i].Depth == 0 ? 0.7f : limbs[i].Depth < st.MinLeafDepth + 1 && st.Uniform ? 0.6f : 1f);
                 total += weights[i];
                 foreach (var p in limbs[i].P) { center = center + p; samples++; }
             }
