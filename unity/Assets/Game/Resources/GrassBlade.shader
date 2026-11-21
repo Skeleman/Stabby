@@ -15,6 +15,7 @@ Shader "Stabby/GrassBlade"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
+            #include "Assets/Viewer/Shaders/Look.hlsl"
 
             struct Blade { float4 p0; uint4 q; };
             StructuredBuffer<Blade> _Blades;
@@ -66,7 +67,7 @@ Shader "Stabby/GrassBlade"
                 float3 v = normalize(_WorldSpaceCameraPos - i.positionWS);
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
-                float3 c = i.color * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * i.look.y;
+                float3 c = (LookColor(i.color, 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
                 return half4(MixFog(c, i.look.w), 1);
             }
             ENDHLSL
