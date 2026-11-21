@@ -21,7 +21,8 @@
         "featureAmp": { "$ref": "#/$defs/amp" },
         "featureWavelengthM": { "$ref": "#/$defs/length" },
         "parallax": { "type": "number", "minimum": 0, "maximum": 2 },
-        "albedoVar": { "$ref": "#/$defs/amp" }
+        "albedoVar": { "$ref": "#/$defs/amp" },
+        "roughness": { "$ref": "#/$defs/amp" }
       }
     }
   },
@@ -40,7 +41,8 @@
         "detailWavelengthM": { "$ref": "#/$defs/length" },
         "saturation": { "$ref": "#/$defs/amp" },
         "roughness": { "$ref": "#/$defs/amp" },
-        "specular": { "$ref": "#/$defs/amp" }
+        "specular": { "$ref": "#/$defs/amp" },
+        "roughnessVar": { "$ref": "#/$defs/amp" }
       }
     },
     "water": {

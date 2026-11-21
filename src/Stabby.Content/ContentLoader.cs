@@ -29,6 +29,7 @@ public static class ContentLoader
         public float Saturation { get; set; }
         public float Roughness { get; set; }
         public float Specular { get; set; }
+        public float RoughnessVar { get; set; }
     }
 
     sealed class WaterEntry
@@ -94,6 +95,7 @@ public static class ContentLoader
         public float FeatureWavelengthM { get; set; }
         public float Parallax { get; set; }
         public float? AlbedoVar { get; set; }
+        public float? Roughness { get; set; }
     }
 
     sealed class StratumEntry
@@ -176,7 +178,7 @@ public static class ContentLoader
             Look = file.Look == null ? null! : new LookDef
             {
                 NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM,
-                Saturation = file.Look.Saturation, Roughness = file.Look.Roughness, Specular = file.Look.Specular,
+                Saturation = file.Look.Saturation, Roughness = file.Look.Roughness, Specular = file.Look.Specular, RoughnessVar = file.Look.RoughnessVar,
             },
             Strata = file.Strata.Select(s => new StratumDef
             {
@@ -229,7 +231,7 @@ public static class ContentLoader
                 BumpAmp = c.BumpAmp, BumpWavelengthM = c.BumpWavelengthM,
                 GrainAmp = c.GrainAmp ?? float.NaN, GrainWavelengthM = c.GrainWavelengthM ?? float.NaN,
                 FeatureAmp = c.FeatureAmp, FeatureWavelengthM = c.FeatureWavelengthM,
-                Parallax = c.Parallax, AlbedoVar = c.AlbedoVar ?? float.NaN,
+                Parallax = c.Parallax, AlbedoVar = c.AlbedoVar ?? float.NaN, Roughness = c.Roughness ?? float.NaN,
             };
         }
         return d;
