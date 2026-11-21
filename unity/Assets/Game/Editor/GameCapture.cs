@@ -673,6 +673,7 @@ namespace Stabby.Game.Editor
                 double f = BenchAt(cam, w, h);
                 sb.Append($" {h}p {b:F2}/{f:F2}");
             }
+            if (GameStatus.Lines.TryGetValue("terrain", out var t)) sb.Append("; ").Append(t);
             return sb.ToString();
         }
 
