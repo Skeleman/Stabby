@@ -40,6 +40,7 @@ public class ObjectTests
         {
             Matches(obj, o);
             Matches(place, o.GetProperty("placement"));
+            if (o.TryGetProperty("interact", out var ia)) Matches(obj.GetProperty("properties").GetProperty("interact"), ia);
             foreach (var p in o.GetProperty("parts").EnumerateArray()) Matches(part, p);
         }
         var foliage = top.GetProperty("properties").GetProperty("foliage");
@@ -73,6 +74,11 @@ public class ObjectTests
         Assert.Equal(ObjectPart.Log, log.Parts[0].Shape);
         Assert.Contains("wetland", log.Placement.Biomes);
         Assert.Empty(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()));
+        var stone = Objects.Objects.First(o => o.Id == "loose-stone");
+        Assert.Equal("take", stone.Verb);
+        Assert.True(Objects.IsInteractive(Objects.Objects.IndexOf(stone)) && stone.ReachM > 0);
+        Assert.Contains(Objects.Objects, o => o.Kind == "interactive" && o.Verb == "cut");
+        Assert.All(Objects.Objects.Where(o => o.Kind != "interactive"), o => Assert.Null(o.Verb));
         log.Placement.Biomes.Add("moon");
         try { Assert.Contains(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()), e => e.Contains("unknown biome moon")); }
         finally { log.Placement.Biomes.Remove("moon"); }
@@ -80,6 +86,13 @@ public class ObjectTests
         bad.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodPixels = RisingLods });
         bad.Objects.Add(new ObjectDef { Id = "x", Kind = "animated", Variants = 0 });
         Assert.Equal(4, ObjectLibrary.Validate(bad).Count);
+        bad.Kinds.Add(new ObjectKind { Id = "interactive", Lods = 3, LodPixels = RisingLods });
+        bad.Objects.Clear();
+        bad.Objects.Add(new ObjectDef { Id = "y", Kind = "interactive", Verb = "eat", ReachM = 2, Parts = { new ObjectPart() } });
+        bad.Objects.Add(new ObjectDef { Id = "z", Kind = "static", Verb = "take", ReachM = 2, Parts = { new ObjectPart() } });
+        var verbs = ObjectLibrary.Validate(bad);
+        Assert.Contains(verbs, e => e.StartsWith("y: interactive objects need", StringComparison.Ordinal));
+        Assert.Contains(verbs, e => e.StartsWith("z: only interactive", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -123,6 +136,69 @@ public class ObjectTests
             Assert.Equal(ObjectMeshes.Build(shape, k, 0).Positions, ObjectMeshes.Build(shape, k, 0).Positions);
         }
         Assert.NotEqual(ObjectMeshes.Build(0, ObjectMeshes.Key("boulder", 0, 1), 0).Positions, ObjectMeshes.Build(0, ObjectMeshes.Key("boulder", 0, 2), 0).Positions);
+    }
+
+    [Fact]
+    public void InteractiveRemovalIsValidatedRecordedPerChunkAndClearsColumns()
+    {
+        var w = Gen(4);
+        var detail = new TerrainDetail(w);
+        var edits = Features.Place(w, detail);
+        var host = new ObjectField(w, detail, edits, Objects);
+        int stoneDef = Objects.Objects.FindIndex(d => d.Id == "loose-stone"), woodDef = Objects.Objects.FindIndex(d => d.Id == "brushwood");
+        ObjectInstance stone = default, wood = default, plain = default;
+        bool hasStone = false, hasWood = false, hasPlain = false;
+        for (int cz = 0; cz < host.ChunksAcross && !(hasStone && hasWood && hasPlain); cz++)
+            for (int cx = 0; cx < host.ChunksAcross; cx++)
+                foreach (var o in host.Chunk(cx, cz))
+                {
+                    if (!hasStone && o.Def == stoneDef) { stone = o; hasStone = true; }
+                    if (!hasWood && o.Def == woodDef) { wood = o; hasWood = true; }
+                    if (!hasPlain && !Objects.IsInteractive(o.Def)) { plain = o; hasPlain = true; }
+                }
+        Assert.True(hasStone && hasWood && hasPlain);
+
+        var deltas = new ObjectDeltas();
+        Assert.Equal(RemoveResult.OutOfReach, deltas.TryRemove(host, stone.Id, stone.X + 20, stone.Y, stone.Z, out _));
+        Assert.Equal(RemoveResult.NotInteractive, deltas.TryRemove(host, plain.Id, plain.X, plain.Y, plain.Z, out _));
+        int across = host.ChunksAcross;
+        Assert.Equal(RemoveResult.NoChunk, deltas.TryRemove(host, ObjectIds.Make(across * across, stoneDef, 0), 0, 0, 0, out _));
+        Assert.Equal(RemoveResult.NoObject, deltas.TryRemove(host, ObjectIds.Make(ObjectIds.Chunk(stone.Id), stoneDef, 1 << 20), stone.X, stone.Y, stone.Z, out _));
+        Assert.Equal(RemoveResult.NoObject, deltas.TryRemove(host, ObjectIds.Make(0, 255, 0), 0, 0, 0, out _));
+        Assert.Equal(0, deltas.Count);
+
+        Assert.True(deltas.Nearest(host, stone.X + 0.5f, stone.Y, stone.Z, out ulong near));
+        Assert.True(Objects.IsInteractive(ObjectIds.Def(near)));
+        Assert.Equal(RemoveResult.Ok, deltas.TryRemove(host, stone.Id, stone.X + 1, stone.Y, stone.Z, out var got));
+        Assert.Equal(stone, got);
+        Assert.Equal(RemoveResult.AlreadyRemoved, deltas.TryRemove(host, stone.Id, stone.X, stone.Y, stone.Z, out _));
+        Assert.False(deltas.Nearest(host, stone.X, stone.Y, stone.Z, out ulong again) && again == stone.Id);
+
+        var table = ColumnArrays.Build(new ObjectField(w, detail, edits, Objects).Columns());
+        var cols = new List<ObjectColumn>();
+        host.ColumnsOf(wood, cols);
+        Assert.NotEmpty(cols);
+        Assert.All(cols, c => Assert.True(Obstacles.Find(table, c) >= 0));
+        float before = Obstacles.Top(table, cols[0].X, cols[0].Z, 0.05f, cols[0].Bottom, cols[0].Top);
+        Assert.True(before >= cols[0].Top);
+        Assert.Equal(RemoveResult.Ok, deltas.TryRemove(host, wood.Id, wood.X, wood.Y, wood.Z, out var woodGot));
+        Assert.Equal(cols.Count, table.Kill(host, woodGot));
+        Assert.All(cols, c => Assert.Equal(-1, Obstacles.Find(table, c)));
+        Assert.Equal(0, table.Kill(host, woodGot));
+
+        var client = new ObjectDeltas();
+        var joiner = new ObjectField(w, detail, edits, Objects);
+        foreach (int chunk in deltas.Chunks)
+            foreach (ulong id in deltas.InChunk(chunk))
+            {
+                Assert.Equal(chunk, ObjectIds.Chunk(id));
+                Assert.True(client.Apply(id));
+                Assert.True(ObjectDeltas.TryFind(joiner, id, out var mirror));
+                Assert.True(id == stone.Id ? mirror.Equals(stone) : mirror.Equals(wood));
+            }
+        Assert.False(client.Apply(stone.Id));
+        Assert.Equal(2, client.Count);
+        Assert.True(client.Removed(stone.Id) && client.Removed(wood.Id));
     }
 
     [Fact]

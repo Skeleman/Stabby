@@ -17,7 +17,8 @@ namespace Stabby.Game
             public Density[] biomeDensity;
         }
         [Serializable] class Density { public string biome; public float scale = 1f; }
-        [Serializable] class Obj { public string id, name, kind, color = "#ff00ff"; public int variants = 1; public Part[] parts; public Place placement; }
+        [Serializable] class Interact { public string verb = ""; public float reachM; }
+        [Serializable] class Obj { public string id, name, kind, color = "#ff00ff"; public int variants = 1; public Interact interact; public Part[] parts; public Place placement; }
         [Serializable] class Wind { public float directionDeg = 60f, strength = 0.35f, gustStrength = 0.5f, gustScaleM = 24f, gustSpeed = 6f, swayHz = 0.9f; }
         [Serializable] class Grass
         {
@@ -56,7 +57,7 @@ namespace Stabby.Game
                 });
             foreach (var o in dto.objects ?? Array.Empty<Obj>())
             {
-                var def = new ObjectDef { Id = o.id, Name = o.name, Kind = o.kind, Color = Hex(o.color), Variants = o.variants };
+                var def = new ObjectDef { Id = o.id, Name = o.name, Kind = o.kind, Color = Hex(o.color), Variants = o.variants, Verb = string.IsNullOrEmpty(o.interact?.verb) ? null : o.interact.verb, ReachM = o.interact?.reachM ?? 0 };
                 foreach (var p in o.parts ?? Array.Empty<Part>())
                 {
                     bool colored = !string.IsNullOrEmpty(p.color);
