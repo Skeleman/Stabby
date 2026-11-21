@@ -159,4 +159,36 @@ public class ObjectTests
         }
         finally { c.Placement.Biomes = keep; }
     }
+    [Fact]
+    public void TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse()
+    {
+        var w = Gen(5, 512);
+        var detail = new TerrainDetail(w);
+        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        int n = w.Config.Size, talus = Objects.Objects.FindIndex(o => o.Id == "talus"), rock = Objects.Objects.FindIndex(o => o.Id == "small-rock");
+        var pl = Objects.Objects[talus].Placement;
+        var perDef = new int[Objects.Objects.Count];
+        int talusFoot = 0, rockFoot = 0, rockSparse = 0, rockDense = 0;
+        foreach (var o in Enumerable.Range(0, field.ChunksAcross * field.ChunksAcross).SelectMany(c => field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross)))
+        {
+            perDef[o.Def]++;
+            if (o.Def == talus && field.Foot(pl, o.X, o.Z)) talusFoot++;
+            if (o.Def != rock) continue;
+            if (field.Foot(pl, o.X, o.Z)) rockFoot++;
+            int gx = Math.Min(n - 1, (int)(o.X / w.Config.CellMeters + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / w.Config.CellMeters + 0.5f));
+            string b = w.BiomeIds[w.Biome[gz * n + gx]];
+            if (b == "desert" || b == "wetland" || b == "mangrove") rockSparse++; else rockDense++;
+        }
+        int sparseCells = 0, denseCells = 0;
+        for (int i = 0; i < n * n; i++)
+        {
+            if (w.Biome[i] < 0) continue;
+            string b = w.BiomeIds[w.Biome[i]];
+            if (b == "desert" || b == "wetland" || b == "mangrove") sparseCells++; else denseCells++;
+        }
+        var report = string.Join(", ", Objects.Objects.Select((o, d) => o.Id + " " + perDef[d])) + $"; talus at feet {talusFoot}, small rocks at feet {rockFoot}, sparse {rockSparse}/{sparseCells} dense {rockDense}/{denseCells}";
+        Assert.True(perDef[talus] > 1000, report);
+        Assert.True(talusFoot * 2 > perDef[talus] * 0.4f * 2 && talusFoot * (double)perDef[rock] > 5.0 * rockFoot * perDef[talus], report);
+        Assert.True(sparseCells == 0 || rockSparse / (double)sparseCells < 0.4 * rockDense / denseCells, report);
+    }
 }

@@ -243,6 +243,15 @@ public static class ContentLoader
         public float ClusterRadiusM { get; set; }
         public float Sink { get; set; }
         public float AlignToSlope { get; set; }
+        public float FootRiseM { get; set; }
+        public float FootReachM { get; set; } = 12f;
+        public List<BiomeDensityEntry> BiomeDensity { get; set; } = new();
+    }
+
+    sealed class BiomeDensityEntry
+    {
+        public string Biome { get; set; } = "";
+        public float Scale { get; set; } = 1f;
     }
 
     static uint Hex(string s) => uint.Parse(s.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
@@ -286,6 +295,8 @@ public static class ContentLoader
                 Biomes = pl.Biomes, PerHectare = pl.PerHectare, SlopeMin = pl.SlopeMin, SlopeMax = pl.SlopeMax,
                 HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
+                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM,
+                BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);
         }

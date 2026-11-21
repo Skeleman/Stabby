@@ -10,17 +10,31 @@
     {
       "id": "small-rock", "name": "Small rock", "kind": "static", "color": "#8a857c", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.8, 1], "solid": "off", "shadows": "off" } ],
-      "placement": { "perHectare": 10, "slopeMax": 1.2, "sizeMinM": 0.25, "sizeMaxM": 0.7, "sink": 0.2, "alignToSlope": 0.8 }
+      "placement": { "perHectare": 14, "slopeMax": 1.2, "sizeMinM": 0.25, "sizeMaxM": 0.7, "sink": 0.2, "alignToSlope": 0.8,
+        "biomeDensity": [ { "biome": "desert", "scale": 0.15 }, { "biome": "cold-desert", "scale": 0.3 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
       "id": "scree", "name": "Scree", "kind": "static", "color": "#7d7a74", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
-      "placement": { "perHectare": 12, "slopeMin": 0.45, "slopeMax": 1.8, "hardnessMin": 0.3, "sizeMinM": 0.3, "sizeMaxM": 0.9, "clusterCount": 10, "clusterRadiusM": 6, "sink": 0.25, "alignToSlope": 1 }
+      "placement": { "perHectare": 12, "slopeMin": 0.45, "slopeMax": 1.8, "hardnessMin": 0.3, "sizeMinM": 0.3, "sizeMaxM": 0.9, "clusterCount": 10, "clusterRadiusM": 6, "sink": 0.25, "alignToSlope": 1,
+        "biomeDensity": [ { "biome": "desert", "scale": 0.4 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
+    },
+    {
+      "id": "talus", "name": "Talus", "kind": "static", "color": "#7f7b74", "variants": 8,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1] } ],
+      "placement": { "perHectare": 360, "slopeMax": 1.1, "sizeMinM": 0.3, "sizeMaxM": 1.4, "clusterCount": 24, "clusterRadiusM": 10, "sink": 0.25, "alignToSlope": 0.7, "footRiseM": 5, "footReachM": 10,
+        "biomeDensity": [ { "biome": "desert", "scale": 0.4 }, { "biome": "wetland", "scale": 0.15 }, { "biome": "mangrove", "scale": 0.15 } ] }
+    },
+    {
+      "id": "field-stone", "name": "Field stone", "kind": "static", "color": "#8e897f", "variants": 6,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.55, 1], "solid": "off", "shadows": "off" } ],
+      "placement": { "biomes": ["steppe", "savanna", "shrubland", "tundra", "temperate-forest", "boreal", "alpine"], "perHectare": 40, "slopeMax": 0.9, "sizeMinM": 0.12, "sizeMaxM": 0.4, "clusterCount": 4, "clusterRadiusM": 3, "sink": 0.25, "alignToSlope": 0.9 }
     },
     {
       "id": "boulder", "name": "Boulder", "kind": "static", "color": "#8c877e", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock" } ],
-      "placement": { "perHectare": 1.2, "slopeMax": 1.4, "hardnessMin": 0.2, "sizeMinM": 1.4, "sizeMaxM": 3.6, "sink": 0.15, "alignToSlope": 0.3 }
+      "placement": { "perHectare": 1.2, "slopeMax": 1.4, "hardnessMin": 0.2, "sizeMinM": 1.4, "sizeMaxM": 3.6, "sink": 0.15, "alignToSlope": 0.3,
+        "biomeDensity": [ { "biome": "desert", "scale": 0.5 }, { "biome": "wetland", "scale": 0.15 }, { "biome": "mangrove", "scale": 0.15 } ] }
     },
     {
       "id": "boulder-cluster", "name": "Boulder cluster", "kind": "static", "color": "#837f77", "variants": 4,
@@ -29,17 +43,19 @@
         { "id": "mid", "shape": "rock", "offset": [0.75, 0, 0.35], "scale": [0.6, 0.55, 0.6] },
         { "id": "small", "shape": "rock", "offset": [-0.4, 0, 0.7], "scale": [0.35, 0.3, 0.35], "solid": "off", "shadows": "off" }
       ],
-      "placement": { "perHectare": 0.4, "slopeMax": 1, "hardnessMin": 0.25, "sizeMinM": 1.6, "sizeMaxM": 3, "sink": 0.12, "alignToSlope": 0.2 }
+      "placement": { "perHectare": 0.4, "slopeMax": 1, "hardnessMin": 0.25, "sizeMinM": 1.6, "sizeMaxM": 3, "sink": 0.12, "alignToSlope": 0.2,
+        "biomeDensity": [ { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
       "id": "fallen-log", "name": "Fallen log", "kind": "static", "color": "#5b4632", "variants": 4,
       "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.11, 0.11] } ],
-      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "wetland"], "perHectare": 2.5, "slopeMax": 0.6, "sizeMinM": 4, "sizeMaxM": 8, "sink": 0.02, "alignToSlope": 1 }
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "wetland"], "perHectare": 6, "slopeMax": 0.6, "sizeMinM": 4, "sizeMaxM": 8, "sink": 0.02, "alignToSlope": 1,
+        "biomeDensity": [ { "biome": "wetland", "scale": 0.3 } ] }
     },
     {
       "id": "stump", "name": "Stump", "kind": "static", "color": "#6a5640", "variants": 4,
       "parts": [ { "id": "stump", "shape": "stump", "scale": [1, 0.9, 1] } ],
-      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 1.5, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 4, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
     }
   ]
 }

@@ -19,8 +19,8 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream;
-        readonly bool[][] biomeOk;
+        readonly ulong stream, footStream, thinStream;
+        readonly float[][] density;
         readonly float[] footprint;
         readonly float[][][] heights;
         readonly ulong[] key;
@@ -37,19 +37,27 @@ namespace Stabby.World
             across = WorldChunks.Across(n);
             chunks = new ObjectInstance[across * across][];
             stream = Rng.Stream(w.Config.Seed, "objects").NextU64();
+            footStream = Rng.Stream(w.Config.Seed, "objects-foot").NextU64();
+            thinStream = Rng.Stream(w.Config.Seed, "objects-thin").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
             heights = PartHeights(lib);
-            biomeOk = new bool[defs][];
+            density = new float[defs][];
             footprint = new float[defs];
             key = new ulong[defs];
             float maxR = 0;
             for (int d = 0; d < defs; d++)
             {
                 var def = lib.Objects[d];
-                biomeOk[d] = new bool[biomes];
-                for (int b = 0; b < biomes; b++) biomeOk[d][b] = def.Placement.Biomes.Count == 0 || def.Placement.Biomes.Contains(w.BiomeIds[b]);
+                density[d] = new float[biomes];
+                for (int b = 0; b < biomes; b++)
+                {
+                    bool ok = def.Placement.Biomes.Count == 0 || def.Placement.Biomes.Contains(w.BiomeIds[b]);
+                    float scale = 1f;
+                    foreach (var bd in def.Placement.BiomeDensity) if (bd.Biome == w.BiomeIds[b]) scale = bd.Scale;
+                    density[d][b] = ok ? scale : 0f;
+                }
                 footprint[d] = def.FootprintRadius();
                 key[d] = Key(def.Id);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
@@ -118,22 +126,31 @@ namespace Stabby.World
         public ObjectInstance[] Place(int cx, int cz, bool solidOnly = false)
         {
             var list = new List<ObjectInstance>();
+            PlaceInto(cx, cz, solidOnly, list);
+            return list.ToArray();
+        }
+
+        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list)
+        {
             float span = WorldChunks.Size * cm;
             float x0 = cx * span, z0 = cz * span;
             float sx = Math.Min(span, worldM - x0), sz = Math.Min(span, worldM - z0);
-            if (sx <= 0 || sz <= 0) return list.ToArray();
+            if (sx <= 0 || sz <= 0) return;
             ulong chunkKey = Rng.Mix((ulong)(cz * across + cx) + 1);
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 var pl = lib.Objects[d].Placement;
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d))) continue;
-                var rng = new Rng(Rng.Mix(stream ^ chunkKey ^ key[d]));
+                bool foot = pl.FootRiseM > 0;
+                var rng = new Rng(Rng.Mix((foot ? footStream : stream) ^ chunkKey ^ key[d]));
+                var thin = new Rng(Rng.Mix(thinStream ^ chunkKey ^ key[d]));
                 float expected = pl.PerHectare * sx * sz / 10000f / pl.ClusterCount;
                 int clusters = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
                 for (int k = 0; k < clusters; k++)
                 {
                     float ax = x0 + rng.NextFloat() * sx, az = z0 + rng.NextFloat() * sz;
-                    bool open = Open(d, ax, az);
+                    bool open = Open(d, ax, az) && (!foot || Foot(pl, ax, az));
+                    if (foot && !open) continue;
                     for (int m = 0; m < pl.ClusterCount; m++)
                     {
                         float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), t = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
@@ -141,19 +158,53 @@ namespace Stabby.World
                         if (!open) continue;
                         float px = m == 0 ? ax : ax + ox * pl.ClusterRadiusM, pz = m == 0 ? az : az + oz * pl.ClusterRadiusM;
                         if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz) continue;
+                        if (Density(d, px, pz) < 1f && thin.NextFloat() >= Density(d, px, pz)) continue;
                         float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t;
                         if (Accept(d, px, pz, size, qa, qb, out var o)) { o.Variant = variant; list.Add(o); }
                     }
                 }
             }
-            return list.ToArray();
+        }
+
+        float Density(int d, float x, float z)
+        {
+            if (x < 0 || z < 0 || x >= worldM || z >= worldM) return 0f;
+            int b = w.Biome[Cell(z) * n + Cell(x)];
+            return b >= 0 ? density[d][b] : 0f;
+        }
+
+        public bool Foot(ObjectPlacement pl, float x, float z)
+        {
+            int gx = Cell(x), gz = Cell(z);
+            float h0 = detail.Height(gz * n + gx), span = 0;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = Math.Max(0, Math.Min(n - 1, gx + dx)), az = Math.Max(0, Math.Min(n - 1, gz + dz));
+                    span = Math.Max(span, Math.Abs(detail.Height(az * n + ax) - h0));
+                }
+            float r = pl.FootReachM;
+            if (span / cm * r * 1.5f + detail.Amplitude(gz * n + gx) < pl.FootRiseM) return false;
+            float gxs = detail.Height(gz * n + Math.Min(n - 1, gx + 1)) - detail.Height(gz * n + Math.Max(0, gx - 1));
+            float gzs = detail.Height(Math.Min(n - 1, gz + 1) * n + gx) - detail.Height(Math.Max(0, gz - 1) * n + gx);
+            float gl = (float)Math.Sqrt(gxs * gxs + gzs * gzs);
+            float y = GroundAt(detail, cm, x, z), diag = r * 0.70710678f, best = 0, below = 0;
+            if (gl > 1e-3f && GroundAt(detail, cm, x + gxs / gl * r, z + gzs / gl * r) - y < 0.4f * pl.FootRiseM) return false;
+            for (int k = 0; k < 8; k++)
+            {
+                float ux = k == 0 ? r : k == 1 ? -r : k < 4 ? 0 : k == 4 || k == 6 ? diag : -diag;
+                float uz = k == 2 ? r : k == 3 ? -r : k < 2 ? 0 : k == 4 || k == 5 ? diag : -diag;
+                float rise = GroundAt(detail, cm, x + ux, z + uz) - y;
+                if (rise > best) { best = rise; below = y - GroundAt(detail, cm, x - ux, z - uz); }
+            }
+            return best >= pl.FootRiseM && below < 0.5f * best;
         }
 
         bool Open(int d, float x, float z)
         {
             if (x < 0 || z < 0 || x >= worldM || z >= worldM) return false;
             int b = w.Biome[Cell(z) * n + Cell(x)];
-            return b >= 0 && biomeOk[d][b];
+            return b >= 0 && density[d][b] > 0;
         }
 
         bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o)
@@ -235,9 +286,16 @@ namespace Stabby.World
         public List<ObjectColumn> Columns()
         {
             var list = new List<ObjectColumn>();
+            var scratch = new List<ObjectInstance>();
             for (int cz = 0; cz < across; cz++)
                 for (int cx = 0; cx < across; cx++)
-                    foreach (var o in chunks[cz * across + cx] ?? Place(cx, cz, true)) AddColumns(lib, heights, o, list);
+                {
+                    var held = chunks[cz * across + cx];
+                    if (held != null) { foreach (var o in held) AddColumns(lib, heights, o, list); continue; }
+                    scratch.Clear();
+                    PlaceInto(cx, cz, true, scratch);
+                    foreach (var o in scratch) AddColumns(lib, heights, o, list);
+                }
             return list;
         }
 
