@@ -17,6 +17,12 @@ namespace Stabby.Game
         public const int ToolSettleFrames = 10;
         public static bool AfterTool => UnityEngine.Time.frameCount - ToolFrame <= ToolSettleFrames;
 
+        public static bool Line(string key, out string line)
+        {
+            if (Live.TryGetValue(key, out var f)) { line = f(); return true; }
+            return Lines.TryGetValue(key, out line);
+        }
+
         public static void PutFrames()
         {
             foreach (var kv in Live) Lines[kv.Key] = kv.Value();

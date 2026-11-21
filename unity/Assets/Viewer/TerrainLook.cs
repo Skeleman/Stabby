@@ -191,23 +191,78 @@ namespace Stabby.Viewer
             return mips.ToArray();
         }
 
-        public static IEnumerable<bool> ApplyField(FieldLook f, int budgetBytes)
+        public static void CreateField(FieldLook f)
         {
-            foreach (var t in new[] { slopeField, bedField, biomeField }) if (t != null) UnityEngine.Object.Destroy(t);
+            if (slopeField != null) UnityEngine.Object.Destroy(slopeField);
+            if (bedField != null) UnityEngine.Object.Destroy(bedField);
+            if (biomeField != null) UnityEngine.Object.Destroy(biomeField);
             slopeField = Field("Slopes", f.Res, GraphicsFormat.R16G16_SFloat, f.Slopes.Length, FilterMode.Trilinear, 4);
             bedField = Field("Bed", f.Res, GraphicsFormat.R32_SFloat, f.Bed.Length, FilterMode.Trilinear, 1);
             biomeField = Field("Biomes", f.N, GraphicsFormat.R16G16B16A16_SFloat, 1, FilterMode.Bilinear, 1);
             Shader.SetGlobalTexture("_StabbySlope", slopeField);
             Shader.SetGlobalTexture("_StabbyBed", bedField);
             Shader.SetGlobalTexture("_StabbyBiome", biomeField);
-            yield return false;
+        }
+
+        public static void FieldGlobals(FieldLook f)
+        {
             Shader.SetGlobalVector("_StabbyFieldUV", new Vector4(1f / (f.TexelM * f.Res), 0.5f / f.Res, 1f / (f.CellM * f.N), 0.5f / f.N));
             Shader.SetGlobalVector("_StabbySand", new Vector4(Sand.x, Sand.y, Sand.z, 0));
-            int spent = 0;
-            foreach (int bytes in Slices(f.Slopes, 2, slopeField, budgetBytes)) if ((spent += bytes) >= budgetBytes) { spent = 0; yield return false; }
-            foreach (int bytes in Slices(f.Bed, 1, bedField, budgetBytes)) if ((spent += bytes) >= budgetBytes) { spent = 0; yield return false; }
-            foreach (int bytes in Slices(new[] { f.Biome }, 4, biomeField, budgetBytes)) if ((spent += bytes) >= budgetBytes) { spent = 0; yield return false; }
-            yield return true;
+        }
+
+        public sealed class FieldUpload
+        {
+            readonly FieldLook f;
+            readonly int budget;
+            int part, mip, row;
+            Texture2D stage;
+
+            public FieldUpload(FieldLook field, int budgetBytes)
+            {
+                f = field;
+                budget = budgetBytes;
+            }
+
+            public bool Step()
+            {
+                if (part == 0)
+                {
+                    CreateField(f);
+                    part = 1;
+                    return false;
+                }
+                if (part == 1 && mip == 0 && row == 0) FieldGlobals(f);
+                int spent = 0;
+                while (part <= 3)
+                {
+                    int bytes = part == 1 ? Slice(f.Slopes[mip], 2, slopeField, f.Slopes.Length)
+                        : part == 2 ? Slice(f.Bed[mip], 1, bedField, f.Bed.Length)
+                        : Slice(f.Biome, 4, biomeField, 1);
+                    if ((spent += bytes) >= budget) return false;
+                }
+                if (stage != null) UnityEngine.Object.Destroy(stage);
+                stage = null;
+                return true;
+            }
+
+            int Slice<T>(T[] src, int channels, RenderTexture target, int mips) where T : struct
+            {
+                int bpp = channels * Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<T>();
+                int w = Math.Max(1, target.width >> mip), rows = Math.Clamp(budget / (w * bpp), 1, w), n = Math.Min(rows, w - row);
+                var format = target.graphicsFormat;
+                if (stage == null) stage = new Texture2D(w, n, format, TextureCreationFlags.DontInitializePixels) { name = "Field stage" };
+                else if (stage.width != w || stage.height != n || stage.graphicsFormat != format) stage.Reinitialize(w, n, format, false);
+                stage.SetPixelData(src, 0, row * w * channels);
+                stage.Apply(false, false);
+                Graphics.CopyTexture(stage, 0, 0, 0, 0, w, n, target, 0, mip, 0, row);
+                row += n;
+                if (row >= w)
+                {
+                    row = 0;
+                    if (++mip >= mips) { mip = 0; part++; }
+                }
+                return n * w * bpp;
+            }
         }
 
         static RenderTexture slopeField, bedField, biomeField;
@@ -218,27 +273,6 @@ namespace Stabby.Viewer
             var rt = new RenderTexture(d) { name = name, wrapMode = TextureWrapMode.Clamp, filterMode = filter, anisoLevel = aniso };
             rt.Create();
             return rt;
-        }
-
-        static IEnumerable<int> Slices<T>(T[][] mips, int channels, RenderTexture target, int budgetBytes) where T : struct
-        {
-            int bpp = channels * System.Runtime.InteropServices.Marshal.SizeOf<T>();
-            for (int m = 0; m < mips.Length; m++)
-            {
-                int w = Math.Max(1, target.width >> m), rows = Math.Clamp(budgetBytes / (w * bpp), 1, w);
-                var stage = new Texture2D(w, rows, target.graphicsFormat, TextureCreationFlags.DontInitializePixels) { name = target.name + " stage" };
-                var buffer = new T[w * rows * channels];
-                for (int y = 0; y < w; y += rows)
-                {
-                    int n = Math.Min(rows, w - y);
-                    Array.Copy(mips[m], y * w * channels, buffer, 0, n * w * channels);
-                    stage.SetPixelData(buffer, 0);
-                    stage.Apply(false, false);
-                    Graphics.CopyTexture(stage, 0, 0, 0, 0, w, n, target, 0, m, 0, y);
-                    yield return n * w * bpp;
-                }
-                UnityEngine.Object.Destroy(stage);
-            }
         }
 
         public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib, float[] offsets = null)
