@@ -50,12 +50,12 @@
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8c8a83", "thicknessM": 14, "hardness": 0.85 },
-    { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#9a6248", "thicknessM": 6, "hardness": 0.5 },
-    { "id": "buff-sandstone", "name": "Buff sandstone",  "color": "#b49a72", "thicknessM": 9, "hardness": 0.55 },
+    { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#89685c", "thicknessM": 6, "hardness": 0.5 },
+    { "id": "buff-sandstone", "name": "Buff sandstone",  "color": "#af9b7f", "thicknessM": 9, "hardness": 0.55 },
     { "id": "dark-shale",     "name": "Dark shale",      "color": "#6b6661", "thicknessM": 3, "hardness": 0.05 },
-    { "id": "ochre-siltstone","name": "Ochre siltstone", "color": "#a3814f", "thicknessM": 7, "hardness": 0.3 },
+    { "id": "ochre-siltstone","name": "Ochre siltstone", "color": "#98836a", "thicknessM": 7, "hardness": 0.3 },
     { "id": "pale-chalk",     "name": "Pale chalk",      "color": "#c2bdb1", "thicknessM": 4, "hardness": 0.4 },
     { "id": "basalt",         "name": "Basalt",          "color": "#5e5e62", "thicknessM": 11, "hardness": 0.92 },
-    { "id": "rust-mudstone",  "name": "Rust mudstone",   "color": "#7f5a45", "thicknessM": 5, "hardness": 0.1 }
+    { "id": "rust-mudstone",  "name": "Rust mudstone",   "color": "#735e54", "thicknessM": 5, "hardness": 0.1 }
   ]
 }
