@@ -37,6 +37,13 @@ public class ObjectRegionTests
         regions.Put(best);
         Assert.True(regions.Resident(best.Index));
         Assert.True(Obstacles.Top(regions, col.X, col.Z, 0.05f, col.Bottom, col.Top) >= col.Top);
+        var g = best.Grid;
+        float gx0 = g.X0 * ColumnRegion.CellM, gz0 = g.Z0 * ColumnRegion.CellM, gx1 = (g.X0 + g.W) * ColumnRegion.CellM, gz1 = (g.Z0 + g.H) * ColumnRegion.CellM;
+        float off = g.Max + 3 * ColumnRegion.CellM;
+        foreach (float ox in new[] { gx0 - off, gx0 + 1, gx1 - 1, gx1 + off })
+            foreach (float oz in new[] { gz0 - off, gz0 + 1, gz1 - 1, gz1 + off })
+                if (ox < gx0 || ox > gx1 || oz < gz0 || oz > gz1)
+                    Assert.Equal(float.NegativeInfinity, Obstacles.Top(regions, ox, oz, 0.05f, float.NegativeInfinity, float.PositiveInfinity));
         int alive = best.Alive(owner);
         Assert.True(alive > 0);
         Assert.Equal(alive, regions.Kill(owner));

@@ -159,7 +159,7 @@ namespace Stabby.Game.Editor
             field.ColumnsOf(target, cols);
             var oc = Columns(GameSettings.FullStreamClient);
             int region = ObjectIds.Chunk(target.Id);
-            ref var data = ref oc.Regions[region].Value;
+            var data = oc.Regions[region];
             var saved = new List<(int, ObjectColumn)>();
             for (int k = 0; k < data.Owners.Length; k++)
                 if (data.Owners[k] == target.Id) saved.Add((k, data.Items[k]));

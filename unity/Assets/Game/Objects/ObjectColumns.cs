@@ -11,17 +11,41 @@ using Unity.Transforms;
 
 namespace Stabby.Game
 {
-    public struct RegionColumnData
+    public struct RegionColumns
     {
         public RegionGrid Grid;
-        public BlobArray<int> Starts;
-        public BlobArray<ObjectColumn> Items;
-        public BlobArray<ulong> Owners;
+        public UnsafeList<int> Starts;
+        public UnsafeList<ObjectColumn> Items;
+        public UnsafeList<ulong> Owners;
+
+        public bool IsCreated => Starts.IsCreated;
+
+        public static RegionColumns Of(ColumnRegion r)
+        {
+            var c = new RegionColumns
+            {
+                Grid = r.Grid,
+                Starts = new UnsafeList<int>(r.Starts.Length, Allocator.Persistent),
+                Items = new UnsafeList<ObjectColumn>(r.Count, Allocator.Persistent),
+                Owners = new UnsafeList<ulong>(r.Count, Allocator.Persistent),
+            };
+            for (int k = 0; k < r.Starts.Length; k++) c.Starts.AddNoResize(r.Starts[k]);
+            for (int k = 0; k < r.Count; k++) { c.Items.AddNoResize(r.Items[k]); c.Owners.AddNoResize(r.Owners[k]); }
+            return c;
+        }
+
+        public void Dispose()
+        {
+            if (!IsCreated) return;
+            Starts.Dispose();
+            Items.Dispose();
+            Owners.Dispose();
+        }
     }
 
     public struct ObjectColumns : IComponentData, IColumnTable
     {
-        public UnsafeList<BlobAssetReference<RegionColumnData>> Regions;
+        public UnsafeList<RegionColumns> Regions;
         public float Size;
         public int Count;
 
@@ -32,19 +56,19 @@ namespace Stabby.Game
         public bool Grid(int region, out RegionGrid g)
         {
             var b = Regions[region];
-            g = b.IsCreated ? b.Value.Grid : default;
+            g = b.IsCreated ? b.Grid : default;
             return b.IsCreated;
         }
 
-        public int Start(int region, int cell) => Regions[region].Value.Starts[cell];
-        public ObjectColumn Column(int region, int k) => Regions[region].Value.Items[k];
+        public int Start(int region, int cell) => Regions[region].Starts[cell];
+        public ObjectColumn Column(int region, int k) => Regions[region].Items[k];
         public bool Resident(int region) => Regions.IsCreated && region < Regions.Length && Regions[region].IsCreated;
 
         public int Kill(ulong id)
         {
             int r = ObjectIds.Chunk(id), killed = 0;
             if (!Resident(r)) return 0;
-            ref var data = ref Regions[r].Value;
+            var data = Regions[r];
             for (int k = 0; k < data.Owners.Length; k++)
                 if (data.Owners[k] == id && !Obstacles.IsDead(data.Items[k])) { data.Items[k] = Obstacles.Dead; killed++; }
             return killed;
@@ -54,7 +78,7 @@ namespace Stabby.Game
         {
             int r = ObjectIds.Chunk(id), n = 0;
             if (!Resident(r)) return 0;
-            ref var data = ref Regions[r].Value;
+            var data = Regions[r];
             for (int k = 0; k < data.Owners.Length; k++)
                 if (data.Owners[k] == id && !Obstacles.IsDead(data.Items[k])) n++;
             return n;
@@ -66,13 +90,13 @@ namespace Stabby.Game
     {
         sealed class Built
         {
-            public BlobAssetReference<RegionColumnData> Blob;
+            public RegionColumns Region;
             public int Columns;
             public long Ms;
         }
 
         Task<ObjectField> fieldTask;
-        UnsafeList<BlobAssetReference<RegionColumnData>> regions;
+        UnsafeList<RegionColumns> regions;
         readonly Dictionary<int, Task<Built>> building = new Dictionary<int, Task<Built>>();
         readonly List<int> resident = new List<int>();
         readonly List<int> wanted = new List<int>();
@@ -96,7 +120,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
-            foreach (var t in building.Values) Owned.Release(t, b => b.Blob.Dispose());
+            foreach (var t in building.Values) Owned.Release(t, b => b.Region.Dispose());
             building.Clear();
             if (!regions.IsCreated) return;
             for (int k = 0; k < regions.Length; k++) if (regions[k].IsCreated) regions[k].Dispose();
@@ -132,7 +156,7 @@ namespace Stabby.Game
                 Field = fieldTask.Result;
                 fieldTask = null;
                 int across = Field.ChunksAcross;
-                regions = new UnsafeList<BlobAssetReference<RegionColumnData>>(across * across, Allocator.Persistent);
+                regions = new UnsafeList<RegionColumns>(across * across, Allocator.Persistent);
                 regions.Resize(across * across, NativeArrayOptions.ClearMemory);
                 EntityManager.CreateSingleton(new ObjectColumns { Regions = regions, Size = Field.ChunkMeters, Count = across });
             }
@@ -169,8 +193,8 @@ namespace Stabby.Game
                 building.Remove(r);
                 if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
                 var b = task.Result;
-                if (!Near(r, freeReach)) { b.Blob.Dispose(); continue; }
-                regions[r] = b.Blob;
+                if (!Near(r, freeReach)) { b.Region.Dispose(); continue; }
+                regions[r] = b.Region;
                 resident.Add(r);
                 columns += b.Columns;
                 lastColumns = b.Columns;
@@ -185,7 +209,7 @@ namespace Stabby.Game
             {
                 int r = resident[k];
                 if (Near(r, freeReach)) continue;
-                columns -= regions[r].Value.Items.Length;
+                columns -= regions[r].Items.Length;
                 regions[r].Dispose();
                 regions[r] = default;
                 resident.RemoveAt(k);
@@ -209,23 +233,7 @@ namespace Stabby.Game
         {
             var sw = Stopwatch.StartNew();
             var r = ColumnRegion.Build(field, index);
-            var b = new BlobBuilder(Allocator.Persistent);
-            try
-            {
-                ref var root = ref b.ConstructRoot<RegionColumnData>();
-                root.Grid = r.Grid;
-                var starts = b.Allocate(ref root.Starts, r.Starts.Length);
-                for (int k = 0; k < r.Starts.Length; k++) starts[k] = r.Starts[k];
-                var items = b.Allocate(ref root.Items, r.Count);
-                var owners = b.Allocate(ref root.Owners, r.Count);
-                for (int k = 0; k < r.Count; k++) { items[k] = r.Items[k]; owners[k] = r.Owners[k]; }
-                var blob = b.CreateBlobAssetReference<RegionColumnData>(Allocator.Persistent);
-                return new Built { Blob = blob, Columns = r.Count, Ms = sw.ElapsedMilliseconds };
-            }
-            finally
-            {
-                b.Dispose();
-            }
+            return new Built { Region = RegionColumns.Of(r), Columns = r.Count, Ms = sw.ElapsedMilliseconds };
         }
 
         void Status()
