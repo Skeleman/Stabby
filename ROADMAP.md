@@ -69,6 +69,19 @@ their geometry is built.
 | Per-cell refinement: subdivide only lattice cells that touch a feature edit, stitched to the coarse neighbours, instead of whole chunks at a finer step | idea |
 | Player collision against the solid field: engine-free `Walk.Step` (step-up, head and radius probes, constant-speed fall, wall slide) shared by server, client prediction and `WorldChecks.CheckCaveWalk`, which walks every cave path | done |
 
+## Next: generator features
+
+Steps marked **Zach** need his decision first: they add to or change the
+architecture contract. The other steps fit the contract as it stands.
+
+| Item | Status |
+|---|---|
+| More biomes (alpine, wetland, mangrove, cold desert) in `biomes.json`; content only | now |
+| River overhaul inside `Drainage` and hydrology: meanders, wider lowland beds, banks; no second river array | next |
+| **Zach:** cliffs. Hard strata resist erosion, which makes scarps. Generation would read rock hardness from the material library, so the material library would feed generation instead of being render-only | next |
+| Undercut cliff faces as overhang edits along scarps (needs the cliff decision) | later |
+| **Zach:** cave expansion beyond the current fundamentals (cave networks, a dungeon scale) | later |
+
 ## Next
 
 - Real streaming when gameplay needs a bigger world: residency around players,
