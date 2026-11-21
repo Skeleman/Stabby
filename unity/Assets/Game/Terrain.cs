@@ -599,7 +599,7 @@ namespace Stabby.Game
         Task<Prepared> preparing;
         IEnumerator<string> loading;
         Prepared prepared;
-        IEnumerator<bool> upload;
+        TerrainLook.FieldUpload upload;
         const int UploadBytes = 2 << 20;
         BlobAssetReference<TerrainLookData> look, lookReady;
         BlobBake<TerrainLookData> lookBake;
@@ -630,7 +630,8 @@ namespace Stabby.Game
         readonly List<Pending> pending = new List<Pending>();
         readonly List<Mesh> statics = new List<Mesh>();
         readonly int[] levelCounts = new int[TerrainTree.Levels];
-        int statusSeen;
+        int shownDrawn, shownSunk, shownWanted, shownBehind, shownVertices, shownCasting, shownCast;
+        readonly int[] shownLevels = new int[TerrainTree.Levels];
         readonly Stopwatch frame = new Stopwatch(), since = new Stopwatch();
         EntitiesGraphicsSystem graphics;
         BatchMaterialID material, waterMaterial;
@@ -655,7 +656,7 @@ namespace Stabby.Game
             if (look.IsCreated)
             {
                 if (SmoothOnly != builtSmooth) Reset();
-                if (upload != null && (!upload.MoveNext() || upload.Current)) upload = null;
+                if (upload != null && upload.Step()) upload = null;
                 double tu = frame.Elapsed.TotalMilliseconds;
                 Collect();
                 double tc = frame.Elapsed.TotalMilliseconds;
@@ -690,6 +691,8 @@ namespace Stabby.Game
             GameStatus.TerrainVertices = frameVertices;
             if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage}: {Parts()})"; }
         }
+
+        string Status() => $"terrain nodes {shownDrawn} drawn, {shownSunk} sunk hidden, {shownWanted} wanted, {shownBehind} behind, {built} built, {built - evicted} live, {shownVertices} drawn vertices, {shownCasting} casting ({shownCast} vertices), by level {string.Join("/", shownLevels)}";
 
         string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, statics {partStatics:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
 
@@ -867,7 +870,7 @@ namespace Stabby.Game
                 while ((Fill() >= 0 || spare.Length < SpareFill) && frame.Elapsed.TotalMilliseconds < ApplyMs);
                 yield return $"pool {Fill()}/{spare.Length}";
             }
-            upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
+            upload = new TerrainLook.FieldUpload(prepared.Field, UploadBytes);
             prepared.Field = null;
             look = lookReady;
         }
@@ -1252,13 +1255,9 @@ namespace Stabby.Game
             (lodRequests, lodDraw, lodNodes, lodEvictMs, lodShadowMs) = (t1 - t0, t2 - t1, frame.Elapsed.TotalMilliseconds - t2, evictMs, shadowMs);
             (lodEvicts, lodDeferred, lodShadows) = (evicts, deferred, shadows);
             GameStatus.TerrainBehind = behind;
-            int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices, castVertices);
-            for (int i = 0; i < levelCounts.Length; i++) seen = HashCode.Combine(seen, levelCounts[i]);
-            if (seen != statusSeen || !GameStatus.Lines.ContainsKey("terrain"))
-            {
-                statusSeen = seen;
-                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count - sunk} drawn, {sunk} sunk hidden, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, {casting} casting ({castVertices} vertices), by level {string.Join("/", levelCounts)}";
-            }
+            (shownDrawn, shownSunk, shownWanted, shownBehind, shownVertices, shownCasting, shownCast) = (drawn.Count - sunk, sunk, leaves.Length, behind, vertices, casting, castVertices);
+            Array.Copy(levelCounts, shownLevels, levelCounts.Length);
+            if (!GameStatus.Live.ContainsKey("terrain")) GameStatus.Live["terrain"] = Status;
             ScheduleLods(cam);
         }
 
@@ -1347,6 +1346,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
+            if (GameStatus.Live.Remove("terrain")) GameStatus.Lines["terrain"] = Status();
             if (lodScheduled) lodHandle.Complete();
             foreach (var p in pending)
             {
