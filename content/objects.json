@@ -16,7 +16,7 @@
     {
       "id": "scree", "name": "Scree", "kind": "static", "color": "#7d7a74", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
-      "placement": { "perHectare": 12, "slopeMin": 0.45, "slopeMax": 1.8, "hardnessMin": 0.3, "sizeMinM": 0.3, "sizeMaxM": 0.9, "clusterCount": 10, "clusterRadiusM": 6, "sink": 0.25, "alignToSlope": 1,
+      "placement": { "perHectare": 240, "slopeMax": 0.8, "hardnessMin": 0.3, "sizeMinM": 0.3, "sizeMaxM": 1.2, "clusterCount": 14, "clusterRadiusM": 6, "sink": 0.25, "alignToSlope": 0.9, "footRiseM": 6, "footReachM": 12, "fanM": 14,
         "biomeDensity": [ { "biome": "desert", "scale": 0.4 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
@@ -28,7 +28,7 @@
     {
       "id": "cliff-scree", "name": "Cliff scree", "kind": "static", "color": "#7a7771", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.55, 1], "solid": "off", "shadows": "off" } ],
-      "placement": { "perHectare": 220, "slopeMax": 1.0, "sizeMinM": 0.15, "sizeMaxM": 0.5, "clusterCount": 16, "clusterRadiusM": 5, "sink": 0.3, "alignToSlope": 0.9, "footRiseM": 8, "footReachM": 14,
+      "placement": { "perHectare": 220, "slopeMax": 0.9, "sizeMinM": 0.15, "sizeMaxM": 0.5, "clusterCount": 16, "clusterRadiusM": 5, "sink": 0.3, "alignToSlope": 0.9, "footRiseM": 8, "footReachM": 14, "fanM": 10,
         "biomeDensity": [ { "biome": "desert", "scale": 0.5 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {

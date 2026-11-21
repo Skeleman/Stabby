@@ -274,7 +274,7 @@ namespace Stabby.Content
                     SizeMinM = pl.Float("sizeMinM", 1f), SizeMaxM = pl.Float("sizeMaxM", 1f),
                     ClusterCount = pl.Int("clusterCount", 1), ClusterRadiusM = pl.Float("clusterRadiusM", 0),
                     Sink = pl.Float("sink", 0), AlignToSlope = pl.Float("alignToSlope", 0),
-                    FootRiseM = pl.Float("footRiseM", 0), FootReachM = pl.Float("footReachM", 12f), EditMinSizeM = pl.Float("editMinSizeM", 0),
+                    FootRiseM = pl.Float("footRiseM", 0), FootReachM = pl.Float("footReachM", 12f), FanM = pl.Float("fanM", 0), EditMinSizeM = pl.Float("editMinSizeM", 0),
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
                     ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
                 };
