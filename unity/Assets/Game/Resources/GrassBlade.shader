@@ -37,18 +37,25 @@ Shader "Stabby/GrassBlade"
                 if (tri == _GrassTris - 1) { level = corner == 2 ? segs + 1 : segs; side = corner == 0 ? -1 : corner == 1 ? 1 : 0; }
                 else if ((tri & 1) == 0) { level = corner == 2 ? q + 1 : q; side = corner == 1 ? 1 : -1; }
                 else { level = corner == 1 ? q : q + 1; side = corner == 0 ? -1 : 1; }
-                float t = level / (float)(segs + 1), h = b.p0.w;
+                bool head = (b.q.z >> 30) & 1;
+                float tl = level / (float)(segs + 1), h = b.p0.w;
+                float t = head ? (tl <= 0.5 ? tl * 1.44 : 0.72 + (tl - 0.5) * 0.56) : tl;
                 float angle = (b.q.x & 0xffff) * (6.2831853 / 65535), seed = (b.q.x >> 16) * (1.0 / 65535);
                 float bw = f16tof32(b.q.y), shade = ((b.q.y >> 16) & 0xff) * (1.0 / 255), fade = (b.q.y >> 24) * (1.0 / 255);
-                float3 root = float3(f16tof32(b.q.z), f16tof32(b.q.z >> 16), f16tof32(b.q.w));
+                float3 root = float3(b.q.z & 1023, (b.q.z >> 10) & 1023, (b.q.z >> 20) & 1023) * (1.0 / 1023);
+                root *= root;
+                float bend = (b.q.w & 0xff) * (1.0 / 255), dry = ((b.q.w >> 8) & 0xff) * (1.0 / 255);
                 float2 nxz = float2((b.q.w >> 16) & 0xff, b.q.w >> 24) * (2.0 / 255) - 1;
                 float3 gn = float3(nxz.x, sqrt(saturate(1 - dot(nxz, nxz))), nxz.y);
                 float2 face = float2(cos(angle), sin(angle)), across = float2(-face.y, face.x);
-                float2 push = WindPush(b.p0.xz, _Time.y, seed) + face * _GrassLook.x;
+                float2 push = WindPush(b.p0.xz, _Time.y, seed) + face * _GrassLook.x * (head ? 0.3 : 0.3 + 1.4 * bend);
                 float lean = length(push);
                 float2 off = push * t * t * h;
                 float rise = h * t * rsqrt(1 + lean * lean * t * t);
-                float wid = bw * pow(saturate(1 - t), 0.7);
+                float wid = head ? bw * (t < 0.72 ? 0.3 : lerp(0.3, 1.6, saturate(1 - abs(t - 0.86) * 7.15))) : bw * pow(saturate(1 - t), 0.7);
+                float lum = dot(root, float3(0.2126, 0.7152, 0.0722));
+                float3 col = lerp(root, lum * float3(1.6, 1.32, 0.7), dry * smoothstep(0.5, 0.95, t));
+                col = head && t > 0.8 ? lum * float3(1.4, 1.22, 0.78) : col;
                 float3 pos = b.p0.xyz + float3(off.x + across.x * side * wid * 0.5, rise, off.y + across.y * side * wid * 0.5);
                 float3 tangent = normalize(float3(push.x * 2 * t, 1, push.y * 2 * t));
                 float3 bn = normalize(cross(float3(across.x, 0, across.y), tangent));
@@ -56,7 +63,7 @@ Shader "Stabby/GrassBlade"
                 o.normalWS = normalize(lerp(gn, bn, 0.6 * t));
                 o.positionWS = pos;
                 o.positionCS = TransformWorldToHClip(pos);
-                o.color = root * (1 + _GrassLook.y * fade * t * t);
+                o.color = col * (1 + _GrassLook.y * fade * t * t);
                 o.look = float4(t, shade, fade, ComputeFogFactor(o.positionCS.z));
                 return o;
             }

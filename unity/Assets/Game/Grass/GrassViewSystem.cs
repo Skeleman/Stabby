@@ -230,7 +230,9 @@ namespace Stabby.Game
         MeshBuffers Buffers(Mesh mesh)
         {
             if (cache.TryGetValue(mesh, out var mb)) return mb;
-            if (mesh.indexFormat != IndexFormat.UInt32 || (mesh.vertexBufferTarget & GraphicsBuffer.Target.Raw) == 0 || (mesh.indexBufferTarget & GraphicsBuffer.Target.Raw) == 0) return null;
+            if (mesh.indexFormat != IndexFormat.UInt32 || !mesh.isReadable) return null;
+            if ((mesh.vertexBufferTarget & GraphicsBuffer.Target.Raw) == 0) mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+            if ((mesh.indexBufferTarget & GraphicsBuffer.Target.Raw) == 0) mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
             mb = new MeshBuffers { Verts = mesh.GetVertexBuffer(0), Indices = mesh.GetIndexBuffer(), Tris = (int)(mesh.GetIndexCount(0) / 3) };
             cache[mesh] = mb;
             return mb;
