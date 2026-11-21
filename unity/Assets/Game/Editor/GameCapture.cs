@@ -1699,6 +1699,8 @@ namespace Stabby.Game.Editor
             }
         }
 
+        const float BasinPitch = 35f;
+
         static System.Collections.IEnumerator FallsTour(Camera cam, string dir, GeneratedWorld map, Ground ground)
         {
             var best = default(Stabby.Viewer.FallCurtain);
@@ -1718,12 +1720,16 @@ namespace Stabby.Game.Editor
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
                 foot + fd * (4f * h + 40f) + side * (0.6f * w + 15f) + Vector3.up * (h + 10f),
                 foot + fd * (6f * h + 170f) + side * (w + 90f) + Vector3.up * (2f * h + 70f),
+                default,
             };
-            string[] names = { "falls-close", "falls-mid", "falls-far" };
-            var look = (lip + foot) * 0.5f;
-            for (int v = 0; v < 3; v++)
+            string[] names = { "falls-close", "falls-mid", "falls-far", "falls-basin" };
+            var basin = foot + fd * (0.3f * w);
+            float reach = Mathf.Max(1.5f * h, 3f * w) + 20f;
+            eyes[3] = basin + (fd * Mathf.Cos(BasinPitch * Mathf.Deg2Rad) + Vector3.up * Mathf.Sin(BasinPitch * Mathf.Deg2Rad)) * reach;
+            for (int v = 0; v < eyes.Length; v++)
             {
                 var eye = eyes[v];
+                var look = v == 3 ? basin : (lip + foot) * 0.5f;
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.8f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 for (var s = Settle(180); s.MoveNext();) yield return null;
