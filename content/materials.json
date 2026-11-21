@@ -25,7 +25,7 @@
       "grass": {
         "biomes": ["boreal", "steppe", "temperate-forest", "temperate-rain", "savanna", "tropical-forest", "wetland", "mangrove"],
         "bumpAmp": 0.06, "bumpWavelengthM": 1.6, "grainAmp": 0.2, "grainWavelengthM": 0.07,
-        "featureAmp": 0.25, "featureWavelengthM": 0.5, "parallax": 0, "albedoVar": 0.25
+        "featureAmp": 0.25, "featureWavelengthM": 0.5, "parallax": 0, "albedoVar": 0.08
       },
       "soil": {
         "biomes": ["shrubland", "alpine"],
