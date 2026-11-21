@@ -4,24 +4,71 @@
   "type": "object",
   "required": ["schemaVersion", "offsetAmplitudeM", "offsetWavelengthM", "tiltPerKm", "surface", "strata"],
   "additionalProperties": false,
+  "$defs": {
+    "amp": { "type": "number", "minimum": 0, "maximum": 1 },
+    "length": { "type": "number", "minimum": 0.01, "maximum": 1000 },
+    "depth": { "type": "number", "minimum": 0, "maximum": 2 },
+    "coat": {
+      "type": "object",
+      "required": ["biomes", "bumpAmp", "bumpWavelengthM", "grainAmp", "grainWavelengthM", "featureAmp", "featureWavelengthM", "parallax", "albedoVar"],
+      "additionalProperties": false,
+      "properties": {
+        "biomes": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z-]*$" }, "uniqueItems": true },
+        "bumpAmp": { "$ref": "#/$defs/amp" },
+        "bumpWavelengthM": { "$ref": "#/$defs/length" },
+        "grainAmp": { "$ref": "#/$defs/amp" },
+        "grainWavelengthM": { "$ref": "#/$defs/length" },
+        "featureAmp": { "$ref": "#/$defs/amp" },
+        "featureWavelengthM": { "$ref": "#/$defs/length" },
+        "parallax": { "type": "number", "minimum": 0, "maximum": 2 },
+        "albedoVar": { "$ref": "#/$defs/amp" }
+      }
+    }
+  },
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "offsetAmplitudeM": { "type": "number", "minimum": 0 },
     "offsetWavelengthM": { "type": "number", "exclusiveMinimum": 0 },
     "tiltPerKm": { "type": "number", "minimum": 0 },
     "surface": {
       "type": "object",
-      "required": ["strataWobbleM", "strataWobbleWavelengthM", "coatPatchAmp", "coatPatchWavelengthM", "coatGrainAmp", "coatGrainWavelengthM", "rockGrainAmp", "rockGrainWavelengthM"],
+      "required": ["fadePixels", "parallaxFootprintM", "windDeg", "strataWobbleM", "strataWobbleWavelengthM", "coatPatchAmp", "coatPatchWavelengthM", "rock", "coats"],
       "additionalProperties": false,
       "properties": {
+        "fadePixels": { "type": "number", "minimum": 0.5, "maximum": 16 },
+        "parallaxFootprintM": { "type": "number", "minimum": 0.001, "maximum": 1 },
+        "windDeg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 },
         "strataWobbleM": { "type": "number", "minimum": 0, "maximum": 50 },
-        "strataWobbleWavelengthM": { "type": "number", "minimum": 0.1, "maximum": 1000 },
-        "coatPatchAmp": { "type": "number", "minimum": 0, "maximum": 1 },
-        "coatPatchWavelengthM": { "type": "number", "minimum": 0.1, "maximum": 1000 },
-        "coatGrainAmp": { "type": "number", "minimum": 0, "maximum": 1 },
-        "coatGrainWavelengthM": { "type": "number", "minimum": 0.1, "maximum": 1000 },
-        "rockGrainAmp": { "type": "number", "minimum": 0, "maximum": 1 },
-        "rockGrainWavelengthM": { "type": "number", "minimum": 0.1, "maximum": 1000 }
+        "strataWobbleWavelengthM": { "$ref": "#/$defs/length" },
+        "coatPatchAmp": { "$ref": "#/$defs/amp" },
+        "coatPatchWavelengthM": { "$ref": "#/$defs/length" },
+        "rock": {
+          "type": "object",
+          "required": ["grainAmp", "grainWavelengthM", "bumpAmp", "bumpWavelengthM", "bedSpacingM", "bedDepthM", "jointSpacingM", "jointDepthM", "parallax"],
+          "additionalProperties": false,
+          "properties": {
+            "grainAmp": { "$ref": "#/$defs/amp" },
+            "grainWavelengthM": { "$ref": "#/$defs/length" },
+            "bumpAmp": { "$ref": "#/$defs/amp" },
+            "bumpWavelengthM": { "$ref": "#/$defs/length" },
+            "bedSpacingM": { "$ref": "#/$defs/length" },
+            "bedDepthM": { "$ref": "#/$defs/depth" },
+            "jointSpacingM": { "$ref": "#/$defs/length" },
+            "jointDepthM": { "$ref": "#/$defs/depth" },
+            "parallax": { "type": "number", "minimum": 0, "maximum": 2 }
+          }
+        },
+        "coats": {
+          "type": "object",
+          "required": ["grass", "soil", "sand", "snow"],
+          "additionalProperties": false,
+          "properties": {
+            "grass": { "$ref": "#/$defs/coat" },
+            "soil": { "$ref": "#/$defs/coat" },
+            "sand": { "$ref": "#/$defs/coat" },
+            "snow": { "$ref": "#/$defs/coat" }
+          }
+        }
       }
     },
     "strata": {

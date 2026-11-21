@@ -12,12 +12,56 @@ namespace Stabby.World
         public float Hardness;
     }
 
+    public sealed class RockSurface
+    {
+        public float GrainAmp, GrainWavelengthM;
+        public float BumpAmp, BumpWavelengthM;
+        public float BedSpacingM, BedDepthM;
+        public float JointSpacingM, JointDepthM;
+        public float Parallax;
+    }
+
+    public sealed class CoatDef
+    {
+        public string Id;
+        public List<string> Biomes = new List<string>();
+        public float BumpAmp, BumpWavelengthM;
+        public float GrainAmp, GrainWavelengthM;
+        public float FeatureAmp, FeatureWavelengthM;
+        public float Parallax, AlbedoVar;
+    }
+
     public sealed class SurfaceDetail
     {
+        public static readonly string[] CoatKinds = { "grass", "soil", "sand", "snow" };
+        public const int Sand = 2;
+
+        public float FadePixels, ParallaxFootprintM, WindDeg;
         public float StrataWobbleM, StrataWobbleWavelengthM;
         public float CoatPatchAmp, CoatPatchWavelengthM;
-        public float CoatGrainAmp, CoatGrainWavelengthM;
-        public float RockGrainAmp, RockGrainWavelengthM;
+        public RockSurface Rock = new RockSurface();
+        public CoatDef[] Coats = new CoatDef[CoatKinds.Length];
+
+        public int CoatOf(string biomeId)
+        {
+            for (int k = 0; k < Coats.Length; k++)
+                if (Coats[k] != null && Coats[k].Biomes.Contains(biomeId)) return k;
+            return -1;
+        }
+
+        public byte[] CoatWeights(GeneratedWorld w)
+        {
+            int cells = w.Height.Length;
+            var kind = new int[w.BiomeIds == null ? 0 : w.BiomeIds.Length];
+            for (int b = 0; b < kind.Length; b++) kind[b] = CoatOf(w.BiomeIds[b]);
+            var px = new byte[cells * 4];
+            for (int i = 0; i < cells; i++)
+            {
+                int k = w.Sea[i] || w.Biome == null || w.Biome[i] < 0 ? Sand : kind[w.Biome[i]];
+                px[i * 4 + (k < 0 ? 0 : k)] = 255;
+            }
+            return px;
+        }
     }
 
     public sealed class MaterialLibrary
@@ -91,12 +135,60 @@ namespace Stabby.World
             else
             {
                 if (!(d.StrataWobbleM >= 0 && d.StrataWobbleM <= 50)) errors.Add($"surface.strataWobbleM {d.StrataWobbleM} outside 0..50");
-                foreach (var (name, a) in new[] { ("coatPatchAmp", d.CoatPatchAmp), ("coatGrainAmp", d.CoatGrainAmp), ("rockGrainAmp", d.RockGrainAmp) })
-                    if (!(a >= 0 && a <= 1)) errors.Add($"surface.{name} {a} outside 0..1");
-                foreach (var (name, l) in new[] { ("strataWobbleWavelengthM", d.StrataWobbleWavelengthM), ("coatPatchWavelengthM", d.CoatPatchWavelengthM), ("coatGrainWavelengthM", d.CoatGrainWavelengthM), ("rockGrainWavelengthM", d.RockGrainWavelengthM) })
-                    if (!(l >= 0.1f && l <= 1000)) errors.Add($"surface.{name} {l} outside 0.1..1000");
+                if (!(d.FadePixels >= 0.5f && d.FadePixels <= 16)) errors.Add($"surface.fadePixels {d.FadePixels} outside 0.5..16");
+                if (!(d.ParallaxFootprintM >= 0.001f && d.ParallaxFootprintM <= 1)) errors.Add($"surface.parallaxFootprintM {d.ParallaxFootprintM} outside 0.001..1");
+                if (!(d.WindDeg >= 0 && d.WindDeg < 360)) errors.Add($"surface.windDeg {d.WindDeg} outside 0..360");
+                Amp(errors, "surface.coatPatchAmp", d.CoatPatchAmp);
+                Len(errors, "surface.strataWobbleWavelengthM", d.StrataWobbleWavelengthM);
+                Len(errors, "surface.coatPatchWavelengthM", d.CoatPatchWavelengthM);
+                var r = d.Rock;
+                if (r == null) errors.Add("surface.rock: required");
+                else
+                {
+                    Amp(errors, "surface.rock.grainAmp", r.GrainAmp);
+                    Amp(errors, "surface.rock.bumpAmp", r.BumpAmp);
+                    Len(errors, "surface.rock.grainWavelengthM", r.GrainWavelengthM);
+                    Len(errors, "surface.rock.bumpWavelengthM", r.BumpWavelengthM);
+                    Len(errors, "surface.rock.bedSpacingM", r.BedSpacingM);
+                    Len(errors, "surface.rock.jointSpacingM", r.JointSpacingM);
+                    Depth(errors, "surface.rock.bedDepthM", r.BedDepthM);
+                    Depth(errors, "surface.rock.jointDepthM", r.JointDepthM);
+                    if (!(r.Parallax >= 0 && r.Parallax <= 2)) errors.Add($"surface.rock.parallax {r.Parallax} outside 0..2");
+                }
+                var seen = new HashSet<string>();
+                for (int k = 0; k < SurfaceDetail.CoatKinds.Length; k++)
+                {
+                    var c = d.Coats == null || d.Coats.Length <= k ? null : d.Coats[k];
+                    string n = "surface.coats." + SurfaceDetail.CoatKinds[k];
+                    if (c == null) { errors.Add(n + ": required"); continue; }
+                    foreach (var b in c.Biomes)
+                        if (!seen.Add(b)) errors.Add($"{n}: biome '{b}' already has a coat");
+                    Amp(errors, n + ".bumpAmp", c.BumpAmp);
+                    Amp(errors, n + ".grainAmp", c.GrainAmp);
+                    Amp(errors, n + ".featureAmp", c.FeatureAmp);
+                    Amp(errors, n + ".albedoVar", c.AlbedoVar);
+                    Len(errors, n + ".bumpWavelengthM", c.BumpWavelengthM);
+                    Len(errors, n + ".grainWavelengthM", c.GrainWavelengthM);
+                    Len(errors, n + ".featureWavelengthM", c.FeatureWavelengthM);
+                    if (!(c.Parallax >= 0 && c.Parallax <= 2)) errors.Add($"{n}.parallax {c.Parallax} outside 0..2");
+                }
             }
             return errors;
+        }
+
+        static void Amp(List<string> e, string name, float a)
+        {
+            if (!(a >= 0 && a <= 1)) e.Add($"{name} {a} outside 0..1");
+        }
+
+        static void Len(List<string> e, string name, float l)
+        {
+            if (!(l >= 0.01f && l <= 1000)) e.Add($"{name} {l} outside 0.01..1000");
+        }
+
+        static void Depth(List<string> e, string name, float d)
+        {
+            if (!(d >= 0 && d <= 2)) e.Add($"{name} {d} outside 0..2");
         }
     }
 

@@ -207,10 +207,27 @@ public class WorldTests
         var surfaceNames = data.RootElement.GetProperty("surface").EnumerateObject().Select(p => p.Name).ToList();
         Assert.Empty(surface.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).Except(surfaceNames));
         Assert.Empty(surfaceNames.Except(surface.GetProperty("properties").EnumerateObject().Select(p => p.Name)));
+        var defs = top.GetProperty("$defs");
+        var rock = surface.GetProperty("properties").GetProperty("rock");
+        var coat = defs.GetProperty("coat");
+        void Same(System.Text.Json.JsonElement s, System.Text.Json.JsonElement d)
+        {
+            var names = d.EnumerateObject().Select(p => p.Name).ToList();
+            Assert.Empty(s.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).Except(names));
+            Assert.Empty(names.Except(s.GetProperty("properties").EnumerateObject().Select(p => p.Name)));
+        }
+        var surfaceData = data.RootElement.GetProperty("surface");
+        Same(rock, surfaceData.GetProperty("rock"));
+        Same(surface.GetProperty("properties").GetProperty("coats"), surfaceData.GetProperty("coats"));
+        foreach (var c in surfaceData.GetProperty("coats").EnumerateObject()) Same(coat, c.Value);
         var lib = ContentLoader.LoadMaterials(root);
-        Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.RockGrainWavelengthM > 0);
-        lib.Surface.CoatGrainAmp = 2;
-        Assert.Contains(MaterialLibrary.Validate(lib), e => e.Contains("coatGrainAmp"));
+        Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.Rock.BedSpacingM > 0);
+        foreach (var b in ContentLoader.LoadBiomes(root)) Assert.True(lib.Surface.CoatOf(b.Id) >= 0, b.Id + " has no coat");
+        lib.Surface.Coats[1].GrainAmp = 2;
+        lib.Surface.Coats[3].Biomes.Add(lib.Surface.Coats[0].Biomes[0]);
+        var errors = MaterialLibrary.Validate(lib);
+        Assert.Contains(errors, e => e.Contains("coats.soil.grainAmp"));
+        Assert.Contains(errors, e => e.Contains("already has a coat"));
         var item = top.GetProperty("properties").GetProperty("strata").GetProperty("items");
         var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).ToList();
         var allowed = item.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();
@@ -234,6 +251,13 @@ public class WorldTests
         var a = lib.Offsets(w);
         Assert.Equal(a, lib.Offsets(w));
         Assert.Contains(a, v => Math.Abs(v) > 1f);
+        var coat = lib.Surface.CoatWeights(w);
+        Assert.Equal(w.Height.Length * 4, coat.Length);
+        for (int i = 0; i < w.Height.Length; i++)
+        {
+            Assert.Equal(255, coat[i * 4] + coat[i * 4 + 1] + coat[i * 4 + 2] + coat[i * 4 + 3]);
+            if (w.Sea[i]) Assert.Equal(255, coat[i * 4 + SurfaceDetail.Sand]);
+        }
     }
 
     [Fact]

@@ -7,7 +7,7 @@ namespace Stabby.Content;
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
-    public const int MaterialSchemaVersion = 1;
+    public const int MaterialSchemaVersion = 2;
 
     sealed class MaterialFile
     {
@@ -21,14 +21,49 @@ public static class ContentLoader
 
     sealed class SurfaceEntry
     {
+        public float FadePixels { get; set; }
+        public float ParallaxFootprintM { get; set; }
+        public float WindDeg { get; set; }
         public float StrataWobbleM { get; set; }
         public float StrataWobbleWavelengthM { get; set; }
         public float CoatPatchAmp { get; set; }
         public float CoatPatchWavelengthM { get; set; }
-        public float CoatGrainAmp { get; set; }
-        public float CoatGrainWavelengthM { get; set; }
-        public float RockGrainAmp { get; set; }
-        public float RockGrainWavelengthM { get; set; }
+        public RockEntry? Rock { get; set; }
+        public CoatsEntry? Coats { get; set; }
+    }
+
+    sealed class RockEntry
+    {
+        public float GrainAmp { get; set; }
+        public float GrainWavelengthM { get; set; }
+        public float BumpAmp { get; set; }
+        public float BumpWavelengthM { get; set; }
+        public float BedSpacingM { get; set; }
+        public float BedDepthM { get; set; }
+        public float JointSpacingM { get; set; }
+        public float JointDepthM { get; set; }
+        public float Parallax { get; set; }
+    }
+
+    sealed class CoatsEntry
+    {
+        public CoatEntry? Grass { get; set; }
+        public CoatEntry? Soil { get; set; }
+        public CoatEntry? Sand { get; set; }
+        public CoatEntry? Snow { get; set; }
+    }
+
+    sealed class CoatEntry
+    {
+        public List<string> Biomes { get; set; } = new();
+        public float BumpAmp { get; set; }
+        public float BumpWavelengthM { get; set; }
+        public float GrainAmp { get; set; }
+        public float GrainWavelengthM { get; set; }
+        public float FeatureAmp { get; set; }
+        public float FeatureWavelengthM { get; set; }
+        public float Parallax { get; set; }
+        public float AlbedoVar { get; set; }
     }
 
     sealed class StratumEntry
@@ -106,13 +141,7 @@ public static class ContentLoader
         var lib = new MaterialLibrary
         {
             OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
-            Surface = file.Surface == null ? null! : new SurfaceDetail
-            {
-                StrataWobbleM = file.Surface.StrataWobbleM, StrataWobbleWavelengthM = file.Surface.StrataWobbleWavelengthM,
-                CoatPatchAmp = file.Surface.CoatPatchAmp, CoatPatchWavelengthM = file.Surface.CoatPatchWavelengthM,
-                CoatGrainAmp = file.Surface.CoatGrainAmp, CoatGrainWavelengthM = file.Surface.CoatGrainWavelengthM,
-                RockGrainAmp = file.Surface.RockGrainAmp, RockGrainWavelengthM = file.Surface.RockGrainWavelengthM,
-            },
+            Surface = file.Surface == null ? null! : Surface(file.Surface),
             Strata = file.Strata.Select(s => new StratumDef
             {
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
@@ -122,6 +151,38 @@ public static class ContentLoader
         var errors = MaterialLibrary.Validate(lib);
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
         return lib;
+    }
+
+    static SurfaceDetail Surface(SurfaceEntry e)
+    {
+        var d = new SurfaceDetail
+        {
+            FadePixels = e.FadePixels, ParallaxFootprintM = e.ParallaxFootprintM, WindDeg = e.WindDeg,
+            StrataWobbleM = e.StrataWobbleM, StrataWobbleWavelengthM = e.StrataWobbleWavelengthM,
+            CoatPatchAmp = e.CoatPatchAmp, CoatPatchWavelengthM = e.CoatPatchWavelengthM,
+            Rock = e.Rock == null ? null! : new RockSurface
+            {
+                GrainAmp = e.Rock.GrainAmp, GrainWavelengthM = e.Rock.GrainWavelengthM,
+                BumpAmp = e.Rock.BumpAmp, BumpWavelengthM = e.Rock.BumpWavelengthM,
+                BedSpacingM = e.Rock.BedSpacingM, BedDepthM = e.Rock.BedDepthM,
+                JointSpacingM = e.Rock.JointSpacingM, JointDepthM = e.Rock.JointDepthM,
+                Parallax = e.Rock.Parallax,
+            },
+        };
+        var coats = new[] { e.Coats?.Grass, e.Coats?.Soil, e.Coats?.Sand, e.Coats?.Snow };
+        for (int k = 0; k < coats.Length; k++)
+        {
+            var c = coats[k];
+            d.Coats[k] = c == null ? null! : new CoatDef
+            {
+                Id = SurfaceDetail.CoatKinds[k], Biomes = c.Biomes,
+                BumpAmp = c.BumpAmp, BumpWavelengthM = c.BumpWavelengthM,
+                GrainAmp = c.GrainAmp, GrainWavelengthM = c.GrainWavelengthM,
+                FeatureAmp = c.FeatureAmp, FeatureWavelengthM = c.FeatureWavelengthM,
+                Parallax = c.Parallax, AlbedoVar = c.AlbedoVar,
+            };
+        }
+        return d;
     }
 
     public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
