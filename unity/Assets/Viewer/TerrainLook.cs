@@ -40,7 +40,7 @@ namespace Stabby.Viewer
 
         static Texture2D strataTexture, coatTexture, levelTexture;
 
-        public static float3 Sand => new float3(0.86f, 0.80f, 0.62f);
+        public static float3 Sand => new float3(0.75f, 0.71f, 0.63f);
 
         public static float3 ToLinear(float3 c) => math.select(math.pow((c + 0.055f) / 1.055f, 2.4f), c / 12.92f, c <= 0.04045f);
 
@@ -49,7 +49,7 @@ namespace Stabby.Viewer
         public static float4 Shade(float3 biome, float h, float ny)
         {
             if (h <= 0) return new float4(ToLinear(math.lerp(Sand, Sand * 0.6f, math.saturate(-h / 30f))), 0);
-            float slope = math.sqrt(math.max(0, 1 - ny * ny)) / math.max(ny, 0.05f), shore = math.saturate(1f - h / 6f);
+            float slope = math.sqrt(math.max(0, 1 - ny * ny)) / math.max(ny, 0.05f), shore = math.smoothstep(2.8f, 1.2f, h);
             var c = math.lerp(biome, Sand, shore);
             return new float4(ToLinear(c), math.saturate((slope - 0.25f) / 0.35f) * (1 - shore));
         }

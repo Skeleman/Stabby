@@ -18,7 +18,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait;
-        static readonly bool rockOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY") == "rock";
+        static readonly string only = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY");
         static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -143,7 +143,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = rockOnly ? 7 : 1;
+                phase = only == "rock" ? 7 : only == "coast" ? 9 : 1;
             }
             while (phase <= 6)
             {
@@ -191,7 +191,8 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
-                if (phase == 7 && rockOnly)
+                if (phase == 9) GameStatus.Lines["~bench sand"] = Bench(cam, "sand close-up");
+                if (phase == 7 && only == "rock")
                 {
                     File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                     Finish(0);
@@ -237,7 +238,7 @@ namespace Stabby.Game.Editor
                     Shot(cam, dir, "sand-far");
                 }
                 wait = 0;
-                phase++;
+                phase = phase == 9 && only == "coast" ? 13 : phase + 1;
             }
             if (phase == 11)
             {
@@ -304,6 +305,12 @@ namespace Stabby.Game.Editor
                 if (phase == 15) GameStatus.Lines["~bench water far"] = Bench(cam, "water far coast");
                 wait = 0;
                 phase++;
+            }
+            if (phase == 16 && only == "coast")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             while (phase >= 16 && phase <= 17)
             {
@@ -931,7 +938,7 @@ namespace Stabby.Game.Editor
                         int i = z * n + x;
                         if (map.Sea[i] || map.Height[i] < (which == 2 ? 0.5f : 3)) continue;
                         float gx = (map.Height[i + 1] - map.Height[i - 1]) / (2 * cm), gz = (map.Height[i + n] - map.Height[i - n]) / (2 * cm), s = Mathf.Sqrt(gx * gx + gz * gz);
-                        bool ok = which == 0 ? s > 0.8f : which == 2 && map.Height[i] < 3 ? s < 0.1f : s < 0.12f && map.Height[i] >= 3 && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
+                        bool ok = which == 0 ? s > 0.8f : which == 2 && map.Height[i] < 1.2f ? s < 0.1f : s < 0.12f && map.Height[i] >= 3 && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
                         float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
                         if (ok && d < bestD) { bestD = d; best = i; down = new Vector2(-gx, -gz).normalized; }
                     }
