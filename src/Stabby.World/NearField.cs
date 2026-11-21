@@ -16,6 +16,7 @@ namespace Stabby.World
         uint GullySeed { get; }
         uint RockSeed { get; }
         uint CoastSeed { get; }
+        uint CragSeed { get; }
         float Height(int i);
         float Amp(int i);
         float Offset(int i);
@@ -32,6 +33,8 @@ namespace Stabby.World
         public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
         public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f;
         public const float CoastWarpCells = 0.5f, CoastWaveCells = 2.5f, CoastBandM = 3f, CoastPin = 0.35f;
+        public const float CragFrac = 0.5f, CragMaxM = 10f, CragSlopeLo = 0.35f, CragSlopeHi = 1.2f, CragGridLo = 0.1f, CragGridHi = 0.25f, CragAlongM = 50f, CragAcrossM = 18f, CragJutM = 24f, CragFloorM = 0.25f, CragWeightFloor = 0.25f;
+        public const float CragWarpM = 9f, CragWarpWaveM = 40f, LedgePeriodM = 6.5f, LedgeWarpM = 1.5f, LedgeWarpWaveM = 35f, LedgeRagM = 0.15f, LedgeRagWaveM = 4f, LedgeStrikeM = 70f;
         public const int MacroOctaves = 5, Chaikin = 2;
         public const int NodeQuads = 64, NodeLevels = 9;
 
@@ -141,7 +144,7 @@ namespace Stabby.World
             d = (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        public const float DetailReach = 1.35f;
+        public const float DetailReach = 1.35f + CragFrac;
 
         public static void Range<T>(T c, float x0, float z0, float x1, float z1, out float lo, out float hi) where T : struct, INearCells
         {
@@ -281,7 +284,51 @@ namespace Stabby.World
                 fine += ga * Math.Max(-1f, Math.Min(1f, g / wsum));
             }
             if (ra > 0) fine += ra * Math.Max(-1f, Math.Min(1f, Noise.Fbm(c.RockSeed, x / RockM, z / RockM, 2)));
+            float ca = Math.Min(CragMaxM, CragFrac * a) * Grid.Smoothstep(CragGridLo, CragGridHi, slope) * (0.4f + 0.6f * hard);
+            if (ca > CragFloorM)
+            {
+                float local = -BaseSlope(c, x / cm, z / cm, dx, dz) / cm;
+                ca = ca * Grid.Smoothstep(CragSlopeLo, CragSlopeHi, local) - CragFloorM;
+                if (ca > 0) fine += Crag(c, x, z, b + off, dx, dz, MaterialLibrary.Sedimentary(off), ca);
+            }
             return fine;
+        }
+
+        static float Crag<T>(T c, float x, float z, float strat, float dx, float dz, float sed, float ca) where T : struct, INearCells
+        {
+            uint s = c.CragSeed;
+            float r = 0;
+            if (sed < 1)
+            {
+                float wu = x / CragWarpWaveM, wv = z / CragWarpWaveM;
+                float wx = x + CragWarpM * Noise.Gradient(s + 1u, wu, wv), wz = z + CragWarpM * Noise.Gradient(s + 2u, wu + 31.7f, wv - 17.3f);
+                float wsum = 1e-4f, m = 0;
+                for (int i = 0; i < 4; i++)
+                {
+                    float ux = i == 0 ? 1f : i == 2 ? 0f : i == 1 ? 0.70710678f : -0.70710678f;
+                    float uz = i == 0 ? 0f : i == 2 ? 1f : 0.70710678f;
+                    float dot = ux * dx + uz * dz, w = dot * dot * dot * dot - CragWeightFloor;
+                    if (w <= 0) continue;
+                    float u = (wx * ux + wz * uz) / CragAlongM, v = (wz * ux - wx * uz) / CragAcrossM;
+                    uint k = s + 16u + (uint)i * 0x9E3779B9u;
+                    float g = Noise.Gradient(k, u, v) + 0.35f * Noise.Gradient(k + 3u, 2.3f * u, 2.3f * v) + 0.1f * Noise.Gradient(k + 5u, 4.1f * u, 4.1f * v);
+                    float p = Grid.Smoothstep(-0.3f, 0.4f, g) * 2f - 1f;
+                    float jut = Math.Max(-1f, Math.Min(1f, Noise.Gradient(k + 7u, (wx * ux + wz * uz) / CragJutM, v * (CragAcrossM / CragJutM))));
+                    m += w * p * (0.6f + 0.4f * jut);
+                    wsum += w;
+                }
+                r += (1 - sed) * m / wsum;
+            }
+            if (sed > 0)
+            {
+                float t = (strat + LedgeWarpM * Noise.Gradient(s + 41u, x / LedgeWarpWaveM, z / LedgeWarpWaveM) + LedgeRagM * Noise.Gradient(s + 43u, x / LedgeRagWaveM, z / LedgeRagWaveM)) / LedgePeriodM;
+                float f = t - (float)Math.Floor(t);
+                float sharp = 0.7f + 0.1f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(s + 45u, x / LedgeWarpWaveM + 9.1f, z / LedgeWarpWaveM - 4.3f)));
+                float g = Grid.Smoothstep(1 - sharp, 1, f);
+                float on = Grid.Smoothstep(-0.3f, 0.4f, Noise.Gradient(s + 47u, x / LedgeStrikeM, z / LedgeStrikeM));
+                r += sed * on * Math.Min(1f, LedgePeriodM / ca) * (g - f + 0.5f * (1 - sharp));
+            }
+            return ca * Math.Max(-1f, Math.Min(1f, r));
         }
 
         static float Dx<T>(T c, int x, int z) where T : struct, INearCells
@@ -334,6 +381,32 @@ namespace Stabby.World
             float tx = gx - x0, tz = gz - z0;
             float r0 = Row(c, n, z0 - 1, x0, tx), r1 = Row(c, n, z0, x0, tx), r2 = Row(c, n, z0 + 1, x0, tx), r3 = Row(c, n, z0 + 2, x0, tx);
             return Hermite(r0, r1, r2, r3, tz);
+        }
+
+        static float BaseSlope<T>(T c, float gx, float gz, float dx, float dz) where T : struct, INearCells
+        {
+            int n = c.N, x0 = (int)Math.Floor(gx), z0 = (int)Math.Floor(gz);
+            float tx = gx - x0, tz = gz - z0;
+            float r0 = RowSlope(c, n, z0 - 1, x0, tx, out float d0), r1 = RowSlope(c, n, z0, x0, tx, out float d1);
+            float r2 = RowSlope(c, n, z0 + 1, x0, tx, out float d2), r3 = RowSlope(c, n, z0 + 2, x0, tx, out float d3);
+            float a = r1 - r0, d = r2 - r1, e = r3 - r2, da = d1 - d0, dd = d2 - d1, de = d3 - d2;
+            float m1 = Tangent(a, d), m2 = Tangent(d, e);
+            float dm1 = a * d > 0 ? 2 * (d * d * da + a * a * dd) / ((a + d) * (a + d)) : 0;
+            float dm2 = d * e > 0 ? 2 * (e * e * dd + d * d * de) / ((d + e) * (d + e)) : 0;
+            float t2 = tz * tz, t3 = t2 * tz;
+            float sx = d1 + (t3 - 2 * t2 + tz) * dm1 + (3 * t2 - 2 * t3) * dd + (t3 - t2) * dm2;
+            float sz = (3 * t2 - 4 * tz + 1) * m1 + (6 * tz - 6 * t2) * d + (3 * t2 - 2 * tz) * m2;
+            return sx * dx + sz * dz;
+        }
+
+        static float RowSlope<T>(T c, int n, int z, int x0, float t, out float slope) where T : struct, INearCells
+        {
+            int r = Clamp(z, n) * n;
+            float p0 = c.Height(r + Clamp(x0 - 1, n)), p1 = c.Height(r + Clamp(x0, n)), p2 = c.Height(r + Clamp(x0 + 1, n)), p3 = c.Height(r + Clamp(x0 + 2, n));
+            float d = p2 - p1, m1 = Tangent(p1 - p0, d), m2 = Tangent(d, p3 - p2);
+            float t2 = t * t, t3 = t2 * t;
+            slope = (3 * t2 - 4 * t + 1) * m1 + (6 * t - 6 * t2) * d + (3 * t2 - 2 * t) * m2;
+            return p1 + (t3 - 2 * t2 + t) * m1 + (3 * t2 - 2 * t3) * d + (t3 - t2) * m2;
         }
 
         static float Row<T>(T c, int n, int z, int x0, float t) where T : struct, INearCells

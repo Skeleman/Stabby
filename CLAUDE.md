@@ -49,7 +49,15 @@
     Large boulders are solid-field edits. Static collision is engine-free and
     shared with movement. Interactive objects keep stable ids and change only
     through host-authoritative deltas. Wind and animation run on the GPU and
-    fade by screen size; structures merge their pieces per LOD. Assets are
+    fade by screen size. Structures are built from a shared kit: standalone
+    elements (an awning, a table) are objects of their own that any structure
+    can reuse, and buildings join reusable structural modules (walls,
+    corners, floors, roofs, frames) into one continuous-looking whole that
+    merges into a single LOD element at distance. Blueprints nest: each
+    places kit pieces or whole lower blueprints as single elements, so a
+    building blueprint (an inn's shell) sits inside a site blueprint (its
+    yard, stalls and signs), and a town places sites. Each level expands
+    deterministically from its own stream. Assets are
     built in code. Material surfaces are shaders (procedural normals, cheap
     parallax) so files stay small, surfaces scale and materials share
     features. Textures hold only heightfield data, shared noise, and

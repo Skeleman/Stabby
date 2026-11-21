@@ -118,7 +118,7 @@
     },
     {
       "id": "spruce", "name": "Spruce", "kind": "animated", "color": "#4b3d33", "variants": 8,
-      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafColor": "#3b5a3a" } ],
+      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafColor": "#33503f" } ],
       "placement": { "biomes": ["boreal", "temperate-rain", "temperate-forest", "alpine"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 6, "sizeMaxM": 19, "clusterCount": 5, "clusterRadiusM": 8, "sink": 0.02,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.2 }, { "biome": "temperate-rain", "scale": 0.7 }, { "biome": "alpine", "scale": 0.08 } ] }
     },

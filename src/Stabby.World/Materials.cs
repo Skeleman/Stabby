@@ -77,6 +77,83 @@ namespace Stabby.World
             }
             return px;
         }
+
+        public static byte[] ForestWeights(GeneratedWorld w, ObjectLibrary objects, IReadOnlyList<BiomeDef> defs)
+        {
+            int n = w.Config.Size, cells = w.Height.Length, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
+            var px = new byte[cells * 4];
+            if (objects == null || w.Biome == null || biomes == 0) return px;
+            var trees = new List<ObjectDef>();
+            var leaf = new List<bool>();
+            foreach (var d in objects.Objects)
+                foreach (var p in d.Parts)
+                    if (p.Shape == ObjectPart.Broadleaf || p.Shape == ObjectPart.Conifer) { trees.Add(d); leaf.Add(p.Shape == ObjectPart.Broadleaf); break; }
+            var reach = new float[trees.Count * biomes];
+            for (int t = 0; t < trees.Count; t++)
+            {
+                var pl = trees[t].Placement;
+                float a = pl.SizeMinM, b = pl.SizeMaxM, spread = (float)Math.PI * 0.25f * (a * a + a * b + b * b) / 3f;
+                for (int k = 0; k < biomes; k++)
+                {
+                    if (pl.Biomes.Count > 0 && !pl.Biomes.Contains(w.BiomeIds[k])) continue;
+                    float scale = 1f;
+                    foreach (var bd in pl.BiomeDensity) if (bd.Biome == w.BiomeIds[k]) scale = bd.Scale;
+                    reach[t * biomes + k] = pl.PerHectare * scale * spread / 10000f;
+                }
+            }
+            var wets = new float[biomes];
+            for (int k = 0; k < biomes; k++)
+                foreach (var bd in defs)
+                    if (bd.Id == w.BiomeIds[k])
+                    {
+                        float rain = 0.5f * (bd.PrecipMinMm + bd.PrecipMaxMm), temp = 0.5f * (bd.TempMinC + bd.TempMaxC);
+                        wets[k] = Saturate((rain - 900f) / 1700f) * Saturate((temp + 2f) / 6f) * Saturate((26f - temp) / 6f);
+                    }
+            var raw = new float[cells * 3];
+            float cm = w.Config.CellMeters;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x, k = w.Biome[i];
+                    if (w.Sea[i] || k < 0) continue;
+                    float gx = (w.Height[y * n + Math.Min(x + 1, n - 1)] - w.Height[y * n + Math.Max(x - 1, 0)]) / (2 * cm);
+                    float gz = (w.Height[Math.Min(y + 1, n - 1) * n + x] - w.Height[Math.Max(y - 1, 0) * n + x]) / (2 * cm);
+                    float slope = (float)Math.Sqrt(gx * gx + gz * gz), broad = 0, needle = 0;
+                    for (int t = 0; t < trees.Count; t++)
+                    {
+                        float r = reach[t * biomes + k];
+                        if (r <= 0) continue;
+                        r *= Saturate((trees[t].Placement.SlopeMax * 1.2f - slope) / (trees[t].Placement.SlopeMax * 0.6f));
+                        if (leaf[t]) broad += r; else needle += r;
+                    }
+                    float cover = 1f - (float)FMath.Exp(-(broad + needle));
+                    float sum = Math.Max(broad + needle, 1e-6f);
+                    raw[i * 3] = cover * broad / sum;
+                    raw[i * 3 + 1] = cover * needle / sum;
+                    raw[i * 3 + 2] = wets[k];
+                }
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x;
+                    for (int c = 0; c < 3; c++)
+                    {
+                        float s = 0, wsum = 0;
+                        for (int dy = -1; dy <= 1; dy++)
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                int xx = Math.Min(Math.Max(x + dx, 0), n - 1), yy = Math.Min(Math.Max(y + dy, 0), n - 1);
+                                float wt = (dx == 0 ? 2 : 1) * (dy == 0 ? 2 : 1);
+                                s += raw[(yy * n + xx) * 3 + c] * wt; wsum += wt;
+                            }
+                        px[i * 4 + c] = (byte)Math.Round(Saturate(s / wsum) * 255f);
+                    }
+                    px[i * 4 + 3] = 255;
+                }
+            return px;
+        }
+
+        static float Saturate(float v) => v < 0 ? 0 : v > 1 ? 1 : v;
     }
 
     public sealed class WaterDef
@@ -90,6 +167,14 @@ namespace Stabby.World
 
     public sealed class MaterialLibrary
     {
+        public const float RockTypePeriodM = 40f;
+
+        public static float Sedimentary(float offset)
+        {
+            float p = offset / RockTypePeriodM;
+            return Grid.Smoothstep(0.3f, 0.7f, Math.Abs(p - (float)Math.Floor(p) - 0.5f) * 2f);
+        }
+
         public SurfaceDetail Surface = new SurfaceDetail();
         public WaterDef Water = new WaterDef();
         public LookDef Look = new LookDef();
