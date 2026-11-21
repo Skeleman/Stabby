@@ -6,6 +6,10 @@ Shader "Stabby/Foliage"
         _Leaf ("Leaf", Vector) = (0.2, 0.3, 0.1, 2)
         _Fade ("Fade", Vector) = (1, 1, 0, 1)
         _LeafAtlas ("Leaf atlas", 2D) = "white" {}
+        _Imp ("Impostor blend", Float) = 0
+        _ImpGrid ("Impostor grid", Vector) = (1, 1, 8, 0)
+        _ImpA ("Impostor albedo", 2D) = "black" {}
+        _ImpB ("Impostor normal", 2D) = "black" {}
     }
     SubShader
     {
@@ -19,6 +23,8 @@ Shader "Stabby/Foliage"
         float4 _BaseColor;
         float4 _Leaf;
         float4 _Fade;
+        float4 _ImpGrid;
+        float _Imp;
         CBUFFER_END
 
         #ifdef UNITY_DOTS_INSTANCING_ENABLED
@@ -26,15 +32,20 @@ Shader "Stabby/Foliage"
             UNITY_DOTS_INSTANCED_PROP(float4, _BaseColor)
             UNITY_DOTS_INSTANCED_PROP(float4, _Leaf)
             UNITY_DOTS_INSTANCED_PROP(float4, _Fade)
+            UNITY_DOTS_INSTANCED_PROP(float, _Imp)
         UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
         #define _BaseColor UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _BaseColor)
         #define _Leaf UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _Leaf)
         #define _Fade UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _Fade)
+        #define _Imp UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _Imp)
         #endif
 
         float _StabbyFoliageOff;
         TEXTURE2D(_LeafAtlas);
         SAMPLER(sampler_LeafAtlas);
+        TEXTURE2D(_ImpA);
+        TEXTURE2D(_ImpB);
+        SAMPLER(sampler_ImpA);
 
         float Bayer(float2 p)
         {
@@ -51,6 +62,23 @@ Shader "Stabby/Foliage"
             float4 wind : TEXCOORD1;
             UNITY_VERTEX_INPUT_INSTANCE_ID
         };
+
+        float3 ImpostorVertex(FoliageIn i, out float2 uv)
+        {
+            float3 c = i.wind.xyz;
+            float s = i.wind.w;
+            float3 cam = TransformWorldToObject(_WorldSpaceCameraPos);
+            float2 dv = cam.xz - c.xz;
+            dv = dot(dv, dv) > 1e-6 ? normalize(dv) : float2(0, 1);
+            float frames = _ImpGrid.z;
+            float f = fmod(round(atan2(dv.x, dv.y) * frames / 6.2831853) + frames, frames);
+            float cell = i.uv.z * frames + f;
+            float cols = _ImpGrid.x;
+            float2 at = float2(fmod(cell, cols), floor(cell / cols));
+            uv = (at + 0.5 + 0.5 * _ImpGrid.y * i.uv.xy) / cols;
+            float3 right = float3(-dv.y, 0, dv.x);
+            return TransformObjectToWorld(c + (right * i.uv.x + float3(0, i.uv.y, 0)) * 0.5 * s);
+        }
 
         float3 FoliageWind(FoliageIn i, out float3 normalWS)
         {
@@ -77,7 +105,7 @@ Shader "Stabby/Foliage"
             float2 limb = (dir * (0.6 + 0.4 * sin(bph)) + side * 0.5 * sin(bph * 0.73 + 1.7)) * bend * amp;
             float bob = sin(bph * 1.1 + 0.6) * bend * amp * 0.35;
             float3 off = float3(trunk.x + limb.x, bob - 0.5 * dot(trunk, trunk) / max(size, 0.1), trunk.y + limb.y) * sway;
-            [branch] if (flutter > 0 && i.uv.w > 0.5)
+            [branch] if (flutter > 0 && i.uv.w > 0.5 && i.uv.w < 1.5)
             {
                 float fph = 6.2831853 * (t * (3.1 + 1.7 * i.wind.w) + i.wind.w * 11.0);
                 float fl = i.wind.y * flutter * size * (0.004 + 0.012 * gust) * (sin(fph) + 0.5 * sin(fph * 2.37 + 1.3));
@@ -119,12 +147,19 @@ Shader "Stabby/Foliage"
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
-                float3 n;
-                float3 wp = FoliageWind(i, n);
+                float3 n = 0;
+                float3 wp;
+                o.uv = i.uv;
+                [branch] if (i.uv.w > 1.5)
+                {
+                    float2 uv;
+                    wp = ImpostorVertex(i, uv);
+                    o.uv.xy = uv;
+                }
+                else wp = FoliageWind(i, n);
                 o.positionWS = wp;
                 o.positionCS = _StabbyFoliageOff > 0 ? float4(0, 0, -2, 1) : TransformWorldToHClip(wp);
                 o.normalWS = n;
-                o.uv = i.uv;
                 o.fog = ComputeFogFactor(o.positionCS.z);
                 return o;
             }
@@ -138,16 +173,32 @@ Shader "Stabby/Foliage"
             {
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
-                clip(fade.x - Bayer(i.positionCS.xy));
+                float dither = Bayer(i.positionCS.xy);
+                clip(fade.x - dither);
                 float size = max(fade.w, 0.1);
                 float3 wp = i.positionWS;
-                float3 n = normalize(i.normalWS);
+                bool imp = i.uv.w > 1.5;
+                clip(imp ? _Imp - dither : dither - _Imp);
+                float3 n = imp ? 0 : normalize(i.normalWS);
                 float3 v = normalize(_WorldSpaceCameraPos - wp);
                 bool leaf = i.uv.w > 0.5;
                 float3 albedo;
                 float trans = 0, ao = 1;
                 float alpha = 1;
-                [branch] if (leaf)
+                [branch] if (imp)
+                {
+                    float4 a = SAMPLE_TEXTURE2D(_ImpA, sampler_ImpA, i.uv.xy);
+                    clip(a.a - 0.4);
+                    float4 b = SAMPLE_TEXTURE2D(_ImpB, sampler_ImpA, i.uv.xy) / a.a;
+                    a.rgb /= a.a;
+                    n = normalize(TransformObjectToWorldNormal(b.rgb * 2 - 1));
+                    float shade = a.r * 1.5;
+                    float3 leafColor = _Leaf.rgb * (1 + (a.g - 0.5) * float3(0.9, 0.35, -0.7));
+                    albedo = lerp(leafColor, _BaseColor.rgb * 1.3, a.b) * shade;
+                    trans = 1 - a.b;
+                    ao = b.a;
+                }
+                else if (leaf)
                 {
                     float4 a = SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy);
                     alpha = a.a;
@@ -172,7 +223,7 @@ Shader "Stabby/Foliage"
                 ao *= groundAo;
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp));
                 float ndl = dot(n, l.direction);
-                float diffuse = leaf ? saturate((ndl + 0.45) / 1.45) : saturate(ndl);
+                float diffuse = lerp(saturate(ndl), saturate((ndl + 0.45) / 1.45), imp ? trans : leaf ? 1 : 0);
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
                 float back = pow(saturate(dot(-v, l.direction)), 4) * 0.55 + saturate(-ndl) * 0.2;
                 float3 direct = l.color * l.shadowAttenuation;
@@ -219,7 +270,7 @@ Shader "Stabby/Foliage"
                 #else
                 cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
                 #endif
-                o.positionCS = _StabbyFoliageOff > 0 ? float4(0, 0, -2, 1) : cs;
+                o.positionCS = _StabbyFoliageOff > 0 || i.uv.w > 1.5 ? float4(0, 0, -2, 1) : cs;
                 o.uv = i.uv;
                 return o;
             }
@@ -229,8 +280,76 @@ Shader "Stabby/Foliage"
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
                 clip(min(fade.y - 0.5, fade.x - Bayer(i.positionCS.xy)));
-                [branch] if (i.uv.w > 0.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - 0.5);
+                [branch] if (i.uv.w > 0.5 && i.uv.w < 1.5) clip(SAMPLE_TEXTURE2D(_LeafAtlas, sampler_LeafAtlas, i.uv.xy).a - 0.5);
                 return 0;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Bake"
+            Tags { "LightMode" = "StabbyBake" }
+            ZWrite On
+            ZTest LEqual
+            Cull Off
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            float4 _StabbyBakeCenter, _StabbyBakeFrame, _StabbyBakeGrid;
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalOS : TEXCOORD0;
+                float4 uv : TEXCOORD1;
+            };
+
+            struct BakeOut
+            {
+                half4 a : SV_Target0;
+                half4 b : SV_Target1;
+            };
+
+            Varyings vert(FoliageIn i)
+            {
+                Varyings o;
+                float s = _StabbyBakeCenter.w;
+                float3 q = i.positionOS.xyz - _StabbyBakeCenter.xyz;
+                float3 d = float3(_StabbyBakeFrame.x, 0, _StabbyBakeFrame.y);
+                float3 r = float3(-_StabbyBakeFrame.y, 0, _StabbyBakeFrame.x);
+                float2 xy = float2(dot(q, r), q.y) * 2 / s;
+                float t = dot(q, d) / s;
+                float2 uv = (_StabbyBakeFrame.zw + 0.5 + 0.5 * _StabbyBakeGrid.y * clamp(xy, -1, 1)) / _StabbyBakeGrid.x;
+                float2 cs = uv * 2 - 1;
+                #if UNITY_UV_STARTS_AT_TOP
+                cs.y = -cs.y;
+                #endif
+                #if UNITY_REVERSED_Z
+                float z = clamp(0.5 + t, 0.01, 0.99);
+                #else
+                float z = clamp(0.5 - t, 0.01, 0.99);
+                #endif
+                o.positionCS = float4(cs, z, 1);
+                o.normalOS = i.normalOS;
+                o.uv = i.uv;
+                return o;
+            }
+
+            BakeOut frag(Varyings i)
+            {
+                BakeOut o;
+                half4 a = half4(0.436, 0.5, 1, 1);
+                [branch] if (i.uv.w > 0.5)
+                {
+                    float4 t = SAMPLE_TEXTURE2D_LOD(_LeafAtlas, sampler_LeafAtlas, i.uv.xy, 0);
+                    clip(t.a - 0.5);
+                    a = half4(t.rgb, 1);
+                }
+                o.a = a;
+                o.b = half4(normalize(i.normalOS) * 0.5 + 0.5, i.uv.z);
+                return o;
             }
             ENDHLSL
         }

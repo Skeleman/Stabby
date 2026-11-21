@@ -3,7 +3,7 @@
   "kinds": [
     { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
     { "id": "interactive", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 6.48, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
-    { "id": "animated", "lods": 3, "lodPixels": [108, 32.4], "fadePixels": 6.48, "shadows": true, "shadowPixels": 43.2, "wind": true, "swayPixels": 16.2, "flutterPixels": 54, "animated": true, "solid": false },
+    { "id": "animated", "lods": 3, "lodPixels": [108, 32.4], "fadePixels": 6.48, "shadows": true, "shadowPixels": 43.2, "wind": true, "swayPixels": 16.2, "flutterPixels": 54, "impostorPixels": 16.2, "animated": true, "solid": false },
     { "id": "structure", "lods": 3, "lodPixels": [129.6, 43.2], "fadePixels": 3.24, "shadows": true, "shadowPixels": 21.6, "wind": false, "animated": false, "solid": true }
   ],
   "objects": [
@@ -111,7 +111,7 @@
     },
     {
       "id": "spruce", "name": "Spruce", "kind": "animated", "color": "#4b3d33", "variants": 8,
-      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafColor": "#2f4b30" } ],
+      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafColor": "#3b5a3a" } ],
       "placement": { "biomes": ["boreal", "temperate-rain", "temperate-forest", "alpine"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 6, "sizeMaxM": 19, "clusterCount": 5, "clusterRadiusM": 8, "sink": 0.02,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.2 }, { "biome": "temperate-rain", "scale": 0.7 }, { "biome": "alpine", "scale": 0.08 } ] }
     }

@@ -79,7 +79,7 @@ namespace Stabby.World
         static readonly Style ConiferStyle = new Style
         {
             Cell = Needles, Card = 0.06f, Along = 0.85f, Lift = -0.1f, Jitter = 0.25f, From = 0.04f, AoLow = 0.2f, MinLeafDepth = 1, Width = 1.7f, Uniform = true,
-            Counts = new[] { 1500, 440, 120 }, Sides = new[] { new[] { 7, 3, 3 }, new[] { 5, 0, 0 }, new[] { 4, 0, 0 } },
+            Counts = new[] { 1200, 360, 110 }, Sides = new[] { new[] { 7, 3, 3 }, new[] { 5, 0, 0 }, new[] { 4, 0, 0 } },
         };
 
         sealed class Out

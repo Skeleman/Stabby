@@ -12,7 +12,7 @@ namespace Stabby.World
         public bool Shadows = true;
         public float ShadowPixels = 32.4f;
         public bool Wind, Animated;
-        public float SwayPixels = 16.2f, FlutterPixels = 54f;
+        public float SwayPixels = 16.2f, FlutterPixels = 54f, ImpostorPixels;
         public bool Solid = true;
     }
 
@@ -114,6 +114,7 @@ namespace Stabby.World
                     if (k.LodPixels[i] <= k.FadePixels || (i > 0 && k.LodPixels[i] >= k.LodPixels[i - 1])) errors.Add(k.Id + ": lodPixels must fall and stay above fadePixels");
                 if (k.FadePixels <= 0 || k.FadePixels >= Detail.ReferenceLines) errors.Add(k.Id + ": fadePixels must be above 0, below 1080");
                 if (k.ShadowPixels < 0) errors.Add(k.Id + ": shadowPixels below 0");
+                if (k.ImpostorPixels != 0 && (k.ImpostorPixels <= k.FadePixels || k.LodPixels == null || k.LodPixels.Length == 0 || 1.5f * k.ImpostorPixels >= k.LodPixels[k.LodPixels.Length - 1])) errors.Add(k.Id + ": impostorPixels must sit above fadePixels and 1.5x below the last lodPixels");
             }
             var ids = new HashSet<string>();
             foreach (var d in lib.Objects)
