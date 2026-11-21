@@ -140,7 +140,8 @@ Shader "Stabby/Object"
                 clip(fade.x - Bayer(i.positionCS.xy));
                 float4 base = _BaseColor;
                 float3 wp = i.positionWS;
-                float fp = max(length(fwidth(wp)), 1e-4);
+                float la = length(ddx(wp)), lb = length(ddy(wp));
+                float fp = max(max(sqrt(la * lb), 0.4 * max(la, lb)), 1e-4);
                 float3 n = normalize(i.normalWS);
                 float3 albedo;
                 [branch] if (base.a < 0.5)
@@ -153,7 +154,9 @@ Shader "Stabby/Object"
                         albedo = SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
                     else
                     {
-                        TmOut m = TmRock(wp, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy);
+                        float2 o2 = TmOrigin(_WorldSpaceCameraPos);
+                        tmO = float3(o2.x, 0, o2.y);
+                        TmOut m = TmRock(wp - tmO, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy);
                         float3 g = m.grad - n * dot(m.grad, n);
                         n = normalize(n - g);
                         albedo = m.albedo;

@@ -1,8 +1,9 @@
+using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
-using Unity.Collections;
 using Unity.Entities;
 using Unity.NetCode;
 
@@ -57,6 +58,25 @@ namespace Stabby.Game
             Owned.Release(build, p => p.Blob.Dispose());
         }
 
+        static BlobAssetReference<ObjectColumnData> Pack(ColumnArrays cols)
+        {
+            int startsAt = 32, startsBytes = cols.Starts.Length * 4;
+            int itemsAt = (startsAt + startsBytes + 15) & ~15;
+            var itemBytes = MemoryMarshal.AsBytes(cols.Items.AsSpan());
+            var bytes = new byte[itemsAt + itemBytes.Length];
+            var span = bytes.AsSpan();
+            MemoryMarshal.Write(span, ref cols.Cell);
+            MemoryMarshal.Write(span.Slice(4), ref cols.Max);
+            int so = startsAt - 8, sl = cols.Starts.Length, io = itemsAt - 16, il = cols.Items.Length;
+            MemoryMarshal.Write(span.Slice(8), ref so);
+            MemoryMarshal.Write(span.Slice(12), ref sl);
+            MemoryMarshal.Write(span.Slice(16), ref io);
+            MemoryMarshal.Write(span.Slice(20), ref il);
+            MemoryMarshal.AsBytes(cols.Starts.AsSpan()).CopyTo(span.Slice(startsAt));
+            itemBytes.CopyTo(span.Slice(itemsAt));
+            return BlobAssetReference<ObjectColumnData>.Create(bytes);
+        }
+
         GeneratedWorld MapReady()
         {
             if (World.IsServer()) return World.GetExistingSystemManaged<ServerMapSystem>().Map;
@@ -77,16 +97,7 @@ namespace Stabby.Game
                     var detail = new TerrainDetail(w);
                     var field = new ObjectField(w, detail, Features.Place(w, detail), objects);
                     var cols = ColumnArrays.Build(field.Columns());
-                    var b = new BlobBuilder(Allocator.Persistent);
-                    ref var root = ref b.ConstructRoot<ObjectColumnData>();
-                    root.Cell = cols.Cell;
-                    root.Max = cols.Max;
-                    var s = b.Allocate(ref root.Starts, cols.Starts.Length);
-                    for (int k = 0; k < cols.Starts.Length; k++) s[k] = cols.Starts[k];
-                    var items = b.Allocate(ref root.Items, cols.Items.Length);
-                    for (int k = 0; k < cols.Items.Length; k++) items[k] = cols.Items[k];
-                    var made = b.CreateBlobAssetReference<ObjectColumnData>(Allocator.Persistent);
-                    b.Dispose();
+                    var made = Pack(cols);
                     return new Prepared { Field = field, Blob = made, Columns = cols.Items.Length, Ms = sw.ElapsedMilliseconds };
                 });
                 return;

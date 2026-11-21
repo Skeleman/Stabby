@@ -17,7 +17,9 @@ namespace Stabby.Game.Editor
         static readonly HashSet<string> names = new HashSet<string>();
         static readonly List<string> report = new List<string>();
         static string prev = "";
-        static int frame;
+        static int frame, gcRuns;
+        static long gcBuilt, gcBefore;
+        static ProfilerRecorder gcFrame;
 
         static readonly bool Record = Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
 
@@ -30,15 +32,21 @@ namespace Stabby.Game.Editor
                 Profiler.enabled = true;
             }
             if (!On) return;
+            if (!gcFrame.Valid) gcFrame = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
+            long gc = gcFrame.LastValue;
+            if (GameStatus.TerrainBuilt) gcBuilt += gc; else gcBefore += gc;
+            int runs = GC.CollectionCount(0);
+            bool collected = runs != gcRuns;
+            gcRuns = runs;
             if (frame++ % (frame < 300 ? 5 : 120) == 0) Scan();
             var top = recs.Select(r => (r.name, ms: r.rec.LastValue / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80);
             string now = string.Join(", ", top.Select(r => $"{r.name} {r.ms:F0}"));
             float dt = Time.unscaledDeltaTime * 1000f;
-            if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms\n  this: {now}\n  prev: {prev}");
+            if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {now}\n  prev: {prev}");
             prev = now;
         }
 
-        public static string Report() => On ? $"spikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
+        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcRuns} collections\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
 
         static float Arg()
         {
@@ -64,6 +72,7 @@ namespace Stabby.Game.Editor
         {
             if (Record) { Profiler.enabled = false; Profiler.logFile = ""; }
             foreach (var r in recs) r.rec.Dispose();
+            if (gcFrame.Valid) gcFrame.Dispose();
             recs.Clear();
         }
     }
