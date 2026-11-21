@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct StructurePiece
     {
         public ulong Key;
-        public float X, Y, Z, Sx, Sy, Sz, C, S;
+        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q;
         public int Lo, Hi;
     }
 
@@ -21,6 +21,7 @@ namespace Stabby.World
         public const int Tiers = 3;
         public const float SeatM = 0.5f;
         public const float WallHeight = 0.2f, WallBase = 0.12f, WallBatter = 0.3f, WallColumnStep = 0.05f, Squareness = 0.45f;
+        public const float WallSpan = 0.96f, WallOverlap = 0.012f, GateSpan = 0.55f;
         static readonly int[] TierRock = { 1, 0, 0 };
         static readonly float[] Dir =
         {
@@ -56,14 +57,14 @@ namespace Stabby.World
                 {
                     float inf = Math.Max(Math.Abs(u[v]), Math.Max(Math.Abs(u[v + 1]), Math.Abs(u[v + 2])));
                     if (inf < 1e-4f) continue;
-                    float k = 1 + Squareness * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
+                    float k = 1 + p.Q * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
                     u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
                 }
                 u = Bounds(u);
                 int first = b.P.Count / 3;
                 for (int v = 0; v < u.Length; v += 3)
                 {
-                    float x = 0.5f * u[v] * p.Sx, y = 0.5f * (u[v + 1] + 1) * p.Sy, z = 0.5f * u[v + 2] * p.Sz;
+                    float y = 0.5f * (u[v + 1] + 1) * p.Sy, x = 0.5f * u[v] * p.Sx + p.L * (y - 0.5f * p.Sy), z = 0.5f * u[v + 2] * p.Sz;
                     b.Add(p.X + p.C * x - p.S * z, p.Y + y, p.Z + p.S * x + p.C * z);
                 }
                 foreach (int i in m.Indices) b.I.Add(first + i);
@@ -81,10 +82,10 @@ namespace Stabby.World
             return u;
         }
 
-        static void Add(StructureLayout l, ulong key, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi)
+        static void Add(StructureLayout l, ulong key, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi, float q = Squareness, float lean = 0)
         {
             ulong k = Rng.Mix(key ^ ((ulong)(l.Pieces.Count + 1) * 0x9E3779B97F4A7C15UL));
-            l.Pieces.Add(new StructurePiece { Key = k, X = x, Y = y, Z = z, Sx = sx, Sy = sy, Sz = sz, C = c, S = s, Lo = lo, Hi = hi });
+            l.Pieces.Add(new StructurePiece { Key = k, X = x, Y = y, Z = z, Sx = sx, Sy = sy, Sz = sz, C = c, S = s, L = lean, Q = q, Lo = lo, Hi = hi });
         }
 
         static void Yaw(ref Rng rng, float range, out float c, out float s)
@@ -97,7 +98,7 @@ namespace Stabby.World
         {
             float top = 0;
             foreach (var p in l.Pieces)
-                if (p.Lo == 0 && p.Hi >= 1 && Math.Abs(x - p.X) <= 0.5f * p.Sx) top = Math.Max(top, p.Y + p.Sy);
+                if (p.Lo == 0 && (p.Hi >= 1 || p.Y >= 0) && Math.Abs(x - p.X) <= 0.5f * p.Sx) top = Math.Max(top, p.Y + p.Sy);
             return top;
         }
 
@@ -116,8 +117,8 @@ namespace Stabby.World
             }
             courses.Add(h);
             int count = courses.Count - 1;
-            float stepL = rng.Range(0.004f, 0.035f), stepR = rng.Range(0.004f, 0.035f);
-            bool breach = count > 2 && rng.NextFloat() < 0.5f;
+            float stepL = rng.Range(0f, 0.008f), stepR = rng.Range(0f, 0.008f);
+            bool breach = count > 2 && rng.NextFloat() < 0.25f;
             float bx = rng.Range(-0.25f, 0.25f), bw = rng.Range(0.03f, 0.07f);
             int bBase = rng.Range(1, Math.Max(2, count - 1));
             for (int j = 0; j < count; j++)
@@ -160,47 +161,78 @@ namespace Stabby.World
             }
         }
 
+        const float StoneSquare = 0.8f, SlabSquare = 0.85f;
+
         static void Course(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w)
         {
             float t = a;
             bool first = true;
             while (e - t > 0.004f)
             {
-                float len = ch * rng.Range(1.4f, 2.6f);
+                float len = ch * rng.Range(1f, 3.4f);
                 if (first && (j & 1) == 1) len *= 0.5f;
                 first = false;
                 len = Math.Min(len, e - t);
                 if (e - t - len < 0.6f * ch) len = e - t;
-                float xc = t + 0.5f * len;
+                float xc = t + 0.5f * len, y0 = yb - 0.05f * ch;
                 if (rng.NextFloat() < 0.12f)
                 {
-                    Yaw(ref rng, 0.06f, out float c, out float s);
-                    Add(l, key, xc, yb - 0.08f * ch, rng.Range(-0.003f, 0.003f), len * rng.Range(1f, 1.12f), ch * rng.Range(1.05f, 1.2f), w * 1.04f, c, s, 0, 1);
+                    Yaw(ref rng, 0.05f, out float c, out float s);
+                    float sy = ch * rng.Range(0.88f, 1.12f);
+                    Add(l, key, xc, y0, rng.Range(-0.003f, 0.003f), len * rng.Range(1f, 1.06f), sy, w * 1.04f, c, s, 0, 1, StoneSquare);
+                    Pin(l, key, ref rng, xc, len, y0 + sy, yb + ch, 0, w);
                 }
                 else
                     for (int side = -1; side <= 1; side += 2)
                     {
-                        float d = w * rng.Range(0.5f, 0.62f);
-                        Yaw(ref rng, 0.06f, out float c, out float s);
-                        Add(l, key, xc, yb - 0.08f * ch, side * (0.5f * w - 0.5f * d) + rng.Range(-0.003f, 0.003f), len * rng.Range(1f, 1.12f), ch * rng.Range(1.05f, 1.2f), d, c, s, 0, 1);
+                        float d = w * rng.Range(0.5f, 0.62f), sy = ch * rng.Range(0.82f, 1.12f);
+                        float sx = len * rng.Range(0.94f, 1.06f), z = side * (0.5f * w - 0.5f * d) + rng.Range(-0.003f, 0.003f);
+                        Yaw(ref rng, 0.05f, out float c, out float s);
+                        Add(l, key, xc, y0, z, sx, sy, d, c, s, 0, 1, StoneSquare);
+                        Pin(l, key, ref rng, xc, sx, y0 + sy, yb + ch, z, d);
                     }
                 t += len;
+                if (e - t > 0.004f)
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        if (rng.NextFloat() < 0.35f) continue;
+                        float hs = ch * rng.Range(0.18f, 0.32f), hz = w * rng.Range(0.16f, 0.26f);
+                        int dir = rng.Range(0, 16);
+                        Add(l, key, t + rng.Range(-0.2f, 0.2f) * ch, yb + ch * rng.Range(0.1f, 0.65f), side * (0.5f * w - 0.5f * hz - 0.003f), hs * rng.Range(1f, 1.6f), hs, hz, Cos16(dir), Sin16(dir), 0, 0, 0.6f);
+                    }
             }
+        }
+
+        static void Pin(StructureLayout l, ulong key, ref Rng rng, float xc, float len, float top, float course, float z, float d)
+        {
+            float gap = course - top;
+            if (gap < 0.004f) return;
+            float pl = len * rng.Range(0.3f, 0.6f);
+            Add(l, key, xc + rng.Range(-0.25f, 0.25f) * (len - pl), top - 0.2f * gap, z, pl, 1.3f * gap, d * rng.Range(0.6f, 0.9f), 1, 0, 0, 0, StoneSquare);
         }
 
         static void Cope(StructureLayout l, ulong key, ref Rng rng, float gapA, float gapB, float a, float e, float h, float w)
         {
-            float t = a;
-            while (e - t > 0.015f)
+            float t = a, lean = rng.Range(-0.2f, 0.2f);
+            while (e - t > 0.012f)
             {
-                float th = rng.Range(0.02f, 0.032f), sy = rng.Range(0.026f, 0.038f);
-                float xc = t + 0.5f * th;
+                lean = Math.Max(-0.35f, Math.Min(0.35f, lean + rng.Range(-0.09f, 0.09f)));
+                bool flat = rng.NextFloat() < 0.07f;
+                float th = flat ? rng.Range(0.035f, 0.06f) : rng.Range(0.008f, 0.02f);
+                float sy = flat ? rng.Range(0.01f, 0.016f) : rng.Range(0.03f, 0.06f);
+                float sz = w * rng.Range(0.85f, 1.2f), xc = t + 0.5f * th;
+                Yaw(ref rng, 0.12f, out float c, out float s);
                 if (xc < gapA - 0.5f * th || xc > gapB + 0.5f * th)
-                {
-                    Yaw(ref rng, 0.1f, out float c, out float s);
-                    Add(l, key, xc, h - 0.004f, rng.Range(-0.003f, 0.003f), th, sy, w * rng.Range(1f, 1.15f), c, s, 0, 1);
-                }
-                t += th * rng.Range(0.95f, 1.05f);
+                    Add(l, key, xc, h - 0.004f, rng.Range(-0.004f, 0.004f), th, sy, sz, c, s, 0, 0, SlabSquare, flat ? 0 : lean);
+                t += th * rng.Range(0.9f, 1.15f);
+            }
+            t = a;
+            while (e - t > 0.012f)
+            {
+                float len = Math.Min(e - t, rng.Range(0.06f, 0.1f)), xc = t + 0.5f * len;
+                if (xc < gapA - 0.5f * len || xc > gapB + 0.5f * len)
+                    Add(l, key, xc, h - 0.004f, 0, len, rng.Range(0.035f, 0.045f), w, 1, 0, 1, 1, StoneSquare);
+                t += len;
             }
         }
 

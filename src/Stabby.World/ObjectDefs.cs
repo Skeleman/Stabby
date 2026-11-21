@@ -48,6 +48,8 @@ namespace Stabby.World
         public float AlignToSlope;
         public float FootRiseM, FootReachM = 12f;
         public float EditMinSizeM;
+        public int ChainMin = 1, ChainMax = 1;
+        public float ChainCorner, ChainGate;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
     }
 
@@ -146,6 +148,10 @@ namespace Stabby.World
                 if (pl.AlignToSlope < 0 || pl.AlignToSlope > 1) errors.Add(d.Id + ": alignToSlope must be 0-1");
                 if (d.Kind == Structure && (pl.AlignToSlope != 0 || pl.ClusterCount != 1 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0))
                     errors.Add(d.Id + ": structures stand level, alone, with no footRiseM or editMinSizeM");
+                if (pl.ChainMin < 1 || pl.ChainMax < pl.ChainMin || pl.ChainMax > 24) errors.Add(d.Id + ": chainMin/chainMax must be increasing, 1-24");
+                if (pl.ChainCorner < 0 || pl.ChainCorner > 1 || pl.ChainGate < 0 || pl.ChainGate > 1) errors.Add(d.Id + ": chainCorner and chainGate must be 0-1");
+                if ((pl.ChainMax > 1 || pl.ChainCorner > 0 || pl.ChainGate > 0) && !(d.Kind == Structure && d.Parts.Count == 1 && d.Parts[0].Shape == ObjectPart.Wall))
+                    errors.Add(d.Id + ": chains belong only to single-part wall structures");
                 if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
                 if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
                 if (pl.EditMinSizeM < 0 || pl.EditMinSizeM > 20) errors.Add(d.Id + ": editMinSizeM must be 0-20");

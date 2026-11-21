@@ -84,7 +84,18 @@ public class StructureTests
         var tilted = new ObjectDef { Id = "c", Kind = "structure", Parts = { new ObjectPart { Shape = ObjectPart.Cairn } } };
         tilted.Placement.AlignToSlope = 0.5f;
         bad.Objects.Add(tilted);
+        var chainedCairn = new ObjectDef { Id = "d", Kind = "structure", Parts = { new ObjectPart { Shape = ObjectPart.Cairn } } };
+        chainedCairn.Placement.ChainMax = 4;
+        bad.Objects.Add(chainedCairn);
+        var backwards = new ObjectDef { Id = "e", Kind = "structure", Parts = { new ObjectPart { Shape = ObjectPart.Wall } } };
+        backwards.Placement.ChainMin = 6;
+        backwards.Placement.ChainMax = 3;
+        backwards.Placement.ChainGate = 1.5f;
+        bad.Objects.Add(backwards);
         var errors = ObjectLibrary.Validate(bad);
+        Assert.Contains(errors, e => e.StartsWith("d: chains belong only", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e.StartsWith("e: chainMin/chainMax", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e.StartsWith("e: chainCorner and chainGate", StringComparison.Ordinal));
         Assert.Contains(errors, e => e.StartsWith("a: structure shapes", StringComparison.Ordinal));
         Assert.Contains(errors, e => e.StartsWith("b: structure shapes", StringComparison.Ordinal));
         Assert.Contains(errors, e => e.StartsWith("c: structures stand level", StringComparison.Ordinal));
@@ -98,6 +109,7 @@ public class StructureTests
         var detail = new TerrainDetail(w);
         var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
         int seen = 0;
+        var walls = new List<ObjectInstance>();
         for (int cz = 0; cz < field.ChunksAcross; cz++)
             for (int cx = 0; cx < field.ChunksAcross; cx++)
                 foreach (var o in field.Chunk(cx, cz))
@@ -105,12 +117,16 @@ public class StructureTests
                     var seat = ObjectField.Seats(Objects.Objects[o.Def]);
                     if (seat == null) continue;
                     seen++;
+                    if (Objects.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall) walls.Add(o);
                     ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
                     Assert.True(hi - lo <= Structures.SeatM && o.Y <= lo, $"{o.X:F0},{o.Z:F0}: seats {lo:F2}..{hi:F2}, y {o.Y:F2}");
                     Assert.Equal(0f, o.Qx);
                     Assert.Equal(0f, o.Qz);
                 }
         Assert.True(seen > 20, $"{seen} structures");
+        int linked = walls.Count(a => walls.Count(b => a.Id != b.Id && ObjectIds.Chunk(a.Id) == ObjectIds.Chunk(b.Id)
+            && (a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z) <= Math.Pow(Structures.WallSpan * Math.Max(a.Size, b.Size), 2)) >= 2);
+        Assert.True(linked > 5, $"{linked} of {walls.Count} wall sections sit inside a run of three");
     }
 
     struct Flat : IGroundHeight

@@ -118,7 +118,8 @@
     {
       "id": "dry-stone-wall", "name": "Dry-stone wall", "kind": "structure", "color": "#8a857c", "variants": 6,
       "parts": [ { "id": "wall", "shape": "dry-stone-wall" } ],
-      "placement": { "biomes": ["steppe", "shrubland", "tundra", "temperate-forest", "alpine", "boreal", "cold-desert"], "perHectare": 0.4, "slopeMax": 0.25, "hardnessMin": 0.1, "sizeMinM": 4, "sizeMaxM": 6.5, "sink": 0.005,
+      "placement": { "biomes": ["steppe", "shrubland", "tundra", "temperate-forest", "alpine", "boreal", "cold-desert"], "perHectare": 0.1, "slopeMax": 0.25, "hardnessMin": 0.1, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005,
+        "chainMin": 3, "chainMax": 10, "chainCorner": 0.14, "chainGate": 0.07,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.4 }, { "biome": "boreal", "scale": 0.3 }, { "biome": "cold-desert", "scale": 0.5 } ] }
     },
     {

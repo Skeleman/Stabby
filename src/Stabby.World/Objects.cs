@@ -29,7 +29,7 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
@@ -54,6 +54,7 @@ namespace Stabby.World
             boulderThinStream = Rng.Stream(w.Config.Seed, "boulders-thin").NextU64();
             structureStream = Rng.Stream(w.Config.Seed, "structures").NextU64();
             structureThinStream = Rng.Stream(w.Config.Seed, "structures-thin").NextU64();
+            chainStream = Rng.Stream(w.Config.Seed, "structures-chain").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -197,8 +198,58 @@ namespace Stabby.World
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
+                        if (pl.ChainMax > 1 && boulders == null) Chain(d, o, chunk, chunkKey, x0, z0, sx, sz, ref ordinal, list);
                     }
                 }
+            }
+        }
+
+        void Chain(int d, ObjectInstance o, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> list)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var rng = new Rng(Rng.Mix(chainStream ^ chunkKey ^ key[d] ^ ((ulong)ordinal * 0x9E3779B97F4A7C15UL)));
+            int count = rng.Range(pl.ChainMin, pl.ChainMax + 1) - 1;
+            float size = o.Size, span = Structures.WallSpan * size, thick = Structures.WallBase * size;
+            Rotate(o, 1, 0, 0, out float ux, out _, out float uz);
+            float ex = o.X + ux * 0.5f * span, ez = o.Z + uz * 0.5f * span;
+            for (int k = 0; k < count; k++)
+            {
+                float roll = rng.NextFloat(), turn = rng.NextFloat() < 0.5f ? -1f : 1f, wander = rng.Range(-0.1f, 0.1f);
+                int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                bool gate = rng.NextFloat() < pl.ChainGate;
+                float bx = ex, bz = ez;
+                if (roll < pl.ChainCorner)
+                {
+                    bx -= ux * 0.5f * thick; bz -= uz * 0.5f * thick;
+                    float t = ux; ux = -uz * turn; uz = t * turn;
+                }
+                else
+                {
+                    float gx = GroundAt(detail, cm, ex + SlopeStepM, ez) - GroundAt(detail, cm, ex - SlopeStepM, ez);
+                    float gz = GroundAt(detail, cm, ex, ez + SlopeStepM) - GroundAt(detail, cm, ex, ez - SlopeStepM);
+                    float gl = (float)Math.Sqrt(gx * gx + gz * gz);
+                    if (gl > 0.02f * SlopeStepM)
+                    {
+                        float cx = -gz / gl, cz = gx / gl;
+                        if (cx * ux + cz * uz < 0) { cx = -cx; cz = -cz; }
+                        ux += 0.6f * (cx - ux); uz += 0.6f * (cz - uz);
+                    }
+                    float px = -uz, pz = ux;
+                    ux += wander * px; uz += wander * pz;
+                    float ul = (float)Math.Sqrt(ux * ux + uz * uz);
+                    ux /= ul; uz /= ul;
+                    bx -= ux * Structures.WallOverlap * size; bz -= uz * Structures.WallOverlap * size;
+                }
+                if (gate) { ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span; continue; }
+                float mx = bx + ux * 0.5f * span, mz = bz + uz * 0.5f * span, fx = bx + ux * span, fz = bz + uz * span;
+                if (Math.Min(bx, fx) < x0 || Math.Min(bz, fz) < z0 || Math.Max(bx, fx) >= x0 + sx || Math.Max(bz, fz) >= z0 + sz) return;
+                float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
+                if (!Accept(d, mx, mz, size, qw, qy, out var s)) return;
+                s.Variant = variant;
+                s.Id = ObjectIds.Make(chunk, d, ordinal++);
+                list.Add(s);
+                ex = fx; ez = fz;
             }
         }
 

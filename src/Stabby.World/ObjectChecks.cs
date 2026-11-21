@@ -72,6 +72,8 @@ namespace Stabby.World
                 {
                     if (ObjectField.Seats(w.Objects.Objects[o.Def]) == null) continue;
                     found++;
+                    int own = ObjectIds.Chunk(o.Id), ox = (int)Math.Floor(o.X / field.ChunkMeters), oz = (int)Math.Floor(o.Z / field.ChunkMeters);
+                    if (own != c || ox != c % across || oz != c / across) { e.Add($"{w.Objects.Objects[o.Def].Id} at {o.X:F0},{o.Z:F0} leaves its object chunk"); return; }
                     string seat = SeatFault(w, detail, o);
                     if (seat != null) { e.Add($"{w.Objects.Objects[o.Def].Id} at {o.X:F0},{o.Z:F0}" + seat); return; }
                 }

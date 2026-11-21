@@ -140,6 +140,10 @@
               "footRiseM": { "type": "number", "minimum": 0, "maximum": 100 },
               "footReachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
               "editMinSizeM": { "type": "number", "minimum": 0, "maximum": 20 },
+              "chainMin": { "type": "integer", "minimum": 1, "maximum": 24 },
+              "chainMax": { "type": "integer", "minimum": 1, "maximum": 24 },
+              "chainCorner": { "type": "number", "minimum": 0, "maximum": 1 },
+              "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
               "biomeDensity": {
                 "type": "array",
                 "items": {
