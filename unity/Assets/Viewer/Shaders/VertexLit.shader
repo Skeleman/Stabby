@@ -112,7 +112,7 @@ Shader "Stabby/VertexLit"
                 float2 xv = i.xz + TmOrigin(_WorldSpaceCameraPos);
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
-                float3 c = (LookColor(m.albedo, 1) * (l.color * saturate(dot(n, l.direction)) + ambient) + LookSheen(n, v, l.direction, l.color, LookRough())) * ao;
+                float3 c = (LookColor(m.albedo, 1) * (l.color * saturate(dot(n, l.direction)) + ambient) + LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
                 return half4(MixFog(c, i.fog), 1);
             }
             ENDHLSL

@@ -5,7 +5,7 @@
   "tiltPerKm": 6,
   "look": {
     "noiseContrast": 0.12, "albedoVar": 0.08, "detailWavelengthM": 0.05,
-    "saturation": 0.65, "roughness": 0.85, "specular": 0.04
+    "saturation": 0.65, "roughness": 0.85, "specular": 0.04, "roughnessVar": 0.12
   },
   "water": {
     "deepColor": "#295c8c", "shallowColor": "#7cadb1",
@@ -34,17 +34,17 @@
       "soil": {
         "biomes": ["shrubland", "alpine"],
         "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.15,
-        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.1
+        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.1, "roughness": 0.9
       },
       "sand": {
         "biomes": ["desert", "cold-desert"],
         "bumpAmp": 0.035, "bumpWavelengthM": 6, "grainWavelengthM": 0.02,
-        "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06
+        "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06, "roughness": 0.92
       },
       "snow": {
         "biomes": ["tundra"],
         "bumpAmp": 0.3, "bumpWavelengthM": 4, "grainWavelengthM": 0.03,
-        "featureAmp": 0.35, "featureWavelengthM": 1.2, "parallax": 0
+        "featureAmp": 0.35, "featureWavelengthM": 1.2, "parallax": 0, "roughness": 0.6
       }
     }
   },

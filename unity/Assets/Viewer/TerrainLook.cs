@@ -16,7 +16,7 @@ namespace Stabby.Viewer
         public byte[] Coat;
         public int N;
         public float CellM;
-        public Vector4 Surface, Wobble, RockA, RockB, RockC, Look;
+        public Vector4 Surface, Wobble, RockA, RockB, RockC, Look, CoatRough;
         public Vector4[] CoatA, CoatB;
         public Vector4[] Water;
     }
@@ -78,6 +78,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyRockB", s.RockB);
             Shader.SetGlobalVector("_StabbyRockC", s.RockC);
             Shader.SetGlobalVector("_StabbyLook", s.Look);
+            Shader.SetGlobalVector("_StabbyCoatRough", s.CoatRough);
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
             Shader.SetGlobalVector("_StabbyWaterDeep", s.Water[0]);
@@ -207,11 +208,13 @@ namespace Stabby.Viewer
             float wind = math.radians(d.WindDeg);
             var coatA = new Vector4[d.Coats.Length];
             var coatB = new Vector4[d.Coats.Length];
+            var coatR = Vector4.zero;
             for (int k = 0; k < d.Coats.Length; k++)
             {
                 var c = d.Coats[k];
                 coatA[k] = new Vector4(c.BumpAmp, 1f / c.BumpWavelengthM, c.GrainAmp, 1f / c.GrainWavelengthM);
                 coatB[k] = new Vector4(c.FeatureAmp, 1f / c.FeatureWavelengthM, c.Parallax, c.AlbedoVar);
+                coatR[k] = c.Roughness;
             }
             return new StrataLook
             {
@@ -222,7 +225,8 @@ namespace Stabby.Viewer
                 RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),
                 RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
                 RockC = new Vector4(r.Parallax, 0, 0, 0),
-                Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, 0),
+                Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, lib.Look.RoughnessVar),
+                CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,
                 Water = WaterLook(lib.Water),
             };
