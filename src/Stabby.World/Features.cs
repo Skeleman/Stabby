@@ -105,7 +105,7 @@ namespace Stabby.World
         public const int TileCells = 32;
         public const int MarginCells = 3;
         public const float OverhangChance = 0.6f, ArchChance = 0.3f;
-        public const float OverhangMinDrop = 50f;
+        public const float OverhangMinDrop = 50f, ReferenceCellM = 45f;
         public const float CaveChance = 0.35f, CaveMinDrop = 30f, CaveRoof = 12f, CaveGrade = 0.18f, CaveSideChance = 0.4f, RoofSampleM = 4f;
         public const float CaveHollow = 1f - 1.25f * FeatureEdit.Blend, JoinBlend = 0.25f;
         public const int CavePieces = 4, CavePaths = 3;
@@ -242,7 +242,7 @@ namespace Stabby.World
             float roll = r.NextFloat(), radius = r.Range(28f, 40f), length = r.Range(60f, 120f), lift = r.Range(0.2f, 0.5f);
             if (roll >= OverhangChance) return;
             int n = w.Config.Size, best = -1, bestDir = 0;
-            float bestDrop = OverhangMinDrop;
+            float bestDrop = Math.Min(OverhangMinDrop, OverhangMinDrop / ReferenceCellM * w.Config.CellMeters);
             for (int y = ty * TileCells + MarginCells; y < (ty + 1) * TileCells - MarginCells; y++)
                 for (int x = tx * TileCells + MarginCells; x < (tx + 1) * TileCells - MarginCells; x++)
                 {
@@ -278,7 +278,7 @@ namespace Stabby.World
             float roll = r.NextFloat(), radius = r.Range(16f, 22f), length = r.Range(80f, 140f);
             if (roll >= UndercutChance) return;
             int n = w.Config.Size, best = -1, bestDir = 0;
-            float bestDrop = UndercutMinDrop;
+            float bestDrop = Math.Min(UndercutMinDrop, UndercutMinDrop / ReferenceCellM * w.Config.CellMeters);
             for (int y = ty * TileCells + MarginCells; y < (ty + 1) * TileCells - MarginCells; y++)
                 for (int x = tx * TileCells + MarginCells; x < (tx + 1) * TileCells - MarginCells; x++)
                 {
@@ -484,7 +484,7 @@ namespace Stabby.World
             }
             float cm = w.Config.CellMeters, inv = 1f / Grid.Dist[bestDir];
             float hx = -Grid.DX[bestDir] * inv, hz = -Grid.DY[bestDir] * inv;
-            float ax = best % n - 0.5f * hx, az = best / n - 0.5f * hz, ay = detail.HeightAt(ax, az) + 0.9f * radius * CaveHollow;
+            float back = Math.Max(0.5f, 0.5f * ReferenceCellM / cm), ax = best % n - back * hx, az = best / n - back * hz, ay = detail.HeightAt(ax, az) + 0.9f * radius * CaveHollow;
             int start = output.Count;
             var c = new CaveBuild { Detail = detail, Cm = cm, R = radius, Chamber = chamber, Output = output, Start = start };
             var mouth = plan[0];
@@ -503,7 +503,7 @@ namespace Stabby.World
         {
             if (!Dry(w, i)) return -1;
             int n = w.Config.Size, dir = -1;
-            float most = CaveMinDrop;
+            float most = Math.Min(CaveMinDrop, CaveMinDrop / ReferenceCellM * w.Config.CellMeters);
             for (int k = 0; k < 8; k++)
             {
                 int j = i + Grid.DY[k] * n + Grid.DX[k];
