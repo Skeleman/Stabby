@@ -40,7 +40,7 @@ namespace Stabby.Viewer
 
         static Texture2D strataTexture, coatTexture, levelTexture;
 
-        public static float3 Sand => new float3(0.75f, 0.71f, 0.63f);
+        public static float3 Sand => new float3(0.78f, 0.72f, 0.60f);
 
         public static float3 ToLinear(float3 c) => math.select(math.pow((c + 0.055f) / 1.055f, 2.4f), c / 12.92f, c <= 0.04045f);
 
