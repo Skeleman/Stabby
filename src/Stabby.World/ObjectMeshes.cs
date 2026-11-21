@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public float[] Positions, Normals;
         public int[] Indices;
-        public float[] Uvs, Winds;
+        public float[] Uvs, Winds, Tones;
         public int VertexCount => Positions.Length / 3;
         public int TriangleCount => Indices.Length / 3;
     }

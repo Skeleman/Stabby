@@ -62,7 +62,7 @@ Shader "Stabby/Object"
             #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
@@ -72,6 +72,7 @@ Shader "Stabby/Object"
                 float3 local : TEXCOORD3;
                 float3 normalOS : TEXCOORD4;
                 float3 axisWS : TEXCOORD5;
+                float4 tone : TEXCOORD6;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -92,6 +93,7 @@ Shader "Stabby/Object"
                 o.local = c * scale;
                 o.normalOS = i.normalOS;
                 o.axisWS = normalize(isLog ? m._m00_m10_m20 : m._m01_m11_m21);
+                o.tone = i.tone;
                 return o;
             }
 
@@ -134,6 +136,22 @@ Shader "Stabby/Object"
                 nOut = normalize(n - (grad - n * dot(grad, n)));
             }
 
+            float3 Dressed(float3 albedo, float4 tone, float3 wp, float3 n, float h, float fp)
+            {
+                float lum = dot(albedo, float3(0.3, 0.59, 0.11));
+                float3 tint = lerp(float3(1.04, 0.98, 0.9), float3(1.08, 0.95, 0.8), 0.5 + 0.5 * tone.z);
+                albedo = lerp(lum * tint, albedo, 0.25) * (1 + 0.22 * tone.y);
+                float3 p = wp * 22;
+                float3 c = floor(p);
+                float spot = TmHash(int3(c)), r = length(frac(p) - 0.5);
+                float dens = (0.05 + 0.1 * tone.w) * (0.5 + 0.5 * saturate(n.y + 0.6));
+                float lich = TmFade(22, fp) * step(1 - dens, spot) * smoothstep(0.42, 0.3, r);
+                float3 lc = lerp(float3(0.34, 0.35, 0.29), float3(0.4, 0.37, 0.26), frac(spot * 7.3));
+                albedo = lerp(albedo, lc * (0.9 + 0.2 * tone.y), 0.8 * lich);
+                float band = 1 - smoothstep(0.04, 0.4, h);
+                return lerp(albedo, albedo * float3(0.5, 0.46, 0.4), 0.75 * band);
+            }
+
             half4 frag(Varyings i) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(i);
@@ -166,6 +184,7 @@ Shader "Stabby/Object"
                         albedo = m.albedo;
                     }
                     albedo *= base.rgb;
+                    [branch] if (i.tone.x > 0.5) albedo = Dressed(albedo, i.tone, wp - tmO, n, i.local.y, fp);
                 }
                 else
                     Wood(i.local, normalize(i.normalOS), n, normalize(i.axisWS), base.rgb, base.a < 1.5, fp, albedo, n);
