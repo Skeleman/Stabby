@@ -226,7 +226,7 @@ namespace Stabby.World
                 NearField.Project(q, x, z, out float d, out float t);
                 float hw = q.Wa + (q.Wb - q.Wa) * t, s = q.Sa + (q.Sb - q.Sa) * t;
                 float wb = hw + NearField.Bank(hw);
-                if (d < hw || d < wb - 0.5f && (own < 0 || d < own - 0.5f || s < stage)) return true;
+                if (d < hw || d < wb - 0.5f && (own < 0 || d < own - 0.5f || s < stage + BankTolerance)) return true;
                 if (Math.Abs(r - self) > 2 && s < stage && d < wb + stage - s) return true;
             }
             return false;

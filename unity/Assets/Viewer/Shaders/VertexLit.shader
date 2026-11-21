@@ -36,6 +36,7 @@ Shader "Stabby/VertexLit"
             #include "TerrainMaterials.hlsl"
             #include "Look.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
+            #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; };
@@ -111,6 +112,7 @@ Shader "Stabby/VertexLit"
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
                 float2 xv = i.xz + TmOrigin(_WorldSpaceCameraPos);
+                m.albedo = ContactGround(m.albedo, xv, h);
                 float2 sj = 0.08 * float2(TmL2(xv, 0.9, 113.1).x, TmL2(xv, 0.9, 117.9).x) + 0.03 * float2(TmL2(xv, 3.1, 121.3).x, TmL2(xv, 3.1, 125.7).x);
                 Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)));
                 l.color *= l.shadowAttenuation;

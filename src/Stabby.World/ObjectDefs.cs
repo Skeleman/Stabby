@@ -50,6 +50,7 @@ namespace Stabby.World
         public float Sink;
         public float AlignToSlope;
         public float FootRiseM, FootReachM = 12f;
+        public float FanM;
         public float EditMinSizeM;
         public int ChainMin = 1, ChainMax = 1;
         public float ChainCorner, ChainGate;
@@ -162,6 +163,7 @@ namespace Stabby.World
                     errors.Add(d.Id + ": chains belong only to single-part wall structures");
                 if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
                 if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
+                if (pl.FanM < 0 || pl.FanM > 30 || (pl.FanM > 0 && pl.FootRiseM <= 0)) errors.Add(d.Id + ": fanM must be 0-30 and needs footRiseM");
                 if (pl.EditMinSizeM < 0 || pl.EditMinSizeM > 20) errors.Add(d.Id + ": editMinSizeM must be 0-20");
                 if (pl.EditMinSizeM > 0 && (d.Parts.Count != 1 || d.Parts[0].Shape != ObjectPart.Rock || pl.ClusterCount != 1 || pl.FootRiseM > 0))
                     errors.Add(d.Id + ": editMinSizeM needs one rock part, no clusters and no footRiseM");

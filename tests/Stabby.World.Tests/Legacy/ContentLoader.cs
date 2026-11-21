@@ -251,6 +251,8 @@ public static class ContentLoader
     sealed class TerrainEntry
     {
         public float QuadPixels { get; set; } = new TerrainViewDef().QuadPixels;
+        public float ContactPixels { get; set; } = new TerrainViewDef().ContactPixels;
+        public float ContactTexelPixels { get; set; } = new TerrainViewDef().ContactTexelPixels;
     }
 
     sealed class FoliageEntry
@@ -355,6 +357,7 @@ public static class ContentLoader
         public float AlignToSlope { get; set; }
         public float FootRiseM { get; set; }
         public float FootReachM { get; set; } = 12f;
+        public float FanM { get; set; }
         public float EditMinSizeM { get; set; }
         public int ChainMin { get; set; } = 1;
         public int ChainMax { get; set; } = 1;
@@ -413,13 +416,13 @@ public static class ContentLoader
                 Biomes = pl.Biomes, PerHectare = pl.PerHectare, SlopeMin = pl.SlopeMin, SlopeMax = pl.SlopeMax,
                 HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
-                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, EditMinSizeM = pl.EditMinSizeM,
+                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
                 ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);
         }
-        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels };
+        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels };
         if (file.Foliage != null)
         {
             var g = file.Foliage.Grass;
