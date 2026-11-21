@@ -391,6 +391,21 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            while (phase >= 26 && phase <= 28)
+            {
+                string name = phase == 26 ? "floor-near" : phase == 27 ? "floor-mid" : "cliff-foot";
+                if (wait == 0)
+                {
+                    if (!AimFloor(cam, phase - 26)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
             if (!castDone) { job = CastTour(cam, dir); castDone = true; }
             if (job != null && job.MoveNext()) return;
             job = null;
@@ -796,6 +811,61 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim structure " + (close ? "close" : "mid")] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimFloor(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var lib = field.Library.Objects;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                    {
+                        var chunk = field.Chunk(cx, cz);
+                        foreach (var o in chunk)
+                        {
+                            string id = lib[o.Def].Id;
+                            if (mode < 2 ? id != "fallen-log" : id != "cliff-scree") continue;
+                            int near = 0;
+                            foreach (var b in chunk)
+                            {
+                                string bid = lib[b.Def].Id;
+                                float d2 = (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z);
+                                if (d2 < 400f && (mode < 2 ? bid == "fallen-log" || bid == "stump" : bid == "cliff-scree")) near++;
+                            }
+                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude * 0.02f - near;
+                            if (score < best) { best = score; pick = o; }
+                        }
+                    }
+                if (best == float.MaxValue) return false;
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                var target = new Vector3(pick.X, pick.Y + 0.3f, pick.Z);
+                Vector3 eye;
+                if (mode < 2)
+                {
+                    var across = new Vector3(2 * (pick.Qx * pick.Qz + pick.Qw * pick.Qy), 0, 1 - 2 * (pick.Qx * pick.Qx + pick.Qy * pick.Qy)).normalized;
+                    var along = new Vector3(across.z, 0, -across.x);
+                    float back = mode == 0 ? 3.5f : 14f;
+                    eye = target + (across * 0.8f + along * 0.6f) * back + Vector3.up * (mode == 0 ? 1.3f : 4f);
+                }
+                else
+                {
+                    float gx = ground.HeightAt(pick.X + 4f, pick.Z) - ground.HeightAt(pick.X - 4f, pick.Z), gz = ground.HeightAt(pick.X, pick.Z + 4f) - ground.HeightAt(pick.X, pick.Z - 4f);
+                    var up = new Vector3(gx, 0, gz);
+                    up = up.sqrMagnitude > 1e-4f ? up.normalized : Vector3.forward;
+                    eye = target - up * 14f + Vector3.up * 3f;
+                    target += up * 4f + Vector3.up * 3f;
+                }
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim floor " + mode] = $"{lib[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, score {best:F1}";
                 return true;
             }
             return false;
