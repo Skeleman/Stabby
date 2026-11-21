@@ -11,8 +11,13 @@ namespace Stabby.Viewer
     {
         public float[] Offsets;
         public float3[] Bands;
+        public float[] Hardness;
         public float PeriodM;
-        public Vector4 DetailAmp, DetailFreq;
+        public byte[] Coat;
+        public int N;
+        public float CellM;
+        public Vector4 Surface, Wobble, RockA, RockB, RockC;
+        public Vector4[] CoatA, CoatB;
     }
 
     public sealed class FieldLook
@@ -29,7 +34,7 @@ namespace Stabby.Viewer
 
         public const int FieldTexelsPerCell = 4, FieldMax = 2048;
 
-        static Texture2D strataTexture, slopeTexture, biomeTexture;
+        static Texture2D strataTexture, coatTexture, slopeTexture, biomeTexture;
 
         public static float3 Water => new float3(0.16f, 0.36f, 0.55f);
         public static float3 Sand => new float3(0.78f, 0.72f, 0.52f);
@@ -54,14 +59,25 @@ namespace Stabby.Viewer
             for (int k = 0; k < px.Length; k++)
             {
                 var c = ToLinear(s.Bands[k]) * 255f;
-                px[k] = new Color32((byte)c.x, (byte)c.y, (byte)c.z, 255);
+                px[k] = new Color32((byte)c.x, (byte)c.y, (byte)c.z, (byte)math.round(s.Hardness[k] * 255f));
             }
             strataTexture.SetPixels32(px);
             strataTexture.Apply(true);
+            if (coatTexture != null) UnityEngine.Object.Destroy(coatTexture);
+            coatTexture = new Texture2D(s.N, s.N, TextureFormat.RGBA32, false, true) { name = "Coats", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            coatTexture.SetPixelData(s.Coat, 0);
+            coatTexture.Apply(false, true);
             Shader.SetGlobalTexture("_StabbyStrata", strataTexture);
+            Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
             Shader.SetGlobalFloat("_StabbyStrataPeriod", s.PeriodM);
-            Shader.SetGlobalVector("_StabbyDetailAmp", s.DetailAmp);
-            Shader.SetGlobalVector("_StabbyDetailFreq", s.DetailFreq);
+            Shader.SetGlobalVector("_StabbyCoatUV", new Vector4(1f / (s.CellM * s.N), 0.5f / s.N, 0, 0));
+            Shader.SetGlobalVector("_StabbySurface", s.Surface);
+            Shader.SetGlobalVector("_StabbyStrataWobble", s.Wobble);
+            Shader.SetGlobalVector("_StabbyRockA", s.RockA);
+            Shader.SetGlobalVector("_StabbyRockB", s.RockB);
+            Shader.SetGlobalVector("_StabbyRockC", s.RockC);
+            Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
+            Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -149,13 +165,29 @@ namespace Stabby.Viewer
         {
             var ids = lib.Bands(BandStepM);
             var bands = new float3[ids.Length];
-            for (int k = 0; k < ids.Length; k++) bands[k] = Unpack(lib.Strata[ids[k]].Color);
+            var hard = new float[ids.Length];
+            for (int k = 0; k < ids.Length; k++) { bands[k] = Unpack(lib.Strata[ids[k]].Color); hard[k] = lib.Strata[ids[k]].Hardness; }
             var d = lib.Surface;
+            var r = d.Rock;
+            float wind = math.radians(d.WindDeg);
+            var coatA = new Vector4[d.Coats.Length];
+            var coatB = new Vector4[d.Coats.Length];
+            for (int k = 0; k < d.Coats.Length; k++)
+            {
+                var c = d.Coats[k];
+                coatA[k] = new Vector4(c.BumpAmp, 1f / c.BumpWavelengthM, c.GrainAmp, 1f / c.GrainWavelengthM);
+                coatB[k] = new Vector4(c.FeatureAmp, 1f / c.FeatureWavelengthM, c.Parallax, c.AlbedoVar);
+            }
             return new StrataLook
             {
-                Offsets = lib.Offsets(w), Bands = bands, PeriodM = lib.PeriodM,
-                DetailAmp = new Vector4(d.StrataWobbleM, d.CoatPatchAmp, d.CoatGrainAmp, d.RockGrainAmp),
-                DetailFreq = new Vector4(1f / d.StrataWobbleWavelengthM, 1f / d.CoatPatchWavelengthM, 1f / d.CoatGrainWavelengthM, 1f / d.RockGrainWavelengthM),
+                Offsets = lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
+                Coat = d.CoatWeights(w), N = w.Config.Size, CellM = w.Config.CellMeters,
+                Surface = new Vector4(d.FadePixels, 1f / d.ParallaxFootprintM, math.sin(wind), math.cos(wind)),
+                Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),
+                RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),
+                RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
+                RockC = new Vector4(r.Parallax, 0, 0, 0),
+                CoatA = coatA, CoatB = coatB,
             };
         }
     }

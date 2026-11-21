@@ -1,13 +1,41 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "offsetAmplitudeM": 18,
   "offsetWavelengthM": 2400,
   "tiltPerKm": 6,
   "surface": {
+    "fadePixels": 2.5, "parallaxFootprintM": 0.012, "windDeg": 60,
     "strataWobbleM": 2.5, "strataWobbleWavelengthM": 30,
     "coatPatchAmp": 0.22, "coatPatchWavelengthM": 28,
-    "coatGrainAmp": 0.12, "coatGrainWavelengthM": 1.2,
-    "rockGrainAmp": 0.18, "rockGrainWavelengthM": 1.6
+    "rock": {
+      "grainAmp": 0.18, "grainWavelengthM": 0.35,
+      "bumpAmp": 0.45, "bumpWavelengthM": 2.5,
+      "bedSpacingM": 0.8, "bedDepthM": 0.1,
+      "jointSpacingM": 2.2, "jointDepthM": 0.08,
+      "parallax": 1
+    },
+    "coats": {
+      "grass": {
+        "biomes": ["boreal", "steppe", "temperate-forest", "temperate-rain", "savanna", "tropical-forest", "wetland", "mangrove"],
+        "bumpAmp": 0.3, "bumpWavelengthM": 1.6, "grainAmp": 0.45, "grainWavelengthM": 0.07,
+        "featureAmp": 0.5, "featureWavelengthM": 0.5, "parallax": 0, "albedoVar": 0.25
+      },
+      "soil": {
+        "biomes": ["shrubland", "alpine"],
+        "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.3, "grainWavelengthM": 0.05,
+        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.2
+      },
+      "sand": {
+        "biomes": ["desert", "cold-desert"],
+        "bumpAmp": 0.15, "bumpWavelengthM": 6, "grainAmp": 0.25, "grainWavelengthM": 0.02,
+        "featureAmp": 0.5, "featureWavelengthM": 0.32, "parallax": 0.6, "albedoVar": 0.12
+      },
+      "snow": {
+        "biomes": ["tundra"],
+        "bumpAmp": 0.3, "bumpWavelengthM": 4, "grainAmp": 0.12, "grainWavelengthM": 0.03,
+        "featureAmp": 0.35, "featureWavelengthM": 1.2, "parallax": 0, "albedoVar": 0.08
+      }
+    }
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8c8a83", "thicknessM": 14, "hardness": 0.85 },
