@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Stabby.World
@@ -17,7 +18,14 @@ namespace Stabby.World
             n = w.Config.Size;
             cm = w.Config.CellMeters;
             var h = w.Height;
-            var dist = WetDistance(w);
+            float[] dist = null, offsets = null, bands;
+            List<RiverPiece> pieces = null;
+            int[] index = null, items = null;
+            bool strata = w.Materials != null && w.Materials.Strata.Count > 0;
+            Parallel.Invoke(
+                () => dist = WetDistance(w),
+                () => offsets = strata ? w.Materials.Offsets(w.Config) : new float[n * n],
+                () => { pieces = NearField.Pieces(w); NearField.Index(pieces, n, cm, out index, out items); });
             var amp = new float[n * n];
             Parallel.For(0, n, y =>
             {
@@ -37,26 +45,21 @@ namespace Stabby.World
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
             });
-            float[] offsets, bands;
             float period;
-            if (w.Materials != null && w.Materials.Strata.Count > 0)
+            if (strata)
             {
-                var strata = new StrataField(w.Config, w.Materials);
-                offsets = w.Materials.Offsets(w.Config);
+                var field = new StrataField(w.Config, w.Materials);
                 period = w.Materials.PeriodM;
                 bands = new float[BandSamples];
-                for (int k = 0; k < BandSamples; k++) bands[k] = strata.Hardness(0, k * period / BandSamples - offsets[0]);
+                for (int k = 0; k < BandSamples; k++) bands[k] = field.Hardness(0, k * period / BandSamples - offsets[0]);
             }
             else
             {
-                offsets = new float[n * n];
                 period = 1f;
                 bands = new[] { 0.5f };
             }
-            var pieces = NearField.Pieces(w);
-            NearField.Index(pieces, n, cm, out int[] start, out int[] items);
             cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(),
-                h, amp, offsets, period, bands, pieces.ToArray(), start, items);
+                h, amp, offsets, period, bands, pieces.ToArray(), index, items);
         }
 
         public int Size => n;
