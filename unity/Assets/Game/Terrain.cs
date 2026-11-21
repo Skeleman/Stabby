@@ -204,6 +204,58 @@ namespace Stabby.Game
             return 0;
         }
 
+        static void Axis(int b0, int i, int m, float s2, out int c, out bool snap, out bool lerp, out float at)
+        {
+            int b = b0 + i;
+            if (i == 0 || i == m)
+            {
+                c = (b >> 1) - 1;
+                snap = true;
+                lerp = (b >> 1) % m != 0;
+                at = (b >> 1) * s2;
+                return;
+            }
+            c = (b - 1) >> 1;
+            int end = (b0 >> 1) / m * m + m;
+            snap = c == end - 1;
+            lerp = false;
+            at = end * s2;
+        }
+
+        static float Fraction(float a, float b, float t) => b != a ? math.saturate((t - a) / (b - a)) : 0.5f;
+
+        static bool Open(NativeEdits edits, float x, float z)
+        {
+            for (int q = 0; q < edits.Count; q++)
+            {
+                var e = edits.Items[q];
+                if (x >= e.MinX && x <= e.MaxX && z >= e.MinZ && z <= e.MaxZ) return false;
+            }
+            return true;
+        }
+
+        static float3 Coarse(GroundColumns coarse, NativeEdits near, float s2, int cx, int j, int cz, bool sx, float ax, bool sz, float az, out float3 nrm)
+        {
+            SurfaceNets.CoarseVertex(coarse, near, s2, cx, j, cz, out float x, out float y, out float z, out nrm.x, out nrm.y, out nrm.z);
+            if (sx) x = ax;
+            if (sz) z = az;
+            if ((sx || sz) && Open(near, x, z)) y = coarse.At(x, z);
+            return new float3(x, y, z);
+        }
+
+        static void Row(GroundColumns coarse, NativeEdits near, float s2, int cx, bool sx, bool lx, float ax, int cz, bool sz, float az, int j, out float3 pos, out float3 nrm)
+        {
+            pos = Coarse(coarse, near, s2, cx, j, cz, sx && !lx, ax, sz, az, out nrm);
+            if (lx)
+            {
+                var q = Coarse(coarse, near, s2, cx + 1, j, cz, false, ax, sz, az, out float3 qn);
+                float f = Fraction(pos.x, q.x, ax);
+                pos = math.lerp(pos, q, f);
+                nrm = math.lerp(nrm, qn, f);
+            }
+            if (sx) pos.x = ax;
+        }
+
         public void Execute()
         {
             ref var g = ref Ground.Blob.Value;
@@ -276,26 +328,32 @@ namespace Stabby.Game
             for (int t = 0; t < Tris.Length; t++) Tris[t] = used[Tris[t]];
             for (int r = 0; r < ringCount; r++) rim[r] = used[rim[r]];
 
-            int mc = m / 2;
             for (int v = 0; v < kept; v++)
             {
                 int i = meta[v].x, j = meta[v].y, k = meta[v].z;
                 bool edge = i == 0 || k == 0 || i == m || k == m;
                 if (!edge && !stitch) continue;
-                int ci = (chunk.X0 - 1 + i) >> 1, ck = (chunk.Z0 - 1 + k) >> 1;
-                int ic = ci - (chunk.X0 / 2 - 1), kc = ck - (chunk.Z0 / 2 - 1);
                 bool xe = i == 0 || i == m, ze = k == 0 || k == m;
                 int bits = !edge ? 0 : xe && ze ? 16 << ((i == m ? 1 : 0) + (k == m ? 2 : 0)) : i == 0 ? 1 : i == m ? 2 : k == 0 ? 4 : 8;
                 var p = Verts[v];
                 if (i == 0) p.Pos.x = x0m; else if (i == m) p.Pos.x = x1m;
                 if (k == 0) p.Pos.z = z0m; else if (k == m) p.Pos.z = z1m;
+                if (edge && Open(edits, p.Pos.x, p.Pos.z)) p.Pos.y = columns.At(p.Pos.x, p.Pos.z);
                 if (stitch)
                 {
-                    SurfaceNets.CoarseVertex(coarse, near, 2 * s, ci, j >> 1, ck, out float tx, out float ty, out float tz, out float nx, out float ny, out float nz);
-                    p.StitchNormal = new half4(new float4(nx, ny, nz, 0));
-                    if (ic == 0) tx = x0m; else if (ic == mc) tx = x1m;
-                    if (kc == 0) tz = z0m; else if (kc == mc) tz = z1m;
-                    p.Stitch = new float4(tx, ty, tz, bits);
+                    Axis(chunk.X0, i, m, 2 * s, out int cx, out bool sx, out bool lx, out float ax);
+                    Axis(chunk.Z0, k, m, 2 * s, out int cz, out bool sz, out bool lz, out float az);
+                    Row(coarse, near, 2 * s, cx, sx, lx, ax, cz, sz && !lz, az, j >> 1, out float3 tp, out float3 tn);
+                    if (lz)
+                    {
+                        Row(coarse, near, 2 * s, cx, sx, lx, ax, cz + 1, sz && !lz, az, j >> 1, out float3 tp1, out float3 tn1);
+                        float f = Fraction(tp.z, tp1.z, az);
+                        tp = math.lerp(tp, tp1, f);
+                        tn = math.lerp(tn, tn1, f);
+                    }
+                    if (sz) tp.z = az;
+                    p.StitchNormal = new half4(new float4(tn, 0));
+                    p.Stitch = new float4(tp, bits);
                 }
                 Verts[v] = p;
             }
@@ -358,6 +416,19 @@ namespace Stabby.Game
         public NativeList<TerrainLeaf> Leaves;
         public float3 Eye;
         public float Allowed;
+        [ReadOnly] public NativeArray<float4> Planes;
+
+        float SplitDistance(int key)
+        {
+            var b = Tree.Box(key);
+            float d = math.max(1f, math.distance(Eye, math.clamp(Eye, b.Min, b.Max)));
+            float3 c = 0.5f * (b.Min + b.Max), e = 0.5f * (b.Max - b.Min);
+            for (int p = 0; p < Planes.Length; p++)
+                if (math.dot(Planes[p].xyz, c) + math.dot(math.abs(Planes[p].xyz), e) + Planes[p].w < 0) return d * OffscreenScale;
+            return d;
+        }
+
+        public const float OffscreenScale = 2f;
 
         public void Execute()
         {
@@ -369,7 +440,7 @@ namespace Stabby.Game
                 int key = stack[stack.Length - 1];
                 stack.RemoveAt(stack.Length - 1);
                 int l = Tree.Level(key);
-                if (l == 0 || TerrainTree.Step(l) <= Allowed * Tree.Distance(key, Eye)) continue;
+                if (l == 0 || TerrainTree.Step(l) <= Allowed * SplitDistance(key)) continue;
                 Split.Add(key);
                 PushChildren(ref stack, key);
             }
@@ -443,6 +514,7 @@ namespace Stabby.Game
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     [UpdateInGroup(typeof(PresentationSystemGroup))]
+    [CreateAfter(typeof(ClientMapSystem))]
     public partial class TerrainViewSystem : SystemBase
     {
         public float TargetQuadScreen = 0.01f;
@@ -481,6 +553,8 @@ namespace Stabby.Game
         NativeHashSet<int> split, drawn;
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
+        NativeArray<float4> planes;
+        readonly Plane[] frustum = new Plane[6];
         JobHandle lodHandle;
         bool lodScheduled, selected;
         float3 lodEye;
@@ -491,6 +565,7 @@ namespace Stabby.Game
         readonly List<Pending> pending = new List<Pending>();
         readonly List<Mesh> statics = new List<Mesh>();
         readonly int[] levelCounts = new int[TerrainTree.Levels];
+        int statusSeen;
         readonly Stopwatch frame = new Stopwatch(), since = new Stopwatch();
         EntitiesGraphicsSystem graphics;
         BatchMaterialID material, waterMaterial;
@@ -516,7 +591,9 @@ namespace Stabby.Game
             else if (preparing == null) Begin();
             else if (preparing.IsCompleted) Load();
             float ms = (float)frame.Elapsed.TotalMilliseconds;
-            GameStatus.TerrainFrame = $"terrain {ms:F1} ms {stage}, {frameVertices} vertices";
+            GameStatus.TerrainMs = ms;
+            GameStatus.TerrainStage = stage;
+            GameStatus.TerrainVertices = frameVertices;
             if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage})"; }
         }
 
@@ -667,6 +744,7 @@ namespace Stabby.Game
             split = new NativeHashSet<int>(1024, Allocator.Persistent);
             drawn = new NativeHashSet<int>(1024, Allocator.Persistent);
             leaves = new NativeList<TerrainLeaf>(1024, Allocator.Persistent);
+            planes = new NativeArray<float4>(6, Allocator.Persistent);
             roots = new NativeList<int>(16, Allocator.Persistent);
             int d = tree.Dim[TerrainTree.Root];
             for (int iz = 0; iz < d; iz++)
@@ -935,7 +1013,13 @@ namespace Stabby.Game
                 nodes[key] = nd;
             }
             GameStatus.TerrainBehind = behind;
-            GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count} drawn, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, by level {string.Join("/", levelCounts)}";
+            int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices);
+            for (int i = 0; i < levelCounts.Length; i++) seen = HashCode.Combine(seen, levelCounts[i]);
+            if (seen != statusSeen || !GameStatus.Lines.ContainsKey("terrain"))
+            {
+                statusSeen = seen;
+                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count} drawn, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, by level {string.Join("/", levelCounts)}";
+            }
             ScheduleLods(cam);
         }
 
@@ -949,7 +1033,9 @@ namespace Stabby.Game
             lodTurn = turn;
             lodFov = cam.fieldOfView;
             float allowed = TargetQuadScreen * 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f);
-            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Leaves = leaves, Eye = eye, Allowed = allowed }.Schedule();
+            GeometryUtility.CalculateFrustumPlanes(cam, frustum);
+            for (int p = 0; p < 6; p++) planes[p] = new float4(frustum[p].normal, frustum[p].distance);
+            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();
             lodScheduled = true;
         }
 
@@ -1019,6 +1105,7 @@ namespace Stabby.Game
             if (split.IsCreated) split.Dispose();
             if (drawn.IsCreated) drawn.Dispose();
             if (leaves.IsCreated) leaves.Dispose();
+            if (planes.IsCreated) planes.Dispose();
             if (roots.IsCreated) roots.Dispose();
             if (look.IsCreated) look.Dispose();
         }
