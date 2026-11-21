@@ -52,3 +52,14 @@
     fade by screen size; structures merge their pieces per LOD. Assets are
     built in code: surface detail is shader-based (procedural normals, cheap
     parallax), and textures hold only heightfield data and shared noise.
+12. Every detail threshold is a screen size (Punchy's DetailPolicy). One
+    engine-free `Detail` gives `ScreenSize(sizeM, distanceM, ppm)`: an
+    object's approximate size over its 3D distance from the camera, in
+    reference pixels (1080 lines at the camera's FOV, so resolution never
+    moves a boundary). Each kind's rule in `content/` holds separate
+    thresholds per answer (geometry tier, fade, shadow, animation); tiers
+    switch with hysteresis and blend through one shared crossfade. Graphics
+    quality scales thresholds, never simulation; simulation ranges use a
+    fixed reference FOV so every machine agrees. Grass reach, object
+    spawn/stream ranges and terrain rings derive from it (`Reach` is the
+    inverse); none is a fixed distance in metres.

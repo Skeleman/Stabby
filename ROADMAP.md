@@ -109,12 +109,13 @@ architecture contract. The other steps fit the contract as it stands.
 | Rocks inside one grey strata band read plain grey up close (shared rock material, changes cliffs too) | later |
 | Large boulders as solid-field edits (rule 11): draws at or above `editMinSizeM` (3.6 m) become two Add capsule lumps on their own streams, checked in WorldChecks (bounds, no water, mesher match, collision within a cell of the mesh); GeneratorVersion 36 | done |
 | Boulder follow-ups: coarse-LOD inflate (`FeatureEdit.AtStep`), per-cell edit index (`EditGrid`), 12-boulder mesh check; also fixed large boulders never reaching the game (Unity loader dropped `editMinSizeM`, map had no object library) | done |
+| Screen-size detail (Zach, rule 12): port Punchy's DetailPolicy as engine-free `Detail` (ScreenSize in reference pixels, Reach, per-kind rules with tiers, hysteresis, crossfade, quality scale, fixed-FOV simulation reach); move grass lod1M/lod2M/nearM/reachM, object tile reach/despawn/unload and terrain ring reach onto screen-size thresholds in content; a lint or check so new metre thresholds can't creep back | now |
 | Boulder coat: edit solid above the heightfield takes the full biome coat, so big boulders read as grassy lumps; steep coated faces show flat untextured olive bands with jagged cutoffs. Fade coat by height above ground and soften the slope cutoff in the material library | now |
 | Near-field follow-ups: frustum-cull node selection (offscreen nodes split at 2x distance), teardown waits for jobs before freeing ground data, terrain status string cached; 294 ms spike not seen since | done |
 | Near-field follow-ups 2: terrain node entities pooled and frames string lazy (done); left: exclude capture GPU spill frames from spike counts, pre-fill the terrain pool; SurfaceNets filler trim dropped (index layout is the fast-path contract; Terrain.cs already compacts) | now |
 | Objects step 2a: GPU grass blades near the camera (`GrassScatter.compute` scatters per near terrain mesh from the biome coat, one indirect draw, frustum cull, distance fade into the terrain colour); shared wind globals `_StabbyWind`/`_StabbyGust` from `objects.json` foliage; +0.24 ms at 1080p in the grass close-up | done |
 | Objects step 2b: animated foliage (bushes, trees) on the shared wind | later |
-| Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | now |
+| Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | done |
 | Grass follow-ups: no grass on submerged beds (done), blade shadows, profiler to confirm chase/far cost with blades on and off | later |
 | Objects step 3: interactive objects with host-authoritative removal | later |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
