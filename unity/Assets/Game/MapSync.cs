@@ -52,6 +52,73 @@ namespace Stabby.Game
         }
     }
 
+    public static class WorldStore
+    {
+        public sealed class Entry
+        {
+            public ulong[] Sums;
+            public GeneratedWorld Map;
+            public GroundParts Parts;
+            public BlobAssetReference<GroundData> Ground;
+            public int Refs;
+            public bool Failed;
+        }
+
+        static readonly List<Entry> entries = new List<Entry>();
+
+        public static Entry Offer(GeneratedWorld map, ulong[] sums)
+        {
+            var e = new Entry { Map = map, Sums = sums, Refs = 1 };
+            lock (entries) entries.Add(e);
+            return e;
+        }
+
+        public static void Publish(Entry e, GroundParts parts, BlobAssetReference<GroundData> ground)
+        {
+            lock (entries) { e.Parts = parts; e.Ground = ground; }
+        }
+
+        public static void Fail(Entry e)
+        {
+            if (e == null) return;
+            lock (entries) e.Failed = true;
+        }
+
+        public static bool Ready(Entry e, out bool failed)
+        {
+            lock (entries) { failed = e.Failed; return e.Ground.IsCreated; }
+        }
+
+        public static Entry Find(ulong[] sums)
+        {
+            lock (entries)
+                foreach (var e in entries)
+                    if (!e.Failed && e.Refs > 0 && Same(e.Sums, sums)) { e.Refs++; return e; }
+            return null;
+        }
+
+        public static void Release(Entry e)
+        {
+            if (e == null) return;
+            lock (entries)
+            {
+                if (--e.Refs > 0) return;
+                entries.Remove(e);
+                if (e.Ground.IsCreated) e.Ground.Dispose();
+                e.Ground = default;
+                e.Map = null;
+                e.Parts = null;
+            }
+        }
+
+        static bool Same(ulong[] a, ulong[] b)
+        {
+            if (a.Length != b.Length) return false;
+            for (int k = 0; k < a.Length; k++) if (a[k] != b[k]) return false;
+            return true;
+        }
+    }
+
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     public partial class ServerMapSystem : SystemBase
     {
@@ -63,6 +130,7 @@ namespace Stabby.Game
             public Task<GroundParts> Fill;
             public long FillMs;
             public string Source;
+            public WorldStore.Entry Entry;
         }
 
         Task<Prepared> gen;
@@ -72,6 +140,7 @@ namespace Stabby.Game
         BlobBake<PackedChunks> packBake;
         BlobBake<GroundData> groundBake;
         GroundParts filled;
+        WorldStore.Entry entry;
 
         public GeneratedWorld Map { get; private set; }
         public GroundParts Parts { get; private set; }
@@ -95,6 +164,7 @@ namespace Stabby.Game
                     return g;
                 });
                 var sums = WorldChunks.Checksums(w);
+                p.Entry = WorldStore.Offer(w, sums);
                 long sumsMs = sw.ElapsedMilliseconds;
                 p.Packed = Pack(w, sums);
                 p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
@@ -143,9 +213,10 @@ namespace Stabby.Game
             packBake.Release();
             groundBake.Release();
             if (packed.IsCreated) packed.Dispose();
-            if (ground.IsCreated) ground.Dispose();
-            else if (prepared != null && filled == null) Owned.Release(prepared.Fill, g => g.Blob.Dispose());
-            Owned.Release(gen, p => { p.Packed.Dispose(); Owned.Release(p.Fill, g => g.Blob.Dispose()); });
+            if (!ground.IsCreated && prepared != null && filled == null) Owned.Release(prepared.Fill, g => g.Blob.Dispose());
+            if (!ground.IsCreated) WorldStore.Fail(entry);
+            WorldStore.Release(entry);
+            Owned.Release(gen, p => { p.Packed.Dispose(); WorldStore.Fail(p.Entry); WorldStore.Release(p.Entry); Owned.Release(p.Fill, g => g.Blob.Dispose()); });
         }
 
         protected override void OnUpdate()
@@ -155,6 +226,7 @@ namespace Stabby.Game
                 if (!gen.IsCompleted) return;
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); gen = null; Enabled = false; return; }
                 prepared = gen.Result;
+                entry = prepared.Entry;
                 gen = null;
                 packBake = BlobBake<PackedChunks>.Start(prepared.Packed);
             }
@@ -170,7 +242,7 @@ namespace Stabby.Game
             if (filled == null)
             {
                 if (!p.Fill.IsCompleted) return;
-                if (p.Fill.IsFaulted) { Enabled = false; prepared = null; GameStatus.Failure = p.Fill.Exception.ToString(); return; }
+                if (p.Fill.IsFaulted) { Enabled = false; prepared = null; WorldStore.Fail(entry); GameStatus.Failure = p.Fill.Exception.ToString(); return; }
                 filled = p.Fill.Result;
                 groundBake = BlobBake<GroundData>.Start(filled.Blob);
             }
@@ -179,6 +251,7 @@ namespace Stabby.Game
             prepared = null;
             Parts = filled;
             ground = Ground.Create(EntityManager, groundBake.Take());
+            WorldStore.Publish(entry, filled, ground);
             Map = p.Map;
             int size = Map.Config.Size;
             GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, detail at {p.FillMs} ms, +5 m mound at cell {p.Mound % size},{p.Mound / size}";
@@ -196,7 +269,8 @@ namespace Stabby.Game
         }
 
         Task<(GeneratedWorld, ulong[])> gen;
-        Task<(int, GroundParts)> finish;
+        Task<(int, GroundParts, WorldStore.Entry)> finish;
+        WorldStore.Entry shared;
         BlobAssetReference<GroundData> ground;
         BlobBake<GroundData> groundBake;
         GroundParts synced;
@@ -227,8 +301,9 @@ namespace Stabby.Game
         {
             EntityManager.CompleteAllTrackedJobs();
             groundBake.Release();
-            if (ground.IsCreated) ground.Dispose();
-            if (Map == null && synced == null) Owned.Release(finish, r => { if (r.Item1 == 0) r.Item2.Blob.Dispose(); });
+            if (shared != null) WorldStore.Release(shared);
+            else if (ground.IsCreated) ground.Dispose();
+            if (Map == null && synced == null && shared == null) Owned.Release(finish, r => { if (r.Item3 != null) WorldStore.Release(r.Item3); else if (r.Item1 == 0) r.Item2.Blob.Dispose(); });
             if (inbox != Entity.Null && EntityManager.Exists(inbox)) EntityManager.GetComponentData<ChunkInbox>(inbox).Dispose();
         }
 
@@ -332,22 +407,43 @@ namespace Stabby.Game
                 var sums = WorldChunks.Checksums(w);
                 int bad = 0;
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
-                return (bad, bad == 0 ? Ground.Fill(w) : null);
+                if (bad != 0) return (bad, null, null);
+                var found = WorldStore.Find(sums);
+                return (0, found == null ? Ground.Fill(w) : null, found);
             });
         }
 
         void Finish(ChunkInbox box)
         {
-            if (synced == null)
+            if (synced == null && shared == null)
             {
                 if (!finish.IsCompleted) return;
                 if (finish.IsFaulted) { GameStatus.Failure = finish.Exception.ToString(); Enabled = false; return; }
-                var (bad, parts) = finish.Result;
+                var (bad, parts, found) = finish.Result;
                 GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, {stale}/{mine.Length} chunks stale, " +
                     $"streamed {box.Streamed} ({box.BytesIn / 1024} KB deflated in {box.PiecesIn} pieces), synced after {clock.ElapsedMilliseconds} ms, {bad} differ after sync";
                 if (bad != 0) { Map = world; GameStatus.Failure = GameStatus.Lines[World.Name]; return; }
-                synced = parts;
-                groundBake = BlobBake<GroundData>.Start(parts.Blob);
+                shared = found;
+                if (found == null)
+                {
+                    synced = parts;
+                    groundBake = BlobBake<GroundData>.Start(parts.Blob);
+                }
+            }
+            if (shared != null)
+            {
+                if (!WorldStore.Ready(shared, out bool failed))
+                {
+                    if (failed) { GameStatus.Failure = $"{World.Name}: shared host world failed"; Enabled = false; }
+                    return;
+                }
+                ground = Ground.Create(EntityManager, shared.Ground);
+                GameStatus.Lines[World.Name] += ", shares host world";
+                GameStatus.Synced.Add(World.Name);
+                Parts = shared.Parts;
+                Map = shared.Map;
+                world = null;
+                return;
             }
             if (!groundBake.IsCompleted) return;
             ground = Ground.Create(EntityManager, groundBake.Take());

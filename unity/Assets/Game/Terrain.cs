@@ -838,6 +838,7 @@ namespace Stabby.Game
             builtSmooth = SmoothOnly;
             layout = new NativeArray<VertexAttributeDescriptor>(Layout, Allocator.Persistent);
             upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
+            prepared.Field = null;
             look = lookReady;
         }
 
