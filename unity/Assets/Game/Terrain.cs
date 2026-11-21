@@ -225,6 +225,8 @@ namespace Stabby.Game
 
         static float Fraction(float a, float b, float t) => b != a ? math.saturate((t - a) / (b - a)) : 0.5f;
 
+        static float Lift(float cover) => cover < 0 ? math.smoothstep(0.3f, 0.9f, -cover) : math.smoothstep(2f, 6f, cover);
+
         static bool Open(NativeEdits edits, float x, float z)
         {
             for (int q = 0; q < edits.Count; q++)
@@ -380,7 +382,7 @@ namespace Stabby.Game
                 int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
                 float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
-                float cover = Cover(edits, columns, p.Pos), lift = math.smoothstep(2f, 6f, math.abs(cover));
+                float cover = Cover(edits, columns, p.Pos), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover));
                 p.Strata = new float4(off, math.max(col.w, lift), 1 - lift, math.clamp(Water(ref g, ref look, p.Pos.x, p.Pos.z) - p.Pos.y, -4, 4));
                 if (stitch)
@@ -390,7 +392,7 @@ namespace Stabby.Game
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
                     float sCover = Cover(near, coarse, p.Stitch.xyz);
-                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, math.smoothstep(2f, 6f, math.abs(sCover)))));
+                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, Lift(sCover))));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover)));
                 }
                 Verts[v] = p;
