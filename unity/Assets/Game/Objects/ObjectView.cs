@@ -133,7 +133,7 @@ namespace Stabby.Game
 
         static float4 Linear(uint rgb, float tint, int shape)
         {
-            if (shape == ObjectPart.Rock) return new float4(tint, tint, tint, 0);
+            if (ObjectPart.IsStone(shape)) return new float4(tint, tint, tint, 0);
             return new float4(Decode(rgb) * tint, shape);
         }
 

@@ -32,6 +32,7 @@ namespace Stabby.World
         public static ObjectMesh Build(int shape, ulong key, int lod)
         {
             lod = Math.Max(0, Math.Min(MaxLods - 1, lod));
+            if (ObjectPart.IsStructure(shape)) return Structures.Build(shape, key, lod);
             if (shape == ObjectPart.Shrub) return ObjectFoliage.Shrub(key, lod);
             if (shape == ObjectPart.Broadleaf) return ObjectFoliage.Broadleaf(key, lod);
             if (shape == ObjectPart.Conifer) return ObjectFoliage.Conifer(key, lod);
@@ -40,7 +41,7 @@ namespace Stabby.World
             return Rock(key, RockLevels[lod]);
         }
 
-        struct Builder
+        internal struct Builder
         {
             public List<float> P;
             public List<int> I;
@@ -76,7 +77,7 @@ namespace Stabby.World
             }
         }
 
-        static ObjectMesh Rock(ulong key, int levels)
+        internal static ObjectMesh Rock(ulong key, int levels)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x51ED270B27D4EB4FUL));
             int planes = rng.Range(5, 10);

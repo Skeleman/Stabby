@@ -141,7 +141,7 @@ public class ObjectTests
     [Fact]
     public void FoliageMeshesFitUnitBoundsAndCarryLeafAndWindData()
     {
-        for (int shape = ObjectPart.Shrub; shape < ObjectPart.Shapes; shape++)
+        for (int shape = ObjectPart.Shrub; shape <= ObjectPart.Conifer; shape++)
             for (int lod = 0; lod < 3; lod++)
             {
                 var m = ObjectMeshes.Build(shape, ObjectMeshes.Key("bush", 0, 3), lod);

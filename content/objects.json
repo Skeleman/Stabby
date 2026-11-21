@@ -96,6 +96,18 @@
         { "id": "c", "shape": "log", "offset": [-0.1, 0.05, -0.1], "scale": [0.7, 0.05, 0.05], "solid": "off", "color": "#7a6247" }
       ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "shrubland"], "perHectare": 2, "slopeMax": 0.7, "sizeMinM": 1.4, "sizeMaxM": 2.2, "sink": 0.02, "alignToSlope": 1 }
+    },
+    {
+      "id": "dry-stone-wall", "name": "Dry-stone wall", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "parts": [ { "id": "wall", "shape": "dry-stone-wall" } ],
+      "placement": { "biomes": ["steppe", "shrubland", "tundra", "temperate-forest", "alpine", "boreal", "cold-desert"], "perHectare": 0.4, "slopeMax": 0.25, "hardnessMin": 0.1, "sizeMinM": 4, "sizeMaxM": 6.5, "sink": 0.005,
+        "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.4 }, { "biome": "boreal", "scale": 0.3 }, { "biome": "cold-desert", "scale": 0.5 } ] }
+    },
+    {
+      "id": "cairn", "name": "Cairn", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "parts": [ { "id": "cairn", "shape": "cairn" } ],
+      "placement": { "biomes": ["alpine", "tundra", "cold-desert", "steppe"], "perHectare": 0.25, "slopeMax": 0.45, "hardnessMin": 0.1, "sizeMinM": 1.4, "sizeMaxM": 2.4, "sink": 0.01,
+        "biomeDensity": [ { "biome": "steppe", "scale": 0.3 } ] }
     }
   ],
   "terrain": { "quadPixels": 10.8 },
