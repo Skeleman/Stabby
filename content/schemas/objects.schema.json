@@ -62,7 +62,7 @@
             "additionalProperties": false,
             "properties": {
               "biomes": { "type": "array", "items": { "type": "string" } },
-              "perHectare": { "type": "number", "minimum": 0, "maximum": 200 },
+              "perHectare": { "type": "number", "minimum": 0, "maximum": 400 },
               "slopeMin": { "type": "number", "minimum": 0 },
               "slopeMax": { "type": "number", "exclusiveMinimum": 0 },
               "hardnessMin": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -72,7 +72,21 @@
               "clusterCount": { "type": "integer", "minimum": 1, "maximum": 32 },
               "clusterRadiusM": { "type": "number", "minimum": 0, "maximum": 30 },
               "sink": { "type": "number", "minimum": 0, "maximum": 0.9 },
-              "alignToSlope": { "type": "number", "minimum": 0, "maximum": 1 }
+              "alignToSlope": { "type": "number", "minimum": 0, "maximum": 1 },
+              "footRiseM": { "type": "number", "minimum": 0, "maximum": 100 },
+              "footReachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
+              "biomeDensity": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["biome", "scale"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "biome": { "type": "string" },
+                    "scale": { "type": "number", "minimum": 0, "maximum": 1 }
+                  }
+                }
+              }
             }
           }
         }

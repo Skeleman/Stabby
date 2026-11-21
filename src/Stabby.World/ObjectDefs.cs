@@ -40,6 +40,14 @@ namespace Stabby.World
         public float ClusterRadiusM;
         public float Sink;
         public float AlignToSlope;
+        public float FootRiseM, FootReachM = 12f;
+        public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
+    }
+
+    public sealed class BiomeDensity
+    {
+        public string Biome;
+        public float Scale = 1f;
     }
 
     public sealed class ObjectDef
@@ -107,7 +115,7 @@ namespace Stabby.World
                     if (p.ScaleX <= 0 || p.ScaleY <= 0 || p.ScaleZ <= 0) errors.Add(d.Id + ": part " + p.Id + " scale must be above 0");
                 }
                 var pl = d.Placement;
-                if (pl.PerHectare < 0 || pl.PerHectare > 200) errors.Add(d.Id + ": perHectare must be 0-200");
+                if (pl.PerHectare < 0 || pl.PerHectare > 400) errors.Add(d.Id + ": perHectare must be 0-400");
                 if (pl.SlopeMax <= pl.SlopeMin || pl.SlopeMin < 0) errors.Add(d.Id + ": slopeMax must exceed slopeMin >= 0");
                 if (pl.HardnessMax <= pl.HardnessMin || pl.HardnessMin < 0 || pl.HardnessMax > 1) errors.Add(d.Id + ": hardness range must lie in 0-1 and be increasing");
                 if (pl.SizeMinM <= 0 || pl.SizeMaxM < pl.SizeMinM || pl.SizeMaxM > 20) errors.Add(d.Id + ": sizeMinM/sizeMaxM must be increasing, 0-20 m");
@@ -115,6 +123,14 @@ namespace Stabby.World
                 if (pl.ClusterRadiusM < 0 || pl.ClusterRadiusM > 30) errors.Add(d.Id + ": clusterRadiusM must be 0-30");
                 if (pl.Sink < 0 || pl.Sink > 0.9f) errors.Add(d.Id + ": sink must be 0-0.9");
                 if (pl.AlignToSlope < 0 || pl.AlignToSlope > 1) errors.Add(d.Id + ": alignToSlope must be 0-1");
+                if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
+                if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
+                foreach (var bd in pl.BiomeDensity)
+                {
+                    if (bd.Scale < 0 || bd.Scale > 1) errors.Add(d.Id + ": biomeDensity scale must be 0-1");
+                    if (pl.Biomes.Count > 0 && !pl.Biomes.Contains(bd.Biome ?? "")) errors.Add(d.Id + ": biomeDensity " + bd.Biome + " is not in its biomes");
+                    if (biomeIds != null && !Contains(biomeIds, bd.Biome ?? "")) errors.Add(d.Id + ": unknown biome " + bd.Biome);
+                }
                 if (biomeIds != null)
                     foreach (var b in pl.Biomes)
                         if (!Contains(biomeIds, b)) errors.Add(d.Id + ": unknown biome " + b);

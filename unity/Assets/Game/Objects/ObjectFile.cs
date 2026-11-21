@@ -13,8 +13,10 @@ namespace Stabby.Game
         [Serializable] class Place
         {
             public string[] biomes; public float perHectare, slopeMin, slopeMax = 10f, hardnessMin, hardnessMax = 1f, sizeMinM = 1f, sizeMaxM = 1f;
-            public int clusterCount = 1; public float clusterRadiusM, sink, alignToSlope;
+            public int clusterCount = 1; public float clusterRadiusM, sink, alignToSlope, footRiseM, footReachM = 12f;
+            public Density[] biomeDensity;
         }
+        [Serializable] class Density { public string biome; public float scale = 1f; }
         [Serializable] class Obj { public string id, name, kind, color = "#ff00ff"; public int variants = 1; public Part[] parts; public Place placement; }
         [Serializable] class Dto { public int schemaVersion; public Kind[] kinds; public Obj[] objects; }
 
@@ -59,7 +61,9 @@ namespace Stabby.Game
                     Biomes = new List<string>(pl.biomes ?? Array.Empty<string>()), PerHectare = pl.perHectare, SlopeMin = pl.slopeMin, SlopeMax = pl.slopeMax,
                     HardnessMin = pl.hardnessMin, HardnessMax = pl.hardnessMax, SizeMinM = pl.sizeMinM, SizeMaxM = pl.sizeMaxM,
                     ClusterCount = pl.clusterCount, ClusterRadiusM = pl.clusterRadiusM, Sink = pl.sink, AlignToSlope = pl.alignToSlope,
+                    FootRiseM = pl.footRiseM, FootReachM = pl.footReachM,
                 };
+                foreach (var bd in pl.biomeDensity ?? Array.Empty<Density>()) def.Placement.BiomeDensity.Add(new BiomeDensity { Biome = bd.biome, Scale = bd.scale });
                 lib.Objects.Add(def);
             }
             errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
