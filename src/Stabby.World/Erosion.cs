@@ -127,6 +127,97 @@ namespace Stabby.World
 
         public static void Run(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, float[] precipitationMm)
         {
+            int n = c.Size, m = c.ErosionSize;
+            int fine = Math.Min(c.FineSteps, c.ErosionSteps);
+            if (m <= 0 || n <= m || n % m != 0)
+            {
+                Steps(c, s, lib, h, precipitationMm, c.ErosionSteps);
+                return;
+            }
+            int f = n / m;
+            var cc = c.Clone();
+            cc.Size = m;
+            cc.CellMeters = c.CellMeters * f;
+            var cs = Coarse(s, f, m);
+            var hc = new float[m * m];
+            var pc = new float[m * m];
+            for (int cy = 0; cy < m; cy++)
+                for (int cx = 0; cx < m; cx++)
+                {
+                    int ci = cy * m + cx;
+                    bool land = cs.Land[ci];
+                    double sum = 0, rain = 0; int count = 0;
+                    for (int dy = 0; dy < f; dy++)
+                        for (int dx = 0; dx < f; dx++)
+                        {
+                            int i = (cy * f + dy) * n + cx * f + dx;
+                            rain += precipitationMm[i];
+                            if (s.Land[i] != land) continue;
+                            sum += h[i]; count++;
+                        }
+                    hc[ci] = (float)(sum / count);
+                    pc[ci] = (float)(rain / (f * f));
+                }
+            var start = (float[])hc.Clone();
+            Steps(cc, cs, lib, hc, pc, c.ErosionSteps - fine);
+            for (int i = 0; i < m * m; i++) hc[i] = cs.Land[i] ? hc[i] - start[i] : 0;
+            float half = (f - 1) * 0.5f;
+            for (int y = 0; y < n; y++)
+            {
+                float v = Math.Max(0, Math.Min(m - 1, (y - half) / f));
+                int y0 = Math.Min(m - 2, (int)v);
+                float ty = v - y0;
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x;
+                    if (!s.Land[i]) continue;
+                    float u = Math.Max(0, Math.Min(m - 1, (x - half) / f));
+                    int x0 = Math.Min(m - 2, (int)u);
+                    float tx = u - x0;
+                    int a = y0 * m + x0;
+                    float top = hc[a] + (hc[a + 1] - hc[a]) * tx, bottom = hc[a + m] + (hc[a + m + 1] - hc[a + m]) * tx;
+                    h[i] += top + (bottom - top) * ty;
+                }
+            }
+            if (fine > 0) Steps(c, s, lib, h, precipitationMm, fine);
+            else
+                for (int i = 0; i < n * n; i++)
+                    if (s.Land[i]) h[i] = Math.Max(MinLandHeight, h[i]);
+        }
+
+        static WorldSketch Coarse(WorldSketch s, int f, int m)
+        {
+            int n = s.Size;
+            var cs = new WorldSketch
+            {
+                Size = m, Land = new bool[m * m], Uplift = new float[m * m], Coast = new float[m * m],
+                Beach = new float[m * m], Cliff = new float[m * m],
+            };
+            float half = (f - 1) * 0.5f, area = f * f;
+            foreach (var hl in s.Highlands)
+                cs.Highlands.Add(new HighlandSketch { Plateau = hl.Plateau, X = (hl.X - half) / f, Y = (hl.Y - half) / f, Radius = hl.Radius / f });
+            for (int cy = 0; cy < m; cy++)
+                for (int cx = 0; cx < m; cx++)
+                {
+                    int land = 0;
+                    float up = 0, coast = 0, beach = 0, cliff = 0;
+                    for (int dy = 0; dy < f; dy++)
+                        for (int dx = 0; dx < f; dx++)
+                        {
+                            int i = (cy * f + dy) * n + cx * f + dx;
+                            if (s.Land[i]) land++;
+                            up += s.Uplift[i]; coast += s.Coast[i]; beach += s.Beach[i]; cliff += s.Cliff[i];
+                        }
+                    int ci = cy * m + cx;
+                    cs.Land[ci] = 2 * land > f * f;
+                    cs.Uplift[ci] = up / area; cs.Coast[ci] = coast / area / f;
+                    cs.Beach[ci] = beach / area; cs.Cliff[ci] = cliff / area;
+                }
+            return cs;
+        }
+
+        static void Steps(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, float[] precipitationMm, int steps)
+        {
             int n = c.Size;
             bool[] sea = SeaOf(s.Land);
             float cellArea = c.CellMeters * c.CellMeters;
@@ -155,7 +246,7 @@ namespace Stabby.World
             float dt = c.TimeStepYears;
             var scratch = new DrainageScratch(n);
             var src = new float[n * n];
-            for (int step = 0; step < c.ErosionSteps; step++)
+            for (int step = 0; step < steps; step++)
             {
                 var filled = Drainage.Fill(h, sea, n, 1e-3f, scratch);
                 var recv = Drainage.Receivers(filled, sea, n, c.CellMeters, scratch.Recv);

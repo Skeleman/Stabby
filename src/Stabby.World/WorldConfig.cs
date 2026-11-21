@@ -4,7 +4,7 @@ namespace Stabby.World
 
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 31;
+        public const int GeneratorVersion = 32;
 
         public ulong Seed = 1;
         public const float MapMeters = 23040f;
@@ -33,6 +33,7 @@ namespace Stabby.World
 
         public float ErosionRainMm = 450f;
         public int ErosionSteps = 100;
+        public int ErosionSize = 512, FineSteps = 8;
         public float TimeStepYears = 1e5f;
         public float MaxUplift = 1.9e-3f;
         public float Erodibility = 2.6e-5f;
