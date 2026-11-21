@@ -87,7 +87,7 @@ architecture contract. The other steps fit the contract as it stands.
 
 | Item | Status |
 |---|---|
-| Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (lane b/near-field) | now |
+| Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (`NearField.Sample`, 64-quad nodes over 9 levels with 2:1 balance; GeneratorVersion 35) | done |
 | Erosion speed: coarse-to-fine erosion (512 grid for all but the last 8 steps) and parallel row loops; 2048 generates in ~5 s (erosion 3 s), 4096 in ~19 s but its checks crash in Features.Dry/Arch (arch endpoints unclamped) | done (e7d12e3) |
 | Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | next |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
@@ -98,7 +98,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
 | Close grass reads as saturated green fur; real blades come with objects step 2 foliage. Faint sand crest dashes at 4-8 m | later |
 | Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
-| Chunk-sized holes at chunk edges: overhead shot shows one chunk as a pit of flat strata bands with hard rectangular edges (likely a missing or wrong-LOD chunk exposing neighbour skirts); chase shot shows a green slab along a chunk edge | next |
+| Chunk-sized holes at chunk edges: overhead shot shows one chunk as a pit of flat strata bands with hard rectangular edges (likely a missing or wrong-LOD chunk exposing neighbour skirts); gone with the near-field lattice; thin green streaks remain in the chase shot | next |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
 | Far shoreline: sea and lake depth past 120-240 m read a smooth bed-height field (`_StabbyBed`, 11 m texels, mipped) instead of far terrain facets; +0.1 ms at 1080p, `coast-far` capture shot | done |
 | Stepped sand rim at ~1 km where coarse far-LOD terrain crosses the flat water plane (geometry, not foam): finer far LOD along shorelines | later |
@@ -107,6 +107,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Objects step 1b: rocks use the strata material library, denser and varied placement (clusters at scarp feet, scree on slopes, logs under forest), spawn data unloaded with chunks, instance counts in capture stats; GeneratorVersion 34 | done |
 | Rock strata tint barely visible up close; worst built frame 33 ms vs 30 ms baseline (column build allocations, recheck) | later |
 | Large boulders as solid-field edits (rule 11), after near field lands | next |
+| Near-field follow-ups: frustum-cull node selection; trim SurfaceNets filler vertices at the source; teardown order (finish terrain mesh jobs before map systems free ground data); 294 ms GC spike mid-tour and 46 ms worst built frame after the merge | now |
 | Objects step 2: animated foliage with shader wind | later |
 | Objects step 3: interactive objects with host-authoritative removal | later |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
