@@ -113,14 +113,14 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
                 "shadows": { "enum": ["", "on", "off"] },
                 "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
                 "leafColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-                "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped"] }
+                "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped", "worn"] }
               }
             }
           },
@@ -149,6 +149,8 @@
               "chainMax": { "type": "integer", "minimum": 1, "maximum": 24 },
               "chainCorner": { "type": "number", "minimum": 0, "maximum": 1 },
               "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
+              "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "biomeDensity": {
                 "type": "array",
                 "items": {

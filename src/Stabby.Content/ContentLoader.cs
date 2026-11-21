@@ -280,6 +280,7 @@ namespace Stabby.Content
                     FootRiseM = pl.Float("footRiseM", 0), FootReachM = pl.Float("footReachM", 12f), FanM = pl.Float("fanM", 0), EditMinSizeM = pl.Float("editMinSizeM", 0),
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
                     ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
+                    Bank = pl.String("bank", null), PerHundredM = pl.Float("perHundredM", 0),
                 };
                 foreach (var b in pl.Objects("biomeDensity"))
                 {

@@ -1638,6 +1638,64 @@ namespace Stabby.Game.Editor
                     Shot(cam, dir, "river-" + kinds[k] + "-" + names[v]);
                 }
             }
+            for (var d = BankDetails(cam, dir, ground); d.MoveNext();) yield return null;
+        }
+
+        static readonly string[] BankShots = { "reeds", "river-gravel", "driftwood", "wet-stone" };
+
+        static System.Collections.IEnumerator BankDetails(Camera cam, string dir, Ground ground)
+        {
+            ObjectField field = null;
+            float span = 0;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient)
+                {
+                    field = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+                    var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                    if (map != null) span = WorldChunks.Size * map.Config.CellMeters;
+                }
+            if (field == null || span <= 0) { GameStatus.Lines["~bank details"] = "no object field"; yield break; }
+            int across = field.ChunksAcross, hx = (int)(home.x / span), hz = (int)(home.z / span);
+            foreach (var id in BankShots)
+            {
+                int def = field.Library.Objects.FindIndex(o => o.Id == id);
+                var all = new System.Collections.Generic.List<ObjectInstance>();
+                for (int cz = Mathf.Max(0, hz - 2); cz <= Mathf.Min(across - 1, hz + 2); cz++)
+                    for (int cx = Mathf.Max(0, hx - 2); cx <= Mathf.Min(across - 1, hx + 2); cx++)
+                        foreach (var o in field.Chunk(cx, cz)) if (o.Def == def) all.Add(o);
+                if (all.Count == 0) { GameStatus.Lines["~bank " + id] = "no " + id + " near the player"; continue; }
+                ObjectInstance pick = all[0];
+                float best = float.MinValue;
+                for (int k = 0; k < all.Count; k += Mathf.Max(1, all.Count / 800))
+                {
+                    var a = all[k];
+                    int count = 0;
+                    for (int j = 0; j < all.Count; j += Mathf.Max(1, all.Count / 4000))
+                        if ((all[j].X - a.X) * (all[j].X - a.X) + (all[j].Z - a.Z) * (all[j].Z - a.Z) < 64f) count++;
+                    float sc = count - (new Vector2(a.X - home.x, a.Z - home.z)).magnitude / 300f;
+                    if (sc > best) { best = sc; pick = a; }
+                }
+                float back = id == "driftwood" ? 5f + pick.Size : id == "reeds" ? 6.5f : 1.8f;
+                Vector3 eye = Vector3.zero, shore = Vector3.zero;
+                float low = float.MaxValue, high = float.MinValue;
+                for (int a = 0; a < 8; a++)
+                {
+                    var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
+                    var e = new Vector3(pick.X, 0, pick.Z) + d * back;
+                    float h = ground.HeightAt(e.x, e.z);
+                    if (h < low) { low = h; eye = e; }
+                    if (h > high && h < pick.Y + 3f) { high = h; shore = e; }
+                }
+                bool landward = (id == "reeds" || id == "driftwood" || id == "river-gravel") && high > float.MinValue;
+                if (landward) { eye = shore; low = high; }
+                eye.y = Mathf.Max(low, pick.Y) + (id == "reeds" ? 2.4f : id == "driftwood" ? 1.6f : id == "wet-stone" ? 6f : 2.8f);
+                var look = new Vector3(pick.X, pick.Y + (id == "reeds" ? 0.6f * pick.Size : 0.2f), pick.Z);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                GameStatus.Lines["~bank " + id] = $"{id} at {pick.X:F0},{pick.Y:F1},{pick.Z:F0}, {all.Count} near, cluster {best:F1}";
+                for (int k = 0; k < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && k < 1800); k++) yield return null;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "bank-" + id);
+            }
         }
 
         static System.Collections.IEnumerator CliffTour(Camera cam, string dir)

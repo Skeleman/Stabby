@@ -18,13 +18,13 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Shapes = 8;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn" };
-        public static bool IsFoliage(int shape) => shape >= Shrub && shape <= Conifer;
-        public static bool IsStructure(int shape) => shape >= Wall && shape < Shapes;
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Shapes = 9;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed" };
+        public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
+        public static bool IsStructure(int shape) => shape >= Wall && shape <= Cairn;
         public static bool IsStone(int shape) => shape == Rock || IsStructure(shape);
-        public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4;
-        public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped" };
+        public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5;
+        public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn" };
 
         public string Id;
         public int Shape;
@@ -54,6 +54,8 @@ namespace Stabby.World
         public float EditMinSizeM;
         public int ChainMin = 1, ChainMax = 1;
         public float ChainCorner, ChainGate;
+        public string Bank;
+        public float PerHundredM;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
     }
 
@@ -143,7 +145,7 @@ namespace Stabby.World
                     if (ObjectPart.IsStructure(p.Shape) != (d.Kind == Structure)) errors.Add(d.Id + ": structure shapes belong only to structure objects");
                     if (p.Ends < 0 || p.Ends >= ObjectPart.EndNames.Length) errors.Add(d.Id + ": part " + p.Id + " has unknown ends");
                     else if (p.Ends != ObjectPart.EndsAuto && p.Shape != ObjectPart.Log && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " ends belong only to logs and stumps");
-                    else if (p.Ends == ObjectPart.EndsRooted && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " rooted ends belong only to logs");
+                    else if ((p.Ends == ObjectPart.EndsRooted || p.Ends == ObjectPart.EndsWorn) && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " " + ObjectPart.EndNames[p.Ends] + " ends belong only to logs");
                     else if (p.Ends == ObjectPart.EndsSnapped && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " snapped ends belong only to stumps");
                 }
                 var pl = d.Placement;
@@ -169,6 +171,9 @@ namespace Stabby.World
                     errors.Add(d.Id + ": editMinSizeM needs one rock part, no clusters and no footRiseM");
                 if (pl.EditMinSizeM > 0 && ObjectField.BoulderSideR * d.FootprintRadius() * pl.EditMinSizeM < 0.75f * NearField.NodeStep(0))
                     errors.Add(d.Id + ": editMinSizeM is too small for boulder edits to mesh at the finest step");
+                if (pl.Bank != null && (BankSites.Of(pl.Bank) < 0 || pl.PerHectare > 0 || pl.PerHundredM <= 0 || pl.PerHundredM > 800 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0 || pl.ChainMax > 1 || d.Kind == Structure || pl.Biomes.Count > 0))
+                    errors.Add(d.Id + ": bank placement needs a known bank site, perHundredM 0-800, no perHectare, biomes, foot, edits, chains or structures");
+                if (pl.Bank == null && pl.PerHundredM != 0) errors.Add(d.Id + ": perHundredM belongs only to bank placement");
                 foreach (var bd in pl.BiomeDensity)
                 {
                     if (bd.Scale < 0 || bd.Scale > 1) errors.Add(d.Id + ": biomeDensity scale must be 0-1");

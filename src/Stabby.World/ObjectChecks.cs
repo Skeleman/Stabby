@@ -36,9 +36,10 @@ namespace Stabby.World
                     int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
                     float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
                     if (w.Sea[i]) Fail(1, at + " stands in the sea");
-                    int lake = w.Water.LakeId[i];
-                    if (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0) Fail(2, at + $" stands in lake {lake}");
-                    if (OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
+                    int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
+                    if (site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, at + $" stands in lake {lake}");
+                    if (site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
+                    if (site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, at + " is off its river or lake bank");
                     grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                     if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
@@ -261,6 +262,26 @@ namespace Stabby.World
                 if (picked.Count >= ObjectCheckChunks) break;
             }
             return picked;
+        }
+
+        static bool OnBank(GeneratedWorld w, TerrainDetail detail, int site, int gx, int gz, float x, float z, float ground)
+        {
+            if (BankSites.Nearest(detail.Cells, x, z, out var q, out float d, out float t))
+            {
+                float hw = q.Wa + (q.Wb - q.Wa) * t;
+                if (d <= hw + NearField.Bank(hw) + BankSites.ReachPadM && BankSites.InBand(site, ground - (q.Sa + (q.Sb - q.Sa) * t))) return true;
+            }
+            if (site != BankSites.Reed) return false;
+            int n = w.Config.Size;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = gx + dx, az = gz + dz;
+                    if (ax < 0 || az < 0 || ax >= n || az >= n) continue;
+                    int l = w.Water.LakeId[az * n + ax];
+                    if (l >= 0 && BankSites.InBand(site, ground - w.Water.Lakes[l].Level)) return true;
+                }
+            return false;
         }
 
         static int NearLake(GeneratedWorld w, int gx, int gz, float y)
