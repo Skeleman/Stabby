@@ -355,19 +355,26 @@ namespace Stabby.World
                 int count = rng.Range(5, 8);
                 spin = Around(spin, rng.Range(0.1f, 0.4f));
                 bool deadWhorl = t < dead;
+                float keep = deadWhorl ? form.Range(2f, 4.5f) / count : 1f;
                 for (int k = 0; k < count; k++)
                 {
                     var dir = Around(spin, (k + rng.Range(-0.2f, 0.2f)) / count);
+                    if (deadWhorl && form.NextFloat() > keep) continue;
                     float droop = 0.35f + 0.25f * t;
                     float fill = form.NextFloat(), heft = 1f + lean * V.Dot(dir, heavy), lift = form.Range(0.05f, 0.35f) + 0.3f * t;
                     bool bare = deadWhorl || fill < gappy || skip < 0.2f;
-                    float len = reach * rng.Range(0.85f, 1.1f) * heft * form.Range(0.75f, 1.2f) * (deadWhorl ? form.Range(0.35f, 0.7f) : 1f);
-                    var bd = (dir + new V(0, deadWhorl ? -0.25f : lift - 0.2f * (1 - t), 0)).Norm();
-                    var pull = new V(0, deadWhorl ? -0.2f : droop - (0.6f + 0.5f * (1 - t)) * sag, 0);
-                    var branch = Grow(ref rng, at, bd, len, 4, TrunkRadius * (0.15f + 0.4f * (1 - t)) * (deadWhorl ? 0.7f : 1f), 0.002f, deadWhorl ? 0.14f : 0.06f, pull, trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
+                    bool stub = bare && form.NextFloat() < 0.35f;
+                    float len = bare ? reach * (stub ? form.Range(0.05f, 0.1f) : form.Range(0.25f, 0.45f)) : reach * rng.Range(0.85f, 1.1f) * heft * form.Range(0.75f, 1.2f);
+                    var bd = (dir + new V(0, bare ? -form.Range(0.2f, 0.55f) : lift - 0.2f * (1 - t), 0)).Norm();
+                    var pull = new V(0, bare ? -form.Range(0.8f, 1.6f) : droop - (0.6f + 0.5f * (1 - t)) * sag, 0);
+                    float r0 = TrunkRadius * (0.15f + 0.4f * (1 - t)) * (bare ? 0.5f : 1f);
+                    var branch = bare
+                        ? Grow(ref form, at, bd, len, stub ? 3 : 6, r0, 0.0012f, form.Range(0.25f, 0.45f), pull, trunk.Bend(t), 0.3f, trunk.Phase, 1)
+                        : Grow(ref rng, at, bd, len, 4, r0, 0.002f, 0.06f, pull, trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
                     limbs.Add(branch);
                     int first = limbs.Count;
-                    if (reach > 0.05f) Twigs(ref rng, limbs, branch, deadWhorl ? 2 : 3, 0.3f, 0.9f, len * 0.3f, len * 0.5f, 0.85f, new V(0, deadWhorl ? -0.2f : -0.9f * sag, 0), 1f);
+                    if (bare) { if (!stub && form.NextFloat() < 0.6f) Twigs(ref form, limbs, branch, 1, 0.4f, 0.8f, len * 0.2f, len * 0.35f, 0.9f, new V(0, -0.6f, 0), 0.3f); }
+                    else if (reach > 0.05f) Twigs(ref rng, limbs, branch, 3, 0.3f, 0.9f, len * 0.3f, len * 0.5f, 0.85f, new V(0, -0.9f * sag, 0), 1f);
                     float low = Math.Min(1f, (t - dead) / 0.25f), leafy = bare ? 0 : (0.45f + 0.9f * (fill - gappy) / (1 - gappy) * heft) * (0.55f + 0.45f * Math.Max(0f, low));
                     branch.Bare = bare;
                     branch.Leafy = leafy;
