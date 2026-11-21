@@ -28,7 +28,7 @@ Shader "Stabby/VertexLit"
             #endif
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
-            float _StabbyStrataPeriod;
+            float _StabbyStrataPeriod, _StabbyCellMeters;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
             TEXTURE2D(_StabbySlope);
@@ -41,7 +41,7 @@ Shader "Stabby/VertexLit"
             #include "TerrainMaterials.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; };
 
             Varyings vert(Attributes i)
             {
@@ -59,6 +59,7 @@ Shader "Stabby/VertexLit"
                 o.color = lerp(i.color, i.stitchColor, t);
                 o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y, i.strata.z);
                 o.xz = p.positionWS.xz - TmOrigin(_WorldSpaceCameraPos);
+                o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 return o;
             }
@@ -82,7 +83,7 @@ Shader "Stabby/VertexLit"
                         fc = ToLinear(bo.rgb);
                         fr = saturate((slope - 0.25) / 0.35) * (1 - shore);
                     }
-                    n = normalize(lerp(n, fn, f));
+                    n = normalize(lerp(n, fn, f * i.field));
                     color = lerp(color, fc, f);
                     off = lerp(off, bo.a, f);
                     mix = lerp(mix, fr, f);
