@@ -61,7 +61,7 @@ namespace Stabby.Game
             BladesId = Shader.PropertyToID("_Blades"), PlanesId = Shader.PropertyToID("_Planes"), EyeId = Shader.PropertyToID("_Eye"),
             GrassAId = Shader.PropertyToID("_GrassA"), GrassBId = Shader.PropertyToID("_GrassB"), GrassCId = Shader.PropertyToID("_GrassC"), GrassDId = Shader.PropertyToID("_GrassD"), LayoutId = Shader.PropertyToID("_Layout");
 
-        static readonly int[] TextureIds = { Shader.PropertyToID("_StabbyCoat"), Shader.PropertyToID("_StabbySlope"), Shader.PropertyToID("_StabbyBiome"), Shader.PropertyToID("_StabbyForest") };
+        static readonly int[] TextureIds = { Shader.PropertyToID("_StabbyCoat"), Shader.PropertyToID("_StabbySlope"), Shader.PropertyToID("_StabbyBiome"), Shader.PropertyToID("_StabbyForest"), Shader.PropertyToID("_StabbyWaterLevel") };
         static readonly int[] VectorIds = { Shader.PropertyToID("_StabbySand"), Shader.PropertyToID("_StabbyFieldUV"), Shader.PropertyToID("_StabbyCoatUV"), Shader.PropertyToID("_StabbySurface"), Shader.PropertyToID("_StabbyStrataWobble") };
         static readonly int CoatAId = Shader.PropertyToID("_StabbyCoatA"), CoatBId = Shader.PropertyToID("_StabbyCoatB"), DetailOffId = Shader.PropertyToID("_StabbyDetailOff"), GrassFarId = Shader.PropertyToID("_StabbyGrassFar");
 
