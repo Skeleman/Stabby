@@ -63,7 +63,7 @@ namespace Stabby.Game
 
         static readonly int[] TextureIds = { Shader.PropertyToID("_StabbyCoat"), Shader.PropertyToID("_StabbySlope"), Shader.PropertyToID("_StabbyBiome") };
         static readonly int[] VectorIds = { Shader.PropertyToID("_StabbySand"), Shader.PropertyToID("_StabbyFieldUV"), Shader.PropertyToID("_StabbyCoatUV"), Shader.PropertyToID("_StabbySurface"), Shader.PropertyToID("_StabbyStrataWobble") };
-        static readonly int CoatAId = Shader.PropertyToID("_StabbyCoatA"), CoatBId = Shader.PropertyToID("_StabbyCoatB"), DetailOffId = Shader.PropertyToID("_StabbyDetailOff");
+        static readonly int CoatAId = Shader.PropertyToID("_StabbyCoatA"), CoatBId = Shader.PropertyToID("_StabbyCoatB"), DetailOffId = Shader.PropertyToID("_StabbyDetailOff"), GrassFarId = Shader.PropertyToID("_StabbyGrassFar");
 
         public static bool Paused, Rescatter;
         static GrassViewSystem live;
@@ -147,6 +147,7 @@ namespace Stabby.Game
             float ppm = Mathf.Min(view.PixelsPerMetre, Detail.MaxZoom * Detail.ReferencePixelsPerMetre), q = view.Quality;
             float reachM = grass.ReachAt(grass.ReachPixels / q, ppm), nearM = grass.ReachAt(grass.NearPixels / q, ppm);
             float lod1M = grass.ReachAt(grass.Lod1Pixels / q, ppm), lod2M = grass.ReachAt(grass.Lod2Pixels / q, ppm);
+            Shader.SetGlobalVector(GrassFarId, new Vector4(reachM, grass.TipLight / 3f, 0, 0));
             terrain.NearMeshes(eye, reachM + grass.HeightMaxM, near);
             if (near.Count != lastNear)
             {

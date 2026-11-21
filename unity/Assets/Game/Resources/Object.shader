@@ -165,9 +165,11 @@ Shader "Stabby/Object"
                 }
                 else
                     Wood(i.local, normalize(i.normalOS), n, normalize(i.axisWS), base.rgb, base.a < 1.5, fp, albedo, n);
+                float above = max(wp.y - fade.z, 0), size = max(fade.w, 0.1);
+                float ao = lerp(0.72, 1, smoothstep(0, min(0.12, 0.2 * size), above)) * lerp(0.75, 1, smoothstep(0, min(0.9, 0.6 * size), above)) * lerp(1, 0.5, saturate(-n.y));
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp));
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
-                float3 c = albedo * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation + ambient);
+                float3 c = albedo * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + ambient * ao);
                 return half4(MixFog(c, i.fog), 1);
             }
             ENDHLSL
