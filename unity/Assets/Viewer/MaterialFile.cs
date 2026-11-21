@@ -15,7 +15,7 @@ namespace Stabby.Viewer
         [Serializable] class Coat { public string[] biomes; public float bumpAmp, bumpWavelengthM, grainAmp, grainWavelengthM, featureAmp, featureWavelengthM, parallax, albedoVar; }
         [Serializable] class Coats { public Coat grass, soil, sand, snow; }
         [Serializable] class Surface { public float fadePixels, parallaxFootprintM, windDeg, strataWobbleM, strataWobbleWavelengthM, coatPatchAmp, coatPatchWavelengthM; public Rock rock; public Coats coats; }
-        [Serializable] class Water { public string deepColor, shallowColor; public float clarityM, shoreM, foamWidthM, waveScaleM, waveSpeed, waveStrength, swellScaleM, swellStrength, lakeSwell, flowSpeed, rapidsSlope; }
+        [Serializable] class Water { public string deepColor, shallowColor; public float clarityM, shoreM, foamWidthM, waveScaleM, waveSpeed, waveStrength, swellScaleM, swellStrength, lakeSwell, flowSpeed, rapidsSlope, bedFieldM; }
         [Serializable] class Dto { public int schemaVersion; public float offsetAmplitudeM, offsetWavelengthM, tiltPerKm; public Surface surface; public Water water; public Row[] strata; }
 
         public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "materials.json"));
@@ -63,7 +63,7 @@ namespace Stabby.Viewer
                 ClarityM = w.clarityM, ShoreM = w.shoreM, FoamWidthM = w.foamWidthM,
                 WaveScaleM = w.waveScaleM, WaveSpeed = w.waveSpeed, WaveStrength = w.waveStrength,
                 SwellScaleM = w.swellScaleM, SwellStrength = w.swellStrength, LakeSwell = w.lakeSwell,
-                FlowSpeed = w.flowSpeed, RapidsSlope = w.rapidsSlope,
+                FlowSpeed = w.flowSpeed, RapidsSlope = w.rapidsSlope, BedFieldM = w.bedFieldM,
             };
             foreach (var r in dto.strata)
                 lib.Strata.Add(new StratumDef { Id = r.id, Name = r.name, ThicknessM = r.thicknessM, Hardness = r.hardness, Color = Convert.ToUInt32(r.color.TrimStart('#'), 16) });

@@ -22,6 +22,8 @@ Shader "Stabby/Water"
             float4 _StabbyWaterDeep, _StabbyWaterShallow, _StabbyWaterWave, _StabbyWaterSwell, _StabbyWaterFlow;
             TEXTURE2D(_StabbySlope);
             SAMPLER(sampler_StabbySlope);
+            TEXTURE2D(_StabbyBed);
+            SAMPLER(sampler_StabbyBed);
 
             static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
             static const float FlowPeriod = 3;
@@ -80,7 +82,10 @@ Shader "Stabby/Water"
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float3 bed = _WorldSpaceCameraPos - v * (dist * scene / max(surface, 0.001));
-                float depth = max(0, i.positionWS.y - bed.y);
+                float2 fuv = i.positionWS.xz * _StabbyFieldUV.x + _StabbyFieldUV.y;
+                float field = max(0, i.positionWS.y - SAMPLE_TEXTURE2D(_StabbyBed, sampler_StabbyBed, fuv).r);
+                float far = i.color.a > 0.25 ? saturate(dist * _StabbyWaterSwell.z - 1) : 0;
+                float depth = lerp(max(0, i.positionWS.y - bed.y), field, far);
 
                 float4 wv = _StabbyWaterWave;
                 float t = _Time.y * wv.y;
@@ -120,7 +125,7 @@ Shader "Stabby/Water"
                 float3 h = normalize(l.direction + v);
                 c += l.color * pow(saturate(dot(n, h)), 240) * 1.5;
 
-                float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, i.positionWS.xz * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).rg;
+                float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, fuv, 0).rg;
                 float shore = depth / max(length(sl), 0.03);
                 float band = saturate(1 - shore / max(wv.w, 0.01));
                 float foam = 0;

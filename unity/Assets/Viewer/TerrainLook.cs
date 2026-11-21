@@ -26,6 +26,7 @@ namespace Stabby.Viewer
         public int Res, N;
         public float TexelM, CellM;
         public ushort[][] Slopes;
+        public float[][] Bed;
         public ushort[] Biome;
     }
 
@@ -35,7 +36,7 @@ namespace Stabby.Viewer
 
         public const int FieldTexelsPerCell = 4, FieldMax = 2048;
 
-        static Texture2D strataTexture, coatTexture, slopeTexture, biomeTexture;
+        static Texture2D strataTexture, coatTexture, slopeTexture, bedTexture, biomeTexture;
 
         public static float3 Sand => new float3(0.78f, 0.72f, 0.52f);
 
@@ -147,20 +148,48 @@ namespace Stabby.Viewer
                 biome[4 * q + 2] = (ushort)math.f32tof16(colors[q].z);
                 biome[4 * q + 3] = (ushort)math.f32tof16(offsets[q]);
             }
-            return new FieldLook { Res = res, N = n, TexelM = tm, CellM = cm, Slopes = mips.ToArray(), Biome = biome };
+            return new FieldLook { Res = res, N = n, TexelM = tm, CellM = cm, Slopes = mips.ToArray(), Bed = Mips(h, res), Biome = biome };
+        }
+
+        static float[][] Mips(float[] top, int res)
+        {
+            var mips = new List<float[]> { top };
+            for (int p = res; p > 1;)
+            {
+                int cur = Math.Max(1, p >> 1), prev = p;
+                var src = mips[mips.Count - 1];
+                var dst = new float[cur * cur];
+                Parallel.For(0, cur, k =>
+                {
+                    int k0 = Math.Min(2 * k, prev - 1), k1 = Math.Min(2 * k + 1, prev - 1);
+                    for (int i = 0; i < cur; i++)
+                    {
+                        int i0 = Math.Min(2 * i, prev - 1), i1 = Math.Min(2 * i + 1, prev - 1);
+                        dst[k * cur + i] = 0.25f * (src[k0 * prev + i0] + src[k0 * prev + i1] + src[k1 * prev + i0] + src[k1 * prev + i1]);
+                    }
+                });
+                mips.Add(dst);
+                p = cur;
+            }
+            return mips.ToArray();
         }
 
         public static void ApplyField(FieldLook f)
         {
             if (slopeTexture != null) UnityEngine.Object.Destroy(slopeTexture);
+            if (bedTexture != null) UnityEngine.Object.Destroy(bedTexture);
             if (biomeTexture != null) UnityEngine.Object.Destroy(biomeTexture);
             slopeTexture = new Texture2D(f.Res, f.Res, TextureFormat.RGHalf, f.Slopes.Length, true) { name = "Slopes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
             for (int m = 0; m < f.Slopes.Length; m++) slopeTexture.SetPixelData(f.Slopes[m], m);
             slopeTexture.Apply(false, true);
+            bedTexture = new Texture2D(f.Res, f.Res, TextureFormat.RFloat, f.Bed.Length, true) { name = "Bed", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+            for (int m = 0; m < f.Bed.Length; m++) bedTexture.SetPixelData(f.Bed[m], m);
+            bedTexture.Apply(false, true);
             biomeTexture = new Texture2D(f.N, f.N, TextureFormat.RGBAHalf, false, true) { name = "Biomes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             biomeTexture.SetPixelData(f.Biome, 0);
             biomeTexture.Apply(false, true);
             Shader.SetGlobalTexture("_StabbySlope", slopeTexture);
+            Shader.SetGlobalTexture("_StabbyBed", bedTexture);
             Shader.SetGlobalTexture("_StabbyBiome", biomeTexture);
             Shader.SetGlobalVector("_StabbyFieldUV", new Vector4(1f / (f.TexelM * f.Res), 0.5f / f.Res, 1f / (f.CellM * f.N), 0.5f / f.N));
             Shader.SetGlobalVector("_StabbySand", new Vector4(Sand.x, Sand.y, Sand.z, 0));
@@ -205,7 +234,7 @@ namespace Stabby.Viewer
                 new Vector4(deep.x, deep.y, deep.z, 1f / w.ClarityM),
                 new Vector4(shallow.x, shallow.y, shallow.z, 1f / w.ShoreM),
                 new Vector4(1f / w.WaveScaleM, w.WaveSpeed, w.WaveStrength, w.FoamWidthM),
-                new Vector4(1f / w.SwellScaleM, w.SwellStrength, 0, 0),
+                new Vector4(1f / w.SwellScaleM, w.SwellStrength, 1f / w.BedFieldM, 0),
                 new Vector4(w.FlowSpeed, 1f / w.RapidsSlope, w.LakeSwell, 0),
             };
         }

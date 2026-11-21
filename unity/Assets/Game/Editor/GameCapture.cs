@@ -211,12 +211,12 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~frames"] = framesBeforeTour;
                 phase++;
             }
-            while (phase >= 13 && phase <= 14)
+            while (phase >= 13 && phase <= 15)
             {
-                string name = phase == 13 ? "coast-low" : "coast-high";
+                string name = phase == 13 ? "coast-low" : phase == 14 ? "coast-high" : "coast-far";
                 if (wait == 0)
                 {
-                    if (!Coast(cam, phase == 13 ? 40f : 150f)) { GameStatus.Lines["~" + name] = "no coast found"; phase++; continue; }
+                    if (!(phase == 15 ? FarCoast(cam, 1000f, 250f) : Coast(cam, phase == 13 ? 40f : 150f))) { GameStatus.Lines["~" + name] = "no coast found"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -224,6 +224,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 14) GameStatus.Lines["~bench water"] = Bench(cam, "water coast");
+                if (phase == 15) GameStatus.Lines["~bench water far"] = Bench(cam, "water far coast");
                 wait = 0;
                 phase++;
             }
@@ -459,6 +460,43 @@ namespace Stabby.Game.Editor
                 var eye = target + new Vector3(-0.5f, 0, -0.4f) * height + Vector3.up * height;
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim coast " + height] = $"coast at {target.x:F0},{target.z:F0} from {height:F0} m, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
+
+        static bool FarCoast(Camera cam, float back, float height)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                if (map == null) continue;
+                int n = map.Config.Size, r = 12, best = -1;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                Vector2 bestDir = default;
+                for (int z = r; z < n - r; z++)
+                    for (int x = r; x < n - r; x++)
+                    {
+                        int i = z * n + x;
+                        if (!map.Sea[i] || (map.Sea[i + 1] && map.Sea[i - 1] && map.Sea[i + n] && map.Sea[i - n])) continue;
+                        float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (d >= bestD) continue;
+                        var dir = Vector2.zero;
+                        int sea = 0;
+                        for (int dz = -r; dz <= r; dz++)
+                            for (int dx = -r; dx <= r; dx++)
+                                if (map.Sea[(z + dz) * n + x + dx]) { dir += new Vector2(dx, dz); sea++; }
+                        if (sea < r * r || dir.sqrMagnitude < 1) continue;
+                        bestD = d;
+                        best = i;
+                        bestDir = dir.normalized;
+                    }
+                if (best < 0) return false;
+                var target = new Vector3(best % n * cm, 0, best / n * cm);
+                var eye = target + new Vector3(bestDir.x, 0, bestDir.y) * back + Vector3.up * height;
+                eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + height);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target + Vector3.up * 20f - eye));
+                GameStatus.Lines["~aim coast far"] = $"far coast at {target.x:F0},{target.z:F0} from {back:F0} m out, {height:F0} m up";
                 return true;
             }
             return false;

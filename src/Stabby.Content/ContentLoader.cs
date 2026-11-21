@@ -35,6 +35,7 @@ public static class ContentLoader
         public float LakeSwell { get; set; }
         public float FlowSpeed { get; set; }
         public float RapidsSlope { get; set; }
+        public float BedFieldM { get; set; }
     }
 
     sealed class SurfaceEntry
@@ -178,7 +179,7 @@ public static class ContentLoader
         ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
-        FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope,
+        FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope, BedFieldM = e.BedFieldM,
     };
 
     static uint Hex(string s, string path, string field) =>
