@@ -45,11 +45,44 @@ namespace Stabby.Game
         public float4 Value;
     }
 
+    struct TerrainWrite
+    {
+        public Entity Entity;
+        public int Kind;
+        public float4 Value;
+        public MaterialMeshInfo Mesh;
+        public AABB Box;
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainWriteJob : IJob
+    {
+        [ReadOnly] public NativeList<TerrainWrite> Writes;
+        public ComponentLookup<MaterialMeshInfo> Meshes;
+        public ComponentLookup<RenderBounds> Bounds;
+        public ComponentLookup<TerrainStitch> Stitch;
+
+        public void Execute()
+        {
+            for (int i = 0; i < Writes.Length; i++)
+            {
+                var w = Writes[i];
+                if (w.Kind == 0) Meshes.SetComponentEnabled(w.Entity, w.Value.x != 0);
+                else if (w.Kind == 1) Stitch[w.Entity] = new TerrainStitch { Value = w.Value };
+                else
+                {
+                    Meshes[w.Entity] = w.Mesh;
+                    Bounds[w.Entity] = new RenderBounds { Value = w.Box };
+                }
+            }
+        }
+    }
+
     struct TerrainNode
     {
         public int Built, Pending, Drawn, Stitch, Vertices, Cast, Tier;
         public float MorphEnd;
-        public Entity Entity;
+        public Entity Entity, Caster;
         public BatchMeshID Mesh;
     }
 
@@ -609,9 +642,9 @@ namespace Stabby.Game
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
         NativeList<Entity> spare;
-        Entity prototype;
+        Entity prototype, casterPrototype;
         const int SpareBatch = 64, SpareFill = 256;
-        static readonly int[] PoolFill = { 64, 128, 64, 24, 24, 24, 16, 4, 2 };
+        static readonly int[] PoolFill = { 64, 128, 96, 32, 24, 64, 48, 12, 8 };
         const int PoolReach = 2;
         NativeArray<int> zeros;
         readonly List<Mesh>[] pool = Lists<Mesh>();
@@ -644,8 +677,16 @@ namespace Stabby.Game
         int lodEvicts, lodDeferred, lodShadows;
         const int EvictBudget = 32;
 
+        NativeList<TerrainWrite> writes;
+        ComponentLookup<MaterialMeshInfo> meshLookup;
+        ComponentLookup<RenderBounds> boundsLookup;
+        ComponentLookup<TerrainStitch> stitchLookup;
+
         protected override void OnCreate()
         {
+            meshLookup = GetComponentLookup<MaterialMeshInfo>();
+            boundsLookup = GetComponentLookup<RenderBounds>();
+            stitchLookup = GetComponentLookup<TerrainStitch>();
             if (World.Name != GameSettings.ViewClient) Enabled = false;
         }
 
@@ -668,6 +709,7 @@ namespace Stabby.Game
                 double lm = frame.Elapsed.TotalMilliseconds - ts;
                 loadPart = null;
                 (partUpload, partCollect, partStatics, partLods) = (tu, tc - tu, ts - tc, lm);
+                Flush();
                 if (lm > worstLodsMs) { worstLodsMs = (float)lm; GameStatus.Lines["terrain~lods"] = $"terrain worst lods {lm:F1} ms ({stage}: {LodParts()})"; }
                 if (tc - tu > worstCollectMs) { worstCollectMs = (float)(tc - tu); GameStatus.Lines["terrain~collect"] = $"terrain worst collect {tc - tu:F1} ms ({stage}, {frameVertices} vertices)"; }
             }
@@ -859,7 +901,7 @@ namespace Stabby.Game
             builtSmooth = SmoothOnly;
             TerrainTree.Capacity(TerrainTree.Tiers - 1, out _, out int most);
             if (!zeros.IsCreated) zeros = new NativeArray<int>(most, Allocator.Persistent);
-            while (Fill() >= 0 || spare.Length < SpareFill)
+            while (Fill() >= 0 || spare.Length < 2 * SpareFill)
             {
                 do
                 {
@@ -867,7 +909,7 @@ namespace Stabby.Game
                     if (k >= 0) Pool(k);
                     else Spare();
                 }
-                while ((Fill() >= 0 || spare.Length < SpareFill) && frame.Elapsed.TotalMilliseconds < ApplyMs);
+                while ((Fill() >= 0 || spare.Length < 2 * SpareFill) && frame.Elapsed.TotalMilliseconds < ApplyMs);
                 yield return $"pool {Fill()}/{spare.Length}";
             }
             upload = new TerrainLook.FieldUpload(prepared.Field, UploadBytes);
@@ -989,7 +1031,7 @@ namespace Stabby.Game
             nd.Built = 1;
             MinMaxAABB box = tree.Box(p.Key);
             if (math.any(lo < box.Min - 0.01f) || math.any(hi > box.Max + 0.01f)) UnityEngine.Debug.LogWarning($"terrain node L{l} {c} mesh {lo}..{hi} outside bounds {box.Min}..{box.Max}");
-            nd.Entity = Take(nd.Mesh, box);
+            nd.Entity = Take(nd.Mesh, box, out nd.Caster);
             nd.Drawn = 0;
             nd.Stitch = -1;
             nodes[p.Key] = nd;
@@ -1044,24 +1086,26 @@ namespace Stabby.Game
             new VertexAttributeDescriptor(VertexAttribute.TexCoord3, VertexAttributeFormat.Float16, 4),
         };
 
-        Entity Spawn(BatchMeshID mesh, AABB box, BatchMaterialID mat)
+        Entity Spawn(BatchMeshID mesh, AABB box, BatchMaterialID mat, ShadowCastingMode shadows = ShadowCastingMode.Off)
         {
             var em = EntityManager;
             var e = em.CreateEntity();
-            RenderMeshUtility.AddComponents(e, em, new RenderMeshDescription(ShadowCastingMode.Off), new MaterialMeshInfo(mat, mesh));
+            RenderMeshUtility.AddComponents(e, em, new RenderMeshDescription(shadows), new MaterialMeshInfo(mat, mesh));
             em.SetComponentData(e, new RenderBounds { Value = box });
             em.AddComponentData(e, new LocalToWorld { Value = float4x4.identity });
             return e;
         }
 
-        Entity Take(BatchMeshID mesh, AABB box)
+        Entity Take(BatchMeshID mesh, AABB box, out Entity caster)
         {
-            var em = EntityManager;
             if (spare.Length == 0) Spare();
-            var e = spare[spare.Length - 1];
-            spare.RemoveAt(spare.Length - 1);
-            em.SetComponentData(e, new MaterialMeshInfo(material, mesh));
-            em.SetComponentData(e, new RenderBounds { Value = box });
+            int n = spare.Length;
+            var e = spare[n - 2];
+            caster = spare[n - 1];
+            spare.ResizeUninitialized(n - 2);
+            var info = new MaterialMeshInfo(material, mesh);
+            Queue(new TerrainWrite { Entity = e, Kind = 2, Mesh = info, Box = box });
+            Queue(new TerrainWrite { Entity = caster, Kind = 2, Mesh = info, Box = box });
             return e;
         }
 
@@ -1070,13 +1114,26 @@ namespace Stabby.Game
             var em = EntityManager;
             if (prototype == Entity.Null)
             {
-                prototype = Spawn(poolIds[0].Count > 0 ? poolIds[0][0] : default, default, material);
-                em.AddComponentData(prototype, new TerrainStitch());
-                em.AddComponent<Prefab>(prototype);
-                em.SetComponentEnabled<MaterialMeshInfo>(prototype, false);
+                prototype = Prototype(ShadowCastingMode.Off);
+                casterPrototype = Prototype(ShadowCastingMode.ShadowsOnly);
             }
             using var made = em.Instantiate(prototype, SpareBatch, Allocator.Temp);
-            spare.AddRange(made);
+            using var casters = em.Instantiate(casterPrototype, SpareBatch, Allocator.Temp);
+            for (int i = 0; i < SpareBatch; i++)
+            {
+                spare.Add(made[i]);
+                spare.Add(casters[i]);
+            }
+        }
+
+        Entity Prototype(ShadowCastingMode shadows)
+        {
+            var em = EntityManager;
+            var e = Spawn(poolIds[0].Count > 0 ? poolIds[0][0] : default, default, material, shadows);
+            em.AddComponentData(e, new TerrainStitch());
+            em.AddComponent<Prefab>(e);
+            em.SetComponentEnabled<MaterialMeshInfo>(e, false);
+            return e;
         }
 
         void Statics()
@@ -1208,10 +1265,12 @@ namespace Stabby.Game
                     else
                     {
                         deferred++;
-                        if (nd.Drawn != 0)
+                        if (nd.Drawn != 0 || nd.Cast != 0)
                         {
-                            EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, false);
+                            if (nd.Drawn != 0) Show(nd.Entity, false);
+                            if (nd.Cast != 0) Show(nd.Caster, false);
                             nd.Drawn = 0;
+                            nd.Cast = 0;
                             nodes[key] = nd;
                         }
                     }
@@ -1221,7 +1280,7 @@ namespace Stabby.Game
                 sunk += want && !show ? 1 : 0;
                 if (show != (nd.Drawn != 0))
                 {
-                    EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, show);
+                    Show(nd.Entity, show);
                     nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
@@ -1229,7 +1288,7 @@ namespace Stabby.Game
                 if (cast != nd.Cast)
                 {
                     double tsh = frame.Elapsed.TotalMilliseconds;
-                    Shadow(nd.Entity, cast);
+                    Show(nd.Caster, cast != 0);
                     shadows++;
                     shadowMs += frame.Elapsed.TotalMilliseconds - tsh;
                 }
@@ -1245,7 +1304,9 @@ namespace Stabby.Game
                     float end = l < TerrainTree.Root ? TerrainTree.Step(l + 1) / allowed : 0;
                     if (mask != nd.Stitch || end != nd.MorphEnd)
                     {
-                        EntityManager.SetComponentData(nd.Entity, new TerrainStitch { Value = new float4(mask, MorphStart * end, end, TerrainTree.Step(l)) });
+                        var stitch = new float4(mask, MorphStart * end, end, TerrainTree.Step(l));
+                        Queue(new TerrainWrite { Entity = nd.Entity, Kind = 1, Value = stitch });
+                        Queue(new TerrainWrite { Entity = nd.Caster, Kind = 1, Value = stitch });
                         nd.Stitch = mask;
                         nd.MorphEnd = end;
                     }
@@ -1312,11 +1373,23 @@ namespace Stabby.Game
                 if (tree.Level(key) == 0 && tree.Distance(key, eye) < reach && meshes.TryGetValue(key, out var m)) into.Add(m);
         }
 
-        void Shadow(Entity e, int cast)
+        void Show(Entity e, bool show) => Queue(new TerrainWrite { Entity = e, Kind = 0, Value = show ? 1 : 0 });
+
+        void Queue(TerrainWrite w)
         {
-            var f = EntityManager.GetSharedComponentManaged<RenderFilterSettings>(e);
-            f.ShadowCastingMode = cast != 0 ? ShadowCastingMode.On : ShadowCastingMode.Off;
-            EntityManager.SetSharedComponentManaged(e, f);
+            if (!writes.IsCreated) writes = new NativeList<TerrainWrite>(64, Allocator.TempJob);
+            writes.Add(w);
+        }
+
+        void Flush()
+        {
+            if (!writes.IsCreated) return;
+            meshLookup.Update(this);
+            boundsLookup.Update(this);
+            stitchLookup.Update(this);
+            Dependency = new TerrainWriteJob { Writes = writes, Meshes = meshLookup, Bounds = boundsLookup, Stitch = stitchLookup }.Schedule(Dependency);
+            writes.Dispose(Dependency);
+            writes = default;
         }
 
         void Evict(int key)
@@ -1324,9 +1397,10 @@ namespace Stabby.Game
             var nd = nodes[key];
             if (nd.Entity != Entity.Null)
             {
-                if (nd.Cast != 0) Shadow(nd.Entity, 0);
-                EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, false);
+                Show(nd.Entity, false);
+                if (nd.Cast != 0) Show(nd.Caster, false);
                 spare.Add(nd.Entity);
+                spare.Add(nd.Caster);
             }
             if (nd.Tier < 0)
             {
@@ -1348,6 +1422,7 @@ namespace Stabby.Game
         {
             if (GameStatus.Live.Remove("terrain")) GameStatus.Lines["terrain"] = Status();
             if (lodScheduled) lodHandle.Complete();
+            if (writes.IsCreated) writes.Dispose();
             foreach (var p in pending)
             {
                 p.Handle.Complete();
