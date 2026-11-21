@@ -147,41 +147,144 @@ float TmGroove(float x, float width, out float slope)
 
 static const float2 tmJ1 = float2(0.96, 0.28), tmJ2 = float2(-0.28, 0.96);
 
-float TmRockRelief(float2 qa, float level, float2 levelGrad, float hard, float fp, float layered, float2 jw, out float3 grad, out float bed)
+float TmChip(float c, float w, float r, out float dp)
+{
+    float t = saturate((c + r) / w);
+    dp = 6 * t * (1 - t) / w;
+    return t * t * (3 - 2 * t) - 1;
+}
+
+float TmRockRelief(float2 qa, float level, float2 levelGrad, float hard, float fp, float layered, float beds, float2 jw, out float3 grad, out float bed, out float bedF)
 {
     float4 rb = _StabbyRockB;
-    float b = level * rb.x, ib = floor(b), sb;
+    float3 dal = float3(0.8, 0, 0.6), dlev = float3(levelGrad.x, 1, levelGrad.y);
+    float al = dot(qa, dal.xz), b0 = level * rb.x;
+    float3 tw = TmNoise2(float2(b0 * 0.37, al * (1.0 / 40)) + 5.3);
+    float b = b0 + 0.6 * tw.x, ib = floor(b);
+    float3 lg = dlev * rb.x * (1 + 0.222 * tw.y) + 0.015 * tw.z * dal;
     bed = ib;
-    float depth = layered * rb.y * lerp(1.6, 0.5, hard) * lerp(0.2, 1.4, TmHash(int2((int)floor(b + 0.5), 7))) * TmFade(rb.x, fp);
-    float gb = TmGroove(b - ib, 0.16, sb);
-    float3 lg = rb.x * float3(levelGrad.x, 1, levelGrad.y);
-    grad = depth * sb * lg;
+    bedF = b - ib;
+    float kb = floor(b + 0.5);
+    int ik = (int)kb;
+    float3 w1 = TmNoise2(float2(al * (1.0 / 5.5), kb * 7.13));
+    float3 w2 = TmNoise2(float2(al * (1.0 / 1.4), kb * 3.71 + 40));
+    float x = b - kb + 0.07 * w1.x + 0.025 * w2.x;
+    float3 xg = lg + (0.0127 * w1.y + 0.0179 * w2.y) * dal;
+    float3 vw = TmNoise2(float2(al * (1.0 / 9), kb * 5.9 + 80));
+    float3 vd = TmNoise2(float2(al * (1.0 / 17), kb * 2.3 + 120));
+    float hk0 = TmHash(int2(ik, 7));
+    float pres = smoothstep(-0.4, 0.35, vd.x + 0.5 * (hk0 - 0.5));
+    float depth = beds * layered * rb.y * lerp(1.6, 0.5, hard) * lerp(0.3, 1.4, hk0) * pres * TmFade(rb.x * 8, fp);
+    float ws = 0.13 * lerp(0.45, 1.6, saturate(0.5 + 0.6 * vw.x)) * (x < 0 ? 1.5 : 0.8);
+    float fr = TmFade(8, fp);
+    float3 rn = TmNoise2(float2(al * 2.7, level * 3.3) + 9.1);
+    float3 rn2 = fr * TmNoise2(float2(al * 7.9, level * 8.3) + 21.7);
+    float r = ws * (0.4 * rn.x + 0.18 * rn2.x), dp;
+    float3 rg = ws * (0.4 * (2.7 * rn.y * dal + 3.3 * rn.z * dlev) + 0.18 * (7.9 * rn2.y * dal + 8.3 * rn2.z * dlev));
+    float gb = TmChip(abs(x), ws, r, dp);
+    grad = depth * dp * ((x < 0 ? -1 : 1) * xg + rg);
     float hb = depth * gb;
-    float jd = layered * rb.w * smoothstep(0.35, 0.85, hard) * TmFade(rb.z * 8, fp) * (1 + gb);
+    float jd = layered * rb.w * (0.25 + 0.75 * beds) * smoothstep(0.35, 0.85, hard) * TmFade(rb.z * 20, fp) * (1 + 0.5 * gb);
     if (jd <= 0) return hb;
     float2 d1 = tmJ1, d2 = tmJ2;
     int bi = (int)ib;
-    float fb = b - ib;
-    float sp1 = rb.z * lerp(0.65, 1.45, TmHash(int2(bi, 13)));
-    float j = dot(qa, d1) * sp1 + TmHash(int2(bi, 3)) * 4, ij = floor(j), fj = j - ij;
-    float el = fj - 0.36 * (TmHash(int3(bi, (int)ij, 21)) - 0.5), er = fj - 1 - 0.36 * (TmHash(int3(bi, (int)ij + 1, 21)) - 0.5);
-    bool lft = abs(el) < abs(er);
-    float e = lft ? el : er;
-    int jb = (int)ij + (lft ? 0 : 1);
-    float hp = TmHash(int3(bi, jb, 23)), hl = TmHash(int3(bi, jb, 29));
-    float jl = lerp(0.3, 1.1, hl), fl = hl > 0.5 ? fb : 1 - fb;
-    float a1 = jd * jw.x * step(0.2, hp) * lerp(0.45, 1.35, frac(hp * 7.31)) * smoothstep(jl, jl - 0.15, fl);
-    float t1 = saturate(abs(e) / 0.035);
-    float hj = a1 * (t1 * t1 * (3 - 2 * t1) - 1);
-    float3 gj = a1 * 6 * t1 * (1 - t1) / 0.035 * sign(e) * sp1 * float3(d1.x, 0, d1.y);
-    float sp2 = rb.z * 0.6 * lerp(0.7, 1.4, TmHash(int2(bi, 17)));
-    float k = dot(qa, d2) * sp2 + TmHash(int3(bi, (int)ij, 5)) * 4, s2;
-    float m = step(0.45, TmHash(int3(bi, (int)ij, 9))) * lerp(0.4, 1.2, TmHash(int3(bi, (int)floor(k), 31)));
-    float hk = jd * jw.y * m * TmGroove(k - floor(k), 0.05, s2);
-    float3 gk = jd * jw.y * m * s2 * sp2 * float3(d2.x, 0, d2.y);
+    float3 pw = TmNoise2(float2(b * 0.21, al * (1.0 / 30)) + 41.3);
+    float3 pv = TmNoise2(float2(level * (1.0 / 1.1), al * (1.0 / 7)) + 55.1);
+    float u1 = dot(qa, d1) * rb.z;
+    float3 sw1 = TmNoise2(float2(u1 * 0.31, b * 0.11) + 87.7);
+    float j = u1 + 0.45 * sw1.x + 0.35 * pw.x + 0.06 * pv.x + 0.02 * rn.x;
+    float ij = floor(j + 0.5), e = j - ij;
+    int jb = (int)ij;
+    float3 jgv = rb.z * (1 + 0.14 * sw1.y) * float3(d1.x, 0, d1.y) + 0.0735 * pw.y * lg + 0.0545 * pv.z * dlev;
+    float hp = TmHash(int2(jb, 23));
+    float3 jx = TmNoise2(float2(b * 0.3, ij * 4.7 + 19));
+    float run = smoothstep(0, 0.35, jx.x + 0.6 * (hp - 0.5)) * step(0.12, TmHash(int2(bi * 31 + jb, 37)));
+    float a1 = jd * jw.x * run * lerp(0.45, 1.35, frac(hp * 7.31)) * saturate(0.6 + 0.7 * rn.x + 0.3 * vw.x);
+    float wj = 0.035 * lerp(0.6, 1.5, saturate(0.5 + 0.7 * w1.x)), dj;
+    float hj = a1 * TmChip(abs(e), wj, wj * (0.45 * rn.x + 0.2 * rn2.x), dj);
+    float3 gj = a1 * dj * ((e < 0 ? -1 : 1) * jgv + wj * 0.45 * (2.7 * rn.y * dal + 3.3 * rn.z * dlev));
+    float3 pw2 = TmNoise2(float2(b * 0.17, dot(qa, d1) * (1.0 / 25)) + 63.9);
+    float u2 = dot(qa, d2) * rb.z * 0.6;
+    float3 sw2k = TmNoise2(float2(u2 * 0.27, b * 0.13) + 23.3);
+    float k = u2 + 0.45 * sw2k.x + 0.3 * pw2.x + 0.05 * w2.x;
+    float ic = floor(k + 0.5), ek = k - ic, d2p;
+    float3 kx = TmNoise2(float2(b * 0.45, ic * 3.1 + 71));
+    float hq = TmHash(int2((int)ic, 43));
+    float m = smoothstep(0.05, 0.4, kx.x + 0.5 * (hq - 0.5)) * lerp(0.4, 1.2, frac(hq * 5.13)) * saturate(0.5 + rn.x);
+    float3 kgv = rb.z * 0.6 * (1 + 0.12 * sw2k.y) * float3(d2.x, 0, d2.y) + 0.051 * pw2.y * lg;
+    float wk = 0.05 * lerp(0.6, 1.4, saturate(0.5 + 0.7 * vw.x));
+    float hk = jd * jw.y * m * TmChip(abs(ek), wk, wk * 0.45 * rn2.x, d2p);
+    float3 gk = jd * jw.y * m * d2p * ((ek < 0 ? -1 : 1) * kgv + wk * 0.45 * (7.9 * rn2.y * dal + 8.3 * rn2.z * dlev));
     float hm = min(hj, hk);
-    grad += (hj < hk ? gj : gk) + hm / (1 + gb) * sb * lg;
+    grad += (hj < hk ? gj : gk) + 0.5 * hm / (1 + 0.5 * gb) * dp * (x < 0 ? -1 : 1) * xg;
     return hb + hm;
+}
+
+float TmCragPlane(float u, float y, float fp, float hard, float mass, out float2 g, out float cav, out float tone, out float streak)
+{
+    float3 mw = TmNoise2(float2(y * (1.0 / 40), u * (1.0 / 60)) + 3.7);
+    u += 4 * mw.x;
+    float amp = lerp(0.6, 1.2, hard) * lerp(0.85, 1.1, mass);
+    float f1 = TmFade(1.0 / 18, fp), f2 = TmFade(1.0 / 6.5, fp), f3 = TmFade(1.0 / 1.7, fp);
+    float3 b1 = TmNoise2(float2(u * (1.0 / 18), y * (1.0 / 110)) + 61.7);
+    float3 b2 = TmNoise2(float2(u * (1.0 / 6.5), y * (1.0 / 38)) + 17.9);
+    float3 fl = TmNoise2(float2(u * (1.0 / 1.7), y * (1.0 / 11)) + 33.1);
+    float s1 = b1.x < 0 ? -1 : 1, s2 = b2.x < 0 ? -1 : 1;
+    float h = amp * (f1 * 5.0 * (abs(b1.x) - 0.35) + f2 * 1.7 * (abs(b2.x) - 0.35) + f3 * 0.22 * fl.x);
+    g = amp * (f1 * 5.0 * s1 * b1.yz * float2(1.0 / 18, 1.0 / 110) + f2 * 1.7 * s2 * b2.yz * float2(1.0 / 6.5, 1.0 / 38) + f3 * 0.22 * fl.yz * float2(1.0 / 1.7, 1.0 / 11));
+    float gully = f1 * (1 - smoothstep(0.02, 0.3, abs(b1.x))) + 0.6 * f2 * (1 - smoothstep(0.02, 0.25, abs(b2.x)));
+    float ff = TmFade(1.0 / 9, fp), fs = TmFade(1.0 / 2.6, fp);
+    float3 fw = TmNoise2(float2(u * (1.0 / 3.3), y * (1.0 / 4.1)) + 27.1);
+    float2 p1 = float2(u * (1.0 / 9) + 0.35 * b2.x + 0.12 * fw.x, y * (1.0 / 12) + 0.35 * fl.x + 0.1 * fw.y);
+    float2 p2 = float2(u * (1.0 / 2.6) + 0.3 * fl.x + 0.15 * fw.y, y * (1.0 / 3.2) + 0.3 * b2.x + 0.15 * fw.x);
+    float2 c1 = floor(p1), c2 = floor(p2), e1 = min(p1 - c1, 1 - p1 + c1), e2 = min(p2 - c2, 1 - p2 + c2);
+    float k1 = smoothstep(0, 0.1 + 0.07 * fw.x, min(e1.x, e1.y)), k2 = smoothstep(0, 0.12 + 0.08 * fw.y, min(e2.x, e2.y));
+    int2 i1 = (int2)c1, i2 = (int2)c2;
+    float2 t1 = float2(TmHash(int3(i1, 41)), TmHash(int3(i1, 43))) - 0.5;
+    float2 t2 = float2(TmHash(int3(i2, 47)), TmHash(int3(i2, 53))) - 0.5;
+    g += ff * k1 * lerp(0.45, 0.8, mass) * t1 + fs * k2 * lerp(0.15, 0.4, mass) * t2;
+    tone = ff * 0.1 * (TmHash(int3(i1, 59)) - 0.5) + fs * 0.05 * (TmHash(int3(i2, 61)) - 0.5);
+    float xj = u * (1.0 / 4.6) + 0.3 * TmNoise2(float2(y * (1.0 / 6), u * (1.0 / 30)) + 91.3).x + 0.12 * TmNoise2(float2(y * (1.0 / 1.7), u * (1.0 / 9)) + 15.9).x + 0.06 * fl.x;
+    float ij = floor(xj + 0.5), e = xj - ij;
+    float3 jp = TmNoise2(float2(y * (1.0 / 8), ij * 4.7 + 3));
+    float pj = smoothstep(-0.25, 0.3, jp.x + 0.5 * (TmHash(int2((int)ij, 67)) - 0.5));
+    float fj = TmFade(2, fp), fjf = TmFade(0.4, fp);
+    float3 jr = fj * TmNoise2(float2(u * 3.1, y * 2.6) + 77.7);
+    float3 jv = TmNoise2(float2(y * (1.0 / 4), ij * 2.9 + 11));
+    float wj = 0.024 * lerp(0.5, 1.7, saturate(0.5 + 0.6 * jv.x)), dj;
+    float dpj = 0.4 * lerp(0.5, 1.2, hard) * pj * fj;
+    float hj = dpj * TmChip(abs(e), wj, wj * 0.5 * jr.x, dj);
+    g += dpj * dj * (float2((e < 0 ? -1 : 1) * (1.0 / 4.6), 0) + wj * 0.5 * jr.yz * float2(3.1, 2.6));
+    h += hj;
+    float3 je = TmNoise2(float2(u * 0.9, y * 0.7) + 49.1);
+    float lw0 = lerp(0.12, 0.55, saturate(0.5 + 0.6 * jv.x)) * (1 + 0.45 * je.x), lw = lw0 + 1.5 * fp;
+    float jl = fjf * pj * saturate(0.55 + 0.9 * je.x) * (lw0 / lw) * (1 - smoothstep(0, lw, abs(e) * 4.6 + 0.2 * lw0 * jr.x));
+    cav = saturate(0.6 * gully + 0.7 * jl - 0.15 * h);
+    float3 st1 = TmNoise2(float2(u * (1.0 / 0.9), y * (1.0 / 24)) + 13.3);
+    float3 st2 = TmNoise2(float2(u * (1.0 / 3.8), y * (1.0 / 60)) + 29.9);
+    float lf = frac(y * (1.0 / 6.5) + 0.6 * mw.x + 0.3 * b2.x);
+    streak = smoothstep(0.05, 0.6, 0.5 * TmFade(1.0 / 0.9, fp) * st1.x + 0.6 * st2.x + 0.4 * gully) * lerp(0.3, 1, lf * lf);
+    return h;
+}
+
+void TmCrag(float2 wa, float y, float3 n, float hard, float mass, float fp, out float3 grad, out float cav, out float tone, out float streak)
+{
+    float a1 = dot(n.xz, tmJ1), a2 = dot(n.xz, tmJ2);
+    float w1 = smoothstep(0.25, 0.75, a1 * a1 / (a1 * a1 + a2 * a2 + 1e-5)), w2 = 1 - w1;
+    grad = 0; cav = 0; tone = 0; streak = 0;
+    float2 g; float cv, tn, sk;
+    [branch] if (w1 > 0.01)
+    {
+        TmCragPlane(dot(wa, tmJ2), y, fp, hard, mass, g, cv, tn, sk);
+        grad += w1 * (g.x * float3(tmJ2.x, 0, tmJ2.y) + float3(0, g.y, 0));
+        cav += w1 * cv; tone += w1 * tn; streak += w1 * sk;
+    }
+    [branch] if (w2 > 0.01)
+    {
+        TmCragPlane(dot(wa, tmJ1) + 517.3, y, fp, hard, mass, g, cv, tn, sk);
+        grad += w2 * (g.x * float3(tmJ1.x, 0, tmJ1.y) + float3(0, g.y, 0));
+        cav += w2 * cv; tone += w2 * tn; streak += w2 * sk;
+    }
 }
 
 float TmStrataWarp(float2 xz, float h)
@@ -198,14 +301,17 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float4 ra = _StabbyRockA, sw = _StabbyStrataWobble;
     float period = max(_StabbyStrataPeriod, 1);
     float layered = 1 - stone;
+    float sed = smoothstep(0.3, 0.7, abs(frac(off * _StabbyRockC.y) - 0.5) * 2), mass = 1 - sed;
     off += TmStrataWarp(wp.xz + tmO.xz, wp.y + off);
     float fw = TmFade(sw.y, fp) * layered;
     float3 wb = sw.x * fw * TmN2((wp.xz + tmO.xz) * sw.y + 17.3, fw) * float3(1, sw.y, sw.y);
     float level = wp.y + off + wb.x;
     float4 st = SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(level / period, 0.5), dux, duy);
-    float hard = st.a;
+    float hard = lerp(0.82, st.a, sed);
+    float sf = smoothstep(-0.35, 0.45, TmNoise2(float2(dot(wp.xz + tmO.xz, float2(0.8, 0.6)) * (1.0 / 240), level * (1.0 / 38)) + 71.3).x);
+    float bk = layered * lerp(0.08, 1, sed) * lerp(0.3, 1, sf);
     float3 g;
-    float bed;
+    float bed, bedF;
     float3 q = wp;
     float nl = length(n.xz);
     float2 ja = float2(dot(n.xz, tmJ1), dot(n.xz, tmJ2));
@@ -217,28 +323,35 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         float nv = max(dot(v, n), 0.55);
         for (int k = 0; k < 3; k++)
         {
-            float hq = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, jw, g, bed);
+            float hq = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, bk, jw, g, bed, bedF);
             q = wp + v * (0.7 * hq * pk / nv);
         }
     }
-    float hr = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, jw, g, bed);
+    float hr = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, bk, jw, g, bed, bedF);
+    float ck = smoothstep(0.3, 0.7, nl) * (layered + 0.7 * stone) * _StabbyRockC.z;
+    float3 crg = 0;
+    float cav = 0, ctone = 0, streak = 0;
+    [branch] if (ck > 0) TmCrag(q.xz + tmO.xz, q.y, n, hard, mass, fp, crg, cav, ctone, streak);
+    float crs = ck * lerp(0.8, 1.3, mass);
     float4 bump = TmFbm3(q, ra.w, ra.z, 3, fp);
     float gw = TmFade(ra.y, fp), fw2 = TmFade(ra.y * 2.9, fp);
     float4 grain = TmLN3(q, ra.y, 5.1, gw);
     float4 fine = TmLN3(q, ra.y * 2.9, 11.7, fw2);
+    float fw3 = TmFade(ra.y * 7.3, fp);
+    float4 micro = TmLN3(q, ra.y * 7.3, 53.3, fw3);
     TmOut o;
-    o.grad = g + (0.4 - 0.1 * stone) * bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw);
+    o.grad = g + crs * crg + (0.4 - 0.1 * stone) * bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw + 0.3 * fw3 * micro.yzw);
     float speck = smoothstep(-0.6, 0.6, fine.x) - 0.5;
     float3 lw = float3(0.2126, 0.7152, 0.0722);
     float3 sm = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(0.5, 0.5), 12).rgb;
     float3 sw2 = lerp(sm, dot(sm, lw) * float3(1.05, 1, 0.9), 0.4);
-    float3 sc = lerp(st.rgb, sw2, 0.62 * smoothstep(0.12, 1.6, fp) * layered);
+    float3 sc = lerp(st.rgb, sw2, (1 - (1 - 0.62 * smoothstep(0.12, 1.6, fp)) * (0.12 + 0.38 * bk / max(layered, 1e-3))) * layered);
     float sl = max(dot(sc, lw), 1e-3), warm = saturate((sc.r - sc.b) / sl * 4 + 0.35), pinkish = saturate((sc.r - sc.g) / sl * 4);
     float3 pal = lerp(float3(1.02, 1, 0.95), lerp(lerp(float3(1.16, 1.04, 0.8), float3(1.13, 1.05, 0.74), saturate((sc.g - sc.b) / sl * 3 - 0.5)), float3(1.1, 1.01, 0.86), pinkish), warm);
-    float sl2 = lerp(dot(sw2, lw), sl, 0.75);
+    float sl2 = lerp(dot(sw2, lw), sl, 0.06 + 0.32 * bk);
     sc = lerp(sc, sl2 * pal, 0.8 * layered);
     sc = lerp(sc, dot(sc, lw) * float3(1.02, 1, 0.97), 0.85 * stone);
-    float3 c = sc * (1 + ra.x * gw * grain.x) * (1 + ra.x * 0.9 * fw2 * speck) * (1 + 0.12 * layered * TmFade(_StabbyRockB.x, fp) * (TmHash(int2((int)bed, 11)) * 2 - 1));
+    float3 c = sc * (1 + ra.x * gw * grain.x) * (1 + ra.x * 0.9 * fw2 * speck) * (1 + 0.06 * bk * TmFade(_StabbyRockB.x, fp) * (lerp(TmHash(int2((int)bed, 11)), TmHash(int2((int)bed + 1, 11)), smoothstep(0.7, 1, bedF)) * 2 - 1)) * (1 + crs * ctone);
     float fh = TmFade(0.12, fp);
     float4 drift = TmLN3(q, 0.12, 37.9, fh);
     float4 drift2 = TmLN3(q, 0.31, 41.3, fh);
@@ -247,14 +360,17 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float flam = TmFade(_StabbyRockB.x * 4, fp) * (layered + 0.35 * stone);
     int lb = (int)bed * 7 + 13;
     float lt = lerp(TmHash(int2((int)il, lb)), TmHash(int2((int)il + 1, lb)), smoothstep(0.7, 1, fl)) * 2 - 1;
-    float pt = step(0.62, TmHash(int2((int)il, lb + 1))) * (1 - smoothstep(0, 0.06, fl));
-    c *= 1 + flam * (0.1 * lt - 0.12 * pt);
+    float sa = dot(q.xz + tmO.xz, float2(0.8, 0.6)), kl = floor(lam + 0.5), el = lam - kl;
+    float3 ln = TmNoise2(float2(sa * 0.53, kl * 2.9) + 31.7);
+    float wl0 = 0.05 * (1 + 0.6 * ln.x), wl = wl0 + fp * _StabbyRockB.x * 4;
+    float pt = step(0.62, TmHash(int2((int)kl, lb + 1))) * saturate(0.4 + 1.2 * ln.x) * (wl0 / wl) * (1 - smoothstep(0, wl, abs(el + 0.03 * ln.y)));
+    c *= 1 + flam * lerp(0.35, 0.6, bk) * (0.1 * lt - 0.12 * pt);
     float fm = TmFade(ra.y * 5, fp);
     float4 mn = TmLN3(q * float3(1, 3.5, 1), ra.y * 5, 43.1, fm);
     float dm = fm * lerp(0.1, 1.8, smoothstep(-0.25, 0.35, 0.6 * drift.x + 0.4 * drift2.x)), gs = gw * grain.x * 0.5;
     float lgt = dm * (1 + gs) * smoothstep(0.35, 0.75, mn.x), drk = dm * (1 - gs) * smoothstep(0.35, 0.75, -mn.x);
     c = lerp(c, dot(c, lw) * 1.6, 0.2 * lgt) * (1 - 0.17 * drk);
-    c *= 1 - 0.35 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4));
+    c *= (1 - 0.3 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4))) * (1 - 0.35 * crs * cav) * (1 - 0.4 * crs * streak * float3(1, 0.99, 0.97));
     c *= 1 + 0.3 * (1 - 0.5 * stone) * bump.x * ra.w;
     float up = saturate(n.y), dn = saturate((0.05 - n.y) * 2.5);
     float cl = dot(c, lw);
@@ -263,8 +379,9 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float steep = saturate(1 - n.y * n.y);
     float fs = steep * TmFade(1.3, fp);
     float sn = TmLN3(q * float3(1, 0.06, 1), 1.3, 23.7, fs).x;
-    float fb = (q.y + off + wb.x) * _StabbyRockB.x - bed;
-    float seep = fs * layered * (0.45 + 0.55 * saturate(fb)) * smoothstep(1, 0.96, fb) * smoothstep(0.2, 0.5, sn + 0.25 * gw * grain.x);
+    float3 sv = TmNoise2(float2(sa * 0.29, bed * 3.7) + 61.3);
+    float fb = saturate(bedF + 0.05 * sv.x), wv = 0.06 + 0.1 * saturate(0.5 + 0.7 * sv.y) + fp * _StabbyRockB.x;
+    float seep = fs * (0.3 + 0.7 * bk) * smoothstep(0.2, 0.9, fb) * smoothstep(1, 1 - wv, fb) * smoothstep(0.2, 0.5, sn + 0.25 * gw * grain.x);
     c *= (1 - 0.1 * fs * layered * saturate(sn)) * (1 - 0.5 * seep * float3(1, 1.03, 1.08));
     float lic = layered * TmFade(1.1, fp) * smoothstep(-0.2, 0.55, n.y) * smoothstep(0.05, 0.35, drift2.x + 0.35 * gw * grain.x + 0.25 * mn.x);
     c = lerp(c, dot(c, lw) * float3(0.96, 1.02, 0.86) * (1.12 + 0.12 * mn.x), 0.35 * lic);
@@ -275,7 +392,8 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         float4 gate = TmLN3(q, 0.22, 7.7, fcr);
         float4 crack = TmLN3(q, 0.45, 23.1, fcr);
         c *= 1 - stone * 0.12 * fs * saturate(TmLN3(q * float3(1, 0.057, 1), 2.1, 9.7, fs).x);
-        float w = 0.035, ax = abs(crack.x), tc = saturate(ax / w), cg = fcr * smoothstep(-0.1, 0.3, gate.x);
+        float w0 = 0.035 * (0.5 + saturate(0.5 + 0.8 * weather.x)), w = w0 + 0.3 * fp;
+        float ax = abs(crack.x + 0.012 * fwt * weather.y), tc = saturate(ax / w), cg = fcr * smoothstep(-0.1, 0.3, gate.x) * (w0 / w);
         float seam = (1 - tc * tc * (3 - 2 * tc)) * cg;
         float dl = cg * 6 * tc * (1 - tc) / w * (crack.x < 0 ? -1 : 1) * TmQ(0.45);
         o.grad += stone * 0.08 * dl * crack.yzw;
