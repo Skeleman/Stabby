@@ -34,6 +34,7 @@
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0",
+    "com.stabby.content": "file:../../src/Stabby.Content",
     "com.stabby.world": "file:../../src/Stabby.World",
     "com.unity.entities": "6.5.0",
     "com.unity.entities.graphics": "6.5.0",
