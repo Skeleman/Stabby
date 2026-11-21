@@ -828,15 +828,19 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         }
         float fc = 1 - TmFade(0.12, fp);
         c = lerp(c, lerp(float3(0.098, 0.064, 0.036), float3(0.072, 0.052, 0.036), nd) * (1.05 - 0.1 * dk), fc);
-        float4 t1 = TmFleck(p, float2x2(1, 0.45, -0.45, 1), 1.3, fp, 113, 0.18, 0.4, 0.5 - 0.4 * sd);
-        float4 t2 = TmFleck(p, float2x2(1, -0.7, 0.7, 1), 3.4, fp, 117, 0.15, 0.35, 0.55 - 0.4 * sd);
+        float fw = TmFade(2.1, fp), fr = TmFade(7, fp), fq = TmFade(0.9, fp);
+        float2 tw = p + 0.16 * fw * float2(TmLN2(p, 2.1, 131.3, fw).x, TmLN2(p, 2.1, 133.7, fw).x);
+        tw += 0.05 * fr * float2(TmLN2(p, 7, 135.1, fr).x, TmLN2(p, 7, 136.9, fr).x);
+        float tc = smoothstep(-0.15, 0.45, TmLN2(p, 0.9, 137.9, fq).x) * (1 - 0.4 * sd);
+        float4 t1 = TmFleck(tw, float2x2(1, 0.45, -0.45, 1), 1.3, fp, 113, 0.08, 0.45, 0.6 * tc);
+        float4 t2 = TmFleck(tw, float2x2(1, -0.7, 0.7, 1), 3.4, fp, 117, 0.06, 0.4, 0.65 * tc);
         float4 lv = TmFleck(p, float2x2(1, 0.2, -0.2, 1), 2.3, fp, 121, 0.12, 0.3, 0.35);
         c = lerp(c, lerp(float3(0.17, 0.105, 0.05), float3(0.13, 0.11, 0.05), saturate(0.5 + lv.x)), 0.55 * lv.w * bd);
-        float tuft = saturate(t1.w + t2.w) * (1 - 0.7 * sd);
+        float tuft = saturate(t1.w + t2.w) * (1 - 0.7 * sd) * TmFade(3, fp);
         float lb = dot(base, float3(0.2126, 0.7152, 0.0722)), lc = dot(c, float3(0.2126, 0.7152, 0.0722));
         float mid = (1 - TmFade(2.5, fp)) * (1 - smoothstep(0.55, 0.95, sd));
         c *= lerp(1, min((lb + 0.4 * (lc - lb)) / max(lc, 1e-4), 2.5), mid);
-        cov *= 1 - 0.85 * tuft;
+        cov *= 1 - 0.5 * tuft;
         k.albedo = lerp(k.albedo, c, cov);
         k.grad = lerp(k.grad, float3(g.x, 0, g.y), cov);
     }
