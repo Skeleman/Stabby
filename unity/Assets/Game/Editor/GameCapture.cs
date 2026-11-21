@@ -214,6 +214,11 @@ namespace Stabby.Game.Editor
                     cam.transform.SetPositionAndRotation(gp, Quaternion.LookRotation(gf - new Vector3(0, 0.12f, 0)));
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "grass-fade");
+                    var mp = gp - gf * 18f;
+                    mp.y = GroundHeight(mp.x, mp.z) + 4.5f;
+                    cam.transform.SetPositionAndRotation(mp, Quaternion.LookRotation(gf - new Vector3(0, 0.2f, 0)));
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "grass-meadow");
                 }
                 if (phase == 9)
                 {

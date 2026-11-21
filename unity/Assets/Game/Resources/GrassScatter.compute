@@ -52,7 +52,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
     float3 a = Pos(ix.x), b = Pos(ix.y), c = Pos(ix.z);
     float3 ctr = (a + b + c) / 3;
     float rad = sqrt(max(max(dot(a - ctr, a - ctr), dot(b - ctr, b - ctr)), dot(c - ctr, c - ctr)));
-    float reach = _GrassA.z, near = _GrassA.y, hMax = _GrassB.y;
+    float reach = _GrassA.z, near = _GrassA.y, hMax = _GrassB.y * 1.8;
     float dc = distance(ctr, _Eye.xyz);
     if (dc - rad > reach || Outside(ctr, rad + hMax)) return;
     float3 cr = cross(b - a, c - a);
@@ -109,8 +109,33 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.3 * jn);
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
         float gw = cw.x * (1 - m) * up;
-        float cmin = _GrassB.w;
-        if (gw <= cmin + (1 - cmin) * Rand(cell, 3)) continue;
+        float cmin = _GrassB.w, gate = cmin + (1 - cmin) * Rand(cell, 3);
+        if (gw * 1.2 <= gate) continue;
+        float sw = _StabbyStrataWobble.w;
+        float hn = 0.65 * TmNoise2(xa * sw * 2.7 + 5.3).x + 0.35 * TmNoise2(xa * sw * 0.6 + 1.9).x;
+        float2 dw = mul(float2x2(0.8, -0.6, 0.6, 0.8), xa);
+        float dirt = smoothstep(0.35, 1.0, TmNoise2(dw * 0.035 + 31.3).x + 0.5 * TmNoise2(dw * 0.09 + 7.1).x);
+        float cl = TmL2(xa - tmO.xz, _StabbyCoatB[0].y, 3.7).x;
+        gw *= saturate(0.85 + 0.45 * cl + 0.55 * hn) * (1 - 0.9 * dirt) * 1.2;
+        if (gw <= gate) continue;
+        float2 cg = xa * (1.0 / 0.55), cf = frac(cg), bo = 0;
+        int2 ci = (int2)floor(cg), bc = ci;
+        float best = 9;
+        [unroll] for (int j = 0; j < 9; j++)
+        {
+            int2 o = int2(j % 3 - 1, j / 3 - 1);
+            uint h = TmHashU(uint3((uint)(ci.x + o.x), (uint)(ci.y + o.y), 0x6c1du));
+            float2 dv = o + float2(h & 0xffff, h >> 16) * (1.0 / 65535) - cf;
+            float dd = dot(dv, dv);
+            if (dd < best) { best = dd; bo = dv; bc = ci + o; }
+        }
+        uint ch = TmHashU(uint3((uint)bc.x, (uint)bc.y, 0x9e37u));
+        float4 cr4 = float4(ch & 255, (ch >> 8) & 255, (ch >> 16) & 255, ch >> 24) * (1.0 / 255);
+        float dr = saturate(sqrt(best) * 1.5);
+        float faceA = atan2(-bo.y, -bo.x) * (1.0 / 6.2831853) + (Rand(cell, 5) - 0.5) * 0.3;
+        float leanAmt = saturate((0.2 + 0.8 * dr) * (0.55 + 0.9 * cr4.z));
+        float dry = Rand(cell, 9) < saturate(0.06 + 0.3 * saturate(-1.5 * hn) + 0.3 * dirt + 0.08 * (cr4.y - 0.5)) ? 0.45 + 0.55 * Rand(cell, 10) : 0;
+        bool seedHead = Rand(cell, 11) < 0.035 * (0.4 + 1.2 * cr4.z);
         float fp = max(d * _Eye.w, 1e-4);
         float3 root = color;
         [branch] if (_StabbyDetailOff <= 0)
@@ -118,11 +143,14 @@ void Scatter(uint3 id : SV_DispatchThreadID)
             TmOut g = TmGrass(float3(p.x - tmO.x, p.y, p.z - tmO.z), color, fp, _StabbyCoatA[0], _StabbyCoatB[0]);
             root = lerp(TmGrassGreen(color), g.albedo, 0.2 * up);
         }
+        float lum = dot(root, float3(0.2126, 0.7152, 0.0722));
+        float hv = cr4.w - 0.5;
+        root = lerp(lum.xxx, root, 0.66 + 0.14 * cr4.x) * float3(1.07 + 0.1 * hv, 1, 0.82 - 0.12 * hv) * (0.9 + 0.2 * cr4.y) * (0.94 + 0.12 * Rand(cell, 8));
         float fadeOut = smoothstep(reach, 0.7 * reach, d);
         float grow = saturate((keep - rank) / (0.3 * keep));
-        float hgt = lerp(_GrassB.x, hMax, Rand(cell, 4)) * saturate(0.4 + gw) * fadeOut * grow;
+        float hgt = lerp(_GrassB.x, _GrassB.y, Rand(cell, 4)) * saturate(0.4 + gw) * fadeOut * grow * (0.65 + 0.7 * cr4.x) * (1 - 0.3 * dr * dr) * (seedHead ? 1.3 : 1);
         if (hgt < 0.01) continue;
-        float wid = min(_GrassB.z * pow(abs(keep), -_GrassD.y), _GrassD.z);
+        float wid = min(_GrassB.z * pow(abs(keep), -_GrassD.y), _GrassD.z) * (0.75 + 0.55 * cr4.y) * (0.85 + 0.3 * Rand(cell, 7));
         uint lod = d < _GrassD.w ? 0 : d < _GrassC.w ? 1 : 2;
         uint slot;
         _Args.InterlockedAdd(lod * 16 + 4, 1, slot);
@@ -130,10 +158,11 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         if (slot >= cap) { _Args.InterlockedAdd(lod * 16 + 4, 0xffffffffu); continue; }
         Blade bl;
         bl.p0 = float4(p, hgt);
-        bl.q.x = (uint)(Rand(cell, 5) * 65535) | ((uint)(Rand(cell, 6) * 65535) << 16);
+        uint3 re = (uint3)(sqrt(saturate(root)) * 1023 + 0.5);
+        bl.q.x = (uint)(frac(faceA) * 65535) | ((uint)(Rand(cell, 6) * 65535) << 16);
         bl.q.y = f32tof16(wid) | ((uint)(saturate(col.a) * 255 + 0.5) << 16) | ((uint)(fadeOut * 255 + 0.5) << 24);
-        bl.q.z = f32tof16(root.r) | (f32tof16(root.g) << 16);
-        bl.q.w = f32tof16(root.b) | ((uint)(n.x * 127.5 + 127.5) << 16) | ((uint)(n.z * 127.5 + 127.5) << 24);
+        bl.q.z = re.x | (re.y << 10) | (re.z << 20) | (seedHead ? 1u << 30 : 0u);
+        bl.q.w = (uint)(leanAmt * 255 + 0.5) | ((uint)(dry * 255 + 0.5) << 8) | ((uint)(n.x * 127.5 + 127.5) << 16) | ((uint)(n.z * 127.5 + 127.5) << 24);
         _Blades[lod * cap + slot] = bl;
     }
 }
