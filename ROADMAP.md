@@ -87,6 +87,8 @@ architecture contract. The other steps fit the contract as it stands.
 
 Art direction (Zach): stylised natural realism. Real-world colour palettes (no saturated cartoon hues), shader surfaces that mimic real materials, and enough noise and imperfection to feel organic. Fidelity can stay modest; palette and material believability come first.
 
+One visual identity (Zach): every shader follows the same look budget, with shared limits on noise contrast, detail scale, saturation and specular range, so terrain, water, objects and grass read as one pipeline. Ground colours are hue-locked and narrow; sand is flat and grainy; wet bands fade gradually.
+
 | Item | Status |
 |---|---|
 | Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (`NearField.Sample`, 64-quad nodes over 9 levels with 2:1 balance; GeneratorVersion 35) | done |
@@ -115,6 +117,7 @@ Art direction (Zach): stylised natural realism. Real-world colour palettes (no s
 | River water tiling (Zach): float hash at world coordinates made wave and foam cells disagree at edges; integer hash, gentler rapids from content rapidsSlope, smoother ribbon slope | done |
 | Boulder coat: edit solid above the heightfield takes the full biome coat, so big boulders read as grassy lumps; steep coated faces show flat untextured olive bands with jagged cutoffs. Fade coat by height above ground and soften the slope cutoff in the material library | done |
 | Boulder rock: boulders read as layer-cake barrels (world-height strata bands across a 3 m rock, grey stratum ring at the crown); one stratum per boulder picked at its base, weathered noise, cracks and lichen instead of bands | done |
+| Look budget (Zach): one shared block in content/materials.json (noise contrast, detail scale, saturation ceiling, specular/roughness range) read by every shader through one HLSL include; audit terrain, water, grass, objects against it; after the Linear switch (b/punchy-ground) | next |
 | Weathered rock palette (Zach): boulders and cliff strata from saturated orange to weathered grey-brown and buff stone, lichen variety, water streaks, dust in hollows, roughness variation (step 6 of b/punchy-ground) | now |
 | Punchy ground look (Zach): bring Punchy's terrain style into the one material library: three-octave soft micro-relief each fading by its own screen size, grain flecks on bare ground, ground under blades takes the grass colour, far grass carries the blades' gust bands, patchy wet shore band, puddles in hollows when wet (later, with weather), object grounding (contact darkening, downward faces); Punchy is Zach's code, PunchyReferences NC-SA files ideas only | now |
 | Near-field follow-ups: frustum-cull node selection (offscreen nodes split at 2x distance), teardown waits for jobs before freeing ground data, terrain status string cached; 294 ms spike not seen since | done |
