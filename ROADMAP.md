@@ -92,7 +92,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples (lane b/materials) | now |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
-| Objects step 1: static rocks and debris, collision shared by `Walk.Step` | later |
+| Objects step 1: static rocks and debris, collision shared by `Walk.Step` (lane b/objects) | now |
 | Objects step 2: animated foliage with shader wind | later |
 | Objects step 3: interactive objects with host-authoritative removal | later |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
