@@ -345,19 +345,19 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 22 && phase <= 23)
+            while (phase >= 23 && phase <= 24)
             {
-                string name = phase == 22 ? "structure-close" : "structure-mid";
+                string name = phase == 23 ? "structure-close" : "structure-mid";
                 if (wait == 0)
                 {
-                    if (!AimStructure(cam, phase == 22)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    if (!AimStructure(cam, phase == 23)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
-                if (phase == 23) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (phase == 24) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
                 wait = 0;
                 phase++;
             }
