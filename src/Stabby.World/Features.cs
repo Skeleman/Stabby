@@ -27,15 +27,27 @@ namespace Stabby.World
 
         public float Apply(float d, float x, float y, float z)
         {
-            if (!Contains(x, y, z)) return d;
+            if (!Reach(x, y, z, out float dist)) return d;
+            return Kind == Add ? Math.Max(d, R - dist) : Cut(d, Hole(dist), R * Blend);
+        }
+
+        public bool Reach(float x, float y, float z, out float dist)
+        {
+            dist = R;
+            if (!Contains(x, y, z)) return false;
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
-            float dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
-            if (dist >= R) return d;
-            if (Kind == Add) return Math.Max(d, R - dist);
-            float k = R * Blend, c = dist - (R - 1.25f * k), h = Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * (c - d) / k));
+            dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+            return dist < R;
+        }
+
+        public float Hole(float dist) => dist - (R - 1.25f * R * Blend);
+
+        public static float Cut(float d, float c, float k)
+        {
+            float h = Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * (c - d) / k));
             return c + (d - c) * h - k * h * (1 - h);
         }
     }
@@ -79,7 +91,7 @@ namespace Stabby.World
         public const float OverhangChance = 0.6f, ArchChance = 0.3f;
         public const float OverhangMinDrop = 50f;
         public const float CaveChance = 0.35f, CaveMinDrop = 30f, CaveRoof = 12f, CaveGrade = 0.18f, CaveSideChance = 0.4f, RoofSampleM = 4f;
-        public const float CaveHollow = 1f - 1.25f * FeatureEdit.Blend;
+        public const float CaveHollow = 1f - 1.25f * FeatureEdit.Blend, JoinBlend = 0.25f;
         public const int CavePieces = 4, CavePaths = 3;
         public const float LatticeStepM = 11.25f, MinRadiusSteps = 1.25f;
         public const float UndercutChance = 0.5f, UndercutMinDrop = 30f, UndercutContrast = 0.12f, UndercutStep = 15f;
@@ -90,8 +102,24 @@ namespace Stabby.World
 
         public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z) where TEdits : struct, IEditList
         {
-            for (int q = 0, n = edits.Count; q < n; q++) d = edits.At(q).Apply(d, x, y, z);
-            return d;
+            float hole = float.MaxValue, k = 0f;
+            for (int q = 0, n = edits.Count; q < n; q++)
+            {
+                var e = edits.At(q);
+                if (!e.Reach(x, y, z, out float dist)) continue;
+                if (e.Kind == FeatureEdit.Add)
+                {
+                    if (hole < float.MaxValue) { d = FeatureEdit.Cut(d, hole, k); hole = float.MaxValue; k = 0f; }
+                    d = Math.Max(d, e.R - dist);
+                }
+                else
+                {
+                    float c = e.Hole(dist), kc = e.R * FeatureEdit.Blend;
+                    hole = hole < float.MaxValue ? FeatureEdit.Cut(hole, c, JoinBlend * Math.Min(k, kc)) : c;
+                    k = Math.Max(k, kc);
+                }
+            }
+            return hole < float.MaxValue ? FeatureEdit.Cut(d, hole, k) : d;
         }
 
         public static float Level<TCols>(TCols columns, float d, int i, int k, float s) where TCols : struct, IColumnField
@@ -315,23 +343,50 @@ namespace Stabby.World
             public TerrainDetail Detail;
             public float Cm, R, Chamber;
             public List<FeatureEdit> Output;
+            public int Start;
 
             public bool Covered(float x, float y, float z, float r) => Detail.HeightAt(x, z) >= y + r + CaveRoof;
 
-            public bool Add(int shape, float r, float ax, float ay, float az, float bx, float by, float bz, float open = 0)
+            public bool Add(int shape, float r, float ax, float ay, float az, float bx, float by, float bz, float open = 0, float ground = 0)
             {
                 float len = (float)Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az)) * Cm;
                 int steps = Math.Max(2, (int)Math.Ceiling(len / RoofSampleM));
                 for (int t = 1; t <= steps; t++)
                 {
                     float f = t / (float)steps;
-                    if (f * len < open) continue;
+                    if (f * len < open && Detail.HeightAt(ax + (bx - ax) * f, az + (bz - az) * f) >= ground) continue;
                     if (!Covered(ax + (bx - ax) * f, ay + (by - ay) * f, az + (bz - az) * f, r)) return false;
                 }
                 var e = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = shape, R = r, Ax = ax * Cm, Ay = ay, Az = az * Cm, Bx = bx * Cm, By = by, Bz = bz * Cm };
                 if (!Inside(e, Cm)) return false;
+                for (int q = Start; q < Output.Count; q++)
+                {
+                    var o = Output[q];
+                    if (Joined(o, e)) continue;
+                    if (Over(o, e) || Over(e, o)) return false;
+                }
                 Output.Add(e);
                 return true;
+            }
+
+            static bool Joined(FeatureEdit o, FeatureEdit e)
+                => (Math.Abs(o.Bx - e.Ax) < 1e-2f && Math.Abs(o.Bz - e.Az) < 1e-2f) || (Math.Abs(o.Ax - e.Ax) < 1e-2f && Math.Abs(o.Az - e.Az) < 1e-2f);
+
+            static bool Over(FeatureEdit o, FeatureEdit e)
+            {
+                float ex = e.Bx - e.Ax, ez = e.Bz - e.Az, ox = o.Bx - o.Ax, oz = o.Bz - o.Az, ll = ox * ox + oz * oz;
+                float reach = (1f - FeatureEdit.Blend * 0.25f) * o.R, tol = 0.25f * Math.Min(o.R, e.R);
+                int steps = Math.Max(2, (int)Math.Ceiling(Math.Sqrt(ex * ex + ez * ez) / RoofSampleM));
+                for (int t = 0; t <= steps; t++)
+                {
+                    float f = t / (float)steps, px = e.Ax + ex * f, pz = e.Az + ez * f;
+                    float u = ll > 0 ? Math.Max(0f, Math.Min(1f, ((px - o.Ax) * ox + (pz - o.Az) * oz) / ll)) : 0f;
+                    float dx = px - o.Ax - ox * u, dz = pz - o.Az - oz * u;
+                    if (dx * dx + dz * dz >= reach * reach) continue;
+                    float fe = e.Ay + (e.By - e.Ay) * f - e.R * CaveHollow, fo = o.Ay + (o.By - o.Ay) * u - o.R * CaveHollow;
+                    if (Math.Abs(fe - fo) > tol) return true;
+                }
+                return false;
             }
 
             public void Room(float x, float y, float z, float hx, float hz, float r)
@@ -401,11 +456,11 @@ namespace Stabby.World
             float cm = w.Config.CellMeters, inv = 1f / Grid.Dist[bestDir];
             float hx = -Grid.DX[bestDir] * inv, hz = -Grid.DY[bestDir] * inv;
             float ax = best % n - 0.5f * hx, az = best / n - 0.5f * hz, ay = detail.HeightAt(ax, az) + 0.9f * radius * CaveHollow;
-            var c = new CaveBuild { Detail = detail, Cm = cm, R = radius, Chamber = chamber, Output = output };
             int start = output.Count;
+            var c = new CaveBuild { Detail = detail, Cm = cm, R = radius, Chamber = chamber, Output = output, Start = start };
             var mouth = plan[0];
             float bx = ax + hx * mouth.Length / cm, bz = az + hz * mouth.Length / cm, by = ay - mouth.Length * mouth.Grade;
-            if (!c.Add(FeatureEdit.Cave, radius, ax, ay, az, bx, by, bz, radius + CaveRoof)) return;
+            if (!c.Add(FeatureEdit.Cave, radius, ax, ay, az, bx, by, bz, radius + CaveRoof, detail.HeightAt(ax, az))) return;
             for (int p = 0; p < paths; p++)
             {
                 float x = bx, y = by, z = bz, dx = hx, dz = hz;

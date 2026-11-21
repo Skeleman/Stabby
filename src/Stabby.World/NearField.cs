@@ -229,7 +229,7 @@ namespace Stabby.World
                 }
                 cut = Math.Min(cut, p);
             }
-            return SmoothMin(raised, cut, CutSoft);
+            return Math.Max(SmoothMin(raised, cut, CutSoft), Math.Min(h, 0.5f * Erosion.MinLandHeight));
         }
 
         static float Fine<T>(T c, float x, float z, float b, float a, float tx, float tz, int ax, int az, int bx, int bz) where T : struct, INearCells
