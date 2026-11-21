@@ -241,7 +241,7 @@ namespace Stabby.Viewer
             }
         }
 
-        public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib)
+        public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib, float[] offsets = null)
         {
             var ids = lib.Bands(BandStepM);
             var bands = new float3[ids.Length];
@@ -262,7 +262,7 @@ namespace Stabby.Viewer
             }
             return new StrataLook
             {
-                Offsets = lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
+                Offsets = offsets ?? lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
                 Coat = d.CoatWeights(w), WaterLevel = WaterLevel(w), N = w.Config.Size, CellM = w.Config.CellMeters,
                 Surface = new Vector4(d.FadePixels, 1f / d.ParallaxFootprintM, math.sin(wind), math.cos(wind)),
                 Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),

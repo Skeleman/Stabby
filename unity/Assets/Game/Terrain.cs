@@ -727,7 +727,7 @@ namespace Stabby.Game
             var arr = p.Look.Allocate(ref root.Colors, colors.Length);
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
             var lib = MaterialFile.Load(materials);
-            p.Strata = TerrainLook.Strata(world, lib);
+            p.Strata = TerrainLook.Strata(world, lib, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
             p.Deep = lib.Water == null ? float.NegativeInfinity : -math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
@@ -737,6 +737,9 @@ namespace Stabby.Game
             p.Field = TerrainLook.Field(detail, n, cm, colors, p.Strata.Offsets);
             return p;
         }
+
+        static bool SameOffsets(MaterialLibrary a, MaterialLibrary b) =>
+            a != null && a.Strata.Count > 0 && a.OffsetAmplitudeM == b.OffsetAmplitudeM && a.OffsetWavelengthM == b.OffsetWavelengthM && a.TiltPerKm == b.TiltPerKm;
 
         static void Pyramid(GeneratedWorld world, TerrainDetail detail, FeatureEdit[] edits, Prepared p)
         {
@@ -857,6 +860,7 @@ namespace Stabby.Game
                 yield return $"pool {Fill()}/{spare.Length}";
             }
             upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
+            prepared.Field = null;
             look = lookReady;
         }
 
