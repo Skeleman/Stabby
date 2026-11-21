@@ -487,6 +487,11 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            if (only == "river")
+            {
+                if (job == null) job = RiverTour(cam, dir);
+                if (job.MoveNext()) return;
+            }
             while (phase >= 140 && phase < 140 + WaterShots.Length)
             {
                 string name = WaterShots[phase - 140];
@@ -1551,6 +1556,75 @@ namespace Stabby.Game.Editor
         }
 
         public static float Sedimentary(float off) => MaterialLibrary.Sedimentary(off);
+
+        static System.Collections.IEnumerator RiverTour(Camera cam, string dir)
+        {
+            ClientMapSystem sys = null;
+            Ground ground = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var s = w.GetExistingSystemManaged<ClientMapSystem>();
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (s?.Map == null || q.CalculateEntityCount() != 1) continue;
+                sys = s;
+                ground = q.GetSingleton<Ground>();
+                break;
+            }
+            if (sys == null) { GameStatus.Lines["~rivers"] = "no map"; yield break; }
+            var map = sys.Map;
+            float cm = map.Config.CellMeters;
+            string[] kinds = { "bend", "steep" };
+            var spots = new Vector3[2];
+            var alongs = new Vector3[2];
+            var turns = new float[2];
+            var widths = new float[2];
+            var dist = new float[] { float.MaxValue, float.MaxValue };
+            foreach (var r in map.Water.Rivers)
+                for (int k = 3; k + 3 < r.X.Count; k++)
+                {
+                    float ax = r.X[k] - r.X[k - 3], az = r.Y[k] - r.Y[k - 3], bx = r.X[k + 3] - r.X[k], bz = r.Y[k + 3] - r.Y[k];
+                    float la = Mathf.Sqrt(ax * ax + az * az), lb = Mathf.Sqrt(bx * bx + bz * bz);
+                    if (la < 1e-3f || lb < 1e-3f) continue;
+                    float turn = (ax * bz - az * bx) / (la * lb), hw = 0.5f * r.Width[k];
+                    float bend = Mathf.Abs(turn) * hw / (0.5f * (la + lb) * cm);
+                    float slope = (r.Surface[k - 3] - r.Surface[k + 3]) / ((la + lb) * cm);
+                    var p = new Vector3(r.X[k] * cm, r.Surface[k], r.Y[k] * cm);
+                    float d = (new Vector2(p.x, p.z) - new Vector2(home.x, home.z)).sqrMagnitude;
+                    int pick = r.Width[k] >= 12f && bend >= 0.12f ? 0 : r.Width[k] >= 5f && slope >= 0.05f && r.Surface[k] >= 25f ? 1 : -1;
+                    if (pick < 0 || d >= dist[pick]) continue;
+                    dist[pick] = d; spots[pick] = p; turns[pick] = turn; widths[pick] = r.Width[k];
+                    alongs[pick] = new Vector3(bx + ax, 0, bz + az).normalized;
+                }
+            for (int k = 0; k < 2; k++)
+            {
+                if (dist[k] == float.MaxValue) { GameStatus.Lines["~river " + kinds[k]] = "no " + kinds[k] + " found"; continue; }
+                var t = spots[k];
+                var al = alongs[k];
+                var left = new Vector3(-al.z, 0, al.x);
+                float hw = 0.5f * widths[k];
+                var inner = turns[k] > 0 ? left : -left;
+                GameStatus.Lines["~river " + kinds[k]] = $"{kinds[k]} at {t.x:F0},{t.y:F0},{t.z:F0}, width {widths[k]:F0} m, turn {turns[k]:F2}, {Mathf.Sqrt(dist[k]):F0} m from the player";
+                var eyes = new Vector3[]
+                {
+                    k == 0 ? t + inner * (hw + 14f) + Vector3.up * 5f : t + al * (hw + 35f) + Vector3.up * 7f,
+                    t - al * (hw * 2.5f + 25f) + inner * hw * 0.5f + Vector3.up * (hw * 0.4f + 8f),
+                    t - al * 160f + inner * 120f + Vector3.up * 260f,
+                };
+                var looks = new Vector3[] { k == 0 ? t - inner * hw : t, t - inner * hw * 0.3f, t };
+                string[] names = { "close", "along", "aerial" };
+                for (int v = 0; v < 3; v++)
+                {
+                    var eye = eyes[v];
+                    eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.8f);
+                    var look = looks[v];
+                    look.y = Mathf.Max(ground.HeightAt(look.x, look.z), t.y);
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                    for (var w = Settle(180); w.MoveNext();) yield return null;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "river-" + kinds[k] + "-" + names[v]);
+                }
+            }
+        }
 
         static System.Collections.IEnumerator CliffTour(Camera cam, string dir)
         {

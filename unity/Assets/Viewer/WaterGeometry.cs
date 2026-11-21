@@ -77,16 +77,14 @@ namespace Stabby.Viewer
 
         public static List<MeshParts> Rivers(GeneratedWorld world)
         {
-            float cm = world.Config.CellMeters;
             var pieces = new List<MeshParts>();
             var verts = new List<Vector3>();
             var cols = new List<Color>();
             var chan = new List<Vector2>();
             var reach = new List<Vector4>();
             var tris = new List<int>();
-            foreach (var r in world.Water.Rivers)
+            foreach (var r in NearField.Lines(world))
             {
-                if (r.Cells.Count < 2) continue;
                 if (verts.Count >= RiverPieceVertices)
                 {
                     pieces.Add(RiverPiece($"Rivers {pieces.Count}", verts, cols, chan, reach, tris));
@@ -97,9 +95,8 @@ namespace Stabby.Viewer
                     tris.Clear();
                 }
                 var pts = new List<Vector4>();
-                for (int k = 0; k < r.Cells.Count; k++)
-                    pts.Add(new Vector4(r.X[k] * cm, Hydrology.Stage(world.Config, r, k), r.Y[k] * cm, r.Width[k]));
-                for (int it = 0; it < 2; it++) pts = Chaikin(pts);
+                for (int k = 0; k < r.X.Length; k++)
+                    pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));
                 int b = verts.Count, last = pts.Count - 1;
                 var slopes = new float[pts.Count];
                 for (int k = 0; k < pts.Count; k++)
@@ -173,18 +170,6 @@ namespace Stabby.Viewer
             var up = new Vector3[verts.Count];
             for (int k = 0; k < up.Length; k++) { up[k] = Vector3.up; if (perVertex == null) cols[k] = kind; }
             return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray() };
-        }
-
-        static List<Vector4> Chaikin(List<Vector4> p)
-        {
-            var o = new List<Vector4>(p.Count * 2) { p[0] };
-            for (int k = 0; k + 1 < p.Count; k++)
-            {
-                o.Add(Vector4.Lerp(p[k], p[k + 1], 0.25f));
-                o.Add(Vector4.Lerp(p[k], p[k + 1], 0.75f));
-            }
-            o.Add(p[p.Count - 1]);
-            return o;
         }
     }
 }
