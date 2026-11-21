@@ -16,7 +16,7 @@ namespace Stabby.Game.Editor
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
-        static int settle = -1, phase, wait, smooth;
+        static int settle = -1, phase, wait, smooth, chaseWait;
         static bool bank;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -110,6 +110,7 @@ namespace Stabby.Game.Editor
             if (!ready) return;
             if (settle == -1) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
             if (settle > 0 && --settle > 0) return;
+            if (phase == 0 && GameStatus.TerrainBehind > 0 && chaseWait < 1800) { chaseWait++; return; }
 
             var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game"));
             Directory.CreateDirectory(dir);
@@ -117,6 +118,7 @@ namespace Stabby.Game.Editor
             if (phase == 0)
             {
                 Shot(cam, null, "warmup");
+                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain";
                 Shot(cam, dir, "chase");
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");

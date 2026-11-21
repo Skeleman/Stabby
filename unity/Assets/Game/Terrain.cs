@@ -64,11 +64,12 @@ namespace Stabby.Game
         public const int Vertices = (Quads + 1) * (Quads + 1) + 4 * Quads, Indices = Quads * Quads * 6 + 4 * Quads * 12;
         [ReadOnly] public NativeArray<int> Offset, Dim;
         [ReadOnly] public NativeArray<float2> Range;
-        public float Top;
+        public float Top, Deep;
 
         public static float Step(int l) => NearField.NodeStep(l);
         public static float Size(int l) => NearField.NodeSize(l);
         public int Key(int l, int ix, int iz) => Offset[l] + iz * Dim[l] + ix;
+        public bool Sunk(int key) => Range[key].y < Deep;
 
         public int Level(int key)
         {
@@ -460,7 +461,7 @@ namespace Stabby.Game
                 int key = stack[stack.Length - 1];
                 stack.RemoveAt(stack.Length - 1);
                 int l = Tree.Level(key);
-                if (l == 0 || TerrainTree.Step(l) <= Allowed * SplitDistance(key)) continue;
+                if (l == 0 || Tree.Sunk(key) || TerrainTree.Step(l) <= Allowed * SplitDistance(key)) continue;
                 Split.Add(key);
                 PushChildren(ref stack, key);
             }
@@ -549,6 +550,7 @@ namespace Stabby.Game
             public FieldLook Field;
             public int[] Offset, Dim;
             public float2[] Range;
+            public float Deep;
         }
 
         struct Pending
@@ -657,7 +659,9 @@ namespace Stabby.Game
             root.N = n;
             var arr = p.Look.Allocate(ref root.Colors, colors.Length);
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
-            p.Strata = TerrainLook.Strata(world, MaterialFile.Load(materials));
+            var lib = MaterialFile.Load(materials);
+            p.Strata = TerrainLook.Strata(world, lib);
+            p.Deep = lib.Water == null ? float.NegativeInfinity : -math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
             var lake = p.Look.Allocate(ref root.Lake, n * n);
@@ -756,6 +760,7 @@ namespace Stabby.Game
                 Dim = new NativeArray<int>(prepared.Dim, Allocator.Persistent),
                 Range = new NativeArray<float2>(prepared.Range, Allocator.Persistent),
                 Top = ground.Blob.Value.Top,
+                Deep = prepared.Deep,
             };
             nodes = new NativeHashMap<int, TerrainNode>(1024, Allocator.Persistent);
             split = new NativeHashSet<int>(1024, Allocator.Persistent);
