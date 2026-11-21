@@ -98,6 +98,8 @@ architecture contract. The other steps fit the contract as it stands.
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
 | Close grass reads as saturated green fur; real blades come with objects step 2 foliage. Faint sand crest dashes at 4-8 m | later |
 | Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
+| Chunk-sized holes at chunk edges: overhead shot shows one chunk as a pit of flat strata bands with hard rectangular edges (likely a missing or wrong-LOD chunk exposing neighbour skirts); chase shot shows a green slab along a chunk edge | next |
+| Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
 | Far shoreline (~1 km) still shows boxy foam patches: the depth band follows coarse terrain facets; needs a shoreline-distance field (heightfield data texture) or finer far terrain | next |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` (`Objects`, `ObjectChecks`, instanced view with screen-size LOD) | done |
