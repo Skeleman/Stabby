@@ -153,7 +153,29 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : 1;
+            }
+            while (phase >= 160 && phase < 160 + InnShots.Length)
+            {
+                string name = InnShots[phase - 160];
+                if (wait == 0)
+                {
+                    if (!AimInn(cam, phase - 160)) { GameStatus.Lines["~" + name] = "no inn placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 161) GameStatus.Lines["~bench inn"] = Bench(cam, "inn mid");
+                wait = 0;
+                phase++;
+            }
+            if (only == "inn" && phase >= 160 + InnShots.Length)
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             if (phase == 50)
             {
@@ -955,6 +977,56 @@ namespace Stabby.Game.Editor
             return false;
         }
 
+        static readonly string[] InnShots = { "inn-far", "inn-mid", "inn-door", "inn-interior", "inn-site", "inn-roof-close" };
+
+        static bool AimInn(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                int d = field.Library.Objects.FindIndex(o => o.Id == "inn");
+                if (d < 0) return false;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            if (o.Def != d) continue;
+                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            if (score < best) { best = score; pick = o; }
+                        }
+                if (best == float.MaxValue) return false;
+                var part = field.Library.Objects[d].Parts[0];
+                var l = Structures.Layout(ObjectPart.Inn, ObjectMeshes.Key("inn", 0, pick.Variant));
+                var q = new Quaternion(pick.Qx, pick.Qy, pick.Qz, pick.Qw);
+                var pos = new Vector3(pick.X, pick.Y, pick.Z);
+                float s = pick.Size, k = s * part.ScaleX * Structures.InnU, floor = Structures.Fy * k;
+                var across = q * Vector3.forward;
+                var along = q * Vector3.right;
+                var up = Vector3.up;
+                var centre = pos + q * new Vector3(0, 0, part.OffsetZ * s);
+                var door = pos + q * new Vector3(part.ScaleX * l.DoorX * s, 0, (part.OffsetZ + part.ScaleZ * l.DoorZ) * s);
+                Vector3 eye, target;
+                if (mode == 0) { target = centre + up * 4f * k; eye = target + (across * 0.85f + along * 0.5f).normalized * 110f + up * 35f; }
+                else if (mode == 1) { target = centre + up * 3f * k; eye = target + (across * 0.85f + along * 0.45f).normalized * 22f * k + up * 5f * k; }
+                else if (mode == 2) { target = door + up * (floor + 1.2f * k); eye = target + across * 4.5f * k + along * 1.4f * k + up * 0.4f * k; }
+                else if (mode == 3) { eye = door - across * 1.3f * k + up * (floor + 1.65f * k); target = centre - across * 0.4f * part.ScaleZ * l.DoorZ * s + along * (centre - door).magnitude * 0.2f + up * (floor + 0.9f * k); }
+                else if (mode == 5) { float side = l.DoorX > 0 ? -1 : 1; target = centre + across * (part.ScaleZ * l.DoorZ * s + 0.6f * k) + along * side * 2.2f * k + up * (floor + 2.3f * k); eye = target + across * 2.6f * k + along * side * 1.3f * k + up * 0.9f * k; }
+                else { target = pos + up * 1.5f; eye = target + across * 0.8f * s + along * 0.35f * s + up * 0.85f * s; }
+                if (mode != 3)
+                {
+                    var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                    eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
+                }
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + InnShots[mode]] = $"inn variant {pick.Variant} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, door {door.x:F1},{door.z:F1}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
+                return true;
+            }
+            return false;
+        }
+
         static readonly string[] StructureShots = { "structure-close", "structure-mid", "structure-lod1", "structure-far" };
         static readonly float[] StructureBack = { 0.75f, 7.5f, 17f, 30f };
         static int structStep;
@@ -974,7 +1046,8 @@ namespace Stabby.Game.Editor
                         var chunk = field.Chunk(cx, cz);
                         foreach (var o in chunk)
                         {
-                            if (!field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsStructure(p.Shape))) continue;
+                            int s0 = field.Library.Objects[o.Def].Parts[0].Shape;
+                            if (s0 != ObjectPart.Wall && s0 != ObjectPart.Cairn) continue;
                             float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
                             if (field.Library.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall)
                             {
@@ -1699,31 +1772,43 @@ namespace Stabby.Game.Editor
             }
         }
 
+        const float BasinPitch = 35f;
+
         static System.Collections.IEnumerator FallsTour(Camera cam, string dir, GeneratedWorld map, Ground ground)
         {
             var best = default(Stabby.Viewer.FallCurtain);
             bool found = false;
+            int falls = 0, rows = 0;
             foreach (var l in NearField.Lines(map))
                 for (int k = 1; k < l.X.Length; k++)
-                    if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _) && (!found || f.Drop > best.Drop)) { best = f; found = true; }
+                    if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _))
+                    {
+                        falls++;
+                        rows += Stabby.Viewer.WaterGeometry.CurtainRowsOf(f.Drop + 0.5f);
+                        if (!found || f.Drop > best.Drop) { best = f; found = true; }
+                    }
             if (!found) { GameStatus.Lines["~falls"] = "no falls found"; yield break; }
             var fd = new Vector3(best.DirX, 0, best.DirZ);
             var side = new Vector3(-fd.z, 0, fd.x);
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, w = best.Width;
-            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}";
+            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)}; {falls} falls, curtain rows {rows}, verts {2 * rows}, tris {4 * (rows - falls)}";
             var eyes = new[]
             {
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
                 foot + fd * (4f * h + 40f) + side * (0.6f * w + 15f) + Vector3.up * (h + 10f),
                 foot + fd * (6f * h + 170f) + side * (w + 90f) + Vector3.up * (2f * h + 70f),
+                default,
             };
-            string[] names = { "falls-close", "falls-mid", "falls-far" };
-            var look = (lip + foot) * 0.5f;
-            for (int v = 0; v < 3; v++)
+            string[] names = { "falls-close", "falls-mid", "falls-far", "falls-basin" };
+            var basin = foot + fd * (0.3f * w);
+            float reach = Mathf.Max(1.5f * h, 3f * w) + 20f;
+            eyes[3] = basin + (fd * Mathf.Cos(BasinPitch * Mathf.Deg2Rad) + Vector3.up * Mathf.Sin(BasinPitch * Mathf.Deg2Rad)) * reach;
+            for (int v = 0; v < eyes.Length; v++)
             {
                 var eye = eyes[v];
+                var look = v == 3 ? basin : (lip + foot) * 0.5f;
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.8f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 for (var s = Settle(180); s.MoveNext();) yield return null;

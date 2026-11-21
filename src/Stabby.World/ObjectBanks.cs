@@ -67,7 +67,7 @@ namespace Stabby.World
             }
         }
 
-        void PlaceBank(int d, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, List<ObjectInstance> list)
+        void PlaceBank(int d, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, List<ObjectInstance> near, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
@@ -88,13 +88,13 @@ namespace Stabby.World
                     float t = rng.NextFloat(), side = rng.NextFloat() < 0.5f ? -1f : 1f, out0 = rng.NextFloat();
                     float w = q.Wa + (q.Wb - q.Wa) * t, off = side * (0.5f * w + out0 * (0.5f * w + NearField.Bank(w)));
                     float ax = q.Ax + ex * t - fz * off, az = q.Az + ez * t + fx * off;
-                    Members(d, site, pl, ref rng, ax, az, fx, fz, chunk, x0, z0, sx, sz, ref ordinal, list);
+                    Members(d, site, pl, ref rng, ax, az, fx, fz, chunk, x0, z0, sx, sz, ref ordinal, near, list);
                 }
             }
-            if (site == BankSites.Reed) LakeReeds(d, pl, chunk, x0, z0, sx, sz, ref ordinal, list);
+            if (site == BankSites.Reed) LakeReeds(d, pl, chunk, x0, z0, sx, sz, ref ordinal, near, list);
         }
 
-        void Members(int d, int site, ObjectPlacement pl, ref Rng rng, float ax, float az, float fx, float fz, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> list)
+        void Members(int d, int site, ObjectPlacement pl, ref Rng rng, float ax, float az, float fx, float fz, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> near, List<ObjectInstance> list)
         {
             for (int m = 0; m < pl.ClusterCount; m++)
             {
@@ -115,6 +115,7 @@ namespace Stabby.World
                     qa = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux)));
                     qb = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
                 }
+                if (Cleared(near, px, pz, footprint[d] * size)) continue;
                 if (!Accept(d, px, pz, size, qa, qb, out var o, true)) continue;
                 o.Variant = variant;
                 o.Id = ObjectIds.Make(chunk, d, ordinal++);
@@ -161,7 +162,7 @@ namespace Stabby.World
             return found;
         }
 
-        void LakeReeds(int d, ObjectPlacement pl, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> list)
+        void LakeReeds(int d, ObjectPlacement pl, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> near, List<ObjectInstance> list)
         {
             int gx0 = Math.Max(0, (int)Math.Floor(x0 / cm)), gx1 = Math.Min(n - 1, (int)Math.Ceiling((x0 + sx) / cm));
             int gz0 = Math.Max(0, (int)Math.Floor(z0 / cm)), gz1 = Math.Min(n - 1, (int)Math.Ceiling((z0 + sz) / cm));
@@ -176,7 +177,7 @@ namespace Stabby.World
                     for (int k = 0; k < clusters; k++)
                     {
                         float ax = (gx + rng.Range(-0.5f, 0.5f)) * cm, az = (gz + rng.Range(-0.5f, 0.5f)) * cm;
-                        Members(d, BankSites.Reed, pl, ref rng, ax, az, 0, 0, chunk, x0, z0, sx, sz, ref ordinal, list);
+                        Members(d, BankSites.Reed, pl, ref rng, ax, az, 0, 0, chunk, x0, z0, sx, sz, ref ordinal, near, list);
                     }
                 }
         }

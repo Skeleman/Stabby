@@ -151,6 +151,41 @@
         "biomeDensity": [ { "biome": "steppe", "scale": 0.3 } ] }
     },
     {
+      "id": "inn", "name": "Inn", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "inn", "shape": "inn", "offset": [0, 0, -0.12], "scale": [0.63, 0.63, 0.63] }, { "id": "yard", "shape": "inn-yard" } ],
+      "placement": { "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "perHectare": 0.02, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
+    },
+    {
+      "id": "table", "name": "Table", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "table", "shape": "table" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 1.6, "sizeMaxM": 1.6 }
+    },
+    {
+      "id": "bench", "name": "Bench", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "bench", "shape": "bench" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 1.4, "sizeMaxM": 1.4 }
+    },
+    {
+      "id": "barrel", "name": "Barrel", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "barrel", "shape": "barrel" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 0.85, "sizeMaxM": 0.85 }
+    },
+    {
+      "id": "crate", "name": "Crate", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "crate", "shape": "crate" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 0.7, "sizeMaxM": 0.7 }
+    },
+    {
+      "id": "market-stall", "name": "Market stall", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "stall", "shape": "market-stall" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 3, "sizeMaxM": 3 }
+    },
+    {
+      "id": "well", "name": "Well", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "well", "shape": "well" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 2.6, "sizeMaxM": 2.6 }
+    },
+    {
       "id": "reeds", "name": "Reeds and cattails", "kind": "animated", "color": "#5a3b24", "variants": 8,
       "parts": [ { "id": "body", "shape": "reed", "leafColor": "#5d6847" } ],
       "placement": { "perHectare": 0, "bank": "reed", "perHundredM": 220, "slopeMax": 1.3, "sizeMinM": 1.1, "sizeMaxM": 2.2, "clusterCount": 12, "clusterRadiusM": 2.2, "sink": 0.04,

@@ -49,15 +49,29 @@ namespace Stabby.Game
         public const int Lods = 3, Stride = Lods + 2, RegisterPerFrame = 24, SpawnBudget = 4000, Frames = 8, Cell = 64;
         public const float DespawnReach = 1f / (1f - Detail.Hysteresis), UnloadReach = 1.5f;
 
+        struct MeshSpan
+        {
+            public int Vertex, VertexCount, Index, IndexCount, Uvs;
+            public bool Wide;
+        }
+
         sealed class MeshSet
         {
-            public Vector3[][] Positions, Normals;
-            public Vector4[][] Uv0, Uv1;
-            public int[][] Indices;
+            public NativeList<float> Vertices;
+            public NativeList<ushort> Narrow;
+            public NativeList<int> Wide;
+            public MeshSpan[] Spans;
             public AABB[] Bounds;
             public Vector4[] Centers;
             public int[] Slots;
             public int SlotCount;
+
+            public void Dispose()
+            {
+                if (Vertices.IsCreated) Vertices.Dispose();
+                if (Narrow.IsCreated) Narrow.Dispose();
+                if (Wide.IsCreated) Wide.Dispose();
+            }
         }
 
         struct ChunkParts
@@ -147,6 +161,8 @@ namespace Stabby.Game
             if (chunkParts != null) foreach (var a in chunkParts) if (a.IsCreated) a.Dispose();
             if (chunkKeys != null) foreach (var a in chunkKeys) if (a.IsCreated) a.Dispose();
             foreach (var t in chunkTasks) Owned.Release(t, r => r.Dispose());
+            Owned.Release(meshTask, r => r.Dispose());
+            meshSet?.Dispose();
             EntityManager.CompleteAllTrackedJobs();
             if (defLods.IsCreated) defLods.Dispose();
             if (meshIdsNative.IsCreated) meshIdsNative.Dispose();
@@ -232,116 +248,186 @@ namespace Stabby.Game
             return true;
         }
 
+        static readonly VertexAttributeDescriptor[][] Layouts =
+        {
+            new[] { new VertexAttributeDescriptor(VertexAttribute.Position), new VertexAttributeDescriptor(VertexAttribute.Normal) },
+            new[] { new VertexAttributeDescriptor(VertexAttribute.Position), new VertexAttributeDescriptor(VertexAttribute.Normal), new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 4) },
+            new[]
+            {
+                new VertexAttributeDescriptor(VertexAttribute.Position), new VertexAttributeDescriptor(VertexAttribute.Normal), new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 4),
+                new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
+            },
+        };
+        static readonly int[] Quad = { 0, 1, 2, 0, 2, 3 };
+        static readonly List<Mesh> applied = new List<Mesh>();
+
+        static int Floats(int uvs) => 6 + 4 * uvs;
+
         static MeshSet BuildMeshes(List<int> shapes, List<ObjectPart> parts, List<ulong> keys, List<bool> impostors)
         {
             int n = shapes.Count * Stride;
             var set = new MeshSet
             {
-                Positions = new Vector3[n][], Normals = new Vector3[n][], Uv0 = new Vector4[n][], Uv1 = new Vector4[n][], Indices = new int[n][], Bounds = new AABB[shapes.Count],
-                Centers = new Vector4[shapes.Count], Slots = new int[shapes.Count],
+                Vertices = new NativeList<float>(1 << 20, Allocator.Persistent), Narrow = new NativeList<ushort>(1 << 18, Allocator.Persistent), Wide = new NativeList<int>(0, Allocator.Persistent),
+                Spans = new MeshSpan[n], Bounds = new AABB[shapes.Count], Centers = new Vector4[shapes.Count], Slots = new int[shapes.Count],
             };
-            for (int k = 0; k < shapes.Count; k++)
+            try
             {
-                for (int l = 0; l < Lods; l++)
+                for (int i = 0; i < n; i++) set.Spans[i].Uvs = -1;
+                for (int k = 0; k < shapes.Count; k++)
                 {
-                    var m = ObjectMeshes.Build(parts[k], keys[k], l);
-                    int vc = m.VertexCount, at = k * Stride + l;
-                    var pos = new Vector3[vc];
-                    var nor = new Vector3[vc];
-                    Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity, mid = Vector3.zero;
-                    for (int v = 0; v < vc; v++)
+                    for (int l = 0; l < Lods; l++)
                     {
-                        pos[v] = new Vector3(m.Positions[3 * v], m.Positions[3 * v + 1], m.Positions[3 * v + 2]);
-                        nor[v] = new Vector3(m.Normals[3 * v], m.Normals[3 * v + 1], m.Normals[3 * v + 2]);
-                        lo = Vector3.Min(lo, pos[v]); hi = Vector3.Max(hi, pos[v]); mid += pos[v];
-                    }
-                    mid /= Mathf.Max(1, vc);
-                    float outward = 0;
-                    for (int v = 0; v < vc; v++) outward += Vector3.Dot(nor[v], pos[v] - mid);
-                    var idx = m.Indices;
-                    if (m.Uvs != null)
-                    {
-                        var u0 = new Vector4[vc];
-                        var u1 = new Vector4[vc];
+                        var m = ObjectMeshes.Build(parts[k], keys[k], l);
+                        int vc = m.VertexCount, at = k * Stride + l;
+                        float[] p = m.Positions, q = m.Normals;
+                        Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity, mid = Vector3.zero;
                         for (int v = 0; v < vc; v++)
                         {
-                            u0[v] = new Vector4(m.Uvs[4 * v], m.Uvs[4 * v + 1], m.Uvs[4 * v + 2], m.Uvs[4 * v + 3]);
-                            u1[v] = new Vector4(m.Winds[4 * v], m.Winds[4 * v + 1], m.Winds[4 * v + 2], m.Winds[4 * v + 3]);
+                            var pv = new Vector3(p[3 * v], p[3 * v + 1], p[3 * v + 2]);
+                            lo = Vector3.Min(lo, pv); hi = Vector3.Max(hi, pv); mid += pv;
                         }
-                        set.Uv0[at] = u0;
-                        set.Uv1[at] = u1;
-                    }
-                    else
-                    {
-                        if (m.Tones != null)
+                        mid /= Mathf.Max(1, vc);
+                        float outward = 0;
+                        for (int v = 0; v < vc; v++) outward += Vector3.Dot(new Vector3(q[3 * v], q[3 * v + 1], q[3 * v + 2]), new Vector3(p[3 * v], p[3 * v + 1], p[3 * v + 2]) - mid);
+                        var idx = m.Indices;
+                        int uvs = m.Uvs != null ? 2 : m.Tones != null ? 1 : 0;
+                        bool flip = m.Uvs == null && outward < 0;
+                        if (flip) for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
+                        float course = parts[k].Shape == ObjectPart.Wall && l == Lods - 1 ? 2 : 0;
+                        int f = Floats(uvs), start = set.Vertices.Length;
+                        set.Vertices.ResizeUninitialized(start + vc * f);
+                        var dst = set.Vertices.AsArray();
+                        for (int v = 0; v < vc; v++)
                         {
-                            var t0 = new Vector4[vc];
-                            float course = parts[k].Shape == ObjectPart.Wall && l == Lods - 1 ? 2 : 0;
-                            for (int v = 0; v < vc; v++) t0[v] = new Vector4(m.Tones[4 * v], m.Tones[4 * v + 1], m.Tones[4 * v + 2], m.Tones[4 * v + 3] + course);
-                            set.Uv0[at] = t0;
+                            int o = start + v * f;
+                            for (int c = 0; c < 3; c++)
+                            {
+                                dst[o + c] = p[3 * v + c];
+                                dst[o + 3 + c] = flip ? -q[3 * v + c] : q[3 * v + c];
+                            }
+                            if (uvs == 2)
+                            {
+                                for (int c = 0; c < 4; c++) { dst[o + 6 + c] = m.Uvs[4 * v + c]; dst[o + 10 + c] = m.Winds[4 * v + c]; }
+                            }
+                            else if (uvs == 1)
+                            {
+                                for (int c = 0; c < 3; c++) dst[o + 6 + c] = m.Tones[4 * v + c];
+                                dst[o + 9] = m.Tones[4 * v + 3] + course;
+                            }
                         }
-                        if (outward < 0)
-                        {
-                            for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
-                            for (int v = 0; v < vc; v++) nor[v] = -nor[v];
-                        }
+                        Begin(set, at, start, vc, uvs);
+                        foreach (var i in idx) Push(set, at, i);
+                        End(set, at);
+                        if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * (m.Uvs != null ? 0.56f : 0.5f) };
                     }
-                    set.Positions[at] = pos; set.Normals[at] = nor; set.Indices[at] = idx;
-                    if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * (m.Uvs != null ? 0.56f : 0.5f) };
+                    set.Slots[k] = -1;
+                    if (impostors[k] && set.Spans[k * Stride].Uvs > 0) Impostor(set, k);
                 }
-                set.Slots[k] = -1;
-                if (impostors[k] && set.Uv0[k * Stride] != null) Impostor(set, k);
+            }
+            catch
+            {
+                set.Dispose();
+                throw;
             }
             return set;
         }
 
+        static void Begin(MeshSet set, int at, int start, int vc, int uvs)
+        {
+            ref var s = ref set.Spans[at];
+            s.Vertex = start; s.VertexCount = vc; s.Uvs = uvs; s.Wide = vc > 65535;
+            s.Index = s.Wide ? set.Wide.Length : set.Narrow.Length;
+        }
+
+        static void Push(MeshSet set, int at, int i)
+        {
+            if (set.Spans[at].Wide) set.Wide.Add(i);
+            else set.Narrow.Add((ushort)i);
+        }
+
+        static void End(MeshSet set, int at)
+        {
+            ref var s = ref set.Spans[at];
+            s.IndexCount = (s.Wide ? set.Wide.Length : set.Narrow.Length) - s.Index;
+        }
+
+        static Vector3 Position(NativeArray<float> src, int o) => new Vector3(src[o], src[o + 1], src[o + 2]);
+
         static void Impostor(MeshSet set, int k)
         {
-            var pos = set.Positions[k * Stride];
+            var l0 = set.Spans[k * Stride];
+            var src = set.Vertices.AsArray();
+            int f0 = Floats(l0.Uvs);
             Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity;
-            foreach (var p in pos) { lo = Vector3.Min(lo, p); hi = Vector3.Max(hi, p); }
+            for (int v = 0; v < l0.VertexCount; v++) { var p = Position(src, l0.Vertex + v * f0); lo = Vector3.Min(lo, p); hi = Vector3.Max(hi, p); }
             var c = (lo + hi) * 0.5f;
             float r = 0;
-            foreach (var p in pos) r = Mathf.Max(r, new Vector2(p.x - c.x, p.z - c.z).magnitude);
+            for (int v = 0; v < l0.VertexCount; v++) { var p = Position(src, l0.Vertex + v * f0); r = Mathf.Max(r, new Vector2(p.x - c.x, p.z - c.z).magnitude); }
             float s = Mathf.Max(2f * r, hi.y - lo.y) * 1.02f;
             int slot = set.SlotCount++;
             set.Slots[k] = slot;
-            set.Centers[k] = new Vector4(c.x, c.y, c.z, s);
+            var center = new Vector4(c.x, c.y, c.z, s);
+            set.Centers[k] = center;
             var b = set.Bounds[k];
             b.Extents = math.max(b.Extents, new float3(0.5f * s, 0.5f * s, 0.5f * s));
             b.Center = c;
             set.Bounds[k] = b;
-            var qp = new Vector3[4];
-            var qn = new Vector3[4];
-            var q0 = new Vector4[4];
-            var q1 = new Vector4[4];
+            int f = Floats(2), at = k * Stride + Lods, quad = set.Vertices.Length;
+            set.Vertices.ResizeUninitialized(quad + 4 * f);
+            var dst = set.Vertices.AsArray();
             for (int v = 0; v < 4; v++)
             {
                 float x = v == 0 || v == 3 ? -1 : 1, y = v < 2 ? -1 : 1;
-                qp[v] = c + new Vector3(x * 0.5f * s, y * 0.5f * s, 0);
-                qn[v] = Vector3.forward;
-                q0[v] = new Vector4(x, y, slot, 2);
-                q1[v] = set.Centers[k];
+                var qp = c + new Vector3(x * 0.5f * s, y * 0.5f * s, 0);
+                int o = quad + v * f;
+                dst[o] = qp.x; dst[o + 1] = qp.y; dst[o + 2] = qp.z;
+                dst[o + 3] = 0; dst[o + 4] = 0; dst[o + 5] = 1;
+                dst[o + 6] = x; dst[o + 7] = y; dst[o + 8] = slot; dst[o + 9] = 2;
+                for (int e = 0; e < 4; e++) dst[o + 10 + e] = center[e];
             }
-            int at = k * Stride + Lods;
-            set.Positions[at] = qp; set.Normals[at] = qn; set.Uv0[at] = q0; set.Uv1[at] = q1; set.Indices[at] = new[] { 0, 1, 2, 0, 2, 3 };
-            int l2 = k * Stride + Lods - 1, vc = set.Positions[l2].Length;
-            set.Positions[at + 1] = Concat(set.Positions[l2], qp);
-            set.Normals[at + 1] = Concat(set.Normals[l2], qn);
-            set.Uv0[at + 1] = Concat(set.Uv0[l2], q0);
-            set.Uv1[at + 1] = Concat(set.Uv1[l2], q1);
-            var idx = new int[set.Indices[l2].Length + 6];
-            set.Indices[l2].CopyTo(idx, 0);
-            for (int i = 0; i < 6; i++) idx[set.Indices[l2].Length + i] = vc + set.Indices[at][i];
-            set.Indices[at + 1] = idx;
+            Begin(set, at, quad, 4, 2);
+            foreach (var i in Quad) Push(set, at, i);
+            End(set, at);
+            var l2 = set.Spans[k * Stride + Lods - 1];
+            if (l2.Uvs != 2) throw new InvalidOperationException("impostor blend needs both uv sets at the last lod");
+            int blend = set.Vertices.Length, vc = l2.VertexCount;
+            set.Vertices.ResizeUninitialized(blend + (vc + 4) * f);
+            dst = set.Vertices.AsArray();
+            NativeArray<float>.Copy(dst, l2.Vertex, dst, blend, vc * f);
+            NativeArray<float>.Copy(dst, quad, dst, blend + vc * f, 4 * f);
+            Begin(set, at + 1, blend, vc + 4, 2);
+            for (int i = 0; i < l2.IndexCount; i++) Push(set, at + 1, l2.Wide ? set.Wide[l2.Index + i] : set.Narrow[l2.Index + i]);
+            foreach (var i in Quad) Push(set, at + 1, vc + i);
+            End(set, at + 1);
         }
 
-        static T[] Concat<T>(T[] a, T[] b)
+        static void Apply(MeshSet set, int from, int to, Mesh[] into)
         {
-            var r = new T[a.Length + b.Length];
-            a.CopyTo(r, 0);
-            b.CopyTo(r, a.Length);
-            return r;
+            int count = 0;
+            for (int i = from; i < to; i++) if (set.Spans[i].Uvs >= 0) count++;
+            if (count == 0) return;
+            var data = Mesh.AllocateWritableMeshData(count);
+            var verts = set.Vertices.AsArray();
+            applied.Clear();
+            for (int i = from, j = 0; i < to; i++)
+            {
+                var s = set.Spans[i];
+                if (s.Uvs < 0) continue;
+                var d = data[j++];
+                d.SetVertexBufferParams(s.VertexCount, Layouts[s.Uvs]);
+                d.GetVertexData<float>().CopyFrom(verts.GetSubArray(s.Vertex, s.VertexCount * Floats(s.Uvs)));
+                d.SetIndexBufferParams(s.IndexCount, s.Wide ? IndexFormat.UInt32 : IndexFormat.UInt16);
+                if (s.Wide) d.GetIndexData<int>().CopyFrom(set.Wide.AsArray().GetSubArray(s.Index, s.IndexCount));
+                else d.GetIndexData<ushort>().CopyFrom(set.Narrow.AsArray().GetSubArray(s.Index, s.IndexCount));
+                d.subMeshCount = 1;
+                d.SetSubMesh(0, new SubMeshDescriptor(0, s.IndexCount));
+                into[i] = new Mesh { name = "Object " + i };
+                applied.Add(into[i]);
+            }
+            Mesh.ApplyAndDisposeWritableMeshData(data, applied);
+            foreach (var m in applied) m.bounds = m.GetSubMesh(0).bounds;
+            applied.Clear();
         }
 
         void Bake(CommandBuffer cmd)
@@ -398,7 +484,7 @@ namespace Stabby.Game
                 if (meshTask.IsFaulted) { GameStatus.Failure = meshTask.Exception.ToString(); meshTask = null; return false; }
                 meshSet = meshTask.Result;
                 meshTask = null;
-                meshes = new Mesh[meshSet.Positions.Length];
+                meshes = new Mesh[meshSet.Spans.Length];
                 meshIds = new BatchMeshID[meshes.Length];
             }
             if (atlasTask != null)
@@ -410,20 +496,11 @@ namespace Stabby.Game
             }
             if (registered >= meshes.Length) return true;
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            for (int end = Math.Min(meshes.Length, registered + RegisterPerFrame); registered < end; registered++)
-            {
-                if (meshSet.Positions[registered] == null) continue;
-                var m = new Mesh { name = "Object " + registered, vertices = meshSet.Positions[registered], normals = meshSet.Normals[registered], triangles = meshSet.Indices[registered] };
-                if (meshSet.Uv0[registered] != null)
-                {
-                    m.SetUVs(0, meshSet.Uv0[registered]);
-                    if (meshSet.Uv1[registered] != null) m.SetUVs(1, meshSet.Uv1[registered]);
-                }
-                m.RecalculateBounds();
-                meshes[registered] = m;
-                meshIds[registered] = graphics.RegisterMesh(m);
-            }
+            int end = Math.Min(meshes.Length, registered + RegisterPerFrame);
+            Apply(meshSet, registered, end, meshes);
+            for (; registered < end; registered++) if (meshes[registered] != null) meshIds[registered] = graphics.RegisterMesh(meshes[registered]);
             if (registered < meshes.Length) return false;
+            meshSet.Dispose();
             meshIdsNative = new NativeArray<BatchMeshID>(meshIds, Allocator.Persistent);
             boundsNative = new NativeArray<AABB>(meshSet.Bounds, Allocator.Persistent);
             slotsNative = new NativeArray<int>(meshSet.Slots, Allocator.Persistent);
