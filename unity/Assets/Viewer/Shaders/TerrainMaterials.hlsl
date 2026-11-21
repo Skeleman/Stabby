@@ -388,6 +388,16 @@ void TmAdd(inout TmOut acc, TmOut m, float w)
     acc.grad += m.grad * w;
 }
 
+float3 TmMicro(float2 p, float fp)
+{
+    float f1 = TmFade(0.333, fp), f2 = TmFade(1.43, fp), f3 = TmFade(4.76, fp);
+    float3 s = f1 * TmLN2(p, 0.333, 41.7, f1);
+    float3 c = f2 * TmLN2(p, 1.43, 5.3, f2);
+    float3 g = f3 * TmLN2(p, 4.76, 17.3, f3);
+    float2 d = 0.07 * s.yz + 0.05 * c.yz + 0.04 * g.yz;
+    return float3(0.4 * s.x + 0.6 * c.x + 0.4 * g.x, d);
+}
+
 TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix, float stone)
 {
     float3 grassColor = coatColor;
@@ -453,6 +463,9 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         if (cw.w > 0.02) TmAdd(k, TmSnow(wp, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += coatColor * (1 - kept);
+        float3 mr = TmMicro(wp.xz, fp) * dot(cw, float4(1, 1, 0.3, 0.5));
+        k.albedo *= 1 + 0.1 * mr.x;
+        k.grad += float3(mr.y, 0, mr.z);
         float up = saturate((sl - 0.3) / 0.25);
         o.albedo += c * lerp(coatColor, k.albedo, up);
         o.grad += c * up * k.grad;
