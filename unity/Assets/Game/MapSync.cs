@@ -63,51 +63,10 @@ namespace Stabby.Game
             public GeneratedWorld Map;
             public GroundParts Parts;
             public BlobAssetReference<GroundData> Ground;
-            public Task<SharedObjects> Objects;
+            public Task<ObjectField> Objects;
             public string Path;
             public int Refs;
             public bool Failed;
-        }
-
-        public sealed class SharedObjects
-        {
-            public ObjectField Field;
-            public NativeArray<int> Starts;
-            public NativeArray<ObjectColumn> Items;
-            public float Cell, Max;
-            public long Ms;
-            bool disposed;
-
-            public int Count => Items.Length;
-
-            public bool Build(out BlobBuilder b)
-            {
-                lock (this)
-                {
-                    b = default;
-                    if (disposed) return false;
-                    b = new BlobBuilder(Allocator.Persistent);
-                    ref var root = ref b.ConstructRoot<ObjectColumnData>();
-                    root.Cell = Cell;
-                    root.Max = Max;
-                    var starts = b.Allocate(ref root.Starts, Starts.Length);
-                    for (int k = 0; k < Starts.Length; k++) starts[k] = Starts[k];
-                    var items = b.Allocate(ref root.Items, Items.Length);
-                    for (int k = 0; k < Items.Length; k++) items[k] = Items[k];
-                    return true;
-                }
-            }
-
-            public void Dispose()
-            {
-                lock (this)
-                {
-                    if (disposed) return;
-                    disposed = true;
-                    Starts.Dispose();
-                    Items.Dispose();
-                }
-            }
         }
 
         static readonly List<Entry> entries = new List<Entry>();
@@ -135,7 +94,7 @@ namespace Stabby.Game
             lock (entries) { failed = e.Failed; return e.Ground.IsCreated; }
         }
 
-        public static Task<SharedObjects> Objects(Entry e, Func<SharedObjects> build)
+        public static Task<ObjectField> Objects(Entry e, Func<ObjectField> build)
         {
             lock (entries) return e.Objects ??= Task.Run(build);
         }
@@ -167,7 +126,6 @@ namespace Stabby.Game
                 e.Ground = default;
                 e.Map = null;
                 e.Parts = null;
-                Owned.Release(e.Objects, o => o.Dispose());
                 e.Objects = null;
             }
         }

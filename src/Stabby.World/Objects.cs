@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -153,6 +152,14 @@ namespace Stabby.World
             list.Clear();
             PlaceInto(cx, cz, solidOnly, list, null);
             return list.ToArray();
+        }
+
+        public void SolidInto(int cx, int cz, List<ObjectInstance> list)
+        {
+            list.Clear();
+            var cached = chunks[cz * across + cx];
+            if (cached != null) list.AddRange(cached);
+            else PlaceInto(cx, cz, true, list, null);
         }
 
         public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
@@ -479,41 +486,6 @@ namespace Stabby.World
             return false;
         }
 
-        public List<ObjectColumn> Columns()
-        {
-            var rows = new List<ObjectColumn>[across];
-            for (int k = 0; k < across; k++) rows[k] = new List<ObjectColumn>();
-            ColumnRows((cz, columns) => rows[cz].AddRange(columns));
-            int total = 0;
-            foreach (var r in rows) total += r.Count;
-            var list = new List<ObjectColumn>(total);
-            foreach (var r in rows) list.AddRange(r);
-            return list;
-        }
-
-        public void ColumnRows(ColumnSink sink)
-        {
-            var pool = new ConcurrentBag<(List<ObjectColumn>, List<ObjectInstance>)>();
-            Parallel.For(0, across, () => pool.TryTake(out var p) ? p : (new List<ObjectColumn>(), new List<ObjectInstance>()), (cz, _, t) =>
-            {
-                var (columns, scratch) = t;
-                for (int cx = 0; cx < across; cx++)
-                {
-                    columns.Clear();
-                    var held = chunks[cz * across + cx];
-                    if (held != null) foreach (var o in held) AddColumns(lib, shapes, o, columns);
-                    else
-                    {
-                        scratch.Clear();
-                        PlaceInto(cx, cz, true, scratch, null);
-                        foreach (var o in scratch) AddColumns(lib, shapes, o, columns);
-                    }
-                    if (columns.Count > 0) sink(cz, columns);
-                }
-                return t;
-            }, pool.Add);
-        }
-
         public static void AddColumns(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
         {
             var def = lib.Objects[o.Def];
@@ -576,8 +548,6 @@ namespace Stabby.World
         }
     }
 
-    public delegate void ColumnSink(int row, List<ObjectColumn> columns);
-
     public sealed class PartShapes
     {
         public float[][][] Heights;
@@ -616,108 +586,53 @@ namespace Stabby.World
     public interface IColumnTable
     {
         float CellM { get; }
-        float MaxR { get; }
-        int Mask { get; }
-        int Start(int bucket);
-        ObjectColumn Column(int k);
+        float RegionM { get; }
+        int Across { get; }
+        bool Grid(int region, out RegionGrid g);
+        int Start(int region, int cell);
+        ObjectColumn Column(int region, int k);
     }
 
     public struct NoColumns : IColumnTable
     {
         public float CellM => 1;
-        public float MaxR => 0;
-        public int Mask => -1;
-        public int Start(int bucket) => 0;
-        public ObjectColumn Column(int k) => default;
-    }
-
-    public struct ColumnArrays : IColumnTable
-    {
-        public const float DefaultCellM = 8f;
-        public float Cell, Max;
-        public int[] Starts;
-        public ObjectColumn[] Items;
-
-        public float CellM => Cell;
-        public float MaxR => Max;
-        public int Mask => Starts == null ? -1 : Starts.Length - 2;
-        public int Start(int bucket) => Starts[bucket];
-        public ObjectColumn Column(int k) => Items[k];
-
-        public int Kill(ObjectField field, ObjectInstance o)
-        {
-            var cols = new List<ObjectColumn>();
-            field.ColumnsOf(o, cols);
-            int killed = 0;
-            foreach (var c in cols)
-            {
-                int k = Obstacles.Find(this, c);
-                if (k >= 0) { Items[k] = Obstacles.Dead; killed++; }
-            }
-            return killed;
-        }
-
-        public static int Buckets(int count)
-        {
-            int buckets = 64;
-            while (buckets < count * 2 && buckets < (1 << 24)) buckets <<= 1;
-            return buckets;
-        }
-
-        public static ColumnArrays Build(List<ObjectColumn> columns, float cellM = DefaultCellM)
-        {
-            int buckets = Buckets(columns.Count);
-            var t = new ColumnArrays { Cell = cellM, Starts = new int[buckets + 1], Items = new ObjectColumn[columns.Count] };
-            var at = new int[columns.Count];
-            for (int k = 0; k < columns.Count; k++)
-            {
-                var c = columns[k];
-                t.Max = Math.Max(t.Max, c.R);
-                at[k] = Obstacles.Bucket((int)Math.Floor(c.X / cellM), (int)Math.Floor(c.Z / cellM), buckets - 1);
-                t.Starts[at[k] + 1]++;
-            }
-            for (int b = 0; b < buckets; b++) t.Starts[b + 1] += t.Starts[b];
-            var fill = (int[])t.Starts.Clone();
-            for (int k = 0; k < columns.Count; k++) t.Items[fill[at[k]]++] = columns[k];
-            return t;
-        }
+        public float RegionM => 1;
+        public int Across => 0;
+        public bool Grid(int region, out RegionGrid g) { g = default; return false; }
+        public int Start(int region, int cell) => 0;
+        public ObjectColumn Column(int region, int k) => default;
     }
 
     public static class Obstacles
     {
         public static readonly ObjectColumn Dead = new ObjectColumn { Bottom = float.PositiveInfinity, Top = float.NegativeInfinity };
 
-        public static int Bucket(int cx, int cz, int mask) => (int)(((uint)cx * 73856093u) ^ ((uint)cz * 19349663u)) & mask;
-
-        public static bool Same(ObjectColumn a, ObjectColumn b) => a.X == b.X && a.Z == b.Z && a.R == b.R && a.Bottom == b.Bottom && a.Top == b.Top;
-
-        public static int Find<T>(T t, ObjectColumn c) where T : struct, IColumnTable
-        {
-            int mask = t.Mask;
-            if (mask < 0) return -1;
-            int b = Bucket((int)Math.Floor(c.X / t.CellM), (int)Math.Floor(c.Z / t.CellM), mask);
-            for (int k = t.Start(b), e = t.Start(b + 1); k < e; k++)
-                if (Same(t.Column(k), c)) return k;
-            return -1;
-        }
+        public static bool IsDead(ObjectColumn c) => c.Top < c.Bottom;
 
         public static float Top<T>(T t, float x, float z, float r, float bottom, float top) where T : struct, IColumnTable
         {
             float best = float.NegativeInfinity;
-            int mask = t.Mask;
-            if (mask < 0) return best;
-            float reach = r + t.MaxR, cell = t.CellM;
-            int x0 = (int)Math.Floor((x - reach) / cell), x1 = (int)Math.Floor((x + reach) / cell);
-            int z0 = (int)Math.Floor((z - reach) / cell), z1 = (int)Math.Floor((z + reach) / cell);
-            for (int cz = z0; cz <= z1; cz++)
-                for (int cx = x0; cx <= x1; cx++)
+            int across = t.Across;
+            if (across <= 0) return best;
+            float size = t.RegionM, cell = t.CellM;
+            int rx = (int)Math.Floor(x / size), rz = (int)Math.Floor(z / size);
+            for (int qz = Math.Max(0, rz - 1); qz <= Math.Min(across - 1, rz + 1); qz++)
+                for (int qx = Math.Max(0, rx - 1); qx <= Math.Min(across - 1, rx + 1); qx++)
                 {
-                    int b = Bucket(cx, cz, mask);
-                    for (int k = t.Start(b), e = t.Start(b + 1); k < e; k++)
+                    int region = qz * across + qx;
+                    if (!t.Grid(region, out var g) || g.W == 0) continue;
+                    float reach = r + g.Max;
+                    int x0 = Math.Max(g.X0, (int)Math.Floor((x - reach) / cell)), x1 = Math.Min(g.X0 + g.W - 1, (int)Math.Floor((x + reach) / cell));
+                    int z0 = Math.Max(g.Z0, (int)Math.Floor((z - reach) / cell)), z1 = Math.Min(g.Z0 + g.H - 1, (int)Math.Floor((z + reach) / cell));
+                    for (int cz = z0; cz <= z1; cz++)
                     {
-                        var c = t.Column(k);
-                        float dx = c.X - x, dz = c.Z - z, rr = r + c.R;
-                        if (dx * dx + dz * dz < rr * rr && c.Bottom < top && c.Top > bottom && c.Top > best) best = c.Top;
+                        int row = (cz - g.Z0) * g.W - g.X0;
+                        for (int k = t.Start(region, row + x0), e = t.Start(region, row + x1 + 1); k < e; k++)
+                        {
+                            var c = t.Column(region, k);
+                            float dx = c.X - x, dz = c.Z - z, rr = r + c.R;
+                            if (dx * dx + dz * dz < rr * rr && c.Bottom < top && c.Top > bottom && c.Top > best) best = c.Top;
+                        }
                     }
                 }
             return best;
