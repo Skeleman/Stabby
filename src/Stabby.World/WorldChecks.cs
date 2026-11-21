@@ -195,10 +195,11 @@ namespace Stabby.World
                     int col = k * w + i;
                     for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
                     {
-                        int cell = SurfaceNets.CoarseVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z);
+                        int cell = SurfaceNets.CoarseVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z, out float nx, out float ny, out float nz);
                         if (cell < f.ColumnStart(col) || cell >= f.ColumnEnd(col)) return false;
                         int v = 6 * (f.ColumnBase(col) + cell - f.ColumnStart(col));
                         if (x != f.Verts[v] || y != f.Verts[v + 1] || z != f.Verts[v + 2]) return false;
+                        if (nx != f.Verts[v + 3] || ny != f.Verts[v + 4] || nz != f.Verts[v + 5]) return false;
                     }
                 }
             return true;

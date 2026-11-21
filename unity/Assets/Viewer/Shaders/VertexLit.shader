@@ -32,19 +32,20 @@ Shader "Stabby/VertexLit"
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float2 strata : TEXCOORD0; float4 stitch : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float2 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float3 strata : TEXCOORD2; };
 
             Varyings vert(Attributes i)
             {
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
-                float3 pos = ((uint)i.stitch.w & (uint)_StitchMask) != 0 ? i.stitch.xyz : i.positionOS.xyz;
+                bool coarse = ((uint)i.stitch.w & (uint)_StitchMask) != 0;
+                float3 pos = coarse ? i.stitch.xyz : i.positionOS.xyz;
                 VertexPositionInputs p = GetVertexPositionInputs(pos);
                 o.positionCS = p.positionCS;
-                o.normalWS = TransformObjectToWorldNormal(i.normalOS);
-                o.color = i.color;
-                o.strata = float3(i.strata, p.positionWS.y);
+                o.normalWS = TransformObjectToWorldNormal(coarse ? i.stitchNormal.xyz : i.normalOS);
+                o.color = coarse ? i.stitchColor : i.color;
+                o.strata = float3(i.strata.x, coarse ? i.stitchNormal.w : i.strata.y, p.positionWS.y);
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 return o;
             }

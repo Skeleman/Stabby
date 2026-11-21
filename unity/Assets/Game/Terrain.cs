@@ -32,6 +32,7 @@ namespace Stabby.Game
         public float4 Color;
         public float2 Strata;
         public float4 Stitch;
+        public half4 StitchNormal, StitchColor;
     }
 
     [MaterialProperty("_StitchMask")]
@@ -164,7 +165,8 @@ namespace Stabby.Game
                         if (k == 0) p.Pos.z = z0m; else if (k == m) p.Pos.z = z1m;
                         if (stitch)
                         {
-                            SurfaceNets.CoarseVertex(coarse, near, 2 * s, ci, j >> 1, ck, out float tx, out float ty, out float tz);
+                            SurfaceNets.CoarseVertex(coarse, near, 2 * s, ci, j >> 1, ck, out float tx, out float ty, out float tz, out float nx, out float ny, out float nz);
+                            p.StitchNormal = new half4(new float4(nx, ny, nz, 0));
                             if (ic == 0) tx = x0m; else if (ic == mc) tx = x1m;
                             if (kc == 0) tz = z0m; else if (kc == mc) tz = z1m;
                             p.Stitch = new float4(tx, ty, tz, bits);
@@ -184,6 +186,16 @@ namespace Stabby.Game
                 float cover = Ground.GridHeight(gx, gy) - p.Pos.y;
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover));
                 p.Strata = new float2(off, math.max(col.w, math.smoothstep(2f, 6f, math.abs(cover))));
+                if (p.Stitch.w != 0)
+                {
+                    float3 sn = new float4(p.StitchNormal).xyz;
+                    float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
+                    int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
+                    var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
+                    float sCover = Ground.GridHeight(sx, sz) - p.Stitch.y;
+                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, math.smoothstep(2f, 6f, math.abs(sCover)))));
+                    p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover)));
+                }
                 Verts[v] = p;
                 lo = math.min(lo, p.Pos);
                 hi = math.max(hi, p.Pos);
@@ -541,6 +553,8 @@ namespace Stabby.Game
             new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float16, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord3, VertexAttributeFormat.Float16, 4),
         };
 
         Entity Spawn(BatchMeshID mesh, AABB box)

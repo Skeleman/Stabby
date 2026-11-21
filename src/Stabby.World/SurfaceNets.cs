@@ -324,6 +324,10 @@ namespace Stabby.World
 
         public static int CoarseVertex<TCols, TEdits>(TCols columns, TEdits edits, float s, int ci, int j, int ck, out float x, out float y, out float z)
             where TCols : struct, IColumnField where TEdits : struct, IEditList
+            => CoarseVertex(columns, edits, s, ci, j, ck, out x, out y, out z, out _, out _, out _);
+
+        public static int CoarseVertex<TCols, TEdits>(TCols columns, TEdits edits, float s, int ci, int j, int ck, out float x, out float y, out float z, out float nx, out float ny, out float nz)
+            where TCols : struct, IColumnField where TEdits : struct, IEditList
         {
             float h00 = columns.Height(ci, ck), h10 = columns.Height(ci + 1, ck), h01 = columns.Height(ci, ck + 1), h11 = columns.Height(ci + 1, ck + 1);
             float l00 = Features.Slope(h10, columns.Height(ci - 1, ck), h01, columns.Height(ci, ck - 1), s);
@@ -343,18 +347,19 @@ namespace Stabby.World
                 if (d == end - start - 1) Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
             }
             x = sink.X; y = sink.Y; z = sink.Z;
+            nx = sink.NX; ny = sink.NY; nz = sink.NZ;
             return cell;
         }
 
         struct PointSink : INetsSink
         {
-            public float X, Y, Z;
+            public float X, Y, Z, NX, NY, NZ;
             public void Begin(int ints, int floats) { }
             public int GetInt(int k) => 0;
             public void SetInt(int k, int v) { }
             public float GetFloat(int k) => 0;
             public void SetFloat(int k, float v) { }
-            public int AddVertex(float x, float y, float z, float nx, float ny, float nz) { X = x; Y = y; Z = z; return 0; }
+            public int AddVertex(float x, float y, float z, float nx, float ny, float nz) { X = x; Y = y; Z = z; NX = nx; NY = ny; NZ = nz; return 0; }
             public void AddTriangle(int a, int b, int c) { }
         }
 
