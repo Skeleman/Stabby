@@ -42,6 +42,12 @@ and converts once into native data.
 
 ## Next: unified world geometry
 
+- Light budgets (from Punchy `LightPolicy`, `LightBudget`, `FarLightPolicy`): caps on real and
+  shadowed lights, then glow, far emissive and emissive-only fallbacks by screen
+  size and importance. Before fires, torches or night effects.
+- Water interaction: local wakes and bow waves around moving entities (Punchy had them).
+- Weather, precipitation and volumetric clouds.
+
 Overhangs, layers, vertical faces, caves and arches share one geometry model
 with the heightfield: the same material library and one global vertex lattice,
 so feature meshes meet ground meshes without seams. Features differ only in how
@@ -97,6 +103,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | 2048 load to under 10 s playable, no GC pause over 33 ms, then default 2048: backlog-gated chunk stream with a 128-packet reliable window, blobs baked in jobs, shared ground parts, parallel client inflate, staged terrain uploads; 2048 now playable in 7.6 s (was 35.7 s), Client2 full sync 7.4 s; GC pauses still up to 174 ms from about 1.4 GB managed load allocation across three editor worlds, so the default stays 512 until world data moves to native storage | done (b/native-world-5: default 2048; 3 back-to-back runs playable 6.13/6.35/6.19 s, worst GC collect 11 ms, terrain worst collect 7.8 ms, 370-380 MB allocated after terrain build, 7 KB per play frame; the old 113-154 ms stalls were the spike probe re-describing every profiler marker) |
 | Load hitches at 2048: capture polls over 10 ms count as tool frames (the 54-56 ms play spikes were capture camera aims), capsule render warm-up entity, probe marker scan budgeted at 250 per frame; quiet-machine play worst 18-21 ms after build; left: frame 22 at 34-38 ms (first render pass) and a 76-147 ms heap growth in 2 of 4 runs from ~550 MB allocated before build | done (b/load-hitches) |
 | Pre-build allocation: cut the ~550 MB managed allocation before terrain build so the heap never grows mid-load (76-147 ms stall in half the runs) | next |
+| Object scale: bench 10k / 50k / 100k / 250k placed objects (ObjectLodSystem visits every object entity each frame) for LOD job, streaming, render submission and memory; then a forest bench with grass, shadows, terrain and water all on. Only objects near players stay resident as entities; the rest stay as per-chunk placement data | next |
 | Coast warp: shorelines wander about half a cell (wavelength 2.5 cells) near sea level in `NearField.Sample`, own stream `near-coast`, pinned at lattice nodes; GeneratorVersion 42 | done |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Water pass 2 (Zach): square pattern along the sea edge; sea, lakes and rivers share one water definition, differing only in flow and swell (`materials.json` `water`, one shader keyed by vertex colour; soft gradient-noise foam, lake shore ring) | done |
@@ -155,8 +162,8 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Forest-floor objects: broken and mossy logs, cut and broken stumps, cliff-scree def at the foot of rises; Wood shader greys with age, fibrous broken ends, blotchy moss; per-bed jittered rock joints; WorldChecks object slope invariant; GeneratorVersion 45. Scree reads small and partly climbs the cliff foot | done (b/forest-floor-objects) |
 | Cliff crags: strata too strong and uniform; strata strength by regional rock type, broken and lower contrast; vertical joints, buttress/gully fluting, facets and weathering streaks become the main cliff read; close-up grooves read as routed channels: every normal term gets organic noise, no clean lines; optional hardness-scaled crag geometry in the sample function | phase 1 done (b/cliff-crags: rock type by regional offset, strata 0.08x in massive rock, cross-bed fractures, buttress/gully relief, streaks); phase 2 crag geometry in the sample function next (GeneratorVersion 46) |
 | Contact shading: placed objects and the ground darken toward one terrain-derived contact colour where they meet (object base by height above ground, terrain by a footprint mask); structures darken downward faces, gaps between stones and inner seams (door jamb on a landing) via baked vertex occlusion | next (b/contact-shading) |
-| Fallen logs: natural forest logs look fallen, not chopped: splintered ends, branch stubs and broken limbs, some with exposed root plates and pits, others paired near the broken stump they snapped from; clean cuts only near settlements | next (b/rock-objects) |
-| Structure kit (rule 11): standalone elements such as awnings, tables, crates and posts are objects of their own that stalls and camps reuse; buildings assemble reusable modules (walls, corners, floors, roofs, door and window frames) that join seamlessly and merge to one LOD element at distance; the dry-stone wall and cairn become kit pieces; blueprints nest (kit piece -> building blueprint -> site blueprint with surrounding decorative and functional elements -> town placing sites), each level a content definition expanded from its own stream | next |
+| Fallen logs: natural forest logs look fallen, not chopped: splintered ends, branch stubs and broken limbs, some with exposed root plates and pits, others paired near the broken stump they snapped from; clean cuts only near settlements | next (b/fallen-logs, foliage lane) |
+| Structure kit (rule 11): standalone elements such as awnings, tables, crates and posts are objects of their own that stalls and camps reuse; buildings assemble reusable modules (walls, corners, floors, roofs, door and window frames) that join seamlessly and merge to one LOD element at distance; the dry-stone wall and cairn become kit pieces; blueprints nest (kit piece -> building blueprint -> site blueprint with surrounding decorative and functional elements -> town placing sites), each level a content definition expanded from its own stream Prove it on one complete inn first (modules, doors and windows, furniture, yard, merged far mesh, collision), then one site placing it beside other elements; towns only after that | next |
 | Wall look: stones flush with the battered face (few-cm set-backs, cuts shape the outline not the face), shared TmRock tone with per-stone warm-grey/grey-brown jitter from the layout seed, darker contact band at the base, cope unchanged; GeneratorVersion 44. Structure bench read 1-2 ms higher on a contended machine; quiet rerun pending, lichen noise is the first cut | done (b/wall-look) |
 | Rock tone: the dark round blotches on boulders and walls were bump lighting (metre-scale lobes tilted away from the sun), so stone keeps 30% of the bump gradient; stone branch hue-locked to muted warm grey so boulders no longer read orange and sit with the walls; stone cover uses vertical streak stains instead of round spots, hue-locked lichen; wall lichen samples cut from Object.shader (structure mid back to pre-wall-look cost, 2.66 ms at 1080p). Render-only | done (b/rock-tone) |
 | Ground litter: bare soil on paths, gully banks and scree gets a packed-earth coat (`TmEarth`): muted grey-brown, clod/grain/fine noise, faint rut streaks along the downslope direction, small pebble flecks, instead of the flat smeared coat colour. Forest floor (`TmLitter`, dark biome colour as the forest proxy, no tree data in the shader) gets needle litter under spruce-type biomes and leaf flecks under oak-type biomes, narrow hue-locked browns; kept out of `TmGrass` so blade roots stay as they were. Sand unchanged. Render-only | done (b/ground-litter) |
@@ -167,6 +174,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Water look: open sea breaks its ripple carpet with broad wind slicks (calm patches that damp ripples) and a two-octave swell; ripples and swell fade by pixel footprint (screen size), so the far sea flattens into the sky reflection and the horizon carries; rivers and lakes keep a gentler ripple fade. Palette: scatter tint shifts from teal-green in shallows to blue-slate with depth (deep #1d3a4c, shallow #7ab4a8); foam rim and wet band unchanged; ALU only, no texture samples (water coast 1.33/1.78 ms at 1080p vs 1.25/1.71 main) | done (b/water-look) |
 | Water look 2: shallows tint clear teal-aqua over sand (shallow #5ec4c8), grading to green-blue then slate; sea slicks read as long, soft, wind-aligned bright streaks at mid distance (smoother, more sky); rivers get faint foam lines along the flow on steep reaches and rapids from the slope and flow vertex data, built in 24 m local flow frames so bends stay coherent, with rougher ripples on steep water; calm reaches stay glassy; foam rim and wet band unchanged | done (b/water-look-2) |
 | Tree crowns: broadleaf crowns vary per tree from their own key-mixed stream (heavy side and lean, 2-4 leaders of uneven reach and spread, bole height, branch lengths); each branch carries a leafiness its twigs share, 15-35% of branches stay bare and poke past the crown, leaves sit on the outer twigs, so crowns are gappy, asymmetric clumps with sky showing through. Leaf colour hue-locked (narrow yellow-green swing, mostly luminance), oak #5d7242 and rainforest #486434; shaded interior and undersides darker and cooler by leaf ao, sun side slightly warmer, softer back-light glow; impostors share the tint. Trees bench foliage 1.10-1.26 ms vs 0.76 ms main (drawn 3.53 vs 3.03), bushes unchanged | done (b/tree-crowns) |
+| Conifer crowns: conifers vary per tree from their own key-mixed stream (heavy side and lean, sag, trunk curl, crown width); whorls jitter in height and reach per tier, some whorls and branches stay bare, branch tips droop, a band of short dead branches sits below the live crown, and some tops are cut with a leaning leader. Needles darker, bluer and muted (#33503f). Leaf card normals carry per-limb clump and per-card noise. Impostors darken by their baked ao and lose most of the warm sun tint, so far canopy matches near. Broadleaf spread narrowed (0.8-1.2, extra leader 20%). Trees bench foliage 0.34 ms main, 0.17 ms first pass, 0.52 ms final on a loaded run (bushes, unchanged, read 0.08/0.15/0.32 across the same runs) | done (b/conifer-crowns) |
 | Terrain shadows: cliffs and terrain boulders cast sun shadows; VertexLit gains a ShadowCaster pass sharing the stitch morph (`TerrainStitch.hlsl`), only drawn terrain nodes within the shadow distance cast (6-8 nodes, 30-65k vertices), cost within bench noise (+-0.3 ms); no acne or peter-panning at 14 degree sun with the light's default bias. Field textures (slope, bed, biome) upload in 4 MB slices over frames: terrain worst update 93 -> 25 ms, load-frame Gfx.UploadTextureData spike gone. Sunk sea nodes (whole range below -Deep, opaque water) stay in the drawn set for stitching but skip drawing: 22-26 nodes, about 110k vertices hidden; no holes or seams in coast-high or coast-far; bench within noise at 1080p, far at 4K about 0.2 ms faster | done |
 | Terrain mesh spread: node meshes written into `Mesh.MeshDataArray` in a Burst job and applied with `ApplyAndDisposeWritableMeshData` inside the per-frame budget (no main-thread SetVertexBufferData); cliff-band triangle lines and the close-rock parting sawtooth traced to strata bed relief and parallax in `TmRockRelief` (not shadow bias, resolution, joints or mesh; caster already uses the stitched normal), fix left to the material lane; `close-rock` shots with cast/nocast/detail-off/no-joints variants; grass blades checked in shadow (`grass-low` shot) | done (b/terrain-mesh-spread) |
 | Terrain load split: the one-time terrain load runs one step per frame (look blob, strata bands/coats/water level, terrain and water material registration, natives, first field slice next frame); terrain evictions capped per frame inside the apply budget, deferred nodes hidden until evicted; lod worst-update line breaks down requests/draw/evict/shadow | done |
@@ -186,9 +194,28 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 - Generator features resume after the audit: caves, cliffs and river overhaul
   carried over from Punchy, more biomes.
 
+## Gameplay (Zach's three pillars; Punchy's gameplay is the reference)
+
+- Exploration: a world dense with detail, secrets and one-off discoveries:
+  landmarks, rare creatures, giant creatures, mysterious structures, scenic
+  vistas. Built on the object, structure kit and blueprint stages (rule 11),
+  each discovery type placed from its own stream. | planned
+- Character interactivity: NPCs, animals and creatures act on their own
+  desires and interact with each other and the player. One shared desire and
+  behaviour system serves every agent; NPCs add ownership of items and
+  structures, households and family ties, and dialogue about themselves,
+  their background and culture. Theft and trespass follow from ownership.
+  Burst ECS systems, host-authoritative. | planned
+- Creatures, NPCs and items follow Punchy closely (Punchy `Assets/Game/Scripts/Fauna`,
+  `Assets/Game/Fauna/Limbs`, `Scripts/Items`): procedural bodies from simple
+  hierarchical parts (arm, leg, tail, head types) that share definitions and
+  animations and vary per entity; animation from a few keyframes plus inverse
+  kinematics; all rendering through the shared material library. Part
+  definitions live in `content/`, ported to ECS and Burst. | planned
+- Combat: not defined yet, waits until the other two take shape. | later
+
 ## Later
 
-- ECS gameplay on Netcode: interaction, creatures, settlements, as Burst systems.
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
 - Map editing on top of `sketch.json`.
 - Dungeons about 4x the size of caves, built on the same carve edits (idea).
