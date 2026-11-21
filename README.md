@@ -16,7 +16,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 |---|---|
 | `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
 | `bake --seed N [--size 512] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
-| `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings |
+| `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings, `--checks 0` times generation alone |
 | `scenarios [--out out/scenarios] [--scan 100]` | Generates each named acceptance scenario and writes a review sheet with the witness marked; `--scan` lists which seeds show each one |
 
 - `gen` writes `map.png`, `sketch.png`, `biomes.png`, `precipitation.png`,
@@ -26,7 +26,9 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 - `--rain mm` stops after terrain and hydrology with uniform rainfall: no
   climate, no biomes. Useful for isolating erosion and rivers.
 - `--size` changes resolution, not extent: every size spans about 23 km
-  (default 512 cells of 45 m); smaller sizes use coarser cells.
+  (default 512 cells of 45 m); smaller sizes use coarser cells. Above
+  `ErosionSize` (512) erosion runs coarse-to-fine: all but `FineSteps` (8)
+  steps on the 512 grid, then the rest at full resolution.
 - `--scale` sets PNG pixels per cell (default 3 at 256 and below, 2 at 512, 1 above).
 
 ## Layout
@@ -54,19 +56,20 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 ## Baselines
 
-`sweep --jobs 1`, Release, one desktop core (generator 17). CI (`.github/workflows/ci.yml`)
+`sweep --jobs 1` (one seed at a time; stages use all cores), Release, generator 32. CI (`.github/workflows/ci.yml`)
 runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 512` on every push.
-The 1024 column is 5 seeds; cost grows about linearly with cell count, and checks stay under 3%.
+256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0` (`Features` placement
+currently throws at 4096). Total excludes checks. Peak working set is about 0.8 GB at 2048 and 2.7 GB at 4096.
 
-| Stage | 256 (median ms / MB) | 512 (median ms / MB) | 1024 (median ms / MB) |
-|---|---|---|---|
-| sketch | 51 / 3.5 | 203 / 14 | 837 / 55 |
-| erosion | 273 / 7 | 1139 / 28 | 4927 / 111 |
-| climate | 1 / 1.8 | 6 / 7 | 45 / 28 |
-| hydrology | 4 / 3.5 | 17 / 14 | 74 / 54 |
-| biomes | 0.4 / 0.3 | 2 / 1.3 | 7 / 5 |
-| checks | 9 / 1.2 | 38 / 5 | 152 / 20 |
-| total | 330 | 1364 | 5946 |
+| Stage | 256 (median ms / MB) | 512 (median ms / MB) | 1024 (median ms / MB) | 2048 (median ms / MB) | 4096 (ms / MB) |
+|---|---|---|---|---|---|
+| sketch | 14 / 2.8 | 55 / 11 | 207 / 45 | 829 / 180 | 3113 / 720 |
+| erosion | 260 / 8 | 993 / 29 | 1329 / 117 | 3383 / 377 | 9420 / 1414 |
+| climate | 1 / 1.8 | 6 / 7 | 46 / 28 | 456 / 112 | 4038 / 448 |
+| hydrology | 4 / 4.3 | 17 / 17 | 67 / 66 | 325 / 262 | 1204 / 1043 |
+| biomes | 5 / 0.9 | 19 / 3.5 | 76 / 14 | 306 / 56 | 1145 / 224 |
+| checks | 69 / 4.5 | 1304 / 91 | 1173 / 113 | 6013 / 423 | - |
+| total | 284 | 1089 | 1724 | 5306 | 18920 |
 
 ## Scenarios
 

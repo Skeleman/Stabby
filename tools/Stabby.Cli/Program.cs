@@ -17,7 +17,7 @@ switch (args.FirstOrDefault())
     case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
@@ -146,6 +146,7 @@ int Sweep()
     var times = new System.Collections.Concurrent.ConcurrentBag<long>();
     var stages = new System.Collections.Concurrent.ConcurrentBag<(string, double, long)>();
     var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", "-1"), CultureInfo.InvariantCulture) };
+    bool checks = Opt("checks", "1") != "0";
     Parallel.For(0, count, par, k =>
     {
         var c = Config(from + (ulong)k, size);
@@ -161,6 +162,7 @@ int Sweep()
         }
         var w = WorldGenerator.Generate(c, biomes, materials, null, Mark);
         times.Add(sw.ElapsedMilliseconds);
+        if (!checks) return;
         foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
         Mark("checks");
     });
