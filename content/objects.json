@@ -37,6 +37,12 @@
         "biomeDensity": [ { "biome": "desert", "scale": 0.5 }, { "biome": "wetland", "scale": 0.15 }, { "biome": "mangrove", "scale": 0.15 } ] }
     },
     {
+      "id": "large-boulder", "name": "Large boulder", "kind": "static", "color": "#8a857c", "variants": 8,
+      "parts": [ { "id": "body", "shape": "rock" } ],
+      "placement": { "perHectare": 0.12, "slopeMax": 0.7, "hardnessMin": 0.2, "sizeMinM": 3, "sizeMaxM": 8, "editMinSizeM": 3.6, "sink": 0.1, "alignToSlope": 0.3,
+        "biomeDensity": [ { "biome": "desert", "scale": 0.6 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
+    },
+    {
       "id": "boulder-cluster", "name": "Boulder cluster", "kind": "static", "color": "#837f77", "variants": 4,
       "parts": [
         { "id": "big", "shape": "rock", "scale": [1, 0.9, 1] },

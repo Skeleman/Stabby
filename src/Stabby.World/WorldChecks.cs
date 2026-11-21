@@ -313,14 +313,15 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, edits, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
+            if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, edits, e);
             float cm = w.Config.CellMeters, s = LatticeStepM;
             foreach (var x in edits)
-                if (!Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
+                if (x.Shape != FeatureEdit.Boulder && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
             var cols = new DetailColumns { Detail = detail, StepM = s };
             var seen = new bool[FeatureEdit.Shapes];
             foreach (var x in edits)
             {
-                if (seen[x.Shape]) continue;
+                if (x.Shape == FeatureEdit.Boulder || seen[x.Shape]) continue;
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
