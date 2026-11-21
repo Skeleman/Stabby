@@ -305,12 +305,12 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 18 && phase <= 20)
+            while (phase >= 18 && phase <= 21)
             {
-                string name = phase == 18 ? "foliage-close" : phase == 19 ? "foliage-mid" : "foliage-far";
+                string name = FoliageShots[phase - 18];
                 if (wait == 0)
                 {
-                    if (!AimFoliage(cam, phase - 18)) { GameStatus.Lines["~" + name] = "no foliage placed"; phase++; continue; }
+                    if (!AimFoliage(cam, FoliageRanges[phase - 18])) { GameStatus.Lines["~" + name] = "no foliage placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -318,6 +318,8 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 19)
+                    GameStatus.Lines["~bench trees"] = FoliageBench(cam, "trees filling the view");
+                if (phase == 20)
                 {
                     AimFoliage(cam, 3);
                     Shot(cam, dir, "foliage-bench");
@@ -578,7 +580,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly float[] FoliageBack = { 2.4f, 14f, 60f, 5f }, FoliageUp = { 0.5f, 3f, 14f, 7f };
+        static readonly float[] FoliageBack = { 2.4f, 14f, 60f, 5f, 1.7f }, FoliageUp = { 0.5f, 3f, 14f, 7f, 0.1f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -595,9 +599,10 @@ namespace Stabby.Game.Editor
                     {
                         if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
                         foreach (var o in field.Chunk(cx, cz))
-                            if (field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
                     }
                 if (near.Count == 0) return false;
+                bool scaled = range == 0 || range == 4;
                 ObjectInstance pick = default;
                 int crowd = 0;
                 var cells = new System.Collections.Generic.Dictionary<long, int>();
@@ -610,10 +615,10 @@ namespace Stabby.Game.Editor
                     if (score < best) { best = score; pick = o; crowd = around; }
                 }
                 var target = new Vector3(pick.X, pick.Y + pick.Size * 0.45f, pick.Z);
-                float back = FoliageBack[range] * (range == 0 ? Mathf.Max(1f, pick.Size) : 1f);
-                var eye = target + new Vector3(-0.77f, 0, -0.64f) * back + Vector3.up * FoliageUp[range] * (range == 0 ? Mathf.Max(1f, pick.Size) : 1f);
+                float back = FoliageBack[range] * (scaled ? Mathf.Max(1f, pick.Size) : 1f);
+                var eye = target + new Vector3(-0.77f, 0, -0.64f) * back + Vector3.up * FoliageUp[range] * (scaled ? Mathf.Max(1f, pick.Size) : 1f);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
-                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.2f);
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + (range == 2 ? 10f : 1.2f));
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim foliage " + range] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0} with {crowd} foliage in its 12 m cell, eye {back:F0} m back";
                 return true;

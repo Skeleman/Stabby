@@ -71,14 +71,14 @@ namespace Stabby.World
 
         static readonly Style BroadleafStyle = new Style
         {
-            Cell = BroadLeaves, Card = 0.11f, Along = 0.4f, Lift = 0.3f, Jitter = 0.5f, From = 0.3f, AoLow = 0.2f, MinLeafDepth = 2,
-            Counts = new[] { 300, 100, 34 }, Sides = new[] { new[] { 7, 5, 4, 3 }, new[] { 5, 3, 0, 0 }, new[] { 4, 0, 0, 0 } },
+            Cell = BroadLeaves, Card = 0.12f, Along = 0.35f, Lift = 0.3f, Jitter = 0.55f, From = 0.2f, AoLow = 0.2f, MinLeafDepth = 2,
+            Counts = new[] { 620, 190, 56 }, Sides = new[] { new[] { 7, 5, 4, 3 }, new[] { 5, 3, 0, 0 }, new[] { 4, 0, 0, 0 } },
         };
 
         static readonly Style ConiferStyle = new Style
         {
-            Cell = Needles, Card = 0.085f, Along = 0.85f, Lift = -0.05f, Jitter = 0.3f, From = 0.15f, AoLow = 0.18f, MinLeafDepth = 1, Width = 1.15f,
-            Counts = new[] { 320, 110, 38 }, Sides = new[] { new[] { 7, 3, 3 }, new[] { 5, 0, 0 }, new[] { 4, 0, 0 } },
+            Cell = Needles, Card = 0.09f, Along = 0.8f, Lift = -0.05f, Jitter = 0.35f, From = 0.1f, AoLow = 0.18f, MinLeafDepth = 1, Width = 1.2f,
+            Counts = new[] { 640, 200, 60 }, Sides = new[] { new[] { 7, 3, 3 }, new[] { 5, 0, 0 }, new[] { 4, 0, 0 } },
         };
 
         sealed class Out
@@ -262,7 +262,7 @@ namespace Stabby.World
                 var d = (new V(0, 1, 0) + side * rng.Range(0.35f, 0.7f)).Norm();
                 var leader = Grow(ref rng, top, d, rng.Range(0.36f, 0.5f), 5, TrunkRadius * 0.75f, 0.004f, 0.08f, new V(0, 0.25f, 0), 0.05f, 0.35f, rng.NextFloat(), 1);
                 limbs.Add(leader);
-                int branches = rng.Range(4, 7);
+                int branches = rng.Range(6, 10);
                 for (int b = 0; b < branches; b++)
                 {
                     float t = 0.2f + 0.75f * (b + rng.NextFloat()) / branches;
@@ -273,7 +273,7 @@ namespace Stabby.World
                     float len = rng.Range(0.16f, 0.28f) * (1.15f - 0.5f * t);
                     var branch = Grow(ref rng, at, bd, len, 4, leader.Radius(t) * 0.7f, 0.003f, 0.12f, new V(0, -0.15f, 0), leader.Bend(t), 0.85f, rng.NextFloat(), 2);
                     limbs.Add(branch);
-                    Twigs(ref rng, limbs, branch, 2, 0.4f, 0.9f, 0.07f, 0.12f, 0.7f, new V(0, 0.1f, 0), 1.1f);
+                    Twigs(ref rng, limbs, branch, 3, 0.3f, 0.95f, 0.08f, 0.14f, 0.7f, new V(0, 0.1f, 0), 1.1f);
                 }
             }
             for (int b = 0; b < 2; b++)
@@ -295,7 +295,7 @@ namespace Stabby.World
             var trunk = Grow(ref rng, new V(0, 0, 0), new V(0, 1, 0), 1f, 8, TrunkRadius * 1.1f, 0.003f, 0.012f, new V(0, 0.5f, 0), 0, 0.3f, rng.NextFloat(), 0);
             limbs.Add(trunk);
             float crown = rng.Range(0.22f, 0.3f), start = rng.Range(0.12f, 0.22f);
-            int whorls = rng.Range(10, 14);
+            int whorls = rng.Range(15, 20);
             var spin = Flat(ref rng);
             for (int w = 0; w < whorls; w++)
             {
@@ -313,7 +313,7 @@ namespace Stabby.World
                     var bd = (dir + new V(0, 0.35f, 0)).Norm();
                     var branch = Grow(ref rng, at, bd, reach * rng.Range(0.85f, 1.1f), 4, TrunkRadius * (0.15f + 0.4f * (1 - t)), 0.002f, 0.06f, new V(0, droop, 0), trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
                     limbs.Add(branch);
-                    if (reach > 0.08f) Twigs(ref rng, limbs, branch, 2, 0.35f, 0.85f, reach * 0.25f, reach * 0.4f, 0.85f, new V(0, droop * 0.5f, 0), 1f);
+                    if (reach > 0.06f) Twigs(ref rng, limbs, branch, 3, 0.35f, 0.85f, reach * 0.25f, reach * 0.4f, 0.85f, new V(0, droop * 0.5f, 0), 1f);
                 }
             }
             return Leaves(key, lod, limbs, ConiferStyle);
