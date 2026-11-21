@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public const int CellsAcross = 2;
         public const int BroadLeaves = 0, Needles = 1, ShrubLeaves = 2, Reeds = 3;
-        public const float TrunkRadius = 0.022f;
+        public const float TrunkRadius = 0.022f, TipRadius = 0.07f, TipDroop = 0.05f;
         static readonly float[] SideCos = { -0.5f, 0f, 0.30901699f, 0.5f, 0.6234898f, 0.70710678f };
         static readonly float[] SideSin = { 0.8660254f, 1f, 0.95105652f, 0.8660254f, 0.7818315f, 0.70710678f };
 
@@ -32,7 +32,7 @@ namespace Stabby.World
             public readonly List<float> R = new List<float>();
             public float Bend0, Bend1, Phase;
             public int Depth;
-            public bool Bare;
+            public bool Bare, Point;
             public float Leafy = 1;
             public float Bend(float t) => Bend0 + (Bend1 - Bend0) * t * (float)Math.Sqrt(t);
             public V At(float t, out V dir)
@@ -158,8 +158,9 @@ namespace Stabby.World
             float cs = SideCos[s], sn = SideSin[s];
             int rings = l.P.Count, first = o.Count;
             var a = Side((l.P[1] - l.P[0]).Norm());
+            int body = l.Point ? rings - 1 : rings;
             float along = 0;
-            for (int r = 0; r < rings; r++)
+            for (int r = 0; r < body; r++)
             {
                 var d = r == 0 ? (l.P[1] - l.P[0]).Norm() : r == rings - 1 ? (l.P[r] - l.P[r - 1]).Norm() : (l.P[r + 1] - l.P[r - 1]).Norm();
                 a = (a - d * V.Dot(a, d)).Norm();
@@ -177,13 +178,19 @@ namespace Stabby.World
                 }
             }
             int ring = sides + 1;
-            for (int r = 0; r + 1 < rings; r++)
+            for (int r = 0; r + 1 < body; r++)
                 for (int k = 0; k < sides; k++)
                 {
                     int i0 = first + r * ring + k, i1 = i0 + 1, j0 = i0 + ring, j1 = j0 + 1;
                     o.Tri(i0, j0, j1);
                     o.Tri(i0, j1, i1);
                 }
+            if (!l.Point) return;
+            var tip = (l.P[rings - 1] - l.P[rings - 2]).Norm();
+            int apex = o.Count, last = first + (body - 1) * ring;
+            along += (l.P[rings - 1] - l.P[rings - 2]).Length;
+            o.Add(l.P[rings - 1], tip, 0, along, !dark || l.Depth == 0 ? 0.85f : 0.45f, dark ? 0.25f : 0, l.Bend(1), 0, l.Phase, 0);
+            for (int k = 0; k < sides; k++) o.Tri(last + k, apex, last + k + 1);
         }
 
         static void Card(Out o, V at, V up, V face, float size, float width, int cell, bool flip, V center, float crownH, float crownV, float bend, float phase, float flutterPhase, float aoLow, V wobble)
@@ -268,7 +275,21 @@ namespace Stabby.World
             return l;
         }
 
-        static void Twigs(ref Rng rng, List<Limb> limbs, Limb parent, int count, float tMin, float tMax, float lenMin, float lenMax, float spread, V pull, float tipBend)
+        static Limb Tip(Limb l)
+        {
+            int n = l.P.Count;
+            float r0 = l.R[0], drop = TipDroop * l.Length();
+            for (int i = 1; i < n; i++)
+            {
+                float u = i / (float)(n - 1), e = 1 - u;
+                l.R[i] = i == n - 1 ? 0 : r0 * (TipRadius + (1 - TipRadius) * (float)Math.Sqrt(e * Math.Sqrt(e)));
+                l.P[i] = l.P[i] - new V(0, drop * u * u, 0);
+            }
+            l.Point = true;
+            return l;
+        }
+
+        static void Twigs(ref Rng rng, List<Limb> limbs, Limb parent, int count, float tMin, float tMax, float lenMin, float lenMax, float spread, V pull, float tipBend, bool point = true)
         {
             for (int k = 0; k < count; k++)
             {
@@ -276,7 +297,8 @@ namespace Stabby.World
                 var at = parent.At(t, out var pd);
                 var side = V.Cross(pd, Unit(ref rng)).Norm();
                 var d = (pd * (1 - spread) + side * spread).Norm();
-                limbs.Add(Grow(ref rng, at, d, rng.Range(lenMin, lenMax), 3, parent.Radius(t) * 0.65f, 0.0025f, 0.15f, pull, parent.Bend(t), tipBend, parent.Phase, parent.Depth + 1));
+                var twig = Grow(ref rng, at, d, rng.Range(lenMin, lenMax), 3, parent.Radius(t) * 0.65f, 0.0025f, 0.15f, pull, parent.Bend(t), tipBend, parent.Phase, parent.Depth + 1);
+                limbs.Add(point ? Tip(twig) : twig);
             }
         }
 
@@ -293,7 +315,7 @@ namespace Stabby.World
                 var start = new V(rng.Range(-0.05f, 0.05f), 0, rng.Range(-0.05f, 0.05f));
                 float reach = rng.Range(0.6f, 1f);
                 reach = s == 0 ? 1f : 0.35f + 1.1f * (reach - 0.6f) * (reach - 0.6f) / 0.4f + 0.2f * (s & 1);
-                var stem = Grow(ref rng, start, d, reach, 5, 0.022f, 0.006f, 0.2f, new V(0, 0.15f, 0), 0, 1, rng.NextFloat(), 0);
+                var stem = Tip(Grow(ref rng, start, d, reach, 5, 0.022f, 0.006f, 0.2f, new V(0, 0.15f, 0), 0, 1, rng.NextFloat(), 0));
                 limbs.Add(stem);
                 Twigs(ref rng, limbs, stem, rng.Range(2, 4), 0.35f, 0.8f, 0.22f, 0.4f, 0.6f, new V(0, 0.2f, 0), 1.25f);
             }
@@ -330,7 +352,7 @@ namespace Stabby.World
                 var side = Around(spin, (k + rng.Range(-0.15f, 0.15f) + form.Range(-0.2f, 0.2f)) / leaders);
                 float pull = V.Dot(side, heavy), reachK = 1f + lean * pull * form.Range(0.6f, 1.4f);
                 var d = (new V(0, 1, 0) + side * (rng.Range(0.5f, 0.9f) * widen * (1f + 0.35f * lean * pull))).Norm();
-                var leader = Grow(ref rng, top, d, rng.Range(0.34f, 0.46f) * reachK * form.Range(0.75f, 1.2f), 5, TrunkRadius * 0.75f, 0.004f, 0.08f + 0.06f * form.NextFloat(), new V(0, 0.25f, 0), 0.05f, 0.35f, rng.NextFloat(), 1);
+                var leader = Tip(Grow(ref rng, top, d, rng.Range(0.34f, 0.46f) * reachK * form.Range(0.75f, 1.2f), 5, TrunkRadius * 0.75f, 0.004f, 0.08f + 0.06f * form.NextFloat(), new V(0, 0.25f, 0), 0.05f, 0.35f, rng.NextFloat(), 1));
                 limbs.Add(leader);
                 int branches = rng.Range(8, 12);
                 for (int b = 0; b < branches; b++)
@@ -343,7 +365,7 @@ namespace Stabby.World
                     float fill = form.NextFloat(), heft = 1f + lean * V.Dot(outward, heavy);
                     bool bare = fill < gappy;
                     float len = rng.Range(0.18f, 0.3f) * (1.2f - 0.6f * t) * heft * form.Range(0.65f, 1.35f) * (bare ? 1.15f : 1f);
-                    var branch = Grow(ref rng, at, bd, len, 4, leader.Radius(t) * 0.7f, 0.003f, 0.12f, new V(0, -0.15f, 0), leader.Bend(t), 0.85f, rng.NextFloat(), 2);
+                    var branch = Tip(Grow(ref rng, at, bd, len, 4, leader.Radius(t) * 0.7f, 0.003f, 0.12f, new V(0, -0.15f, 0), leader.Bend(t), 0.85f, rng.NextFloat(), 2));
                     limbs.Add(branch);
                     int first = limbs.Count;
                     Twigs(ref rng, limbs, branch, 5, 0.15f, 0.95f, 0.06f, 0.12f, 0.75f, new V(0, 0.1f, 0), 1.1f);
@@ -364,7 +386,7 @@ namespace Stabby.World
                 float t = rng.Range(0.6f, 0.9f);
                 var at = trunk.At(t, out _);
                 var bd = (Flat(ref rng) + new V(0, 0.3f, 0)).Norm();
-                var low = Grow(ref rng, at, bd, rng.Range(0.18f, 0.26f), 4, TrunkRadius * 0.45f, 0.003f, 0.1f, new V(0, -0.1f, 0), 0.02f, 0.8f, rng.NextFloat(), 2);
+                var low = Tip(Grow(ref rng, at, bd, rng.Range(0.18f, 0.26f), 4, TrunkRadius * 0.45f, 0.003f, 0.1f, new V(0, -0.1f, 0), 0.02f, 0.8f, rng.NextFloat(), 2));
                 limbs.Add(low);
                 Twigs(ref rng, limbs, low, 2, 0.5f, 0.9f, 0.07f, 0.11f, 0.7f, new V(0, 0.1f, 0), 1.1f);
             }
@@ -410,10 +432,10 @@ namespace Stabby.World
                     float r0 = TrunkRadius * (0.15f + 0.4f * (1 - t)) * (bare ? 0.5f : 1f);
                     var branch = bare
                         ? Grow(ref form, at, bd, len, stub ? 3 : 6, r0, 0.0012f, form.Range(0.25f, 0.45f), pull, trunk.Bend(t), 0.3f, trunk.Phase, 1)
-                        : Grow(ref rng, at, bd, len, 4, r0, 0.002f, 0.06f, pull, trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
+                        : Tip(Grow(ref rng, at, bd, len, 4, r0, 0.002f, 0.06f, pull, trunk.Bend(t), 0.8f, rng.NextFloat(), 1));
                     limbs.Add(branch);
                     int first = limbs.Count;
-                    if (bare) { if (!stub && form.NextFloat() < 0.6f) Twigs(ref form, limbs, branch, 1, 0.4f, 0.8f, len * 0.2f, len * 0.35f, 0.9f, new V(0, -0.6f, 0), 0.3f); }
+                    if (bare) { if (!stub && form.NextFloat() < 0.6f) Twigs(ref form, limbs, branch, 1, 0.4f, 0.8f, len * 0.2f, len * 0.35f, 0.9f, new V(0, -0.6f, 0), 0.3f, false); }
                     else if (reach > 0.05f) Twigs(ref rng, limbs, branch, 3, 0.3f, 0.9f, len * 0.3f, len * 0.5f, 0.85f, new V(0, -0.9f * sag, 0), 1f);
                     float low = Math.Min(1f, (t - dead) / 0.25f), leafy = bare ? 0 : (0.45f + 0.9f * (fill - gappy) / (1 - gappy) * heft) * (0.55f + 0.45f * Math.Max(0f, low));
                     branch.Bare = bare;
@@ -426,7 +448,7 @@ namespace Stabby.World
                 }
             }
             var crest = trunk.At(topCut - 0.06f, out var up);
-            var tip = Grow(ref form, crest, (up + heavy * form.Range(0.05f, 0.3f)).Norm(), 1.03f - topCut + form.Range(0.02f, 0.08f), 4, 0.004f, 0.002f, 0.1f, new V(0, 0.3f, 0), trunk.Bend(topCut), 0.5f, trunk.Phase, 1);
+            var tip = Tip(Grow(ref form, crest, (up + heavy * form.Range(0.05f, 0.3f)).Norm(), 1.03f - topCut + form.Range(0.02f, 0.08f), 4, 0.004f, 0.002f, 0.1f, new V(0, 0.3f, 0), trunk.Bend(topCut), 0.5f, trunk.Phase, 1));
             tip.Leafy = 0.6f;
             limbs.Add(tip);
             return Leaves(key, lod, limbs, ConiferStyle);
