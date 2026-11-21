@@ -31,6 +31,7 @@ Shader "Stabby/Water"
             static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
             static const float SlopeRange = 0.1;
+            static const float MistPxLo = 6, MistPxHi = 24, LipPx = 1.5;
 
             float2 Grad(int2 p)
             {
@@ -80,21 +81,93 @@ Shader "Stabby/Water"
                 return g * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x));
             }
 
-            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; };
+            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; };
+
+            float ScreenPx(float size, float dist) { return size / max(dist, 0.01) * UNITY_MATRIX_P[1][1] * 540; }
+
+            half4 Curtain(Varyings i, float3 v, float dist, float2 uv)
+            {
+                float u = saturate(i.fall.x), h = i.fall.y, y = u * h, x = i.chan.x * i.chan.y;
+                float2 fd = normalize(i.color.rg * 2 - 1), sd = float2(fd.y, -fd.x);
+                float flowQ = saturate(log2(1 + i.chan.z) / 9);
+                float tau = sqrt(2 * y / 9.81), tm = _Time.y;
+                float fp = max(length(ddx(float2(x, y))), length(ddy(float2(x, y))));
+                float detail = saturate(1.5 - fp * 1.2);
+                float2 wq = float2(x * 0.35, tau * 1.3 + 3.1);
+                float3 warp = Noise(wq) + 0.5 * Noise(wq * 2.1 + 5.7);
+                float2 sq = float2(x * 1.3 + 0.9 * warp.x, (tau - tm * 0.8) * 2.2);
+                float3 s1 = Noise(sq * float2(1, 0.3));
+                float3 s2 = Noise(sq * float2(2.6, 0.55) + 7.7);
+                float3 s3 = Noise(float2(x * 4.1 + 1.3 * warp.x, (tau - tm * 1.1) * 3.4) + 13.1) * detail;
+                float str = s1.x + 0.5 * s2.x + 0.3 * s3.x;
+                float aer = saturate(smoothstep(0.15, 1, u) * (0.55 + 0.45 * flowQ) + 0.25 * flowQ);
+                float white = saturate(aer + smoothstep(0.05, 0.55, str) * (0.35 + 0.4 * u));
+                float3 up = float3(0, 1, 0), f3 = float3(fd.x, 0, fd.y), s3d = float3(sd.x, 0, sd.y);
+                float3 nb = normalize(f3 * (0.35 + u) + up * (1 - u) * 0.9);
+                float3 tb = normalize(cross(s3d, nb));
+                float3 n = normalize(nb + s3d * (0.5 * s1.y + 0.3 * s2.y + 0.2 * s3.y + 0.3 * warp.y) + tb * (0.15 * s1.z + 0.1 * s2.z + 0.2 * warp.z));
+                n = dot(n, v) < 0 ? -n : n;
+                Light l = GetMainLight();
+                float3 sky = _StabbySky.rgb;
+                float ndv = saturate(dot(n, v));
+                float fres = 0.04 + 0.96 * pow(1 - ndv, 5);
+                float3 r = reflect(-v, n);
+                float3 skyR = lerp(sky * 1.2, sky * float3(0.8, 0.88, 1.05), sqrt(saturate(r.y))) + l.color * pow(saturate(dot(r, l.direction)), 8) * 0.4;
+                float3 under = SampleSceneColor(uv + n.xz * 0.02 / (1 + dist * 0.05));
+                float3 glass = lerp(under * lerp(_StabbyWaterShallow.rgb, 1, 0.55), skyR, fres);
+                float lit = saturate(dot(n, l.direction)) * 0.55 + 0.45;
+                float3 froth = (l.color * lit * 0.85 + sky * 0.3) * (0.88 + 0.12 * s2.x);
+                float3 c = lerp(glass, froth, white);
+                float lipW = 0.12 + 0.06 * Noise(float2(x * 0.7, 1.7)).x;
+                float lip = (1 - smoothstep(lipW * 0.5, lipW, y)) * saturate(ScreenPx(lipW, dist) / LipPx);
+                c = lerp(c, skyR * 1.15 + l.color * 0.25, lip * 0.8);
+                float3 h3 = normalize(l.direction + v);
+                c += l.color * pow(saturate(dot(n, h3)), 120) * 0.6 * (1 - white);
+                float edge = smoothstep(1, 0.82, abs(i.chan.x) + 0.08 * warp.x);
+                float thin = 0.5 + 0.5 * smoothstep(-0.3, 0.4, s1.x + 0.4 * warp.x);
+                float alpha = saturate(lerp(0.45 * thin + 0.2 * flowQ, 0.97, white)) * edge;
+                return half4(MixFog(c, i.fog), alpha);
+            }
+
+            half4 Mist(Varyings i, float3 v, float dist, float2 uv)
+            {
+                float2 cxy = i.fall.xy;
+                float rad = i.fall.z, r2 = dot(cxy, cxy);
+                float2 mq = cxy * 1.3 + float2(_Time.y * 0.07, -_Time.y * 0.18) + i.along * 0.13;
+                float wisp = 0.6 + 0.5 * Noise(mq).x + 0.25 * Noise(mq * 2.3 + 4.1).x;
+                float blob = saturate(1 - r2);
+                blob *= blob * saturate(wisp);
+                float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
+                float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
+                float soft = saturate((scene - surface) / (rad * 0.4));
+                float near = saturate((surface - _ProjectionParams.y - 0.5) / rad);
+                float px = smoothstep(MistPxLo, MistPxHi, ScreenPx(rad, dist));
+                Light l = GetMainLight();
+                float3 c = l.color * 0.8 + _StabbySky.rgb * 0.45;
+                return half4(MixFog(c, i.fog), blob * soft * near * px * 0.4);
+            }
 
             Varyings vert(Attributes i)
             {
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
-                VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
-                o.positionCS = p.positionCS;
-                o.positionWS = p.positionWS;
+                float3 wp = TransformObjectToWorld(i.positionOS.xyz);
+                UNITY_BRANCH if (i.fall.w > 1.5)
+                {
+                    float px = ScreenPx(i.fall.z, length(_WorldSpaceCameraPos - wp));
+                    float grow = px < MistPxLo ? 0 : i.fall.z;
+                    wp += (UNITY_MATRIX_V[0].xyz * i.fall.x + UNITY_MATRIX_V[1].xyz * i.fall.y) * grow;
+                }
+                float4 cs = TransformWorldToHClip(wp);
+                o.positionCS = cs;
+                o.positionWS = wp;
                 o.color = i.color;
-                o.fog = ComputeFogFactor(p.positionCS.z);
-                o.screen = ComputeScreenPos(p.positionCS);
+                o.fog = ComputeFogFactor(cs.z);
+                o.screen = ComputeScreenPos(cs);
                 o.chan = float4(i.chan, i.reach.xy);
                 o.along = i.reach.z;
+                o.fall = i.fall;
                 return o;
             }
 
@@ -104,6 +177,8 @@ Shader "Stabby/Water"
                 float dist = length(toCam);
                 float3 v = toCam / dist;
                 float2 uv = i.screen.xy / i.screen.w;
+                UNITY_BRANCH if (i.fall.w > 1.5) return Mist(i, v, dist, uv);
+                UNITY_BRANCH if (i.fall.w > 0.5) return Curtain(i, v, dist, uv);
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float3 bed = _WorldSpaceCameraPos - v * (dist * scene / max(surface, 0.001));
@@ -184,6 +259,16 @@ Shader "Stabby/Water"
                     float2 sq = mul(Turn, xz * _StabbyWaterSwell.x) + float2(_Time.y * 0.05, _Time.y * 0.02);
                     float2 sg = mul(Noise(sq).yz, Turn) + 0.7 * Noise(mul(sq, Turn) * 0.43 + float2(-_Time.y * 0.02, 1.7)).yz;
                     g += swell * _StabbyWaterSwell.y * saturate(1.6 - fp * _StabbyWaterSwell.x * 6) * (1.2 - 0.5 * ripple) * (1 - 0.5 * slick) * sg;
+                }
+                float pool = 0, poolBoil = 0;
+                UNITY_BRANCH if (river && i.fall.y > 0)
+                {
+                    float rn = (i.along - i.fall.x) / max(i.fall.z, 0.5) * (1 + 0.35 * i.chan.x * i.chan.x);
+                    float3 pb = Noise(xz * 0.45 + float2(t * 0.7, -t * 0.5)) + 0.5 * Noise(mul(Turn, xz) * 1.3 - float2(t * 1.1, t * 0.4));
+                    rn += 0.22 * Noise(xz * 0.17 + 5.3).x;
+                    pool = saturate(1 - rn);
+                    poolBoil = pb.x;
+                    g += pool * wv.z * 2.5 * pb.yz;
                 }
                 float3 n = normalize(float3(-g.x, 1, -g.y));
                 float streak = 0;
@@ -270,6 +355,12 @@ Shader "Stabby/Water"
                     foam = max(foam, 0.8 * eddy * slow * smoothstep(0.3, 0.7, eb) * grain);
                 }
                 foam = max(foam, 0.15 * streak);
+                UNITY_BRANCH if (pool > 0)
+                {
+                    float core = smoothstep(0.45, 0.85, pool) * (0.8 + 0.2 * poolBoil);
+                    float ring = smoothstep(0, 0.5, pool) * smoothstep(-0.15, 0.45, poolBoil + 0.7 * pool - 0.3);
+                    foam = max(foam, max(core, 0.75 * ring));
+                }
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
                 float alpha = saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.04)));
