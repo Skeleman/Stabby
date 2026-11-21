@@ -105,21 +105,33 @@ Shader "Stabby/Object"
                 return h + 0.35 * b.x;
             }
 
-            void Wood(float3 local, float3 nOS, float3 n, float3 axis, float3 baseColor, bool isLog, float fp, out float3 albedo, out float3 nOut)
+            void Wood(float3 local, float3 nOS, float3 n, float3 axis, float3 baseColor, bool isLog, float4 tone, float fp, out float3 albedo, out float3 nOut)
             {
                 float along = isLog ? local.x : local.y;
                 float2 rc = isLog ? local.yz : local.xz;
                 float radius = max(length(rc), 1e-3);
                 float capN = isLog ? abs(nOS.x) : nOS.y;
-                                float3 wood = ToLinear(float3(0.72, 0.58, 0.40));
+                float3 wood = lerp(ToLinear(float3(0.6, 0.55, 0.47)), ToLinear(float3(0.52, 0.51, 0.48)), tone.w);
+                float mossMask = tone.y * smoothstep(0.2, 0.75, n.y) * smoothstep(-0.1, 0.35, TmNoise2(local.xz * 5 + along * 2).x + 0.3 * TmNoise2(local.xz * 17).x);
+                float3 moss = ToLinear(float3(0.33, 0.38, 0.2)) * (0.8 + 0.3 * TmNoise2(local.xz * 23).x);
                 if (capN > 0.7)
                 {
-                    float wob = 0.06 * TmNoise2(rc * 6 + along).x;
-                    float r = (radius + wob) * 14;
-                    float ring = 0.5 + 0.5 * cos(r * 6.2831853);
                     float keep = TmFade(14, fp);
-                    float crack = smoothstep(0.92, 1, TmNoise2(float2(atan2(rc.y, rc.x) * 3, radius * 2)).x * 0.5 + 0.5);
-                    albedo = wood * (1 - 0.18 * keep * ring) * (1 - 0.5 * crack);
+                    if (tone.z > 0.5)
+                    {
+                        float2 q = float2(rc.x * 26, rc.y * 5) + along * 3;
+                        float fib = 1 - abs(TmNoise2(q).x), sp = TmNoise2(rc * 9 + 3.1).x;
+                        albedo = wood * (0.7 + 0.35 * lerp(0.6, fib, keep)) * (0.9 + 0.12 * sp);
+                    }
+                    else
+                    {
+                        float wob = 0.06 * TmNoise2(rc * 6 + along).x;
+                        float r = (radius + wob) * 14;
+                        float ring = 0.5 + 0.5 * cos(r * 6.2831853);
+                        float crack = smoothstep(0.92, 1, TmNoise2(float2(atan2(rc.y, rc.x) * 3, radius * 2)).x * 0.5 + 0.5);
+                        albedo = wood * (1 - 0.18 * keep * ring) * (1 - 0.5 * crack);
+                    }
+                    albedo = lerp(albedo, moss, mossMask * 0.6);
                     nOut = n;
                     return;
                 }
@@ -128,11 +140,12 @@ Shader "Stabby/Object"
                 float2 g;
                 float keep = TmFade(9, fp);
                 float h = WoodRidge(p, g);
-                albedo = baseColor * (0.65 + 0.55 * lerp(0.6, h, keep));
+                float3 bark = lerp(baseColor, baseColor * float3(0.92, 0.95, 1.02) + 0.03, tone.w);
+                albedo = lerp(bark * (0.65 + 0.55 * lerp(0.6, h, keep)), moss, mossMask);
                 float3 t = axis;
                 float3 b = normalize(cross(n, t));
                 t = cross(b, n);
-                float3 grad = (g.x * 1.6 * t + g.y * 9 * b) * 0.05 * keep;
+                float3 grad = (g.x * 1.6 * t + g.y * 9 * b) * 0.05 * keep * (1 - 0.7 * mossMask);
                 nOut = normalize(n - (grad - n * dot(grad, n)));
             }
 
@@ -180,7 +193,7 @@ Shader "Stabby/Object"
                     [branch] if (i.tone.x > 0.5) albedo = Dressed(albedo, i.tone, wp - tmO, n, i.local.y, fp);
                 }
                 else
-                    Wood(i.local, normalize(i.normalOS), n, normalize(i.axisWS), base.rgb, base.a < 1.5, fp, albedo, n);
+                    Wood(i.local, normalize(i.normalOS), n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, albedo, n);
                 float above = max(wp.y - fade.z, 0), size = max(fade.w, 0.1);
                 float ao = lerp(0.72, 1, smoothstep(0, min(0.12, 0.2 * size), above)) * lerp(0.75, 1, smoothstep(0, min(0.9, 0.6 * size), above)) * lerp(1, 0.5, saturate(-n.y));
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp));
