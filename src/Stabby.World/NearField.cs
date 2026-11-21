@@ -13,6 +13,8 @@ namespace Stabby.World
         int N { get; }
         float CellMeters { get; }
         uint Seed { get; }
+        uint GullySeed { get; }
+        uint RockSeed { get; }
         float Height(int i);
         float Amp(int i);
         float Offset(int i);
@@ -26,10 +28,13 @@ namespace Stabby.World
 
     public static class NearField
     {
-        public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 8f, GullyDepthM = 2.5f, RockM = 6f;
+        public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
         public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f;
         public const int MacroOctaves = 5, Chaikin = 2;
-        const uint GullySalt = 0x9E3779B9u, RockSalt = 0x85EBCA6Bu;
+        public const int NodeQuads = 64, NodeLevels = 9;
+
+        public static float NodeStep(int level) => 1 << level;
+        public static float NodeSize(int level) => NodeQuads * NodeStep(level);
 
         public static float Bank(float halfWidth) => BankMinM + BankPerWidth * halfWidth;
         public static float Rise(float halfWidth) => BankRiseM + BankRisePerWidth * 2 * halfWidth;
@@ -118,6 +123,12 @@ namespace Stabby.World
                 foreach (int c in cells[p]) items[start[c] + fill[c]++] = p;
         }
 
+        static float StageGradient(RiverPiece q)
+        {
+            float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l = (float)Math.Sqrt(ex * ex + ez * ez);
+            return l > 1e-3f ? Math.Abs(q.Sb - q.Sa) / l : 0f;
+        }
+
         public static void Project(RiverPiece q, float x, float z, out float d, out float t)
         {
             float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l2 = ex * ex + ez * ez;
@@ -125,6 +136,32 @@ namespace Stabby.World
             t = t < 0 ? 0 : t > 1 ? 1 : t;
             float dx = x - q.Ax - ex * t, dz = z - q.Az - ez * t;
             d = (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        public const float DetailReach = 1.35f;
+
+        public static void Range<T>(T c, float x0, float z0, float x1, float z1, out float lo, out float hi) where T : struct, INearCells
+        {
+            int n = c.N;
+            float cm = c.CellMeters, amp = 0, wlo = float.MaxValue, whi = float.MinValue;
+            lo = float.MaxValue; hi = float.MinValue;
+            int i0 = Clamp((int)Math.Floor(x0 / cm) - 1, n), i1 = Clamp((int)Math.Ceiling(x1 / cm) + 1, n);
+            int k0 = Clamp((int)Math.Floor(z0 / cm) - 1, n), k1 = Clamp((int)Math.Ceiling(z1 / cm) + 1, n);
+            for (int k = k0; k <= k1; k++)
+                for (int i = i0; i <= i1; i++)
+                {
+                    int cell = k * n + i;
+                    float h = c.Height(cell);
+                    lo = Math.Min(lo, h); hi = Math.Max(hi, h); amp = Math.Max(amp, c.Amp(cell));
+                    for (int q = c.PieceStart(cell), e = c.PieceStart(cell + 1); q < e; q++)
+                    {
+                        var p = c.Piece(c.PieceAt(q));
+                        wlo = Math.Min(wlo, Math.Min(Math.Min(p.Sa - p.Da, p.Sb - p.Db), 0.5f * Math.Min(Math.Min(p.Sa, p.Sb), Erosion.MinLandHeight)));
+                        whi = Math.Max(whi, Math.Max(p.Sa + Rise(p.Wa), p.Sb + Rise(p.Wb)) + 1f);
+                    }
+                }
+            lo -= DetailReach * amp; hi += DetailReach * amp;
+            lo = Math.Min(lo, wlo); hi = Math.Max(hi, whi);
         }
 
         public static float Smooth<T>(T c, float x, float z) where T : struct, INearCells
@@ -145,7 +182,8 @@ namespace Stabby.World
             float a = Lerp2(c.Amp(i00), c.Amp(i10), c.Amp(i01), c.Amp(i11), tx, tz);
 
             int cell = CellOf(x, z, cm, n), s0 = c.PieceStart(cell), s1 = c.PieceStart(cell + 1);
-            float fade = 1f, emin = float.MaxValue, f = Fade(cm);
+            float fade = 1f, f = Fade(cm);
+            bool near = false;
             for (int k = s0; k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
@@ -153,7 +191,7 @@ namespace Stabby.World
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
                 if (d >= wb + f) continue;
                 fade = Math.Min(fade, Grid.Smoothstep(wb, wb + f, d));
-                emin = Math.Min(emin, d - w);
+                near = true;
             }
 
             float h = b;
@@ -162,24 +200,36 @@ namespace Stabby.World
                 float m = Noise.Fbm(c.Seed, x / MacroM, z / MacroM, MacroOctaves);
                 h += fade * (a * Math.Max(-1f, Math.Min(1f, m)) + Fine(c, x, z, b, a, tx, tz, ax, az, bx, bz));
             }
-            if (emin == float.MaxValue) return h;
+            if (!near) return h;
 
-            float sum = 0, acc = 0;
+            float raised = h;
             for (int k = s0; k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
                 if (d >= wb + f) continue;
-                float s = q.Sa + (q.Sb - q.Sa) * t, depth = q.Da + (q.Db - q.Da) * t;
-                float top = SmoothMax(h, s + Rise(w), 1f), p;
-                if (d < w) p = Math.Max(s - depth * (1 - d * d / (w * w)), 0.5f * Math.Min(s, Erosion.MinLandHeight));
-                else if (d < wb) p = s + (top - s) * Grid.Smoothstep(w, wb, d);
-                else p = h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d));
-                float e = d - w - emin, wt = (1 - Grid.Smoothstep(wb, wb + f, d)) / ((0.25f + e * e) * (0.25f + e * e));
-                sum += wt; acc += wt * p;
+                float s = q.Sa + (q.Sb - q.Sa) * t, top = SmoothMax(h, s + Rise(w), 1f);
+                raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)));
             }
-            return sum > 0 ? acc / sum : h;
+            float cut = float.MaxValue;
+            for (int k = s0; k < s1; k++)
+            {
+                var q = c.Piece(c.PieceAt(k));
+                Project(q, x, z, out float d, out float t);
+                float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
+                if (d >= wb + f) continue;
+                float s = q.Sa + (q.Sb - q.Sa) * t, depth = q.Da + (q.Db - q.Da) * t, top = SmoothMax(h, s + Rise(w), 1f), p;
+                if (d < w) p = Math.Max(s - depth * (1 - d * d / (w * w)), 0.5f * Math.Min(s, Erosion.MinLandHeight));
+                else
+                {
+                    float r = Math.Min(WallRampM, 2f * (wb - w));
+                    p = (d < wb ? s + (top - s) * Grid.Smoothstep(w, wb, d) : top) + (WallSlope + 2f * StageGradient(q)) * Ramp(d - wb + 0.5f * r, r);
+                    if (d >= wb) p += WallLift * Grid.Smoothstep(wb + 0.5f * f, wb + f, d);
+                }
+                cut = Math.Min(cut, p);
+            }
+            return SmoothMin(raised, cut, CutSoft);
         }
 
         static float Fine<T>(T c, float x, float z, float b, float a, float tx, float tz, int ax, int az, int bx, int bz) where T : struct, INearCells
@@ -205,16 +255,16 @@ namespace Stabby.World
                     float dot = ux * dx + uz * dz, w = dot * dot * dot * dot;
                     if (w < 1e-3f) continue;
                     float u = x * ux + z * uz, v = z * ux - x * uz;
-                    uint s = c.Seed ^ GullySalt ^ (uint)i * 0x27D4EB2Fu;
-                    float n1 = 1 - Math.Abs(Noise.Gradient(s, u / GullyAlongM, v / GullyAcrossM));
-                    float n2 = 1 - Math.Abs(Noise.Gradient(s + 7u, 2 * u / GullyAlongM, 2 * v / GullyAcrossM));
+                    uint s = c.GullySeed + (uint)i * 0x27D4EB2Fu;
+                    float n1 = Ridge(Noise.Gradient(s, u / GullyAlongM, v / GullyAcrossM));
+                    float n2 = Ridge(Noise.Gradient(s + 7u, 2 * u / GullyAlongM, 1.5f * v / GullyAcrossM));
                     float ch = n1 * n1 + 0.5f * n2 * n2;
                     g += w * (1 - ch * (2f / 1.5f));
                     wsum += w;
                 }
                 fine += ga * Math.Max(-1f, Math.Min(1f, g / wsum));
             }
-            if (ra > 0) fine += ra * Math.Max(-1f, Math.Min(1f, Noise.Fbm(c.Seed ^ RockSalt, x / RockM, z / RockM, 2)));
+            if (ra > 0) fine += ra * Math.Max(-1f, Math.Min(1f, Noise.Fbm(c.RockSeed, x / RockM, z / RockM, 2)));
             return fine;
         }
 
@@ -240,10 +290,20 @@ namespace Stabby.World
             return c.Band(k) + (c.Band((k + 1) % bands) - c.Band(k)) * t;
         }
 
+        static float Ridge(float g) => 1 + CreaseSoft - (float)Math.Sqrt(g * g + CreaseSoft * CreaseSoft);
+
         static float SmoothMax(float a, float b, float k)
         {
             float d = a - b;
             return 0.5f * (a + b + (float)Math.Sqrt(d * d + k * k));
+        }
+
+        static float Ramp(float e, float r) => e <= 0 ? 0 : e < r ? e * e / (2f * r) : e - 0.5f * r;
+
+        static float SmoothMin(float a, float b, float k)
+        {
+            float d = a - b;
+            return 0.5f * (a + b - (float)Math.Sqrt(d * d + k * k));
         }
 
         static float Lerp2(float v00, float v10, float v01, float v11, float tx, float tz)

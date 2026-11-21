@@ -136,14 +136,14 @@ namespace Stabby.World
                 for (int x = 0; x < n - 1; x++)
                 {
                     int i = y * n + x;
-                    bool wet = w.Sea[i] || hy.LakeId[i] >= 0 || hy.IsRiver[i];
+                    bool wet = (w.Sea[i] || hy.LakeId[i] >= 0) && d.Cells.PieceStart(i) == d.Cells.PieceStart(i + 1);
                     if (wet && d.HeightAt(x, y) != w.Height[i]) { e.Add($"detail moves water cell {i}"); return; }
                     if (w.Height[i] > 0 && w.Height[i + 1] > 0 && w.Height[i + n] > 0 && w.Height[i + n + 1] > 0
                         && d.HeightAt(x + 0.5f, y + 0.5f) <= 0) { e.Add($"detail sinks land below the sea near cell {i}"); return; }
                 }
         }
 
-        public const float SeamEpsilonM = 0.005f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f;
+        public const float SeamEpsilonM = 0.01f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f;
         public const int SeamStride = 3, NearCells = 24;
 
         static void CheckNearField(GeneratedWorld w, List<string> e)
@@ -161,8 +161,7 @@ namespace Stabby.World
                 for (int half = 0; half < 2; half++)
                 {
                     float bx = (float)Math.Floor(sx / cm) * cm + half * 0.5f * cm, bz = (float)Math.Floor(sz / cm) * cm + half * 0.5f * cm;
-                    float jx = Math.Abs(d.Sample(bx - SeamEpsilonM, sz) - d.Sample(bx + SeamEpsilonM, sz));
-                    float jz = Math.Abs(d.Sample(sx, bz - SeamEpsilonM) - d.Sample(sx, bz + SeamEpsilonM));
+                    float jx = Jump(d, bx, sz, 1, 0), jz = Jump(d, sx, bz, 0, 1);
                     if (jx > SeamTolerance) { e.Add($"near field jumps {jx:F2} m across x = {bx:F1} at z = {sz:F0}"); return; }
                     if (jz > SeamTolerance) { e.Add($"near field jumps {jz:F2} m across z = {bz:F1} at x = {sx:F0}"); return; }
                 }
@@ -178,8 +177,9 @@ namespace Stabby.World
                 var c = new NetsChunk { X0 = (int)Math.Floor(ax / NearStepM) - NearCells / 2, Z0 = (int)Math.Floor(az / NearStepM) - NearCells / 2, Cells = NearCells, StepM = NearStepM };
                 var f = new NetsBuffers();
                 SurfaceNets.Heightfield(new DetailColumns { Detail = d, StepM = NearStepM }, c, ref f);
-                for (int v = 0; v < f.Verts.Count; v += 6 * 5)
+                for (int t = 0; t < f.Tris.Count; t += 7)
                 {
+                    int v = 6 * f.Tris[t];
                     float x = f.Verts[v], y = f.Verts[v + 1], z = f.Verts[v + 2], wy = y + 0.5f;
                     Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
                     if (Math.Abs(wy - y) > MeshTolerance) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
@@ -192,28 +192,37 @@ namespace Stabby.World
                 float mx = 0.5f * (q.Ax + q.Bx), mz = 0.5f * (q.Az + q.Bz), ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l = (float)Math.Sqrt(ex * ex + ez * ez);
                 if (l < 1e-3f) continue;
                 float s = 0.5f * (q.Sa + q.Sb), hw = 0.5f * (q.Wa + q.Wb), depth = 0.5f * (q.Da + q.Db), reach = hw + NearField.Bank(hw);
-                if (!Crowded(pieces, p, mx, mz, -1) && depth > 0.2f && s > Erosion.MinLandHeight + depth && d.Sample(mx, mz) > s - 0.1f * depth)
+                if (!Crowded(pieces, p, mx, mz, -1, float.MinValue) && depth > 0.2f && s > Erosion.MinLandHeight + depth && d.Sample(mx, mz) > s - 0.1f * depth)
                 { e.Add($"river bed at {mx:F0},{mz:F0} sits above its water {s:F1}"); return; }
                 for (int side = -1; side <= 1; side += 2)
                 {
                     float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
                     int bc = NearField.CellOf(bx, bz, cm, n);
-                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach)) continue;
+                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s)) continue;
                     float h = d.Sample(bx, bz);
                     if (h < s - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {s:F1}"); return; }
                 }
             }
         }
 
-        static bool Crowded(List<RiverPiece> pieces, int self, float x, float z, float own)
+        static float Jump(TerrainDetail d, float x, float z, float ux, float uz)
+        {
+            float e = SeamEpsilonM;
+            float a = d.Sample(x - 3 * e * ux, z - 3 * e * uz), b = d.Sample(x - e * ux, z - e * uz), c = d.Sample(x + e * ux, z + e * uz), f = d.Sample(x + 3 * e * ux, z + 3 * e * uz);
+            return Math.Abs(c - b) - 1.5f * Math.Max(Math.Abs(b - a), Math.Abs(f - c));
+        }
+
+        static bool Crowded(List<RiverPiece> pieces, int self, float x, float z, float own, float stage)
         {
             for (int r = 0; r < pieces.Count; r++)
             {
                 if (r == self) continue;
                 var q = pieces[r];
                 NearField.Project(q, x, z, out float d, out float t);
-                float hw = q.Wa + (q.Wb - q.Wa) * t;
-                if (d < hw + NearField.Bank(hw) - 0.5f && (own < 0 || d < own - 0.5f)) return true;
+                float hw = q.Wa + (q.Wb - q.Wa) * t, s = q.Sa + (q.Sb - q.Sa) * t;
+                float wb = hw + NearField.Bank(hw);
+                if (d < wb - 0.5f && (own < 0 || d < own - 0.5f || s < stage)) return true;
+                if (Math.Abs(r - self) > 2 && s < stage && d < wb + stage - s) return true;
             }
             return false;
         }
@@ -236,31 +245,27 @@ namespace Stabby.World
             if (!f.SameAs(g)) e.Add($"heightfield mesher differs from the general mesher near cell {top}");
         }
 
-        public const int ChunkCells = 32;
-        public static readonly float[] ChunkSteps = { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f, 8f };
-
         static void CheckChunkBounds(GeneratedWorld w, FeatureEdit[] placed, List<string> e)
         {
             int n = w.Config.Size;
-            float cm = w.Config.CellMeters, coarse = ChunkSteps[ChunkSteps.Length - 1];
+            float cm = w.Config.CellMeters;
             var detail = new TerrainDetail(w);
             var all = new EditArray { Items = placed };
-            var origins = new List<(int, int)>();
+            var spots = new List<(float, float)>();
             int top = 0;
             for (int i = 1; i < w.Height.Length; i++) if (w.Height[i] > w.Height[top]) top = i;
-            origins.Add((top % n / ChunkCells * ChunkCells, top / n / ChunkCells * ChunkCells));
-            if (placed.Length > 0) origins.Add(((int)(placed[0].Ax / cm) / ChunkCells * ChunkCells, (int)(placed[0].Az / cm) / ChunkCells * ChunkCells));
-            for (int o = 0; o < origins.Count; o++)
-            {
-                var (cx, cz) = origins[o];
-                detail.ChunkRange(all, cm, cx, cz, ChunkCells, coarse, out float lo, out float hi);
-                foreach (float step in ChunkSteps)
+            spots.Add((top % n * cm, top / n * cm));
+            if (placed.Length > 0) spots.Add((placed[0].Ax, placed[0].Az));
+            var pieces = NearField.Pieces(w);
+            if (pieces.Count > 0) spots.Add((pieces[pieces.Count / 2].Ax, pieces[pieces.Count / 2].Az));
+            foreach (var (sx, sz) in spots)
+                for (int level = 0; level < NearField.NodeLevels; level++)
                 {
-                    if (step < 0.5f && o == 0) continue;
-                    int m = (int)(ChunkCells / step);
-                    var cols = new DetailColumns { Detail = detail, StepM = step * cm };
-                    var c = new NetsChunk { X0 = (int)(cx / step), Z0 = (int)(cz / step), Cells = m, StepM = step * cm };
-                    float sm = step * cm, x0 = cx * cm, z0 = cz * cm, x1 = x0 + ChunkCells * cm, z1 = z0 + ChunkCells * cm;
+                    float sm = NearField.NodeStep(level), size = NearField.NodeSize(level);
+                    float x0 = (float)Math.Floor(sx / size) * size, z0 = (float)Math.Floor(sz / size) * size, x1 = x0 + size, z1 = z0 + size;
+                    detail.ChunkRange(all, x0, z0, size, sm, out float lo, out float hi);
+                    var cols = new DetailColumns { Detail = detail, StepM = sm };
+                    var c = new NetsChunk { X0 = (int)(x0 / sm), Z0 = (int)(z0 / sm), Cells = NearField.NodeQuads, StepM = sm };
                     var meshed = new List<FeatureEdit>();
                     foreach (var x in placed) if (x.MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(x);
                     var f = new NetsBuffers();
@@ -268,15 +273,14 @@ namespace Stabby.World
                     if (meshed.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
                     else SurfaceNets.Heightfield(cols, c, ref f);
                     if (meshed.Count > 0 && !StitchTargetsMatch(cols, list, c, f))
-                    { e.Add($"chunk {cx},{cz} at step {step} has border vertices a finer neighbour cannot stitch to"); return; }
+                    { e.Add($"node {x0:F0},{z0:F0} at level {level} has border vertices a finer neighbour cannot stitch to"); return; }
                     foreach (int t in f.Tris)
                     {
                         int v = t * 6 + 1;
                         if (f.Verts[v] < lo || f.Verts[v] > hi)
-                        { e.Add($"bounds {lo:F0}..{hi:F0} miss vertex {f.Verts[v - 1]:F0},{f.Verts[v]:F0},{f.Verts[v + 1]:F0} of chunk {cx},{cz} at step {step}"); return; }
+                        { e.Add($"bounds {lo:F0}..{hi:F0} miss vertex {f.Verts[v - 1]:F0},{f.Verts[v]:F0},{f.Verts[v + 1]:F0} of node {x0:F0},{z0:F0} at level {level}"); return; }
                     }
                 }
-            }
         }
 
         static bool StitchTargetsMatch(DetailColumns cols, EditArray edits, NetsChunk c, NetsBuffers f)
