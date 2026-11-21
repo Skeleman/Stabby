@@ -8,6 +8,7 @@ using Stabby.World;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Entities.Graphics;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -16,6 +17,7 @@ using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Stabby.Game
 {
@@ -45,7 +47,7 @@ namespace Stabby.Game
 
     struct TerrainNode
     {
-        public int Built, Pending, Drawn, Stitch, Vertices;
+        public int Built, Pending, Drawn, Stitch, Vertices, Cast;
         public float MorphEnd;
         public Entity Entity;
         public BatchMeshID Mesh;
@@ -540,6 +542,7 @@ namespace Stabby.Game
         public int ApplyVertices = 150000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
+        public static bool Casting = true;
 
         sealed class Prepared
         {
@@ -564,6 +567,8 @@ namespace Stabby.Game
 
         Task<Prepared> preparing;
         Prepared prepared;
+        IEnumerator<bool> upload;
+        const int UploadBytes = 4 << 20;
         BlobAssetReference<TerrainLookData> look;
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
@@ -606,6 +611,7 @@ namespace Stabby.Game
             if (look.IsCreated)
             {
                 if (SmoothOnly != builtSmooth) Reset();
+                if (upload != null && (!upload.MoveNext() || upload.Current)) upload = null;
                 Collect(); Roots(); Statics(); Lods();
             }
             else if (preparing == null) Begin();
@@ -746,7 +752,7 @@ namespace Stabby.Game
             look = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
             prepared.Look.Dispose();
             TerrainLook.ApplyStrata(prepared.Strata);
-            TerrainLook.ApplyField(prepared.Field);
+            upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
             Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.45f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.16f, 0.15f, 0.12f));
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
@@ -1023,7 +1029,9 @@ namespace Stabby.Game
             builtKeys.AddRange(meshes.Keys);
             Array.Clear(levelCounts, 0, levelCounts.Length);
             float allowed = Allowed(cam);
-            int vertices = 0;
+            float3 eye = cam.transform.position;
+            float reach = Casting && UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.shadowDistance : 0;
+            int vertices = 0, casting = 0, castVertices = 0;
             foreach (int key in builtKeys)
             {
                 var nd = nodes[key];
@@ -1034,6 +1042,12 @@ namespace Stabby.Game
                     EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, want);
                     nd.Drawn = want ? 1 : 0;
                 }
+                MinMaxAABB nb = tree.Box(key);
+                int cast = want && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
+                if (cast != nd.Cast) Shadow(nd.Entity, cast);
+                nd.Cast = cast;
+                casting += cast;
+                castVertices += cast * nd.Vertices;
                 if (want)
                 {
                     int l = tree.Level(key);
@@ -1051,12 +1065,12 @@ namespace Stabby.Game
                 nodes[key] = nd;
             }
             GameStatus.TerrainBehind = behind;
-            int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices);
+            int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices, castVertices);
             for (int i = 0; i < levelCounts.Length; i++) seen = HashCode.Combine(seen, levelCounts[i]);
             if (seen != statusSeen || !GameStatus.Lines.ContainsKey("terrain"))
             {
                 statusSeen = seen;
-                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count} drawn, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, by level {string.Join("/", levelCounts)}";
+                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count} drawn, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, {casting} casting ({castVertices} vertices), by level {string.Join("/", levelCounts)}";
             }
             ScheduleLods(cam);
         }
@@ -1112,11 +1126,19 @@ namespace Stabby.Game
                 if (tree.Level(key) == 0 && tree.Distance(key, eye) < reach && meshes.TryGetValue(key, out var m)) into.Add(m);
         }
 
+        void Shadow(Entity e, int cast)
+        {
+            var f = EntityManager.GetSharedComponentManaged<RenderFilterSettings>(e);
+            f.ShadowCastingMode = cast != 0 ? ShadowCastingMode.On : ShadowCastingMode.Off;
+            EntityManager.SetSharedComponentManaged(e, f);
+        }
+
         void Evict(int key)
         {
             var nd = nodes[key];
             if (nd.Entity != Entity.Null)
             {
+                if (nd.Cast != 0) Shadow(nd.Entity, 0);
                 EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, false);
                 spare.Add(nd.Entity);
             }
