@@ -44,7 +44,7 @@ namespace Stabby.Game
     public struct GroundData
     {
         public int N, Bands, EditAcross;
-        public uint Seed, GullySeed, RockSeed;
+        public uint Seed, GullySeed, RockSeed, CoastSeed;
         public float CellMeters, Top, Period;
         public BlobArray<float> Height, Amp, Offset, Band;
         public BlobArray<int> PieceStart, PieceItems;
@@ -87,6 +87,7 @@ namespace Stabby.Game
             public uint Seed => Blob.Value.Seed;
             public uint GullySeed => Blob.Value.GullySeed;
             public uint RockSeed => Blob.Value.RockSeed;
+            public uint CoastSeed => Blob.Value.CoastSeed;
             public float Period => Blob.Value.Period;
             public int Bands => Blob.Value.Bands;
             public float Height(int i) => Blob.Value.Height[i];
@@ -110,6 +111,7 @@ namespace Stabby.Game
             root.Seed = c.Seed;
             root.GullySeed = c.GullySeed;
             root.RockSeed = c.RockSeed;
+            root.CoastSeed = c.CoastSeed;
             root.CellMeters = c.CellMeters;
             root.Period = c.Period;
             root.Bands = c.Bands;

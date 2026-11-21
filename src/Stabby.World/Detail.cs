@@ -58,7 +58,7 @@ namespace Stabby.World
                 period = 1f;
                 bands = new[] { 0.5f };
             }
-            cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(),
+            cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(), Rng.Stream(w.Config.Seed, "near-coast").NextU32(),
                 h, amp, offsets, period, bands, pieces.ToArray(), index, items);
         }
 
@@ -68,6 +68,7 @@ namespace Stabby.World
         public uint Seed => cells.Seed;
         public uint GullySeed => cells.GullySeed;
         public uint RockSeed => cells.RockSeed;
+        public uint CoastSeed => cells.CoastSeed;
         public float Height(int cell) => cells.Height(cell);
         public float Amplitude(int cell) => cells.Amp(cell);
 
@@ -123,11 +124,11 @@ namespace Stabby.World
         readonly int[] start, items;
         readonly int n;
         readonly float cm, period;
-        readonly uint seed, gully, rock;
+        readonly uint seed, gully, rock, coast;
 
-        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items)
+        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, uint coast, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items)
         {
-            this.n = n; this.cm = cm; this.seed = seed; this.gully = gully; this.rock = rock;
+            this.n = n; this.cm = cm; this.seed = seed; this.gully = gully; this.rock = rock; this.coast = coast;
             this.h = h; this.amp = amp; this.off = off; this.period = period; this.bands = bands;
             this.pieces = pieces; this.start = start; this.items = items;
         }
@@ -137,6 +138,7 @@ namespace Stabby.World
         public uint Seed => seed;
         public uint GullySeed => gully;
         public uint RockSeed => rock;
+        public uint CoastSeed => coast;
         public float Period => period;
         public int Bands => bands.Length;
         public int PieceCount => pieces.Length;
