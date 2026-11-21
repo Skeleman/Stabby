@@ -216,7 +216,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 - Exploration: a world dense with detail, secrets and one-off discoveries:
   landmarks, rare creatures, giant creatures, mysterious structures, scenic
   vistas. Built on the object, structure kit and blueprint stages (rule 11),
-  each discovery type placed from its own stream. Step 1 (b/discoveries-1): placement stage plus a standing-stone ring. | now
+  each discovery type placed from its own stream. Step 1 (b/discoveries-1): placement stage plus a standing-stone ring. Zach: draw site ideas from Punchy's landmark list (Assets/Game/Landmarks: hermit huts, campsites, ruins, sunken temple, salt tower, ash ribcage, geysers, hot springs, fairy ring, wolf den, road shrine, lone inn and more), rebuilt on the object kit. | now
 - Character interactivity: NPCs, animals and creatures act on their own
   desires and interact with each other and the player. One shared desire and
   behaviour system serves every agent; NPCs add ownership of items and
