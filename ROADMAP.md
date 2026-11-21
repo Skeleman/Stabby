@@ -81,7 +81,20 @@ architecture contract. The other steps fit the contract as it stands.
 | Cliffs (approved by Zach): hard strata resist erosion, which makes scarps. Generation reads rock hardness per stratum from the material library, so material changes bump `GeneratorVersion`. Caves share the same strata for wall faces and can later prefer softer layers | done |
 | Undercut cliff faces: overhang-shaped carves along scarps at the softest band under a hard cap (`Features.Undercut`, `StrataField` shared with erosion) | done |
 | Cross-runtime erosion drift: Unity (Mono) and .NET generate seed 3 up to ~60 m apart before strata, ~180 m with them. The host map is authoritative and chunk sync corrects clients, so bake shipped maps on one runtime | later |
-| **Zach:** cave expansion beyond the current fundamentals (cave networks, a dungeon scale) | later |
+| **Zach:** cave expansion beyond the current fundamentals (cave networks, a dungeon scale); after surface look and objects | later |
+
+## Next: surface look and objects (before bigger caves)
+
+| Item | Status |
+|---|---|
+| **Zach:** terrain resolution: 45 m cells are too coarse; options A (5.8 km world), B (1024 cells, 11.5 km), C (2048 cells, 23 km); drop the levee once cells are finer | next |
+| Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | next |
+| Terrain textures: texture sets per material in `materials.json`, triplanar on rock | next |
+| **Zach:** world objects contract: one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes | next |
+| Objects step 1: static rocks and debris, collision shared by `Walk.Step` | later |
+| Objects step 2: animated foliage with shader wind | later |
+| Objects step 3: interactive objects with host-authoritative removal | later |
+| Objects step 4: structures from hierarchical pieces, merged LOD | later |
 
 ## Next
 
