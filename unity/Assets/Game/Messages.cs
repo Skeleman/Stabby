@@ -42,10 +42,12 @@ namespace Stabby.Game
 
     public struct GroundData
     {
-        public int N;
-        public uint Seed;
-        public float CellMeters, Top;
-        public BlobArray<float> Height, Amp;
+        public int N, Bands;
+        public uint Seed, GullySeed, RockSeed;
+        public float CellMeters, Top, Period;
+        public BlobArray<float> Height, Amp, Offset, Band;
+        public BlobArray<int> PieceStart, PieceItems;
+        public BlobArray<RiverPiece> Pieces;
         public BlobArray<FeatureEdit> Edits;
     }
 
@@ -55,42 +57,64 @@ namespace Stabby.Game
 
         public float Top => Blob.Value.Top;
 
-        public float WalkStep => Features.LatticeStepCells * Blob.Value.CellMeters;
+        public float WalkStep => Features.LatticeStepM;
 
         public GroundEdits Edits => new GroundEdits { Blob = Blob };
 
-        public float HeightAt(float x, float z)
-        {
-            ref var g = ref Blob.Value;
-            return math.max(0, DetailSampler.HeightAt(new Cells { Blob = Blob }, g.N, g.Seed, x / g.CellMeters, z / g.CellMeters));
-        }
+        public NearCells Cells => new NearCells { Blob = Blob };
 
-        public float GridHeight(float gx, float gy)
-        {
-            ref var g = ref Blob.Value;
-            return DetailSampler.HeightAt(new Cells { Blob = Blob }, g.N, g.Seed, gx, gy);
-        }
+        public float HeightAt(float x, float z) => math.max(0, NearField.Sample(Cells, x, z));
 
-        struct Cells : IDetailCells
+        public float Surface(float x, float z) => NearField.Sample(Cells, x, z);
+
+        public void Range(float x0, float z0, float x1, float z1, out float lo, out float hi) => NearField.Range(Cells, x0, z0, x1, z1, out lo, out hi);
+
+        public struct NearCells : INearCells
         {
             public BlobAssetReference<GroundData> Blob;
+            public int N => Blob.Value.N;
+            public float CellMeters => Blob.Value.CellMeters;
+            public uint Seed => Blob.Value.Seed;
+            public uint GullySeed => Blob.Value.GullySeed;
+            public uint RockSeed => Blob.Value.RockSeed;
+            public float Period => Blob.Value.Period;
+            public int Bands => Blob.Value.Bands;
             public float Height(int i) => Blob.Value.Height[i];
             public float Amp(int i) => Blob.Value.Amp[i];
+            public float Offset(int i) => Blob.Value.Offset[i];
+            public float Band(int k) => Blob.Value.Band[k];
+            public int PieceStart(int cell) => Blob.Value.PieceStart[cell];
+            public int PieceAt(int k) => Blob.Value.PieceItems[k];
+            public RiverPiece Piece(int p) => Blob.Value.Pieces[p];
         }
 
         public static BlobBuilder Fill(GeneratedWorld w)
         {
             var detail = new TerrainDetail(w);
-            int n = detail.Size;
+            var c = detail.Cells;
+            int n = c.N, nn = n * n;
             var b = new BlobBuilder(Allocator.Persistent);
             ref var root = ref b.ConstructRoot<GroundData>();
             root.N = n;
-            root.Seed = detail.Seed;
-            root.CellMeters = w.Config.CellMeters;
-            root.Top = (n - 1) * w.Config.CellMeters;
-            var h = b.Allocate(ref root.Height, n * n);
-            var a = b.Allocate(ref root.Amp, n * n);
-            for (int i = 0; i < n * n; i++) { h[i] = detail.Height(i); a[i] = detail.Amplitude(i); }
+            root.Seed = c.Seed;
+            root.GullySeed = c.GullySeed;
+            root.RockSeed = c.RockSeed;
+            root.CellMeters = c.CellMeters;
+            root.Period = c.Period;
+            root.Bands = c.Bands;
+            root.Top = (n - 1) * c.CellMeters;
+            var h = b.Allocate(ref root.Height, nn);
+            var a = b.Allocate(ref root.Amp, nn);
+            var o = b.Allocate(ref root.Offset, nn);
+            for (int i = 0; i < nn; i++) { h[i] = c.Height(i); a[i] = c.Amp(i); o[i] = c.Offset(i); }
+            var band = b.Allocate(ref root.Band, c.Bands);
+            for (int k = 0; k < c.Bands; k++) band[k] = c.Band(k);
+            var start = b.Allocate(ref root.PieceStart, nn + 1);
+            for (int i = 0; i <= nn; i++) start[i] = c.PieceStart(i);
+            var items = b.Allocate(ref root.PieceItems, c.IndexLength);
+            for (int k = 0; k < c.IndexLength; k++) items[k] = c.PieceAt(k);
+            var pieces = b.Allocate(ref root.Pieces, c.PieceCount);
+            for (int p = 0; p < c.PieceCount; p++) pieces[p] = c.Piece(p);
             var edits = Features.Place(w, detail);
             var e = b.Allocate(ref root.Edits, edits.Length);
             for (int i = 0; i < edits.Length; i++) e[i] = edits[i];

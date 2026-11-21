@@ -5,21 +5,19 @@ namespace Stabby.World
     public sealed class TerrainDetail
     {
         public const float WetFadeCells = 3f;
-        public const float NoiseWavelengthCells = 4f;
-        public const int Octaves = 5;
+        public const int BandSamples = 64;
 
+        readonly NearArrays cells;
+        readonly float cm;
         readonly int n;
-        readonly float[] h;
-        readonly float[] amp;
-        readonly uint seed;
 
         public TerrainDetail(GeneratedWorld w)
         {
             n = w.Config.Size;
-            h = w.Height;
-            seed = Rng.Stream(w.Config.Seed, "detail").NextU32();
+            cm = w.Config.CellMeters;
+            var h = w.Height;
             var dist = WetDistance(w);
-            amp = new float[n * n];
+            var amp = new float[n * n];
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {
@@ -36,24 +34,48 @@ namespace Stabby.World
                     a *= Grid.Smoothstep(0.5f, 0.5f + WetFadeCells, dist[i]);
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
+            float[] offsets, bands;
+            float period;
+            if (w.Materials != null && w.Materials.Strata.Count > 0)
+            {
+                var strata = new StrataField(w.Config, w.Materials);
+                offsets = w.Materials.Offsets(w.Config);
+                period = w.Materials.PeriodM;
+                bands = new float[BandSamples];
+                for (int k = 0; k < BandSamples; k++) bands[k] = strata.Hardness(0, k * period / BandSamples - offsets[0]);
+            }
+            else
+            {
+                offsets = new float[n * n];
+                period = 1f;
+                bands = new[] { 0.5f };
+            }
+            var pieces = NearField.Pieces(w);
+            NearField.Index(pieces, n, cm, out int[] start, out int[] items);
+            cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(),
+                h, amp, offsets, period, bands, pieces.ToArray(), start, items);
         }
 
         public int Size => n;
-        public uint Seed => seed;
-        public float Height(int cell) => h[cell];
-        public float Amplitude(int cell) => amp[cell];
+        public float CellMeters => cm;
+        public NearArrays Cells => cells;
+        public uint Seed => cells.Seed;
+        public uint GullySeed => cells.GullySeed;
+        public uint RockSeed => cells.RockSeed;
+        public float Height(int cell) => cells.Height(cell);
+        public float Amplitude(int cell) => cells.Amp(cell);
 
-        public float HeightAt(float gx, float gy) => DetailSampler.HeightAt(new ArrayCells(h, amp), n, seed, gx, gy);
+        public float Sample(float x, float z) => NearField.Sample(cells, x, z);
+        public float Smooth(float x, float z) => NearField.Smooth(cells, x, z);
+        public float HeightAt(float gx, float gy) => Sample(gx * cm, gy * cm);
 
-        public void ChunkRange<TEdits>(TEdits edits, float cm, int x0, int z0, int size, float padCells, out float lo, out float hi) where TEdits : struct, IEditList
+        public void ChunkRange<TEdits>(TEdits edits, float x0, float z0, float size, float pad, out float lo, out float hi) where TEdits : struct, IEditList
         {
-            int p = (int)Math.Ceiling(padCells) + 1;
-            DetailSampler.Range(new ArrayCells(h, amp), n, x0 - p, z0 - p, x0 + size + p, z0 + size + p, out lo, out hi);
-            float pad = padCells * cm, ax = x0 * cm, az = z0 * cm, bx = (x0 + size) * cm, bz = (z0 + size) * cm;
+            NearField.Range(cells, x0, z0, x0 + size, z0 + size, out lo, out hi);
             for (int q = 0, count = edits.Count; q < count; q++)
             {
                 var e = edits.At(q);
-                if (e.MaxX < ax || e.MinX > bx || e.MaxZ < az || e.MinZ > bz) continue;
+                if (e.MaxX < x0 || e.MinX > x0 + size || e.MaxZ < z0 || e.MinZ > z0 + size) continue;
                 lo = Math.Min(lo, e.MinY); hi = Math.Max(hi, e.MaxY);
             }
             lo -= pad; hi += pad;
@@ -61,24 +83,12 @@ namespace Stabby.World
 
         int Clamp(int v) => v < 0 ? 0 : v >= n ? n - 1 : v;
 
-        readonly struct ArrayCells : IDetailCells
-        {
-            readonly float[] h, amp;
-            public ArrayCells(float[] h, float[] amp) { this.h = h; this.amp = amp; }
-            public float Height(int i) => h[i];
-            public float Amp(int i) => amp[i];
-        }
-
         static float[] WetDistance(GeneratedWorld w)
         {
             int n = w.Config.Size;
-            float cm = w.Config.CellMeters;
             var d = new float[n * n];
             for (int i = 0; i < d.Length; i++)
-                d[i] = w.Sea[i] || w.Water.LakeId[i] >= 0 ? 0f : float.MaxValue;
-            foreach (var r in w.Water.Rivers)
-                for (int k = 0; k < r.Cells.Count; k++)
-                    d[r.Cells[k]] = Math.Min(d[r.Cells[k]], -r.Width[k] * 0.5f / cm);
+                d[i] = w.Sea[i] || (w.Water != null && w.Water.LakeId[i] >= 0) ? 0f : float.MaxValue;
             for (int pass = 0; pass < 2; pass++)
             {
                 int start = pass == 0 ? 0 : n * n - 1, step = pass == 0 ? 1 : -1;
@@ -100,56 +110,37 @@ namespace Stabby.World
         }
     }
 
-    public interface IDetailCells
+    public readonly struct NearArrays : INearCells
     {
-        float Height(int i);
-        float Amp(int i);
-    }
+        readonly float[] h, amp, off, bands;
+        readonly RiverPiece[] pieces;
+        readonly int[] start, items;
+        readonly int n;
+        readonly float cm, period;
+        readonly uint seed, gully, rock;
 
-    public static class DetailSampler
-    {
-        public static float HeightAt<T>(T c, int n, uint seed, float gx, float gy) where T : struct, IDetailCells
+        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items)
         {
-            int x0 = (int)Math.Floor(gx), y0 = (int)Math.Floor(gy);
-            float tx = gx - x0, ty = gy - y0;
-            float r0 = Row(c, n, y0 - 1, x0, tx), r1 = Row(c, n, y0, x0, tx), r2 = Row(c, n, y0 + 1, x0, tx), r3 = Row(c, n, y0 + 2, x0, tx);
-            int ax = Clamp(x0, n), ay = Clamp(y0, n), bx = Clamp(x0 + 1, n), by = Clamp(y0 + 1, n);
-            float c00 = c.Height(ay * n + ax), c10 = c.Height(ay * n + bx), c01 = c.Height(by * n + ax), c11 = c.Height(by * n + bx);
-            float lo = Math.Min(Math.Min(c00, c10), Math.Min(c01, c11)), hi = Math.Max(Math.Max(c00, c10), Math.Max(c01, c11));
-            float b = Math.Max(lo, Math.Min(hi, CatmullRom(r0, r1, r2, r3, ty)));
-
-            float a00 = c.Amp(ay * n + ax), a10 = c.Amp(ay * n + bx), a01 = c.Amp(by * n + ax), a11 = c.Amp(by * n + bx);
-            float a0 = a00 + (a10 - a00) * tx;
-            float a1 = a01 + (a11 - a01) * tx;
-            float a = a0 + (a1 - a0) * ty;
-            if (a <= 0) return b;
-            float f = Noise.Fbm(seed, gx / TerrainDetail.NoiseWavelengthCells, gy / TerrainDetail.NoiseWavelengthCells, TerrainDetail.Octaves);
-            return b + a * Math.Max(-1f, Math.Min(1f, f));
+            this.n = n; this.cm = cm; this.seed = seed; this.gully = gully; this.rock = rock;
+            this.h = h; this.amp = amp; this.off = off; this.period = period; this.bands = bands;
+            this.pieces = pieces; this.start = start; this.items = items;
         }
 
-        public static void Range<T>(T c, int n, int x0, int y0, int x1, int y1, out float lo, out float hi) where T : struct, IDetailCells
-        {
-            lo = float.MaxValue; hi = float.MinValue;
-            float amp = 0;
-            for (int y = Clamp(y0, n), ye = Clamp(y1, n); y <= ye; y++)
-                for (int x = Clamp(x0, n), xe = Clamp(x1, n); x <= xe; x++)
-                {
-                    int i = y * n + x;
-                    float h = c.Height(i);
-                    lo = Math.Min(lo, h); hi = Math.Max(hi, h); amp = Math.Max(amp, c.Amp(i));
-                }
-            lo -= amp; hi += amp;
-        }
-
-        static float Row<T>(T c, int n, int y, int x0, float t) where T : struct, IDetailCells
-        {
-            int r = Clamp(y, n) * n;
-            return CatmullRom(c.Height(r + Clamp(x0 - 1, n)), c.Height(r + Clamp(x0, n)), c.Height(r + Clamp(x0 + 1, n)), c.Height(r + Clamp(x0 + 2, n)), t);
-        }
-
-        static int Clamp(int v, int n) => v < 0 ? 0 : v >= n ? n - 1 : v;
-
-        static float CatmullRom(float p0, float p1, float p2, float p3, float t) =>
-            p1 + 0.5f * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+        public int N => n;
+        public float CellMeters => cm;
+        public uint Seed => seed;
+        public uint GullySeed => gully;
+        public uint RockSeed => rock;
+        public float Period => period;
+        public int Bands => bands.Length;
+        public int PieceCount => pieces.Length;
+        public int IndexLength => items.Length;
+        public float Height(int i) => h[i];
+        public float Amp(int i) => amp[i];
+        public float Offset(int i) => off[i];
+        public float Band(int k) => bands[k];
+        public int PieceStart(int cell) => start[cell];
+        public int PieceAt(int k) => items[k];
+        public RiverPiece Piece(int p) => pieces[p];
     }
 }

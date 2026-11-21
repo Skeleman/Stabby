@@ -113,9 +113,9 @@ namespace Stabby.World
     public struct DetailColumns : IColumnField
     {
         public TerrainDetail Detail;
-        public float StepCells;
+        public float StepM;
 
-        public float Height(int i, int k) => Detail.HeightAt(i * StepCells, k * StepCells);
+        public float Height(int i, int k) => Detail.Sample(i * StepM, k * StepM);
     }
 
     public struct NetsBuffers : INetsSink

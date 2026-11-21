@@ -16,7 +16,7 @@ namespace Stabby.Game.Editor
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
-        static int settle = -1, phase, wait;
+        static int settle = -1, phase, wait, smooth;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
 
@@ -159,6 +159,18 @@ namespace Stabby.Game.Editor
                     return;
                 }
                 if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                if (phase == 7 && smooth < 2)
+                {
+                    if (smooth == 1)
+                    {
+                        Shot(cam, null, "warmup");
+                        Shot(cam, dir, name + "-smooth");
+                    }
+                    SetSmooth(smooth == 0);
+                    smooth++;
+                    wait = 180;
+                    return;
+                }
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
@@ -504,6 +516,15 @@ namespace Stabby.Game.Editor
 
         static Vector3 home;
         static readonly string[] CloseNames = { "rock", "grass", "sand", "snow" };
+
+        static void SetSmooth(bool on)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var sys = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<TerrainViewSystem>() : null;
+                if (sys != null) sys.SmoothOnly = on;
+            }
+        }
 
         static bool CloseUp(Camera cam, int which)
         {

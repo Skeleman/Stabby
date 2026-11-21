@@ -10,9 +10,8 @@ namespace Stabby.World
     public struct DetailGround : IGroundHeight
     {
         public TerrainDetail Detail;
-        public float CellMeters;
 
-        public float HeightAt(float x, float z) => Detail.HeightAt(x / CellMeters, z / CellMeters);
+        public float HeightAt(float x, float z) => Detail.Sample(x, z);
     }
 
     public static class Walk
