@@ -40,6 +40,7 @@ public class ObjectTests
         {
             Matches(obj, o);
             Matches(place, o.GetProperty("placement"));
+            if (o.TryGetProperty("interact", out var ia)) Matches(obj.GetProperty("properties").GetProperty("interact"), ia);
             foreach (var p in o.GetProperty("parts").EnumerateArray()) Matches(part, p);
         }
         var foliage = top.GetProperty("properties").GetProperty("foliage");
@@ -73,6 +74,11 @@ public class ObjectTests
         Assert.Equal(ObjectPart.Log, log.Parts[0].Shape);
         Assert.Contains("wetland", log.Placement.Biomes);
         Assert.Empty(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()));
+        var stone = Objects.Objects.First(o => o.Id == "loose-stone");
+        Assert.Equal("take", stone.Verb);
+        Assert.True(Objects.IsInteractive(Objects.Objects.IndexOf(stone)) && stone.ReachM > 0);
+        Assert.Contains(Objects.Objects, o => o.Kind == "interactive" && o.Verb == "cut");
+        Assert.All(Objects.Objects.Where(o => o.Kind != "interactive"), o => Assert.Null(o.Verb));
         log.Placement.Biomes.Add("moon");
         try { Assert.Contains(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()), e => e.Contains("unknown biome moon")); }
         finally { log.Placement.Biomes.Remove("moon"); }
@@ -80,6 +86,13 @@ public class ObjectTests
         bad.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodPixels = RisingLods });
         bad.Objects.Add(new ObjectDef { Id = "x", Kind = "animated", Variants = 0 });
         Assert.Equal(4, ObjectLibrary.Validate(bad).Count);
+        bad.Kinds.Add(new ObjectKind { Id = "interactive", Lods = 3, LodPixels = RisingLods });
+        bad.Objects.Clear();
+        bad.Objects.Add(new ObjectDef { Id = "y", Kind = "interactive", Verb = "eat", ReachM = 2, Parts = { new ObjectPart() } });
+        bad.Objects.Add(new ObjectDef { Id = "z", Kind = "static", Verb = "take", ReachM = 2, Parts = { new ObjectPart() } });
+        var verbs = ObjectLibrary.Validate(bad);
+        Assert.Contains(verbs, e => e.StartsWith("y: interactive objects need", StringComparison.Ordinal));
+        Assert.Contains(verbs, e => e.StartsWith("z: only interactive", StringComparison.Ordinal));
     }
 
     [Fact]
