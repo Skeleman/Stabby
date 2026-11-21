@@ -10,30 +10,96 @@ namespace Stabby.World
         public float TempMinC, TempMaxC;
         public float PrecipMinMm, PrecipMaxMm;
         public uint Color;
+        public float HeightMinM = float.NaN, HeightMaxM = float.NaN;
+        public float WaterWithinM = float.NaN, CoastWithinM = float.NaN;
+
+        public bool Conditional => !float.IsNaN(HeightMinM) || !float.IsNaN(HeightMaxM) || !float.IsNaN(WaterWithinM) || !float.IsNaN(CoastWithinM);
     }
 
     public static class Biomes
     {
-        public static int[] Classify(IReadOnlyList<BiomeDef> defs, ClimateField climate, bool[] water)
+        public static int[] Classify(WorldConfig c, IReadOnlyList<BiomeDef> defs, ClimateField climate, float[] height, bool[] sea, Hydrology hy, bool[] water)
         {
             int count = climate.TemperatureC.Length;
+            bool needWater = false, needCoast = false;
+            foreach (var d in defs) { needWater |= !float.IsNaN(d.WaterWithinM); needCoast |= !float.IsNaN(d.CoastWithinM); }
+            float[] toWater = null, toCoast = null;
+            if (needWater)
+            {
+                var src = new bool[count];
+                for (int i = 0; i < count; i++) src[i] = hy.IsRiver[i] || hy.LakeId[i] >= 0;
+                toWater = Distance(c.Size, src, c.CellMeters);
+            }
+            if (needCoast) toCoast = Distance(c.Size, sea, c.CellMeters);
             var result = new int[count];
             for (int i = 0; i < count; i++)
             {
                 if (water[i]) { result[i] = -1; continue; }
                 float t = climate.TemperatureC[i], p = climate.PrecipitationMm[i];
-                int best = 0; float bestScore = float.MinValue;
+                int best = -1; float bestScore = float.MinValue;
                 for (int b = 0; b < defs.Count; b++)
                 {
                     var d = defs[b];
-                    float st = Math.Min(t - d.TempMinC, d.TempMaxC - t) / (d.TempMaxC - d.TempMinC);
-                    float sp = Math.Min(p - d.PrecipMinMm, d.PrecipMaxMm - p) / (d.PrecipMaxMm - d.PrecipMinMm);
-                    float score = Math.Min(st, sp);
-                    if (score > bestScore) { bestScore = score; best = b; }
+                    if (!d.Conditional) continue;
+                    if (!float.IsNaN(d.HeightMinM) && height[i] < d.HeightMinM) continue;
+                    if (!float.IsNaN(d.HeightMaxM) && height[i] > d.HeightMaxM) continue;
+                    if (!float.IsNaN(d.WaterWithinM) && toWater[i] > d.WaterWithinM) continue;
+                    if (!float.IsNaN(d.CoastWithinM) && toCoast[i] > d.CoastWithinM) continue;
+                    float score = Score(d, t, p);
+                    if (score >= 0 && score > bestScore) { bestScore = score; best = b; }
                 }
-                result[i] = best;
+                if (best < 0)
+                    for (int b = 0; b < defs.Count; b++)
+                    {
+                        if (defs[b].Conditional) continue;
+                        float score = Score(defs[b], t, p);
+                        if (score > bestScore) { bestScore = score; best = b; }
+                    }
+                result[i] = Math.Max(0, best);
             }
             return result;
+        }
+
+        static float Score(BiomeDef d, float t, float p)
+        {
+            float st = Math.Min(t - d.TempMinC, d.TempMaxC - t) / (d.TempMaxC - d.TempMinC);
+            float sp = Math.Min(p - d.PrecipMinMm, d.PrecipMaxMm - p) / (d.PrecipMaxMm - d.PrecipMinMm);
+            return Math.Min(st, sp);
+        }
+
+        public static float[] Distance(int n, bool[] source, float cellMeters)
+        {
+            const float Diag = 1.41421356f;
+            var d = new float[n * n];
+            for (int i = 0; i < d.Length; i++) d[i] = source[i] ? 0 : float.MaxValue;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x; float v = d[i];
+                    if (x > 0) v = Math.Min(v, d[i - 1] + 1);
+                    if (y > 0)
+                    {
+                        v = Math.Min(v, d[i - n] + 1);
+                        if (x > 0) v = Math.Min(v, d[i - n - 1] + Diag);
+                        if (x < n - 1) v = Math.Min(v, d[i - n + 1] + Diag);
+                    }
+                    d[i] = v;
+                }
+            for (int y = n - 1; y >= 0; y--)
+                for (int x = n - 1; x >= 0; x--)
+                {
+                    int i = y * n + x; float v = d[i];
+                    if (x < n - 1) v = Math.Min(v, d[i + 1] + 1);
+                    if (y < n - 1)
+                    {
+                        v = Math.Min(v, d[i + n] + 1);
+                        if (x < n - 1) v = Math.Min(v, d[i + n + 1] + Diag);
+                        if (x > 0) v = Math.Min(v, d[i + n - 1] + Diag);
+                    }
+                    d[i] = v;
+                }
+            for (int i = 0; i < d.Length; i++) d[i] = d[i] == float.MaxValue ? float.MaxValue : d[i] * cellMeters;
+            return d;
         }
 
         public const float RegionCore = 0.6f;
@@ -78,6 +144,9 @@ namespace Stabby.World
                 if (d.TempMaxC <= d.TempMinC) errors.Add(d.Id + ": tempMaxC must exceed tempMinC");
                 if (d.PrecipMaxMm <= d.PrecipMinMm) errors.Add(d.Id + ": precipMaxMm must exceed precipMinMm");
                 if (d.PrecipMinMm < 0) errors.Add(d.Id + ": precipMinMm below 0");
+                if (d.HeightMaxM <= d.HeightMinM) errors.Add(d.Id + ": heightMaxM must exceed heightMinM");
+                if (d.WaterWithinM <= 0) errors.Add(d.Id + ": waterWithinM must be above 0");
+                if (d.CoastWithinM <= 0) errors.Add(d.Id + ": coastWithinM must be above 0");
             }
             return errors;
         }

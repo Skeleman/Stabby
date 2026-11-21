@@ -9,6 +9,10 @@
     { "id": "shrubland",        "name": "Shrubland",            "tempMinC": 12,  "tempMaxC": 30, "precipMinMm": 300,  "precipMaxMm": 900,  "color": "#a39552" },
     { "id": "desert",           "name": "Desert",               "tempMinC": 10,  "tempMaxC": 38, "precipMinMm": 0,    "precipMaxMm": 300,  "color": "#d9c48a" },
     { "id": "savanna",          "name": "Savanna",              "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 700,  "precipMaxMm": 1500, "color": "#a9ad4f" },
-    { "id": "tropical-forest",  "name": "Tropical forest",      "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 1500, "precipMaxMm": 5000, "color": "#2f7d32" }
+    { "id": "tropical-forest",  "name": "Tropical forest",      "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 1500, "precipMaxMm": 5000, "color": "#2f7d32" },
+    { "id": "cold-desert",      "name": "Cold desert",          "tempMinC": -10, "tempMaxC": 10, "precipMinMm": 0,    "precipMaxMm": 250,  "color": "#c8bfa4" },
+    { "id": "alpine",           "name": "Alpine",               "tempMinC": -30, "tempMaxC": 6,  "precipMinMm": 0,    "precipMaxMm": 5000, "color": "#a7a99c", "heightMinM": 600 },
+    { "id": "wetland",          "name": "Wetland",              "tempMinC": 2,   "tempMaxC": 26, "precipMinMm": 600,  "precipMaxMm": 5000, "color": "#5d7a4e", "heightMaxM": 250, "waterWithinM": 90 },
+    { "id": "mangrove",         "name": "Mangrove",             "tempMinC": 20,  "tempMaxC": 38, "precipMinMm": 1000, "precipMaxMm": 5000, "color": "#3d6b3a", "heightMaxM": 8, "coastWithinM": 135 }
   ]
 }

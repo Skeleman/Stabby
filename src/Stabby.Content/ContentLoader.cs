@@ -54,6 +54,10 @@ public static class ContentLoader
         public float PrecipMinMm { get; set; }
         public float PrecipMaxMm { get; set; }
         public string Color { get; set; } = "#ff00ff";
+        public float? HeightMinM { get; set; }
+        public float? HeightMaxM { get; set; }
+        public float? WaterWithinM { get; set; }
+        public float? CoastWithinM { get; set; }
     }
 
     static readonly JsonSerializerOptions Options = new()
@@ -82,6 +86,8 @@ public static class ContentLoader
             Id = b.Id, Name = b.Name,
             TempMinC = b.TempMinC, TempMaxC = b.TempMaxC,
             PrecipMinMm = b.PrecipMinMm, PrecipMaxMm = b.PrecipMaxMm,
+            HeightMinM = b.HeightMinM ?? float.NaN, HeightMaxM = b.HeightMaxM ?? float.NaN,
+            WaterWithinM = b.WaterWithinM ?? float.NaN, CoastWithinM = b.CoastWithinM ?? float.NaN,
             Color = uint.Parse(b.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
         }).ToList();
         var errors = Biomes.Validate(defs);

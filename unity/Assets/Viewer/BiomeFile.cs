@@ -8,7 +8,11 @@ namespace Stabby.Viewer
 {
     public static class BiomeFile
     {
-        [Serializable] class Row { public string id, name, color; public float tempMinC, tempMaxC, precipMinMm, precipMaxMm; }
+        [Serializable] class Row
+        {
+            public string id, name, color; public float tempMinC, tempMaxC, precipMinMm, precipMaxMm;
+            public float heightMinM = float.NaN, heightMaxM = float.NaN, waterWithinM = float.NaN, coastWithinM = float.NaN;
+        }
         [Serializable] class Dto { public int schemaVersion; public Row[] biomes; }
 
         public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "biomes.json"));
@@ -24,6 +28,8 @@ namespace Stabby.Viewer
                     Id = r.id, Name = r.name,
                     TempMinC = r.tempMinC, TempMaxC = r.tempMaxC,
                     PrecipMinMm = r.precipMinMm, PrecipMaxMm = r.precipMaxMm,
+                    HeightMinM = r.heightMinM, HeightMaxM = r.heightMaxM,
+                    WaterWithinM = r.waterWithinM, CoastWithinM = r.coastWithinM,
                     Color = Convert.ToUInt32(r.color.TrimStart('#'), 16),
                 });
             var errors = Biomes.Validate(defs);

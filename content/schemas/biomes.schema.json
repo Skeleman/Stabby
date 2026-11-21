@@ -20,7 +20,11 @@
           "tempMaxC": { "type": "number" },
           "precipMinMm": { "type": "number", "minimum": 0 },
           "precipMaxMm": { "type": "number", "minimum": 0 },
-          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "heightMinM": { "type": "number" },
+          "heightMaxM": { "type": "number" },
+          "waterWithinM": { "type": "number", "exclusiveMinimum": 0 },
+          "coastWithinM": { "type": "number", "exclusiveMinimum": 0 }
         }
       }
     }

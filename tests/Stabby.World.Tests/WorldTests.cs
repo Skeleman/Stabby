@@ -166,7 +166,31 @@ public class WorldTests
     }
 
     [Fact]
-    public void BiomeContentLoads() => Assert.Equal(9, Biomes.Count);
+    public void ConditionalBiomesFollowTheirConditions()
+    {
+        var c = Cfg(3); c.SeaLevelTempC = 26;
+        var w = WorldGenerator.Generate(c, Biomes);
+        int n = c.Size, mangrove = World.Biomes.IndexOf(Biomes, "mangrove"), alpine = World.Biomes.IndexOf(Biomes, "alpine");
+        var coast = World.Biomes.Distance(n, w.Sea, c.CellMeters);
+        int m = 0;
+        for (int i = 0; i < n * n; i++)
+        {
+            if (w.Biome[i] == mangrove) { m++; Assert.True(w.Height[i] <= 8 && coast[i] <= 135); }
+            if (w.Biome[i] == alpine) Assert.True(w.Height[i] >= 600);
+        }
+        Assert.True(m > 0, "no mangrove on a warm coast");
+    }
+
+    [Fact]
+    public void BiomeContentLoads()
+    {
+        Assert.Equal(13, Biomes.Count);
+        var alpine = Biomes[World.Biomes.IndexOf(Biomes, "alpine")];
+        Assert.True(alpine.Conditional && alpine.HeightMinM == 600 && float.IsNaN(alpine.HeightMaxM));
+        Assert.False(Biomes[0].Conditional);
+        var bad = new BiomeDef { Id = "x", TempMinC = 0, TempMaxC = 1, PrecipMaxMm = 1, HeightMinM = 5, HeightMaxM = 2, WaterWithinM = 0 };
+        Assert.Equal(2, World.Biomes.Validate(new[] { bad }).Count);
+    }
 
     [Fact]
     public void MaterialContentMatchesSchema()

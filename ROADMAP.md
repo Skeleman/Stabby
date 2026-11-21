@@ -76,9 +76,9 @@ architecture contract. The other steps fit the contract as it stands.
 
 | Item | Status |
 |---|---|
-| More biomes (alpine, wetland, mangrove, cold desert) in `biomes.json`; content only | now |
+| More biomes (alpine, wetland, mangrove, cold desert): optional height, distance-to-water and distance-to-coast conditions per biome in `biomes.json`; distances derived inside `Biomes` from hydrology and sea | done |
 | River overhaul inside `Drainage` and hydrology: meanders, wider lowland beds, banks; no second river array | next |
-| **Zach:** cliffs. Hard strata resist erosion, which makes scarps. Generation would read rock hardness from the material library, so the material library would feed generation instead of being render-only | next |
+| Cliffs (approved by Zach): hard strata resist erosion, which makes scarps. Generation reads rock hardness per stratum from the material library, so material changes bump `GeneratorVersion`. Caves share the same strata for wall faces and can later prefer softer layers | now |
 | Undercut cliff faces as overhang edits along scarps (needs the cliff decision) | later |
 | **Zach:** cave expansion beyond the current fundamentals (cave networks, a dungeon scale) | later |
 

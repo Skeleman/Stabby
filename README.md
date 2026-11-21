@@ -49,7 +49,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 5. **Final climate** - one maritime climate: temperature falls with height (steep game lapse rate, tundra up top), rain follows the wind with rain shadows; rates are per metre, so any resolution matches.
 6. **Hydrology** - lakes by priority flood (pits under 1.5 ha or 1.5 m deep fill in), D8 routing, discharge, river
    reaches; terrain, water and rivers share one drainage graph.
-7. **Biomes** classified from climate using `content/biomes.json`.
+7. **Biomes** classified from climate using `content/biomes.json`; a biome with height or distance-to-water/coast conditions wins where they hold.
 8. **Authored regions** from the sketch applied on top.
 
 ## Baselines
