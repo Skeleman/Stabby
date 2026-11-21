@@ -37,3 +37,13 @@
     unless `lint-allow.txt` gives a reason. Runtime game data is unmanaged
     (ECS components, blobs, native containers) so Burst and jobs can use it;
     managed code stays at load and network boundaries and converts once.
+11. World objects have one definition in `content/objects.json`. Its kind
+    (static, interactive, animated, structure) sets LOD, shadow, wind,
+    animation and collision policy; parts may override traits. Placement is
+    an engine-free stage after biomes with its own stream, stored per chunk.
+    Large boulders are solid-field edits. Static collision is engine-free and
+    shared with movement. Interactive objects keep stable ids and change only
+    through host-authoritative deltas. Wind and animation run on the GPU and
+    fade by screen size; structures merge their pieces per LOD. Assets are
+    built in code: surface detail is shader-based (procedural normals, cheap
+    parallax), and textures hold only heightfield data and shared noise.
