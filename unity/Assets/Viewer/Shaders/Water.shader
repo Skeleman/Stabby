@@ -17,6 +17,7 @@ Shader "Stabby/Water"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
             float4 _StabbySky, _StabbyFieldUV;
@@ -118,17 +119,25 @@ Shader "Stabby/Water"
                 }
                 float3 n = normalize(float3(-g.x, 1, -g.y));
 
-                float k = saturate(depth * _StabbyWaterDeep.w);
-                float3 body = LookColor(lerp(_StabbyWaterShallow.rgb, _StabbyWaterDeep.rgb, k * (2 - k)), 1.3);
+                float2 ruv = uv + g * (0.12 * saturate(depth) / (1 + surface * 0.08));
+                float rscene = LinearEyeDepth(SampleSceneDepth(ruv), _ZBufferParams);
+                UNITY_FLATTEN if (rscene < surface) { ruv = uv; rscene = scene; }
+                float3 under = SampleSceneColor(ruv);
+                float path = lerp(max(0, dist * (rscene / max(surface, 0.001) - 1)), field / max(v.y, 0.05), far);
+                float3 trans = exp(log(max(_StabbyWaterShallow.rgb, 0.01)) * (path * _StabbyWaterDeep.w));
 
                 Light l = GetMainLight();
                 float3 sky = _StabbySky.rgb;
+                float3 scatter = LookColor(_StabbyWaterDeep.rgb, 1.3) * (l.color * saturate(l.direction.y + 0.2) * 0.6 + sky * 0.5);
+                float3 c = under * trans + scatter * (1 - trans);
                 float ndv = saturate(dot(n, v));
                 float fres = 0.02 + 0.98 * pow(1 - ndv, 5);
-                float3 c = body * (l.color * saturate(dot(n, l.direction)) * 0.6 + sky * 0.5);
-                c = lerp(c, sky, fres * 0.8);
+                float3 r = reflect(-v, n);
+                float3 skyR = lerp(sky * 1.35, sky * float3(0.8, 0.88, 1.05), sqrt(saturate(r.y))) + l.color * pow(saturate(dot(r, l.direction)), 6) * 0.25;
+                c = lerp(c, skyR, fres);
+                float e = lerp(900, 60, saturate(dist / 400));
                 float3 h = normalize(l.direction + v);
-                c += l.color * pow(saturate(dot(n, h)), 240) * 1.5;
+                c += l.color * pow(saturate(dot(n, h)), e) * ((e + 8) / 25.13 * 0.05);
 
                 float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, fuv, 0).rg;
                 float shore = depth / max(length(sl), 0.03);
@@ -149,9 +158,9 @@ Shader "Stabby/Water"
                 }
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
-                float alpha = lerp(lerp(0.8, 0.97, k), 1, fres * 0.6) * saturate(depth * _StabbyWaterShallow.w);
-                alpha = saturate(max(alpha, foam * 0.7 * saturate(depth / 0.15)));
-                return half4(MixFog(c, i.fog), alpha);
+                float alpha = saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.15)));
+                float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7);
+                return half4(lerp(MixFog(c, i.fog), c, clear), alpha);
             }
             ENDHLSL
         }
