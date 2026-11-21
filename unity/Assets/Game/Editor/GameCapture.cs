@@ -150,7 +150,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : 1;
+                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : 1;
             }
             while (phase <= 6)
             {
@@ -251,7 +251,7 @@ namespace Stabby.Game.Editor
                     Shot(cam, dir, "sand-far");
                 }
                 wait = 0;
-                phase = phase == 9 && only == "coast" ? 13 : phase + 1;
+                phase = phase == 9 && only == "coast" ? 13 : phase == 10 && only == "biomes" ? 26 : phase + 1;
             }
             if (phase == 11)
             {
@@ -390,6 +390,27 @@ namespace Stabby.Game.Editor
                 if (phase == 25) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
                 wait = 0;
                 phase++;
+            }
+            while (phase >= 26 && phase < 26 + BiomeShots.Length)
+            {
+                string name = "biome-" + BiomeShots[phase - 26];
+                if (wait == 0)
+                {
+                    if (!AimBiome(cam, BiomeShots[phase - 26])) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
+            if (only == "biomes")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             if (!castDone) { job = CastTour(cam, dir); castDone = true; }
             if (job != null && job.MoveNext()) return;
@@ -933,6 +954,51 @@ namespace Stabby.Game.Editor
 
         static Vector3 home;
         static readonly string[] CloseNames = { "rock", "grass", "sand", "snow" };
+
+        static readonly string[] BiomeShots = { "tundra", "alpine", "desert", "cold-desert", "savanna", "steppe" };
+
+        static bool AimBiome(Camera cam, string id)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var sys = w.GetExistingSystemManaged<ClientMapSystem>();
+                var map = sys?.Map;
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (map == null || map.Biome == null || q.CalculateEntityCount() != 1) continue;
+                var ground = q.GetSingleton<Ground>();
+                int n = map.Config.Size, best = -1, b = System.Array.IndexOf(map.BiomeIds, id), r = 2, cells = 0;
+                if (b < 0) return false;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue, anyD = float.MaxValue;
+                int any = -1;
+                for (int z = r; z < n - r; z++)
+                    for (int x = r; x < n - r; x++)
+                    {
+                        int i = z * n + x;
+                        if (map.Biome[i] != b || map.Sea[i]) continue;
+                        cells++;
+                        float da = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (da < anyD) { anyD = da; any = i; }
+                        if (map.Biome[i - r] != b || map.Biome[i + r] != b || map.Biome[i - r * n] != b || map.Biome[i + r * n] != b) continue;
+                        float gx = (map.Height[i + 1] - map.Height[i - 1]) / (2 * cm), gz = (map.Height[i + n] - map.Height[i - n]) / (2 * cm);
+                        if (gx * gx + gz * gz > 0.0144f) continue;
+                        float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (d < bestD) { bestD = d; best = i; }
+                    }
+                GameStatus.Lines["~aim biome " + id] = $"{id}: {cells} land cells, none flat";
+                if (best < 0) { best = any; bestD = anyD; }
+                if (best < 0) return false;
+                var target = new Vector3(best % n * cm, 0, best / n * cm);
+                target.y = ground.HeightAt(target.x, target.z);
+                var eye = target + new Vector3(-0.77f, 0, -0.64f) * 24f;
+                eye.y = Mathf.Max(target.y, ground.HeightAt(eye.x, eye.z)) + 7f;
+                var aim = target + new Vector3(0.77f, 0, 0.64f) * 20f;
+                aim.y = Mathf.Max(ground.HeightAt(aim.x, aim.z), eye.y - 10f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
+                GameStatus.Lines["~aim biome " + id] = $"{id} at {target.x:F0},{target.y:F0},{target.z:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
 
         static void SetSmooth(bool on)
         {
