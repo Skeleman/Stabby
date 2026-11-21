@@ -14,6 +14,7 @@ SAMPLER(sampler_StabbyWaterLevel);
 static float3 tmO;
 static float tmGrass;
 static float tmRough;
+static float tmCurv;
 
 struct TmOut { float3 albedo; float3 grad; };
 
@@ -390,11 +391,19 @@ float TmSnowLie(float2 p, float hollow, float amount, float fp)
 
 float3 TmLichen(float2 p, float3 c, float fp, float share)
 {
-    float4 a = TmFleck(p, float2x2(1, 0.3, -0.3, 1), 3.7, fp, 71, 0.12, 0.3, share);
-    float4 b = TmFleck(p, float2x2(1, -0.5, 0.5, 1), 8.3, fp, 77, 0.1, 0.26, share);
-    float4 s = a.w >= b.w ? a : b;
-    float3 lc = lerp(c, float3(0.36, 0.37, 0.29), 0.7) * (1 + 0.08 * s.x / max(s.w, 1e-3));
-    return lerp(c, lc, saturate(0.6 * s.w + 0.2 * share * (1 - TmFade(9.2, fp))));
+    float fl = TmFade(14, fp);
+    [branch] if (fl <= 0) return c;
+    float clump = saturate(1.6 * TmLN2(p, 0.37, 63.1, 1).x);
+    float2 q = p + 0.16 * float2(TmLN2(p, 1.4, 61.7, 1).x, TmLN2(p, 1.4, 65.3, 1).x) + 0.035 * float2(TmLN2(p, 11, 67.9, fl).x, TmLN2(p, 11, 69.1, fl).x);
+    float sh = share * clump;
+    float4 a = TmFleck(q, float2x2(1, 0.3, -0.3, 1), 4.1, fp, 71, 0.04, 0.34, sh * 0.6);
+    float4 b = TmFleck(q, float2x2(1, -0.5, 0.5, 1), 9.7, fp, 77, 0.05, 0.32, sh * 1.4);
+    float4 d = TmFleck(q, float2x2(1, 0.8, -0.8, 1), 21, fp, 83, 0.08, 0.38, sh * 2);
+    float4 m = a.w >= b.w ? a : b;
+    m = m.w >= d.w ? m : d;
+    float tex = 0.6 + 0.4 * TmLN2(p, 23, 73.3, fl).x;
+    float op = 0.4 * m.w * fl * tex * (0.55 + 0.45 * abs(m.x) / max(m.w, 1e-3));
+    return lerp(c, lerp(c, float3(0.36, 0.37, 0.3), 0.5), op);
 }
 
 TmOut TmSoil(float3 wp, float3 n, float3 v, float3 base, float fp, float4 A, float4 B)
@@ -468,7 +477,7 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
     return o;
 }
 
-TmOut TmSnow(float3 wp, float3 base, float fp, float4 A, float4 B)
+TmOut TmSnow(float3 wp, float3 n, float3 base, float fp, float4 A, float4 B)
 {
     float2 p = wp.xz, pa = p + tmO.xz, wind = _StabbySurface.zw, side = float2(-wind.y, wind.x);
     float3 drift = TmFbm2(p, A.y, A.x, 3, fp);
@@ -478,16 +487,25 @@ TmOut TmSnow(float3 wp, float3 base, float fp, float4 A, float4 B)
     float2 sg = sgn * (sz.y * 0.3 * wind + sz.z * side);
     float fg = TmFade(A.w, fp);
     float3 grain = TmLN2(p, A.w, 4.4, fg);
-    float dip = saturate(-drift.x * A.y * 3);
-    float hollow = dip + 0.4 * fs * (1 - ridge);
-    float lie = TmSnowLie(p, dip, 0.42, fp);
+    float hd = drift.x * A.y;
+    float hollow = saturate(-hd * 3) + 0.4 * fs * (1 - ridge);
+    float fb = TmFade(0.7, fp), ff = TmFade(2.6, fp), fx = TmFade(7, fp);
+    float bm = TmLN2(p, 0.7, 85.1, fb).x;
+    float fn = TmN2(float2(dot(pa, wind) * 0.9, dot(pa, side) * 2.6) + 3.1, ff).x;
+    float fx3 = TmLN2(p, 7, 87.3, fx).x;
+    float conv = clamp(-10 * tmCurv, -0.7, 0.7) + 1.4 * hd + 0.45 * fs * (ridge - 0.5) + 1.2 * (1 - n.y) - 0.3 * dot(n.xz, wind) - 0.6 * dot(drift.yz, wind);
+    float sv = 0.22 * TmLN2(p, 0.045, 81.3, 1).x - conv + 0.2 * fb * bm + 0.13 * ff * fn + 0.07 * fx * fx3;
+    float e = 0.02 + 0.35 * saturate(1.5 * fp);
+    float lie = smoothstep(-e, e, sv + 0.42);
     float3 snow = TmSnowAlbedo(saturate(hollow) * (0.5 + B.w * 4)) * (1 + A.z * fg * grain.x * 0.5);
-    float ft = TmFade(1.7, fp), fh = TmFade(0.33, fp);
+    float ft = TmFade(1.7, fp), fh = TmFade(0.33, fp), f1 = TmFade(0.9, fp), f2 = TmFade(3.2, fp), f3 = TmFade(9, fp);
     float3 tuft = TmLN2(p, 1.7, 44.1, ft);
-    float3 hv = TmLN2(p, 0.33, 46.7, fh);
-    float3 heath = lerp(float3(0.165, 0.155, 0.088), float3(0.18, 0.135, 0.08), saturate(0.5 + fh * hv.x));
-    heath *= (1 + B.w * 3 * ft * tuft.x) * (1 + A.z * fg * grain.x * 0.3);
-    heath = TmLichen(p, heath, fp, 0.25);
+    float hv = TmLN2(p, 0.33, 46.7, fh).x, m1 = TmLN2(p, 0.9, 51.3, f1).x, m2 = TmLN2(p, 3.2, 53.9, f2).x, m3 = TmLN2(p, 9, 57.1, f3).x;
+    float3 heath = lerp(float3(0.15, 0.15, 0.072), float3(0.178, 0.13, 0.08), saturate(0.5 + 0.9 * fh * hv + 0.5 * f1 * m1));
+    heath = lerp(heath, float3(0.2, 0.115, 0.068), saturate(1.6 * f2 * (m2 - 0.2)) * saturate(0.5 + f1 * m1));
+    heath = lerp(heath, float3(0.155, 0.17, 0.07), 0.6 * saturate(2 * f3 * (m3 - 0.3)) * saturate(0.5 - f1 * m1));
+    heath *= (1 + B.w * 3 * ft * tuft.x) * (1 + 0.16 * f3 * m3) * (1 + A.z * fg * grain.x * 0.3);
+    heath = TmLichen(p, heath, fp, 0.22);
     float2 gh = 0.5 * drift.yz + 0.4 * B.x * ft * tuft.yz + 0.3 * A.z * fg * grain.yz;
     float2 gs = drift.yz + B.x * fs * sg + 0.3 * A.z * fg * grain.yz;
     float2 g = lerp(gh, gs, lie);
@@ -676,7 +694,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         if (cw.x > 0.02) TmAdd(k, TmGrass(wp, grassColor, fp, _StabbyCoatA[0], _StabbyCoatB[0]), cw.x);
         if (cw.y > 0.02) TmAdd(k, TmSoil(wp, n, v, coatColor, fp, _StabbyCoatA[1], _StabbyCoatB[1]), cw.y);
         if (cw.z > 0.02) TmAdd(k, TmSand(wp, n, v, coatColor, fp, shore, _StabbyCoatA[2], _StabbyCoatB[2]), cw.z);
-        if (cw.w > 0.02) TmAdd(k, TmSnow(wp, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
+        if (cw.w > 0.02) TmAdd(k, TmSnow(wp, n, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += lerp(coatColor, grassColor, cw.x) * (1 - kept);
         TmLitter(k, wp, grassColor, fp, cw.x);

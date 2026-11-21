@@ -250,6 +250,17 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "sand-far");
                 }
+                if (phase == 10)
+                {
+                    var wf = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                    var at = cam.transform.position + wf * 15f;
+                    at.y = GroundHeight(at.x, at.z);
+                    var wpos = cam.transform.position - wf * 35f;
+                    wpos.y = Mathf.Max(GroundHeight(wpos.x, wpos.z), at.y) + 16f;
+                    cam.transform.SetPositionAndRotation(wpos, Quaternion.LookRotation(at - wpos));
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "snow-wide");
+                }
                 wait = 0;
                 phase = phase == 9 && only == "coast" ? 13 : phase == 10 && only == "biomes" ? 26 : phase + 1;
             }
