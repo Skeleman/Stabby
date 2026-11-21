@@ -100,7 +100,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples (`TerrainMaterials.hlsl`; detail branched on pixel footprint, +0.1 ms at 1080p mid view, up to +1 ms in a 4K rock close-up) | done |
 | Terrain surface pass 2: grass less saturated with crisp near grain instead of smeared bumps, rock sharper up close, dark shale band lighter, sand blotches, camera-relative coordinates for detail precision far from origin | done |
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
-| Close grass reads as saturated green fur: real blades now cover it within 45 m (objects step 2 grass). Faint sand crest dashes at 4-8 m remain | wip (b/grass-followups) |
+| Close grass reads as saturated green fur: real blades now cover it within 45 m (objects step 2 grass). Sand crest dashes replaced by a soft ~1 m cosine ripple | done |
 | Flat untextured green wall in chase and overhead shots (mesh, not material): gone with the near-field lattice; chase and overhead clean in every capture since | done (7fa335e) |
 | Chunk-sized holes at chunk edges: gone with the near-field lattice; thin green streaks were steep edge-row facets (edge vertices snapped half a cell), fixed by sampling the continuous surface on node edges | done |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
@@ -129,9 +129,9 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Objects step 2a: GPU grass blades near the camera (`GrassScatter.compute` scatters per near terrain mesh from the biome coat, one indirect draw, frustum cull, distance fade into the terrain colour); shared wind globals `_StabbyWind`/`_StabbyGust` from `objects.json` foliage; +0.24 ms at 1080p in the grass close-up | done |
 | Objects step 2b: animated foliage (bushes, trees) on the shared wind. Zach: realistic, not Punchy's cartoon style; real leaf detail on cutout leaf cards (alpha-tested, alpha-to-coverage) on code-built branches, leaf atlas generated in code at load, runtime-baked billboard impostors far off; rule 11 now allows code-generated atlases for repeated patterns | wip (b/foliage) |
 | Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | done |
-| Grass follow-ups: no grass on submerged beds (done), blade shadows, profiler to confirm chase/far cost with blades on and off | wip (b/grass-followups) |
+| Grass follow-ups: no grass on submerged beds (done), sun shadows at 60 m (1 cascade, 2048) received by terrain and blades, +0.2-0.4 ms; terrain boulders and cliffs do not cast yet, blades never cast | done |
 | Objects step 3: interactive objects (loose stone, brushwood) with stable chunk+index ids (GeneratorVersion 37); host-authoritative removal deltas per chunk, replicated to clients and late joiners, collision columns cleared in place; E to take/cut with a status line; `ObjectDeltaCheck` two-client check | done |
-| Objects perf: the ~43 ms spike when objects first stream in was the editor compiling the `Stabby/Object` shader variant inside `new Material` and `RegisterMaterial` (46 + 58 ms cold); both now run one per frame during load, before terrain is built. Column buffers already reuse one scratch list per chunk | wip |
+| Objects perf: the ~43 ms spike when objects first stream in was the editor compiling the `Stabby/Object` shader variant inside `new Material` and `RegisterMaterial` (46 + 58 ms cold); both now run one per frame during load, before terrain is built. Column buffers already reuse one scratch list per chunk | done |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
 
 ## Next
