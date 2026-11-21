@@ -23,6 +23,8 @@ namespace Stabby.World
         public static bool IsFoliage(int shape) => shape >= Shrub && shape <= Conifer;
         public static bool IsStructure(int shape) => shape >= Wall && shape < Shapes;
         public static bool IsStone(int shape) => shape == Rock || IsStructure(shape);
+        public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4;
+        public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped" };
 
         public string Id;
         public int Shape;
@@ -33,6 +35,7 @@ namespace Stabby.World
         public bool HasColor;
         public uint LeafColor;
         public bool HasLeafColor;
+        public int Ends;
     }
 
     public sealed class ObjectPlacement
@@ -138,6 +141,10 @@ namespace Stabby.World
                     if (ObjectPart.IsFoliage(p.Shape) && !p.HasLeafColor) errors.Add(d.Id + ": part " + p.Id + " needs a leafColor");
                     if (p.ScaleX <= 0 || p.ScaleY <= 0 || p.ScaleZ <= 0) errors.Add(d.Id + ": part " + p.Id + " scale must be above 0");
                     if (ObjectPart.IsStructure(p.Shape) != (d.Kind == Structure)) errors.Add(d.Id + ": structure shapes belong only to structure objects");
+                    if (p.Ends < 0 || p.Ends >= ObjectPart.EndNames.Length) errors.Add(d.Id + ": part " + p.Id + " has unknown ends");
+                    else if (p.Ends != ObjectPart.EndsAuto && p.Shape != ObjectPart.Log && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " ends belong only to logs and stumps");
+                    else if (p.Ends == ObjectPart.EndsRooted && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " rooted ends belong only to logs");
+                    else if (p.Ends == ObjectPart.EndsSnapped && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " snapped ends belong only to stumps");
                 }
                 var pl = d.Placement;
                 if (pl.PerHectare < 0 || pl.PerHectare > 400) errors.Add(d.Id + ": perHectare must be 0-400");

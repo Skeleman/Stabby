@@ -338,6 +338,7 @@ public static class ContentLoader
         public string Shadows { get; set; } = "";
         public string? Color { get; set; }
         public string? LeafColor { get; set; }
+        public string Ends { get; set; } = "auto";
     }
 
     sealed class PlacementEntry
@@ -402,6 +403,8 @@ public static class ContentLoader
                     HasColor = p.Color != null, Color = p.Color != null ? Hex(p.Color) : def.Color,
                     HasLeafColor = p.LeafColor != null, LeafColor = p.LeafColor != null ? Hex(p.LeafColor) : 0,
                 };
+                part.Ends = Array.IndexOf(ObjectPart.EndNames, p.Ends);
+                if (part.Ends < 0) errors.Add(o.Id + ": part " + p.Id + " has unknown ends \"" + p.Ends + "\"");
                 if (part.Solid < -1 || part.Shadows < -1) errors.Add(o.Id + ": part " + p.Id + " solid/shadows must be \"\", \"on\" or \"off\"");
                 if (p.Offset is { Length: 3 }) { part.OffsetX = p.Offset[0]; part.OffsetY = p.Offset[1]; part.OffsetZ = p.Offset[2]; }
                 if (p.Scale is { Length: 3 }) { part.ScaleX = p.Scale[0]; part.ScaleY = p.Scale[1]; part.ScaleZ = p.Scale[2]; }

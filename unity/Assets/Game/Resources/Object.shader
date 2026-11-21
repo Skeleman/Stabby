@@ -63,6 +63,7 @@ Shader "Stabby/Object"
 
             #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
+            #include "Assets/Viewer/Shaders/Bark.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -102,31 +103,68 @@ Shader "Stabby/Object"
                 return o;
             }
 
-            float WoodRidge(float2 p, out float2 g)
+            float3 Bumped(float3 n, float3 axis, float sgn, float2 g, float depth)
             {
-                float3 a = TmNoise2(p), b = TmNoise2(p * 2.1 + 7.7);
-                float h = 1 - abs(a.x), s = a.x >= 0 ? -1 : 1;
-                g = s * a.yz + 0.35 * b.yz * 2.1;
-                return h + 0.35 * b.x;
+                float3 b = cross(n, axis);
+                float bl = length(b);
+                b = bl > 1e-3 ? b / bl : normalize(cross(n, float3(0.31, 0.83, 0.47)));
+                float3 t = cross(b, n);
+                return normalize(n - depth * (g.x * sgn * b + g.y * t));
             }
 
-            void Wood(float3 local, float3 nOS, float3 n, float3 axis, float3 baseColor, bool isLog, float4 tone, float fp, out float3 albedo, out float3 nOut)
+            void Wood(float3 local, float3 n, float3 axis, float3 baseColor, bool isLog, float4 tone, float fp, float3 wp, float3 gc, out float3 albedo, out float3 nOut)
             {
+                float3 lw = float3(0.2126, 0.7152, 0.0722);
                 float along = isLog ? local.x : local.y;
                 float2 rc = isLog ? local.yz : local.xz;
                 float radius = max(length(rc), 1e-3);
-                float capN = isLog ? abs(nOS.x) : nOS.y;
-                float3 wood = lerp(ToLinear(float3(0.6, 0.55, 0.47)), ToLinear(float3(0.52, 0.51, 0.48)), tone.w);
-                float mossMask = tone.y * smoothstep(0.2, 0.75, n.y) * smoothstep(-0.25, 0.3, TmNoise2(float2(along * 2.2 + rc.y * 1.5, rc.x * 3.1 - rc.y * 2.3)).x + 0.35 * TmNoise2(float2(along * 7.3, rc.x * 9.7 + rc.y * 5.1)).x);
-                float3 moss = ToLinear(float3(0.33, 0.38, 0.2)) * (0.8 + 0.3 * TmNoise2(local.xz * 23).x);
-                if (capN > 0.7)
+                float sgn = isLog ? -1 : 1;
+                int code = (int)round(tone.x);
+                float age = tone.w;
+                float3 weathered = lerp(ToLinear(float3(0.56, 0.5, 0.42)), ToLinear(float3(0.47, 0.46, 0.44)), age);
+                float4 mn = TmNoise3(wp * 2.3, int3(0, 0, 0)), mf = TmNoise3(wp * 9.1 + 17.3, int3(0, 0, 0));
+                float mossAmt = code <= 2 ? tone.y : 0;
+                float patch = smoothstep(0.5, 0.8, 0.5 + 0.5 * mn.x + 0.2 * mossAmt * age - 0.15 + 0.25 * mf.x);
+                float moss = 0.9 * saturate(mossAmt * smoothstep(0.35, 0.85, n.y + 0.3 * mn.y) * patch * 1.3);
+                float3 mossC = lerp(float3(0.07, 0.09, 0.03), float3(0.16, 0.18, 0.07), 0.5 + 0.5 * mf.y);
+                float decay = lerp(1, 0.62, age * age);
+                [branch] if (code == 3)
+                {
+                    float3 dirt = float3(0.06, 0.045, 0.032) * (0.8 + 0.4 * mn.y);
+                    float3 nz = TmNoise3(wp * 6.1 + 4.4, int3(0, 0, 0)).yzw;
+                    float pebble = smoothstep(0.55, 0.75, TmNoise3(wp * 13.7, int3(0, 0, 0)).x);
+                    albedo = lerp(dirt, gc * 0.55, 0.5 * saturate(tone.y * (0.7 + 0.6 * mn.x))) * (1 - 0.55 * tone.z);
+                    albedo = lerp(albedo, ToLinear(float3(0.42, 0.4, 0.37)), 0.5 * pebble * (1 - tone.y));
+                    float fib = smoothstep(0.82, 0.95, 1 - abs(TmNoise2(wp.xz * 7 + wp.y * 3.1).x)) * (1 - tone.y) * TmFade(7, fp);
+                    albedo = lerp(albedo, ToLinear(float3(0.32, 0.25, 0.18)), 0.6 * fib);
+                    float3 g = 0.06 * nz * TmFade(6, fp);
+                    nOut = normalize(n - (g - n * dot(g, n)));
+                    return;
+                }
+                [branch] if (code == 4)
+                {
+                    float2 m = float2(radius * 3.1 + 0.4 * wp.y, along);
+                    float tn;
+                    float3 b = OakBark(m * 2.5, fp, tn);
+                    albedo = baseColor * 0.75 * (0.55 + 0.5 * tn) * decay;
+                    albedo = lerp(albedo, lerp(float3(0.06, 0.045, 0.032), gc, 0.4), saturate(tone.y * (0.6 + 0.6 * mf.x)));
+                    nOut = Bumped(n, normalize(cross(n, float3(0, 1, 0)) + 1e-3), 1, b.yz, 0.006);
+                    return;
+                }
+                [branch] if (code == 2)
                 {
                     float keep = TmFade(14, fp);
+                    float3 wood = weathered * decay;
+                    float2 g = 0;
                     if (tone.z > 0.5)
                     {
                         float2 q = float2(rc.x * 26, rc.y * 5) + along * 3;
-                        float fib = 1 - abs(TmNoise2(q).x), sp = TmNoise2(rc * 9 + 3.1).x;
+                        float3 f = TmNoise2(q);
+                        float fib = 1 - abs(f.x), sp = TmNoise2(rc * 9 + 3.1).x;
                         albedo = wood * (0.7 + 0.35 * lerp(0.6, fib, keep)) * (0.9 + 0.12 * sp);
+                        float3 sc = TmNoise3(wp * 5.3 + 8.8, int3(0, 0, 0)).yzw;
+                        float3 gg = (0.05 * keep * sign(f.x)) * float3(f.y * 26, f.z * 5, 0) + 0.04 * sc;
+                        nOut = normalize(n - (gg - n * dot(gg, n)));
                     }
                     else
                     {
@@ -134,24 +172,34 @@ Shader "Stabby/Object"
                         float r = (radius + wob) * 14;
                         float ring = 0.5 + 0.5 * cos(r * 6.2831853);
                         float crack = smoothstep(0.92, 1, TmNoise2(float2(atan2(rc.y, rc.x) * 3, radius * 2)).x * 0.5 + 0.5);
-                        albedo = wood * (1 - 0.18 * keep * ring) * (1 - 0.5 * crack);
+                        albedo = wood * (1 - 0.18 * keep * ring) * (1 - 0.5 * crack * (0.4 + age));
+                        float3 sc = TmNoise3(wp * 7.1 + 2.2, int3(0, 0, 0)).yzw;
+                        float3 gg = 0.015 * sc * keep;
+                        nOut = normalize(n - (gg - n * dot(gg, n)));
                     }
-                    albedo = lerp(albedo, moss, mossMask * 0.6);
-                    nOut = n;
+                    albedo = lerp(albedo, albedo * float3(0.62, 0.5, 0.4), 0.5 * smoothstep(0.45, 1, age) * (0.6 + 0.4 * mn.z));
+                    albedo = lerp(albedo, mossC, moss * 0.7);
                     return;
                 }
-                float circ = atan2(rc.y, rc.x) * radius;
-                float2 p = float2(along * 1.6, circ * 9);
-                float2 g;
-                float keep = TmFade(9, fp);
-                float h = WoodRidge(p, g);
-                float3 bark = lerp(baseColor, baseColor * float3(0.92, 0.95, 1.02) + 0.03, tone.w);
-                albedo = lerp(bark * (0.65 + 0.55 * lerp(0.6, h, keep)), moss, mossMask);
-                float3 t = axis;
-                float3 b = normalize(cross(n, t));
-                t = cross(b, n);
-                float3 grad = (g.x * 1.6 * t + g.y * 9 * b) * 0.05 * keep * (1 - 0.7 * mossMask);
-                nOut = normalize(n - (grad - n * dot(grad, n)));
+                bool spruce = code == 1;
+                float2 mm = float2(atan2(rc.y, rc.x) * radius, along);
+                float tn, fresh = 0;
+                float3 bk = spruce ? SpruceBark(mm, fp, tn, fresh) : OakBark(mm, fp, tn);
+                albedo = baseColor * (spruce ? 0.62 + 0.5 * tn : 0.5 + 0.6 * tn);
+                albedo = spruce ? lerp(albedo, albedo * float3(1.35, 0.95, 0.75), fresh * (1 - age)) : lerp(albedo, dot(albedo, lw) * float3(1.04, 1, 0.94), 0.4 * saturate(tn));
+                albedo = lerp(albedo, dot(albedo, lw) * float3(1, 0.97, 0.92), 0.45 * age) * decay;
+                float4 ln = TmNoise3(wp * 1.7 + 51.3, int3(0, 0, 0));
+                float loss = smoothstep(0.62, 0.42, 1 - age + 0.35 * ln.x) * (0.5 + 0.5 * smoothstep(-0.2, 0.3, ln.x));
+                float3 fibre = TmNoise2(float2(mm.x * 30, mm.y * 3));
+                float3 bare = weathered * decay * (0.75 + 0.3 * (1 - abs(fibre.x)));
+                albedo = lerp(albedo, bare, loss);
+                albedo = lerp(albedo, mossC, moss);
+                float4 lc = TmNoise3(wp * 4.7 + 31.1, int3(0, 0, 0));
+                float lic = smoothstep(0.5, 0.68, lc.x) * (spruce ? 0.25 : 0.4) * (0.6 + 0.6 * age) * (1 - moss) * BarkFade(4.7, fp);
+                albedo = lerp(albedo, dot(albedo, lw) * float3(0.9, 1.03, 0.78) * (2.1 + 0.3 * lc.y), 0.6 * saturate(lic));
+                float2 g = lerp(bk.yz, 0.08 * fibre.yz * float2(30, 3) * BarkFade(30, fp), loss);
+                float depth = (spruce ? 0.012 : 0.01) * (1 - 0.6 * moss);
+                nOut = Bumped(n, axis, sgn, g, depth);
             }
 
             float Dressed(inout float3 albedo, float4 tone, float3 wp)
@@ -216,7 +264,11 @@ Shader "Stabby/Object"
                     [branch] if (i.tone.x > 0.25) occ = Dressed(albedo, i.tone, wp - tmO);
                 }
                 else
-                    Wood(i.local, normalize(i.normalOS), n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, albedo, n);
+                {
+                    float3 gw = ToLinear(_StabbyGround.rgb);
+                    [branch] if (_StabbyFieldUV.z > 0) gw = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
+                    Wood(i.local, n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, wp, gw, albedo, n);
+                }
                 float size = max(fade.w, 0.1), ground = fade.z;
                 [branch] if (_StabbyFieldUV.x > 0)
                 {

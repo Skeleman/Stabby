@@ -545,6 +545,18 @@ namespace Stabby.World
                         float py = cy + uy * t;
                         list.Add(new ObjectColumn { X = cx + ux * t, Z = cz + uz * t, R = rad, Bottom = py - rad, Top = py + rad });
                     }
+                    if (p.Ends == ObjectPart.EndsRooted)
+                    {
+                        ObjectMeshes.RootPlate(ObjectMeshes.Key(def.Id, pi, o.Variant), out float rp, out float yc, out float thick);
+                        float t = -0.5f * len + (0.3f - 0.5f * thick) * rad;
+                        Rotate(o, 0, 0, 1, out float wx, out float wy, out float wz);
+                        for (int k = -1; k <= 1; k++)
+                        {
+                            float side = 0.55f * rp * rad * k;
+                            float py = cy + uy * t + wy * side;
+                            list.Add(new ObjectColumn { X = cx + ux * t + wx * side, Z = cz + uz * t + wz * side, R = 0.35f * rp * rad, Bottom = py - rad, Top = py + (yc + 0.9f * rp) * rad });
+                        }
+                    }
                 }
                 else
                 {
