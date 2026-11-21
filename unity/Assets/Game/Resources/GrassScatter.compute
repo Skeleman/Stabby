@@ -77,7 +77,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         if (u + v > 1) { u = 1 - u; v = 1 - v; }
         float w = 1 - u - v;
         float3 p = a * w + b * u + c * v;
-        if (p.y < 0.3) continue;
+        if (sa.w * w + sb.w * u + sc.w * v > -0.3) continue;
         float d = distance(p, _Eye.xyz);
         float keep = min(1, near * near / max(d * d, 1e-4));
         if (d > reach || rank >= keep || Outside(p, hMax)) continue;

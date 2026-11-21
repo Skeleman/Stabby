@@ -32,8 +32,44 @@ namespace Stabby.Game.Editor
                     if (lines.Length > 0) sb.Append($"-- thread {v.threadName}\n").Append(lines);
                 }
             }
+            var gc = new Dictionary<string, long>();
+            int counted = 0;
+            foreach (var (f, _) in frames)
+                using (var v = ProfilerDriver.GetHierarchyFrameDataView(f, 0, HierarchyFrameDataView.ViewModes.Default, HierarchyFrameDataView.columnGcMemory, false))
+                {
+                    if (!v.valid) continue;
+                    var path = new List<string>();
+                    if (Allocs(v, v.GetRootItemID(), path, gc)) counted++;
+                }
+            sb.AppendLine($"=== GC by caller over {counted} frames, capture work left out (KB total)");
+            foreach (var kv in gc.OrderByDescending(kv => kv.Value).Take(60)) sb.AppendLine($"{kv.Value / 1024} {kv.Key}");
             System.IO.File.WriteAllText(outPath, sb.ToString());
             EditorApplication.Exit(0);
+        }
+
+        static bool Allocs(HierarchyFrameDataView v, int root, List<string> path, Dictionary<string, long> gc)
+        {
+            void Visit(int id)
+            {
+                var kids = new List<int>();
+                v.GetItemChildren(id, kids);
+                foreach (int k in kids)
+                {
+                    string name = v.GetItemName(k);
+                    if (name.Contains("GameCapture.Poll")) continue;
+                    if (name == "GC.Alloc")
+                    {
+                        string at = path.Count == 0 ? "?" : string.Join(" > ", path.Skip(System.Math.Max(0, path.Count - 3)));
+                        gc[at] = (gc.TryGetValue(at, out var o) ? o : 0) + (long)v.GetItemColumnDataAsDouble(k, HierarchyFrameDataView.columnGcMemory);
+                        continue;
+                    }
+                    path.Add(name);
+                    Visit(k);
+                    path.RemoveAt(path.Count - 1);
+                }
+            }
+            Visit(root);
+            return true;
         }
 
         static void Walk(HierarchyFrameDataView v, int id, int depth, float min, StringBuilder sb)

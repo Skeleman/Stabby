@@ -24,6 +24,7 @@ namespace Stabby.Game
         public int N;
         public BlobArray<float3> Colors;
         public BlobArray<float> Offsets;
+        public BlobArray<float> Lake;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -256,6 +257,19 @@ namespace Stabby.Game
             if (sx) pos.x = ax;
         }
 
+        static float Water(ref GroundData g, ref TerrainLookData look, float x, float z)
+        {
+            int c = NearField.CellOf(x, z, g.CellMeters, g.N);
+            float h = math.max(0, look.Lake[c]);
+            for (int k = g.PieceStart[c]; k < g.PieceStart[c + 1]; k++)
+            {
+                var q = g.Pieces[g.PieceItems[k]];
+                NearField.Project(q, x, z, out float d, out float t);
+                if (d < math.max(math.lerp(q.Wa, q.Wb, t), 6f)) h = math.max(h, math.lerp(q.Sa, q.Sb, t) + WaterGeometry.RiverLift);
+            }
+            return h;
+        }
+
         public void Execute()
         {
             ref var g = ref Ground.Blob.Value;
@@ -368,7 +382,7 @@ namespace Stabby.Game
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
                 float cover = Cover(edits, columns, p.Pos), lift = math.smoothstep(2f, 6f, math.abs(cover));
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover));
-                p.Strata = new float4(off, math.max(col.w, lift), 1 - lift, 0);
+                p.Strata = new float4(off, math.max(col.w, lift), 1 - lift, math.clamp(Water(ref g, ref look, p.Pos.x, p.Pos.z) - p.Pos.y, -4, 4));
                 if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
@@ -553,6 +567,9 @@ namespace Stabby.Game
         NativeHashSet<int> split, drawn;
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
+        NativeList<Entity> spare;
+        Entity prototype;
+        const int SpareBatch = 64;
         NativeArray<float4> planes;
         readonly Plane[] frustum = new Plane[6];
         JobHandle lodHandle;
@@ -635,6 +652,9 @@ namespace Stabby.Game
             p.Strata = TerrainLook.Strata(world, MaterialFile.Load(materials));
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
+            var lake = p.Look.Allocate(ref root.Lake, n * n);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++) lake[y * n + x] = WaterGeometry.LakeHeight(world, x, y);
             p.Field = TerrainLook.Field(detail, n, cm, colors, p.Strata.Offsets);
             return p;
         }
@@ -746,6 +766,7 @@ namespace Stabby.Game
             leaves = new NativeList<TerrainLeaf>(1024, Allocator.Persistent);
             planes = new NativeArray<float4>(6, Allocator.Persistent);
             roots = new NativeList<int>(16, Allocator.Persistent);
+            spare = new NativeList<Entity>(SpareBatch, Allocator.Persistent);
             int d = tree.Dim[TerrainTree.Root];
             for (int iz = 0; iz < d; iz++)
                 for (int ix = 0; ix < d; ix++)
@@ -849,9 +870,7 @@ namespace Stabby.Game
             nd.Built = 1;
             MinMaxAABB box = tree.Box(p.Key);
             if (math.any(lo < box.Min - 0.01f) || math.any(hi > box.Max + 0.01f)) UnityEngine.Debug.LogWarning($"terrain node L{l} {c} mesh {lo}..{hi} outside bounds {box.Min}..{box.Max}");
-            nd.Entity = Spawn(nd.Mesh, box, material);
-            EntityManager.AddComponentData(nd.Entity, new TerrainStitch());
-            EntityManager.AddComponent<DisableRendering>(nd.Entity);
+            nd.Entity = Take(nd.Mesh, box);
             nd.Drawn = 0;
             nd.Stitch = -1;
             nodes[p.Key] = nd;
@@ -875,6 +894,28 @@ namespace Stabby.Game
             RenderMeshUtility.AddComponents(e, em, new RenderMeshDescription(ShadowCastingMode.Off), new MaterialMeshInfo(mat, mesh));
             em.SetComponentData(e, new RenderBounds { Value = box });
             em.AddComponentData(e, new LocalToWorld { Value = float4x4.identity });
+            return e;
+        }
+
+        Entity Take(BatchMeshID mesh, AABB box)
+        {
+            var em = EntityManager;
+            if (spare.Length == 0)
+            {
+                if (prototype == Entity.Null)
+                {
+                    prototype = Spawn(mesh, box, material);
+                    em.AddComponentData(prototype, new TerrainStitch());
+                    em.AddComponent<Prefab>(prototype);
+                    em.SetComponentEnabled<MaterialMeshInfo>(prototype, false);
+                }
+                using var made = em.Instantiate(prototype, SpareBatch, Allocator.Temp);
+                spare.AddRange(made);
+            }
+            var e = spare[spare.Length - 1];
+            spare.RemoveAt(spare.Length - 1);
+            em.SetComponentData(e, new MaterialMeshInfo(material, mesh));
+            em.SetComponentData(e, new RenderBounds { Value = box });
             return e;
         }
 
@@ -992,8 +1033,7 @@ namespace Stabby.Game
                 if (!want && !InTree(key)) { Evict(key); continue; }
                 if (want != (nd.Drawn != 0))
                 {
-                    if (want) EntityManager.RemoveComponent<DisableRendering>(nd.Entity);
-                    else EntityManager.AddComponent<DisableRendering>(nd.Entity);
+                    EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, want);
                     nd.Drawn = want ? 1 : 0;
                 }
                 if (want)
@@ -1077,7 +1117,11 @@ namespace Stabby.Game
         void Evict(int key)
         {
             var nd = nodes[key];
-            if (nd.Entity != Entity.Null) EntityManager.DestroyEntity(nd.Entity);
+            if (nd.Entity != Entity.Null)
+            {
+                EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, false);
+                spare.Add(nd.Entity);
+            }
             graphics.UnregisterMesh(nd.Mesh);
             UnityEngine.Object.Destroy(meshes[key]);
             meshes.Remove(key);
@@ -1103,6 +1147,7 @@ namespace Stabby.Game
             if (tree.Offset.IsCreated) { tree.Offset.Dispose(); tree.Dim.Dispose(); tree.Range.Dispose(); tree.Land.Dispose(); }
             if (nodes.IsCreated) nodes.Dispose();
             if (split.IsCreated) split.Dispose();
+            if (spare.IsCreated) spare.Dispose();
             if (drawn.IsCreated) drawn.Dispose();
             if (leaves.IsCreated) leaves.Dispose();
             if (planes.IsCreated) planes.Dispose();
