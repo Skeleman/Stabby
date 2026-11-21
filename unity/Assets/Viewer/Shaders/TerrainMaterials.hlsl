@@ -138,15 +138,15 @@ float TmGroove(float x, float width, out float slope)
     return t * t * (3 - 2 * t) - 1;
 }
 
-float TmRockRelief(float2 qa, float level, float2 levelGrad, float hard, float fp, out float3 grad, out float bed)
+float TmRockRelief(float2 qa, float level, float2 levelGrad, float hard, float fp, float layered, out float3 grad, out float bed)
 {
     float4 rb = _StabbyRockB;
     float b = level * rb.x, ib = floor(b), s;
     bed = ib;
-    float depth = rb.y * lerp(1.6, 0.5, hard) * lerp(0.6, 1.4, TmHash(int2((int)ib, 7))) * TmFade(rb.x, fp);
+    float depth = layered * rb.y * lerp(1.6, 0.5, hard) * lerp(0.6, 1.4, TmHash(int2((int)ib, 7))) * TmFade(rb.x, fp);
     float hb = depth * TmGroove(b - ib, 0.16, s);
     grad = depth * s * rb.x * float3(levelGrad.x, 1, levelGrad.y);
-    float jd = rb.w * smoothstep(0.35, 0.85, hard) * TmFade(rb.z * 8, fp);
+    float jd = layered * rb.w * smoothstep(0.35, 0.85, hard) * TmFade(rb.z * 8, fp);
     if (jd <= 0) return hb;
     float2 d1 = float2(0.96, 0.28), d2 = float2(-0.28, 0.96);
     float j = dot(qa, d1) * rb.z + TmHash(int2((int)ib, 3)) * 4, ij = floor(j);
@@ -159,11 +159,12 @@ float TmRockRelief(float2 qa, float level, float2 levelGrad, float hard, float f
     return hb + min(hj, hk);
 }
 
-TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, float2 duy)
+TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, float2 duy, float stone)
 {
     float4 ra = _StabbyRockA, sw = _StabbyStrataWobble;
     float period = max(_StabbyStrataPeriod, 1);
-    float fw = TmFade(sw.y, fp);
+    float layered = 1 - stone;
+    float fw = TmFade(sw.y, fp) * layered;
     float3 wb = sw.x * fw * TmN2((wp.xz + tmO.xz) * sw.y + 17.3, fw) * float3(1, sw.y, sw.y);
     float level = wp.y + off + wb.x;
     float4 st = SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(level / period, 0.5), dux, duy);
@@ -177,11 +178,11 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         float nv = max(dot(v, n), 0.3);
         for (int k = 0; k < 3; k++)
         {
-            float hq = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, g, bed);
+            float hq = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, g, bed);
             q = wp + v * (hq * pk / nv);
         }
     }
-    float hr = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, g, bed);
+    float hr = TmRockRelief(q.xz + tmO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, g, bed);
     float4 bump = TmFbm3(q, ra.w, ra.z, 3, fp);
     float gw = TmFade(ra.y, fp), fw2 = TmFade(ra.y * 2.9, fp);
     float4 grain = TmLN3(q, ra.y, 5.1, gw);
@@ -194,9 +195,28 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     c *= 1 + 0.3 * bump.x * ra.w;
     float steep = saturate(1 - n.y * n.y);
     float t = dot(q.xz + tmO.xz, normalize(float2(-n.z, n.x) + 1e-5)), fs = steep * TmFade(1.3, fp);
-    c *= 1 - 0.14 * fs * saturate(TmN2(float2(t * 1.3, q.y * 0.08), fs).x);
+    c *= 1 - 0.14 * fs * layered * saturate(TmN2(float2(t * 1.3, q.y * 0.08), fs).x);
+    [branch] if (stone > 0)
+    {
+        float fwt = TmFade(0.9, fp), fcr = TmFade(3.6, fp);
+        float4 weather = TmLN3(q, 0.9, 3.3, fwt);
+        float4 gate = TmLN3(q, 0.22, 7.7, fcr);
+        float4 crack = TmLN3(q, 0.45, 23.1, fcr);
+        float w = 0.035, ax = abs(crack.x), tc = saturate(ax / w), cg = fcr * smoothstep(-0.1, 0.3, gate.x);
+        float seam = (1 - tc * tc * (3 - 2 * tc)) * cg;
+        float dl = cg * 6 * tc * (1 - tc) / w * (crack.x < 0 ? -1 : 1) * TmQ(0.45);
+        o.grad += stone * 0.08 * dl * crack.yzw;
+        float pit = smoothstep(0.1, 0.6, -bump.x * ra.w - 0.25 * fwt * weather.x);
+        c *= 1 + stone * (0.22 * fwt * weather.x - 0.75 * seam - 0.3 * pit);
+        o.grad += stone * 0.25 * fwt * weather.yzw;
+    }
     o.albedo = c;
     return o;
+}
+
+TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, float2 duy)
+{
+    return TmRock(wp, n, v, fp, off, dux, duy, 0);
 }
 
 float3 TmBlade(float2 p, float2 d, float f, float3 w, out float2 grad)
@@ -368,7 +388,7 @@ void TmAdd(inout TmOut acc, TmOut m, float w)
     acc.grad += m.grad * w;
 }
 
-TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix)
+TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix, float stone)
 {
     float3 grassColor = coatColor;
     float2 o2 = TmOrigin(_WorldSpaceCameraPos);
@@ -405,7 +425,22 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     }
     o.albedo = 0;
     o.grad = 0;
-    if (m > 0.01) TmAdd(o, TmRock(wp, n, v, fp, off, dux, duy), m);
+    if (m > 0.01) TmAdd(o, TmRock(wp, n, v, fp, off, dux, duy, stone), m);
+    [branch] if (stone > 0.01)
+    {
+        float fm = TmFade(0.6, fp), fl = TmFade(5.2, fp);
+        float4 patch = TmLN3(wp, 0.6, 51.3, fm);
+        float4 spot = TmLN3(wp, 5.2, 61.7, fl);
+        float top = smoothstep(0.45, 0.9, n.y), wet = cw.x + 0.4 * cw.y;
+        float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.25 * fl * spot.x);
+        float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fl * smoothstep(0.45, 0.65, spot.x) * smoothstep(-0.2, 0.3, patch.x) * (1 - moss);
+        float frost = stone * cw.w * smoothstep(0.55, 0.85, n.y);
+        float3 mossC = lerp(float3(0.045, 0.07, 0.02), float3(0.09, 0.11, 0.03), saturate(0.5 + fl * spot.x));
+        o.albedo = lerp(o.albedo, m * mossC, moss);
+        o.albedo = lerp(o.albedo, m * float3(0.3, 0.31, 0.22), 0.55 * lichen);
+        o.albedo = lerp(o.albedo, m * float3(0.75, 0.79, 0.84), frost);
+        o.grad *= 1 - 0.6 * moss - frost;
+    }
     float c = 1 - m;
     if (c > 0.01)
     {
