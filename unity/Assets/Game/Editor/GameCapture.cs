@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Unity.Entities;
 using Unity.NetCode;
 using Unity.Transforms;
@@ -17,7 +18,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
         static int settle = -1, phase, wait, smooth, chaseWait;
-        static bool bank;
+        static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
 
@@ -155,10 +156,11 @@ namespace Stabby.Game.Editor
                 if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) { if (wait == 0) wait = -1; return; }
                 Shot(cam, null, "warmup");
                 if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
-                Shot(cam, dir, phase == 5 && bank ? "riverbank" : name);
+                Shot(cam, dir, phase == 5 && lake ? "lake" : phase == 5 && bank ? "riverbank" : name);
                 if (phase == 2) Wire(cam, dir, name + "-wire");
-                if (phase == 5 && bank && GameStatus.Lines.TryGetValue("~grass view", out var gv)) GameStatus.Lines["~riverbank grass"] = "riverbank " + gv;
+                if (phase == 5 && bank && !lake && GameStatus.Lines.TryGetValue("~grass view", out var gv)) GameStatus.Lines["~riverbank grass"] = "riverbank " + gv;
                 if (phase == 5 && !bank && Bank(cam)) { bank = true; wait = 180; return; }
+                if (phase == 5 && !lake && AimLake(cam)) { lake = true; wait = 180; return; }
                 wait = 0;
                 phase++;
             }
@@ -190,6 +192,7 @@ namespace Stabby.Game.Editor
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
                 if (phase == 7)
                 {
+                    lows.Add(("rock", cam.transform.position, cam.transform.rotation));
                     lows.Add(("cliff", cam.transform.position, cam.transform.rotation));
                     Vector3 fwd = cam.transform.forward, at = cam.transform.position + fwd * 12f, back = cam.transform.position - new Vector3(fwd.x, 0, fwd.z).normalized * 30f + Vector3.up * 10f;
                     lows.Add(("cliff-wide", back, Quaternion.LookRotation(at - back)));
@@ -198,6 +201,7 @@ namespace Stabby.Game.Editor
                 {
                     GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
                     GameStatus.Lines["~bench grass blades"] = GrassViewSystem.Counts();
+                    lows.Add(("grass", cam.transform.position, cam.transform.rotation));
                     GrassViewSystem.Rescatter = true;
                     GameStatus.Lines["~bench grass moving"] = Bench(cam, "grass close-up rescattering grass every frame");
                     GrassViewSystem.Rescatter = false;
@@ -474,6 +478,41 @@ namespace Stabby.Game.Editor
                 var eye = target - along * 160f + side * 70f + Vector3.up * 70f;
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim river"] = $"river width {best.Width[k]:F0} m at {target.x:F0},{target.z:F0}";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimLake(Camera cam)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                if (map == null) continue;
+                Lake pick = null;
+                foreach (var l in map.Water.Lakes) if (pick == null || l.Cells.Count > pick.Cells.Count) pick = l;
+                if (pick == null) return false;
+                int n = map.Config.Size, edge = -1;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                var mid = Vector2.zero;
+                foreach (int i in pick.Cells) mid += new Vector2(i % n, i / n);
+                mid = mid / pick.Cells.Count * cm;
+                foreach (int i in pick.Cells)
+                {
+                    int x = i % n, z = i / n;
+                    if (x < 1 || z < 1 || x >= n - 1 || z >= n - 1) continue;
+                    if (map.Water.LakeId[i + 1] == pick.Id && map.Water.LakeId[i - 1] == pick.Id && map.Water.LakeId[i + n] == pick.Id && map.Water.LakeId[i - n] == pick.Id) continue;
+                    float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                    if (d < bestD) { bestD = d; edge = i; }
+                }
+                if (edge < 0) return false;
+                var shore = new Vector2(edge % n * cm, edge / n * cm);
+                var dir = (mid - shore).sqrMagnitude > 1f ? (mid - shore).normalized : Vector2.right;
+                var eye = new Vector3(shore.x - dir.x * 25f, 0, shore.y - dir.y * 25f);
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), pick.Level) + 6f;
+                var target = new Vector3(shore.x + dir.x * 60f, pick.Level, shore.y + dir.y * 60f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim lake"] = $"lake {pick.Id} ({pick.Cells.Count} cells) shore at {shore.x:F0},{shore.y:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
                 return true;
             }
             return false;
@@ -872,6 +911,17 @@ namespace Stabby.Game.Editor
                 }
                 GameStatus.Lines.TryGetValue("terrain", out var t);
                 GameStatus.Lines["~bench " + label + " terrain casting"] = $"bench {label} 1080p terrain casting off/on (ms, full): {ms[0]:F2}/{ms[1]:F2}; {t}";
+                var urp = (UniversalRenderPipelineAsset)UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+                bool keepCopy = urp.supportsCameraOpaqueTexture;
+                var copy = new double[2];
+                for (int k = 0; k < 8; k++)
+                {
+                    urp.supportsCameraOpaqueTexture = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    copy[k & 1] += BenchAt(cam, 1920, 1080) / 4;
+                }
+                urp.supportsCameraOpaqueTexture = keepCopy;
+                GameStatus.Lines["~bench " + label + " opaque copy"] = $"bench {label} 1080p opaque copy off/on (ms, full): {copy[0]:F2}/{copy[1]:F2}";
                 var sunk = new double[4];
                 for (int k = 0; k < 8; k++)
                 {
@@ -888,15 +938,22 @@ namespace Stabby.Game.Editor
             foreach (var (name, pos, rot) in lows)
             {
                 cam.transform.SetPositionAndRotation(pos, rot);
-                sun.transform.rotation = Quaternion.Euler(14f, rot.eulerAngles.y + 100f, 0);
+                sun.transform.rotation = name == "rock" ? keep : Quaternion.Euler(name == "grass" ? 6f : 14f, rot.eulerAngles.y + (name == "grass" ? 160f : 100f), 0);
                 for (var w = Settle(180); w.MoveNext();) yield return null;
-                for (int c = 0; c < 2; c++)
+                string[] tags = name == "rock" ? new[] { "-nocast", "-cast", "-detailoff", "-nojoints" } : new[] { "-low-nocast", "-low", "-low-detailoff", "-low-nojoints" };
+                var rockB = Shader.GetGlobalVector("_StabbyRockB");
+                for (int c = 0; c < (name == "cliff" || name == "rock" ? tags.Length : 2); c++)
                 {
-                    TerrainViewSystem.Casting = c == 1;
+                    TerrainViewSystem.Casting = c > 0;
+                    bool rock = name == "rock";
+                    Shader.SetGlobalFloat("_StabbyDetailOff", c == 2 ? 1 : 0);
                     for (var w = Settle(4); w.MoveNext();) yield return null;
+                    Shader.SetGlobalVector("_StabbyRockB", c == 3 ? new Vector4(rockB.x, rockB.y, rockB.z, 0) : rockB);
                     Shot(cam, null, "warmup");
-                    Shot(cam, dir, name + (c == 0 ? "-low-nocast" : "-low"));
+                    Shot(cam, dir, (rock ? "close-rock" : name) + tags[c]);
                 }
+                Shader.SetGlobalFloat("_StabbyDetailOff", 0);
+                Shader.SetGlobalVector("_StabbyRockB", rockB);
             }
             sun.transform.rotation = keep;
             TerrainViewSystem.Casting = true;
