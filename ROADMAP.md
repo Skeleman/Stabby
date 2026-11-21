@@ -216,7 +216,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 - Exploration: a world dense with detail, secrets and one-off discoveries:
   landmarks, rare creatures, giant creatures, mysterious structures, scenic
   vistas. Built on the object, structure kit and blueprint stages (rule 11),
-  each discovery type placed from its own stream. | planned
+  each discovery type placed from its own stream. Step 1 (b/discoveries-1): placement stage plus a standing-stone ring. | now
 - Character interactivity: NPCs, animals and creatures act on their own
   desires and interact with each other and the player. One shared desire and
   behaviour system serves every agent; NPCs add ownership of items and
