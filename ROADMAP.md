@@ -100,7 +100,8 @@ architecture contract. The other steps fit the contract as it stands.
 | Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
 | Chunk-sized holes at chunk edges: overhead shot shows one chunk as a pit of flat strata bands with hard rectangular edges (likely a missing or wrong-LOD chunk exposing neighbour skirts); chase shot shows a green slab along a chunk edge | next |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
-| Far shoreline (~1 km) still shows boxy foam patches: the depth band follows coarse terrain facets; needs a shoreline-distance field (heightfield data texture) or finer far terrain | next |
+| Far shoreline: sea and lake depth past 120-240 m read a smooth bed-height field (`_StabbyBed`, 11 m texels, mipped) instead of far terrain facets; +0.1 ms at 1080p, `coast-far` capture shot | done |
+| Stepped sand rim at ~1 km where coarse far-LOD terrain crosses the flat water plane (geometry, not foam): finer far LOD along shorelines | later |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` (`Objects`, `ObjectChecks`, instanced view with screen-size LOD) | done |
 | Objects step 1b: rocks use the strata material library, denser and varied placement (clusters at scarp feet, scree on slopes, logs under forest), spawn data unloaded with chunks, instance counts in capture stats; GeneratorVersion 34 | done |
