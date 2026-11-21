@@ -12,6 +12,7 @@ namespace Stabby.World
     public sealed class ObjectField
     {
         public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f;
+        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
 
         readonly GeneratedWorld w;
         readonly TerrainDetail detail;
@@ -19,7 +20,7 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream;
         readonly float[][] density;
         readonly float[] footprint;
         readonly float[][][] heights;
@@ -39,6 +40,8 @@ namespace Stabby.World
             stream = Rng.Stream(w.Config.Seed, "objects").NextU64();
             footStream = Rng.Stream(w.Config.Seed, "objects-foot").NextU64();
             thinStream = Rng.Stream(w.Config.Seed, "objects-thin").NextU64();
+            boulderStream = Rng.Stream(w.Config.Seed, "boulders").NextU64();
+            boulderThinStream = Rng.Stream(w.Config.Seed, "boulders-thin").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -126,11 +129,21 @@ namespace Stabby.World
         public ObjectInstance[] Place(int cx, int cz, bool solidOnly = false)
         {
             var list = new List<ObjectInstance>();
-            PlaceInto(cx, cz, solidOnly, list);
+            PlaceInto(cx, cz, solidOnly, list, null);
             return list.ToArray();
         }
 
-        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list)
+        public FeatureEdit[] Boulders()
+        {
+            var list = new List<FeatureEdit>();
+            var scratch = new List<ObjectInstance>();
+            for (int cz = 0; cz < across; cz++)
+                for (int cx = 0; cx < across; cx++)
+                    PlaceInto(cx, cz, false, scratch, list);
+            return list.ToArray();
+        }
+
+        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders)
         {
             float span = WorldChunks.Size * cm;
             float x0 = cx * span, z0 = cz * span;
@@ -140,10 +153,10 @@ namespace Stabby.World
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 var pl = lib.Objects[d].Placement;
-                if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d))) continue;
+                if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
                 bool foot = pl.FootRiseM > 0;
-                var rng = new Rng(Rng.Mix((foot ? footStream : stream) ^ chunkKey ^ key[d]));
-                var thin = new Rng(Rng.Mix(thinStream ^ chunkKey ^ key[d]));
+                var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
+                var thin = new Rng(Rng.Mix((boulders != null ? boulderThinStream : thinStream) ^ chunkKey ^ key[d]));
                 float expected = pl.PerHectare * sx * sz / 10000f / pl.ClusterCount;
                 int clusters = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
                 for (int k = 0; k < clusters; k++)
@@ -160,11 +173,37 @@ namespace Stabby.World
                         if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz) continue;
                         if (Density(d, px, pz) < 1f && thin.NextFloat() >= Density(d, px, pz)) continue;
                         float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t;
-                        if (Accept(d, px, pz, size, qa, qb, out var o)) { o.Variant = variant; list.Add(o); }
+                        if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
+                        if (!Accept(d, px, pz, size, qa, qb, out var o)) continue;
+                        o.Variant = variant;
+                        if (boulders == null) list.Add(o);
+                        else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
                     }
                 }
             }
         }
+
+        void AddBoulder(ObjectInstance o, float reach, float qa, float qb, float x0, float z0, float sx, float sz, List<FeatureEdit> boulders)
+        {
+            float ql = (float)Math.Sqrt(qa * qa + qb * qb);
+            float yw = ql > 1e-4f ? qa / ql : 1f, yy = ql > 1e-4f ? qb / ql : 0f;
+            float ux = yw * yw - yy * yy, uz = 2 * yw * yy, side = (o.Variant & 1) == 0 ? 1f : -1f;
+            float r = BoulderMainR * reach, h = BoulderLength * reach, y = o.Y + BoulderLift * r;
+            float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
+            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
+            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
+            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b)) return;
+            boulders.Add(a);
+            boulders.Add(b);
+        }
+
+        bool Wet(FeatureEdit e)
+        {
+            int i = Cell(0.5f * (e.MinZ + e.MaxZ)) * n + Cell(0.5f * (e.MinX + e.MaxX));
+            return w.Sea[i] || (w.Water != null && w.Water.LakeId[i] >= 0);
+        }
+
+        static bool Within(FeatureEdit e, float x0, float z0, float sx, float sz) => e.MinX >= x0 && e.MaxX < x0 + sx && e.MinZ >= z0 && e.MaxZ < z0 + sz;
 
         float Density(int d, float x, float z)
         {
@@ -293,7 +332,7 @@ namespace Stabby.World
                     var held = chunks[cz * across + cx];
                     if (held != null) { foreach (var o in held) AddColumns(lib, heights, o, list); continue; }
                     scratch.Clear();
-                    PlaceInto(cx, cz, true, scratch);
+                    PlaceInto(cx, cz, true, scratch, null);
                     foreach (var o in scratch) AddColumns(lib, heights, o, list);
                 }
             return list;

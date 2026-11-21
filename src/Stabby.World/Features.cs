@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Shapes = 4;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Shapes = 5;
 
         public const float Blend = 0.5f;
 
@@ -156,6 +156,18 @@ namespace Stabby.World
         }
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail)
+        {
+            var terrain = Terrain(w, detail);
+            if (w.Objects == null || w.Biome == null) return terrain;
+            var boulders = new ObjectField(w, detail, terrain, w.Objects).Boulders();
+            if (boulders.Length == 0) return terrain;
+            var all = new FeatureEdit[terrain.Length + boulders.Length];
+            terrain.CopyTo(all, 0);
+            boulders.CopyTo(all, terrain.Length);
+            return all;
+        }
+
+        static FeatureEdit[] Terrain(GeneratedWorld w, TerrainDetail detail)
         {
             var list = new List<FeatureEdit>();
             if (w.Biome == null || 16f < MinRadiusSteps * LatticeStepM) return list.ToArray();

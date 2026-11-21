@@ -114,6 +114,7 @@
               "alignToSlope": { "type": "number", "minimum": 0, "maximum": 1 },
               "footRiseM": { "type": "number", "minimum": 0, "maximum": 100 },
               "footReachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
+              "editMinSizeM": { "type": "number", "minimum": 0, "maximum": 20 },
               "biomeDensity": {
                 "type": "array",
                 "items": {

@@ -41,6 +41,7 @@ namespace Stabby.World
         public float Sink;
         public float AlignToSlope;
         public float FootRiseM, FootReachM = 12f;
+        public float EditMinSizeM;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
     }
 
@@ -126,6 +127,11 @@ namespace Stabby.World
                 if (pl.AlignToSlope < 0 || pl.AlignToSlope > 1) errors.Add(d.Id + ": alignToSlope must be 0-1");
                 if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
                 if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
+                if (pl.EditMinSizeM < 0 || pl.EditMinSizeM > 20) errors.Add(d.Id + ": editMinSizeM must be 0-20");
+                if (pl.EditMinSizeM > 0 && (d.Parts.Count != 1 || d.Parts[0].Shape != ObjectPart.Rock || pl.ClusterCount != 1 || pl.FootRiseM > 0))
+                    errors.Add(d.Id + ": editMinSizeM needs one rock part, no clusters and no footRiseM");
+                if (pl.EditMinSizeM > 0 && ObjectField.BoulderSideR * d.FootprintRadius() * pl.EditMinSizeM < 0.75f * NearField.NodeStep(0))
+                    errors.Add(d.Id + ": editMinSizeM is too small for boulder edits to mesh at the finest step");
                 foreach (var bd in pl.BiomeDensity)
                 {
                     if (bd.Scale < 0 || bd.Scale > 1) errors.Add(d.Id + ": biomeDensity scale must be 0-1");

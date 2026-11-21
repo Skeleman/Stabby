@@ -150,6 +150,24 @@ public class ObjectTests
     }
 
     [Fact]
+    public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
+    {
+        var w = Gen(4);
+        var detail = new TerrainDetail(w);
+        var edits = Features.Place(w, detail);
+        Assert.Contains(edits, e => e.Shape == FeatureEdit.Boulder && e.Kind == FeatureEdit.Add);
+        var field = new ObjectField(w, detail, edits, Objects);
+        int big = Objects.Objects.FindIndex(o => o.Id == "large-boulder");
+        float min = Objects.Objects[big].Placement.EditMinSizeM;
+        int small = 0;
+        for (int cz = 0; cz < field.ChunksAcross; cz++)
+            for (int cx = 0; cx < field.ChunksAcross; cx++)
+                foreach (var o in field.Chunk(cx, cz))
+                    if (o.Def == big) { Assert.True(o.Size < min); small++; }
+        Assert.True(small > 0);
+    }
+
+    [Fact]
     public void ObjectsStayInTheirBiomes()
     {
         var w = Gen(5);
