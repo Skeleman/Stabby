@@ -51,25 +51,111 @@ namespace Stabby.World
             foreach (var p in Layout(shape, key).Pieces)
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
-                var m = ObjectMeshes.Rock(p.Key, TierRock[tier]);
-                var u = Bounds(m.Positions);
-                for (int v = 0; v < u.Length; v += 3)
+                bool cut = p.Q >= Faceted;
+                float[] u;
+                int[] idx;
+                if (cut)
                 {
-                    float inf = Math.Max(Math.Abs(u[v]), Math.Max(Math.Abs(u[v + 1]), Math.Abs(u[v + 2])));
-                    if (inf < 1e-4f) continue;
-                    float k = 1 + p.Q * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
-                    u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
+                    u = Box(tier == 0 ? 2 : 1, out idx);
+                    Warp(u, p.Key);
+                    Chamfer(u, p.Key, p.Q < StoneSquare ? 0.9f : 0.74f);
+                }
+                else
+                {
+                    var m = ObjectMeshes.Rock(p.Key, TierRock[tier]);
+                    idx = m.Indices;
+                    u = Bounds(m.Positions);
+                    for (int v = 0; v < u.Length; v += 3)
+                    {
+                        float inf = Math.Max(Math.Abs(u[v]), Math.Max(Math.Abs(u[v + 1]), Math.Abs(u[v + 2])));
+                        if (inf < 1e-4f) continue;
+                        float k = 1 + p.Q * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
+                        u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
+                    }
                 }
                 u = Bounds(u);
-                int first = b.P.Count / 3;
+                var w = new float[u.Length];
                 for (int v = 0; v < u.Length; v += 3)
                 {
                     float y = 0.5f * (u[v + 1] + 1) * p.Sy, x = 0.5f * u[v] * p.Sx + p.L * (y - 0.5f * p.Sy), z = 0.5f * u[v + 2] * p.Sz;
-                    b.Add(p.X + p.C * x - p.S * z, p.Y + y, p.Z + p.S * x + p.C * z);
+                    w[v] = p.X + p.C * x - p.S * z; w[v + 1] = p.Y + y; w[v + 2] = p.Z + p.S * x + p.C * z;
                 }
-                foreach (int i in m.Indices) b.I.Add(first + i);
+                if (cut)
+                    foreach (int i in idx) b.I.Add(b.Add(w[i * 3], w[i * 3 + 1], w[i * 3 + 2]));
+                else
+                {
+                    int first = b.P.Count / 3;
+                    for (int v = 0; v < w.Length; v += 3) b.Add(w[v], w[v + 1], w[v + 2]);
+                    foreach (int i in idx) b.I.Add(first + i);
+                }
             }
             return b.Finish();
+        }
+
+        static float[] Box(int n, out int[] idx)
+        {
+            var pos = new List<float>();
+            var ind = new List<int>();
+            for (int f = 0; f < 6; f++)
+            {
+                int a = f >> 1, ua = (a + 1) % 3, va = (a + 2) % 3;
+                float sg = (f & 1) == 0 ? 1 : -1;
+                int first = pos.Count / 3;
+                for (int j = 0; j <= n; j++)
+                    for (int i = 0; i <= n; i++)
+                    {
+                        var c = new float[3];
+                        c[a] = sg; c[ua] = -1 + 2f * i / n; c[va] = -1 + 2f * j / n;
+                        pos.Add(c[0]); pos.Add(c[1]); pos.Add(c[2]);
+                    }
+                for (int j = 0; j < n; j++)
+                    for (int i = 0; i < n; i++)
+                    {
+                        int q = first + j * (n + 1) + i;
+                        if (sg > 0) { ind.Add(q); ind.Add(q + 1); ind.Add(q + n + 2); ind.Add(q); ind.Add(q + n + 2); ind.Add(q + n + 1); }
+                        else { ind.Add(q); ind.Add(q + n + 2); ind.Add(q + 1); ind.Add(q); ind.Add(q + n + 1); ind.Add(q + n + 2); }
+                    }
+            }
+            idx = ind.ToArray();
+            return pos.ToArray();
+        }
+
+        static void Warp(float[] u, ulong key)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0x6A09E667F3BCC909UL));
+            var d = new float[24];
+            for (int k = 0; k < 24; k++) d[k] = rng.Range(-0.1f, 0.1f);
+            for (int v = 0; v < u.Length; v += 3)
+            {
+                float fx = 0.5f * (u[v] + 1), fy = 0.5f * (u[v + 1] + 1), fz = 0.5f * (u[v + 2] + 1);
+                float ox = 0, oy = 0, oz = 0;
+                for (int c = 0; c < 8; c++)
+                {
+                    float wt = ((c & 1) != 0 ? fx : 1 - fx) * ((c & 2) != 0 ? fy : 1 - fy) * ((c & 4) != 0 ? fz : 1 - fz);
+                    ox += wt * d[c * 3]; oy += wt * d[c * 3 + 1]; oz += wt * d[c * 3 + 2];
+                }
+                u[v] += ox; u[v + 1] += oy; u[v + 2] += oz;
+            }
+        }
+
+        static void Chamfer(float[] u, ulong key, float depth)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0x2C1B3C6D4E5F6071UL));
+            int cuts = rng.Range(1, 4);
+            for (int k = 0; k < cuts; k++)
+            {
+                float nx = rng.Range(-1f, 1f), ny = rng.Range(-0.6f, 1f), nz = rng.Range(-1f, 1f);
+                float len = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                if (len < 1e-3f) continue;
+                nx /= len; ny /= len; nz /= len;
+                float d = (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(depth, 0.97f);
+                for (int v = 0; v < u.Length; v += 3)
+                {
+                    float over = u[v] * nx + u[v + 1] * ny + u[v + 2] * nz - d;
+                    if (over <= 0) continue;
+                    u[v] -= over * nx; u[v + 1] -= over * ny; u[v + 2] -= over * nz;
+                }
+            }
         }
 
         static float[] Bounds(float[] pos)
@@ -161,7 +247,7 @@ namespace Stabby.World
             }
         }
 
-        const float StoneSquare = 0.92f, SlabSquare = 0.95f;
+        const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f;
 
         static void Course(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w)
         {
@@ -196,9 +282,9 @@ namespace Stabby.World
                     for (int side = -1; side <= 1; side += 2)
                     {
                         if (rng.NextFloat() < 0.35f) continue;
-                        float hs = ch * rng.Range(0.18f, 0.32f), hz = w * rng.Range(0.16f, 0.26f);
+                        float hs = ch * rng.Range(0.14f, 0.24f), hz = w * rng.Range(0.12f, 0.2f);
                         int dir = rng.Range(0, 16);
-                        Add(l, key, t + rng.Range(-0.2f, 0.2f) * ch, yb + ch * rng.Range(0.1f, 0.65f), side * (0.5f * w - 0.5f * hz - 0.003f), hs * rng.Range(1f, 1.6f), hs, hz, Cos16(dir), Sin16(dir), 0, 0, 0.6f);
+                        Add(l, key, t + rng.Range(-0.2f, 0.2f) * ch, yb + ch * rng.Range(0.1f, 0.65f), side * (0.5f * w - 0.5f * hz - 0.012f), hs * rng.Range(1f, 1.6f), hs, hz, Cos16(dir), Sin16(dir), 0, 0, 0.6f);
                     }
             }
         }
