@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : 1;
+                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "floor" ? 26 + BiomeShots.Length : 1;
             }
             if (phase == 50)
             {
@@ -484,9 +484,9 @@ namespace Stabby.Game.Editor
                 return;
             }
             int f0 = 26 + BiomeShots.Length;
-            while (phase >= f0 && phase <= f0 + 2)
+            while (phase >= f0 && phase <= f0 + 4)
             {
-                string name = phase == f0 ? "floor-near" : phase == f0 + 1 ? "floor-mid" : "cliff-foot";
+                string name = phase == f0 ? "floor-near" : phase == f0 + 1 ? "floor-mid" : phase == f0 + 2 ? "cliff-foot" : phase == f0 + 3 ? "floor-windthrow" : "floor-snapped";
                 if (wait == 0)
                 {
                     if (!AimFloor(cam, phase - f0)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
@@ -498,6 +498,12 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 wait = 0;
                 phase++;
+            }
+            if (only == "floor")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             if (!castDone) { job = CastTour(cam, dir); castDone = true; }
             if (job != null && job.MoveNext()) return;
@@ -918,6 +924,7 @@ namespace Stabby.Game.Editor
                 var lib = field.Library.Objects;
                 ObjectInstance pick = default;
                 float best = float.MaxValue;
+                string want = mode < 2 ? "fallen-log" : mode == 2 ? "cliff-scree" : mode == 3 ? "windthrow" : "snapped-tree";
                 for (int cz = 0; cz < field.ChunksAcross; cz++)
                     for (int cx = 0; cx < field.ChunksAcross; cx++)
                     {
@@ -925,13 +932,13 @@ namespace Stabby.Game.Editor
                         foreach (var o in chunk)
                         {
                             string id = lib[o.Def].Id;
-                            if (mode < 2 ? id != "fallen-log" : id != "cliff-scree") continue;
+                            if (id != want) continue;
                             int near = 0;
                             foreach (var b in chunk)
                             {
                                 string bid = lib[b.Def].Id;
                                 float d2 = (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z);
-                                if (d2 < 400f && (mode < 2 ? bid == "fallen-log" || bid == "stump" : bid == "cliff-scree")) near++;
+                                if (d2 < 400f && (mode == 2 ? bid == "cliff-scree" : bid == "fallen-log" || bid == "stump" || bid == "windthrow" || bid == "snapped-tree")) near++;
                             }
                             float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude * 0.02f - near;
                             if (score < best) { best = score; pick = o; }
@@ -940,7 +947,7 @@ namespace Stabby.Game.Editor
                 if (best == float.MaxValue) return false;
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 var trees = new System.Collections.Generic.List<Vector2>();
-                float reach = mode == 0 ? 10f : 30f;
+                float reach = mode == 0 || mode > 2 ? 12f : 30f;
                 for (int cz = 0; cz < field.ChunksAcross; cz++)
                     for (int cx = 0; cx < field.ChunksAcross; cx++)
                         foreach (var o in field.Chunk(cx, cz))
@@ -962,7 +969,7 @@ namespace Stabby.Game.Editor
                 float gx = ground.HeightAt(pick.X + 4f, pick.Z) - ground.HeightAt(pick.X - 4f, pick.Z), gz = ground.HeightAt(pick.X, pick.Z + 4f) - ground.HeightAt(pick.X, pick.Z - 4f);
                 var up = new Vector3(gx, 0, gz);
                 up = up.sqrMagnitude > 1e-4f ? up.normalized : Vector3.forward;
-                float back = mode == 0 ? 4f : mode == 1 ? 16f : 26f, rise = mode == 0 ? 1.4f : mode == 1 ? 5f : 4f;
+                float back = mode == 0 ? 4f : mode == 1 ? 16f : mode == 2 ? 26f : 7f, rise = mode == 0 ? 1.4f : mode == 1 ? 5f : mode == 2 ? 4f : 2.2f;
                 if (mode == 2) target += Vector3.up * 3f;
                 Vector3 eye = target - up * back + Vector3.up * rise;
                 float clearBest = float.MinValue;

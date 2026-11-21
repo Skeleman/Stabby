@@ -161,6 +161,80 @@ public class ObjectTests
         Assert.NotEqual(ObjectMeshes.Build(0, ObjectMeshes.Key("boulder", 0, 1), 0).Positions, ObjectMeshes.Build(0, ObjectMeshes.Key("boulder", 0, 2), 0).Positions);
     }
 
+    [Theory]
+    [InlineData(ObjectPart.Log, ObjectPart.EndsAuto, 0.11f)]
+    [InlineData(ObjectPart.Log, ObjectPart.EndsTorn, 0.3f)]
+    [InlineData(ObjectPart.Log, ObjectPart.EndsSawn, 0.11f)]
+    [InlineData(ObjectPart.Log, ObjectPart.EndsRooted, 0.12f)]
+    [InlineData(ObjectPart.Stump, ObjectPart.EndsAuto, 1.11f)]
+    [InlineData(ObjectPart.Stump, ObjectPart.EndsSawn, 1.11f)]
+    [InlineData(ObjectPart.Stump, ObjectPart.EndsSnapped, 0.5f)]
+    public void WoodMeshesFallByLodFaceOutwardAndCarryTones(int shape, int ends, float aspect)
+    {
+        for (int v = 0; v < 6; v++)
+        {
+            ulong k = ObjectMeshes.Key("fallen-log", 0, v);
+            int prev = int.MaxValue;
+            for (int lod = 0; lod < 3; lod++)
+            {
+                var m = ObjectMeshes.Build(shape, k, lod, aspect, ends);
+                Assert.True(m.TriangleCount < prev && m.TriangleCount > 0);
+                Assert.Equal(4 * m.VertexCount, m.Tones.Length);
+                Assert.All(m.Indices, i => Assert.InRange(i, 0, m.VertexCount - 1));
+                double mx = 0, my = 0, mz = 0, outward = 0;
+                for (int i = 0; i < m.VertexCount; i++) { mx += m.Positions[3 * i]; my += m.Positions[3 * i + 1]; mz += m.Positions[3 * i + 2]; }
+                mx /= m.VertexCount; my /= m.VertexCount; mz /= m.VertexCount;
+                for (int i = 0; i < m.VertexCount; i++)
+                    outward += m.Normals[3 * i] * (m.Positions[3 * i] - mx) + m.Normals[3 * i + 1] * (m.Positions[3 * i + 1] - my) + m.Normals[3 * i + 2] * (m.Positions[3 * i + 2] - mz);
+                Assert.True(outward > 0, $"lod {lod} variant {v} faces inward");
+                for (int i = 0; i < m.VertexCount; i++) Assert.InRange(m.Tones[4 * i], 0f, 4f);
+                prev = m.TriangleCount;
+            }
+            Assert.Equal(ObjectMeshes.Build(shape, k, 0, aspect, ends).Positions, ObjectMeshes.Build(shape, k, 0, aspect, ends).Positions);
+        }
+    }
+
+    [Fact]
+    public void RootedLogsCarryPlateAndPitAndSawnEndsStayFlat()
+    {
+        ulong k = ObjectMeshes.Key("windthrow", 0, 2);
+        var rooted = ObjectMeshes.Build(ObjectPart.Log, k, 0, 0.12f, ObjectPart.EndsRooted);
+        var torn = ObjectMeshes.Build(ObjectPart.Log, k, 0, 0.12f, ObjectPart.EndsTorn);
+        Assert.Contains(Enumerable.Range(0, rooted.VertexCount), i => rooted.Tones[4 * i] == 3f);
+        Assert.Contains(Enumerable.Range(0, rooted.VertexCount), i => rooted.Tones[4 * i] == 4f);
+        Assert.DoesNotContain(Enumerable.Range(0, torn.VertexCount), i => torn.Tones[4 * i] >= 3f);
+        ObjectMeshes.RootPlate(k, out float rp, out float yc, out float thick);
+        float top = 0;
+        for (int i = 0; i < rooted.VertexCount; i++) top = Math.Max(top, rooted.Positions[3 * i + 1]);
+        Assert.InRange(top, 0.5f + 0.5f * (yc + 0.6f * rp), 0.5f + 0.5f * (yc + 1.3f * rp));
+        Assert.InRange(thick, 0.8f, 1.4f);
+        var sawn = ObjectMeshes.Build(ObjectPart.Stump, k, 0, 1.11f, ObjectPart.EndsSawn);
+        Assert.All(Enumerable.Range(0, sawn.VertexCount).Where(i => sawn.Tones[4 * i] == 2f), i => Assert.Equal(0f, sawn.Tones[4 * i + 2]));
+    }
+
+    [Fact]
+    public void PartEndsAreValidatedPerShape()
+    {
+        var lib = new ObjectLibrary();
+        lib.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodPixels = RisingLods });
+        lib.Objects.Add(new ObjectDef { Id = "a", Kind = "static", Parts = { new ObjectPart { Id = "p", Shape = ObjectPart.Rock, Ends = ObjectPart.EndsTorn } } });
+        lib.Objects.Add(new ObjectDef { Id = "b", Kind = "static", Parts = { new ObjectPart { Id = "p", Shape = ObjectPart.Stump, Ends = ObjectPart.EndsRooted } } });
+        lib.Objects.Add(new ObjectDef { Id = "c", Kind = "static", Parts = { new ObjectPart { Id = "p", Shape = ObjectPart.Log, Ends = ObjectPart.EndsSnapped } } });
+        lib.Objects.Add(new ObjectDef { Id = "d", Kind = "static", Parts = { new ObjectPart { Id = "p", Shape = ObjectPart.Log, Ends = 9 } } });
+        lib.Objects.Add(new ObjectDef { Id = "e", Kind = "static", Parts = { new ObjectPart { Id = "p", Shape = ObjectPart.Log, Ends = ObjectPart.EndsRooted } } });
+        var errors = ObjectLibrary.Validate(lib);
+        Assert.Contains(errors, e => e.StartsWith("a: part p ends belong only", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e.StartsWith("b: part p rooted", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e.StartsWith("c: part p snapped", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e.StartsWith("d: part p has unknown ends", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors, e => e.StartsWith("e:", StringComparison.Ordinal));
+        var wind = Objects.Objects.First(o => o.Id == "windthrow");
+        Assert.Equal(ObjectPart.EndsRooted, wind.Parts[0].Ends);
+        var snapped = Objects.Objects.First(o => o.Id == "snapped-tree");
+        Assert.Equal(ObjectPart.EndsSnapped, snapped.Parts[0].Ends);
+        Assert.Equal(ObjectPart.EndsAuto, snapped.Parts[1].Ends);
+    }
+
     [Fact]
     public void FoliageMeshesFitUnitBoundsAndCarryLeafAndWindData()
     {
