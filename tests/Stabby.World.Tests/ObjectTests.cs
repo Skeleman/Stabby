@@ -114,7 +114,9 @@ public class ObjectTests
                 total += p.Length;
                 foreach (var o in p) kinds.Add(o.Def);
             }
-        Assert.Equal(Objects.Objects.Count, kinds.Count);
+        var present = new HashSet<string>(w.Biome.Where(bb => bb >= 0).Select(bb => w.BiomeIds[bb]));
+        var missing = Objects.Objects.Where((d, i) => !kinds.Contains(i) && (d.Placement.Biomes.Count == 0 || d.Placement.Biomes.Any(present.Contains))).Select(d => d.Id).ToList();
+        Assert.True(missing.Count == 0, "missing: " + string.Join(", ", missing));
         Assert.True(total > 10000, $"{total} objects");
     }
 
