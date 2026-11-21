@@ -150,7 +150,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : 1;
+                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : 1;
             }
             while (phase <= 6)
             {
@@ -417,7 +417,24 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "biomes")
+            while (phase >= 40 && phase < 40 + 2 * BeachShots.Length)
+            {
+                int bk = (phase - 40) / 2;
+                bool mid = (phase - 40) % 2 == 1;
+                string name = "beach-" + BeachShots[bk] + (mid ? "-mid" : "-close");
+                if (wait == 0)
+                {
+                    if (!AimBeach(cam, bk, mid)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
+            if (only == "biomes" || only == "beach")
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -967,6 +984,66 @@ namespace Stabby.Game.Editor
         static readonly string[] CloseNames = { "rock", "grass", "sand", "snow" };
 
         static readonly string[] BiomeShots = { "tundra", "alpine", "desert", "cold-desert", "savanna", "steppe" };
+
+        static readonly string[] BeachShots = { "straight", "bay", "point" };
+
+        static bool AimBeach(Camera cam, int kind, bool mid)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (map == null || q.CalculateEntityCount() != 1) continue;
+                var ground = q.GetSingleton<Ground>();
+                int n = map.Config.Size, r = 5, best = -1;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                Vector2 bestDir = default;
+                for (int z = r; z < n - r; z++)
+                    for (int x = r; x < n - r; x++)
+                    {
+                        int i = z * n + x;
+                        if (map.Sea[i] || map.Height[i] > 1.6f || !(map.Sea[i + 1] || map.Sea[i - 1] || map.Sea[i + n] || map.Sea[i - n])) continue;
+                        float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (d >= bestD) continue;
+                        var dir = Vector2.zero;
+                        int sea = 0, low = 0;
+                        for (int dz = -r; dz <= r; dz++)
+                            for (int dx = -r; dx <= r; dx++)
+                            {
+                                int j = (z + dz) * n + x + dx;
+                                if (map.Sea[j]) { dir += new Vector2(dx, dz); sea++; }
+                                else if (map.Height[j] < 4f) low++;
+                            }
+                        float f = sea / (float)((2 * r + 1) * (2 * r + 1));
+                        bool ok = kind == 0 ? f > 0.42f && f < 0.58f && dir.magnitude > 0.8f * sea * r * 0.5f : kind == 1 ? f > 0.18f && f < 0.34f : f > 0.68f && f < 0.85f;
+                        if (!ok || low < (2 * r + 1) * (2 * r + 1) - sea - 12 || dir.sqrMagnitude < 1) continue;
+                        bestD = d; best = i; bestDir = dir.normalized;
+                    }
+                if (best < 0) return false;
+                var target = new Vector3(best % n * cm, 0, best / n * cm);
+                target.y = ground.HeightAt(target.x, target.z);
+                var sea3 = new Vector3(bestDir.x, 0, bestDir.y);
+                var along = new Vector3(-bestDir.y, 0, bestDir.x);
+                Vector3 eye, aim;
+                if (mid)
+                {
+                    eye = target - sea3 * 26f - along * 12f;
+                    eye.y = Mathf.Max(target.y, ground.HeightAt(eye.x, eye.z)) + 13f;
+                    aim = target + sea3 * 2f;
+                }
+                else
+                {
+                    eye = target - sea3 * 5f - along * 3f;
+                    eye.y = ground.HeightAt(eye.x, eye.z) + 1.8f;
+                    aim = target + along * 4f + sea3 * 1f;
+                    aim.y = ground.HeightAt(aim.x, aim.z);
+                }
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
+                GameStatus.Lines["~aim beach " + kind] = $"{BeachShots[kind]} beach at {target.x:F0},{target.y:F1},{target.z:F0}, sea toward {bestDir.x:F2},{bestDir.y:F2}, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
 
         static bool AimBiome(Camera cam, string id)
         {
