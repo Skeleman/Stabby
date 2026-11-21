@@ -19,6 +19,7 @@ namespace Stabby.Viewer
         const int RiverPieceVertices = 16000;
         public const float RiverLift = 0.1f;
         const float LakeLift = 0.5f, SlopeRange = 0.1f;
+        const int SlopeReach = 8;
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
         public static Mesh ToMesh(MeshParts d)
@@ -104,8 +105,8 @@ namespace Stabby.Viewer
                     p.y = pts[k].y + RiverLift;
                     verts.Add(p - side);
                     verts.Add(p + side);
-                    var u = pts[Mathf.Max(k - 3, 0)];
-                    var d = pts[Mathf.Min(k + 3, pts.Count - 1)];
+                    var u = pts[Mathf.Max(k - SlopeReach, 0)];
+                    var d = pts[Mathf.Min(k + SlopeReach, pts.Count - 1)];
                     float run = new Vector2(d.x - u.x, d.z - u.z).magnitude;
                     float slope = run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0;
                     var flow = new Color(dir.x * 0.5f + 0.5f, dir.z * 0.5f + 0.5f, Mathf.Clamp01(slope / SlopeRange), 0);

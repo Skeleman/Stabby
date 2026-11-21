@@ -93,7 +93,7 @@ namespace Stabby.Game
             if (++frames <= 10) return;
             GameStatus.Frames = frames - 10;
             float ms = UnityEngine.Time.unscaledDeltaTime * 1000f;
-            if (UnityEngine.Time.frameCount - GameStatus.ToolFrame <= 2) GameStatus.ToolFrames++;
+            if (GameStatus.AfterTool) GameStatus.ToolFrames++;
             else
             {
                 if (ms > GameStatus.WorstMs) { GameStatus.WorstMs = ms; GameStatus.WorstWhy = $"frame {frames - 10}, terrain {GameStatus.TerrainMs:F1} ms {GameStatus.TerrainStage}, {GameStatus.TerrainVertices} vertices, gc {System.GC.CollectionCount(0)}"; }

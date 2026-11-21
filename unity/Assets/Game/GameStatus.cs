@@ -13,6 +13,8 @@ namespace Stabby.Game
         public static int Frames, SlowFrames;
         public static float WorstMs, WorstPlayMs;
         public static string WorstWhy;
+        public const int ToolSettleFrames = 10;
+        public static bool AfterTool => UnityEngine.Time.frameCount - ToolFrame <= ToolSettleFrames;
 
         public static void PutFrames()
         {

@@ -29,18 +29,22 @@ Shader "Stabby/Water"
             static const float FlowPeriod = 3;
             static const float SlopeRange = 0.1;
 
-            float2 Grad(float2 p)
+            float2 Grad(int2 p)
             {
-                float3 q = frac(p.xyx * float3(0.1031, 0.1030, 0.0973));
-                q += dot(q, q.yzx + 33.33);
-                return frac((q.xx + q.yz) * q.zy) * 2 - 1;
+                uint2 q = asuint(p) * uint2(1597334673u, 3812015801u);
+                uint h = (q.x ^ q.y) * 1597334673u;
+                h ^= h >> 16;
+                h *= 2246822519u;
+                h ^= h >> 13;
+                return float2(h & 0xffffu, h >> 16) / 32767.5 - 1;
             }
 
             float3 Noise(float2 p)
             {
-                float2 i = floor(p), f = p - i;
+                float2 fl = floor(p), f = p - fl;
+                int2 i = (int2)fl;
                 float2 u = f * f * f * (f * (f * 6 - 15) + 10), du = 30 * f * f * (f * (f - 2) + 1);
-                float2 ga = Grad(i), gb = Grad(i + float2(1, 0)), gc = Grad(i + float2(0, 1)), gd = Grad(i + 1);
+                float2 ga = Grad(i), gb = Grad(i + int2(1, 0)), gc = Grad(i + int2(0, 1)), gd = Grad(i + 1);
                 float va = dot(ga, f), vb = dot(gb, f - float2(1, 0)), vc = dot(gc, f - float2(0, 1)), vd = dot(gd, f - 1);
                 float k = va - vb - vc + vd;
                 float v = va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k;
@@ -93,7 +97,7 @@ Shader "Stabby/Water"
                 float fade = saturate(1.5 - dist * wv.x / 120);
                 float2 flow = i.color.rg * 2 - 1;
                 float slope = i.color.b * SlopeRange;
-                float rapids = smoothstep(0.6, 1.4, slope * _StabbyWaterFlow.y);
+                float rapids = smoothstep(1, 2.25, slope * _StabbyWaterFlow.y);
                 float2 g;
                 UNITY_BRANCH if (dot(flow, flow) > 0.01)
                 {
@@ -104,7 +108,7 @@ Shader "Stabby/Water"
                     g = lerp(a, b, abs(1 - 2 * ph));
                 }
                 else g = Waves(q, t, fade);
-                g *= wv.z * (0.35 + 0.65 * fade) * (1 + 2 * rapids);
+                g *= wv.z * (0.35 + 0.65 * fade) * (1 + rapids);
                 float swell = i.color.a >= 0.99 ? 1 : i.color.a * 2 * _StabbyWaterFlow.z;
                 UNITY_BRANCH if (swell > 0)
                 {
@@ -137,7 +141,7 @@ Shader "Stabby/Water"
                     float surf = 0.5 + 0.5 * sin(6.2832 * (shore / max(wv.w * 0.5, 0.01) + _Time.y * 0.15) + lace * 6);
                     float b = band * band * (3 - 2 * band);
                     foam = smoothstep(0.3, 0.9, b * lace) + 0.3 * b * surf * surf * lace;
-                    foam = max(foam, rapids * smoothstep(0.3, 0.9, lace));
+                    foam = max(foam, rapids * smoothstep(0.55, 1.05, lace));
                 }
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
