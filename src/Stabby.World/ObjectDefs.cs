@@ -18,8 +18,8 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Shapes = 8;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Inn = 8, InnYard = 9, Table = 10, Bench = 11, Barrel = 12, Crate = 13, Stall = 14, Well = 15, Shapes = 16;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well" };
         public static bool IsFoliage(int shape) => shape >= Shrub && shape <= Conifer;
         public static bool IsStructure(int shape) => shape >= Wall && shape < Shapes;
         public static bool IsStone(int shape) => shape == Rock || IsStructure(shape);

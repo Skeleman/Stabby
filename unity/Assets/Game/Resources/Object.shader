@@ -78,6 +78,7 @@ Shader "Stabby/Object"
                 float3 axisWS : TEXCOORD5;
                 float4 tone : TEXCOORD6;
                 float3 origin : TEXCOORD7;
+                float3 grain : TEXCOORD8;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -100,6 +101,7 @@ Shader "Stabby/Object"
                 o.axisWS = normalize(isLog ? m._m00_m10_m20 : m._m01_m11_m21);
                 o.tone = i.tone;
                 o.origin = m._m03_m13_m23;
+                o.grain = mul((float3x3)m, float3(i.tone.y, sqrt(saturate(1 - i.tone.y * i.tone.y - i.tone.z * i.tone.z)), i.tone.z));
                 return o;
             }
 
@@ -216,6 +218,62 @@ Shader "Stabby/Object"
                 return occ;
             }
 
+            float3 Built(float4 tone, float3 g, float3 q, inout float3 n, float fp, out float occ)
+            {
+                int mat = (int)floor(tone.x * 0.5);
+                float open = saturate((tone.x - 2 * mat) * 2 - 1);
+                float3 sd = float3(tone.w * 37.1, tone.w * 11.3, tone.w * 23.7);
+                float3 pg = q - g * dot(q, g) * 0.9 + sd;
+                float4 big = TmNoise3(q * 1.1 + sd, int3(0, 0, 0)), mid = TmNoise3(q * 4.3 + sd + 3.1, int3(0, 0, 0));
+                float4 str = TmNoise3(pg * 9, int3(0, 0, 0)), fib = TmNoise3(pg * 31 + 7.7, int3(0, 0, 0));
+                float fm = TmFade(4.3, fp), fs = TmFade(9, fp), ff = TmFade(31, fp);
+                float3 a, grad;
+                if (mat == 4)
+                {
+                    float4 tuft = TmNoise3(pg * 6 + 1.3, int3(0, 0, 0));
+                    a = ToLinear(float3(0.55, 0.45, 0.28)) * (0.78 + 0.22 * str.x * fs + 0.12 * fib.x * ff + 0.1 * big.x);
+                    a = lerp(a, ToLinear(float3(0.36, 0.33, 0.22)), saturate(0.35 + 0.4 * big.x) * 0.6);
+                    float moss = smoothstep(0.1, 0.6, mid.x * 0.6 + big.x * 0.7 + 0.3 * (1 - open)) * fm;
+                    a = lerp(a, ToLinear(float3(0.24, 0.29, 0.13)) * (0.8 + 0.3 * fib.x), 0.55 * moss);
+                    grad = 0.5 * tuft.yzw * fs + 0.1 * fib.yzw * ff;
+                }
+                else if (mat == 3)
+                {
+                    a = ToLinear(float3(0.78, 0.74, 0.64)) * (0.92 + 0.06 * mid.x * fm + 0.04 * fib.x * ff);
+                    float stain = smoothstep(0.2, 0.8, big.x + 0.5 * mid.x) * 0.45 + (1 - open) * 0.3;
+                    a = lerp(a, ToLinear(float3(0.58, 0.52, 0.4)), saturate(stain));
+                    a = lerp(a, ToLinear(float3(0.66, 0.6, 0.5)), smoothstep(0.35, 0.0, abs(q.y + 0.1 * big.x)) * 0.3);
+                    grad = 0.09 * mid.yzw * fm + 0.09 * fib.yzw * ff;
+                }
+                else if (mat == 5)
+                {
+                    a = ToLinear(float3(0.12, 0.11, 0.1)) * (0.85 + 0.25 * mid.x);
+                    a = lerp(a, ToLinear(float3(0.33, 0.18, 0.09)), smoothstep(0.2, 0.7, big.x + 0.4 * fib.x * ff) * 0.6);
+                    grad = 0.12 * fib.yzw * ff;
+                }
+                else if (mat == 6)
+                {
+                    float h = tone.w;
+                    a = ToLinear(h < 0.33 ? float3(0.5, 0.18, 0.12) : h < 0.66 ? float3(0.2, 0.3, 0.42) : float3(0.55, 0.45, 0.2)) * (0.85 + 0.1 * str.x * fs);
+                    grad = 0.12 * fib.yzw * ff;
+                }
+                else
+                {
+                    float3 c0 = mat == 2 ? float3(0.45, 0.37, 0.27) : float3(0.33, 0.24, 0.16);
+                    float ring = sin((str.x * 3 + mid.x) * 6.283) * 0.5 + 0.5;
+                    a = ToLinear(c0) * (0.8 + 0.18 * ring * fs + 0.12 * fib.x * ff + 0.12 * big.x);
+                    float wet = smoothstep(0.3, 0.9, big.x + 0.4 * mid.x) * 0.3 + (1 - open) * 0.25;
+                    a = lerp(a, ToLinear(float3(0.2, 0.17, 0.14)), saturate(wet));
+                    a = lerp(a, a * float3(0.95, 1.05, 0.9) + 0.03, 0.4 * saturate(n.y) * fm);
+                    a *= 1 - 0.45 * smoothstep(0.88, 0.97, 1 - abs(str.x)) * fs;
+                    grad = 0.054 * str.yzw * fs + 0.06 * fib.yzw * ff + 0.043 * mid.yzw * fm;
+                }
+                grad -= n * dot(grad, n);
+                n = normalize(n - grad);
+                occ = saturate((1 - open) * (1.2 + 0.7 * (big.x + 0.5 * mid.x)));
+                return lerp(a, a * float3(0.5, 0.47, 0.43), occ);
+            }
+
             half4 frag(Varyings i) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(i);
@@ -229,7 +287,8 @@ Shader "Stabby/Object"
                 float3 albedo;
                 float occ = 0;
                 tmRough = LookRough();
-                [branch] if (base.a < 0.5)
+                [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, normalize(i.grain), wp - i.origin, n, fp, occ);
+                else if (base.a < 0.5)
                 {
                     float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).a;
                     float period = max(_StabbyStrataPeriod, 1);

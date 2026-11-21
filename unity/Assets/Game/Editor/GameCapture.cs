@@ -153,7 +153,29 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "floor" ? 26 + BiomeShots.Length : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : 1;
+            }
+            while (phase >= 160 && phase < 160 + InnShots.Length)
+            {
+                string name = InnShots[phase - 160];
+                if (wait == 0)
+                {
+                    if (!AimInn(cam, phase - 160)) { GameStatus.Lines["~" + name] = "no inn placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 161) GameStatus.Lines["~bench inn"] = Bench(cam, "inn mid");
+                wait = 0;
+                phase++;
+            }
+            if (only == "inn" && phase >= 160 + InnShots.Length)
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             if (phase == 50)
             {
@@ -923,6 +945,55 @@ namespace Stabby.Game.Editor
             return false;
         }
 
+        static readonly string[] InnShots = { "inn-far", "inn-mid", "inn-door", "inn-interior", "inn-site" };
+
+        static bool AimInn(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                int d = field.Library.Objects.FindIndex(o => o.Id == "inn");
+                if (d < 0) return false;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            if (o.Def != d) continue;
+                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            if (score < best) { best = score; pick = o; }
+                        }
+                if (best == float.MaxValue) return false;
+                var part = field.Library.Objects[d].Parts[0];
+                var l = Structures.Layout(ObjectPart.Inn, ObjectMeshes.Key("inn", 0, pick.Variant));
+                var q = new Quaternion(pick.Qx, pick.Qy, pick.Qz, pick.Qw);
+                var pos = new Vector3(pick.X, pick.Y, pick.Z);
+                float s = pick.Size, k = s * part.ScaleX * Structures.InnU, floor = Structures.Fy * k;
+                var across = q * Vector3.forward;
+                var along = q * Vector3.right;
+                var up = Vector3.up;
+                var centre = pos + q * new Vector3(0, 0, part.OffsetZ * s);
+                var door = pos + q * new Vector3(part.ScaleX * l.DoorX * s, 0, (part.OffsetZ + part.ScaleZ * l.DoorZ) * s);
+                Vector3 eye, target;
+                if (mode == 0) { target = centre + up * 4f * k; eye = target + (across * 0.85f + along * 0.5f).normalized * 110f + up * 35f; }
+                else if (mode == 1) { target = centre + up * 3f * k; eye = target + (across * 0.85f + along * 0.45f).normalized * 22f * k + up * 5f * k; }
+                else if (mode == 2) { target = door + up * (floor + 1.2f * k); eye = target + across * 4.5f * k + along * 1.4f * k + up * 0.4f * k; }
+                else if (mode == 3) { eye = door - across * 1.3f * k + up * (floor + 1.65f * k); target = centre - across * 0.4f * part.ScaleZ * l.DoorZ * s + along * (centre - door).magnitude * 0.2f + up * (floor + 0.9f * k); }
+                else { target = pos + up * 1.5f; eye = target + across * 0.8f * s + along * 0.35f * s + up * 0.85f * s; }
+                if (mode != 3)
+                {
+                    var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                    eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
+                }
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + InnShots[mode]] = $"inn variant {pick.Variant} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, door {door.x:F1},{door.z:F1}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
+                return true;
+            }
+            return false;
+        }
+
         static bool AimStructure(Camera cam, bool close)
         {
             foreach (var w in Unity.Entities.World.All)
@@ -937,7 +1008,8 @@ namespace Stabby.Game.Editor
                         var chunk = field.Chunk(cx, cz);
                         foreach (var o in chunk)
                         {
-                            if (!field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsStructure(p.Shape))) continue;
+                            int s0 = field.Library.Objects[o.Def].Parts[0].Shape;
+                            if (s0 != ObjectPart.Wall && s0 != ObjectPart.Cairn) continue;
                             float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
                             if (field.Library.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall)
                             {

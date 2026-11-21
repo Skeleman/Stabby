@@ -149,6 +149,41 @@
       "parts": [ { "id": "cairn", "shape": "cairn" } ],
       "placement": { "biomes": ["alpine", "tundra", "cold-desert", "steppe"], "perHectare": 0.25, "slopeMax": 0.45, "hardnessMin": 0.1, "sizeMinM": 1.4, "sizeMaxM": 2.4, "sink": 0.01,
         "biomeDensity": [ { "biome": "steppe", "scale": 0.3 } ] }
+    },
+    {
+      "id": "inn", "name": "Inn", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "inn", "shape": "inn", "offset": [0, 0, -0.12], "scale": [0.63, 0.63, 0.63] }, { "id": "yard", "shape": "inn-yard" } ],
+      "placement": { "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "perHectare": 0.02, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
+    },
+    {
+      "id": "table", "name": "Table", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "table", "shape": "table" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 1.6, "sizeMaxM": 1.6 }
+    },
+    {
+      "id": "bench", "name": "Bench", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "bench", "shape": "bench" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 1.4, "sizeMaxM": 1.4 }
+    },
+    {
+      "id": "barrel", "name": "Barrel", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "barrel", "shape": "barrel" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 0.85, "sizeMaxM": 0.85 }
+    },
+    {
+      "id": "crate", "name": "Crate", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "crate", "shape": "crate" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 0.7, "sizeMaxM": 0.7 }
+    },
+    {
+      "id": "market-stall", "name": "Market stall", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "stall", "shape": "market-stall" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 3, "sizeMaxM": 3 }
+    },
+    {
+      "id": "well", "name": "Well", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "well", "shape": "well" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 2.6, "sizeMaxM": 2.6 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8 },

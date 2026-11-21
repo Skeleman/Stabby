@@ -6,17 +6,18 @@ namespace Stabby.World
     public struct StructurePiece
     {
         public ulong Key;
-        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T;
-        public int Lo, Hi;
+        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A;
+        public int Lo, Hi, M, G;
     }
 
     public sealed class StructureLayout
     {
         public readonly List<StructurePiece> Pieces = new List<StructurePiece>();
         public readonly List<ObjectColumn> Columns = new List<ObjectColumn>();
+        public float DoorX, DoorZ;
     }
 
-    public static class Structures
+    public static partial class Structures
     {
         public const int Tiers = 3;
         public const float SeatM = 0.5f;
@@ -34,13 +35,14 @@ namespace Stabby.World
         static float Cos16(int k) => Dir[k & 15];
         static float Sin16(int k) => Dir[(k + 12) & 15];
 
-        public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : CairnSeat;
+        public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : KitSeat(shape);
 
         public static StructureLayout Layout(int shape, ulong key)
         {
             var l = new StructureLayout();
             if (shape == ObjectPart.Wall) Wall(key, l);
-            else Cairn(key, l);
+            else if (shape == ObjectPart.Cairn) Cairn(key, l);
+            else Built(shape, key, l);
             return l;
         }
 
@@ -66,10 +68,15 @@ namespace Stabby.World
                 var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
                 float tv = tr.Range(-1f, 1f), th = tr.Range(-1f, 1f), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
-                bool cut = p.Q >= Faceted;
+                bool cut = p.Q >= Faceted && p.M == 0;
                 float[] u;
                 int[] idx;
-                if (cut)
+                if (p.M > 0)
+                {
+                    u = UnitBox;
+                    idx = UnitBoxIdx;
+                }
+                else if (cut)
                 {
                     u = Block(p.Key, p.Q < StoneSquare, out idx);
                 }
@@ -86,7 +93,7 @@ namespace Stabby.World
                         u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
                     }
                 }
-                u = Bounds(u);
+                if (p.M == 0) u = Bounds(u);
                 var w = new float[u.Length];
                 for (int v = 0; v < u.Length; v += 3)
                 {
@@ -101,6 +108,7 @@ namespace Stabby.World
                     for (int v = 0; v < w.Length; v += 3) b.Add(w[v], w[v + 1], w[v + 2]);
                     foreach (int i in idx) b.I.Add(first + i);
                 }
+                if (p.M > 0) Grain(p, out tv, out th);
                 for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(tl); }
             }
             starts.Add(b.P.Count / 3);
@@ -150,7 +158,7 @@ namespace Stabby.World
             var near = new List<int>();
             for (int k = 0; k < n; k++)
             {
-                float span = Math.Min(pieces[k].Sx, Math.Min(pieces[k].Sy, pieces[k].Sz)), reach = 0.9f * span;
+                float span = pieces[k].A > 0 ? pieces[k].A : Math.Min(pieces[k].Sx, Math.Min(pieces[k].Sy, pieces[k].Sz)), reach = 0.9f * span;
                 for (int v = starts[k]; v < starts[k + 1]; v++)
                 {
                     float px = pos[3 * v], py = pos[3 * v + 1], pz = pos[3 * v + 2];
@@ -183,7 +191,7 @@ namespace Stabby.World
                         }
                     }
                     float open = (1 - hit / total) * (1 - 0.35f * Math.Max(0, -ny));
-                    mesh.Tones[4 * v] = 0.5f + 0.5f * Math.Max(0, Math.Min(1, open));
+                    mesh.Tones[4 * v] = 2 * pieces[k].M + 0.5f + 0.5f * Math.Max(0, Math.Min(1, open));
                 }
             }
         }
