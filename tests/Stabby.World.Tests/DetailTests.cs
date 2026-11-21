@@ -61,4 +61,20 @@ public class DetailTests
         Assert.Equal(0.5f, Detail.Crossfade(3f, 2f, 4f), 4);
         Assert.Equal(1f, Detail.Crossfade(5f, 2f, 4f));
     }
+
+    [Fact]
+    public void PixelsMatchTheOldScreenFractions()
+    {
+        float invTan = 1f / (2f * MathF.Tan(MathF.PI / 6f));
+        Assert.Equal(2f * 3f * invTan / 0.006f, Detail.SimulationReach(2f * 3f, 0.006f * Detail.ReferenceLines), 2);
+        Assert.Equal(0.01f * 2f * MathF.Tan(MathF.PI / 6f), new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 1f), 5);
+        var grass = new GrassDef();
+        Assert.Equal(5f, grass.ReachAt(grass.NearPixels, Detail.ReferencePixelsPerMetre), 1);
+        Assert.Equal(10f, grass.ReachAt(grass.Lod1Pixels, Detail.ReferencePixelsPerMetre), 1);
+        Assert.Equal(25f, grass.ReachAt(grass.Lod2Pixels, Detail.ReferencePixelsPerMetre), 1);
+    }
+
+    [Fact]
+    public void QualityShrinksTerrainError() =>
+        Assert.True(new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 2f) < new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 1f));
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Stabby.World
@@ -15,12 +16,12 @@ namespace Stabby.World
     public sealed class GrassDef
     {
         public float PerM2 = 160f;
-        public float NearM = 5f;
-        public float ReachM = 80f;
+        public float NearPixels = 112.24f;
+        public float ReachPixels = 7.015f;
         public float ThinPow = 1.2f;
         public float Widen = 0.9f;
         public float WidthMaxM = 0.25f;
-        public float Lod1M = 10f, Lod2M = 25f;
+        public float Lod1Pixels = 56.12f, Lod2Pixels = 22.45f;
         public float HeightMinM = 0.25f, HeightMaxM = 0.6f;
         public float WidthM = 0.035f;
         public float Bend = 0.35f;
@@ -29,6 +30,20 @@ namespace Stabby.World
         public float CoatMin = 0.35f;
         public float SlopeMax = 0.7f;
         public int MaxBlades = 131072;
+
+        public float ReachAt(float pixels, float pixelsPerMetre) => Detail.Reach(HeightMaxM, pixels, pixelsPerMetre);
+    }
+
+    public sealed class TerrainViewDef
+    {
+        public float QuadPixels = 10.8f;
+
+        public float Allowed(float pixelsPerMetre, float quality) => QuadPixels / (pixelsPerMetre * Math.Max(quality, 0.1f));
+
+        public void Validate(List<string> errors)
+        {
+            if (QuadPixels < 1 || QuadPixels > 100) errors.Add("terrain: quadPixels must be 1-100");
+        }
     }
 
     public sealed class FoliageDef
@@ -46,11 +61,11 @@ namespace Stabby.World
             if (w.SwayHz < 0 || w.SwayHz > 5) errors.Add("foliage wind: swayHz must be 0-5");
             var g = Grass;
             if (g.PerM2 < 0 || g.PerM2 > 400) errors.Add("foliage grass: perM2 must be 0-400");
-            if (g.NearM <= 0 || g.ReachM <= g.NearM || g.ReachM > 120) errors.Add("foliage grass: nearM must be above 0 and below reachM, at most 120");
+            if (g.ReachPixels <= 0 || g.NearPixels <= g.ReachPixels || g.ReachAt(g.ReachPixels, Detail.ReferencePixelsPerMetre) > 120) errors.Add("foliage grass: nearPixels must exceed reachPixels > 0, reach at most 120 m at the reference view");
             if (g.ThinPow < 0.5f || g.ThinPow > 3) errors.Add("foliage grass: thinPow must be 0.5-3");
             if (g.Widen < 0 || g.Widen > 1) errors.Add("foliage grass: widen must be 0-1");
             if (g.WidthMaxM < g.WidthM || g.WidthMaxM > 1) errors.Add("foliage grass: widthMaxM must be at least widthM, at most 1");
-            if (g.Lod1M <= 0 || g.Lod2M < g.Lod1M) errors.Add("foliage grass: lod1M/lod2M must be increasing and above 0");
+            if (g.Lod2Pixels <= 0 || g.Lod1Pixels < g.Lod2Pixels) errors.Add("foliage grass: lod1Pixels/lod2Pixels must be falling and above 0");
             if (g.HeightMinM <= 0 || g.HeightMaxM < g.HeightMinM || g.HeightMaxM > 3) errors.Add("foliage grass: heightMinM/heightMaxM must be increasing, 0-3 m");
             if (g.WidthM <= 0 || g.WidthM > 0.5f) errors.Add("foliage grass: widthM must be above 0, at most 0.5");
             if (g.Bend < 0 || g.Bend > 1.5f) errors.Add("foliage grass: bend must be 0-1.5");

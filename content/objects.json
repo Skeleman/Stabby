@@ -1,10 +1,10 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kinds": [
-    { "id": "static", "lods": 3, "lodScreen": [0.08, 0.025], "fadeScreen": 0.004, "shadows": true, "shadowScreen": 0.03, "wind": false, "animated": false, "solid": true },
-    { "id": "interactive", "lods": 3, "lodScreen": [0.08, 0.025], "fadeScreen": 0.006, "shadows": true, "shadowScreen": 0.03, "wind": false, "animated": false, "solid": true },
-    { "id": "animated", "lods": 3, "lodScreen": [0.1, 0.03], "fadeScreen": 0.006, "shadows": true, "shadowScreen": 0.04, "wind": true, "animated": true, "solid": false },
-    { "id": "structure", "lods": 3, "lodScreen": [0.12, 0.04], "fadeScreen": 0.003, "shadows": true, "shadowScreen": 0.02, "wind": false, "animated": false, "solid": true }
+    { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
+    { "id": "interactive", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 6.48, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
+    { "id": "animated", "lods": 3, "lodPixels": [108, 32.4], "fadePixels": 6.48, "shadows": true, "shadowPixels": 43.2, "wind": true, "animated": true, "solid": false },
+    { "id": "structure", "lods": 3, "lodPixels": [129.6, 43.2], "fadePixels": 3.24, "shadows": true, "shadowPixels": 21.6, "wind": false, "animated": false, "solid": true }
   ],
   "objects": [
     {
@@ -64,8 +64,9 @@
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 4, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
     }
   ],
+  "terrain": { "quadPixels": 10.8 },
   "foliage": {
     "wind": { "directionDeg": 60, "strength": 0.35, "gustStrength": 0.5, "gustScaleM": 24, "gustSpeed": 6, "swayHz": 0.9 },
-    "grass": { "perM2": 160, "nearM": 5, "reachM": 80, "thinPow": 1.2, "widen": 0.9, "widthMaxM": 0.25, "lod1M": 10, "lod2M": 25, "heightMinM": 0.25, "heightMaxM": 0.6, "widthM": 0.035, "bend": 0.35, "tipLight": 0.45, "translucency": 0.35, "coatMin": 0.35, "slopeMax": 0.7, "maxBlades": 131072 }
+    "grass": { "perM2": 160, "nearPixels": 112.24, "reachPixels": 7.015, "thinPow": 1.2, "widen": 0.9, "widthMaxM": 0.25, "lod1Pixels": 56.12, "lod2Pixels": 22.45, "heightMinM": 0.25, "heightMaxM": 0.6, "widthM": 0.035, "bend": 0.35, "tipLight": 0.45, "translucency": 0.35, "coatMin": 0.35, "slopeMax": 0.7, "maxBlades": 131072 }
   }
 }

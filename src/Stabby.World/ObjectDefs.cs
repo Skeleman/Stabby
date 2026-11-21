@@ -7,10 +7,10 @@ namespace Stabby.World
     {
         public string Id;
         public int Lods = 3;
-        public float[] LodScreen = { 0.08f, 0.025f };
-        public float FadeScreen = 0.006f;
+        public float[] LodPixels = { 86.4f, 27f };
+        public float FadePixels = 6.48f;
         public bool Shadows = true;
-        public float ShadowScreen = 0.03f;
+        public float ShadowPixels = 32.4f;
         public bool Wind, Animated;
         public bool Solid = true;
     }
@@ -75,6 +75,7 @@ namespace Stabby.World
     {
         public List<ObjectKind> Kinds = new List<ObjectKind>();
         public List<ObjectDef> Objects = new List<ObjectDef>();
+        public TerrainViewDef Terrain = new TerrainViewDef();
         public FoliageDef Foliage = new FoliageDef();
 
         public ObjectKind KindOf(ObjectDef d)
@@ -97,11 +98,11 @@ namespace Stabby.World
                 if (Array.IndexOf(KindNames, k.Id) < 0) errors.Add("unknown kind " + k.Id);
                 else if (!kinds.Add(k.Id)) errors.Add("duplicate kind " + k.Id);
                 if (k.Lods < 1 || k.Lods > 4) errors.Add(k.Id + ": lods must be 1-4");
-                if (k.LodScreen == null || k.LodScreen.Length != k.Lods - 1) errors.Add(k.Id + ": lodScreen needs lods - 1 entries");
-                else for (int i = 0; i < k.LodScreen.Length; i++)
-                    if (k.LodScreen[i] <= k.FadeScreen || (i > 0 && k.LodScreen[i] >= k.LodScreen[i - 1])) errors.Add(k.Id + ": lodScreen must fall and stay above fadeScreen");
-                if (k.FadeScreen <= 0 || k.FadeScreen >= 1) errors.Add(k.Id + ": fadeScreen must be in (0, 1)");
-                if (k.ShadowScreen < 0) errors.Add(k.Id + ": shadowScreen below 0");
+                if (k.LodPixels == null || k.LodPixels.Length != k.Lods - 1) errors.Add(k.Id + ": lodPixels needs lods - 1 entries");
+                else for (int i = 0; i < k.LodPixels.Length; i++)
+                    if (k.LodPixels[i] <= k.FadePixels || (i > 0 && k.LodPixels[i] >= k.LodPixels[i - 1])) errors.Add(k.Id + ": lodPixels must fall and stay above fadePixels");
+                if (k.FadePixels <= 0 || k.FadePixels >= Detail.ReferenceLines) errors.Add(k.Id + ": fadePixels must be above 0, below 1080");
+                if (k.ShadowPixels < 0) errors.Add(k.Id + ": shadowPixels below 0");
             }
             var ids = new HashSet<string>();
             foreach (var d in lib.Objects)
@@ -142,6 +143,7 @@ namespace Stabby.World
                     foreach (var b in pl.Biomes)
                         if (!Contains(biomeIds, b)) errors.Add(d.Id + ": unknown biome " + b);
             }
+            lib.Terrain.Validate(errors);
             lib.Foliage.Validate(errors);
             return errors;
         }
