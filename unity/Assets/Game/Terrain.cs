@@ -64,7 +64,6 @@ namespace Stabby.Game
         public const int Vertices = (Quads + 1) * (Quads + 1) + 4 * Quads, Indices = Quads * Quads * 6 + 4 * Quads * 12;
         [ReadOnly] public NativeArray<int> Offset, Dim;
         [ReadOnly] public NativeArray<float2> Range;
-        [ReadOnly] public NativeArray<byte> Land;
         public float Top;
 
         public static float Step(int l) => NearField.NodeStep(l);
@@ -101,8 +100,6 @@ namespace Stabby.Game
         }
 
         public int At(float x, float z, int l) => x < 0 || z < 0 || x >= Top || z >= Top ? -1 : Key(l, (int)(x / Size(l)), (int)(z / Size(l)));
-
-        public bool IsLand(int key) => key >= 0 && Land[key] != 0;
 
         public AABB Box(int key)
         {
@@ -486,7 +483,7 @@ namespace Stabby.Game
         bool Balance(float x, float z, int l)
         {
             int nb = LeafAt(x, z, out int nl);
-            if (nb < 0 || nl <= l + 1 || !Tree.IsLand(nb)) return false;
+            if (nb < 0 || nl <= l + 1) return false;
             Split.Add(nb);
             return true;
         }
@@ -504,11 +501,7 @@ namespace Stabby.Game
         {
             int d = Tree.Dim[TerrainTree.Root];
             for (int iz = 0; iz < d; iz++)
-                for (int ix = 0; ix < d; ix++)
-                {
-                    int key = Tree.Key(TerrainTree.Root, ix, iz);
-                    if (Tree.IsLand(key)) stack.Add(key);
-                }
+                for (int ix = 0; ix < d; ix++) stack.Add(Tree.Key(TerrainTree.Root, ix, iz));
         }
 
         void PushChildren(ref NativeList<int> stack, int key)
@@ -516,7 +509,7 @@ namespace Stabby.Game
             for (int q = 0; q < 4; q++)
             {
                 int c = Tree.Child(key, q);
-                if (Tree.IsLand(c)) stack.Add(c);
+                if (c >= 0) stack.Add(c);
             }
         }
 
@@ -556,7 +549,6 @@ namespace Stabby.Game
             public FieldLook Field;
             public int[] Offset, Dim;
             public float2[] Range;
-            public byte[] Land;
         }
 
         struct Pending
@@ -687,11 +679,9 @@ namespace Stabby.Game
                 p.Offset[l + 1] = p.Offset[l] + p.Dim[l] * p.Dim[l];
             }
             var range = p.Range = new float2[p.Offset[TerrainTree.Levels]];
-            var land = p.Land = new byte[range.Length];
             int d0 = p.Dim[0];
             float s0 = TerrainTree.Size(0);
             var cells = detail.Cells;
-            var sea = world.Sea;
             Parallel.For(0, d0, iz =>
             {
                 for (int ix = 0; ix < d0; ix++)
@@ -699,11 +689,6 @@ namespace Stabby.Game
                     float x0 = ix * s0, z0 = iz * s0, x1 = x0 + s0, z1 = z0 + s0;
                     NearField.Range(cells, x0, z0, x1, z1, out float lo, out float hi);
                     range[iz * d0 + ix] = new float2(lo, hi);
-                    int i0 = math.min((int)(x0 / cm), n - 1), i1 = math.min((int)math.ceil(x1 / cm), n - 1);
-                    int k0 = math.min((int)(z0 / cm), n - 1), k1 = math.min((int)math.ceil(z1 / cm), n - 1);
-                    for (int k = k0; k <= k1 && land[iz * d0 + ix] == 0; k++)
-                        for (int i = i0; i <= i1; i++)
-                            if (!sea[k * n + i]) { land[iz * d0 + ix] = 1; break; }
                 }
             });
             foreach (var e in edits)
@@ -724,7 +709,6 @@ namespace Stabby.Game
                     for (int ix = 0; ix < d; ix++)
                     {
                         float lo = float.MaxValue, hi = float.MinValue;
-                        byte any = 0;
                         for (int q = 0; q < 4; q++)
                         {
                             int cx = 2 * ix + (q & 1), cz = 2 * iz + (q >> 1);
@@ -732,11 +716,9 @@ namespace Stabby.Game
                             int c = p.Offset[l - 1] + cz * dc + cx;
                             lo = math.min(lo, range[c].x);
                             hi = math.max(hi, range[c].y);
-                            any |= land[c];
                         }
                         int key = p.Offset[l] + iz * d + ix;
                         range[key] = new float2(lo, hi);
-                        land[key] = any;
                     }
             }
         }
@@ -773,7 +755,6 @@ namespace Stabby.Game
                 Offset = new NativeArray<int>(prepared.Offset, Allocator.Persistent),
                 Dim = new NativeArray<int>(prepared.Dim, Allocator.Persistent),
                 Range = new NativeArray<float2>(prepared.Range, Allocator.Persistent),
-                Land = new NativeArray<byte>(prepared.Land, Allocator.Persistent),
                 Top = ground.Blob.Value.Top,
             };
             nodes = new NativeHashMap<int, TerrainNode>(1024, Allocator.Persistent);
@@ -785,11 +766,7 @@ namespace Stabby.Game
             spare = new NativeList<Entity>(SpareBatch, Allocator.Persistent);
             int d = tree.Dim[TerrainTree.Root];
             for (int iz = 0; iz < d; iz++)
-                for (int ix = 0; ix < d; ix++)
-                {
-                    int key = tree.Key(TerrainTree.Root, ix, iz);
-                    if (tree.IsLand(key)) roots.Add(key);
-                }
+                for (int ix = 0; ix < d; ix++) roots.Add(tree.Key(TerrainTree.Root, ix, iz));
             builtSmooth = SmoothOnly;
         }
 
@@ -970,7 +947,7 @@ namespace Stabby.Game
             for (int q = 0; q < 4; q++)
             {
                 int c = tree.Child(key, q);
-                if (tree.IsLand(c) && !Coverable(c)) return false;
+                if (c >= 0 && !Coverable(c)) return false;
             }
             return true;
         }
@@ -983,14 +960,14 @@ namespace Stabby.Game
                 for (int q = 0; q < 4 && all; q++)
                 {
                     int c = tree.Child(key, q);
-                    all = !tree.IsLand(c) || Coverable(c);
+                    all = c < 0 || Coverable(c);
                 }
                 if (all)
                 {
                     for (int q = 0; q < 4; q++)
                     {
                         int c = tree.Child(key, q);
-                        if (tree.IsLand(c)) Draw(c);
+                        if (c >= 0) Draw(c);
                     }
                     return;
                 }
@@ -1009,7 +986,7 @@ namespace Stabby.Game
             for (int l = TerrainTree.Root; l >= 0; l--)
             {
                 int key = tree.At(x, z, l);
-                if (!tree.IsLand(key)) return -1;
+                if (key < 0) return -1;
                 if (drawn.Contains(key)) return l;
             }
             return -1;
@@ -1160,7 +1137,7 @@ namespace Stabby.Game
             Owned.Release(preparing, p => p.Look.Dispose());
             foreach (var mesh in meshes.Values) UnityEngine.Object.Destroy(mesh);
             foreach (var mesh in statics) UnityEngine.Object.Destroy(mesh);
-            if (tree.Offset.IsCreated) { tree.Offset.Dispose(); tree.Dim.Dispose(); tree.Range.Dispose(); tree.Land.Dispose(); }
+            if (tree.Offset.IsCreated) { tree.Offset.Dispose(); tree.Dim.Dispose(); tree.Range.Dispose(); }
             if (nodes.IsCreated) nodes.Dispose();
             if (split.IsCreated) split.Dispose();
             if (spare.IsCreated) spare.Dispose();
