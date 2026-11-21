@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -175,14 +176,14 @@ namespace Stabby.World
                 var l = RandomLandmark(n, m, s.Land, s.Lakes, ref sites);
                 if (l != null) s.Landmarks.Add(l);
             }
-            s.Build(c);
+            s.Build(c, s.Land);
             return s;
         }
 
-        public void Build(WorldConfig c)
+        public void Build(WorldConfig c, bool[] land = null)
         {
             Size = c.Size;
-            Land = LandMask(c);
+            Land = land ?? LandMask(c);
             int n = Size;
             Landmark = new bool[n * n];
             foreach (var l in Landmarks)
@@ -254,7 +255,8 @@ namespace Stabby.World
             uint seed = Rng.Stream(c.Seed, "land-noise").NextU32();
             var land = new bool[n * n];
             var owner = new int[n * n];
-            for (int y = 3; y < n - 3; y++)
+            Parallel.For(3, n - 3, y =>
+            {
                 for (int x = 3; x < n - 3; x++)
                 {
                     float wx = x + n * Warp * Noise.Fbm(seed ^ 0x51u, x * 3f / n, y * 3f / n, 3);
@@ -276,6 +278,7 @@ namespace Stabby.World
                     land[y * n + x] = val > 0;
                     owner[y * n + x] = best;
                 }
+            });
 
             float channel = c.ChannelFraction * n;
             for (int k = 1; k < Landmasses.Count; k++)
@@ -773,7 +776,8 @@ namespace Stabby.World
                         Array.Copy(Ranges[k].Y, 0, ry[k], 1, Ranges[k].Y.Length);
                     }
             }
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
@@ -812,6 +816,7 @@ namespace Stabby.World
                     float taper = Grid.Smoothstep(0, 6, coast[i]);
                     Uplift[i] = Math.Max(0, u) * (taper + (1 - taper) * Cliff[i]);
                 }
+            });
         }
 
         public static float DistanceToPolyline(float[] xs, float[] ys, float px, float py) => DistanceToPolyline(xs, ys, px, py, out _);
