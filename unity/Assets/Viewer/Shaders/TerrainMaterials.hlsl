@@ -8,6 +8,7 @@ TEXTURE2D(_StabbyCoat);
 SAMPLER(sampler_StabbyCoat);
 
 static float3 tmO;
+static float tmGrass;
 
 struct TmOut { float3 albedo; float3 grad; };
 
@@ -453,6 +454,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     }
     o.albedo = 0;
     o.grad = 0;
+    tmGrass = 0;
     if (m > 0.01) TmAdd(o, TmRock(wp, n, v, fp, off, dux, duy, stone), m);
     [branch] if (stone > 0.01)
     {
@@ -494,6 +496,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
             k.grad += bare * 0.12 * float3(g2.y, 0, g2.z);
         }
         float up = saturate((sl - 0.3) / 0.25);
+        tmGrass = c * up * cw.x;
         o.albedo += c * lerp(coatColor, k.albedo, up);
         o.grad += c * up * k.grad;
     }

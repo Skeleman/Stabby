@@ -114,6 +114,7 @@ namespace Stabby.Game
             float a = wind.DirectionDeg * Mathf.Deg2Rad;
             Shader.SetGlobalVector("_StabbyWind", new Vector4(Mathf.Cos(a), Mathf.Sin(a), wind.Strength, wind.SwayHz));
             Shader.SetGlobalVector("_StabbyGust", new Vector4(1f / wind.GustScaleM, wind.GustSpeed, wind.GustStrength, 0));
+            Shader.SetGlobalVector("_StabbyGrassFar", new Vector4(grass.ReachM, grass.TipLight / 3f, 0, 0));
             kernel = scatter.FindKernel("Scatter");
             blades = new GraphicsBuffer(GraphicsBuffer.Target.Structured, grass.MaxBlades * LodTris.Length, 32) { name = "Grass blades" };
             args = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Raw, reset.Length, 4) { name = "Grass args" };
