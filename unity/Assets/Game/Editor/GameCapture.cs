@@ -252,6 +252,21 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            while (phase >= 16 && phase <= 17)
+            {
+                string name = phase == 16 ? "boulder-close" : "boulder-mid";
+                if (wait == 0)
+                {
+                    if (!AimBoulder(cam, phase == 16)) { GameStatus.Lines["~" + name] = "no boulder placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -495,6 +510,35 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim " + shape] = $"edit {at} at {mid.x:F0},{mid.y:F0},{mid.z:F0}";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimBoulder(Camera cam, bool close)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (q.CalculateEntityCount() != 1) continue;
+                var ground = q.GetSingleton<Ground>();
+                ref var g = ref ground.Blob.Value;
+                int at = -1;
+                for (int k = 0; k < g.Edits.Length; k++)
+                {
+                    var e = g.Edits[k];
+                    if (e.Shape == FeatureEdit.Boulder && (e.Ax != e.Bx || e.Az != e.Bz) && (at < 0 || e.R > g.Edits[at].R)) at = k;
+                }
+                if (at < 0) { GameStatus.Lines["~aim boulder " + (close ? "close" : "mid")] = $"{w.Name}: no boulder among {g.Edits.Length} edits"; return false; }
+                var b = g.Edits[at];
+                var top = new Vector3(0.5f * (b.Ax + b.Bx), 0.5f * (b.Ay + b.By) + b.R, 0.5f * (b.Az + b.Bz));
+                var side = new Vector3(-(b.Bz - b.Az), 0, b.Bx - b.Ax).normalized;
+                float dist = close ? 4f * b.R : 120f;
+                var eye = top + side * dist + Vector3.up * (close ? 1.5f * b.R : 25f);
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 2f);
+                var target = top - Vector3.up * b.R * 0.6f;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim boulder " + (close ? "close" : "mid")] = $"edit {at} R {b.R:F1} at {top.x:F0},{top.y:F0},{top.z:F0} from {dist:F0} m";
                 return true;
             }
             return false;

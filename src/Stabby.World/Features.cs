@@ -10,8 +10,24 @@ namespace Stabby.World
 
         public const float Blend = 0.5f;
 
-        public bool MeshedIn(float stepM, float x0, float z0, float x1, float z1) =>
-            R >= 0.75f * stepM && MaxX > x0 && MinX < x1 && MaxZ > z0 && MinZ < z1;
+        public const float MinMeshSteps = 0.75f, FadeSteps = 0.25f;
+
+        public bool MeshedIn(float stepM, float x0, float z0, float x1, float z1)
+        {
+            var e = AtStep(stepM);
+            return e.R >= MinMeshSteps * stepM && e.MaxX > x0 && e.MinX < x1 && e.MaxZ > z0 && e.MinZ < z1;
+        }
+
+        public FeatureEdit AtStep(float stepM)
+        {
+            if (Shape != Boulder || R >= MinMeshSteps * stepM || R < FadeSteps * stepM) return this;
+            var e = this;
+            float grow = MinMeshSteps * stepM - R;
+            e.R += grow;
+            e.Ay -= grow;
+            e.By -= grow;
+            return e;
+        }
 
         public int Kind, Shape;
         public float Ax, Ay, Az, Bx, By, Bz, R;

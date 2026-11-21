@@ -73,11 +73,13 @@ namespace Stabby.Game
         {
             var defs = BiomeFile.Load(BiomeFile.DefaultPath);
             var lib = MaterialFile.Load(MaterialFile.DefaultPath);
+            var objects = ObjectFile.ForBiomes(defs);
             string path = MapFile.PathFor(GameSettings.Seed, GameSettings.Size);
             gen = Task.Run(() =>
             {
                 var sw = Stopwatch.StartNew();
                 var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.Seed), defs, lib, true);
+                w.Objects = objects;
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
                 var sums = WorldChunks.Checksums(w);
                 long sumsMs = sw.ElapsedMilliseconds;
@@ -155,12 +157,14 @@ namespace Stabby.Game
 
         public List<BiomeDef> Defs { get; private set; }
         public MaterialLibrary Materials { get; private set; }
+        public ObjectLibrary Objects { get; private set; }
         public GeneratedWorld Map { get; private set; }
 
         protected override void OnCreate()
         {
             Defs = BiomeFile.Load(BiomeFile.DefaultPath);
             Materials = MaterialFile.Load(MaterialFile.DefaultPath);
+            Objects = ObjectFile.ForBiomes(Defs);
         }
 
         protected override void OnDestroy()
@@ -190,6 +194,7 @@ namespace Stabby.Game
                 clock = Stopwatch.StartNew();
                 var defs = Defs;
                 var lib = Materials;
+                var objects = Objects;
                 ulong s = i.Seed;
                 bool empty = World.Name == GameSettings.FullStreamClient;
                 string path = MapFile.PathFor(s, GameSettings.Size);
@@ -204,6 +209,7 @@ namespace Stabby.Game
                         source = "started empty";
                     }
                     else (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
+                    w.Objects = objects;
                     return (w, WorldChunks.Checksums(w));
                 });
             }

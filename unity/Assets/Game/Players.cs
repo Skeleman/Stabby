@@ -94,7 +94,7 @@ namespace Stabby.Game
                 int nid = id.ValueRO.Value;
                 var p = ecb.Instantiate(prefab);
                 float x = spawn.x + nid * 8f, y = ground.HeightAt(spawn.x + nid * 8f, spawn.y) + Walk.Height, z = spawn.y;
-                Walk.Step(ground, ground.Edits, cols, ground.WalkStep, ref x, ref y, ref z, 0, 0, Walk.Reach);
+                Walk.Step(ground, ground.EditsNear(x, z, Walk.Radius), cols, ground.WalkStep, ref x, ref y, ref z, 0, 0, Walk.Reach);
                 ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, y, z)));
                 ecb.SetComponent(p, new GhostOwner { NetworkId = nid });
                 ecb.AppendToBuffer(conn, new LinkedEntityGroup { Value = p });
@@ -115,7 +115,6 @@ namespace Stabby.Game
         public void OnUpdate(ref SystemState state)
         {
             var ground = SystemAPI.GetSingleton<Ground>();
-            var edits = ground.Edits;
             var cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc) ? oc : default;
             float dt = SystemAPI.Time.DeltaTime, top = ground.Top, s = ground.WalkStep;
             foreach (var (t, input) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<PlayerInput>>().WithAll<Player, Simulate>())
@@ -126,7 +125,7 @@ namespace Stabby.Game
                 var pos = t.ValueRO.Position;
                 d.x = math.clamp(pos.x + d.x, 0, top) - pos.x;
                 d.y = math.clamp(pos.z + d.y, 0, top) - pos.z;
-                Walk.Step(ground, edits, cols, s, ref pos.x, ref pos.y, ref pos.z, d.x, d.y, Walk.FallSpeed * dt);
+                Walk.Step(ground, ground.EditsNear(pos.x, pos.z, math.length(d) + Walk.Radius), cols, s, ref pos.x, ref pos.y, ref pos.z, d.x, d.y, Walk.FallSpeed * dt);
                 t.ValueRW.Position = pos;
                 if (moving) t.ValueRW.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());
             }

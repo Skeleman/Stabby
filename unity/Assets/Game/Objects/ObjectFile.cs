@@ -13,7 +13,7 @@ namespace Stabby.Game
         [Serializable] class Place
         {
             public string[] biomes; public float perHectare, slopeMin, slopeMax = 10f, hardnessMin, hardnessMax = 1f, sizeMinM = 1f, sizeMaxM = 1f;
-            public int clusterCount = 1; public float clusterRadiusM, sink, alignToSlope, footRiseM, footReachM = 12f;
+            public int clusterCount = 1; public float clusterRadiusM, sink, alignToSlope, footRiseM, footReachM = 12f, editMinSizeM;
             public Density[] biomeDensity;
         }
         [Serializable] class Density { public string biome; public float scale = 1f; }
@@ -31,6 +31,13 @@ namespace Stabby.Game
         public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "objects.json"));
 
         static uint Hex(string s) => Convert.ToUInt32(s.TrimStart('#'), 16);
+
+        public static ObjectLibrary ForBiomes(IReadOnlyList<BiomeDef> defs)
+        {
+            var ids = new List<string>();
+            foreach (var d in defs) ids.Add(d.Id);
+            return Load(DefaultPath, ids);
+        }
 
         public static ObjectLibrary Load(string path, IReadOnlyList<string> biomeIds)
         {
@@ -69,7 +76,7 @@ namespace Stabby.Game
                     Biomes = new List<string>(pl.biomes ?? Array.Empty<string>()), PerHectare = pl.perHectare, SlopeMin = pl.slopeMin, SlopeMax = pl.slopeMax,
                     HardnessMin = pl.hardnessMin, HardnessMax = pl.hardnessMax, SizeMinM = pl.sizeMinM, SizeMaxM = pl.sizeMaxM,
                     ClusterCount = pl.clusterCount, ClusterRadiusM = pl.clusterRadiusM, Sink = pl.sink, AlignToSlope = pl.alignToSlope,
-                    FootRiseM = pl.footRiseM, FootReachM = pl.footReachM,
+                    FootRiseM = pl.footRiseM, FootReachM = pl.footReachM, EditMinSizeM = pl.editMinSizeM,
                 };
                 foreach (var bd in pl.biomeDensity ?? Array.Empty<Density>()) def.Placement.BiomeDensity.Add(new BiomeDensity { Biome = bd.biome, Scale = bd.scale });
                 lib.Objects.Add(def);

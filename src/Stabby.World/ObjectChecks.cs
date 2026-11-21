@@ -7,8 +7,10 @@ namespace Stabby.World
     {
         public const int ObjectCheckChunks = 4;
 
-        static void CheckObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        static void CheckObjects(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
+            var edits = grid.Edits;
+            var ids = new List<int>();
             var field = new ObjectField(w, detail, edits, w.Objects);
             int n = w.Config.Size, across = field.ChunksAcross;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm;
@@ -34,8 +36,8 @@ namespace Stabby.World
                     int lake = w.Water.LakeId[i];
                     if (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0) Fail(2, at + $" stands in lake {lake}");
                     if (OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
-                    foreach (var f in edits)
-                        if (o.X + 0.5f * r > f.MinX && o.X - 0.5f * r < f.MaxX && o.Z + 0.5f * r > f.MinZ && o.Z - 0.5f * r < f.MaxZ) { Fail(4, at + " sits inside a feature edit"); break; }
+                    grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
+                    if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
                     var biomes = def.Placement.Biomes;
                     if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
@@ -44,18 +46,21 @@ namespace Stabby.World
         }
 
         public const float BoulderStepM = 1f, BoulderTolerance = 1f;
+        public const int BoulderMeshSamples = 12;
 
-        static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
+            var edits = grid.Edits;
             int n = w.Config.Size;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm, worldM = n * cm;
             var bed = RiverBedCells(w, out var segs);
-            int first = -1;
+            var ids = new List<int>();
+            var boulders = new List<int>();
             for (int q = 0; q < edits.Length; q++)
             {
                 var b = edits[q];
                 if (b.Shape != FeatureEdit.Boulder) continue;
-                if (first < 0) first = q;
+                boulders.Add(q);
                 float x = 0.5f * (b.MinX + b.MaxX), z = 0.5f * (b.MinZ + b.MaxZ), r = 0.5f * Math.Max(b.MaxX - b.MinX, b.MaxZ - b.MinZ);
                 string at = $"boulder at {x:F0},{z:F0}";
                 if (b.Kind != FeatureEdit.Add) { e.Add(at + " carves solid"); return; }
@@ -67,40 +72,83 @@ namespace Stabby.World
                 int lake = w.Water.LakeId[i];
                 if (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0) { e.Add(at + $" stands in lake {lake}"); return; }
                 if (OnBed(bed, segs, i, x, z, r)) { e.Add(at + " lies on a river bed"); return; }
-                foreach (var f in edits)
-                    if (f.Shape != FeatureEdit.Boulder && b.MaxX > f.MinX && b.MinX < f.MaxX && b.MaxZ > f.MinZ && b.MinZ < f.MaxZ) { e.Add(at + " overlaps a terrain feature"); return; }
+                grid.Near(b.MinX, b.MinZ, b.MaxX, b.MaxZ, ids);
+                foreach (int f in ids)
+                    if (edits[f].Shape != FeatureEdit.Boulder) { e.Add(at + " overlaps a terrain feature"); return; }
             }
-            if (first >= 0) CheckBoulderMesh(detail, edits, edits[first], e);
+            int samples = Math.Min(BoulderMeshSamples, boulders.Count);
+            for (int k = 0; k < samples; k++)
+            {
+                var b = edits[boulders[(int)((long)k * boulders.Count / samples)]];
+                int before = e.Count;
+                CheckBoulderMesh(detail, grid, b, e);
+                if (e.Count == before) CheckBoulderFade(detail, grid, b, e);
+                if (e.Count > before) return;
+            }
         }
 
-        static void CheckBoulderMesh(TerrainDetail detail, FeatureEdit[] edits, FeatureEdit b, List<string> e)
+        static FeatureEdit[] NearAt(EditGrid grid, float s, int x0, int z0, int cells, List<int> ids)
         {
-            float s = BoulderStepM;
-            string at = $"boulder at {b.Ax:F0},{b.Az:F0}";
-            if (!b.MeshedIn(s, b.MinX, b.MinZ, b.MaxX, b.MaxZ)) { e.Add(at + " is too small to mesh at the finest step"); return; }
+            float bx0 = x0 * s, bz0 = z0 * s, bx1 = (x0 + cells) * s, bz1 = (z0 + cells) * s;
+            grid.Near(bx0 - 0.5f * s, bz0 - 0.5f * s, bx1 + 0.5f * s, bz1 + 0.5f * s, ids);
+            var near = new List<FeatureEdit>();
+            foreach (int q in ids) if (grid.Edits[q].MeshedIn(s, bx0, bz0, bx1, bz1)) near.Add(grid.Edits[q].AtStep(s));
+            return near.ToArray();
+        }
+
+        static NetsChunk BoulderChunk(FeatureEdit b, float s)
+        {
             int x0 = (int)Math.Floor(b.MinX / s) - 3, z0 = (int)Math.Floor(b.MinZ / s) - 3;
             int cells = Math.Max((int)Math.Ceiling(b.MaxX / s) + 3 - x0, (int)Math.Ceiling(b.MaxZ / s) + 3 - z0);
-            var c = new NetsChunk { X0 = x0, Z0 = z0, Cells = cells, StepM = s };
-            var near = new List<FeatureEdit>();
-            foreach (var f in edits) if (f.MeshedIn(s, x0 * s, z0 * s, (x0 + cells) * s, (z0 + cells) * s)) near.Add(f);
-            var list = new EditArray { Items = near.ToArray() };
+            return new NetsChunk { X0 = x0, Z0 = z0, Cells = cells, StepM = s };
+        }
+
+        static void MeshBoulder(TerrainDetail detail, EditArray list, NetsChunk c, out NetsBuffers m, out NetsBuffers g, out NetsBuffers h)
+        {
+            float s = c.StepM;
             var cols = new DetailColumns { Detail = detail, StepM = s };
             SurfaceNets.HeightRange(cols, c, out int jMin, out int jMax);
-            foreach (var f in near)
+            foreach (var f in list.Items)
             {
                 jMin = Math.Min(jMin, (int)Math.Floor(f.MinY / s) - 2);
                 jMax = Math.Max(jMax, (int)Math.Floor(f.MaxY / s) + 3);
             }
-            var m = new NetsBuffers();
+            m = new NetsBuffers();
             SurfaceNets.Edited(cols, list, c, ref m);
-            var g = new NetsBuffers();
+            g = new NetsBuffers();
             SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
-            var h = new NetsBuffers();
+            h = new NetsBuffers();
             SurfaceNets.Heightfield(cols, c, ref h);
+        }
+
+        static void CheckBoulderFade(TerrainDetail detail, EditGrid grid, FeatureEdit b, List<string> e)
+        {
+            string at = $"boulder at {b.Ax:F0},{b.Az:F0}";
+            float s = BoulderStepM;
+            while (b.R >= FeatureEdit.MinMeshSteps * s) s *= 2;
+            if (s > NearField.NodeStep(NearField.NodeLevels - 1)) return;
+            var a = b.AtStep(s);
+            if (a.R < FeatureEdit.MinMeshSteps * s || Math.Abs(a.MaxY - b.MaxY) > 1e-3f) { e.Add(at + $" does not keep its top when it fades at step {s:F0}"); return; }
+            var c = BoulderChunk(a, s);
+            var list = new EditArray { Items = NearAt(grid, s, c.X0, c.Z0, c.Cells, new List<int>()) };
+            MeshBoulder(detail, list, c, out var m, out var g, out var h);
+            if (!m.SameSurfaceAs(g)) e.Add(at + $" faded mesh at step {s:F0} differs from the general mesher");
+            if (m.SameSurfaceAs(h)) e.Add(at + $" vanishes at step {s:F0} instead of fading");
+        }
+
+        static void CheckBoulderMesh(TerrainDetail detail, EditGrid grid, FeatureEdit b, List<string> e)
+        {
+            float s = BoulderStepM;
+            string at = $"boulder at {b.Ax:F0},{b.Az:F0}";
+            if (!b.MeshedIn(s, b.MinX, b.MinZ, b.MaxX, b.MaxZ)) { e.Add(at + " is too small to mesh at the finest step"); return; }
+            var c = BoulderChunk(b, s);
+            var list = new EditArray { Items = NearAt(grid, s, c.X0, c.Z0, c.Cells, new List<int>()) };
+            MeshBoulder(detail, list, c, out var m, out var g, out var h);
             if (!m.SameSurfaceAs(g)) e.Add(at + " mesh differs from the general mesher");
             if (m.SameSurfaceAs(h)) e.Add(at + " leaves the ground unchanged");
             var ground = new DetailGround { Detail = detail };
             float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = 0.5f * (b.Ay + b.By) + b.R;
+            foreach (var f in list.Items) top = Math.Max(top, TopAt(f, mx, mz));
             float wx = mx, wy = top + Walk.StepUp, wz = mz;
             Walk.Step(ground, list, Features.LatticeStepM, ref wx, ref wy, ref wz, 0, 0, Walk.Reach);
             float meshTop = float.NegativeInfinity;
@@ -122,6 +170,15 @@ namespace Stabby.World
             }
             if (Math.Abs(wy - top) > Walk.Probe) e.Add(at + $" walker stands at {wy:F2}, boulder top is {top:F2}");
             if (Math.Abs(meshTop - top) > BoulderTolerance) e.Add(at + $" mesh top {meshTop:F2} misses boulder top {top:F2}");
+        }
+
+        static float TopAt(FeatureEdit f, float x, float z)
+        {
+            if (f.Kind != FeatureEdit.Add || f.Shape != FeatureEdit.Boulder) return float.NegativeInfinity;
+            float ex = f.Bx - f.Ax, ez = f.Bz - f.Az, ll = ex * ex + ez * ez;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, ((x - f.Ax) * ex + (z - f.Az) * ez) / ll)) : 0f;
+            float qx = x - f.Ax - t * ex, qz = z - f.Az - t * ez, dd = f.R * f.R - qx * qx - qz * qz;
+            return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
         static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, int across, float span)

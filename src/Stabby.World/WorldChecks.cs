@@ -247,8 +247,10 @@ namespace Stabby.World
             if (!f.SameAs(g)) e.Add($"heightfield mesher differs from the general mesher near cell {top}");
         }
 
-        static void CheckChunkBounds(GeneratedWorld w, FeatureEdit[] placed, List<string> e)
+        static void CheckChunkBounds(GeneratedWorld w, EditGrid grid, List<string> e)
         {
+            var placed = grid.Edits;
+            var ids = new List<int>();
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
             var detail = new TerrainDetail(w);
@@ -269,7 +271,8 @@ namespace Stabby.World
                     var cols = new DetailColumns { Detail = detail, StepM = sm };
                     var c = new NetsChunk { X0 = (int)(x0 / sm), Z0 = (int)(z0 / sm), Cells = NearField.NodeQuads, StepM = sm };
                     var meshed = new List<FeatureEdit>();
-                    foreach (var x in placed) if (x.MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(x);
+                    grid.Near(x0 - 0.5f * sm, z0 - 0.5f * sm, x1 + 0.5f * sm, z1 + 0.5f * sm, ids);
+                    foreach (int q in ids) if (placed[q].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(placed[q].AtStep(sm));
                     var f = new NetsBuffers();
                     var list = new EditArray { Items = meshed.ToArray() };
                     if (meshed.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
@@ -309,12 +312,13 @@ namespace Stabby.World
         {
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail);
-            CheckChunkBounds(w, edits, e);
-            if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, edits, e);
+            float cm = w.Config.CellMeters, s = LatticeStepM;
+            var grid = new EditGrid(edits, w.Config.Size * cm);
+            CheckChunkBounds(w, grid, e);
+            if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, grid, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
-            if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, edits, e);
-            float cm = w.Config.CellMeters, s = LatticeStepM;
+            if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             foreach (var x in edits)
                 if (x.Shape != FeatureEdit.Boulder && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
             var cols = new DetailColumns { Detail = detail, StepM = s };
