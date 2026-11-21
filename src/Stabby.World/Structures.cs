@@ -161,7 +161,7 @@ namespace Stabby.World
             }
         }
 
-        const float StoneSquare = 0.8f, SlabSquare = 0.85f;
+        const float StoneSquare = 0.92f, SlabSquare = 0.95f;
 
         static void Course(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w)
         {
@@ -224,7 +224,7 @@ namespace Stabby.World
                 Yaw(ref rng, 0.12f, out float c, out float s);
                 if (xc < gapA - 0.5f * th || xc > gapB + 0.5f * th)
                     Add(l, key, xc, h - 0.004f, rng.Range(-0.004f, 0.004f), th, sy, sz, c, s, 0, 0, SlabSquare, flat ? 0 : lean);
-                t += th * rng.Range(0.9f, 1.15f);
+                t += th * rng.Range(0.7f, 0.9f);
             }
             t = a;
             while (e - t > 0.012f)

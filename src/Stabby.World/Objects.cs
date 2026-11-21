@@ -233,7 +233,7 @@ namespace Stabby.World
                     {
                         float cx = -gz / gl, cz = gx / gl;
                         if (cx * ux + cz * uz < 0) { cx = -cx; cz = -cz; }
-                        ux += 0.6f * (cx - ux); uz += 0.6f * (cz - uz);
+                        ux += 0.8f * (cx - ux); uz += 0.8f * (cz - uz);
                     }
                     float px = -uz, pz = ux;
                     ux += wander * px; uz += wander * pz;
@@ -242,14 +242,27 @@ namespace Stabby.World
                     bx -= ux * Structures.WallOverlap * size; bz -= uz * Structures.WallOverlap * size;
                 }
                 if (gate) { ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span; continue; }
-                float mx = bx + ux * 0.5f * span, mz = bz + uz * 0.5f * span, fx = bx + ux * span, fz = bz + uz * span;
-                if (Math.Min(bx, fx) < x0 || Math.Min(bz, fz) < z0 || Math.Max(bx, fx) >= x0 + sx || Math.Max(bz, fz) >= z0 + sz) return;
-                float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
-                if (!Accept(d, mx, mz, size, qw, qy, out var s)) return;
-                s.Variant = variant;
-                s.Id = ObjectIds.Make(chunk, d, ordinal++);
-                list.Add(s);
-                ex = fx; ez = fz;
+                bool placed = false;
+                float ax = ux, az = uz, sbx = bx, sbz = bz;
+                for (int tries = 0; tries < 3 && !placed; tries++)
+                {
+                    if (tries > 0)
+                    {
+                        float side = tries == 1 ? turn : -turn;
+                        bx = sbx - ax * 0.5f * thick; bz = sbz - az * 0.5f * thick;
+                        ux = -az * side; uz = ax * side;
+                    }
+                    float mx = bx + ux * 0.5f * span, mz = bz + uz * 0.5f * span, fx = bx + ux * span, fz = bz + uz * span;
+                    if (Math.Min(bx, fx) < x0 || Math.Min(bz, fz) < z0 || Math.Max(bx, fx) >= x0 + sx || Math.Max(bz, fz) >= z0 + sz) continue;
+                    float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
+                    if (!Accept(d, mx, mz, size, qw, qy, out var s)) continue;
+                    s.Variant = variant;
+                    s.Id = ObjectIds.Make(chunk, d, ordinal++);
+                    list.Add(s);
+                    ex = fx; ez = fz;
+                    placed = true;
+                }
+                if (!placed) return;
             }
         }
 
