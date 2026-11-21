@@ -210,6 +210,7 @@ namespace Stabby.World
             var edits = Features.Place(w, detail);
             CheckChunkBounds(w, edits, e);
             CheckCavePaths(w, detail, edits, e);
+            CheckCaveWalk(w, detail, edits, e);
             float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
             foreach (var x in edits)
                 if (!Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
@@ -290,6 +291,34 @@ namespace Stabby.World
                     }
                     li = i; lk = k; last = floor;
                 }
+            }
+        }
+
+        public const float WalkStride = 0.5f;
+
+        static void CheckCaveWalk(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        {
+            float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
+            var ground = new DetailGround { Detail = detail, CellMeters = cm };
+            foreach (var p in edits)
+            {
+                if (p.Shape != FeatureEdit.Cave) continue;
+                int tile = Features.TileOf(p, cm);
+                var near = new List<FeatureEdit>();
+                foreach (var q in edits) if (Features.TileOf(q, cm) == tile) near.Add(q);
+                var list = new EditArray { Items = near.ToArray() };
+                float x = p.Ax, y = p.Ay, z = p.Az, run = (float)Math.Sqrt((p.Bx - p.Ax) * (p.Bx - p.Ax) + (p.Bz - p.Az) * (p.Bz - p.Az));
+                Walk.Step(ground, list, s, ref x, ref y, ref z, 0, 0, Walk.Reach);
+                int steps = Math.Max(1, (int)Math.Ceiling(run / WalkStride));
+                float dx = (p.Bx - p.Ax) / steps, dz = (p.Bz - p.Az) / steps, fall = Walk.FallSpeed * WalkStride / 6f;
+                for (int t = 0; t < steps; t++)
+                {
+                    float px = x, pz = z;
+                    Walk.Step(ground, list, s, ref x, ref y, ref z, dx, dz, fall);
+                    if (Math.Abs(x - px - dx) > 1e-3f || Math.Abs(z - pz - dz) > 1e-3f) { e.Add($"walker in cave at {p.Ax:F0},{p.Az:F0} is stopped at {x:F0},{y:F0},{z:F0}"); return; }
+                }
+                float floor = p.By - p.R * Features.CaveHollow;
+                if (Math.Abs(y - floor) > 0.25f * p.R) { e.Add($"walker in cave at {p.Ax:F0},{p.Az:F0} ends at height {y:F1}, floor is {floor:F1}"); return; }
             }
         }
 

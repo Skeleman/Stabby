@@ -49,11 +49,15 @@ namespace Stabby.Game
         public BlobArray<FeatureEdit> Edits;
     }
 
-    public struct Ground : IComponentData
+    public struct Ground : IComponentData, IGroundHeight
     {
         public BlobAssetReference<GroundData> Blob;
 
         public float Top => Blob.Value.Top;
+
+        public float WalkStep => Features.LatticeStepCells * Blob.Value.CellMeters;
+
+        public GroundEdits Edits => new GroundEdits { Blob = Blob };
 
         public float HeightAt(float x, float z)
         {
@@ -109,6 +113,13 @@ namespace Stabby.Game
             if (task == null) return;
             task.ContinueWith(t => { if (t.IsCompletedSuccessfully) dispose(t.Result); }, TaskContinuationOptions.ExecuteSynchronously);
         }
+    }
+
+    public struct GroundEdits : IEditList
+    {
+        public BlobAssetReference<GroundData> Blob;
+        public int Count => Blob.Value.Edits.Length;
+        public FeatureEdit At(int k) => Blob.Value.Edits[k];
     }
 
     public struct SpawnPoint : IComponentData

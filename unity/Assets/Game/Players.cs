@@ -1,3 +1,4 @@
+using Stabby.World;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -91,8 +92,9 @@ namespace Stabby.Game
             {
                 int nid = id.ValueRO.Value;
                 var p = ecb.Instantiate(prefab);
-                float x = spawn.x + nid * 8f, z = spawn.y;
-                ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, ground.HeightAt(x, z), z)));
+                float x = spawn.x + nid * 8f, y = ground.HeightAt(spawn.x + nid * 8f, spawn.y) + Walk.Height, z = spawn.y;
+                Walk.Step(ground, ground.Edits, ground.WalkStep, ref x, ref y, ref z, 0, 0, Walk.Reach);
+                ecb.SetComponent(p, LocalTransform.FromPosition(new float3(x, y, z)));
                 ecb.SetComponent(p, new GhostOwner { NetworkId = nid });
                 ecb.AppendToBuffer(conn, new LinkedEntityGroup { Value = p });
                 ecb.AddComponent<PlayerSpawned>(conn);
@@ -112,18 +114,19 @@ namespace Stabby.Game
         public void OnUpdate(ref SystemState state)
         {
             var ground = SystemAPI.GetSingleton<Ground>();
-            float dt = SystemAPI.Time.DeltaTime, top = ground.Top;
+            var edits = ground.Edits;
+            float dt = SystemAPI.Time.DeltaTime, top = ground.Top, s = ground.WalkStep;
             foreach (var (t, input) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<PlayerInput>>().WithAll<Player, Simulate>())
             {
                 var d = input.ValueRO.Dir;
-                if (math.lengthsq(d) < 1e-4f) continue;
-                d = math.normalizesafe(d);
+                bool moving = math.lengthsq(d) >= 1e-4f;
+                d = moving ? math.normalizesafe(d) * GameSettings.WalkSpeed * dt : float2.zero;
                 var pos = t.ValueRO.Position;
-                pos.x = math.clamp(pos.x + d.x * GameSettings.WalkSpeed * dt, 0, top);
-                pos.z = math.clamp(pos.z + d.y * GameSettings.WalkSpeed * dt, 0, top);
-                pos.y = ground.HeightAt(pos.x, pos.z);
+                d.x = math.clamp(pos.x + d.x, 0, top) - pos.x;
+                d.y = math.clamp(pos.z + d.y, 0, top) - pos.z;
+                Walk.Step(ground, edits, s, ref pos.x, ref pos.y, ref pos.z, d.x, d.y, Walk.FallSpeed * dt);
                 t.ValueRW.Position = pos;
-                t.ValueRW.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());
+                if (moving) t.ValueRW.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());
             }
         }
     }

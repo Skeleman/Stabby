@@ -63,7 +63,7 @@ their geometry is built.
 | LOD stitching: fine border vertices carry their coarse neighbour's vertex (`SurfaceNets.CoarseVertex`, checked bitwise in `WorldChecks`) and the shader collapses onto it when that side or corner is coarser; visible neighbours stay within one LOD | done |
 | Cave rework: tunnels twice as wide, 1-3 main paths branching after the mouth on a gentle grade (no steps or pits, checked in `WorldChecks.CheckCavePaths`), steeper side chambers off the main path, rooms at path ends | done |
 | Per-cell refinement: subdivide only lattice cells that touch a feature edit, stitched to the coarse neighbours, instead of whole chunks at a finer step | idea |
-| Player collision against feature edits (capsule vs field) | later |
+| Player collision against the solid field: engine-free `Walk.Step` (step-up, head and radius probes, constant-speed fall, wall slide) shared by server, client prediction and `WorldChecks.CheckCaveWalk`, which walks every cave path | done |
 
 ## Next
 
@@ -80,5 +80,6 @@ their geometry is built.
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
 - Map editing on top of `sketch.json`.
 - Dungeons about 4x the size of caves, built on the same carve edits (idea).
+- Cave system expansion well beyond the current fundamentals (idea).
 
 Not planned yet: a general job framework (Task.Run plus cancellation covers current needs).
