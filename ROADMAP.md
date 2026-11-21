@@ -88,7 +88,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Item | Status |
 |---|---|
 | **Zach:** terrain resolution: 45 m cells are too coarse; options A (5.8 km world), B (1024 cells, 11.5 km), C (2048 cells, 23 km); drop the levee once cells are finer | next |
-| Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | next |
+| Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Terrain textures: texture sets per material in `materials.json`, triplanar on rock | next |
 | **Zach:** world objects contract: one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` | later |
