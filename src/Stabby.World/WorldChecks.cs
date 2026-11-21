@@ -61,6 +61,8 @@ namespace Stabby.World
                     { e.Add($"river {s.Id} has a gap at point {k}"); break; }
                     if (s.Surface[k] > s.Surface[k - 1] + SurfaceTolerance)
                     { e.Add($"river {s.Id} flows uphill at point {k}"); break; }
+                    if (s.Depth[k] + 1e-4f < s.Depth[k - 1])
+                    { e.Add($"river {s.Id} gets shallower downstream at point {k}"); break; }
                 }
                 CheckRiverBed(w, s, e);
                 int last = s.Cells[s.Cells.Count - 1];
@@ -106,6 +108,7 @@ namespace Stabby.World
             if (w.Sketch != null) CheckSketch(w, e);
             CheckDetail(w, e);
             CheckNearField(w, e);
+            CheckRiverShape(w, e);
             CheckGeometry(w, e);
             CheckFeatures(w, e);
             return e;
@@ -201,8 +204,8 @@ namespace Stabby.World
                     float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
                     int bc = NearField.CellOf(bx, bz, cm, n);
                     if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s)) continue;
-                    float h = d.Sample(bx, bz);
-                    if (h < s - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {s:F1}"); return; }
+                    float h = d.Sample(bx, bz), held = Math.Min(s, Math.Min(q.Sa, q.Sb) + NearField.Rise(hw));
+                    if (h < held - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {held:F1}"); return; }
                 }
             }
         }
@@ -223,10 +226,102 @@ namespace Stabby.World
                 NearField.Project(q, x, z, out float d, out float t);
                 float hw = q.Wa + (q.Wb - q.Wa) * t, s = q.Sa + (q.Sb - q.Sa) * t;
                 float wb = hw + NearField.Bank(hw);
-                if (d < wb - 0.5f && (own < 0 || d < own - 0.5f || s < stage)) return true;
+                if (d < hw || d < wb - 0.5f && (own < 0 || d < own - 0.5f || s < stage)) return true;
                 if (Math.Abs(r - self) > 2 && s < stage && d < wb + stage - s) return true;
             }
             return false;
+        }
+
+        public const float SharpBend = 0.06f, BarLead = 0.15f, BendShare = 0.7f, SteepGradient = 0.04f, StepRatio = 2.5f, StepShare = 0.8f, PlungeFrac = 0.25f, CutBankAt = 0.3f;
+        public const int MinBends = 6, MinSteep = 4, StepWindow = 16;
+
+        static void CheckRiverShape(GeneratedWorld w, List<string> e)
+        {
+            float cm = w.Config.CellMeters;
+            var d = new TerrainDetail(w);
+            var starts = new List<int>();
+            var pieces = NearField.Pieces(w, starts);
+            int bends = 0, cut = 0, steep = 0, stepped = 0, falls = 0, plunged = 0;
+            for (int p = 2; p + 2 < pieces.Count; p++)
+            {
+                if (!Joined(pieces, p - 2, p + 2) || Spans(starts, p - 1, p + 2)) continue;
+                var q = pieces[p];
+                float x0 = pieces[p - 2].Ax, z0 = pieces[p - 2].Az, x2 = pieces[p + 2].Bx, z2 = pieces[p + 2].Bz;
+                float ax = q.Ax - x0, az = q.Az - z0, bx = x2 - q.Ax, bz = z2 - q.Az, cx = x2 - x0, cz = z2 - z0;
+                float la = (float)Math.Sqrt(ax * ax + az * az), lb = (float)Math.Sqrt(bx * bx + bz * bz), lc = (float)Math.Sqrt(cx * cx + cz * cz);
+                if (la < 1e-3f || lb < 1e-3f || lc < 1e-3f) continue;
+                float cross = ax * bz - az * bx, hw = q.Wa, depth = q.Da, s = q.Sa;
+                if (hw < 3f || depth < 0.4f || s < Erosion.MinLandHeight + 2 * depth) continue;
+                if (hw * 2 * Math.Abs(cross) / (la * lb * lc) < SharpBend) continue;
+                float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (l < 1e-3f) continue;
+                float side = cross > 0 ? 1f : -1f, nx = -ez / l * side, nz = ex / l * side;
+                float ix = q.Ax + nx * 0.7f * hw, iz = q.Az + nz * 0.7f * hw, ox = q.Ax - nx * 0.7f * hw, oz = q.Az - nz * 0.7f * hw;
+                float bank = hw + CutBankAt * NearField.Bank(hw);
+                float jx = q.Ax + nx * bank, jz = q.Az + nz * bank, kx = q.Ax - nx * bank, kz = q.Az - nz * bank;
+                if (Foreign(pieces, p, jx, jz) || Foreign(pieces, p, kx, kz)) continue;
+                bends++;
+                if (d.Sample(ix, iz) - d.Sample(ox, oz) >= BarLead * depth && d.Sample(kx, kz) > d.Sample(jx, jz)) cut++;
+            }
+            if (bends >= MinBends && cut < BendShare * bends)
+                e.Add($"river bends are symmetric: {cut} of {bends} sharp bends have a point bar inside and a cut bank outside");
+
+            for (int p = 0; p + StepWindow <= pieces.Count; p += StepWindow / 2)
+            {
+                int last = p + StepWindow - 1;
+                if (!Joined(pieces, p, last)) continue;
+                float run = 0, peak = 0;
+                int at = p;
+                for (int k = p; k <= last; k++)
+                {
+                    var q = pieces[k];
+                    float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l = (float)Math.Sqrt(ex * ex + ez * ez);
+                    run += l;
+                    float g = l > 1e-3f ? (q.Sa - q.Sb) / l : 0;
+                    if (g > peak) { peak = g; at = k; }
+                }
+                float mean = run > 1e-3f ? (pieces[p].Sa - pieces[last].Sb) / run : 0;
+                if (mean < SteepGradient || pieces[last].Sb < Erosion.MinLandHeight + 2 * pieces[last].Db) continue;
+                steep++;
+                if (peak < StepRatio * mean) continue;
+                stepped++;
+                if (at + 1 > last) continue;
+                var below = pieces[at + 1];
+                float drop = NearField.PoolDrop(pieces[at].Sa - pieces[at].Sb, pieces[at].Db), sb = below.Sb;
+                if (Foreign(pieces, at + 1, below.Bx, below.Bz)) continue;
+                falls++;
+                if (d.Sample(below.Bx, below.Bz) <= sb - below.Db - PlungeFrac * drop) plunged++;
+            }
+            if (steep >= MinSteep && stepped < StepShare * steep)
+                e.Add($"steep river reaches never step: {stepped} of {steep} steep windows hold a fall");
+            if (falls >= MinSteep && plunged < StepShare * falls)
+                e.Add($"river falls lack plunge pools: {plunged} of {falls}");
+        }
+
+        static bool Foreign(List<RiverPiece> pieces, int self, float x, float z)
+        {
+            for (int r = 0; r < pieces.Count; r++)
+            {
+                if (Math.Abs(r - self) <= 6 && Joined(pieces, Math.Min(r, self), Math.Max(r, self))) continue;
+                var q = pieces[r];
+                NearField.Project(q, x, z, out float d, out float t);
+                float hw = q.Wa + (q.Wb - q.Wa) * t;
+                if (d < NearField.Reach(hw, 0)) return true;
+            }
+            return false;
+        }
+
+        static bool Spans(List<int> starts, int a, int b)
+        {
+            foreach (int s in starts) if (s >= a && s <= b) return true;
+            return false;
+        }
+
+        static bool Joined(List<RiverPiece> pieces, int a, int b)
+        {
+            for (int k = a; k < b; k++)
+                if (pieces[k].Bx != pieces[k + 1].Ax || pieces[k].Bz != pieces[k + 1].Az) return false;
+            return true;
         }
 
         public const float LatticeStepM = Features.LatticeStepM;
