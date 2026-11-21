@@ -58,8 +58,9 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 `sweep --jobs 1` (one seed at a time; stages use all cores), Release, generator 32. CI (`.github/workflows/ci.yml`)
 runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 512` on every push.
-256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0` (`Features` placement
-currently throws at 4096). Total excludes checks. Peak working set is about 0.8 GB at 2048 and 2.7 GB at 4096.
+256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0`. At generator 38, 2048 (opt-in)
+sweeps at about 5.2 s median idle (16 seeds, checks about 24 s) and 4096 at about 29 s median with
+checks about 64 s (3 seeds). Total excludes checks. Peak working set is about 0.8 GB at 2048 and 2.7 GB at 4096.
 
 | Stage | 256 (median ms / MB) | 512 (median ms / MB) | 1024 (median ms / MB) | 2048 (median ms / MB) | 4096 (ms / MB) |
 |---|---|---|---|---|---|
@@ -116,7 +117,7 @@ Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seed
 `Assets/Scenes/Game.unity` runs a host and two clients in one process with
 Netcode for Entities. The host loads `out/maps/seed<N>-512.stabbymap`
 (`WorldFile`: raw chunks, rebuilt with `Relink`, about 25 ms) instead of generating
-(about 4 s in Unity). If the file is missing, from another generator version or
+(about 4 s in Unity at 512, 6 s at 2048; the file loads in about 0.5 s at 2048). If the file is missing, from another generator version or
 older than `content/biomes.json`, the host generates and saves it, so run
 `stabby bake` after generator changes or let the first run rebake. `Client1`
 loads the same file, compares chunk checksums and streams the chunks that differ
