@@ -199,6 +199,8 @@ namespace Stabby.World
             seg.Discharge.Add(hy.DischargeM3s[i]);
         }
 
+        public static float ReachCells(WorldConfig c, float width) => Math.Max(c.MeanderMaxCells, c.MeanderReachHalfWidths * 0.5f * width / c.CellMeters);
+
         static void Shape(WorldConfig c, RiverSegment seg, uint seed)
         {
             int n = c.Size, count = seg.Cells.Count;
@@ -208,28 +210,50 @@ namespace Stabby.World
                 int a = seg.Cells[k - 1], b = seg.Cells[k];
                 along[k] = along[k - 1] + (a % n != b % n && a / n != b / n ? 1.41421356f : 1f);
             }
-            float total = along[count - 1], phase = 0;
-            int head = seg.Cells[0];
+            float total = along[count - 1];
+            var flats = new float[count];
             for (int k = 0; k < count; k++)
             {
                 int lo = Math.Max(0, k - SlopeReach), hi = Math.Min(count - 1, k + SlopeReach);
                 float run = (along[hi] - along[lo]) * c.CellMeters;
                 float slope = run > 0 ? Math.Max(0, seg.Surface[lo] - seg.Surface[hi]) / run : 0;
-                float flat = 1f - Grid.Smoothstep(0, c.RiverFlatSlope, slope);
-                float width = c.RiverWidthAtUnitFlow * (float)FMath.Pow(seg.Discharge[k], c.RiverWidthExponent) * (1f + c.RiverLowlandWiden * flat);
+                flats[k] = 1f - Grid.Smoothstep(0, c.RiverFlatSlope, slope);
+                float width = c.RiverWidthAtUnitFlow * (float)FMath.Pow(seg.Discharge[k], c.RiverWidthExponent) * (1f + c.RiverLowlandWiden * flats[k]);
                 seg.Width.Add(width);
                 seg.Depth.Add(0.3f + width / 25f);
-
-                int p = seg.Cells[Math.Max(0, k - 2)], q = seg.Cells[Math.Min(count - 1, k + 2)];
-                float dx = q % n - p % n, dy = q / n - p / n, len = (float)Math.Sqrt(dx * dx + dy * dy);
+            }
+            var sx = new float[count];
+            var sy = new float[count];
+            for (int k = 0; k < count; k++)
+            {
+                int r = Math.Min(Math.Min(k, count - 1 - k), Math.Max(SmoothMinCells, Math.Min(SmoothMaxCells, (int)(c.RiverSmoothWidths * seg.Width[k] / c.CellMeters))));
+                float wx = 0, wy = 0, ws = 0;
+                for (int d = -r; d <= r; d++)
+                {
+                    int cell = seg.Cells[k + d];
+                    float wt = r + 1 - Math.Abs(d);
+                    wx += wt * (cell % n); wy += wt * (cell / n); ws += wt;
+                }
+                sx[k] = wx / ws; sy[k] = wy / ws;
+            }
+            float phase = 0;
+            int head = seg.Cells[0];
+            for (int k = 0; k < count; k++)
+            {
+                float width = seg.Width[k];
+                int p = Math.Max(0, k - 2), q = Math.Min(count - 1, k + 2);
+                float dx = sx[q] - sx[p], dy = sy[q] - sy[p], len = (float)Math.Sqrt(dx * dx + dy * dy);
                 float wave = Math.Max(c.MeanderMinWavelengthCells, c.MeanderWavelengthWidths * width / c.CellMeters);
                 if (k > 0) phase += (along[k] - along[k - 1]) / wave;
                 float taper = Grid.Smoothstep(0, MeanderTaperCells, along[k]) * Grid.Smoothstep(0, MeanderTaperCells, total - along[k]);
-                float amp = Math.Min(Math.Min(c.MeanderMaxCells, wave * 0.25f), c.MeanderWidths * width / c.CellMeters) * flat * taper;
+                float reach = ReachCells(c, width);
+                float amp = Math.Min(Math.Min(reach, wave * 0.25f), c.MeanderWidths * width / c.CellMeters) * flats[k] * taper;
                 float o = len > 0 ? amp * Math.Max(-1f, Math.Min(1f, Noise.Gradient(seed, phase, head * 0.618034f))) / len : 0;
                 int cell = seg.Cells[k];
-                seg.X.Add(cell % n - dy * o);
-                seg.Y.Add(cell / n + dx * o);
+                float ox = sx[k] - dy * o - cell % n, oy = sy[k] + dx * o - cell / n, off = (float)Math.Sqrt(ox * ox + oy * oy);
+                if (off > reach) { ox *= reach / off; oy *= reach / off; }
+                seg.X.Add(cell % n + ox);
+                seg.Y.Add(cell / n + oy);
             }
         }
 
@@ -278,5 +302,6 @@ namespace Stabby.World
 
         const int SlopeReach = 3;
         const float MeanderTaperCells = 3f;
+        const int SmoothMinCells = 2, SmoothMaxCells = 6;
     }
 }

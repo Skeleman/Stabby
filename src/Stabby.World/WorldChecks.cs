@@ -114,10 +114,10 @@ namespace Stabby.World
         {
             if (s.X.Count != s.Cells.Count || s.Y.Count != s.Cells.Count) { e.Add($"river {s.Id} has no centreline"); return; }
             int n = w.Config.Size;
-            float reach = w.Config.MeanderMaxCells + SurfaceTolerance;
             for (int k = 0; k < s.Cells.Count; k++)
             {
                 int i = s.Cells[k];
+                float reach = Hydrology.ReachCells(w.Config, s.Width[k]) + SurfaceTolerance;
                 float dx = s.X[k] - i % n, dy = s.Y[k] - i / n;
                 if (dx * dx + dy * dy > reach * reach) { e.Add($"river {s.Id} meanders off its cell at point {k}"); return; }
                 if (w.Sea[i] || w.Water.LakeId[i] >= 0) continue;
