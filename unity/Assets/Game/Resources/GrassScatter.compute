@@ -109,7 +109,10 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.3 * jn);
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
         float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
-        float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - tmO.xz, fo));
+        float3 lp = float3(p.x - tmO.x, p.y, p.z - tmO.z);
+        float hw = p.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
+        float2 wd = hw < 4.8 ? TmWet(lp, hw, max(d * _Eye.w, 1e-4)) : 0;
+        float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - tmO.xz, fo)) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));
         float cmin = _GrassB.w, gate = cmin + (1 - cmin) * Rand(cell, 3);
         if (gw * 1.2 <= gate) continue;
         float sw = _StabbyStrataWobble.w;
@@ -141,9 +144,10 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float3 root = color;
         [branch] if (_StabbyDetailOff <= 0)
         {
-            TmOut g = TmGrass(float3(p.x - tmO.x, p.y, p.z - tmO.z), color, fp, _StabbyCoatA[0], _StabbyCoatB[0]);
+            TmOut g = TmGrass(lp, color, fp, _StabbyCoatA[0], _StabbyCoatB[0]);
             root = lerp(TmGrassGreen(color), g.albedo, 0.45 * up);
         }
+        root = lerp(root, root * root * 2.2, 0.5 * wd.y) * (1 - 0.3 * wd.y);
         float lum = dot(root, float3(0.2126, 0.7152, 0.0722));
         float hv = cr4.w - 0.5 + 0.3 * (Rand(cell, 12) - 0.5);
         root = lerp(lum.xxx, root, 0.58 + 0.12 * cr4.x) * float3(1.04 + 0.08 * hv, 1, 0.88 - 0.08 * hv) * (0.86 + 0.16 * cr4.y) * (0.93 + 0.12 * Rand(cell, 8));
