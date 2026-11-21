@@ -905,6 +905,8 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         if (cw.w > 0.02) TmAdd(k, TmSnow(wp, n, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += lerp(coatColor, grassColor, cw.x) * (1 - kept);
+        float can = smoothstep(0.08, 0.35, fo.r + fo.g) * cw.x;
+        k.albedo = lerp(k.albedo, dot(k.albedo, float3(0.2126, 0.7152, 0.0722)) * float3(1.25, 0.95, 0.68) * 0.8, 0.6 * can);
         float cov = TmLitter(k, wp, fo, fp, fb);
         lc = cov * up;
         mr = TmMicro(wp.xz, fp) * dot(cw, float4(1, 1, 0.3, 0.5));

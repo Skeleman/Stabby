@@ -38,7 +38,7 @@ namespace Stabby.Game.Editor
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.intensity = 0.8f;
-            sun.shadows = LightShadows.Hard;
+            sun.shadows = LightShadows.Soft;
             sun.color = new Color(1f, 0.96f, 0.88f);
             sun.transform.rotation = Quaternion.Euler(38f, 140f, 0);
 
@@ -445,14 +445,14 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 60 && phase < 60 + 2 * ForestShots.Length)
+            while (phase >= 60 && phase <= 60 + 2 * ForestShots.Length)
             {
-                int fk = (phase - 60) / 2;
-                bool mid = (phase - 60) % 2 == 1;
-                string name = "forest-" + ForestShots[fk] + (mid ? "-mid" : "-close");
+                bool wide = phase == 60 + 2 * ForestShots.Length;
+                int fk = wide ? 0 : (phase - 60) / 2, view = wide ? 2 : (phase - 60) % 2;
+                string name = "forest-" + ForestShots[fk] + (view == 2 ? "-wide" : view == 1 ? "-mid" : "-close");
                 if (wait == 0)
                 {
-                    if (!AimBiome(cam, ForestShots[fk]) || !AimForest(cam, ForestShots[fk], mid)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    if (!AimBiome(cam, ForestShots[fk]) || !AimForest(cam, ForestShots[fk], view)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -1171,7 +1171,7 @@ namespace Stabby.Game.Editor
 
         static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };
 
-        static bool AimForest(Camera cam, string id, bool mid)
+        static bool AimForest(Camera cam, string id, int view)
         {
             var near = cam.transform.position + new Vector3(0.77f, 0, 0.64f) * 24f;
             foreach (var w in Unity.Entities.World.All)
@@ -1211,15 +1211,15 @@ namespace Stabby.Game.Editor
                 {
                     var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(0.77f, 0, 0.64f);
                     var t = new Vector3(c.x, 0, c.y) + new Vector3(-d.z, 0, d.x) * 3f;
-                    var e = t - d * (mid ? 22f : 3.5f);
+                    var e = t - d * (view == 2 ? 48f : view == 1 ? 22f : 3.5f);
                     float m = float.MaxValue;
                     foreach (var tr in trees)
                         for (float s = 0; s <= 1; s += 0.25f)
                             m = Mathf.Min(m, (tr - Vector2.Lerp(new Vector2(e.x, e.z), new Vector2(t.x, t.z), s)).sqrMagnitude);
                     if (m > clear) { clear = m; dir = d; target = t; eye = e; }
                 }
-                eye.y = ground.HeightAt(eye.x, eye.z) + (mid ? 5f : 1.6f);
-                var aim = target + dir * (mid ? 4f : 1.5f);
+                eye.y = ground.HeightAt(eye.x, eye.z) + (view == 2 ? 11f : view == 1 ? 5f : 1.6f);
+                var aim = target + dir * (view == 2 ? 6f : view == 1 ? 4f : 1.5f);
                 aim.y = ground.HeightAt(aim.x, aim.z);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
                 GameStatus.Lines["~aim forest " + id] = $"{id} stand at {c.x:F0},{c.y:F0}, {trees.Count} trees searched, score {score:F1}";
@@ -1496,7 +1496,7 @@ namespace Stabby.Game.Editor
         {
             poses.Add((label, cam.transform.position, cam.transform.rotation));
             var sun = Object.FindFirstObjectByType<Light>();
-            var modes = new[] { LightShadows.None, LightShadows.Hard };
+            var modes = new[] { LightShadows.None, LightShadows.Soft };
             var sb = new System.Text.StringBuilder($"bench {label} 1080p shadows off/on (ms, full):");
             for (int pass = 0; pass < (blades ? 2 : 1); pass++)
             {
@@ -1510,7 +1510,7 @@ namespace Stabby.Game.Editor
                 sb.Append(pass == 0 ? " blades on " : ", blades off ").Append($"{ms[0]:F2}/{ms[1]:F2}");
             }
             GrassViewSystem.Paused = false;
-            sun.shadows = LightShadows.Hard;
+            sun.shadows = LightShadows.Soft;
             return sb.ToString();
         }
 
