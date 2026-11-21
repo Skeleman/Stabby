@@ -1,0 +1,133 @@
+#pragma kernel Scatter
+
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+
+float4 _StabbySand, _StabbyFieldUV;
+float _StabbyStrataPeriod;
+float3 _WorldSpaceCameraPos;
+TEXTURE2D(_StabbyStrata);
+SAMPLER(sampler_StabbyStrata);
+TEXTURE2D(_StabbySlope);
+SAMPLER(sampler_StabbySlope);
+TEXTURE2D(_StabbyBiome);
+SAMPLER(sampler_StabbyBiome);
+
+float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
+
+#define ddx(x) ((x) * 0)
+#define ddy(x) ((x) * 0)
+#include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
+
+struct Blade { float4 p0; float4 p1; float4 p2; float4 p3; };
+
+ByteAddressBuffer _Verts;
+ByteAddressBuffer _Indices;
+RWByteAddressBuffer _Args;
+RWStructuredBuffer<Blade> _Blades;
+float4 _Planes[6];
+float4 _Eye;
+float4 _GrassA;
+float4 _GrassB;
+float4 _GrassC;
+uint4 _Layout;
+
+float Rand(int3 cell, uint salt) { return TmHashU(uint3(cell.x, cell.y, cell.z * 16 + salt)) * (1.0 / 4294967296.0); }
+
+bool Outside(float3 p, float r)
+{
+    [unroll] for (int k = 0; k < 6; k++)
+        if (dot(_Planes[k].xyz, p) + _Planes[k].w < -r) return true;
+    return false;
+}
+
+float3 Pos(uint i) { return asfloat(_Verts.Load3(i * _Layout.x)); }
+float4 Attr(uint i, uint off) { return asfloat(_Verts.Load4(i * _Layout.x + off)); }
+
+[numthreads(64, 1, 1)]
+void Scatter(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Layout.w) return;
+    uint3 ix = _Indices.Load3(id.x * 12);
+    float3 a = Pos(ix.x), b = Pos(ix.y), c = Pos(ix.z);
+    float3 ctr = (a + b + c) / 3;
+    float rad = sqrt(max(max(dot(a - ctr, a - ctr), dot(b - ctr, b - ctr)), dot(c - ctr, c - ctr)));
+    float reach = _GrassA.z, near = _GrassA.y, hMax = _GrassB.y;
+    float dc = distance(ctr, _Eye.xyz);
+    if (dc - rad > reach || Outside(ctr, rad + hMax)) return;
+    float3 cr = cross(b - a, c - a);
+    float area2 = length(cr);
+    if (area2 < 1e-6) return;
+    float3 fn = cr / area2;
+    fn *= fn.y < 0 ? -1 : 1;
+    if (fn.y < 0.05 || sqrt(max(0, 1 - fn.y * fn.y)) / fn.y > _GrassA.w) return;
+    float keepTri = min(1, near * near / max((dc - rad) * (dc - rad), 1e-4));
+    float cand = 0.5 * area2 * _GrassA.x;
+    uint count = (uint)cand + (Rand(int3(round(ctr.xz * 16), 0), 15) < frac(cand) ? 1u : 0u);
+    float4 ca = Attr(ix.x, _Layout.y), cb = Attr(ix.y, _Layout.y), cc = Attr(ix.z, _Layout.y);
+    float4 sa = Attr(ix.x, _Layout.z), sb = Attr(ix.y, _Layout.z), sc = Attr(ix.z, _Layout.z);
+    float2 o2 = TmOrigin(_Eye.xyz);
+    tmO = float3(o2.x, 0, o2.y);
+    int2 key = int2(round(ctr.xz * 16));
+    for (uint k = 0; k < count; k++)
+    {
+        int3 cell = int3(key, k);
+        float rank = Rand(cell, 0);
+        if (rank >= keepTri) continue;
+        float u = Rand(cell, 1), v = Rand(cell, 2);
+        if (u + v > 1) { u = 1 - u; v = 1 - v; }
+        float w = 1 - u - v;
+        float3 p = a * w + b * u + c * v;
+        if (p.y < 0.3) continue;
+        float d = distance(p, _Eye.xyz);
+        float keep = min(1, near * near / max(d * d, 1e-4));
+        if (d > reach || rank >= keep || Outside(p, hMax)) continue;
+        float2 xa = p.xz;
+        float4 col = ca * w + cb * u + cc * v;
+        float4 st = sa * w + sb * u + sc * v;
+        float3 color = col.rgb, n = fn;
+        float mix = st.y, f = saturate(st.z);
+        if (f > 0)
+        {
+            float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xa * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).rg;
+            float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xa * _StabbyFieldUV.z + _StabbyFieldUV.w, 0);
+            float3 gn = normalize(float3(-sl.x, 1, -sl.y));
+            float slope = sqrt(max(0, 1 - gn.y * gn.y)) / max(gn.y, 0.05), shoreF = saturate(1 - p.y / 6);
+            color = lerp(color, ToLinear(bo.rgb), f);
+            mix = lerp(mix, saturate((slope - 0.25) / 0.35) * (1 - shoreF), f);
+            n = normalize(lerp(n, gn, f));
+        }
+        float jn = TmNoise2(xa * 0.27 + 41.7).x;
+        float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+        float shore = smoothstep(5.5, 2.5, p.y);
+        cw = lerp(cw, float4(0, 0, 1, 0), shore);
+        cw = saturate(cw * (1 + 0.8 * (1 - shore) * float4(jn, -jn, jn * 0.5, -jn)));
+        cw /= max(dot(cw, 1), 1e-3);
+        float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.3 * jn);
+        float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
+        float gw = cw.x * (1 - m) * up;
+        float cmin = _GrassB.w;
+        if (gw <= cmin + (1 - cmin) * Rand(cell, 3)) continue;
+        float fp = max(d * _Eye.w, 1e-4);
+        float3 root = color;
+        [branch] if (_StabbyDetailOff <= 0)
+        {
+            TmOut g = TmGrass(float3(p.x - tmO.x, p.y, p.z - tmO.z), color, fp, _StabbyCoatA[0], _StabbyCoatB[0]);
+            root = lerp(color, g.albedo, up);
+        }
+        float fadeOut = smoothstep(reach, 0.7 * reach, d);
+        float grow = saturate((keep - rank) / (0.3 * keep));
+        float hgt = lerp(_GrassB.x, hMax, Rand(cell, 4)) * saturate(0.4 + gw) * fadeOut * grow;
+        if (hgt < 0.01) continue;
+        float wid = _GrassB.z * pow(max(d / near, 1), 0.7);
+        uint old;
+        _Args.InterlockedAdd(0, 21, old);
+        uint slot = old / 21;
+        if (slot >= (uint)_GrassC.y) continue;
+        Blade bl;
+        bl.p0 = float4(p, hgt);
+        bl.p1 = float4(Rand(cell, 5) * 6.2831853, wid, Rand(cell, 6), col.a);
+        bl.p2 = float4(root, fadeOut);
+        bl.p3 = float4(n, 0);
+        _Blades[slot] = bl;
+    }
+}

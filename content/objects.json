@@ -57,5 +57,9 @@
       "parts": [ { "id": "stump", "shape": "stump", "scale": [1, 0.9, 1] } ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 4, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
     }
-  ]
+  ],
+  "foliage": {
+    "wind": { "directionDeg": 60, "strength": 0.35, "gustStrength": 0.5, "gustScaleM": 24, "gustSpeed": 6, "swayHz": 0.9 },
+    "grass": { "perM2": 48, "nearM": 6, "reachM": 45, "heightMinM": 0.25, "heightMaxM": 0.6, "widthM": 0.035, "bend": 0.35, "tipLight": 0.45, "translucency": 0.35, "coatMin": 0.35, "slopeMax": 0.7, "maxBlades": 262144 }
+  }
 }

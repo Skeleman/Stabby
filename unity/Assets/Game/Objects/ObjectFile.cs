@@ -18,7 +18,15 @@ namespace Stabby.Game
         }
         [Serializable] class Density { public string biome; public float scale = 1f; }
         [Serializable] class Obj { public string id, name, kind, color = "#ff00ff"; public int variants = 1; public Part[] parts; public Place placement; }
-        [Serializable] class Dto { public int schemaVersion; public Kind[] kinds; public Obj[] objects; }
+        [Serializable] class Wind { public float directionDeg = 60f, strength = 0.35f, gustStrength = 0.5f, gustScaleM = 24f, gustSpeed = 6f, swayHz = 0.9f; }
+        [Serializable] class Grass
+        {
+            public float perM2 = 48f, nearM = 6f, reachM = 45f, heightMinM = 0.25f, heightMaxM = 0.6f, widthM = 0.035f;
+            public float bend = 0.35f, tipLight = 0.45f, translucency = 0.35f, coatMin = 0.35f, slopeMax = 0.7f;
+            public int maxBlades = 262144;
+        }
+        [Serializable] class Foliage { public Wind wind = new Wind(); public Grass grass = new Grass(); }
+        [Serializable] class Dto { public int schemaVersion; public Kind[] kinds; public Obj[] objects; public Foliage foliage = new Foliage(); }
 
         public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "objects.json"));
 
@@ -66,6 +74,17 @@ namespace Stabby.Game
                 foreach (var bd in pl.biomeDensity ?? Array.Empty<Density>()) def.Placement.BiomeDensity.Add(new BiomeDensity { Biome = bd.biome, Scale = bd.scale });
                 lib.Objects.Add(def);
             }
+            var w = dto.foliage?.wind ?? new Wind();
+            var g = dto.foliage?.grass ?? new Grass();
+            lib.Foliage = new FoliageDef
+            {
+                Wind = new WindDef { DirectionDeg = w.directionDeg, Strength = w.strength, GustStrength = w.gustStrength, GustScaleM = w.gustScaleM, GustSpeed = w.gustSpeed, SwayHz = w.swayHz },
+                Grass = new GrassDef
+                {
+                    PerM2 = g.perM2, NearM = g.nearM, ReachM = g.reachM, HeightMinM = g.heightMinM, HeightMaxM = g.heightMaxM, WidthM = g.widthM,
+                    Bend = g.bend, TipLight = g.tipLight, Translucency = g.translucency, CoatMin = g.coatMin, SlopeMax = g.slopeMax, MaxBlades = g.maxBlades,
+                },
+            };
             errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
             if (errors.Count > 0) throw new InvalidDataException("objects.json: " + string.Join("; ", errors));
             return lib;

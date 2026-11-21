@@ -174,6 +174,19 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
+                if (phase == 8)
+                {
+                    GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
+                    GrassViewSystem.Paused = true;
+                    GameStatus.Lines["~bench grass off"] = Bench(cam, "grass close-up without blades");
+                    GrassViewSystem.Paused = false;
+                    var gf = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                    var gp = cam.transform.position;
+                    gp.y = GroundHeight(gp.x, gp.z) + 1.7f;
+                    cam.transform.SetPositionAndRotation(gp, Quaternion.LookRotation(gf - new Vector3(0, 0.12f, 0)));
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "grass-fade");
+                }
                 wait = 0;
                 phase++;
             }

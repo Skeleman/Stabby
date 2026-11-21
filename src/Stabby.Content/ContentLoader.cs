@@ -225,6 +225,41 @@ public static class ContentLoader
         public int SchemaVersion { get; set; }
         public List<KindEntry> Kinds { get; set; } = new();
         public List<ObjectEntry> Objects { get; set; } = new();
+        public FoliageEntry? Foliage { get; set; }
+    }
+
+    sealed class FoliageEntry
+    {
+        public WindEntry Wind { get; set; } = new();
+        public GrassEntry Grass { get; set; } = new();
+    }
+
+    sealed class WindEntry
+    {
+        static readonly WindDef D = new();
+        public float DirectionDeg { get; set; } = D.DirectionDeg;
+        public float Strength { get; set; } = D.Strength;
+        public float GustStrength { get; set; } = D.GustStrength;
+        public float GustScaleM { get; set; } = D.GustScaleM;
+        public float GustSpeed { get; set; } = D.GustSpeed;
+        public float SwayHz { get; set; } = D.SwayHz;
+    }
+
+    sealed class GrassEntry
+    {
+        static readonly GrassDef D = new();
+        public float PerM2 { get; set; } = D.PerM2;
+        public float NearM { get; set; } = D.NearM;
+        public float ReachM { get; set; } = D.ReachM;
+        public float HeightMinM { get; set; } = D.HeightMinM;
+        public float HeightMaxM { get; set; } = D.HeightMaxM;
+        public float WidthM { get; set; } = D.WidthM;
+        public float Bend { get; set; } = D.Bend;
+        public float TipLight { get; set; } = D.TipLight;
+        public float Translucency { get; set; } = D.Translucency;
+        public float CoatMin { get; set; } = D.CoatMin;
+        public float SlopeMax { get; set; } = D.SlopeMax;
+        public int MaxBlades { get; set; } = D.MaxBlades;
     }
 
     sealed class KindEntry
@@ -332,6 +367,25 @@ public static class ContentLoader
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);
+        }
+        if (file.Foliage != null)
+        {
+            var g = file.Foliage.Grass;
+            var w = file.Foliage.Wind;
+            lib.Foliage = new FoliageDef
+            {
+                Wind = new WindDef
+                {
+                    DirectionDeg = w.DirectionDeg, Strength = w.Strength, GustStrength = w.GustStrength,
+                    GustScaleM = w.GustScaleM, GustSpeed = w.GustSpeed, SwayHz = w.SwayHz,
+                },
+                Grass = new GrassDef
+                {
+                    PerM2 = g.PerM2, NearM = g.NearM, ReachM = g.ReachM, HeightMinM = g.HeightMinM, HeightMaxM = g.HeightMaxM,
+                    WidthM = g.WidthM, Bend = g.Bend, TipLight = g.TipLight, Translucency = g.Translucency,
+                    CoatMin = g.CoatMin, SlopeMax = g.SlopeMax, MaxBlades = g.MaxBlades,
+                },
+            };
         }
         errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
