@@ -139,16 +139,19 @@ Shader "Stabby/Water"
                 {
                     float2 fp = i.positionWS.xz * 0.35;
                     float lace = 0.5 + Noise(mul(Turn, fp) + float2(t * 0.3, -t * 0.2)).x + 0.5 * Noise(mul(fp, Turn) * 2.7 - float2(t * 0.4, t * 0.1)).x;
-                    lace = lerp(0.6, lace, saturate(2 - dist / 250));
-                    float surf = 0.5 + 0.5 * sin(6.2832 * (shore / max(wv.w * 0.5, 0.01) + _Time.y * 0.15) + lace * 6);
+                    float fine = Noise(mul(Turn, fp) * 7.3 + float2(t * 0.5, t * 0.7)).x;
+                    lace = lerp(0.6, lace + 0.35 * fine * saturate(2 - dist / 120), saturate(2 - dist / 250));
+                    float surf = 0.5 + 0.5 * sin(6.2832 * (shore / max(wv.w * 0.5, 0.01) + _Time.y * 0.15) + lace * 1.5);
                     float b = band * band * (3 - 2 * band);
-                    foam = smoothstep(0.3, 0.9, b * lace) + 0.3 * b * surf * surf * lace;
+                    float broad = 0.8 + 0.5 * Noise(mul(fp, Turn) * 0.23 + 3.7).x;
+                    float rim = smoothstep(0.5 - 0.3 * saturate(lace * broad - 0.3), 0.85, band);
+                    foam = max(rim * (0.8 + 0.4 * fine), smoothstep(0.35, 0.95, b * lace * broad)) + 0.3 * b * surf * surf * saturate(lace - 0.4);
                     foam = max(foam, rapids * smoothstep(0.55, 1.05, lace));
                 }
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
                 float alpha = lerp(lerp(0.8, 0.97, k), 1, fres * 0.6) * saturate(depth * _StabbyWaterShallow.w);
-                alpha = saturate(max(alpha, foam * 0.7 * saturate(depth / 0.05)));
+                alpha = saturate(max(alpha, foam * 0.7 * saturate(depth / 0.15)));
                 float3 sand = _StabbySand.rgb;
                 sand = sand <= 0.04045 ? sand / 12.92 : pow((sand + 0.055) / 1.055, 2.4);
                 float3 floorC = sand * lerp(0.62, 0.45, saturate(depth / 30)) * (l.color * saturate(l.direction.y) + lerp(_StabbyGround.rgb, sky, 0.75));
