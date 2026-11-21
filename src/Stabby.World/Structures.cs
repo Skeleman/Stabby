@@ -109,7 +109,8 @@ namespace Stabby.World
                     foreach (int i in idx) b.I.Add(first + i);
                 }
                 if (p.M > 0) Grain(p, out tv, out th);
-                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : tl); }
+                if (p.M == Thatch) tl = (float)(Math.Round((p.Q + 0.05 + 0.9 * tl) * 32) / 4194304.0);
+                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(p.M == Thatch ? tl + StrawFace(p, u, v - before) : tl); }
             }
             starts.Add(b.P.Count / 3);
             var mesh = b.Finish();
