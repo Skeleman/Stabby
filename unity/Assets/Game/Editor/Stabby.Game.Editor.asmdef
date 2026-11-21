@@ -10,7 +10,8 @@
         "Unity.Mathematics",
         "Unity.Transforms",
         "Unity.NetCode",
-        "Unity.Burst"
+        "Unity.Burst",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": ["Editor"],
     "autoReferenced": true

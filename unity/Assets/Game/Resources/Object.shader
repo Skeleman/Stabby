@@ -172,7 +172,15 @@ Shader "Stabby/Object"
                 float above = max(wp.y - fade.z, 0), size = max(fade.w, 0.1);
                 float ao = lerp(0.72, 1, smoothstep(0, min(0.12, 0.2 * size), above)) * lerp(0.75, 1, smoothstep(0, min(0.9, 0.6 * size), above)) * lerp(1, 0.5, saturate(-n.y));
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp));
-                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
+                float3 bounce = _StabbyGround.rgb;
+                [branch] if (_StabbyFieldUV.z > 0)
+                {
+                    float3 gc = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
+                    gc = lerp(gc, ToLinear(_StabbySand.rgb), smoothstep(6, 2, fade.z));
+                    float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
+                    bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
+                }
+                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
                 float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + ambient * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao;
                 return half4(MixFog(c, i.fog), 1);
             }
