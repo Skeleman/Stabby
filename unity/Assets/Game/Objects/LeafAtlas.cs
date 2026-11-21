@@ -294,10 +294,6 @@ namespace Stabby.Game
                 if (level > 0)
                 {
                     int m = n / 2;
-                    var r2 = new float[m * m];
-                    var g2 = new float[m * m];
-                    var b2 = new float[m * m];
-                    var a2 = new float[m * m];
                     for (int y = 0; y < m; y++)
                         for (int x = 0; x < m; x++)
                         {
@@ -309,9 +305,9 @@ namespace Stabby.Game
                                 sa += a[i]; sr += r[i] * a[i]; sg += g[i] * a[i]; sb += b[i] * a[i];
                             }
                             float inv = sa > 1e-5f ? 1f / sa : 0;
-                            r2[o] = sr * inv; g2[o] = sg * inv; b2[o] = sb * inv; a2[o] = sa * 0.25f;
+                            r[o] = sr * inv; g[o] = sg * inv; b[o] = sb * inv; a[o] = sa * 0.25f;
                         }
-                    r = r2; g = g2; b = b2; a = a2; n = m;
+                    n = m;
                 }
                 var px = new Color32[n * n];
                 int across = ObjectFoliage.CellsAcross, cellN = Math.Max(1, n / across);
