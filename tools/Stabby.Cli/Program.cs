@@ -18,13 +18,13 @@ switch (args.FirstOrDefault())
     case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 2048] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
 int Gen()
 {
-    var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "2048"), CultureInfo.InvariantCulture));
+    var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "512"), CultureInfo.InvariantCulture));
     WorldSketch? sketch = null;
     if (opts.TryGetValue("sketch", out var sketchPath))
         sketch = SketchFile.Read(File.ReadAllText(sketchPath), c);
@@ -65,7 +65,7 @@ int Gen()
 
 int Bake()
 {
-    var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "2048"), CultureInfo.InvariantCulture));
+    var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "512"), CultureInfo.InvariantCulture));
     var path = Opt("out", Path.Combine("out", "maps", $"seed{c.Seed}-{c.Size}.stabbymap"));
     var sw = Stopwatch.StartNew();
     var w = WorldGenerator.Generate(c, biomes, materials, null, null, objects);

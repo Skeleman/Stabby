@@ -8,8 +8,8 @@ namespace Stabby.World
 
         public ulong Seed = 1;
         public const float MapMeters = 23040f;
-        public int Size = 2048;
-        public float CellMeters = MapMeters / 2048;
+        public int Size = 512;
+        public float CellMeters = MapMeters / 512;
         public static float CellMetersFor(int size) => MapMeters / size;
 
         public int Landmasses = 2;

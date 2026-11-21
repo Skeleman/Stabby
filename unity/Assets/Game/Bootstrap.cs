@@ -30,7 +30,7 @@ namespace Stabby.Game
         public const string PortVariable = "STABBY_PORT";
         public static ushort ActivePort => ushort.TryParse(System.Environment.GetEnvironmentVariable(PortVariable), out var p) && p != 0 ? p : Port;
         public const ulong Seed = 3;
-        public const int Size = 2048;
+        public const int Size = 512;
         public const int PieceBytes = 1000;
         public const int PiecesPerTick = 24;
         public const float WalkSpeed = 6f;

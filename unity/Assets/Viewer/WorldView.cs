@@ -12,7 +12,7 @@ namespace Stabby.Viewer
     public sealed class WorldView : MonoBehaviour
     {
         public int Seed = 4;
-        public int Size = 2048;
+        public int Size = 512;
         public int ChunkCells = 32;
         public Material Material;
         public float TargetQuadScreen = 0.01f;

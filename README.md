@@ -14,8 +14,8 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 | Command | Does |
 |---|---|
-| `gen --seed N [--size 2048] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
-| `bake --seed N [--size 2048] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
+| `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
+| `bake --seed N [--size 512] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
 | `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings, `--checks 0` times generation alone |
 | `scenarios [--out out/scenarios] [--scan 100]` | Generates each named acceptance scenario and writes a review sheet with the witness marked; `--scan` lists which seeds show each one |
 
@@ -26,7 +26,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 - `--rain mm` stops after terrain and hydrology with uniform rainfall: no
   climate, no biomes. Useful for isolating erosion and rivers.
 - `--size` changes resolution, not extent: every size spans about 23 km
-  (default 2048 cells of 11.25 m); smaller sizes use coarser cells. Above
+  (default 512 cells of 45 m); smaller sizes use coarser cells. Above
   `ErosionSize` (512) erosion runs coarse-to-fine: all but `FineSteps` (8)
   steps on the 512 grid, then the rest at full resolution.
 - `--scale` sets PNG pixels per cell (default 3 at 256 and below, 2 at 512, 1 above).
@@ -58,8 +58,8 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 `sweep --jobs 1` (one seed at a time; stages use all cores), Release, generator 32. CI (`.github/workflows/ci.yml`)
 runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 512` on every push.
-256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0`. At generator 38, 2048 (the
-default) sweeps at about 5.2 s median idle (16 seeds, checks about 24 s) and 4096 at about 29 s median with
+256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0`. At generator 38, 2048 (opt-in)
+sweeps at about 5.2 s median idle (16 seeds, checks about 24 s) and 4096 at about 29 s median with
 checks about 64 s (3 seeds). Total excludes checks. Peak working set is about 0.8 GB at 2048 and 2.7 GB at 4096.
 
 | Stage | 256 (median ms / MB) | 512 (median ms / MB) | 1024 (median ms / MB) | 2048 (median ms / MB) | 4096 (ms / MB) |
@@ -115,9 +115,9 @@ Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seed
 ## Unity game prototype
 
 `Assets/Scenes/Game.unity` runs a host and two clients in one process with
-Netcode for Entities. The host loads `out/maps/seed<N>-2048.stabbymap`
+Netcode for Entities. The host loads `out/maps/seed<N>-512.stabbymap`
 (`WorldFile`: raw chunks, rebuilt with `Relink`, about 25 ms) instead of generating
-(about 6 s at 2048 in Unity; the file loads in about 0.5 s). If the file is missing, from another generator version or
+(about 4 s in Unity at 512, 6 s at 2048; the file loads in about 0.5 s at 2048). If the file is missing, from another generator version or
 older than `content/biomes.json`, the host generates and saves it, so run
 `stabby bake` after generator changes or let the first run rebake. `Client1`
 loads the same file, compares chunk checksums and streams the chunks that differ
