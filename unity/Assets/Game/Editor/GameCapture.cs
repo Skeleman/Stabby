@@ -110,7 +110,13 @@ namespace Stabby.Game.Editor
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
                 var focus = cam.transform.position + cam.transform.forward * 24f;
-                cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
+                var eye = focus + new Vector3(-30, 28, -38);
+                for (int k = 0; k < 8; k++)
+                {
+                    var at = Vector3.Lerp(eye, focus, k / 8f);
+                    eye.y += Mathf.Max(0f, GroundHeight(at.x, at.z) + 10f - at.y) / (1f - k / 8f);
+                }
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(focus - eye));
                 Shot(cam, dir, "overhead");
                 var fwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
                 cam.transform.SetPositionAndRotation(home + new Vector3(0, 90, 0), Quaternion.LookRotation(fwd - new Vector3(0, 0.25f, 0)));
@@ -272,6 +278,16 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static float GroundHeight(float x, float z)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (q.CalculateEntityCount() == 1) return q.GetSingleton<Ground>().HeightAt(x, z);
+            }
+            return float.NegativeInfinity;
         }
 
         static bool Aim(Camera cam, int shape, bool inside, bool undercut)

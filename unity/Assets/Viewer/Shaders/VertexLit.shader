@@ -58,7 +58,7 @@ Shader "Stabby/VertexLit"
                 o.normalWS = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));
                 o.color = lerp(i.color, i.stitchColor, t);
                 o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y, i.strata.z);
-                o.xz = p.positionWS.xz;
+                o.xz = p.positionWS.xz - TmOrigin(_WorldSpaceCameraPos);
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 return o;
             }
@@ -70,15 +70,16 @@ Shader "Stabby/VertexLit"
                 float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w);
                 if (f > 0)
                 {
-                    float2 sl = SAMPLE_TEXTURE2D(_StabbySlope, sampler_StabbySlope, i.xz * _StabbyFieldUV.x + _StabbyFieldUV.y).rg;
-                    float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, i.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0);
+                    float2 xa = i.xz + TmOrigin(_WorldSpaceCameraPos);
+                    float2 sl = SAMPLE_TEXTURE2D(_StabbySlope, sampler_StabbySlope, xa * _StabbyFieldUV.x + _StabbyFieldUV.y).rg;
+                    float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xa * _StabbyFieldUV.z + _StabbyFieldUV.w, 0);
                     float3 fn = normalize(float3(-sl.x, 1, -sl.y)), fc;
                     float fr = 0;
                     if (h <= 0) fc = ToLinear(lerp(_StabbySand.rgb, _StabbySand.rgb * 0.6, saturate(-h / 30)));
                     else
                     {
                         float slope = sqrt(max(0, 1 - fn.y * fn.y)) / max(fn.y, 0.05), shore = saturate(1 - h / 6);
-                        fc = ToLinear(lerp(bo.rgb, _StabbySand.rgb, shore));
+                        fc = ToLinear(bo.rgb);
                         fr = saturate((slope - 0.25) / 0.35) * (1 - shore);
                     }
                     n = normalize(lerp(n, fn, f));
