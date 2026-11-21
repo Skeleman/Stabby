@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Stabby.World;
 using Unity.Mathematics;
 using UnityEngine;
@@ -12,11 +14,21 @@ namespace Stabby.Viewer
         public float PeriodM;
     }
 
+    public sealed class FieldLook
+    {
+        public int Res, N;
+        public float TexelM, CellM;
+        public ushort[][] Slopes;
+        public ushort[] Biome;
+    }
+
     public static class TerrainLook
     {
         public const float BandStepM = 0.25f;
 
-        static Texture2D strataTexture;
+        public const int FieldTexelsPerCell = 4, FieldMax = 2048;
+
+        static Texture2D strataTexture, slopeTexture, biomeTexture;
 
         public static float3 Sea => new float3(0.16f, 0.36f, 0.55f);
         public static float3 Lake => new float3(0.22f, 0.47f, 0.68f);
@@ -63,6 +75,73 @@ namespace Stabby.Viewer
             for (int i = 0; i < colors.Length; i++)
                 colors[i] = w.Sea[i] ? Sand : Unpack(w.Biome != null && w.Biome[i] >= 0 ? defs[w.Biome[i]].Color : 0x8DAA5Eu);
             return colors;
+        }
+
+        public static FieldLook Field(TerrainDetail detail, int n, float cm, float3[] colors, float[] offsets)
+        {
+            int res = Math.Min(FieldMax, (n - 1) * FieldTexelsPerCell + 1);
+            float tc = (n - 1f) / (res - 1), tm = tc * cm;
+            var h = new float[res * res];
+            Parallel.For(0, res, k => { for (int i = 0; i < res; i++) h[k * res + i] = detail.HeightAt(i * tc, k * tc); });
+            var level = new float2[res * res];
+            Parallel.For(0, res, k =>
+            {
+                int k0 = Math.Max(k - 1, 0), k1 = Math.Min(k + 1, res - 1);
+                for (int i = 0; i < res; i++)
+                {
+                    int i0 = Math.Max(i - 1, 0), i1 = Math.Min(i + 1, res - 1);
+                    level[k * res + i] = new float2((h[k * res + i1] - h[k * res + i0]) / ((i1 - i0) * tm), (h[k1 * res + i] - h[k0 * res + i]) / ((k1 - k0) * tm));
+                }
+            });
+            var mips = new List<ushort[]>();
+            for (int size = res, prev = res; ; prev = size, size = Math.Max(1, size >> 1))
+            {
+                if (size != prev)
+                {
+                    int p = prev, cur = size;
+                    var src = level;
+                    var dst = new float2[cur * cur];
+                    Parallel.For(0, cur, k =>
+                    {
+                        int k0 = Math.Min(2 * k, p - 1), k1 = Math.Min(2 * k + 1, p - 1);
+                        for (int i = 0; i < cur; i++)
+                        {
+                            int i0 = Math.Min(2 * i, p - 1), i1 = Math.Min(2 * i + 1, p - 1);
+                            dst[k * cur + i] = 0.25f * (src[k0 * p + i0] + src[k0 * p + i1] + src[k1 * p + i0] + src[k1 * p + i1]);
+                        }
+                    });
+                    level = dst;
+                }
+                var px = new ushort[level.Length * 2];
+                for (int q = 0; q < level.Length; q++) { px[2 * q] = (ushort)math.f32tof16(level[q].x); px[2 * q + 1] = (ushort)math.f32tof16(level[q].y); }
+                mips.Add(px);
+                if (size == 1) break;
+            }
+            var biome = new ushort[n * n * 4];
+            for (int q = 0; q < n * n; q++)
+            {
+                biome[4 * q] = (ushort)math.f32tof16(colors[q].x);
+                biome[4 * q + 1] = (ushort)math.f32tof16(colors[q].y);
+                biome[4 * q + 2] = (ushort)math.f32tof16(colors[q].z);
+                biome[4 * q + 3] = (ushort)math.f32tof16(offsets[q]);
+            }
+            return new FieldLook { Res = res, N = n, TexelM = tm, CellM = cm, Slopes = mips.ToArray(), Biome = biome };
+        }
+
+        public static void ApplyField(FieldLook f)
+        {
+            if (slopeTexture != null) UnityEngine.Object.Destroy(slopeTexture);
+            if (biomeTexture != null) UnityEngine.Object.Destroy(biomeTexture);
+            slopeTexture = new Texture2D(f.Res, f.Res, TextureFormat.RGHalf, f.Slopes.Length, true) { name = "Slopes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
+            for (int m = 0; m < f.Slopes.Length; m++) slopeTexture.SetPixelData(f.Slopes[m], m);
+            slopeTexture.Apply(false, true);
+            biomeTexture = new Texture2D(f.N, f.N, TextureFormat.RGBAHalf, false, true) { name = "Biomes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            biomeTexture.SetPixelData(f.Biome, 0);
+            biomeTexture.Apply(false, true);
+            Shader.SetGlobalTexture("_StabbySlope", slopeTexture);
+            Shader.SetGlobalTexture("_StabbyBiome", biomeTexture);
+            Shader.SetGlobalVector("_StabbyFieldUV", new Vector4(1f / (f.TexelM * f.Res), 0.5f / f.Res, 1f / (f.CellM * f.N), 0.5f / f.N));
+            Shader.SetGlobalVector("_StabbySand", new Vector4(Sand.x, Sand.y, Sand.z, 0));
         }
 
         public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib)

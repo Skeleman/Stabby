@@ -30,7 +30,7 @@ namespace Stabby.Game
     {
         public float3 Pos, Normal;
         public float4 Color;
-        public float2 Strata;
+        public float4 Strata;
         public float4 Stitch;
         public half4 StitchNormal, StitchColor;
     }
@@ -121,6 +121,16 @@ namespace Stabby.Game
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
 
+        float Cover(NativeEdits edits, float3 p, float gx, float gy)
+        {
+            for (int q = 0; q < edits.Count; q++)
+            {
+                var e = edits.Items[q];
+                if (p.x >= e.MinX && p.x <= e.MaxX && p.z >= e.MinZ && p.z <= e.MaxZ) return Ground.GridHeight(gx, gy) - p.y;
+            }
+            return 0;
+        }
+
         public void Execute()
         {
             ref var g = ref Ground.Blob.Value;
@@ -183,16 +193,16 @@ namespace Stabby.Game
                 int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
                 float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
-                float cover = Ground.GridHeight(gx, gy) - p.Pos.y;
+                float cover = Cover(edits, p.Pos, gx, gy), lift = math.smoothstep(2f, 6f, math.abs(cover));
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover));
-                p.Strata = new float2(off, math.max(col.w, math.smoothstep(2f, 6f, math.abs(cover))));
+                p.Strata = new float4(off, math.max(col.w, lift), 1 - lift, 0);
                 if (p.Stitch.w != 0)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
                     float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
-                    float sCover = Ground.GridHeight(sx, sz) - p.Stitch.y;
+                    float sCover = Cover(near, p.Stitch.xyz, sx, sz);
                     p.StitchNormal = new half4(new float4(sn, math.max(sc.w, math.smoothstep(2f, 6f, math.abs(sCover)))));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover)));
                 }
@@ -315,6 +325,7 @@ namespace Stabby.Game
             public List<MeshParts> Lakes, Rivers;
             public MeshParts Sea;
             public StrataLook Strata;
+            public FieldLook Field;
         }
 
         struct Pending
@@ -414,6 +425,7 @@ namespace Stabby.Game
             p.Strata = TerrainLook.Strata(world, MaterialFile.Load(materials));
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
+            p.Field = TerrainLook.Field(detail, n, cm, colors, p.Strata.Offsets);
             return p;
         }
 
@@ -436,6 +448,7 @@ namespace Stabby.Game
             look = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
             prepared.Look.Dispose();
             TerrainLook.ApplyStrata(prepared.Strata);
+            TerrainLook.ApplyField(prepared.Field);
             Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.9f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.3f, 0.27f, 0.22f));
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
@@ -551,7 +564,7 @@ namespace Stabby.Game
             new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
             new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3),
             new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float16, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord3, VertexAttributeFormat.Float16, 4),
