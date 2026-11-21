@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "floor" ? 26 + BiomeShots.Length : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "floor" ? 26 + BiomeShots.Length : 1;
             }
             if (phase == 50)
             {
@@ -485,7 +485,24 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "biomes" || only == "beach" || only == "forest" || only == "river")
+            while (phase >= 140 && phase < 140 + WaterShots.Length)
+            {
+                string name = WaterShots[phase - 140];
+                if (wait == 0)
+                {
+                    if (!AimWater(cam, phase - 140)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 140) GameStatus.Lines["~bench water coast"] = Bench(cam, "water coast low");
+                if (phase == 145) GameStatus.Lines["~bench water far"] = Bench(cam, "water far sea");
+                wait = 0;
+                phase++;
+            }
+            if (only == "biomes" || only == "beach" || only == "forest" || only == "river" || only == "water")
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -663,7 +680,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static bool AimLake(Camera cam)
+        static bool AimLake(Camera cam, bool close = false)
         {
             foreach (var w in Unity.Entities.World.All)
             {
@@ -688,8 +705,9 @@ namespace Stabby.Game.Editor
                 if (edge < 0) return false;
                 var shore = new Vector2(edge % n * cm, edge / n * cm);
                 var dir = (mid - shore).sqrMagnitude > 1f ? (mid - shore).normalized : Vector2.right;
-                var eye = new Vector3(shore.x - dir.x * 25f, 0, shore.y - dir.y * 25f);
-                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), pick.Level) + 6f;
+                float back = close ? 7f : 25f;
+                var eye = new Vector3(shore.x - dir.x * back, 0, shore.y - dir.y * back);
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), pick.Level) + (close ? 1.8f : 6f);
                 var target = new Vector3(shore.x + dir.x * 60f, pick.Level, shore.y + dir.y * 60f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim lake"] = $"lake {pick.Id} ({pick.Cells.Count} cells) shore at {shore.x:F0},{shore.y:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
@@ -1232,6 +1250,22 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static readonly string[] WaterShots = { "coast-low", "beach-close", "beach-mid", "lake", "lake-close", "sea-far", "sea-low" };
+
+        static bool AimWater(Camera cam, int view)
+        {
+            switch (view)
+            {
+                case 0: return Coast(cam, 40f);
+                case 1: return AimBeach(cam, 0, false);
+                case 2: return AimBeach(cam, 0, true);
+                case 3: return AimLake(cam, false);
+                case 4: return AimLake(cam, true);
+                case 5: return FarCoast(cam, 1000f, 250f);
+                default: return FarCoast(cam, 260f, 9f);
+            }
         }
 
         static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };

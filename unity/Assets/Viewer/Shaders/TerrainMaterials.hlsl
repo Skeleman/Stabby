@@ -936,7 +936,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         o.albedo += c * lerp(bank * (1 + 0.1 * mr.x), k.albedo, up);
         o.grad += c * (up * k.grad + (1 - up) * ew * e.grad);
     }
-    scr *= 1 - lc;
+    scr *= (1 - lc) * (1 - 0.85 * fb);
     [branch] if (scr > 0.01)
     {
         float3 sm = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(0.5, 0.5), 12).rgb;
