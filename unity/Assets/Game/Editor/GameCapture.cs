@@ -1639,6 +1639,7 @@ namespace Stabby.Game.Editor
                 }
             }
             for (var d = BankDetails(cam, dir, ground); d.MoveNext();) yield return null;
+            for (var f = FallsTour(cam, dir, map, ground); f.MoveNext();) yield return null;
         }
 
         static readonly string[] BankShots = { "reeds", "river-gravel", "driftwood", "wet-stone" };
@@ -1695,6 +1696,40 @@ namespace Stabby.Game.Editor
                 for (int k = 0; k < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && k < 1800); k++) yield return null;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, "bank-" + id);
+            }
+        }
+
+        static System.Collections.IEnumerator FallsTour(Camera cam, string dir, GeneratedWorld map, Ground ground)
+        {
+            var best = default(Stabby.Viewer.FallCurtain);
+            bool found = false;
+            foreach (var l in NearField.Lines(map))
+                for (int k = 1; k < l.X.Length; k++)
+                    if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _) && (!found || f.Drop > best.Drop)) { best = f; found = true; }
+            if (!found) { GameStatus.Lines["~falls"] = "no falls found"; yield break; }
+            var fd = new Vector3(best.DirX, 0, best.DirZ);
+            var side = new Vector3(-fd.z, 0, fd.x);
+            var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
+            var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
+            float h = best.Drop, w = best.Width;
+            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}";
+            var eyes = new[]
+            {
+                foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
+                foot + fd * (4f * h + 40f) + side * (0.6f * w + 15f) + Vector3.up * (h + 10f),
+                foot + fd * (6f * h + 170f) + side * (w + 90f) + Vector3.up * (2f * h + 70f),
+            };
+            string[] names = { "falls-close", "falls-mid", "falls-far" };
+            var look = (lip + foot) * 0.5f;
+            for (int v = 0; v < 3; v++)
+            {
+                var eye = eyes[v];
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.8f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                for (var s = Settle(180); s.MoveNext();) yield return null;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, names[v]);
+                if (v == 0) GameStatus.Lines["~bench falls"] = Bench(cam, "falls close");
             }
         }
 
