@@ -4,6 +4,7 @@
     "references": [
         "Stabby.Game",
         "Stabby.World",
+        "Stabby.Viewer",
         "Unity.Entities",
         "Unity.Entities.Graphics",
         "Unity.Collections",

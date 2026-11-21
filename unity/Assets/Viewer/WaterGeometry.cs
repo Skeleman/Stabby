@@ -15,12 +15,26 @@ namespace Stabby.Viewer
         public int[] Tris;
     }
 
+    public struct FallCurtain
+    {
+        public int K;
+        public float LipX, LipZ, LipY;
+        public float BaseX, BaseZ, BaseY;
+        public float Width;
+        public float DirX, DirZ;
+        public float PoolRadius;
+        public float Discharge;
+        public float Drop => LipY - BaseY;
+    }
+
     public static class WaterGeometry
     {
         const int RiverPieceVertices = 16000;
         public const float RiverLift = 0.1f, LakeLift = 0.5f;
         const float SlopeRange = 0.1f;
         const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
+        public const float FallMinDrop = 0.3f;
+        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallPoolBase = 2f, FallPoolPerDrop = 1.8f, FallDischargePerArea = 2f;
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
         public static Mesh ToMesh(MeshParts d)
@@ -35,6 +49,30 @@ namespace Stabby.Viewer
             mesh.RecalculateBounds();
             return mesh;
         }
+
+        public static bool FallAt(RiverLine r, int k, out FallCurtain f, out float lipT)
+        {
+            f = default;
+            lipT = 0;
+            if (k < 1 || k >= r.X.Length || r.P[k] <= 0) return false;
+            float drop = r.S[k - 1] - r.S[k];
+            var d = new Vector2(r.X[k] - r.X[k - 1], r.Z[k] - r.Z[k - 1]);
+            if (drop < FallMinDrop || d.sqrMagnitude < 1e-6f) return false;
+            lipT = Mathf.Clamp((drop + FallMargin - r.D[k - 1] - r.P[k - 1]) / Mathf.Max(drop + r.P[k] - r.P[k - 1], 1e-3f), FallLipMin, FallLipMax);
+            d.Normalize();
+            float lx = Mathf.Lerp(r.X[k - 1], r.X[k], lipT), lz = Mathf.Lerp(r.Z[k - 1], r.Z[k], lipT), th = FallThrowAt(drop), w = Mathf.Lerp(r.W[k - 1], r.W[k], lipT);
+            f = new FallCurtain
+            {
+                K = k - 1, LipX = lx, LipZ = lz, LipY = r.S[k - 1] + RiverLift,
+                BaseX = lx + d.x * th, BaseZ = lz + d.y * th, BaseY = r.S[k] + RiverLift,
+                Width = 2 * Mathf.Max(w, 6f), DirX = d.x, DirZ = d.y,
+                PoolRadius = FallPoolBase + FallPoolPerDrop * drop,
+                Discharge = FallDischargePerArea * w * Mathf.Lerp(r.D[k - 1], r.D[k], lipT),
+            };
+            return true;
+        }
+
+        public static float FallThrowAt(float height) => FallThrow * Mathf.Sqrt(2 * Mathf.Max(height, 0) / 9.81f);
 
         public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells)
         {
