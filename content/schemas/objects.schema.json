@@ -120,7 +120,7 @@
                 "shadows": { "enum": ["", "on", "off"] },
                 "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
                 "leafColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-                "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped"] }
+                "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped", "worn"] }
               }
             }
           },
@@ -150,7 +150,7 @@
               "chainCorner": { "type": "number", "minimum": 0, "maximum": 1 },
               "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
-              "perHundredM": { "type": "number", "minimum": 0, "maximum": 400 },
+              "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "biomeDensity": {
                 "type": "array",
                 "items": {

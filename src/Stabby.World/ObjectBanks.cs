@@ -8,7 +8,7 @@ namespace Stabby.World
         public const int Reed = 0, Bar = 1, Drift = 2, Rapid = 3;
         public const float LakeShare = 0.5f, ReachPadM = 0.5f;
         public static readonly string[] Names = { "reed", "bar", "drift", "rapid" };
-        public static readonly float[] Below = { 0.4f, 0.15f, 0.3f, 1f }, Above = { 0.6f, 0.9f, 1.6f, 0.8f };
+        public static readonly float[] Below = { 0.4f, 0.15f, 0.5f, 1f }, Above = { 0.35f, 0.9f, 0.8f, 0.8f };
 
         public static int Of(string name) => Array.IndexOf(Names, name);
         public static bool InBand(int site, float rise) => rise >= -Below[site] && rise <= Above[site];
@@ -98,10 +98,10 @@ namespace Stabby.World
         {
             for (int m = 0; m < pl.ClusterCount; m++)
             {
-                float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), t = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f), turn = rng.NextFloat();
+                float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), t = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f), turn = rng.NextFloat(), keep = rng.NextFloat();
                 int variant = (int)(rng.NextU32() % (uint)lib.Objects[d].Variants);
                 float px = m == 0 ? ax : ax + ox * pl.ClusterRadiusM, pz = m == 0 ? az : az + oz * pl.ClusterRadiusM;
-                if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz) continue;
+                if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz || keep >= Density(d, px, pz)) continue;
                 float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t;
                 float ground = GroundAt(detail, cm, px, pz);
                 if (fx == 0 && fz == 0 ? !LakeSite(px, pz, ground) : !RiverSite(site, px, pz, ground, size)) continue;
@@ -134,9 +134,9 @@ namespace Stabby.World
             bool bar = inner > 0.3f && d < w + bank;
             switch (site)
             {
-                case BankSites.Reed: return rapid < 0.1f && plunge <= 0 && inner > 0.12f && d >= 0.75f * w && d <= w + 0.6f * bank;
+                case BankSites.Reed: return rapid < 0.1f && plunge <= 0 && inner > 0.12f && d >= 0.75f * w && d <= w + Math.Min(2f, 0.6f * bank);
                 case BankSites.Bar: return bar;
-                case BankSites.Drift: return bar || (inner < -0.3f && d >= w - 0.5f && d <= w + 1.5f);
+                case BankSites.Drift: return bar || (inner < -0.3f && d >= w - 1.5f && d <= w + 1.5f);
                 default: return ground - s >= -0.45f * size && d >= 0.6f * w && ((rapid > 0.3f && d < w + 1f) || (plunge > 0 && d < w + 1.5f));
             }
         }

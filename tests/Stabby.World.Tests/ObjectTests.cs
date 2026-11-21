@@ -166,6 +166,7 @@ public class ObjectTests
     [InlineData(ObjectPart.Log, ObjectPart.EndsTorn, 0.3f)]
     [InlineData(ObjectPart.Log, ObjectPart.EndsSawn, 0.11f)]
     [InlineData(ObjectPart.Log, ObjectPart.EndsRooted, 0.12f)]
+    [InlineData(ObjectPart.Log, ObjectPart.EndsWorn, 0.09f)]
     [InlineData(ObjectPart.Stump, ObjectPart.EndsAuto, 1.11f)]
     [InlineData(ObjectPart.Stump, ObjectPart.EndsSawn, 1.11f)]
     [InlineData(ObjectPart.Stump, ObjectPart.EndsSnapped, 0.5f)]

@@ -1662,15 +1662,18 @@ namespace Stabby.Game.Editor
                     if (sc > best) { best = sc; pick = a; }
                 }
                 float back = id == "driftwood" ? 5f + pick.Size : id == "reeds" ? 6.5f : 1.8f;
-                Vector3 eye = Vector3.zero;
-                float low = float.MaxValue;
+                Vector3 eye = Vector3.zero, shore = Vector3.zero;
+                float low = float.MaxValue, high = float.MinValue;
                 for (int a = 0; a < 8; a++)
                 {
                     var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
                     var e = new Vector3(pick.X, 0, pick.Z) + d * back;
                     float h = ground.HeightAt(e.x, e.z);
                     if (h < low) { low = h; eye = e; }
+                    if (h > high && h < pick.Y + 3f) { high = h; shore = e; }
                 }
+                bool landward = (id == "reeds" || id == "driftwood" || id == "river-gravel") && high > float.MinValue;
+                if (landward) { eye = shore; low = high; }
                 eye.y = Mathf.Max(low, pick.Y) + (id == "reeds" ? 2.4f : id == "driftwood" ? 1.6f : id == "wet-stone" ? 6f : 2.8f);
                 var look = new Vector3(pick.X, pick.Y + (id == "reeds" ? 0.6f * pick.Size : 0.2f), pick.Z);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
