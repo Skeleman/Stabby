@@ -174,9 +174,10 @@ namespace Stabby.Game
         public BlobAssetReference<T> Take()
         {
             handle.Complete();
-            builder.Dispose();
             var blob = result.Value;
             result.Dispose();
+            var b = builder;
+            Task.Run(() => b.Dispose());
             return blob;
         }
 

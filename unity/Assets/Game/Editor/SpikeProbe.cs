@@ -22,6 +22,8 @@ namespace Stabby.Game.Editor
         static float gcWorst;
         static string gcWorstAt = "";
         static ProfilerRecorder gcFrame;
+        static long heapSize;
+        static readonly List<string> heap = new List<string>();
 
         static readonly bool Record = Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
 
@@ -38,6 +40,9 @@ namespace Stabby.Game.Editor
             long gc = gcFrame.LastValue;
             if (GameStatus.TerrainBuilt) gcBuilt += gc; else gcBefore += gc;
             if (GameStatus.TerrainBuilt && !GameStatus.AfterTool) { gcPlay += gc; playFrames++; }
+            long h = Profiler.GetMonoHeapSizeLong();
+            if (h > heapSize && heap.Count < 30) heap.Add($"frame {frame} {System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency:F2} s: heap {heapSize / 1048576} -> {h / 1048576} MB, used {Profiler.GetMonoUsedSizeLong() / 1048576} MB");
+            heapSize = Math.Max(heapSize, h);
             int runs = GC.CollectionCount(0);
             bool collected = runs != gcRuns;
             gcRuns = runs;
@@ -64,7 +69,7 @@ namespace Stabby.Game.Editor
         static string Top(long[] ns) =>
             string.Join(", ", Enumerable.Range(0, recs.Count).Select(r => (recs[r].name, ms: ns[r] / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80).Select(r => $"{r.name} {r.ms:F0}"));
 
-        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections\nGC spikes: {gcSpikes} frames over {Limit:F0} ms with a collection or collect marker, worst collect marker {gcWorst:F0} ms at {gcWorstAt}\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
+        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections\nGC spikes: {gcSpikes} frames over {Limit:F0} ms with a collection or collect marker, worst collect marker {gcWorst:F0} ms at {gcWorstAt}\nheap growth:\n  {string.Join("\n  ", heap)}\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
 
         static float Arg()
         {
