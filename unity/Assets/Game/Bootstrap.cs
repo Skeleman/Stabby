@@ -16,7 +16,7 @@ namespace Stabby.Game
             }
             UnityEngine.Application.runInBackground = true;
             DefaultListenAddress = NetworkEndpoint.LoopbackIpv4;
-            AutoConnectPort = GameSettings.Port;
+            AutoConnectPort = GameSettings.ActivePort;
             CreateServerWorld("Server");
             foreach (var name in GameSettings.Clients) CreateClientWorld(name);
             return true;
@@ -27,6 +27,8 @@ namespace Stabby.Game
     {
         public const string Scene = "Game";
         public const ushort Port = 7979;
+        public const string PortVariable = "STABBY_PORT";
+        public static ushort ActivePort => ushort.TryParse(System.Environment.GetEnvironmentVariable(PortVariable), out var p) && p != 0 ? p : Port;
         public const ulong Seed = 3;
         public const int Size = 512;
         public const int PieceBytes = 1000;
