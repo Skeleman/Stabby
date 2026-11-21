@@ -92,7 +92,8 @@ architecture contract. The other steps fit the contract as it stands.
 | Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | next |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Water cost: fine wave octave skipped past its fade distance, foam noise skipped away from shores; GPU profile of water and terrain shaders at several resolutions and distances before more effects | now |
-| Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples (lane b/materials) | now |
+| Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples (`TerrainMaterials.hlsl`; detail branched on pixel footprint, +0.1 ms at 1080p mid view, up to +1 ms in a 4K rock close-up) | done |
+| Terrain surface pass 2: grass less saturated with crisp near grain instead of smeared bumps, rock sharper up close, dark shale band lighter, sand blotches, camera-relative coordinates for detail precision far from origin (lane b/materials-2) | now |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` (lane b/objects) | now |
 | Objects step 2: animated foliage with shader wind | later |
