@@ -99,13 +99,13 @@
     },
     {
       "id": "oak", "name": "Oak", "kind": "animated", "color": "#5f5446", "variants": 8,
-      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "leafColor": "#4d6a2b" } ],
+      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "leafColor": "#5d7242" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "wetland", "savanna"], "perHectare": 60, "slopeMax": 0.6, "sizeMinM": 7, "sizeMaxM": 16, "clusterCount": 4, "clusterRadiusM": 10, "sink": 0.02,
         "biomeDensity": [ { "biome": "temperate-rain", "scale": 0.4 }, { "biome": "wetland", "scale": 0.25 }, { "biome": "savanna", "scale": 0.08 } ] }
     },
     {
       "id": "rainforest-tree", "name": "Rainforest tree", "kind": "animated", "color": "#6d6352", "variants": 8,
-      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "scale": [1.15, 1, 1.15], "leafColor": "#3b6224" } ],
+      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "scale": [1.15, 1, 1.15], "leafColor": "#486434" } ],
       "placement": { "biomes": ["tropical-forest", "mangrove"], "perHectare": 70, "slopeMax": 0.7, "sizeMinM": 10, "sizeMaxM": 20, "clusterCount": 3, "clusterRadiusM": 10, "sink": 0.02,
         "biomeDensity": [ { "biome": "mangrove", "scale": 0.3 } ] }
     },
