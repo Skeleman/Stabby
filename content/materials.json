@@ -35,7 +35,7 @@
       "sand": {
         "biomes": ["desert", "cold-desert"],
         "bumpAmp": 0.035, "bumpWavelengthM": 6, "grainAmp": 0.15, "grainWavelengthM": 0.02,
-        "featureAmp": 0.5, "featureWavelengthM": 0.32, "parallax": 0.6, "albedoVar": 0.12
+        "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06
       },
       "snow": {
         "biomes": ["tundra"],

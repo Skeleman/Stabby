@@ -330,31 +330,18 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
     float2 pa = p + tmO.xz;
     float k0 = dot(tmO.xz, wind) * B.y + 0.3 * dot(tmO.xz, side) * B.y * 0.05;
     k0 -= floor(k0);
-    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(B.y * 3, fp), sharp = TmFade(B.y * 8, fp);
+    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(B.y * 6, fp);
     float3 warp = TmN2(pa * B.y * 0.12 + 13.1, calm);
-    float pk = B.z * calm * saturate(2 - fp * _StabbySurface.y);
-    if (pk > 0)
-    {
-        float nv = max(dot(v, n), 0.3);
-        float2 q = p;
-        for (int k = 0; k < 2; k++)
-        {
-            float s0 = dot(q, wind) * B.y + k0 + 1.5 * warp.x + 0.3 * dot(q, side) * B.y * 0.05, f0 = frac(s0);
-            float hq = B.x / B.y * (6.75 * f0 * f0 * (1 - f0) - 1);
-            q = p + v.xz * (hq * pk / nv);
-        }
-        p = q;
-    }
     float s = dot(p, wind) * B.y + k0 + 1.5 * warp.x + 0.3 * dot(p, side) * B.y * 0.05, fr = frac(s);
     float fm = fr * (1 - fr);
-    float prof = lerp(16 * fm * fm, 6.75 * fr * fm, sharp), dprof = lerp(32 * fm * (1 - 2 * fr), 6.75 * fr * (2 - 3 * fr), sharp);
     float2 ds = wind + 1.5 * warp.yz * 0.12 + 0.015 * side;
     float3 bump = TmFbm2(p, A.y, A.x, 2, fp);
     float fg = TmFade(A.w, fp);
     float3 grain = TmLN2(p, A.w, 2.9, fg);
-    float2 g = bump.yz + B.x * calm * dprof * ds + 0.3 * A.z * fg * grain.yz;
+    float3 patch = TmLN2(p, 0.15, 17.3, 1);
+    float2 g = bump.yz + B.x * calm * 32 * fm * (1 - 2 * fr) * ds + 0.3 * A.z * fg * grain.yz;
     float3 sand = lerp(base, ToLinear(_StabbySand.rgb), 0.5 + 0.5 * shore);
-    float3 c = sand * (1 + A.z * fg * grain.x) * (1 - B.w * calm * (1 - prof));
+    float3 c = sand * (1 + A.z * fg * grain.x) * (1 + B.w * patch.x);
     TmOut o;
     o.grad = float3(g.x, 0, g.y);
     o.albedo = c;
