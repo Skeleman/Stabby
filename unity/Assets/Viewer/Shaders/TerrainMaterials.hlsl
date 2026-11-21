@@ -338,7 +338,7 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
     float s = dot(p, wind) * B.y + k0 + 1.5 * warp.x + 0.3 * dot(p, side) * B.y * 0.05, fr = frac(s);
     float fm = fr * (1 - fr);
     float2 ds = wind + 1.5 * warp.yz * 0.12 + 0.015 * side;
-    float3 bump = TmFbm2(p, A.y, A.x, 2, fp);
+    float3 bump = TmFbm2(p, A.y, A.x, 3, fp);
     float fg = TmFade(A.w, fp);
     float3 grain = TmLN2(p, A.w, 2.9, fg);
     float3 patch = TmLN2(p, 0.15, 17.3, 1);

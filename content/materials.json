@@ -24,17 +24,17 @@
     "coats": {
       "grass": {
         "biomes": ["boreal", "steppe", "temperate-forest", "temperate-rain", "savanna", "tropical-forest", "wetland", "mangrove"],
-        "bumpAmp": 0.06, "bumpWavelengthM": 1.6, "grainAmp": 0.2, "grainWavelengthM": 0.07,
-        "featureAmp": 0.25, "featureWavelengthM": 0.5, "parallax": 0, "albedoVar": 0.08
+        "bumpAmp": 0.06, "bumpWavelengthM": 1.6, "grainAmp": 0.12, "grainWavelengthM": 0.07,
+        "featureAmp": 0.12, "featureWavelengthM": 0.8, "parallax": 0, "albedoVar": 0.08
       },
       "soil": {
         "biomes": ["shrubland", "alpine"],
-        "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.3, "grainWavelengthM": 0.05,
-        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.2
+        "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.15, "grainWavelengthM": 0.05,
+        "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.1
       },
       "sand": {
         "biomes": ["desert", "cold-desert"],
-        "bumpAmp": 0.035, "bumpWavelengthM": 6, "grainAmp": 0.15, "grainWavelengthM": 0.02,
+        "bumpAmp": 0.035, "bumpWavelengthM": 6, "grainAmp": 0.12, "grainWavelengthM": 0.02,
         "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06
       },
       "snow": {
