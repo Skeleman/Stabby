@@ -63,8 +63,8 @@ Shader "Stabby/Water"
                 return g;
             }
 
-            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; };
+            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; };
 
             Varyings vert(Attributes i)
             {
@@ -76,6 +76,8 @@ Shader "Stabby/Water"
                 o.color = i.color;
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 o.screen = ComputeScreenPos(p.positionCS);
+                o.chan = float4(i.chan, i.reach.xy);
+                o.along = i.reach.z;
                 return o;
             }
 
@@ -102,16 +104,47 @@ Shader "Stabby/Water"
                 float ripple = saturate(1.5 - fp * wv.x * (i.color.a >= 0.99 ? 4 : 1.6));
                 float2 flow = i.color.rg * 2 - 1;
                 float slope = i.color.b * SlopeRange;
-                float rapids = smoothstep(1, 2.25, slope * _StabbyWaterFlow.y);
-                float steep = smoothstep(0.3, 1.3, slope * _StabbyWaterFlow.y);
-                float2 g;
-                UNITY_BRANCH if (dot(flow, flow) > 0.01)
+                float plunge = i.chan.w * SlopeRange * _StabbyWaterFlow.y;
+                float white = max(smoothstep(1, 2.25, slope * _StabbyWaterFlow.y), 0.85 * smoothstep(0.9, 2.1, plunge));
+                float churn = max(smoothstep(0.3, 1.3, slope * _StabbyWaterFlow.y), 0.8 * smoothstep(0.3, 1.3, plunge));
+                bool river = i.chan.y > 0.5 && dot(flow, flow) > 0.01;
+                float2 fd = river ? normalize(flow) : float2(1, 0), sd = float2(fd.y, -fd.x);
+                float2 cw = float2(i.along, i.chan.x * i.chan.y);
+                float speed = _StabbyWaterFlow.x * (0.8 + 20 * slope);
+                float ph = frac(_Time.y / FlowPeriod), wab = abs(1 - 2 * ph);
+                float2 g, wg = 0;
+                float wl = 0;
+                UNITY_BRANCH if (river)
                 {
-                    float ph = frac(_Time.y / FlowPeriod);
-                    float2 drift = flow * (_StabbyWaterFlow.x * (0.8 + 20 * slope) * FlowPeriod * wv.x);
+                    float stretch = 1.4 + 1.8 * churn;
+                    float2 cq = cw * float2(1 / stretch, 1) * wv.x;
+                    cq.y += 0.35 * Noise(cq * float2(0.6, 0.3) + 9.1).x;
+                    float dr = speed * FlowPeriod * wv.x / stretch;
+                    float2 a = Waves(cq - float2(dr * ph, 0), t, fade);
+                    float2 b = Waves(cq - float2(dr * frac(ph + 0.5), 0) + 0.37, t, fade);
+                    float2 gc = lerp(a, b, wab);
+                    g = gc.x / stretch * fd + gc.y * sd;
+                    UNITY_BRANCH if (white > 0.01)
+                    {
+                        float2 wq = cw * float2(0.16, 0.42);
+                        wq.y += 0.6 * Noise(wq * float2(0.5, 0.35) + 3.3).x;
+                        float wd = speed * FlowPeriod * 0.16;
+                        float3 n1 = Noise(wq - float2(wd * ph, 0));
+                        float3 n2 = Noise(wq - float2(wd * frac(ph + 0.5), 0) + 4.1);
+                        float3 nw = lerp(n1, n2, wab) * rsqrt(wab * wab + (1 - wab) * (1 - wab));
+                        float3 boil = 0;
+                        UNITY_BRANCH if (fade > 0)
+                            boil = Noise(mul(Turn, xz) * 1.7 + float2(t * 0.9, -t * 0.6)) * fade;
+                        wl = 0.5 + nw.x + 0.35 * boil.x;
+                        wg = white * (nw.y * 0.16 * fd + nw.z * 0.42 * sd + 0.25 * mul(boil.yz, Turn));
+                    }
+                }
+                else if (dot(flow, flow) > 0.01)
+                {
+                    float2 drift = flow * (speed * FlowPeriod * wv.x);
                     float2 a = Waves(q - drift * ph, t, fade);
                     float2 b = Waves(q - drift * frac(ph + 0.5) + 0.37, t, fade);
-                    g = lerp(a, b, abs(1 - 2 * ph));
+                    g = lerp(a, b, wab);
                 }
                 else g = Waves(q, t, fade);
                 float swell = i.color.a >= 0.99 ? 1 : i.color.a * 2 * _StabbyWaterFlow.z;
@@ -123,7 +156,8 @@ Shader "Stabby/Water"
                     float sn = Noise(sp).x + 0.5 * Noise(sp * float2(1.9, 2.1) + 5.3).x;
                     slick = swell * smoothstep(0.05, 0.45, sn) * saturate(2 - fp * _StabbyWaterSwell.x * 20);
                 }
-                g *= wv.z * (0.15 + 0.85 * ripple) * (1 - 0.85 * slick) * (1 + rapids + 0.5 * steep);
+                g *= wv.z * (0.15 + 0.85 * ripple) * (1 - 0.85 * slick) * (1 + white + 0.5 * churn);
+                g += wv.z * 3 * wg;
                 UNITY_BRANCH if (swell > 0)
                 {
                     float2 sq = mul(Turn, xz * _StabbyWaterSwell.x) + float2(_Time.y * 0.05, _Time.y * 0.02);
@@ -132,22 +166,16 @@ Shader "Stabby/Water"
                 }
                 float3 n = normalize(float3(-g.x, 1, -g.y));
                 float streak = 0;
-                UNITY_BRANCH if (steep > 0 && dot(flow, flow) > 0.01)
+                UNITY_BRANCH if (river && churn > 0)
                 {
-                    float2 fd = normalize(flow), fn = float2(-fd.y, fd.x);
-                    float2 cell = floor(xz / 24), fw = xz / 24 - cell;
-                    fw = fw * fw * (3 - 2 * fw);
-                    float adv = _Time.y * _StabbyWaterFlow.x * (0.8 + 20 * slope);
-                    float acc = 0, wsum = 0;
-                    [unroll] for (int k = 0; k < 4; k++)
-                    {
-                        float2 o = (cell + float2(k & 1, k >> 1)) * 24;
-                        float2 d = xz - o;
-                        float wk = ((k & 1) ? fw.x : 1 - fw.x) * ((k >> 1) ? fw.y : 1 - fw.y);
-                        acc += wk * Noise(float2(dot(d, fd) - adv, dot(d, fn)) * float2(0.05, 0.35) + frac(o * 0.0137) * 61).x;
-                        wsum += wk * wk;
-                    }
-                    streak = steep * smoothstep(0.8, 0.97, 1 - abs(acc * rsqrt(wsum))) * saturate(1.6 - fp * 0.8);
+                    float sp = frac(_Time.y / 7), sw = abs(1 - 2 * sp);
+                    float sdr = speed * 7 * 0.05;
+                    float2 sq = cw * float2(0.05, 0.35);
+                    sq.y += 0.5 * Noise(sq * float2(0.7, 0.3) + 11.3).x;
+                    float s1 = Noise(sq - float2(sdr * sp, 0)).x, s2 = Noise(sq - float2(sdr * frac(sp + 0.5), 0) + 5.1).x;
+                    float acc = lerp(s1, s2, sw) * rsqrt(sw * sw + (1 - sw) * (1 - sw));
+                    float sb = smoothstep(-0.1, 0.45, Noise(cw * float2(0.035, 0.22) + float2(-sdr * 0.3 * _Time.y / 7, 6.7)).x);
+                    streak = churn * sb * smoothstep(0.84, 0.97, 1 - abs(acc)) * saturate(1.6 - fp * 0.8);
                 }
 
                 float2 ruv = uv + g * (0.12 * saturate(depth) / (1 + surface * 0.08));
@@ -174,9 +202,9 @@ Shader "Stabby/Water"
 
                 float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, fuv, 0).rg;
                 float shore = depth / max(length(sl), 0.03);
-                float band = saturate(1 - shore / max(wv.w, 0.01));
+                float band = saturate(1 - shore / max(wv.w, 0.01)) * (river ? 0.25 + 0.5 * churn : 1);
                 float foam = 0;
-                UNITY_BRANCH if (band + rapids > 0)
+                UNITY_BRANCH if (band > 0)
                 {
                     float2 fp = i.positionWS.xz * 0.35;
                     float lace = 0.5 + Noise(mul(Turn, fp) + float2(t * 0.3, -t * 0.2)).x + 0.5 * Noise(mul(fp, Turn) * 2.7 - float2(t * 0.4, t * 0.1)).x;
@@ -187,9 +215,26 @@ Shader "Stabby/Water"
                     float broad = 0.8 + 0.5 * Noise(mul(fp, Turn) * 0.23 + 3.7).x;
                     float rim = smoothstep(0.5 - 0.3 * saturate(lace * broad - 0.3), 0.85, band);
                     foam = max(rim * (0.8 + 0.4 * fine), smoothstep(0.35, 0.95, b * lace * broad)) + 0.3 * b * surf * surf * saturate(lace - 0.4);
-                    foam = max(foam, rapids * smoothstep(0.55, 1.05, lace));
                 }
-                foam = max(foam, 0.35 * streak);
+                foam = max(foam, white * smoothstep(0.5, 1.0, wl));
+                float slow = 1 - churn, inner = saturate(-i.chan.x * i.chan.z * 1.6);
+                float eddy = inner * smoothstep(0.3, 0.9, abs(i.chan.x));
+                float lw = slow * saturate(0.15 + 1.6 * inner) * saturate(2.5 - fp * 3);
+                UNITY_BRANCH if (river && lw > 0.01)
+                {
+                    float la = _Time.y * _StabbyWaterFlow.x;
+                    float2 lp = float2((i.along - 0.6 * la) * 0.05, cw.y * 0.5);
+                    float3 wn = Noise(lp * float2(1.3, 0.22) + 7.3);
+                    lp.y += 1.6 * wn.x;
+                    float ridge = smoothstep(0.7, 0.95, 1 - abs(Noise(lp).x) * 1.7);
+                    float brk = smoothstep(-0.12, 0.35, Noise(lp * float2(0.9, 0.6) + 2.9).x + 0.25 * wn.x);
+                    float2 ep = float2(i.along + 0.3 * la, cw.y) * 0.14 + 0.8 * wn.yz;
+                    float eb = Noise(ep).x + 0.35 * Noise(ep * 3.3 + 1.7).x;
+                    float grain = lerp(0.7, saturate(0.55 + 0.9 * Noise(mul(Turn, xz) * 1.9 + float2(t * 0.2, 0)).x), fade);
+                    foam = max(foam, lw * ridge * brk * grain);
+                    foam = max(foam, 0.8 * eddy * slow * smoothstep(0.3, 0.7, eb) * grain);
+                }
+                foam = max(foam, 0.3 * streak);
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
                 float alpha = saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.15)));

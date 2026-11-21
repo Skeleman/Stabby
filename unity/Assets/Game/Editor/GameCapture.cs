@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : 1;
+                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : 1;
             }
             if (phase == 50)
             {
@@ -462,7 +462,22 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "biomes" || only == "beach" || only == "forest")
+            while (phase >= 80 && phase < 80 + RiverShots.Length)
+            {
+                string name = RiverShots[phase - 80];
+                if (wait == 0)
+                {
+                    if (!AimRiver(cam, phase - 80)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
+            if (only == "biomes" || only == "beach" || only == "forest" || only == "river")
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1170,6 +1185,55 @@ namespace Stabby.Game.Editor
         }
 
         static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };
+        static readonly string[] RiverShots = { "river-close", "river-bend", "river-steep", "river-steep-mid" };
+
+        static bool AimRiver(Camera cam, int view)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                if (map == null) continue;
+                float cm = map.Config.CellMeters, best = float.MinValue, turnAt = 0;
+                RiverSegment pick = null;
+                int pk = 0;
+                foreach (var r in map.Water.Rivers)
+                    for (int k = 8; k + 8 < r.X.Count; k += 2)
+                    {
+                        if (r.Width[k] < 5f) continue;
+                        var a = new Vector2(r.X[k - 8], r.Y[k - 8]) * cm;
+                        var p = new Vector2(r.X[k], r.Y[k]) * cm;
+                        var z = new Vector2(r.X[k + 8], r.Y[k + 8]) * cm;
+                        var din = (p - a).normalized;
+                        var dout = (z - p).normalized;
+                        float slope = Mathf.Max(0, r.Surface[k - 8] - r.Surface[k + 8]) / Mathf.Max((z - a).magnitude, 1f);
+                        float turn = din.x * dout.y - din.y * dout.x;
+                        float s = view == 0 ? 1 - 20 * slope - Mathf.Abs(turn) : view == 1 ? Mathf.Abs(turn) - 10 * slope : slope;
+                        s /= 1 + (p - new Vector2(home.x, home.z)).magnitude / 1500f;
+                        if (s <= best) continue;
+                        best = s;
+                        pick = r;
+                        pk = k;
+                        turnAt = turn;
+                    }
+                if (pick == null) return false;
+                float wy = Hydrology.Stage(map.Config, pick, pk), half = Mathf.Max(pick.Width[pk] * 0.5f, 6f);
+                var c = new Vector3(pick.X[pk] * cm, wy, pick.Y[pk] * cm);
+                var along = new Vector3(pick.X[pk + 4] - pick.X[pk - 4], 0, pick.Y[pk + 4] - pick.Y[pk - 4]).normalized;
+                var left = new Vector3(-along.z, 0, along.x);
+                var inner = turnAt >= 0 ? left : -left;
+                Vector3 eye, target;
+                float lift;
+                if (view == 0) { eye = c + left * (half + 5f) - along * 4f; target = c + along * 14f - left * (half * 0.3f); lift = 2.2f; }
+                else if (view == 1) { eye = c - inner * (half + 4f) - along * 6f; target = c + inner * (half * 0.55f) + along * 4f; lift = 4f; }
+                else if (view == 2) { eye = c - along * 10f + left * (half + 3f); target = c + along * 10f; lift = 3.5f; }
+                else { eye = c - along * 45f + left * (half + 30f); target = c + along * 10f; lift = 22f; }
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), wy) + lift;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + RiverShots[view]] = $"river {pick.Id} at {c.x:F0},{c.y:F0},{c.z:F0}, width {pick.Width[pk]:F0} m, turn {turnAt:F2}, score {best:F3}";
+                return true;
+            }
+            return false;
+        }
 
         static bool AimForest(Camera cam, string id, int view)
         {
