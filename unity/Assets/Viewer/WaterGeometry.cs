@@ -17,8 +17,8 @@ namespace Stabby.Viewer
     public static class WaterGeometry
     {
         const int RiverPieceVertices = 16000;
-        public const float RiverLift = 0.1f;
-        const float LakeLift = 0.5f, SlopeRange = 0.1f;
+        public const float RiverLift = 0.1f, LakeLift = 0.5f;
+        const float SlopeRange = 0.1f;
         const int SlopeReach = 8;
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
