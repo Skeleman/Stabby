@@ -25,14 +25,22 @@ uint TmHashU(uint3 p)
 float TmHash(int3 p) { return TmHashU((uint3)p) * (1.0 / 4294967296.0); }
 float TmHash(int2 p) { return TmHash(int3(p, 0)); }
 
+float2 TmGrad(int2 p)
+{
+    uint h = TmHashU(uint3((uint2)p, 0));
+    return float2(h & 0xffffu, h >> 16) * (2.0 / 65535) - 1;
+}
+
 float3 TmNoise2(float2 p, int2 s)
 {
     float2 fl = floor(p), f = p - fl;
     int2 i = (int2)fl + s;
     float2 u = f * f * f * (f * (f * 6 - 15) + 10), du = 30 * f * f * (f * (f - 2) + 1);
-    float a = TmHash(i), b = TmHash(i + int2(1, 0)), c = TmHash(i + int2(0, 1)), d = TmHash(i + int2(1, 1));
+    float2 ga = TmGrad(i), gb = TmGrad(i + int2(1, 0)), gc = TmGrad(i + int2(0, 1)), gd = TmGrad(i + int2(1, 1));
+    float a = dot(ga, f), b = dot(gb, f - float2(1, 0)), c = dot(gc, f - float2(0, 1)), d = dot(gd, f - 1);
     float k1 = b - a, k2 = c - a, k4 = a - b - c + d;
-    return float3(2 * (a + k1 * u.x + k2 * u.y + k4 * u.x * u.y) - 1, 2 * du * float2(k1 + k4 * u.y, k2 + k4 * u.x));
+    float2 g = ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * float2(k1 + k4 * u.y, k2 + k4 * u.x);
+    return 2 * float3(a + k1 * u.x + k2 * u.y + k4 * u.x * u.y, g);
 }
 
 float3 TmNoise2(float2 p) { return TmNoise2(p, int2(0, 0)); }
@@ -191,6 +199,15 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     return o;
 }
 
+float3 TmBlade(float2 p, float2 d, float f, float3 w, out float2 grad)
+{
+    float2 du = round(d * f * 410) * (1.0 / 1024), dv = round(float2(-d.y, d.x) * f * 1024) * (1.0 / 1024);
+    float2 ot = tmO.xz * (1.0 / 1024);
+    float3 n = TmNoise2(float2(dot(p, du), dot(p, dv)) + w.x * float2(0.3, 0.6), int2(dot(ot, du * 1024), dot(ot, dv * 1024)));
+    grad = n.y * (du + 0.3 * w.yz) + n.z * (dv + 0.6 * w.yz);
+    return n;
+}
+
 TmOut TmGrass(float3 wp, float3 base, float fp, float4 A, float4 B)
 {
     float2 p = wp.xz, pa = p + tmO.xz;
@@ -198,11 +215,15 @@ TmOut TmGrass(float3 wp, float3 base, float fp, float4 A, float4 B)
     float fc = TmFade(B.y, fp), ft = TmFade(B.y * 2.6, fp);
     float3 clump = TmLN2(p, B.y, 3.7, fc);
     float3 tuft = TmLN2(p, B.y * 2.6, 8.3, ft);
-    float2 d = normalize(clump.yz * 0.25 + _StabbySurface.zw), e = float2(-d.y, d.x);
     float fb = TmFade(A.w, fp);
-    float3 blade = TmN2(float2(dot(p, d) * A.w * 0.25, dot(p, e) * A.w), fb);
+    float3 blade = 0;
+    float2 bg = 0;
+    [branch] if (fb > 0)
+    {
+        blade = TmBlade(p, _StabbySurface.zw, A.w, float3(clump.x, clump.yz * TmQ(B.y)), bg);
+        bg /= A.w;
+    }
     float3 g2 = float3(bump.y + B.x * (fc * clump.y + 0.5 * ft * tuft.y), 0, bump.z + B.x * (fc * clump.z + 0.5 * ft * tuft.z));
-    float2 bg = blade.y * 0.25 * d + blade.z * e;
     g2 += A.z * fb * float3(bg.x, 0, bg.y);
     float lum = dot(base, float3(0.2126, 0.7152, 0.0722));
     float3 green = lerp(lum.xxx, base, 0.6) * float3(1.05, 1, 0.78);
@@ -288,7 +309,7 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
     float2 pa = p + tmO.xz;
     float k0 = dot(tmO.xz, wind) * B.y + 0.3 * dot(tmO.xz, side) * B.y * 0.05;
     k0 -= floor(k0);
-    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(B.y, fp);
+    float calm = saturate((n.y - 0.85) / 0.1) * TmFade(B.y * 3, fp), sharp = TmFade(B.y * 8, fp);
     float3 warp = TmN2(pa * B.y * 0.12 + 13.1, calm);
     float pk = B.z * calm * saturate(2 - fp * _StabbySurface.y);
     if (pk > 0)
@@ -304,7 +325,8 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
         p = q;
     }
     float s = dot(p, wind) * B.y + k0 + 1.5 * warp.x + 0.3 * dot(p, side) * B.y * 0.05, fr = frac(s);
-    float prof = 6.75 * fr * fr * (1 - fr), dprof = 6.75 * fr * (2 - 3 * fr);
+    float fm = fr * (1 - fr);
+    float prof = lerp(16 * fm * fm, 6.75 * fr * fm, sharp), dprof = lerp(32 * fm * (1 - 2 * fr), 6.75 * fr * (2 - 3 * fr), sharp);
     float2 ds = wind + 1.5 * warp.yz * 0.12 + 0.015 * side;
     float3 bump = TmFbm2(p, A.y, A.x, 2, fp);
     float fg = TmFade(A.w, fp);
