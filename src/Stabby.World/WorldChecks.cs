@@ -182,7 +182,9 @@ namespace Stabby.World
                     int v = 6 * f.Tris[t];
                     float x = f.Verts[v], y = f.Verts[v + 1], z = f.Verts[v + 2], wy = y + 0.5f;
                     Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
-                    if (Math.Abs(wy - y) > MeshTolerance) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
+                    float h = d.Sample(x, z), s = NearStepM;
+                    float bend = Math.Max(Math.Abs(d.Sample(x + s, z) + d.Sample(x - s, z) - 2 * h), Math.Abs(d.Sample(x, z + s) + d.Sample(x, z - s) - 2 * h));
+                    if (Math.Abs(wy - h) > SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
                 }
             }
 
