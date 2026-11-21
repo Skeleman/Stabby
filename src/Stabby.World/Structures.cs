@@ -120,7 +120,7 @@ namespace Stabby.World
                 var n = new float[3];
                 int ax = f >> 1;
                 float tilt = slab ? 0.05f : ax == 2 ? FaceTilt : 0.12f;
-                for (int k = 0; k < 3; k++) n[k] = k == ax ? ((f & 1) == 0 ? 1 : -1) : rng.Range(-tilt, tilt);
+                for (int k = 0; k < 3; k++) n[k] = k == ax ? ((f & 1) == 0 ? 1 : -1) : k == 2 && !slab ? rng.Range(-FaceTilt, FaceTilt) : rng.Range(-tilt, tilt);
                 float len = (float)Math.Sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
                 n[0] /= len; n[1] /= len; n[2] /= len;
                 Clip(polys, n[0], n[1], n[2], Math.Abs(n[ax]) - Math.Abs(n[(ax + 1) % 3]) - Math.Abs(n[(ax + 2) % 3]));
@@ -128,11 +128,11 @@ namespace Stabby.World
             int cuts = slab ? rng.Range(0, 2) : rng.Range(1, 4);
             for (int k = 0; k < cuts; k++)
             {
-                float nx = rng.Range(-1f, 1f), ny = rng.Range(-0.6f, 1f), nz = rng.Range(-1f, 1f);
+                float nx = rng.Range(-1f, 1f), ny = rng.Range(-0.6f, slab ? 1f : 0.6f), nz = slab ? rng.Range(-1f, 1f) : rng.Range(-0.15f, 0.15f);
                 float len = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
                 if (len < 1e-3f) continue;
                 nx /= len; ny /= len; nz /= len;
-                Clip(polys, nx, ny, nz, (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(slab ? 0.92f : 0.74f, 0.97f));
+                Clip(polys, nx, ny, nz, (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(slab ? 0.92f : 0.84f, 0.97f));
             }
             var pos = new List<float>();
             var ind = new List<int>();

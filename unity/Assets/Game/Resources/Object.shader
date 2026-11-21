@@ -141,13 +141,11 @@ Shader "Stabby/Object"
                 float lum = dot(albedo, float3(0.3, 0.59, 0.11));
                 float3 tint = lerp(float3(1.04, 0.98, 0.9), float3(1.08, 0.95, 0.8), 0.5 + 0.5 * tone.z);
                 albedo = lerp(lum * tint, albedo, 0.25) * (1 + 0.22 * tone.y);
-                float3 p = wp * 22;
-                float3 c = floor(p);
-                float spot = TmHash(int3(c)), r = length(frac(p) - 0.5);
-                float dens = (0.05 + 0.1 * tone.w) * (0.5 + 0.5 * saturate(n.y + 0.6));
-                float lich = TmFade(22, fp) * step(1 - dens, spot) * smoothstep(0.42, 0.3, r);
-                float3 lc = lerp(float3(0.34, 0.35, 0.29), float3(0.4, 0.37, 0.26), frac(spot * 7.3));
-                albedo = lerp(albedo, lc * (0.9 + 0.2 * tone.y), 0.8 * lich);
+                float4 ln = TmNoise3(wp * 7.3 + 13.7, int3(0, 0, 0)), lf = TmNoise3(wp * 31 + 5.9, int3(0, 0, 0));
+                float dens = 0.15 * tone.w + 0.1 * saturate(n.y);
+                float lich = TmFade(31, fp) * smoothstep(0.45 - dens, 0.55 - dens, ln.x + 0.3 * lf.x);
+                float3 lc = lum * lerp(float3(1.02, 1.04, 0.86), float3(1.1, 1.02, 0.78), 0.5 + 0.5 * ln.y) * (1.25 + 0.15 * lf.y);
+                albedo = lerp(albedo, lc, 0.55 * lich);
                 float band = 1 - smoothstep(0.04, 0.4, h);
                 return lerp(albedo, albedo * float3(0.5, 0.46, 0.4), 0.75 * band);
             }
