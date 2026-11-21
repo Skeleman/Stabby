@@ -199,6 +199,12 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   structures, households and family ties, and dialogue about themselves,
   their background and culture. Theft and trespass follow from ownership.
   Burst ECS systems, host-authoritative. | planned
+- Creatures, NPCs and items follow Punchy closely (Punchy `Assets/Game/Scripts/Fauna`,
+  `Assets/Game/Fauna/Limbs`, `Scripts/Items`): procedural bodies from simple
+  hierarchical parts (arm, leg, tail, head types) that share definitions and
+  animations and vary per entity; animation from a few keyframes plus inverse
+  kinematics; all rendering through the shared material library. Part
+  definitions live in `content/`, ported to ECS and Burst. | planned
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
