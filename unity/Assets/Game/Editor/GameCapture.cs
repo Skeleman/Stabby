@@ -79,6 +79,7 @@ namespace Stabby.Game.Editor
             }
             if (!EditorApplication.isPlaying) return;
             if (playAt < 0) playAt = EditorApplication.timeSinceStartup;
+            if (!quiet) quiet = QuietBatchWarning();
             SpikeProbe.Tick();
             if (GameStatus.Failure != null)
             {
@@ -226,6 +227,7 @@ namespace Stabby.Game.Editor
 
         static void Wire(Camera cam, string dir, string name)
         {
+            GameStatus.ToolFrame = Time.frameCount;
             System.Action<ScriptableRenderContext, Camera> on = (c, k) => GL.wireframe = true, off = (c, k) => GL.wireframe = false;
             RenderPipelineManager.beginCameraRendering += on;
             RenderPipelineManager.endCameraRendering += off;
@@ -235,8 +237,24 @@ namespace Stabby.Game.Editor
             GL.wireframe = false;
         }
 
+        static bool quiet;
+
+        static bool QuietBatchWarning()
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                if (!w.IsServer()) continue;
+                using var q = w.EntityManager.CreateEntityQuery(typeof(Unity.NetCode.NetDebug));
+                if (!q.TryGetSingletonRW<Unity.NetCode.NetDebug>(out var nd)) return false;
+                nd.ValueRW.WarnBatchedTicks = false;
+                return true;
+            }
+            return false;
+        }
+
         static void Shot(Camera cam, string dir, string name)
         {
+            GameStatus.ToolFrame = Time.frameCount;
             var rt = new RenderTexture(1600, 900, 24);
             cam.targetTexture = rt;
             cam.Render();

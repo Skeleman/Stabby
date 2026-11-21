@@ -5,6 +5,7 @@ using Unity.Profiling;
 using Unity.Profiling.LowLevel;
 using Unity.Profiling.LowLevel.Unsafe;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 namespace Stabby.Game.Editor
 {
@@ -18,11 +19,19 @@ namespace Stabby.Game.Editor
         static string prev = "";
         static int frame;
 
+        static readonly bool Record = Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
+
         public static void Tick()
         {
+            if (Record && !Profiler.enabled)
+            {
+                Profiler.logFile = System.IO.Path.GetFullPath("../out/unity/spike.raw");
+                Profiler.enableBinaryLog = true;
+                Profiler.enabled = true;
+            }
             if (!On) return;
-            if (frame++ % 120 == 0) Scan();
-            var top = recs.Select(r => (r.name, ms: r.rec.LastValue / 1e6)).Where(r => r.ms >= 3).OrderByDescending(r => r.ms).Take(40);
+            if (frame++ % (frame < 300 ? 5 : 120) == 0) Scan();
+            var top = recs.Select(r => (r.name, ms: r.rec.LastValue / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80);
             string now = string.Join(", ", top.Select(r => $"{r.name} {r.ms:F0}"));
             float dt = Time.unscaledDeltaTime * 1000f;
             if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms\n  this: {now}\n  prev: {prev}");
@@ -53,6 +62,7 @@ namespace Stabby.Game.Editor
 
         public static void Stop()
         {
+            if (Record) { Profiler.enabled = false; Profiler.logFile = ""; }
             foreach (var r in recs) r.rec.Dispose();
             recs.Clear();
         }

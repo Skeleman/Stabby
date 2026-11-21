@@ -93,9 +93,13 @@ namespace Stabby.Game
         {
             if (++frames <= 10) return;
             float ms = UnityEngine.Time.unscaledDeltaTime * 1000f;
-            if (ms > worst) worst = ms;
-            if (ms > 33f) slow++;
-            GameStatus.Lines["~frames"] = $"frames {frames - 10}, worst {worst:F0} ms, {slow} over 33 ms";
+            if (UnityEngine.Time.frameCount - GameStatus.ToolFrame <= 1) GameStatus.ToolFrames++;
+            else
+            {
+                if (ms > worst) worst = ms;
+                if (ms > 33f) slow++;
+            }
+            GameStatus.Lines["~frames"] = $"frames {frames - 10}, worst {worst:F0} ms, {slow} over 33 ms, {GameStatus.ToolFrames} capture frames left out";
         }
     }
 }
