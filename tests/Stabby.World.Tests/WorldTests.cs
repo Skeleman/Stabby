@@ -262,6 +262,16 @@ public class WorldTests
             Assert.Equal(255, coat[i * 4] + coat[i * 4 + 1] + coat[i * 4 + 2] + coat[i * 4 + 3]);
             if (w.Sea[i]) Assert.Equal(255, coat[i * 4 + SurfaceDetail.Sand]);
         }
+        var forest = SurfaceDetail.ForestWeights(w, Objects, Biomes);
+        Assert.Equal(w.Height.Length * 4, forest.Length);
+        int boreal = Array.IndexOf(w.BiomeIds, "boreal"), desert = Array.IndexOf(w.BiomeIds, "desert");
+        for (int i = 0; i < w.Height.Length; i++)
+        {
+            Assert.True(forest[i * 4] + forest[i * 4 + 1] <= 256);
+            if (w.Biome[i] == desert && desert >= 0) Assert.True(forest[i * 4] + forest[i * 4 + 1] < 64 && forest[i * 4 + 2] < 32);
+        }
+        Assert.Contains(Enumerable.Range(0, w.Height.Length), i => w.Biome[i] == boreal && forest[i * 4 + 1] > 128);
+        Assert.Contains(Enumerable.Range(0, w.Height.Length), i => w.Biome[i] == Array.IndexOf(w.BiomeIds, "temperate-rain") && forest[i * 4 + 2] > 200);
     }
 
     [Fact]

@@ -14,7 +14,7 @@ namespace Stabby.Viewer
         public float3[] Bands;
         public float[] Hardness;
         public float PeriodM;
-        public byte[] Coat;
+        public byte[] Coat, Forest;
         public float[] WaterLevel;
         public int N;
         public float CellM;
@@ -39,7 +39,7 @@ namespace Stabby.Viewer
 
         public const int FieldTexelsPerCell = 4, FieldMax = 2048;
 
-        static Texture2D strataTexture, coatTexture, levelTexture;
+        static Texture2D strataTexture, coatTexture, forestTexture, levelTexture;
 
         public static float3 Sand => new float3(0.78f, 0.72f, 0.60f);
 
@@ -78,8 +78,14 @@ namespace Stabby.Viewer
             coatTexture.SetPixelData(s.Coat, 0);
             coatTexture.Apply(false, true);
             yield return "strata coats";
+            if (forestTexture != null) UnityEngine.Object.Destroy(forestTexture);
+            forestTexture = new Texture2D(s.N, s.N, TextureFormat.RGBA32, false, true) { name = "Forest", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            forestTexture.SetPixelData(s.Forest, 0);
+            forestTexture.Apply(false, true);
+            yield return "strata forest";
             Shader.SetGlobalTexture("_StabbyStrata", strataTexture);
             Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
+            Shader.SetGlobalTexture("_StabbyForest", forestTexture);
             if (levelTexture != null) UnityEngine.Object.Destroy(levelTexture);
             levelTexture = new Texture2D(s.N, s.N, TextureFormat.RFloat, false, true) { name = "WaterLevel", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
             levelTexture.SetPixelData(s.WaterLevel, 0);
@@ -276,7 +282,7 @@ namespace Stabby.Viewer
             return rt;
         }
 
-        public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib, float[] offsets = null)
+        public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib, IReadOnlyList<BiomeDef> defs, float[] offsets = null)
         {
             var ids = lib.Bands(BandStepM);
             var bands = new float3[ids.Length];
@@ -298,7 +304,7 @@ namespace Stabby.Viewer
             return new StrataLook
             {
                 Offsets = offsets ?? lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
-                Coat = d.CoatWeights(w), WaterLevel = WaterLevel(w), N = w.Config.Size, CellM = w.Config.CellMeters,
+                Coat = d.CoatWeights(w), Forest = SurfaceDetail.ForestWeights(w, w.Objects, defs), WaterLevel = WaterLevel(w), N = w.Config.Size, CellM = w.Config.CellMeters,
                 Surface = new Vector4(d.FadePixels, 1f / d.ParallaxFootprintM, math.sin(wind), math.cos(wind)),
                 Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),
                 RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),

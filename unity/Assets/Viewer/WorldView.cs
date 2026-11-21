@@ -215,7 +215,7 @@ namespace Stabby.Viewer
             var s = new Source { World = world, Size = world.Config.Size, ChunkCells = cells, Cm = world.Config.CellMeters };
             s.Detail = new TerrainDetail(world);
             s.Colors = TerrainLook.BaseColors(world, defs);
-            s.Strata = TerrainLook.Strata(world, ContentFiles.Materials(materials));
+            s.Strata = TerrainLook.Strata(world, ContentFiles.Materials(materials), defs);
             var list = new List<ChunkData>();
             int n = s.Size;
             for (int cy = 0; cy < n; cy += cells)
