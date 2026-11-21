@@ -87,7 +87,8 @@ namespace Stabby.Game
         }
 
         int frames, slow;
-        float worst;
+        float worst, worstPlay;
+        string worstWhy;
 
         void Frames()
         {
@@ -96,10 +97,11 @@ namespace Stabby.Game
             if (UnityEngine.Time.frameCount - GameStatus.ToolFrame <= 1) GameStatus.ToolFrames++;
             else
             {
-                if (ms > worst) worst = ms;
+                if (ms > worst) { worst = ms; worstWhy = $"frame {frames - 10}, {GameStatus.TerrainFrame}, gc {System.GC.CollectionCount(0)}"; }
                 if (ms > 33f) slow++;
+                if (GameStatus.TerrainBuilt && ms > worstPlay) worstPlay = ms;
             }
-            GameStatus.Lines["~frames"] = $"frames {frames - 10}, worst {worst:F0} ms, {slow} over 33 ms, {GameStatus.ToolFrames} capture frames left out";
+            GameStatus.Lines["~frames"] = $"frames {frames - 10}, worst {worst:F0} ms ({worstWhy}), {slow} over 33 ms, worst after terrain built {worstPlay:F0} ms, {GameStatus.ToolFrames} capture frames left out";
         }
     }
 }

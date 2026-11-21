@@ -8,6 +8,6 @@ namespace Stabby.Game
         public static readonly HashSet<string> Synced = new HashSet<string>();
         public static int Capsules, TerrainBehind, ToolFrame = -100, ToolFrames;
         public static bool TerrainBuilt, HoldCamera;
-        public static string Failure;
+        public static string Failure, TerrainFrame;
     }
 }

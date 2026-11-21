@@ -379,6 +379,7 @@ namespace Stabby.Game
             else if (preparing == null) Begin();
             else if (preparing.IsCompleted) Load();
             float ms = (float)frame.Elapsed.TotalMilliseconds;
+            GameStatus.TerrainFrame = $"terrain {ms:F1} ms {stage}, {frameVertices} vertices";
             if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage})"; }
         }
 
