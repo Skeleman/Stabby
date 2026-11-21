@@ -36,6 +36,7 @@ namespace Stabby.Game
             public BlobAssetReference<ObjectColumnData> Blob;
             public int Columns;
             public long Ms;
+            public bool Reused;
         }
 
         Task<Prepared> build;
@@ -53,7 +54,7 @@ namespace Stabby.Game
             Owned.Release(build, p => p.Blob.Dispose());
         }
 
-        static BlobAssetReference<ObjectColumnData> Pack(ColumnArrays cols)
+        static byte[] Pack(ColumnArrays cols)
         {
             int startsAt = 32, startsBytes = cols.Starts.Length * 4;
             int itemsAt = (startsAt + startsBytes + 15) & ~15;
@@ -69,34 +70,41 @@ namespace Stabby.Game
             MemoryMarshal.Write(span.Slice(20), ref il);
             MemoryMarshal.AsBytes(cols.Starts.AsSpan()).CopyTo(span.Slice(startsAt));
             itemBytes.CopyTo(span.Slice(itemsAt));
-            return BlobAssetReference<ObjectColumnData>.Create(bytes);
+            return bytes;
         }
 
-        (GeneratedWorld, GroundParts) MapReady()
+        (GeneratedWorld, GroundParts, WorldStore.Entry) MapReady()
         {
             if (World.IsServer())
             {
                 var server = World.GetExistingSystemManaged<ServerMapSystem>();
-                return (server.Map, server.Parts);
+                return (server.Map, server.Parts, server.Shared);
             }
             var client = World.GetExistingSystemManaged<ClientMapSystem>();
-            return client.Map != null && client.Parts != null && SystemAPI.HasSingleton<Ground>() ? (client.Map, client.Parts) : default;
+            return client.Map != null && client.Parts != null && SystemAPI.HasSingleton<Ground>() ? (client.Map, client.Parts, client.Shared) : default;
         }
 
         protected override void OnUpdate()
         {
             if (build == null)
             {
-                var (w, parts) = MapReady();
+                var (w, parts, entry) = MapReady();
                 if (w == null || parts == null) return;
                 var objects = lib;
-                build = Task.Run(() =>
+                bool ran = false;
+                Func<WorldStore.SharedObjects> make = () =>
                 {
+                    ran = true;
                     var sw = Stopwatch.StartNew();
                     var field = new ObjectField(w, parts.Detail, parts.Edits, objects);
                     var cols = ColumnArrays.Build(field.Columns());
-                    var made = Pack(cols);
-                    return new Prepared { Field = field, Blob = made, Columns = cols.Items.Length, Ms = sw.ElapsedMilliseconds };
+                    return new WorldStore.SharedObjects { Field = field, Columns = Pack(cols), Count = cols.Items.Length, Ms = sw.ElapsedMilliseconds };
+                };
+                var source = entry != null ? WorldStore.Objects(entry, make) : Task.Run(make);
+                build = Task.Run(async () =>
+                {
+                    var s = await source;
+                    return new Prepared { Field = s.Field, Blob = BlobAssetReference<ObjectColumnData>.Create(s.Columns), Columns = s.Count, Ms = s.Ms, Reused = !ran };
                 });
                 return;
             }
@@ -108,7 +116,7 @@ namespace Stabby.Game
             blob = p.Blob;
             EntityManager.CreateSingleton(new ObjectColumns { Blob = blob });
             Field = p.Field;
-            GameStatus.Lines[World.Name + "~objects"] = $"{World.Name}: {p.Columns} object columns in {p.Ms} ms";
+            GameStatus.Lines[World.Name + "~objects"] = $"{World.Name}: {p.Columns} object columns in {p.Ms} ms" + (p.Reused ? ", shared" : "");
         }
     }
 }

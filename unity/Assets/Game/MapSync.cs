@@ -60,15 +60,25 @@ namespace Stabby.Game
             public GeneratedWorld Map;
             public GroundParts Parts;
             public BlobAssetReference<GroundData> Ground;
+            public Task<SharedObjects> Objects;
+            public string Path;
             public int Refs;
             public bool Failed;
         }
 
+        public sealed class SharedObjects
+        {
+            public ObjectField Field;
+            public byte[] Columns;
+            public int Count;
+            public long Ms;
+        }
+
         static readonly List<Entry> entries = new List<Entry>();
 
-        public static Entry Offer(GeneratedWorld map, ulong[] sums)
+        public static Entry Offer(GeneratedWorld map, ulong[] sums, string path)
         {
-            var e = new Entry { Map = map, Sums = sums, Refs = 1 };
+            var e = new Entry { Map = map, Sums = sums, Path = path, Refs = 1 };
             lock (entries) entries.Add(e);
             return e;
         }
@@ -89,11 +99,24 @@ namespace Stabby.Game
             lock (entries) { failed = e.Failed; return e.Ground.IsCreated; }
         }
 
+        public static Task<SharedObjects> Objects(Entry e, Func<SharedObjects> build)
+        {
+            lock (entries) return e.Objects ??= Task.Run(build);
+        }
+
         public static Entry Find(ulong[] sums)
         {
             lock (entries)
                 foreach (var e in entries)
                     if (!e.Failed && e.Refs > 0 && Same(e.Sums, sums)) { e.Refs++; return e; }
+            return null;
+        }
+
+        public static Entry Local(string path)
+        {
+            lock (entries)
+                foreach (var e in entries)
+                    if (!e.Failed && e.Refs > 0 && e.Path == path) { e.Refs++; return e; }
             return null;
         }
 
@@ -108,6 +131,7 @@ namespace Stabby.Game
                 e.Ground = default;
                 e.Map = null;
                 e.Parts = null;
+                e.Objects = null;
             }
         }
 
@@ -142,6 +166,7 @@ namespace Stabby.Game
         GroundParts filled;
         WorldStore.Entry entry;
 
+        public WorldStore.Entry Shared => entry;
         public GeneratedWorld Map { get; private set; }
         public GroundParts Parts { get; private set; }
 
@@ -164,7 +189,7 @@ namespace Stabby.Game
                     return g;
                 });
                 var sums = WorldChunks.Checksums(w);
-                p.Entry = WorldStore.Offer(w, sums);
+                p.Entry = WorldStore.Offer(w, sums, path);
                 long sumsMs = sw.ElapsedMilliseconds;
                 p.Packed = Pack(w, sums);
                 p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
@@ -268,9 +293,9 @@ namespace Stabby.Game
             public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
         }
 
-        Task<(GeneratedWorld, ulong[])> gen;
+        Task<(GeneratedWorld, ulong[], WorldStore.Entry)> gen;
         Task<(int, GroundParts, WorldStore.Entry)> finish;
-        WorldStore.Entry shared;
+        WorldStore.Entry shared, borrowed;
         BlobAssetReference<GroundData> ground;
         BlobBake<GroundData> groundBake;
         GroundParts synced;
@@ -289,6 +314,7 @@ namespace Stabby.Game
         public ObjectLibrary Objects { get; private set; }
         public GeneratedWorld Map { get; private set; }
         public GroundParts Parts { get; private set; }
+        public WorldStore.Entry Shared => shared;
 
         protected override void OnCreate()
         {
@@ -303,6 +329,8 @@ namespace Stabby.Game
             groundBake.Release();
             if (shared != null) WorldStore.Release(shared);
             else if (ground.IsCreated) ground.Dispose();
+            if (borrowed != null) WorldStore.Release(borrowed);
+            if (mine == null) Owned.Release(gen, r => { if (r.Item3 != null) WorldStore.Release(r.Item3); });
             if (Map == null && synced == null && shared == null) Owned.Release(finish, r => { if (r.Item3 != null) WorldStore.Release(r.Item3); else if (r.Item1 == 0) r.Item2.Blob.Dispose(); });
             if (inbox != Entity.Null && EntityManager.Exists(inbox)) EntityManager.GetComponentData<ChunkInbox>(inbox).Dispose();
         }
@@ -324,26 +352,7 @@ namespace Stabby.Game
                 chunks = i.Chunks;
                 hostSeed = i.Seed;
                 clock = Stopwatch.StartNew();
-                var defs = Defs;
-                var lib = Materials;
-                var objects = Objects;
-                ulong s = i.Seed;
-                bool empty = World.Name == GameSettings.FullStreamClient;
-                string path = MapFile.PathFor(s, GameSettings.Size);
-                gen = Task.Run(() =>
-                {
-                    GeneratedWorld w;
-                    if (empty)
-                    {
-                        var ids = new string[defs.Count];
-                        for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
-                        w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids, lib);
-                        source = "started empty";
-                    }
-                    else (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
-                    w.Objects = objects;
-                    return (w, WorldChunks.Checksums(w));
-                });
+                Load(true);
             }
             ecb.Playback(EntityManager);
             if (chunks >= 0)
@@ -354,14 +363,24 @@ namespace Stabby.Game
                     Arena = new NativeList<byte>(Allocator.Persistent),
                 });
 
-            if (world == null && gen != null && gen.IsCompleted)
+            if (mine == null && gen != null && gen.IsCompleted)
             {
                 if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); Enabled = false; return; }
-                (world, mine) = gen.Result;
+                (world, mine, borrowed) = gen.Result;
                 genMs = clock.ElapsedMilliseconds;
             }
-            if (inbox == Entity.Null || world == null) return;
+            if (inbox == Entity.Null || mine == null) return;
             var box = EntityManager.GetComponentData<ChunkInbox>(inbox);
+            if (!requested && box.SumsIn == box.HostSums.Length && borrowed != null)
+            {
+                bool same = true;
+                for (int k = 0; k < mine.Length; k++) same &= mine[k] == box.HostSums[k];
+                if (!same) { WorldStore.Release(borrowed); borrowed = null; mine = null; Load(false); return; }
+                shared = borrowed;
+                borrowed = null;
+                requested = true;
+                GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, 0/{mine.Length} chunks stale, streamed 0 (0 KB deflated in 0 pieces), synced after {clock.ElapsedMilliseconds} ms, 0 differ after sync";
+            }
             if (!requested && box.SumsIn == box.HostSums.Length)
             {
                 requested = true;
@@ -377,8 +396,38 @@ namespace Stabby.Game
                 EntityManager.SetComponentData(inbox, box);
                 send.Playback(EntityManager);
             }
-            if (requested && finish == null && box.Remaining == 0) StartFinish(box);
-            if (finish != null && Map == null) Finish(box);
+            if (requested && finish == null && shared == null && box.Remaining == 0) StartFinish(box);
+            if ((finish != null || shared != null) && Map == null) Finish(box);
+        }
+
+        void Load(bool borrow)
+        {
+            var defs = Defs;
+            var lib = Materials;
+            var objects = Objects;
+            ulong s = hostSeed;
+            bool empty = World.Name == GameSettings.FullStreamClient;
+            string path = MapFile.PathFor(s, GameSettings.Size);
+            gen = Task.Run<(GeneratedWorld, ulong[], WorldStore.Entry)>(() =>
+            {
+                var local = borrow && !empty ? WorldStore.Local(path) : null;
+                if (local != null)
+                {
+                    source = "borrowed the host world";
+                    return (null, local.Sums, local);
+                }
+                GeneratedWorld w;
+                if (empty)
+                {
+                    var ids = new string[defs.Count];
+                    for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
+                    w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids, lib);
+                    source = "started empty";
+                }
+                else (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
+                w.Objects = objects;
+                return (w, WorldChunks.Checksums(w), null);
+            });
         }
 
         void StartFinish(ChunkInbox box)
