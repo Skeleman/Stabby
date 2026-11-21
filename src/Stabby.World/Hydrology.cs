@@ -272,14 +272,17 @@ namespace Stabby.World
         static void CarveBeds(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
         {
             int n = c.Size;
-            float cm = c.CellMeters;
+            var cut = (float[])h.Clone();
+            var fill = new float[n * n];
+            var wetBed = new float[n * n];
+            for (int i = 0; i < fill.Length; i++) { fill[i] = float.MinValue; wetBed[i] = float.MaxValue; }
             foreach (var seg in hy.Rivers)
-            {
                 for (int k = 0; k + 1 < seg.Cells.Count; k++)
                 {
                     float ax = seg.X[k], ay = seg.Y[k], bx = seg.X[k + 1], by = seg.Y[k + 1];
-                    float half = Math.Max(seg.Width[k], seg.Width[k + 1]) * 0.5f / cm;
-                    float wet = half, reach = half * (1 + c.RiverBankWidths);
+                    float width = Math.Max(seg.Width[k], seg.Width[k + 1]);
+                    float wet = width * 0.5f / c.CellMeters, reach = wet * (1 + c.RiverBankWidths), peak = wet + (reach - wet) * c.RiverLeveePeak;
+                    float rise = c.RiverBankRise + width * c.RiverBankRisePerWidth;
                     int x0 = Math.Max(0, (int)Math.Floor(Math.Min(ax, bx) - reach)), x1 = Math.Min(n - 1, (int)Math.Ceiling(Math.Max(ax, bx) + reach));
                     int y0 = Math.Max(0, (int)Math.Floor(Math.Min(ay, by) - reach)), y1 = Math.Min(n - 1, (int)Math.Ceiling(Math.Max(ay, by) + reach));
                     float ex = bx - ax, ey = by - ay, ee = ex * ex + ey * ey;
@@ -293,23 +296,35 @@ namespace Stabby.World
                             if (d >= reach) continue;
                             float surface = seg.Surface[k] + (seg.Surface[k + 1] - seg.Surface[k]) * t;
                             float depth = seg.Depth[k] + (seg.Depth[k + 1] - seg.Depth[k]) * t;
-                            float target;
-                            if (d < wet) { float u = d / wet, u2 = u * u; target = surface - depth * (1 - u2 * u2); }
+                            float top = surface + rise;
+                            if (d < wet) { float u = d / wet, u2 = u * u; wetBed[i] = Math.Min(wetBed[i], surface - depth * (1 - u2 * u2)); }
+                            else if (d < peak)
+                            {
+                                float face = surface + rise * Grid.Smoothstep(wet, peak, d);
+                                cut[i] = Math.Min(cut[i], face);
+                                fill[i] = Math.Max(fill[i], face);
+                            }
                             else
                             {
-                                float rise = c.RiverBankRise + seg.Width[k] * 0.02f;
-                                target = Math.Min(h[i], surface + rise) + (h[i] - Math.Min(h[i], surface + rise)) * Grid.Smoothstep(wet, reach, d);
+                                float s = Grid.Smoothstep(peak, reach, d);
+                                cut[i] = Math.Min(cut[i], Math.Min(h[i], top) + (h[i] - Math.Min(h[i], top)) * s);
+                                fill[i] = Math.Max(fill[i], top - (top - Math.Min(h[i], top)) * s);
                             }
-                            h[i] = Math.Min(h[i], Math.Max(Erosion.MinLandHeight, target));
                         }
                 }
+            for (int i = 0; i < h.Length; i++)
+            {
+                if (sea[i] || hy.LakeId[i] >= 0) continue;
+                float v = wetBed[i] != float.MaxValue ? Math.Min(h[i], wetBed[i]) : Math.Max(cut[i], fill[i]);
+                h[i] = Math.Max(Erosion.MinLandHeight, v);
+            }
+            foreach (var seg in hy.Rivers)
                 for (int k = 0; k < seg.Cells.Count; k++)
                 {
                     int i = seg.Cells[k];
                     if (sea[i] || hy.LakeId[i] >= 0) continue;
                     h[i] = Math.Min(h[i], Math.Max(Erosion.MinLandHeight, seg.Surface[k] - 0.5f * seg.Depth[k]));
                 }
-            }
         }
 
         const int SlopeReach = 3;

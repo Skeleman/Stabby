@@ -52,7 +52,7 @@ namespace Stabby.Viewer
                     tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
                     tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
                 }
-            return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, tris, TerrainLook.Lake);
+            return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, tris, TerrainLook.Water);
         }
 
         public static List<MeshParts> Rivers(GeneratedWorld world)
@@ -66,7 +66,7 @@ namespace Stabby.Viewer
                 if (r.Cells.Count < 2) continue;
                 if (verts.Count >= RiverPieceVertices)
                 {
-                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, TerrainLook.River));
+                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, TerrainLook.Water));
                     verts.Clear();
                     tris.Clear();
                 }
@@ -91,7 +91,7 @@ namespace Stabby.Viewer
                     tris.Add(v - 1); tris.Add(v); tris.Add(v + 1);
                 }
             }
-            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, TerrainLook.River));
+            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, TerrainLook.Water));
             return pieces;
         }
 
@@ -103,7 +103,7 @@ namespace Stabby.Viewer
                 new Vector3(-pad, 0, -pad), new Vector3(-pad, 0, span + pad),
                 new Vector3(span + pad, 0, -pad), new Vector3(span + pad, 0, span + pad),
             };
-            return Flat("Sea", verts, new List<int> { 0, 1, 2, 2, 1, 3 }, TerrainLook.Sea);
+            return Flat("Sea", verts, new List<int> { 0, 1, 2, 2, 1, 3 }, TerrainLook.Water);
         }
 
         static MeshParts Flat(string name, List<Vector3> verts, List<int> tris, float3 srgb)
