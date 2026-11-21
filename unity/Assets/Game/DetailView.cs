@@ -8,7 +8,8 @@ namespace Stabby.Game
     public struct DetailView
     {
         public float3 Camera;
-        public float PixelsPerMetre, Quality;
+        public float PixelsPerMetre, Quality, Impostor;
+        public static float ImpostorScale = 1f;
         public int Frame;
 
         sealed class Key { }
@@ -26,6 +27,7 @@ namespace Stabby.Game
                     Camera = cam.transform.position,
                     PixelsPerMetre = Detail.PixelsPerMetreAt(cam.fieldOfView),
                     Quality = math.max(GameSettings.GraphicsQuality, 0.1f),
+                    Impostor = ImpostorScale,
                     Frame = frame,
                 };
             }

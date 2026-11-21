@@ -744,7 +744,7 @@ namespace Stabby.Game
                 var id = tier == 0 ? lod.L0 : tier == 1 ? lod.L1 : lod.L2;
                 if (lod.Impostor > 0)
                 {
-                    float ip = lod.Impostor / math.max(View.Quality, 0.1f);
+                    float ip = lod.Impostor * View.Impostor / math.max(View.Quality, 0.1f);
                     float b = tier == 2 ? math.round((1f - Detail.Crossfade(px, ip, 1.5f * ip)) * 16f) / 16f : 0;
                     if (b >= 1) id = lod.Imp;
                     else if (b > 0) id = lod.Blend;

@@ -65,7 +65,7 @@
     },
     {
       "id": "bush", "name": "Bush", "kind": "animated", "color": "#4c3f33", "variants": 6,
-      "parts": [ { "id": "body", "shape": "shrub", "leafColor": "#587234" } ],
+      "parts": [ { "id": "body", "shape": "shrub", "leafColor": "#5a6c3e" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "shrubland", "savanna", "tropical-forest", "boreal", "wetland"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 0.7, "sizeMaxM": 2.2, "clusterCount": 3, "clusterRadiusM": 3, "sink": 0.04, "alignToSlope": 0.2,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.5 }, { "biome": "temperate-rain", "scale": 0.5 }, { "biome": "tropical-forest", "scale": 0.5 }, { "biome": "boreal", "scale": 0.2 }, { "biome": "savanna", "scale": 0.25 }, { "biome": "wetland", "scale": 0.25 } ] }
     },
@@ -77,7 +77,7 @@
     },
     {
       "id": "dwarf-willow", "name": "Dwarf willow", "kind": "animated", "color": "#5a4a3c", "variants": 6,
-      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.5, 1, 1.5], "leafColor": "#6c7a3e" } ],
+      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.5, 1, 1.5], "leafColor": "#6a7444" } ],
       "placement": { "biomes": ["tundra", "alpine", "boreal"], "perHectare": 45, "slopeMax": 0.9, "sizeMinM": 0.25, "sizeMaxM": 0.7, "clusterCount": 6, "clusterRadiusM": 4, "sink": 0.05, "alignToSlope": 0.5,
         "biomeDensity": [ { "biome": "boreal", "scale": 0.3 } ] }
     },
