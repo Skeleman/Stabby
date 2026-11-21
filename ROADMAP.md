@@ -105,9 +105,10 @@ architecture contract. The other steps fit the contract as it stands.
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` (`Objects`, `ObjectChecks`, instanced view with screen-size LOD) | done |
 | Objects step 1b: rocks use the strata material library, denser and varied placement (clusters at scarp feet, scree on slopes, logs under forest), spawn data unloaded with chunks, instance counts in capture stats; GeneratorVersion 34 | done |
-| Rock strata tint barely visible up close; worst built frame 33 ms vs 30 ms baseline (column build allocations, recheck) | later |
+| Rock strata tint (rocks share the terrain's camera-relative origin and detail fade); object column build and chunk packing moved off the main thread (17 ms main-thread copy gone); 33 ms worst frame was noise | done |
+| Rocks inside one grey strata band read plain grey up close (shared rock material, changes cliffs too) | later |
 | Large boulders as solid-field edits (rule 11), after near field lands | next |
-| Near-field follow-ups: frustum-cull node selection; trim SurfaceNets filler vertices at the source; teardown order (finish terrain mesh jobs before map systems free ground data); 294 ms GC spike mid-tour and 46 ms worst built frame after the merge | now |
+| Near-field follow-ups: frustum-cull node selection; trim SurfaceNets filler vertices at the source; teardown order (finish terrain mesh jobs before map systems free ground data); 294 ms GC spike mid-tour and 46 ms worst built frame after the merge (not object side: ~10-80 KB/frame steady allocation from terrain or engine) | now |
 | Objects step 2: animated foliage with shader wind | later |
 | Objects step 3: interactive objects with host-authoritative removal | later |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
