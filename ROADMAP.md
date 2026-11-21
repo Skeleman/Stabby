@@ -88,7 +88,8 @@ architecture contract. The other steps fit the contract as it stands.
 | Item | Status |
 |---|---|
 | Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (lane b/near-field) | now |
-| Erosion speed: remove generation bottlenecks so the base grid can move to 2048 (11 m cells), 4096 if it fits (lane b/erosion-speed) | now |
+| Erosion speed: coarse-to-fine erosion (512 grid for all but the last 8 steps) and parallel row loops; 2048 generates in ~5 s (erosion 3 s), 4096 in ~19 s but its checks crash in Features.Dry/Arch (arch endpoints unclamped) | done (e7d12e3) |
+| Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | next |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Water cost: fine wave octave skipped past its fade distance, foam noise skipped away from shores; GPU profile of water and terrain shaders at several resolutions and distances before more effects | now |
 | Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples (lane b/materials) | now |
