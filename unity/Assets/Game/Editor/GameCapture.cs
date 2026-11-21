@@ -71,10 +71,20 @@ namespace Stabby.Game.Editor
         public static void Run()
         {
             BuildScene();
+            int port = FreeUdpPort();
+            System.Environment.SetEnvironmentVariable(GameSettings.PortVariable, port.ToString());
+            Debug.Log($"GameCapture: using UDP port {port}");
             SessionState.SetFloat(StartKey, (float)EditorApplication.timeSinceStartup);
             SessionState.SetBool(Key, true);
             EditorApplication.update += Poll;
             EditorApplication.EnterPlaymode();
+        }
+
+        static int FreeUdpPort()
+        {
+            using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp);
+            socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+            return ((System.Net.IPEndPoint)socket.LocalEndPoint).Port;
         }
 
         static void Poll()
@@ -109,16 +119,13 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, "chase");
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
-                var focus = cam.transform.position + cam.transform.forward * 24f;
-                var eye = focus + new Vector3(-30, 28, -38);
-                for (int k = 0; k < 8; k++)
-                {
-                    var at = Vector3.Lerp(eye, focus, k / 8f);
-                    eye.y += Mathf.Max(0f, GroundHeight(at.x, at.z) + 10f - at.y) / (1f - k / 8f);
-                }
+                var fwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                var focus = home + fwd * 22f;
+                focus.y = GroundHeight(focus.x, focus.z);
+                var eye = focus - fwd * 300f + Vector3.up * 800f;
+                eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + 500f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(focus - eye));
                 Shot(cam, dir, "overhead");
-                var fwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
                 cam.transform.SetPositionAndRotation(home + new Vector3(0, 90, 0), Quaternion.LookRotation(fwd - new Vector3(0, 0.25f, 0)));
                 Shot(cam, dir, "far");
                 GameStatus.Lines["~bench far"] = Bench(cam, "far");
