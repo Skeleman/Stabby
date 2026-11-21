@@ -141,11 +141,6 @@ Shader "Stabby/Object"
                 float lum = dot(albedo, float3(0.3, 0.59, 0.11));
                 float3 tint = lerp(float3(1.04, 0.98, 0.9), float3(1.08, 0.95, 0.8), 0.5 + 0.5 * tone.z);
                 albedo = lerp(lum * tint, albedo, 0.25) * (1 + 0.22 * tone.y);
-                float4 ln = TmNoise3(wp * 7.3 + 13.7, int3(0, 0, 0)), lf = TmNoise3(wp * 31 + 5.9, int3(0, 0, 0));
-                float dens = 0.15 * tone.w + 0.1 * saturate(n.y);
-                float lich = TmFade(31, fp) * smoothstep(0.45 - dens, 0.55 - dens, ln.x + 0.3 * lf.x);
-                float3 lc = lum * lerp(float3(1.02, 1.04, 0.86), float3(1.1, 1.02, 0.78), 0.5 + 0.5 * ln.y) * (1.25 + 0.15 * lf.y);
-                albedo = lerp(albedo, lc, 0.55 * lich);
                 float band = 1 - smoothstep(0.04, 0.4, h);
                 return lerp(albedo, albedo * float3(0.5, 0.46, 0.4), 0.75 * band);
             }
