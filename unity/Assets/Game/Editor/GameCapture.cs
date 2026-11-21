@@ -107,6 +107,8 @@ namespace Stabby.Game.Editor
             {
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, "chase");
+                home = cam.transform.position;
+                GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
                 var focus = cam.transform.position + cam.transform.forward * 24f;
                 cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
                 Shot(cam, dir, "overhead");
@@ -127,6 +129,22 @@ namespace Stabby.Game.Editor
                 if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
                 Shot(cam, dir, name);
                 if (phase == 2) Wire(cam, dir, name + "-wire");
+                wait = 0;
+                phase++;
+            }
+            while (phase <= 10)
+            {
+                string name = "close-" + CloseNames[phase - 7];
+                if (wait == 0)
+                {
+                    if (!CloseUp(cam, phase - 7)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 wait = 0;
                 phase++;
             }
@@ -254,6 +272,63 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static Vector3 home;
+        static readonly string[] CloseNames = { "rock", "grass", "sand", "snow" };
+
+        static bool CloseUp(Camera cam, int which)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var sys = w.GetExistingSystemManaged<ClientMapSystem>();
+                var map = sys?.Map;
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (map == null || sys.Materials?.Surface == null || q.CalculateEntityCount() != 1) continue;
+                var ground = q.GetSingleton<Ground>();
+                int n = map.Config.Size, best = -1;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                Vector2 down = default;
+                for (int z = 1; z < n - 1; z++)
+                    for (int x = 1; x < n - 1; x++)
+                    {
+                        int i = z * n + x;
+                        if (map.Sea[i] || map.Height[i] < 3) continue;
+                        float gx = (map.Height[i + 1] - map.Height[i - 1]) / (2 * cm), gz = (map.Height[i + n] - map.Height[i - n]) / (2 * cm), s = Mathf.Sqrt(gx * gx + gz * gz);
+                        bool ok = which == 0 ? s > 0.8f : s < 0.12f && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
+                        float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (ok && d < bestD) { bestD = d; best = i; down = new Vector2(-gx, -gz).normalized; }
+                    }
+                if (best < 0) return false;
+                var target = new Vector3(best % n * cm, 0, best / n * cm);
+                target.y = ground.HeightAt(target.x, target.z);
+                var eye = which == 0 ? target + new Vector3(down.x, 0, down.y) * 14f + Vector3.up * 2f : target + new Vector3(-0.77f, 0, -0.64f) * 5f + Vector3.up * 2.5f;
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.5f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim close " + which] = $"{CloseNames[which]} at {target.x:F0},{target.y:F0},{target.z:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
+
+        static string Bench(Camera cam, string label)
+        {
+            GameStatus.ToolFrame = Time.frameCount;
+            var rt = new RenderTexture(1600, 900, 24);
+            var px = new Texture2D(1, 1, TextureFormat.RGB24, false);
+            cam.targetTexture = rt;
+            RenderTexture.active = rt;
+            for (int k = 0; k < 5; k++) cam.Render();
+            px.ReadPixels(new Rect(0, 0, 1, 1), 0, 0);
+            const int frames = 60;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            for (int k = 0; k < frames; k++) { cam.Render(); px.ReadPixels(new Rect(0, 0, 1, 1), 0, 0); }
+            double ms = clock.Elapsed.TotalMilliseconds / frames;
+            RenderTexture.active = null;
+            cam.targetTexture = null;
+            Object.DestroyImmediate(rt);
+            Object.DestroyImmediate(px);
+            return $"bench {label}: {ms:F2} ms per 1600x900 frame over {frames} synced renders";
         }
 
         static void Wire(Camera cam, string dir, string name)
