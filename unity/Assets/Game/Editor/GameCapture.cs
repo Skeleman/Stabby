@@ -977,7 +977,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly string[] InnShots = { "inn-far", "inn-mid", "inn-door", "inn-interior", "inn-site" };
+        static readonly string[] InnShots = { "inn-far", "inn-mid", "inn-door", "inn-interior", "inn-site", "inn-roof-close" };
 
         static bool AimInn(Camera cam, int mode)
         {
@@ -1013,6 +1013,7 @@ namespace Stabby.Game.Editor
                 else if (mode == 1) { target = centre + up * 3f * k; eye = target + (across * 0.85f + along * 0.45f).normalized * 22f * k + up * 5f * k; }
                 else if (mode == 2) { target = door + up * (floor + 1.2f * k); eye = target + across * 4.5f * k + along * 1.4f * k + up * 0.4f * k; }
                 else if (mode == 3) { eye = door - across * 1.3f * k + up * (floor + 1.65f * k); target = centre - across * 0.4f * part.ScaleZ * l.DoorZ * s + along * (centre - door).magnitude * 0.2f + up * (floor + 0.9f * k); }
+                else if (mode == 5) { float side = l.DoorX > 0 ? -1 : 1; target = centre + across * (part.ScaleZ * l.DoorZ * s + 0.6f * k) + along * side * 2.2f * k + up * (floor + 2.3f * k); eye = target + across * 2.6f * k + along * side * 1.3f * k + up * 0.9f * k; }
                 else { target = pos + up * 1.5f; eye = target + across * 0.8f * s + along * 0.35f * s + up * 0.85f * s; }
                 if (mode != 3)
                 {

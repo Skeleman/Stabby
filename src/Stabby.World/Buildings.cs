@@ -212,22 +212,27 @@ namespace Stabby.World
 
         static void Roof(StructureLayout l, ulong key, ref Rng rng, in Frame f, float hx, float hz, float rr, float y0, float y1, float verge, int nf)
         {
+            var tr = Rng.Stream(key, "thatch");
             float rw = hx + verge, ym = 0.5f * (y0 + y1), sz = 0.45f / rr;
+            const int bands = 8;
+            var cut = new float[bands + 1];
             for (int sg = -1; sg <= 1; sg += 2)
             {
                 float bt = -sg / rr;
                 Box(l, key, f, 0, y0, sg * (hz + 0.5f * sz - (ym - Plate) / rr), 2 * rw, y1 - y0, sz, Thatch, GV, 1, 2, 1, 0, 0, bt);
-                const int bands = 8;
+                cut[0] = 0;
+                for (int k = 1; k <= bands; k++) cut[k] = cut[k - 1] + tr.Range(0.75f, 1.25f);
                 for (int k = 0; k < bands; k++)
                 {
-                    float a = y0 + (y1 - y0) * k / bands - (k > 0 ? 0.08f : 0), b = y0 + (y1 - y0) * (k + 1) / bands;
+                    bool eave = k == 0;
+                    float a = y0 + (y1 - y0) * cut[k] / cut[bands] - (eave ? 0 : 0.08f), b = y0 + (y1 - y0) * cut[k + 1] / cut[bands];
                     float x = -rw;
                     while (x < rw)
                     {
-                        float x1 = Math.Min(x + rng.Range(1.2f, 2.0f), rw);
-                        if (rw - x1 < 0.5f) x1 = rw;
-                        float th = sz * (1 + rng.Range(0, 0.25f)) * (k == 0 ? 1.3f : 1), ya = a + rng.Range(-0.02f, 0.02f), yk = 0.5f * (ya + b);
-                        Box(l, key, f, 0.5f * (x + x1), ya, sg * (hz + 0.5f * th - (yk - Plate) / rr), x1 - x + 0.02f, b - ya, th, Thatch, GV, 0, 0, 1, 0, 0, bt);
+                        float x1 = Math.Min(x + (eave ? tr.Range(0.35f, 0.7f) : tr.Range(0.9f, 1.6f)), rw);
+                        if (rw - x1 < (eave ? 0.2f : 0.4f)) x1 = rw;
+                        float th = sz * tr.Range(1f, 1.2f) * (eave ? 1.3f : 1), ya = a + (eave ? tr.Range(-0.09f, 0.03f) : tr.Range(-0.035f, 0.025f)), yk = 0.5f * (ya + b);
+                        Box(l, key, f, 0.5f * (x + x1), ya, sg * (hz + 0.5f * th - (yk - Plate) / rr), x1 - x + 0.02f, b - ya, 1.05f * th, Thatch, GV, 0, 0, 1, 0, 0, bt, 0.2f * th / (b - ya));
                         x = x1;
                     }
                 }
@@ -239,7 +244,11 @@ namespace Stabby.World
                 Box(l, key, f, 0, Plate + 0.5f * hz * rr - 0.33f, sg * 0.5f * hz, 2 * hx, 0.18f, 0.18f, Timber, GX, 0, 0);
             }
             Box(l, key, f, 0, y1 - 0.1f, 0, 2 * rw + 0.1f, 0.4f, 2 * sz + 0.3f, Thatch, GX, 0, 2);
-            Box(l, key, f, 0, y1 + 0.25f, 0, 2 * rw + 0.15f, 0.15f, sz + 0.2f, Thatch, GX, 0, 0);
+            float rd = sz + 0.32f;
+            Box(l, key, f, 0, y1 + 0.22f, 0, 2 * rw + 0.15f, 0.22f, 0.8f * rd, Thatch, GX, 0, 0, 1, 0, 0, 0, 0.2f * rd / 0.22f);
+            float wb = 2 * sz + 0.36f, wt = 0.6f * rd + 0.04f;
+            for (float x = -rw + tr.Range(0.25f, 0.4f); x < rw - 0.15f; x += tr.Range(0.5f, 0.7f))
+                Box(l, key, f, x, y1 - 0.12f, 0, 0.06f, 0.59f, 0.5f * (wb + wt), Timber, GZ, 0, 0, 1, 0, 0, 0, (wb - wt) / (2 * 0.59f));
             Box(l, key, f, 0, y1 - 0.37f, 0, 2 * hx + 0.2f, 0.22f, 0.2f, Timber, GX, 0, 0);
             for (int i = 1; i < nf; i++)
             {
