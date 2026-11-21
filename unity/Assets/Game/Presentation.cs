@@ -42,7 +42,7 @@ namespace Stabby.Game
         bool Warm()
         {
             int n = Colors.Length;
-            if (warmed > 1 + 2 * n) return true;
+            if (warmed > 2 + 2 * n) return true;
             if (frames <= 10) return false;
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             if (warmed == 0)
@@ -52,6 +52,7 @@ namespace Stabby.Game
                 materialIds = new BatchMaterialID[n];
             }
             else if (warmed == 1) LoadMesh(graphics);
+            else if (warmed == 2 + 2 * n) WarmEntity();
             else
             {
                 int k = (warmed - 2) / 2;
@@ -73,6 +74,15 @@ namespace Stabby.Game
             Object.Destroy(prim);
             bounds = new AABB { Center = mesh.bounds.center, Extents = mesh.bounds.extents };
             meshId = graphics.RegisterMesh(mesh);
+        }
+
+        void WarmEntity()
+        {
+            var e = EntityManager.CreateEntity(typeof(LocalTransform), typeof(LocalToWorld));
+            EntityManager.SetComponentData(e, LocalTransform.FromPosition(new float3(0, -10000, 0)));
+            EntityManager.SetComponentData(e, new LocalToWorld { Value = float4x4.Translate(new float3(0, -10000, 0)) });
+            RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(ShadowCastingMode.On), new MaterialMeshInfo(materialIds[0], meshId));
+            EntityManager.SetComponentData(e, new RenderBounds { Value = bounds });
         }
 
         protected override void OnUpdate()

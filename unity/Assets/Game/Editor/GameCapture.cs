@@ -93,8 +93,11 @@ namespace Stabby.Game.Editor
 
         static void Poll()
         {
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
             PollBody();
-            SpikeProbe.Exit();
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (ms >= 10) GameStatus.ToolFrame = Time.frameCount;
+            SpikeProbe.Exit(ms, phase, wait, tourStop);
         }
 
         static string dir;
