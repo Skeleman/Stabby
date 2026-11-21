@@ -85,6 +85,8 @@ architecture contract. The other steps fit the contract as it stands.
 
 ## Next: surface look and objects (before bigger caves)
 
+Art direction (Zach): stylised natural realism. Real-world colour palettes (no saturated cartoon hues), shader surfaces that mimic real materials, and enough noise and imperfection to feel organic. Fidelity can stay modest; palette and material believability come first.
+
 | Item | Status |
 |---|---|
 | Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (`NearField.Sample`, 64-quad nodes over 9 levels with 2:1 balance; GeneratorVersion 35) | done |
