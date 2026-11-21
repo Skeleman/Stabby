@@ -7,6 +7,7 @@ namespace Stabby.World
     {
         public float[] Positions, Normals;
         public int[] Indices;
+        public float[] Uvs, Winds;
         public int VertexCount => Positions.Length / 3;
         public int TriangleCount => Indices.Length / 3;
     }
@@ -31,6 +32,9 @@ namespace Stabby.World
         public static ObjectMesh Build(int shape, ulong key, int lod)
         {
             lod = Math.Max(0, Math.Min(MaxLods - 1, lod));
+            if (shape == ObjectPart.Shrub) return ObjectFoliage.Shrub(key, lod);
+            if (shape == ObjectPart.Broadleaf) return ObjectFoliage.Broadleaf(key, lod);
+            if (shape == ObjectPart.Conifer) return ObjectFoliage.Conifer(key, lod);
             if (shape == ObjectPart.Log) return Log(key, RingSegments[lod]);
             if (shape == ObjectPart.Stump) return Stump(key, RingSegments[lod]);
             return Rock(key, RockLevels[lod]);

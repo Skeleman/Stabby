@@ -380,7 +380,7 @@ namespace Stabby.World
                 else
                 {
                     Rotate(o, p.OffsetX * o.Size, p.OffsetY * o.Size, p.OffsetZ * o.Size, out float cx, out float cy, out float cz);
-                    float rad = 0.5f * Math.Min(p.ScaleX, p.ScaleZ) * o.Size * 0.85f;
+                    float rad = ObjectPart.IsFoliage(p.Shape) ? ObjectFoliage.TrunkRadius * 1.25f * Math.Min(p.ScaleX, p.ScaleZ) * o.Size : 0.5f * Math.Min(p.ScaleX, p.ScaleZ) * o.Size * 0.85f;
                     list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = rad, Bottom = cy + o.Y, Top = cy + o.Y + tall });
                 }
             }

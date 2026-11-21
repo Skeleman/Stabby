@@ -126,6 +126,32 @@ public class ObjectTests
     }
 
     [Fact]
+    public void FoliageMeshesFitUnitBoundsAndCarryLeafAndWindData()
+    {
+        for (int shape = ObjectPart.Shrub; shape < ObjectPart.Shapes; shape++)
+            for (int lod = 0; lod < 3; lod++)
+            {
+                var m = ObjectMeshes.Build(shape, ObjectMeshes.Key("bush", 0, 3), lod);
+                Assert.Equal(4 * m.VertexCount, m.Uvs.Length);
+                Assert.Equal(4 * m.VertexCount, m.Winds.Length);
+                float maxY = 0, maxR = 0;
+                int leaves = 0;
+                for (int v = 0; v < m.VertexCount; v++)
+                {
+                    float x = m.Positions[3 * v], y = m.Positions[3 * v + 1], z = m.Positions[3 * v + 2];
+                    maxY = Math.Max(maxY, y);
+                    maxR = Math.Max(maxR, (float)Math.Sqrt(x * x + z * z));
+                    if (m.Uvs[4 * v + 3] > 0.5f) leaves++;
+                    Assert.InRange(m.Winds[4 * v], 0f, 1.5f);
+                }
+                Assert.InRange(maxY, 0.45f, lod == 0 ? 1.05f : 1.3f);
+                Assert.InRange(maxR, 0.1f, lod == 0 ? 0.55f : 0.8f);
+                Assert.True(leaves > 0);
+            }
+        Assert.Null(ObjectMeshes.Build(ObjectPart.Rock, ObjectMeshes.Key("boulder", 0, 1), 0).Uvs);
+    }
+
+    [Fact]
     public void WalkingStepsOntoLowRocksAndStopsAtTallOnes()
     {
         var flat = new FlatGround();

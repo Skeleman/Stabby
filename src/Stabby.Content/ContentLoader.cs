@@ -306,6 +306,7 @@ public static class ContentLoader
         public string Solid { get; set; } = "";
         public string Shadows { get; set; } = "";
         public string? Color { get; set; }
+        public string? LeafColor { get; set; }
     }
 
     sealed class PlacementEntry
@@ -363,6 +364,7 @@ public static class ContentLoader
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
                     HasColor = p.Color != null, Color = p.Color != null ? Hex(p.Color) : def.Color,
+                    HasLeafColor = p.LeafColor != null, LeafColor = p.LeafColor != null ? Hex(p.LeafColor) : 0,
                 };
                 if (part.Solid < -1 || part.Shadows < -1) errors.Add(o.Id + ": part " + p.Id + " solid/shadows must be \"\", \"on\" or \"off\"");
                 if (p.Offset is { Length: 3 }) { part.OffsetX = p.Offset[0]; part.OffsetY = p.Offset[1]; part.OffsetZ = p.Offset[2]; }
