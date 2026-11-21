@@ -22,6 +22,7 @@ lakes, D8 rivers) -> biomes -> authored regions.
    ```
    stabby sweep --count 100 --size 256    # 0 violations
    stabby sweep --count 20 --size 512     # 0 violations, note median/max ms
+   stabby sweep --from 3 --count 2 --size 2048 --jobs 2   # river banks at 11 m cells
    stabby gen --seed 4                    # then open out/seed4/sheet.png
    ```
    Use `--rain 1200` to isolate terrain and hydrology from climate.

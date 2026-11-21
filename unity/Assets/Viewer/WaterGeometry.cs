@@ -34,7 +34,7 @@ namespace Stabby.Viewer
         const float SlopeRange = 0.1f;
         const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
         public const float FallMinDrop = 0.3f;
-        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, MistPerWidth = 7f, MistLift = 0.35f, MistPerPool = 0.5f, MistPerDrop = 0.25f;
+        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistLift = 0.35f, MistPerPool = 0.5f, MistPerDrop = 0.25f;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 4;
         const float CurtainRowStep = 2f;
         static readonly Vector4 NoPool = new Vector4(-1e5f, 0, 0, 0);
@@ -58,7 +58,21 @@ namespace Stabby.Viewer
         {
             f = default;
             lipT = 0;
-            if (k < 1 || k >= r.X.Length || r.P[k] <= 0) return false;
+            if (k < 1 || k >= r.X.Length) return false;
+            int at = r.Lip == null ? -1 : System.Array.IndexOf(r.Lip, k - 1);
+            if (at >= 0)
+            {
+                var rf = r.Falls[at];
+                f = new FallCurtain
+                {
+                    K = k - 1, LipX = rf.LipX, LipZ = rf.LipZ, LipY = rf.LipY + RiverLift,
+                    BaseX = rf.LipX + rf.DirX * FallThrowAt(rf.Drop), BaseZ = rf.LipZ + rf.DirZ * FallThrowAt(rf.Drop), BaseY = rf.BaseY + RiverLift,
+                    Width = 2 * Mathf.Max(0.5f * rf.Width, 6f), DirX = rf.DirX, DirZ = rf.DirZ,
+                    PoolRadius = rf.PoolRadius, Discharge = rf.Discharge,
+                };
+                return true;
+            }
+            if (r.P[k] <= 0) return false;
             float drop = r.S[k - 1] - r.S[k];
             var d = new Vector2(r.X[k] - r.X[k - 1], r.Z[k] - r.Z[k - 1]);
             if (drop < FallMinDrop || d.sqrMagnitude < 1e-6f) return false;
@@ -262,6 +276,7 @@ namespace Stabby.Viewer
                     float plunge = 0;
                     for (int j = Mathf.Max(k - PlungeReach, 0); j <= k; j++)
                         plunge = Mathf.Max(plunge, slopes[j] * (1 - (k - j) / (float)(PlungeReach + 1)));
+                    if (pool.x > NoPool.x) half = Mathf.Max(half, pool.z * (1 - Mathf.Clamp01((s - pool.x) / (PoolSpread * pool.z))));
                     var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, 0);
                     bool join = k > 0;
                     if (k > 0 && FallAt(r, k, out var f, out float lt))
