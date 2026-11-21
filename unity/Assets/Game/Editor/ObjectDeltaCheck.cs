@@ -97,6 +97,7 @@ namespace Stabby.Game.Editor
             }
             if (phase == 1)
             {
+                Isolated(field);
                 Shot("before");
                 Sys<ClientObjectDeltaSystem>(GameSettings.FullStreamClient).Request(far);
                 tries = 0;
@@ -148,6 +149,30 @@ namespace Stabby.Game.Editor
         static void Expect(int at, int frames)
         {
             if (++tries > frames) Fail($"phase {at} waited {frames} frames");
+        }
+
+        static void Isolated(ObjectField field)
+        {
+            var cols = new List<ObjectColumn>();
+            field.ColumnsOf(target, cols);
+            var oc = Columns(GameSettings.FullStreamClient);
+            var saved = new List<(int, ObjectColumn)>();
+            foreach (var c in cols)
+            {
+                int k = Obstacles.Find(oc, c);
+                if (k < 0) continue;
+                saved.Add((k, oc.Blob.Value.Items[k]));
+                oc.Blob.Value.Items[k] = Obstacles.Dead;
+            }
+            Check(saved.Count == cols.Count && cols.Count > 0, $"{GameSettings.FullStreamClient}: killed {saved.Count} of {cols.Count} columns in its own copy");
+            foreach (string w in new[] { null, GameSettings.ViewClient })
+            {
+                var other = Columns(w);
+                int left = cols.Count(c => Obstacles.Find(other, c) >= 0);
+                Check(left == cols.Count, $"{w ?? "server"}: {left} of {cols.Count} columns kept after a kill in {GameSettings.FullStreamClient}");
+            }
+            foreach (var (k, c) in saved) oc.Blob.Value.Items[k] = c;
+            log.Add($"kill isolation: {cols.Count} columns killed in {GameSettings.FullStreamClient} only, then restored");
         }
 
         static void Check(bool ok, string what)

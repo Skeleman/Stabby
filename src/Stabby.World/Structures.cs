@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct StructurePiece
     {
         public ulong Key;
-        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q;
+        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T;
         public int Lo, Hi;
     }
 
@@ -48,9 +48,13 @@ namespace Stabby.World
         {
             int tier = Math.Max(0, Math.Min(Tiers - 1, lod));
             var b = ObjectMeshes.Builder.New();
+            var tones = new List<float>();
             foreach (var p in Layout(shape, key).Pieces)
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
+                var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
+                float tv = tr.Range(-1f, 1f), th = tr.Range(-1f, 1f), tl = tr.NextFloat();
+                int before = b.P.Count / 3;
                 bool cut = p.Q >= Faceted;
                 float[] u;
                 int[] idx;
@@ -75,7 +79,7 @@ namespace Stabby.World
                 var w = new float[u.Length];
                 for (int v = 0; v < u.Length; v += 3)
                 {
-                    float y = 0.5f * (u[v + 1] + 1) * p.Sy, x = 0.5f * u[v] * p.Sx + p.L * (y - 0.5f * p.Sy), z = 0.5f * u[v + 2] * p.Sz;
+                    float y = 0.5f * (u[v + 1] + 1) * p.Sy, dy = y - 0.5f * p.Sy, x = 0.5f * u[v] * p.Sx + p.L * dy, z = 0.5f * u[v + 2] * (p.Sz - 2 * p.T * dy) + p.B * dy;
                     w[v] = p.X + p.C * x - p.S * z; w[v + 1] = p.Y + y; w[v + 2] = p.Z + p.S * x + p.C * z;
                 }
                 if (cut)
@@ -86,8 +90,11 @@ namespace Stabby.World
                     for (int v = 0; v < w.Length; v += 3) b.Add(w[v], w[v + 1], w[v + 2]);
                     foreach (int i in idx) b.I.Add(first + i);
                 }
+                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(tl); }
             }
-            return b.Finish();
+            var mesh = b.Finish();
+            mesh.Tones = tones.ToArray();
+            return mesh;
         }
 
         static float[] Block(ulong key, bool slab, out int[] idx)
@@ -107,13 +114,13 @@ namespace Stabby.World
                 }
                 polys.Add(q);
             }
-            float tilt = slab ? 0.05f : 0.12f;
             for (int f = 0; f < 6; f++)
             {
                 if (slab && f == 2) continue;
                 var n = new float[3];
                 int ax = f >> 1;
-                for (int k = 0; k < 3; k++) n[k] = k == ax ? ((f & 1) == 0 ? 1 : -1) : rng.Range(-tilt, tilt);
+                float tilt = slab ? 0.05f : ax == 2 ? FaceTilt : 0.12f;
+                for (int k = 0; k < 3; k++) n[k] = k == ax ? ((f & 1) == 0 ? 1 : -1) : k == 2 && !slab ? rng.Range(-FaceTilt, FaceTilt) : rng.Range(-tilt, tilt);
                 float len = (float)Math.Sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
                 n[0] /= len; n[1] /= len; n[2] /= len;
                 Clip(polys, n[0], n[1], n[2], Math.Abs(n[ax]) - Math.Abs(n[(ax + 1) % 3]) - Math.Abs(n[(ax + 2) % 3]));
@@ -121,11 +128,11 @@ namespace Stabby.World
             int cuts = slab ? rng.Range(0, 2) : rng.Range(1, 4);
             for (int k = 0; k < cuts; k++)
             {
-                float nx = rng.Range(-1f, 1f), ny = rng.Range(-0.6f, 1f), nz = rng.Range(-1f, 1f);
+                float nx = rng.Range(-1f, 1f), ny = rng.Range(-0.6f, slab ? 1f : 0.6f), nz = slab ? rng.Range(-1f, 1f) : rng.Range(-0.15f, 0.15f);
                 float len = (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
                 if (len < 1e-3f) continue;
                 nx /= len; ny /= len; nz /= len;
-                Clip(polys, nx, ny, nz, (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(slab ? 0.92f : 0.74f, 0.97f));
+                Clip(polys, nx, ny, nz, (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(slab ? 0.92f : 0.84f, 0.97f));
             }
             var pos = new List<float>();
             var ind = new List<int>();
@@ -212,10 +219,10 @@ namespace Stabby.World
             return u;
         }
 
-        static void Add(StructureLayout l, ulong key, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi, float q = Squareness, float lean = 0)
+        static void Add(StructureLayout l, ulong key, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi, float q = Squareness, float lean = 0, float batter = 0, float taper = 0)
         {
             ulong k = Rng.Mix(key ^ ((ulong)(l.Pieces.Count + 1) * 0x9E3779B97F4A7C15UL));
-            l.Pieces.Add(new StructurePiece { Key = k, X = x, Y = y, Z = z, Sx = sx, Sy = sy, Sz = sz, C = c, S = s, L = lean, Q = q, Lo = lo, Hi = hi });
+            l.Pieces.Add(new StructurePiece { Key = k, X = x, Y = y, Z = z, Sx = sx, Sy = sy, Sz = sz, C = c, S = s, L = lean, Q = q, B = batter, T = taper, Lo = lo, Hi = hi });
         }
 
         static void Yaw(ref Rng rng, float range, out float c, out float s)
@@ -251,6 +258,7 @@ namespace Stabby.World
             bool breach = count > 2 && rng.NextFloat() < 0.25f;
             float bx = rng.Range(-0.25f, 0.25f), bw = rng.Range(0.03f, 0.07f);
             int bBase = rng.Range(1, Math.Max(2, count - 1));
+            float slope = 0.5f * WallBase * WallBatter / h;
             for (int j = 0; j < count; j++)
             {
                 float yb = courses[j], ch = courses[j + 1] - yb;
@@ -263,10 +271,10 @@ namespace Stabby.World
                     float half = bw * (1 + 0.8f * (j - bBase));
                     ga = bx - half;
                     gb = bx + half;
-                    Course(l, key, ref rng, j, a, Math.Min(e, ga), yb, ch, w);
-                    Course(l, key, ref rng, j, Math.Max(a, gb), e, yb, ch, w);
+                    Course(l, key, ref rng, j, a, Math.Min(e, ga), yb, ch, w, slope);
+                    Course(l, key, ref rng, j, Math.Max(a, gb), e, yb, ch, w, slope);
                 }
-                else Course(l, key, ref rng, j, a, e, yb, ch, w);
+                else Course(l, key, ref rng, j, a, e, yb, ch, w, slope);
                 if (j == count - 1) Cope(l, key, ref rng, ga, gb, a, e, h, WallBase * (1 - WallBatter));
             }
             int tumble = rng.Range(2, 7) + (breach ? 4 : 0);
@@ -291,9 +299,9 @@ namespace Stabby.World
             }
         }
 
-        const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f;
+        const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f, FaceTilt = 0.025f, FaceYaw = 0.012f, SetBack = 0.005f;
 
-        static void Course(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w)
+        static void Course(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w, float slope)
         {
             float t = a;
             bool first = true;
@@ -304,22 +312,22 @@ namespace Stabby.World
                 first = false;
                 len = Math.Min(len, e - t);
                 if (e - t - len < 0.6f * ch) len = e - t;
-                float xc = t + 0.5f * len, y0 = yb - 0.05f * ch;
+                float xc = t + 0.5f * len, y0 = yb - 0.05f * ch, wm = w + 2 * slope * (0.5f * ch - 0.05f * ch);
                 if (rng.NextFloat() < 0.12f)
                 {
-                    Yaw(ref rng, 0.05f, out float c, out float s);
-                    float sy = ch * rng.Range(0.88f, 1.12f);
-                    Add(l, key, xc, y0, rng.Range(-0.003f, 0.003f), len * rng.Range(1f, 1.06f), sy, w * 1.04f, c, s, 0, 1, StoneSquare);
-                    Pin(l, key, ref rng, xc, len, y0 + sy, yb + ch, 0, w);
+                    Yaw(ref rng, FaceYaw, out float c, out float s);
+                    float sy = ch * rng.Range(0.88f, 1.12f), sz = wm - 2 * slope * (0.5f * sy) - rng.Range(0f, 2 * SetBack);
+                    Add(l, key, xc, y0, rng.Range(-0.5f, 0.5f) * (w - sz), len * rng.Range(1f, 1.06f), sy, sz, c, s, 0, 1, StoneSquare, 0, 0, slope);
+                    Pin(l, key, ref rng, xc, len, y0 + sy, yb + ch, 0, w, 0);
                 }
                 else
                     for (int side = -1; side <= 1; side += 2)
                     {
                         float d = w * rng.Range(0.5f, 0.62f), sy = ch * rng.Range(0.82f, 1.12f);
-                        float sx = len * rng.Range(0.94f, 1.06f), z = side * (0.5f * w - 0.5f * d) + rng.Range(-0.003f, 0.003f);
-                        Yaw(ref rng, 0.05f, out float c, out float s);
-                        Add(l, key, xc, y0, z, sx, sy, d, c, s, 0, 1, StoneSquare);
-                        Pin(l, key, ref rng, xc, sx, y0 + sy, yb + ch, z, d);
+                        float sx = len * rng.Range(0.94f, 1.06f), z = side * (0.5f * (wm - slope * sy) - 0.5f * d - rng.Range(0f, SetBack));
+                        Yaw(ref rng, FaceYaw, out float c, out float s);
+                        Add(l, key, xc, y0, z, sx, sy, d, c, s, 0, 1, StoneSquare, 0, -side * slope);
+                        Pin(l, key, ref rng, xc, sx, y0 + sy, yb + ch, z, d, -side * slope);
                     }
                 t += len;
                 if (e - t > 0.004f)
@@ -333,12 +341,12 @@ namespace Stabby.World
             }
         }
 
-        static void Pin(StructureLayout l, ulong key, ref Rng rng, float xc, float len, float top, float course, float z, float d)
+        static void Pin(StructureLayout l, ulong key, ref Rng rng, float xc, float len, float top, float course, float z, float d, float batter)
         {
             float gap = course - top;
             if (gap < 0.004f) return;
             float pl = len * rng.Range(0.3f, 0.6f);
-            Add(l, key, xc + rng.Range(-0.25f, 0.25f) * (len - pl), top - 0.2f * gap, z, pl, 1.3f * gap, d * rng.Range(0.6f, 0.9f), 1, 0, 0, 0, StoneSquare);
+            Add(l, key, xc + rng.Range(-0.25f, 0.25f) * (len - pl), top - 0.2f * gap, z, pl, 1.3f * gap, d * rng.Range(0.6f, 0.9f), 1, 0, 0, 0, StoneSquare, 0, batter);
         }
 
         static void Cope(StructureLayout l, ulong key, ref Rng rng, float gapA, float gapB, float a, float e, float h, float w)
