@@ -11,6 +11,7 @@ namespace Stabby.Viewer
         public Vector3[] Verts, Norms;
         public Color[] Cols;
         public Vector2[] Uvs;
+        public Vector4[] Uv1;
         public int[] Tris;
     }
 
@@ -19,7 +20,7 @@ namespace Stabby.Viewer
         const int RiverPieceVertices = 16000;
         public const float RiverLift = 0.1f, LakeLift = 0.5f;
         const float SlopeRange = 0.1f;
-        const int SlopeReach = 8;
+        const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
         public static Mesh ToMesh(MeshParts d)
@@ -29,6 +30,7 @@ namespace Stabby.Viewer
             mesh.SetNormals(d.Norms);
             mesh.SetColors(d.Cols);
             if (d.Uvs != null) mesh.SetUVs(0, d.Uvs);
+            if (d.Uv1 != null) mesh.SetUVs(1, d.Uv1);
             mesh.SetTriangles(d.Tris, 0);
             mesh.RecalculateBounds();
             return mesh;
@@ -79,47 +81,79 @@ namespace Stabby.Viewer
             var pieces = new List<MeshParts>();
             var verts = new List<Vector3>();
             var cols = new List<Color>();
+            var chan = new List<Vector2>();
+            var reach = new List<Vector4>();
             var tris = new List<int>();
             foreach (var r in world.Water.Rivers)
             {
                 if (r.Cells.Count < 2) continue;
                 if (verts.Count >= RiverPieceVertices)
                 {
-                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, cols, tris, default));
+                    pieces.Add(RiverPiece($"Rivers {pieces.Count}", verts, cols, chan, reach, tris));
                     verts.Clear();
                     cols.Clear();
+                    chan.Clear();
+                    reach.Clear();
                     tris.Clear();
                 }
                 var pts = new List<Vector4>();
                 for (int k = 0; k < r.Cells.Count; k++)
                     pts.Add(new Vector4(r.X[k] * cm, Hydrology.Stage(world.Config, r, k), r.Y[k] * cm, r.Width[k]));
                 for (int it = 0; it < 2; it++) pts = Chaikin(pts);
-                int b = verts.Count;
+                int b = verts.Count, last = pts.Count - 1;
+                var slopes = new float[pts.Count];
+                for (int k = 0; k < pts.Count; k++)
+                {
+                    var u = pts[Mathf.Max(k - SlopeReach, 0)];
+                    var d = pts[Mathf.Min(k + SlopeReach, last)];
+                    float run = new Vector2(d.x - u.x, d.z - u.z).magnitude;
+                    slopes[k] = Mathf.Clamp01((run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0) / SlopeRange);
+                }
+                float s = 0;
                 for (int k = 0; k < pts.Count; k++)
                 {
                     var a = pts[Mathf.Max(k - 1, 0)];
-                    var z = pts[Mathf.Min(k + 1, pts.Count - 1)];
+                    var z = pts[Mathf.Min(k + 1, last)];
                     var dir = new Vector3(z.x - a.x, 0, z.z - a.z).normalized;
-                    var side = new Vector3(dir.z, 0, -dir.x) * Mathf.Max(pts[k].w * 0.5f, 6f);
+                    float half = Mathf.Max(pts[k].w * 0.5f, 6f);
+                    var side = new Vector3(dir.z, 0, -dir.x) * half;
                     var p = new Vector3(pts[k].x, 0, pts[k].z);
+                    if (k > 0) s += new Vector2(p.x - pts[k - 1].x, p.z - pts[k - 1].z).magnitude;
                     p.y = pts[k].y + RiverLift;
                     verts.Add(p - side);
                     verts.Add(p + side);
-                    var u = pts[Mathf.Max(k - SlopeReach, 0)];
-                    var d = pts[Mathf.Min(k + SlopeReach, pts.Count - 1)];
-                    float run = new Vector2(d.x - u.x, d.z - u.z).magnitude;
-                    float slope = run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0;
-                    var flow = new Color(dir.x * 0.5f + 0.5f, dir.z * 0.5f + 0.5f, Mathf.Clamp01(slope / SlopeRange), 0);
+                    var flow = new Color(dir.x * 0.5f + 0.5f, dir.z * 0.5f + 0.5f, slopes[k], 0);
                     cols.Add(flow);
                     cols.Add(flow);
+                    chan.Add(new Vector2(-1, half));
+                    chan.Add(new Vector2(1, half));
+                    var i0 = pts[Mathf.Max(k - TurnReach, 0)];
+                    var i1 = pts[Mathf.Min(k + TurnReach, last)];
+                    float ix = p.x - i0.x, iz = p.z - i0.z, ox = i1.x - p.x, oz = i1.z - p.z;
+                    float li = Mathf.Sqrt(ix * ix + iz * iz), lo = Mathf.Sqrt(ox * ox + oz * oz);
+                    float bend = li * lo > 0 ? (ix * oz - iz * ox) / (li * lo) / (0.5f * (li + lo)) : 0;
+                    float plunge = 0;
+                    for (int j = Mathf.Max(k - PlungeReach, 0); j <= k; j++)
+                        plunge = Mathf.Max(plunge, slopes[j] * (1 - (k - j) / (float)(PlungeReach + 1)));
+                    var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, 0);
+                    reach.Add(rv);
+                    reach.Add(rv);
                     if (k == 0) continue;
                     int v = b + 2 * k;
                     tris.Add(v - 2); tris.Add(v); tris.Add(v - 1);
                     tris.Add(v - 1); tris.Add(v); tris.Add(v + 1);
                 }
             }
-            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, cols, tris, default));
+            if (verts.Count > 0) pieces.Add(RiverPiece($"Rivers {pieces.Count}", verts, cols, chan, reach, tris));
             return pieces;
+        }
+
+        static MeshParts RiverPiece(string name, List<Vector3> verts, List<Color> cols, List<Vector2> chan, List<Vector4> reach, List<int> tris)
+        {
+            var m = Flat(name, verts, cols, tris, default);
+            m.Uvs = chan.ToArray();
+            m.Uv1 = reach.ToArray();
+            return m;
         }
 
         public static MeshParts Sea(int size, float cm)

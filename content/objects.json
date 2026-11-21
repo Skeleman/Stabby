@@ -71,6 +71,21 @@
         "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.8 }, { "biome": "wetland", "scale": 0.3 }, { "biome": "savanna", "scale": 0.1 } ] }
     },
     {
+      "id": "windthrow", "name": "Windthrown tree", "kind": "static", "color": "#574a3d", "variants": 6,
+      "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.12, 0.12], "ends": "rooted" } ],
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 2, "slopeMax": 0.5, "sizeMinM": 5, "sizeMaxM": 10, "sink": 0.02, "alignToSlope": 1,
+        "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.6 } ] }
+    },
+    {
+      "id": "snapped-tree", "name": "Snapped tree", "kind": "static", "color": "#5a4c3f", "variants": 6,
+      "parts": [
+        { "id": "stump", "shape": "stump", "scale": [0.16, 0.32, 0.16], "ends": "snapped" },
+        { "id": "trunk", "shape": "log", "offset": [0.56, 0, 0.1], "scale": [1, 0.11, 0.11] }
+      ],
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 1, "slopeMax": 0.5, "sizeMinM": 5, "sizeMaxM": 9, "sink": 0.02, "alignToSlope": 0.6,
+        "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.6 } ] }
+    },
+    {
       "id": "bush", "name": "Bush", "kind": "animated", "color": "#4c3f33", "variants": 6,
       "parts": [ { "id": "body", "shape": "shrub", "leafColor": "#5a6c3e" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "shrubland", "savanna", "tropical-forest", "boreal", "wetland"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 0.7, "sizeMaxM": 2.2, "clusterCount": 3, "clusterRadiusM": 3, "sink": 0.04, "alignToSlope": 0.2,
