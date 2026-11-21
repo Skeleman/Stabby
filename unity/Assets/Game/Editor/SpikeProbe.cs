@@ -102,6 +102,7 @@ namespace Stabby.Game.Editor
 
         static readonly List<ProfilerRecorderHandle> handles = new List<ProfilerRecorderHandle>();
         static int scanned;
+        static readonly HashSet<ProfilerRecorderHandle> seen = new HashSet<ProfilerRecorderHandle>();
 
         static void Scan()
         {
@@ -110,6 +111,7 @@ namespace Stabby.Game.Editor
             scanned = handles.Count;
             foreach (var h in handles)
             {
+                if (!seen.Add(h)) continue;
                 var d = ProfilerRecorderHandle.GetDescription(h);
                 if (d.UnitType != ProfilerMarkerDataUnit.TimeNanoseconds || !names.Add(d.Name)) continue;
                 recs.Add((d.Name, ProfilerRecorder.StartNew(d.Category, d.Name, 1)));
