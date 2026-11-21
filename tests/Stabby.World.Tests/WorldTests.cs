@@ -8,11 +8,12 @@ public class WorldTests
 {
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
+    static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(ContentLoader.FindContentRoot(AppContext.BaseDirectory), Biomes.Select(b => b.Id).ToList());
 
     static WorldConfig Cfg(ulong seed, int size = 256) =>
         new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) };
 
-    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials);
+    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials, null, null, Objects);
 
     [Fact]
     public void HundredSeedsPassEveryCheck()

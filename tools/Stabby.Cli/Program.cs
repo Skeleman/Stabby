@@ -8,6 +8,7 @@ using Stabby.World;
 var opts = ParseArgs(args.Skip(1).ToArray());
 var biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 var materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
+var objects = ContentLoader.LoadObjects(ContentLoader.FindContentRoot(AppContext.BaseDirectory), biomes.Select(b => b.Id).ToList());
 var json = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
 switch (args.FirstOrDefault())
@@ -32,7 +33,7 @@ int Gen()
     Directory.CreateDirectory(dir);
 
     var sw = Stopwatch.StartNew();
-    var w = WorldGenerator.Generate(c, biomes, materials, sketch);
+    var w = WorldGenerator.Generate(c, biomes, materials, sketch, null, objects);
     long ms = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
 
@@ -67,7 +68,7 @@ int Bake()
     var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "512"), CultureInfo.InvariantCulture));
     var path = Opt("out", Path.Combine("out", "maps", $"seed{c.Seed}-{c.Size}.stabbymap"));
     var sw = Stopwatch.StartNew();
-    var w = WorldGenerator.Generate(c, biomes, materials);
+    var w = WorldGenerator.Generate(c, biomes, materials, null, null, objects);
     long genMs = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
     var bytes = WorldFile.Write(w);
@@ -91,7 +92,7 @@ int RunScenarios()
     {
         var c = Config(s.Seed, Scenarios.Size);
         var sketch = s.Sketch == null ? null : ContentLoader.LoadSketch(root, s.Sketch, c);
-        var w = WorldGenerator.Generate(c, biomes, materials, sketch);
+        var w = WorldGenerator.Generate(c, biomes, materials, sketch, null, objects);
         var violations = WorldChecks.Run(w);
         int at = s.Find(w), n = c.Size;
         bool ok = at >= 0 && violations.Count == 0;
@@ -114,7 +115,7 @@ int ScanScenarios()
         var hits = new System.Collections.Concurrent.ConcurrentBag<ulong>();
         Parallel.For(1, count + 1, k =>
         {
-            var w = WorldGenerator.Generate(Config((ulong)k, Scenarios.Size), biomes, materials);
+            var w = WorldGenerator.Generate(Config((ulong)k, Scenarios.Size), biomes, materials, null, null, objects);
             if (s.Find(w) >= 0 && WorldChecks.Run(w).Count == 0) hits.Add((ulong)k);
         });
         var h = hits.OrderBy(x => x).ToArray();
@@ -160,7 +161,7 @@ int Sweep()
             stages.Add((name, now - last, b - bytes));
             (last, bytes) = (now, b);
         }
-        var w = WorldGenerator.Generate(c, biomes, materials, null, Mark);
+        var w = WorldGenerator.Generate(c, biomes, materials, null, Mark, objects);
         times.Add(sw.ElapsedMilliseconds);
         if (!checks) return;
         foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
