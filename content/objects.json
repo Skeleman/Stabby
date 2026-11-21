@@ -62,6 +62,22 @@
       "id": "stump", "name": "Stump", "kind": "static", "color": "#6a5640", "variants": 4,
       "parts": [ { "id": "stump", "shape": "stump", "scale": [1, 0.9, 1] } ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 4, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
+    },
+    {
+      "id": "loose-stone", "name": "Loose stone", "kind": "interactive", "color": "#958f84", "variants": 6,
+      "interact": { "verb": "take", "reachM": 2.5 },
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1], "solid": "off" } ],
+      "placement": { "biomes": ["steppe", "savanna", "shrubland", "tundra", "temperate-forest", "boreal", "alpine", "desert"], "perHectare": 3, "slopeMax": 0.8, "sizeMinM": 0.25, "sizeMaxM": 0.4, "sink": 0.15, "alignToSlope": 0.9 }
+    },
+    {
+      "id": "brushwood", "name": "Brushwood", "kind": "interactive", "color": "#6b553d", "variants": 4,
+      "interact": { "verb": "cut", "reachM": 3 },
+      "parts": [
+        { "id": "a", "shape": "log", "offset": [0, 0, 0], "scale": [1, 0.08, 0.08] },
+        { "id": "b", "shape": "log", "offset": [0.05, 0.06, 0.12], "scale": [0.8, 0.06, 0.06], "solid": "off" },
+        { "id": "c", "shape": "log", "offset": [-0.1, 0.05, -0.1], "scale": [0.7, 0.05, 0.05], "solid": "off", "color": "#7a6247" }
+      ],
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "shrubland"], "perHectare": 2, "slopeMax": 0.7, "sizeMinM": 1.4, "sizeMaxM": 2.2, "sink": 0.02, "alignToSlope": 1 }
     }
   ],
   "terrain": { "quadPixels": 10.8 },

@@ -310,8 +310,15 @@ public static class ContentLoader
         public string Kind { get; set; } = "";
         public string Color { get; set; } = "#ff00ff";
         public int Variants { get; set; } = 1;
+        public InteractEntry? Interact { get; set; }
         public List<PartEntry> Parts { get; set; } = new();
         public PlacementEntry Placement { get; set; } = new();
+    }
+
+    sealed class InteractEntry
+    {
+        public string Verb { get; set; } = "";
+        public float ReachM { get; set; }
     }
 
     sealed class PartEntry
@@ -370,7 +377,7 @@ public static class ContentLoader
             });
         foreach (var o in file.Objects)
         {
-            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Hex(o.Color), Variants = o.Variants };
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Hex(o.Color), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
             foreach (var p in o.Parts)
             {
                 if ((p.Offset != null && p.Offset.Length != 3) || (p.Scale != null && p.Scale.Length != 3))
