@@ -70,7 +70,7 @@ namespace Stabby.World
         public float ClarityM, ShoreM, FoamWidthM;
         public float WaveScaleM, WaveSpeed, WaveStrength;
         public float SwellScaleM, SwellStrength, LakeSwell;
-        public float FlowSpeed, RapidsSlope;
+        public float FlowSpeed, RapidsSlope, BedFieldM;
     }
 
     public sealed class MaterialLibrary
@@ -198,6 +198,7 @@ namespace Stabby.World
                 Amp(errors, "water.swellStrength", w.SwellStrength);
                 Amp(errors, "water.lakeSwell", w.LakeSwell);
                 if (!(w.RapidsSlope > 0 && w.RapidsSlope <= 1)) errors.Add($"water.rapidsSlope {w.RapidsSlope} outside 0..1");
+                if (!(w.BedFieldM >= 1 && w.BedFieldM <= 5000)) errors.Add($"water.bedFieldM {w.BedFieldM} outside 1..5000");
             }
             return errors;
         }

@@ -8,7 +8,7 @@
     "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,
     "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
     "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
-    "flowSpeed": 1, "rapidsSlope": 0.04
+    "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120
   },
   "surface": {
     "fadePixels": 2.5, "parallaxFootprintM": 0.012, "windDeg": 60,
