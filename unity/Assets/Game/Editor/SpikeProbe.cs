@@ -20,25 +20,46 @@ namespace Stabby.Game.Editor
         static long gcBuilt, gcBefore, gcPlay;
         static int playFrames;
         static ProfilerRecorder gcFrame;
+        const int Segment = 2400;
+        static int recorded, resumes;
+        static int gcPlayRuns, gcTourRuns, tourFrames;
+        static long gcTour;
+        static bool counting, touringNow;
+        public static bool Touring;
+
+        public static void Exit()
+        {
+            int runs = GC.CollectionCount(0);
+            if (counting && runs != gcRuns) gcPlayRuns += runs - gcRuns;
+            if (counting && touringNow && runs != gcRuns) gcTourRuns += runs - gcRuns;
+            gcRuns = runs;
+            counting = GameStatus.TerrainBuilt && !GameStatus.AfterTool;
+            touringNow = Touring;
+        }
 
         static readonly bool Record = Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
 
         public static void Tick()
         {
-            if (Record && !Profiler.enabled)
+            if (Record)
             {
-                Profiler.logFile = System.IO.Path.GetFullPath("../out/unity/spike.raw");
-                Profiler.enableBinaryLog = true;
-                Profiler.enabled = true;
+                bool play = GameStatus.TerrainBuilt && !GameStatus.AfterTool && recorded < Segment;
+                if (play && !Profiler.enabled)
+                {
+                    Profiler.logFile = System.IO.Path.GetFullPath($"../out/unity/spike-{resumes++:D3}.raw");
+                    Profiler.enableBinaryLog = true;
+                    Profiler.enableAllocationCallstacks = true;
+                    Profiler.enabled = true;
+                }
+                else if (!play && Profiler.enabled) { Profiler.enabled = false; Profiler.logFile = ""; }
+                if (play) recorded++;
             }
             if (!On) return;
             if (!gcFrame.Valid) gcFrame = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
             long gc = gcFrame.LastValue;
             if (GameStatus.TerrainBuilt) gcBuilt += gc; else gcBefore += gc;
-            if (GameStatus.TerrainBuilt && !GameStatus.AfterTool) { gcPlay += gc; playFrames++; }
-            int runs = GC.CollectionCount(0);
-            bool collected = runs != gcRuns;
-            gcRuns = runs;
+            if (GameStatus.TerrainBuilt && !GameStatus.AfterTool) { gcPlay += gc; playFrames++; if (Touring) { gcTour += gc; tourFrames++; } }
+            bool collected = GC.CollectionCount(0) != gcRuns;
             if (frame++ % (frame < 300 ? 5 : 120) == 0) Scan();
             if (cur.Length < recs.Count) { Array.Resize(ref cur, recs.Count); Array.Resize(ref last, recs.Count); }
             for (int r = 0; r < recs.Count; r++) cur[r] = recs[r].rec.LastValue;
@@ -52,7 +73,7 @@ namespace Stabby.Game.Editor
         static string Top(long[] ns) =>
             string.Join(", ", Enumerable.Range(0, recs.Count).Select(r => (recs[r].name, ms: ns[r] / 1e6)).Where(r => r.ms >= 1).OrderByDescending(r => r.ms).Take(80).Select(r => $"{r.name} {r.ms:F0}"));
 
-        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
+        public static string Report() => On ? $"GC allocated in frames: {gcBefore / 1048576} MB before terrain built, {gcBuilt / 1048576} MB after, {gcPlay / 1024 / System.Math.Max(1, playFrames)} KB per play frame over {playFrames} frames, {gcRuns} collections, {gcPlayRuns} in play frames\ntour: {gcTour / 1024 / System.Math.Max(1, tourFrames)} KB per frame over {tourFrames} frames, {gcTourRuns} collections\nspikes over {Limit:F0} ms ({recs.Count} markers watched):\n" + string.Join("\n", report) : "";
 
         static float Arg()
         {
@@ -62,10 +83,14 @@ namespace Stabby.Game.Editor
             return i + 1 < a.Length && float.TryParse(a[i + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ms) ? ms : 33f;
         }
 
+        static readonly List<ProfilerRecorderHandle> handles = new List<ProfilerRecorderHandle>();
+        static int scanned;
+
         static void Scan()
         {
-            var handles = new List<ProfilerRecorderHandle>();
             ProfilerRecorderHandle.GetAvailable(handles);
+            if (handles.Count == scanned) return;
+            scanned = handles.Count;
             foreach (var h in handles)
             {
                 var d = ProfilerRecorderHandle.GetDescription(h);
@@ -76,7 +101,7 @@ namespace Stabby.Game.Editor
 
         public static void Stop()
         {
-            if (Record) { Profiler.enabled = false; Profiler.logFile = ""; }
+            if (Record) { Profiler.enabled = false; Profiler.logFile = ""; ProfileDump.StacksHere(); }
             foreach (var r in recs) r.rec.Dispose();
             if (gcFrame.Valid) gcFrame.Dispose();
             recs.Clear();

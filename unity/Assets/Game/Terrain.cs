@@ -638,7 +638,9 @@ namespace Stabby.Game
         int waterApplied, frameVertices, built, evicted, generation, poolMisses, oddBuilt;
         bool ready, rootsReady, builtSmooth;
         float worstMs, worstLoadMs, worstLodsMs, worstCollectMs;
-        string parts = "", lodParts = "";
+        string loadPart = "";
+        double partUpload, partCollect, partStatics, partLods, lodRequests, lodDraw, lodNodes, lodEvictMs, lodShadowMs;
+        int lodEvicts, lodDeferred, lodShadows;
         const int EvictBudget = 32;
 
         protected override void OnCreate()
@@ -659,24 +661,26 @@ namespace Stabby.Game
                 double tc = frame.Elapsed.TotalMilliseconds;
                 Roots(); Statics();
                 double ts = frame.Elapsed.TotalMilliseconds;
-                lodParts = "";
+                lodRequests = lodDraw = lodNodes = lodEvictMs = lodShadowMs = 0;
+                lodEvicts = lodDeferred = lodShadows = 0;
                 Lods();
                 double lm = frame.Elapsed.TotalMilliseconds - ts;
-                parts = $"upload {tu:F1}, collect {tc - tu:F1}, statics {ts - tc:F1}, lods {lm:F1} ms ({lodParts}), {frameVertices} vertices";
-                if (lm > worstLodsMs) { worstLodsMs = (float)lm; GameStatus.Lines["terrain~lods"] = $"terrain worst lods {lm:F1} ms ({stage}: {lodParts})"; }
+                loadPart = null;
+                (partUpload, partCollect, partStatics, partLods) = (tu, tc - tu, ts - tc, lm);
+                if (lm > worstLodsMs) { worstLodsMs = (float)lm; GameStatus.Lines["terrain~lods"] = $"terrain worst lods {lm:F1} ms ({stage}: {LodParts()})"; }
                 if (tc - tu > worstCollectMs) { worstCollectMs = (float)(tc - tu); GameStatus.Lines["terrain~collect"] = $"terrain worst collect {tc - tu:F1} ms ({stage}, {frameVertices} vertices)"; }
             }
             else
             {
-                parts = "load";
+                loadPart = "load";
                 if (loading == null && preparing != null && preparing.IsCompleted) loading = Load();
                 if (loading != null)
                 {
                     bool more = loading.MoveNext();
-                    parts = more ? $"load {loading.Current}" : "load natives";
+                    loadPart = more ? $"load {loading.Current}" : "load natives";
                     if (!more) loading = null;
                     float lt = (float)frame.Elapsed.TotalMilliseconds;
-                    if (lt > worstLoadMs) { worstLoadMs = lt; GameStatus.Lines["terrain~load"] = $"terrain worst load step {lt:F1} ms ({parts})"; }
+                    if (lt > worstLoadMs) { worstLoadMs = lt; GameStatus.Lines["terrain~load"] = $"terrain worst load step {lt:F1} ms ({loadPart})"; }
                 }
                 else if (preparing == null) Begin();
             }
@@ -684,8 +688,12 @@ namespace Stabby.Game
             GameStatus.TerrainMs = ms;
             GameStatus.TerrainStage = stage;
             GameStatus.TerrainVertices = frameVertices;
-            if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage}: {parts})"; }
+            if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage}: {Parts()})"; }
         }
+
+        string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, statics {partStatics:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
+
+        string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
 
         float Allowed(Camera cam)
         {
@@ -1237,7 +1245,8 @@ namespace Stabby.Game
                 }
                 nodes[key] = nd;
             }
-            lodParts = $"requests {t1 - t0:F1}, draw {t2 - t1:F1}, nodes {frame.Elapsed.TotalMilliseconds - t2:F1} [evict {evicts} {evictMs:F1} ms, {deferred} deferred, shadow {shadows} {shadowMs:F1} ms]";
+            (lodRequests, lodDraw, lodNodes, lodEvictMs, lodShadowMs) = (t1 - t0, t2 - t1, frame.Elapsed.TotalMilliseconds - t2, evictMs, shadowMs);
+            (lodEvicts, lodDeferred, lodShadows) = (evicts, deferred, shadows);
             GameStatus.TerrainBehind = behind;
             int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices, castVertices);
             for (int i = 0; i < levelCounts.Length; i++) seen = HashCode.Combine(seen, levelCounts[i]);
