@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -18,7 +19,8 @@ namespace Stabby.World
             var h = w.Height;
             var dist = WetDistance(w);
             var amp = new float[n * n];
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
@@ -34,6 +36,7 @@ namespace Stabby.World
                     a *= Grid.Smoothstep(0.5f, 0.5f + WetFadeCells, dist[i]);
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
+            });
             float[] offsets, bands;
             float period;
             if (w.Materials != null && w.Materials.Strata.Count > 0)
