@@ -16,7 +16,25 @@ public static class ContentLoader
         public float OffsetWavelengthM { get; set; }
         public float TiltPerKm { get; set; }
         public SurfaceEntry? Surface { get; set; }
+        public WaterEntry? Water { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
+    }
+
+    sealed class WaterEntry
+    {
+        public string DeepColor { get; set; } = "";
+        public string ShallowColor { get; set; } = "";
+        public float ClarityM { get; set; }
+        public float ShoreM { get; set; }
+        public float FoamWidthM { get; set; }
+        public float WaveScaleM { get; set; }
+        public float WaveSpeed { get; set; }
+        public float WaveStrength { get; set; }
+        public float SwellScaleM { get; set; }
+        public float SwellStrength { get; set; }
+        public float LakeSwell { get; set; }
+        public float FlowSpeed { get; set; }
+        public float RapidsSlope { get; set; }
     }
 
     sealed class SurfaceEntry
@@ -142,6 +160,7 @@ public static class ContentLoader
         {
             OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
             Surface = file.Surface == null ? null! : Surface(file.Surface),
+            Water = file.Water == null ? null! : Water(file.Water, path),
             Strata = file.Strata.Select(s => new StratumDef
             {
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
@@ -152,6 +171,19 @@ public static class ContentLoader
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
         return lib;
     }
+
+    static WaterDef Water(WaterEntry e, string path) => new WaterDef
+    {
+        DeepColor = Hex(e.DeepColor, path, "water.deepColor"), ShallowColor = Hex(e.ShallowColor, path, "water.shallowColor"),
+        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
+        WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
+        SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
+        FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope,
+    };
+
+    static uint Hex(string s, string path, string field) =>
+        s.Length == 7 && s[0] == '#' && uint.TryParse(s.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v)
+            ? v : throw new InvalidDataException($"{path}: {field} '{s}' is not #rrggbb");
 
     static SurfaceDetail Surface(SurfaceEntry e)
     {

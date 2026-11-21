@@ -18,6 +18,7 @@ namespace Stabby.Viewer
         public float CellM;
         public Vector4 Surface, Wobble, RockA, RockB, RockC;
         public Vector4[] CoatA, CoatB;
+        public Vector4[] Water;
     }
 
     public sealed class FieldLook
@@ -36,7 +37,6 @@ namespace Stabby.Viewer
 
         static Texture2D strataTexture, coatTexture, slopeTexture, biomeTexture;
 
-        public static float3 Water => new float3(0.16f, 0.36f, 0.55f);
         public static float3 Sand => new float3(0.78f, 0.72f, 0.52f);
 
         public static float3 ToLinear(float3 c) => math.select(math.pow((c + 0.055f) / 1.055f, 2.4f), c / 12.92f, c <= 0.04045f);
@@ -78,6 +78,11 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyRockC", s.RockC);
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
+            Shader.SetGlobalVector("_StabbyWaterDeep", s.Water[0]);
+            Shader.SetGlobalVector("_StabbyWaterShallow", s.Water[1]);
+            Shader.SetGlobalVector("_StabbyWaterWave", s.Water[2]);
+            Shader.SetGlobalVector("_StabbyWaterSwell", s.Water[3]);
+            Shader.SetGlobalVector("_StabbyWaterFlow", s.Water[4]);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -188,6 +193,20 @@ namespace Stabby.Viewer
                 RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
                 RockC = new Vector4(r.Parallax, 0, 0, 0),
                 CoatA = coatA, CoatB = coatB,
+                Water = WaterLook(lib.Water),
+            };
+        }
+
+        static Vector4[] WaterLook(WaterDef w)
+        {
+            float3 deep = ToLinear(Unpack(w.DeepColor)), shallow = ToLinear(Unpack(w.ShallowColor));
+            return new[]
+            {
+                new Vector4(deep.x, deep.y, deep.z, 1f / w.ClarityM),
+                new Vector4(shallow.x, shallow.y, shallow.z, 1f / w.ShoreM),
+                new Vector4(1f / w.WaveScaleM, w.WaveSpeed, w.WaveStrength, w.FoamWidthM),
+                new Vector4(1f / w.SwellScaleM, w.SwellStrength, 0, 0),
+                new Vector4(w.FlowSpeed, 1f / w.RapidsSlope, w.LakeSwell, 0),
             };
         }
     }

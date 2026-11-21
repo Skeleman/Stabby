@@ -17,7 +17,8 @@ namespace Stabby.Viewer
     public static class WaterGeometry
     {
         const int RiverPieceVertices = 16000;
-        const float RiverLift = 0.1f;
+        const float RiverLift = 0.1f, LakeLift = 0.5f, SlopeRange = 0.1f;
+        static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
         public static Mesh ToMesh(MeshParts d)
         {
@@ -42,8 +43,21 @@ namespace Stabby.Viewer
                 for (int x = cx; x < Mathf.Min(cx + cells, n); x++)
                 {
                     int c = y * n + x;
-                    if (world.Sea[c] || hy.LakeId[c] < 0) continue;
-                    float h = Mathf.Max(hy.WaterSurface[c], world.Height[c]) + 0.5f;
+                    if (world.Sea[c]) continue;
+                    float h;
+                    if (hy.LakeId[c] >= 0) h = Mathf.Max(hy.WaterSurface[c], world.Height[c]) + LakeLift;
+                    else
+                    {
+                        h = float.MinValue;
+                        for (int k = 0; k < 8; k++)
+                        {
+                            int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
+                            if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                            int o = ny * n + nx;
+                            if (!world.Sea[o] && hy.LakeId[o] >= 0 && world.Height[c] >= hy.WaterSurface[o]) h = Mathf.Max(h, hy.WaterSurface[o] + LakeLift);
+                        }
+                        if (h == float.MinValue) continue;
+                    }
                     int b = verts.Count;
                     verts.Add(new Vector3(x * cm - half, h, y * cm - half));
                     verts.Add(new Vector3(x * cm - half, h, y * cm + half));
@@ -52,7 +66,7 @@ namespace Stabby.Viewer
                     tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
                     tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
                 }
-            return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, tris, TerrainLook.Water);
+            return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
         }
 
         public static List<MeshParts> Rivers(GeneratedWorld world)
@@ -60,14 +74,16 @@ namespace Stabby.Viewer
             float cm = world.Config.CellMeters;
             var pieces = new List<MeshParts>();
             var verts = new List<Vector3>();
+            var cols = new List<Color>();
             var tris = new List<int>();
             foreach (var r in world.Water.Rivers)
             {
                 if (r.Cells.Count < 2) continue;
                 if (verts.Count >= RiverPieceVertices)
                 {
-                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, TerrainLook.Water));
+                    pieces.Add(Flat($"Rivers {pieces.Count}", verts, cols, tris, default));
                     verts.Clear();
+                    cols.Clear();
                     tris.Clear();
                 }
                 var pts = new List<Vector4>();
@@ -85,13 +101,20 @@ namespace Stabby.Viewer
                     p.y = pts[k].y + RiverLift;
                     verts.Add(p - side);
                     verts.Add(p + side);
+                    var u = pts[Mathf.Max(k - 3, 0)];
+                    var d = pts[Mathf.Min(k + 3, pts.Count - 1)];
+                    float run = new Vector2(d.x - u.x, d.z - u.z).magnitude;
+                    float slope = run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0;
+                    var flow = new Color(dir.x * 0.5f + 0.5f, dir.z * 0.5f + 0.5f, Mathf.Clamp01(slope / SlopeRange), 0);
+                    cols.Add(flow);
+                    cols.Add(flow);
                     if (k == 0) continue;
                     int v = b + 2 * k;
                     tris.Add(v - 2); tris.Add(v); tris.Add(v - 1);
                     tris.Add(v - 1); tris.Add(v); tris.Add(v + 1);
                 }
             }
-            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, tris, TerrainLook.Water));
+            if (verts.Count > 0) pieces.Add(Flat($"Rivers {pieces.Count}", verts, cols, tris, default));
             return pieces;
         }
 
@@ -103,16 +126,14 @@ namespace Stabby.Viewer
                 new Vector3(-pad, 0, -pad), new Vector3(-pad, 0, span + pad),
                 new Vector3(span + pad, 0, -pad), new Vector3(span + pad, 0, span + pad),
             };
-            return Flat("Sea", verts, new List<int> { 0, 1, 2, 2, 1, 3 }, TerrainLook.Water);
+            return Flat("Sea", verts, null, new List<int> { 0, 1, 2, 2, 1, 3 }, SeaKind);
         }
 
-        static MeshParts Flat(string name, List<Vector3> verts, List<int> tris, float3 srgb)
+        static MeshParts Flat(string name, List<Vector3> verts, List<Color> perVertex, List<int> tris, Color kind)
         {
-            var cols = new Color[verts.Count];
+            var cols = perVertex != null ? perVertex.ToArray() : new Color[verts.Count];
             var up = new Vector3[verts.Count];
-            var l = TerrainLook.ToLinear(srgb);
-            var lin = new Color(l.x, l.y, l.z);
-            for (int k = 0; k < cols.Length; k++) { cols[k] = lin; up[k] = Vector3.up; }
+            for (int k = 0; k < up.Length; k++) { up[k] = Vector3.up; if (perVertex == null) cols[k] = kind; }
             return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray() };
         }
 

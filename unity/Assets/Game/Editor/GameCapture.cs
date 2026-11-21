@@ -204,6 +204,22 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~frames"] = framesBeforeTour;
                 phase++;
             }
+            while (phase >= 13 && phase <= 14)
+            {
+                string name = phase == 13 ? "coast-low" : "coast-high";
+                if (wait == 0)
+                {
+                    if (!Coast(cam, phase == 13 ? 40f : 150f)) { GameStatus.Lines["~" + name] = "no coast found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 14) GameStatus.Lines["~bench water"] = Bench(cam, "water coast");
+                wait = 0;
+                phase++;
+            }
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -410,6 +426,32 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim " + shape] = $"edit {at} at {mid.x:F0},{mid.y:F0},{mid.z:F0}";
+                return true;
+            }
+            return false;
+        }
+
+        static bool Coast(Camera cam, float height)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                if (map == null) continue;
+                int n = map.Config.Size, best = -1;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                for (int z = 1; z < n - 1; z++)
+                    for (int x = 1; x < n - 1; x++)
+                    {
+                        int i = z * n + x;
+                        if (!map.Sea[i] || (map.Sea[i + 1] && map.Sea[i - 1] && map.Sea[i + n] && map.Sea[i - n])) continue;
+                        float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                        if (d < bestD) { bestD = d; best = i; }
+                    }
+                if (best < 0) return false;
+                var target = new Vector3(best % n * cm, 0, best / n * cm);
+                var eye = target + new Vector3(-0.5f, 0, -0.4f) * height + Vector3.up * height;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim coast " + height] = $"coast at {target.x:F0},{target.z:F0} from {height:F0} m, {Mathf.Sqrt(bestD):F0} m from the player";
                 return true;
             }
             return false;
