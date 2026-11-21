@@ -398,6 +398,19 @@ float3 TmMicro(float2 p, float fp)
     return float3(0.4 * s.x + 0.6 * c.x + 0.4 * g.x, d);
 }
 
+float TmFleck(float2 p, float2x2 m, float f, float fp)
+{
+    float w = TmFade(4 * f, fp);
+    if (w <= 0) return 0;
+    float2 q = mul(m, p) * f, fl = floor(q);
+    int2 c = (int2)fl + (int2)(mul(m, tmO.xz) * f);
+    float h = TmHash(int3(c, 23)) * 2 - 1;
+    float2 ctr = 0.3 + 0.4 * float2(TmHash(int3(c, 24)), TmHash(int3(c, 25)));
+    float r = 0.18 + 0.2 * TmHash(int3(c, 26)), aa = fp * f;
+    float d = length(q - fl - ctr);
+    return w * h * saturate((r - d) / max(aa, 0.05) + 0.5);
+}
+
 TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix, float stone)
 {
     float3 grassColor = coatColor;
@@ -466,6 +479,8 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         float3 mr = TmMicro(wp.xz, fp) * dot(cw, float4(1, 1, 0.3, 0.5));
         k.albedo *= 1 + 0.1 * mr.x;
         k.grad += float3(mr.y, 0, mr.z);
+        float bare = saturate(cw.y + cw.z) * (1 - cw.x);
+        if (bare > 0.01) k.albedo *= 1 + bare * (0.3 * TmFleck(wp.xz, float2x2(1, 0, 0, 1), 37, fp) + 0.25 * TmFleck(wp.xz, float2x2(1, 0.5, -0.5, 1), 15, fp));
         float up = saturate((sl - 0.3) / 0.25);
         o.albedo += c * lerp(coatColor, k.albedo, up);
         o.grad += c * up * k.grad;
