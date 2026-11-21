@@ -31,8 +31,11 @@ namespace Stabby.Game.Editor
         static bool counting, touringNow;
         public static bool Touring;
 
-        public static void Exit()
+        static string slowPoll = "";
+
+        public static void Exit(double pollMs, int phase, int wait, int stop)
         {
+            slowPoll = pollMs >= 10 ? $", capture poll {pollMs:F0} ms at phase {phase} wait {wait} stop {stop}" : "";
             int runs = GC.CollectionCount(0);
             if (counting && runs != gcRuns) gcPlayRuns += runs - gcRuns;
             if (counting && touringNow && runs != gcRuns) gcTourRuns += runs - gcRuns;
@@ -67,7 +70,7 @@ namespace Stabby.Game.Editor
             if (h > heapSize && heap.Count < 30) heap.Add($"frame {frame} {System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency:F2} s: heap {heapSize / 1048576} -> {h / 1048576} MB, used {Profiler.GetMonoUsedSizeLong() / 1048576} MB");
             heapSize = Math.Max(heapSize, h);
             bool collected = GC.CollectionCount(0) != gcRuns;
-            if (frame++ % (frame < 300 ? 5 : 120) == 0) Scan();
+            if (frame++ % (frame < 300 ? 5 : 120) == 0 || scanned < handles.Count) Scan();
             if (cur.Length < recs.Count) { Array.Resize(ref cur, recs.Count); Array.Resize(ref last, recs.Count); }
             for (int r = 0; r < recs.Count; r++) cur[r] = recs[r].rec.LastValue;
             float dt = Time.unscaledDeltaTime * 1000f;
@@ -81,7 +84,7 @@ namespace Stabby.Game.Editor
                     if (gcMs > gcWorst) { gcWorst = gcMs; gcWorstAt = $"frame {frame} {dt:F0} ms"; }
                 }
             }
-            if (frame > 10 && dt > Limit && !GameStatus.AfterTool && (GameStatus.TerrainBuilt ? builtSpikes++ : loadSpikes++) < 40) report.Add($"frame {frame}{(GameStatus.TerrainBuilt ? " built" : "")} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
+            if (frame > 10 && dt > Limit && !GameStatus.AfterTool && (GameStatus.TerrainBuilt ? builtSpikes++ : loadSpikes++) < 40) report.Add($"frame {frame}{(GameStatus.TerrainBuilt ? " built" : "")} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}{slowPoll}\n  this: {Top(cur)}\n  prev: {Top(last)}");
             (cur, last) = (last, cur);
         }
 
@@ -102,17 +105,19 @@ namespace Stabby.Game.Editor
 
         static readonly List<ProfilerRecorderHandle> handles = new List<ProfilerRecorderHandle>();
         static int scanned;
-        static readonly HashSet<ProfilerRecorderHandle> seen = new HashSet<ProfilerRecorderHandle>();
+        const int ScanBudget = 250;
 
         static void Scan()
         {
-            ProfilerRecorderHandle.GetAvailable(handles);
-            if (handles.Count == scanned) return;
-            scanned = handles.Count;
-            foreach (var h in handles)
+            if (scanned >= handles.Count)
             {
-                if (!seen.Add(h)) continue;
-                var d = ProfilerRecorderHandle.GetDescription(h);
+                ProfilerRecorderHandle.GetAvailable(handles);
+                if (scanned >= handles.Count) return;
+            }
+            int end = Math.Min(handles.Count, scanned + ScanBudget);
+            for (; scanned < end; scanned++)
+            {
+                var d = ProfilerRecorderHandle.GetDescription(handles[scanned]);
                 if (d.UnitType != ProfilerMarkerDataUnit.TimeNanoseconds || !names.Add(d.Name)) continue;
                 recs.Add((d.Name, ProfilerRecorder.StartNew(d.Category, d.Name, 1)));
             }
