@@ -186,7 +186,7 @@ namespace Stabby.World
                 }
         }
 
-        static void Card(Out o, V at, V up, V face, float size, float width, int cell, bool flip, V center, float crownH, float crownV, float bend, float phase, float flutterPhase, float aoLow)
+        static void Card(Out o, V at, V up, V face, float size, float width, int cell, bool flip, V center, float crownH, float crownV, float bend, float phase, float flutterPhase, float aoLow, V wobble)
         {
             var right = V.Cross(up, face).Norm() * (0.5f * size * width);
             var lift = up * size;
@@ -202,7 +202,7 @@ namespace Stabby.World
                 var p = k == 0 ? foot - right : k == 1 ? foot + right : k == 2 ? foot + right + lift : foot - right + lift;
                 var radial = (p - center).Norm();
                 var f = V.Dot(face, radial) < 0 ? -face : face;
-                var n = (f * 0.35f + radial * 0.65f).Norm();
+                var n = (f * 0.35f + radial * 0.65f + wobble).Norm();
                 var d = p - center;
                 float h = d.Flat / Math.Max(1e-3f, crownH), y = d.Y / Math.Max(1e-3f, crownV);
                 float depth = Math.Min(1f, h * h + y * y), lit = 0.7f + 0.3f * Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * y));
@@ -278,12 +278,12 @@ namespace Stabby.World
             var form = new Rng(Rng.Mix(key ^ 0x2545F4914F6CDD1DUL));
             var limbs = new List<Limb>();
             var heavy = Flat(ref form);
-            float lean = form.Range(0.25f, 0.6f), widen = form.Range(0.7f, 1.35f), gappy = form.Range(0.15f, 0.35f);
+            float lean = form.Range(0.25f, 0.6f), widen = form.Range(0.8f, 1.2f), gappy = form.Range(0.15f, 0.35f);
             float bole = rng.Range(0.3f, 0.42f) * form.Range(0.75f, 1.25f);
             var trunk = Grow(ref rng, new V(0, 0, 0), new V(0, 1, 0), bole, 5, TrunkRadius * 1.25f, TrunkRadius * 0.8f, 0.04f, new V(0, 0.4f, 0), 0, 0.05f, rng.NextFloat(), 0);
             limbs.Add(trunk);
             var top = trunk.P[trunk.P.Count - 1];
-            int leaders = rng.Range(2, 4) + (form.NextFloat() < 0.35f ? 1 : 0);
+            int leaders = rng.Range(2, 4) + (form.NextFloat() < 0.2f ? 1 : 0);
             var spin = Flat(ref rng);
             for (int k = 0; k < leaders; k++)
             {
@@ -334,31 +334,54 @@ namespace Stabby.World
         public static ObjectMesh Conifer(ulong key, int lod)
         {
             var rng = new Rng(Rng.Mix(key ^ 0xD1B54A32D192ED03UL));
+            var form = new Rng(Rng.Mix(key ^ 0x9E6C63D0676A9A99UL));
             var limbs = new List<Limb>();
-            var trunk = Grow(ref rng, new V(0, 0, 0), new V(0, 1, 0), 1f, 8, TrunkRadius * 1.1f, 0.003f, 0.012f, new V(0, 0.5f, 0), 0, 0.3f, rng.NextFloat(), 0);
+            var heavy = Flat(ref form);
+            float lean = form.Range(0.2f, 0.45f), gappy = form.Range(0.14f, 0.3f), sag = form.Range(0.9f, 1.6f);
+            var trunk = Grow(ref rng, new V(0, 0, 0), new V(0, 1, 0), 1f, 8, TrunkRadius * 1.1f, 0.003f, 0.012f + 0.01f * form.NextFloat(), new V(0, 0.5f, 0), 0, 0.3f, rng.NextFloat(), 0);
             limbs.Add(trunk);
-            float crown = rng.Range(0.26f, 0.33f), start = rng.Range(0.08f, 0.16f);
+            float crown = rng.Range(0.26f, 0.33f) * form.Range(0.85f, 1.15f), start = rng.Range(0.08f, 0.16f);
+            float dead = start + form.Range(0.08f, 0.22f), topCut = form.NextFloat() < 0.3f ? form.Range(0.88f, 0.94f) : 0.97f;
             int whorls = rng.Range(15, 19);
             var spin = Flat(ref rng);
             for (int w = 0; w < whorls; w++)
             {
-                float t = start + (0.97f - start) * (w + rng.Range(-0.25f, 0.25f)) / (whorls - 1);
-                t = Math.Max(start, Math.Min(0.97f, t));
+                float t = start + (0.97f - start) * (w + rng.Range(-0.25f, 0.25f) + form.Range(-0.2f, 0.2f)) / (whorls - 1);
+                t = Math.Max(start, Math.Min(topCut, t));
                 var at = trunk.At(t, out _);
                 float left = 1.02f - t;
-                float reach = crown * left / (1.02f - start) + 0.015f;
+                float tier = form.Range(0.6f, 1.3f), skip = form.NextFloat();
+                float reach = (crown * left / (1.02f - start) + 0.015f) * tier;
                 int count = rng.Range(5, 8);
                 spin = Around(spin, rng.Range(0.1f, 0.4f));
+                bool deadWhorl = t < dead;
                 for (int k = 0; k < count; k++)
                 {
                     var dir = Around(spin, (k + rng.Range(-0.2f, 0.2f)) / count);
                     float droop = 0.35f + 0.25f * t;
-                    var bd = (dir + new V(0, -0.15f - 0.35f * (1 - t), 0)).Norm();
-                    var branch = Grow(ref rng, at, bd, reach * rng.Range(0.85f, 1.1f), 4, TrunkRadius * (0.15f + 0.4f * (1 - t)), 0.002f, 0.06f, new V(0, droop, 0), trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
+                    float fill = form.NextFloat(), heft = 1f + lean * V.Dot(dir, heavy), lift = form.Range(0.05f, 0.35f) + 0.3f * t;
+                    bool bare = deadWhorl || fill < gappy || skip < 0.2f;
+                    float len = reach * rng.Range(0.85f, 1.1f) * heft * form.Range(0.75f, 1.2f) * (deadWhorl ? form.Range(0.35f, 0.7f) : 1f);
+                    var bd = (dir + new V(0, deadWhorl ? -0.25f : lift - 0.2f * (1 - t), 0)).Norm();
+                    var pull = new V(0, deadWhorl ? -0.2f : droop - (0.6f + 0.5f * (1 - t)) * sag, 0);
+                    var branch = Grow(ref rng, at, bd, len, 4, TrunkRadius * (0.15f + 0.4f * (1 - t)) * (deadWhorl ? 0.7f : 1f), 0.002f, deadWhorl ? 0.14f : 0.06f, pull, trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
                     limbs.Add(branch);
-                    if (reach > 0.05f) Twigs(ref rng, limbs, branch, 3, 0.3f, 0.9f, reach * 0.3f, reach * 0.5f, 0.85f, new V(0, -0.5f, 0), 1f);
+                    int first = limbs.Count;
+                    if (reach > 0.05f) Twigs(ref rng, limbs, branch, deadWhorl ? 2 : 3, 0.3f, 0.9f, len * 0.3f, len * 0.5f, 0.85f, new V(0, deadWhorl ? -0.2f : -0.9f * sag, 0), 1f);
+                    float low = Math.Min(1f, (t - dead) / 0.25f), leafy = bare ? 0 : (0.45f + 0.9f * (fill - gappy) / (1 - gappy) * heft) * (0.55f + 0.45f * Math.Max(0f, low));
+                    branch.Bare = bare;
+                    branch.Leafy = leafy;
+                    for (int q = first; q < limbs.Count; q++)
+                    {
+                        limbs[q].Bare = bare;
+                        limbs[q].Leafy = leafy;
+                    }
                 }
             }
+            var crest = trunk.At(topCut - 0.06f, out var up);
+            var tip = Grow(ref form, crest, (up + heavy * form.Range(0.05f, 0.3f)).Norm(), 1.03f - topCut + form.Range(0.02f, 0.08f), 4, 0.004f, 0.002f, 0.1f, new V(0, 0.3f, 0), trunk.Bend(topCut), 0.5f, trunk.Phase, 1);
+            tip.Leafy = 0.6f;
+            limbs.Add(tip);
             return Leaves(key, lod, limbs, ConiferStyle);
         }
 
@@ -397,6 +420,9 @@ namespace Stabby.World
             var sides = st.Sides[lod];
             foreach (var l in limbs) Tube(o, l, sides[Math.Min(sides.Length - 1, l.Depth)], st.DarkWood);
             var rng = new Rng(Rng.Mix(key ^ 0x3C6EF372FE94F82BUL));
+            var nrm = new Rng(Rng.Mix(key ^ 0x5851F42D4C957F2DUL));
+            var clump = new V[limbs.Count];
+            for (int i = 0; i < limbs.Count; i++) clump[i] = Unit(ref nrm) * 0.3f;
             float grow = (float)Math.Sqrt(st.Counts[0] / (float)st.Counts[lod]);
             for (int c = 0; c < st.Counts[0]; c++)
             {
@@ -413,7 +439,7 @@ namespace Stabby.World
                 bool flip = rng.NextFloat() < 0.5f;
                 float phase = rng.NextFloat();
                 if (c >= st.Counts[lod]) continue;
-                Card(o, at, up, face, size, width, st.Cell, flip, center, crownH, crownV, l.Bend(t), l.Phase, phase, st.AoLow);
+                Card(o, at, up, face, size, width, st.Cell, flip, center, crownH, crownV, l.Bend(t), l.Phase, phase, st.AoLow, clump[li] + Unit(ref nrm) * 0.18f);
             }
             float scale = Math.Min(1f / (maxY + 1.2f * st.Card), 0.5f / (maxR + 1.2f * st.Card));
             return o.Finish(scale);

@@ -318,10 +318,11 @@ Shader "Stabby/Foliage"
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
                 float vl = saturate(dot(-v, l.direction));
                 float back = vl * vl * vl * 0.8 + saturate(-ndl) * 0.35;
-                float3 direct = l.color * l.shadowAttenuation;
-                float3 glow = l.color * lerp(0.25, 1, l.shadowAttenuation) * lerp(0.4, 1, ao);
+                float self = imp ? lerp(0.45, 1, ao * ao) : 1;
+                float3 direct = l.color * l.shadowAttenuation * self;
+                float3 glow = l.color * lerp(0.25, 1, l.shadowAttenuation) * lerp(0.4, 1, ao) * self * self;
                 float leafy = imp ? trans : leaf ? 1 : 0;
-                float3 sun = lerp(1, float3(1.1, 1.04, 0.86), leafy * saturate(ndl)), cool = lerp(1, lerp(float3(0.84, 0.93, 1.06), 1, ao * ao), leafy);
+                float3 sun = lerp(1, float3(1.1, 1.04, 0.86), leafy * saturate(ndl) * (imp ? 0.35 : 1)), cool = lerp(1, lerp(float3(0.84, 0.93, 1.06), 1, ao * ao), leafy);
                 float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) * sun + ambient * cool * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.1, 1.2, 0.55) * 1.35 * glow * back * trans;
                 return half4(MixFog(c, i.fog), alpha);
             }
