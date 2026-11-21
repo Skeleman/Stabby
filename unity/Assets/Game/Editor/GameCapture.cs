@@ -46,7 +46,15 @@ namespace Stabby.Game.Editor
             cam.farClipPlane = 60000f;
             cam.fieldOfView = 60f;
 
-            new GameObject("Game").AddComponent<GameScene>().TerrainMaterial = mat;
+            var water = AssetDatabase.LoadAssetAtPath<Material>("Assets/Viewer/Water.mat");
+            if (water == null)
+            {
+                water = new Material(Shader.Find("Stabby/Water"));
+                AssetDatabase.CreateAsset(water, "Assets/Viewer/Water.mat");
+            }
+            var game = new GameObject("Game").AddComponent<GameScene>();
+            game.TerrainMaterial = mat;
+            game.WaterMaterial = water;
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
@@ -62,8 +70,7 @@ namespace Stabby.Game.Editor
 
         public static void Run()
         {
-            if (File.Exists(ScenePath)) EditorSceneManager.OpenScene(ScenePath);
-            else BuildScene();
+            BuildScene();
             SessionState.SetFloat(StartKey, (float)EditorApplication.timeSinceStartup);
             SessionState.SetBool(Key, true);
             EditorApplication.update += Poll;

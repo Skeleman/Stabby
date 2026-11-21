@@ -361,7 +361,7 @@ namespace Stabby.Game
         readonly int[] lodCounts = new int[TerrainLods.Count];
         readonly Stopwatch frame = new Stopwatch(), since = new Stopwatch();
         EntitiesGraphicsSystem graphics;
-        BatchMaterialID material;
+        BatchMaterialID material, waterMaterial;
         Ground ground;
         int coarseApplied, waterApplied, frameVertices, built, evicted;
         bool ready;
@@ -458,6 +458,7 @@ namespace Stabby.Game
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             var scene = Object.FindFirstObjectByType<GameScene>();
             material = graphics.RegisterMaterial(scene != null ? scene.TerrainMaterial : null);
+            waterMaterial = scene != null && scene.WaterMaterial != null ? graphics.RegisterMaterial(scene.WaterMaterial) : material;
             int count = prepared.Cells.Count;
             chunks = new NativeArray<TerrainChunk>(count, Allocator.Persistent);
             sites = new NativeArray<TerrainSite>(count, Allocator.Persistent);
@@ -574,11 +575,13 @@ namespace Stabby.Game
             new VertexAttributeDescriptor(VertexAttribute.TexCoord3, VertexAttributeFormat.Float16, 4),
         };
 
-        Entity Spawn(BatchMeshID mesh, AABB box)
+        Entity Spawn(BatchMeshID mesh, AABB box) => Spawn(mesh, box, material);
+
+        Entity Spawn(BatchMeshID mesh, AABB box, BatchMaterialID mat)
         {
             var em = EntityManager;
             var e = em.CreateEntity();
-            RenderMeshUtility.AddComponents(e, em, new RenderMeshDescription(ShadowCastingMode.Off), new MaterialMeshInfo(material, mesh));
+            RenderMeshUtility.AddComponents(e, em, new RenderMeshDescription(ShadowCastingMode.Off), new MaterialMeshInfo(mat, mesh));
             em.SetComponentData(e, new RenderBounds { Value = box });
             em.AddComponentData(e, new LocalToWorld { Value = float4x4.identity });
             return e;
@@ -609,7 +612,7 @@ namespace Stabby.Game
             var id = graphics.RegisterMesh(mesh);
             statics.Add(mesh);
             var b = mesh.bounds;
-            Spawn(id, new AABB { Center = b.center, Extents = b.extents });
+            Spawn(id, new AABB { Center = b.center, Extents = b.extents }, waterMaterial);
         }
 
         void Lods()
