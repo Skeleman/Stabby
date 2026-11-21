@@ -17,7 +17,18 @@ public static class ContentLoader
         public float TiltPerKm { get; set; }
         public SurfaceEntry? Surface { get; set; }
         public WaterEntry? Water { get; set; }
+        public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
+    }
+
+    sealed class LookEntry
+    {
+        public float NoiseContrast { get; set; }
+        public float AlbedoVar { get; set; }
+        public float DetailWavelengthM { get; set; }
+        public float Saturation { get; set; }
+        public float Roughness { get; set; }
+        public float Specular { get; set; }
     }
 
     sealed class WaterEntry
@@ -77,12 +88,12 @@ public static class ContentLoader
         public List<string> Biomes { get; set; } = new();
         public float BumpAmp { get; set; }
         public float BumpWavelengthM { get; set; }
-        public float GrainAmp { get; set; }
-        public float GrainWavelengthM { get; set; }
+        public float? GrainAmp { get; set; }
+        public float? GrainWavelengthM { get; set; }
         public float FeatureAmp { get; set; }
         public float FeatureWavelengthM { get; set; }
         public float Parallax { get; set; }
-        public float AlbedoVar { get; set; }
+        public float? AlbedoVar { get; set; }
     }
 
     sealed class StratumEntry
@@ -162,12 +173,18 @@ public static class ContentLoader
             OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
             Surface = file.Surface == null ? null! : Surface(file.Surface),
             Water = file.Water == null ? null! : Water(file.Water, path),
+            Look = file.Look == null ? null! : new LookDef
+            {
+                NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM,
+                Saturation = file.Look.Saturation, Roughness = file.Look.Roughness, Specular = file.Look.Specular,
+            },
             Strata = file.Strata.Select(s => new StratumDef
             {
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
                 Color = uint.Parse(s.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
             }).ToList(),
         };
+        lib.FillCoats();
         var errors = MaterialLibrary.Validate(lib);
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
         return lib;
@@ -210,9 +227,9 @@ public static class ContentLoader
             {
                 Id = SurfaceDetail.CoatKinds[k], Biomes = c.Biomes,
                 BumpAmp = c.BumpAmp, BumpWavelengthM = c.BumpWavelengthM,
-                GrainAmp = c.GrainAmp, GrainWavelengthM = c.GrainWavelengthM,
+                GrainAmp = c.GrainAmp ?? float.NaN, GrainWavelengthM = c.GrainWavelengthM ?? float.NaN,
                 FeatureAmp = c.FeatureAmp, FeatureWavelengthM = c.FeatureWavelengthM,
-                Parallax = c.Parallax, AlbedoVar = c.AlbedoVar,
+                Parallax = c.Parallax, AlbedoVar = c.AlbedoVar ?? float.NaN,
             };
         }
         return d;
