@@ -51,7 +51,7 @@ public class ObjectTests
         Assert.Equal(fd.GetProperty("grass").GetProperty("reachM").GetSingle(), Objects.Foliage.Grass.ReachM);
         Assert.True(Objects.Foliage.Grass.ReachM > Objects.Foliage.Grass.NearM);
         var bad = new FoliageDef();
-        bad.Grass.NearM = 50;
+        bad.Grass.NearM = 90;
         bad.Wind.GustScaleM = 0;
         var errors = new List<string>();
         bad.Validate(errors);

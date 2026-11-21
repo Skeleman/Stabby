@@ -18,7 +18,7 @@ float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 
 #define ddy(x) ((x) * 0)
 #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
 
-struct Blade { float4 p0; float4 p1; float4 p2; float4 p3; };
+struct Blade { float4 p0; uint4 q; };
 
 ByteAddressBuffer _Verts;
 ByteAddressBuffer _Indices;
@@ -29,6 +29,7 @@ float4 _Eye;
 float4 _GrassA;
 float4 _GrassB;
 float4 _GrassC;
+float4 _GrassD;
 uint4 _Layout;
 
 float Rand(int3 cell, uint salt) { return TmHashU(uint3(cell.x, cell.y, cell.z * 16 + salt)) * (1.0 / 4294967296.0); }
@@ -60,18 +61,21 @@ void Scatter(uint3 id : SV_DispatchThreadID)
     float3 fn = cr / area2;
     fn *= fn.y < 0 ? -1 : 1;
     if (fn.y < 0.05 || sqrt(max(0, 1 - fn.y * fn.y)) / fn.y > _GrassA.w) return;
-    float keepTri = min(1, near * near / max((dc - rad) * (dc - rad), 1e-4));
+    float thin = _GrassD.x;
+    float keepTri = min(1, pow(near / max(dc - rad, 1e-3), thin));
     float cand = 0.5 * area2 * _GrassA.x;
     uint count = (uint)cand + (Rand(int3(round(ctr.xz * 16), 0), 15) < frac(cand) ? 1u : 0u);
+    uint tries = min(count, (uint)ceil(keepTri * count) + 1);
     float4 ca = Attr(ix.x, _Layout.y), cb = Attr(ix.y, _Layout.y), cc = Attr(ix.z, _Layout.y);
     float4 sa = Attr(ix.x, _Layout.z), sb = Attr(ix.y, _Layout.z), sc = Attr(ix.z, _Layout.z);
     float2 o2 = TmOrigin(_Eye.xyz);
     tmO = float3(o2.x, 0, o2.y);
     int2 key = int2(round(ctr.xz * 16));
-    for (uint k = 0; k < count; k++)
+    float invCount = 1.0 / max(count, 1u);
+    for (uint k = 0; k < tries; k++)
     {
         int3 cell = int3(key, k);
-        float rank = Rand(cell, 0);
+        float rank = (k + Rand(cell, 0)) * invCount;
         if (rank >= keepTri) continue;
         float u = Rand(cell, 1), v = Rand(cell, 2);
         if (u + v > 1) { u = 1 - u; v = 1 - v; }
@@ -79,7 +83,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float3 p = a * w + b * u + c * v;
         if (sa.w * w + sb.w * u + sc.w * v > -0.3) continue;
         float d = distance(p, _Eye.xyz);
-        float keep = min(1, near * near / max(d * d, 1e-4));
+        float keep = min(1, pow(near / max(d, 1e-3), thin));
         if (d > reach || rank >= keep || Outside(p, hMax)) continue;
         float2 xa = p.xz;
         float4 col = ca * w + cb * u + cc * v;
@@ -118,16 +122,18 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float grow = saturate((keep - rank) / (0.3 * keep));
         float hgt = lerp(_GrassB.x, hMax, Rand(cell, 4)) * saturate(0.4 + gw) * fadeOut * grow;
         if (hgt < 0.01) continue;
-        float wid = _GrassB.z * pow(max(d / near, 1), 0.7);
-        uint old;
-        _Args.InterlockedAdd(0, 21, old);
-        uint slot = old / 21;
-        if (slot >= (uint)_GrassC.y) continue;
+        float wid = min(_GrassB.z * pow(abs(keep), -_GrassD.y), _GrassD.z);
+        uint lod = d < _GrassD.w ? 0 : d < _GrassC.w ? 1 : 2;
+        uint slot;
+        _Args.InterlockedAdd(lod * 16 + 4, 1, slot);
+        uint cap = (uint)_GrassC.y;
+        if (slot >= cap) { _Args.InterlockedAdd(lod * 16 + 4, 0xffffffffu); continue; }
         Blade bl;
         bl.p0 = float4(p, hgt);
-        bl.p1 = float4(Rand(cell, 5) * 6.2831853, wid, Rand(cell, 6), col.a);
-        bl.p2 = float4(root, fadeOut);
-        bl.p3 = float4(n, 0);
-        _Blades[slot] = bl;
+        bl.q.x = (uint)(Rand(cell, 5) * 65535) | ((uint)(Rand(cell, 6) * 65535) << 16);
+        bl.q.y = f32tof16(wid) | ((uint)(saturate(col.a) * 255 + 0.5) << 16) | ((uint)(fadeOut * 255 + 0.5) << 24);
+        bl.q.z = f32tof16(root.r) | (f32tof16(root.g) << 16);
+        bl.q.w = f32tof16(root.b) | ((uint)(n.x * 127.5 + 127.5) << 16) | ((uint)(n.z * 127.5 + 127.5) << 24);
+        _Blades[lod * cap + slot] = bl;
     }
 }
