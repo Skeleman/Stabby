@@ -8,6 +8,8 @@ float4 _StabbyCoatA[4], _StabbyCoatB[4], _StabbyCoatRough;
 float _StabbyDetailOff;
 TEXTURE2D(_StabbyCoat);
 SAMPLER(sampler_StabbyCoat);
+TEXTURE2D(_StabbyWaterLevel);
+SAMPLER(sampler_StabbyWaterLevel);
 
 static float3 tmO;
 static float tmGrass;
@@ -512,12 +514,13 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         o.grad += c * up * k.grad;
     }
     float wet = 0;
-    [branch] if (wp.y < 2.4)
+    float hw = wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
+    [branch] if (hw < 2.4)
     {
         float fw = TmFade(0.8, fp);
         float3 tide = TmLN2(wp.xz, 0.11, 7.7, 1);
         float3 dry = TmLN2(wp.xz, 0.8, 29.1, fw);
-        float t = saturate(wp.y / (1.75 + 0.35 * tide.x));
+        float t = saturate(hw / (1.75 + 0.35 * tide.x));
         float edge = smoothstep(0.2, 1, t);
         wet = (1 - smoothstep(0.12, 1, t)) * saturate(1 + edge * (0.5 * fw * dry.x + 0.35 * tide.x));
         o.albedo *= 1 - 0.38 * wet;
