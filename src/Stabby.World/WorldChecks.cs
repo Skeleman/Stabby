@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
-    public static class WorldChecks
+    public static partial class WorldChecks
     {
         public const float SurfaceTolerance = 1e-3f;
         public const float CorridorFollowShare = 0.7f;
@@ -227,6 +227,7 @@ namespace Stabby.World
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail);
             CheckChunkBounds(w, edits, e);
+            if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, edits, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
             float cm = w.Config.CellMeters, s = LatticeStepCells * cm;

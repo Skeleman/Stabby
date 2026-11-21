@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "kinds": [
+    { "id": "static", "lods": 3, "lodScreen": [0.08, 0.025], "fadeScreen": 0.004, "shadows": true, "shadowScreen": 0.03, "wind": false, "animated": false, "solid": true },
+    { "id": "interactive", "lods": 3, "lodScreen": [0.08, 0.025], "fadeScreen": 0.006, "shadows": true, "shadowScreen": 0.03, "wind": false, "animated": false, "solid": true },
+    { "id": "animated", "lods": 3, "lodScreen": [0.1, 0.03], "fadeScreen": 0.006, "shadows": true, "shadowScreen": 0.04, "wind": true, "animated": true, "solid": false },
+    { "id": "structure", "lods": 3, "lodScreen": [0.12, 0.04], "fadeScreen": 0.003, "shadows": true, "shadowScreen": 0.02, "wind": false, "animated": false, "solid": true }
+  ],
+  "objects": [
+    {
+      "id": "small-rock", "name": "Small rock", "kind": "static", "color": "#8a857c", "variants": 6,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.8, 1], "solid": "off", "shadows": "off" } ],
+      "placement": { "perHectare": 10, "slopeMax": 1.2, "sizeMinM": 0.25, "sizeMaxM": 0.7, "sink": 0.2, "alignToSlope": 0.8 }
+    },
+    {
+      "id": "scree", "name": "Scree", "kind": "static", "color": "#7d7a74", "variants": 6,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
+      "placement": { "perHectare": 12, "slopeMin": 0.45, "slopeMax": 1.8, "hardnessMin": 0.3, "sizeMinM": 0.3, "sizeMaxM": 0.9, "clusterCount": 10, "clusterRadiusM": 6, "sink": 0.25, "alignToSlope": 1 }
+    },
+    {
+      "id": "boulder", "name": "Boulder", "kind": "static", "color": "#8c877e", "variants": 8,
+      "parts": [ { "id": "body", "shape": "rock" } ],
+      "placement": { "perHectare": 1.2, "slopeMax": 1.4, "hardnessMin": 0.2, "sizeMinM": 1.4, "sizeMaxM": 3.6, "sink": 0.15, "alignToSlope": 0.3 }
+    },
+    {
+      "id": "boulder-cluster", "name": "Boulder cluster", "kind": "static", "color": "#837f77", "variants": 4,
+      "parts": [
+        { "id": "big", "shape": "rock", "scale": [1, 0.9, 1] },
+        { "id": "mid", "shape": "rock", "offset": [0.75, 0, 0.35], "scale": [0.6, 0.55, 0.6] },
+        { "id": "small", "shape": "rock", "offset": [-0.4, 0, 0.7], "scale": [0.35, 0.3, 0.35], "solid": "off", "shadows": "off" }
+      ],
+      "placement": { "perHectare": 0.4, "slopeMax": 1, "hardnessMin": 0.25, "sizeMinM": 1.6, "sizeMaxM": 3, "sink": 0.12, "alignToSlope": 0.2 }
+    },
+    {
+      "id": "fallen-log", "name": "Fallen log", "kind": "static", "color": "#5b4632", "variants": 4,
+      "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.11, 0.11] } ],
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "wetland"], "perHectare": 2.5, "slopeMax": 0.6, "sizeMinM": 4, "sizeMaxM": 8, "sink": 0.02, "alignToSlope": 1 }
+    },
+    {
+      "id": "stump", "name": "Stump", "kind": "static", "color": "#6a5640", "variants": 4,
+      "parts": [ { "id": "stump", "shape": "stump", "scale": [1, 0.9, 1] } ],
+      "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 1.5, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
+    }
+  ]
+}

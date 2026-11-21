@@ -185,6 +185,115 @@ public static class ContentLoader
         return d;
     }
 
+    public const int ObjectSchemaVersion = 1;
+
+    sealed class ObjectFile
+    {
+        public int SchemaVersion { get; set; }
+        public List<KindEntry> Kinds { get; set; } = new();
+        public List<ObjectEntry> Objects { get; set; } = new();
+    }
+
+    sealed class KindEntry
+    {
+        public string Id { get; set; } = "";
+        public int Lods { get; set; }
+        public float[] LodScreen { get; set; } = Array.Empty<float>();
+        public float FadeScreen { get; set; }
+        public bool Shadows { get; set; }
+        public float ShadowScreen { get; set; }
+        public bool Wind { get; set; }
+        public bool Animated { get; set; }
+        public bool Solid { get; set; }
+    }
+
+    sealed class ObjectEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public string Color { get; set; } = "#ff00ff";
+        public int Variants { get; set; } = 1;
+        public List<PartEntry> Parts { get; set; } = new();
+        public PlacementEntry Placement { get; set; } = new();
+    }
+
+    sealed class PartEntry
+    {
+        public string Id { get; set; } = "";
+        public string Shape { get; set; } = "";
+        public float[]? Offset { get; set; }
+        public float[]? Scale { get; set; }
+        public string Solid { get; set; } = "";
+        public string Shadows { get; set; } = "";
+        public string? Color { get; set; }
+    }
+
+    sealed class PlacementEntry
+    {
+        public List<string> Biomes { get; set; } = new();
+        public float PerHectare { get; set; }
+        public float SlopeMin { get; set; }
+        public float SlopeMax { get; set; } = 10f;
+        public float HardnessMin { get; set; }
+        public float HardnessMax { get; set; } = 1f;
+        public float SizeMinM { get; set; } = 1f;
+        public float SizeMaxM { get; set; } = 1f;
+        public int ClusterCount { get; set; } = 1;
+        public float ClusterRadiusM { get; set; }
+        public float Sink { get; set; }
+        public float AlignToSlope { get; set; }
+    }
+
+    static uint Hex(string s) => uint.Parse(s.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+    public static ObjectLibrary LoadObjects(string contentRoot, IReadOnlyList<string>? biomeIds = null)
+    {
+        var path = Path.Combine(contentRoot, "objects.json");
+        var file = JsonSerializer.Deserialize<ObjectFile>(File.ReadAllText(path), Options)
+                   ?? throw new InvalidDataException(path + " is empty");
+        if (file.SchemaVersion != ObjectSchemaVersion)
+            throw new InvalidDataException($"{path}: schemaVersion {file.SchemaVersion}, expected {ObjectSchemaVersion}");
+        var errors = new List<string>();
+        var lib = new ObjectLibrary();
+        foreach (var k in file.Kinds)
+            lib.Kinds.Add(new ObjectKind
+            {
+                Id = k.Id, Lods = k.Lods, LodScreen = k.LodScreen, FadeScreen = k.FadeScreen,
+                Shadows = k.Shadows, ShadowScreen = k.ShadowScreen, Wind = k.Wind, Animated = k.Animated, Solid = k.Solid,
+            });
+        foreach (var o in file.Objects)
+        {
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Hex(o.Color), Variants = o.Variants };
+            foreach (var p in o.Parts)
+            {
+                if ((p.Offset != null && p.Offset.Length != 3) || (p.Scale != null && p.Scale.Length != 3))
+                    errors.Add(o.Id + ": part " + p.Id + " offset/scale need 3 numbers");
+                var part = new ObjectPart
+                {
+                    Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
+                    Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
+                    HasColor = p.Color != null, Color = p.Color != null ? Hex(p.Color) : def.Color,
+                };
+                if (part.Solid < -1 || part.Shadows < -1) errors.Add(o.Id + ": part " + p.Id + " solid/shadows must be \"\", \"on\" or \"off\"");
+                if (p.Offset is { Length: 3 }) { part.OffsetX = p.Offset[0]; part.OffsetY = p.Offset[1]; part.OffsetZ = p.Offset[2]; }
+                if (p.Scale is { Length: 3 }) { part.ScaleX = p.Scale[0]; part.ScaleY = p.Scale[1]; part.ScaleZ = p.Scale[2]; }
+                def.Parts.Add(part);
+            }
+            var pl = o.Placement;
+            def.Placement = new ObjectPlacement
+            {
+                Biomes = pl.Biomes, PerHectare = pl.PerHectare, SlopeMin = pl.SlopeMin, SlopeMax = pl.SlopeMax,
+                HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
+                ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
+            };
+            lib.Objects.Add(def);
+        }
+        errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
+        if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
+        return lib;
+    }
+
     public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
         SketchFile.Read(File.ReadAllText(Path.Combine(contentRoot, relativePath)), c);
 }

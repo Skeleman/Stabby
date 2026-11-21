@@ -60,7 +60,7 @@ namespace Stabby.World
             return float.NegativeInfinity;
         }
 
-        static bool Try<TG, TE>(TG g, TE e, float s, float y, float nx, float nz, float ux, float uz, float fall, out float ny) where TG : struct, IGroundHeight where TE : struct, IEditList
+        static bool Try<TG, TE, TO>(TG g, TE e, TO o, float s, float y, float nx, float nz, float ux, float uz, float fall, out float ny) where TG : struct, IGroundHeight where TE : struct, IEditList where TO : struct, IColumnTable
         {
             ny = y;
             var c = At(g, e, nx, nz, s);
@@ -68,6 +68,9 @@ namespace Stabby.World
             if (Density(e, c, top) >= 0) return false;
             float f = Floor(e, c, top, y - Reach);
             float feet = f >= y - fall ? f : y - fall;
+            float rock = Obstacles.Top(o, nx, nz, Radius, feet, top);
+            if (rock > top) return false;
+            if (rock > feet) feet = rock;
             if (Density(e, c, feet + Height) >= 0 || Density(e, c, feet + 0.5f * Height) >= 0) return false;
             var r = At(g, e, nx + ux * Radius, nz + uz * Radius, s);
             if (Density(e, r, top) >= 0 || Density(e, r, feet + Height) >= 0) return false;
@@ -76,17 +79,21 @@ namespace Stabby.World
         }
 
         public static bool Step<TG, TE>(TG g, TE e, float s, ref float x, ref float y, ref float z, float dx, float dz, float fall) where TG : struct, IGroundHeight where TE : struct, IEditList
+            => Step(g, e, default(NoColumns), s, ref x, ref y, ref z, dx, dz, fall);
+
+        public static bool Step<TG, TE, TO>(TG g, TE e, TO o, float s, ref float x, ref float y, ref float z, float dx, float dz, float fall) where TG : struct, IGroundHeight where TE : struct, IEditList where TO : struct, IColumnTable
         {
             float l = (float)Math.Sqrt(dx * dx + dz * dz);
             if (l > 1e-6f)
             {
                 float ux = dx / l, uz = dz / l;
-                if (Try(g, e, s, y, x + dx, z + dz, ux, uz, fall, out float ny)) { x += dx; z += dz; y = ny; return true; }
-                if (dx != 0 && Try(g, e, s, y, x + dx, z, Math.Sign(dx), 0, fall, out ny)) { x += dx; y = ny; return true; }
-                if (dz != 0 && Try(g, e, s, y, x, z + dz, 0, Math.Sign(dz), fall, out ny)) { z += dz; y = ny; return true; }
+                if (Try(g, e, o, s, y, x + dx, z + dz, ux, uz, fall, out float ny)) { x += dx; z += dz; y = ny; return true; }
+                if (dx != 0 && Try(g, e, o, s, y, x + dx, z, Math.Sign(dx), 0, fall, out ny)) { x += dx; y = ny; return true; }
+                if (dz != 0 && Try(g, e, o, s, y, x, z + dz, 0, Math.Sign(dz), fall, out ny)) { z += dz; y = ny; return true; }
             }
             var c = At(g, e, x, z, s);
-            float f = Floor(e, c, y + StepUp, y - Reach);
+            float rest = Obstacles.Top(o, x, z, Radius, y - Reach, y + StepUp);
+            float f = Math.Max(Floor(e, c, y + StepUp, y - Reach), rest <= y + StepUp ? rest : float.NegativeInfinity);
             if (!float.IsNaN(f)) y = f >= y - fall ? f : y - fall;
             return false;
         }
