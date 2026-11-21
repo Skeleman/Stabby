@@ -2,10 +2,49 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby world objects",
   "type": "object",
-  "required": ["schemaVersion", "kinds", "objects"],
+  "required": ["schemaVersion", "kinds", "objects", "foliage"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": { "const": 1 },
+    "foliage": {
+      "type": "object",
+      "required": ["wind", "grass"],
+      "additionalProperties": false,
+      "properties": {
+        "wind": {
+          "type": "object",
+          "required": ["directionDeg", "strength", "gustStrength", "gustScaleM", "gustSpeed", "swayHz"],
+          "additionalProperties": false,
+          "properties": {
+            "directionDeg": { "type": "number" },
+            "strength": { "type": "number", "minimum": 0, "maximum": 2 },
+            "gustStrength": { "type": "number", "minimum": 0, "maximum": 2 },
+            "gustScaleM": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000 },
+            "gustSpeed": { "type": "number", "minimum": 0, "maximum": 50 },
+            "swayHz": { "type": "number", "minimum": 0, "maximum": 5 }
+          }
+        },
+        "grass": {
+          "type": "object",
+          "required": ["perM2", "nearM", "reachM", "heightMinM", "heightMaxM", "widthM", "bend", "tipLight", "translucency", "coatMin", "slopeMax", "maxBlades"],
+          "additionalProperties": false,
+          "properties": {
+            "perM2": { "type": "number", "minimum": 0, "maximum": 400 },
+            "nearM": { "type": "number", "exclusiveMinimum": 0 },
+            "reachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 120 },
+            "heightMinM": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+            "heightMaxM": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+            "widthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.5 },
+            "bend": { "type": "number", "minimum": 0, "maximum": 1.5 },
+            "tipLight": { "type": "number", "minimum": 0, "maximum": 2 },
+            "translucency": { "type": "number", "minimum": 0, "maximum": 1 },
+            "coatMin": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
+            "slopeMax": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+            "maxBlades": { "type": "integer", "minimum": 1024, "maximum": 4194304 }
+          }
+        }
+      }
+    },
     "kinds": {
       "type": "array",
       "minItems": 1,

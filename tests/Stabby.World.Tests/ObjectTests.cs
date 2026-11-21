@@ -42,6 +42,20 @@ public class ObjectTests
             Matches(place, o.GetProperty("placement"));
             foreach (var p in o.GetProperty("parts").EnumerateArray()) Matches(part, p);
         }
+        var foliage = top.GetProperty("properties").GetProperty("foliage");
+        var fd = data.RootElement.GetProperty("foliage");
+        Matches(foliage, fd);
+        Matches(foliage.GetProperty("properties").GetProperty("wind"), fd.GetProperty("wind"));
+        Matches(foliage.GetProperty("properties").GetProperty("grass"), fd.GetProperty("grass"));
+        Assert.Equal(fd.GetProperty("wind").GetProperty("gustScaleM").GetSingle(), Objects.Foliage.Wind.GustScaleM);
+        Assert.Equal(fd.GetProperty("grass").GetProperty("reachM").GetSingle(), Objects.Foliage.Grass.ReachM);
+        Assert.True(Objects.Foliage.Grass.ReachM > Objects.Foliage.Grass.NearM);
+        var bad = new FoliageDef();
+        bad.Grass.NearM = 50;
+        bad.Wind.GustScaleM = 0;
+        var errors = new List<string>();
+        bad.Validate(errors);
+        Assert.Equal(2, errors.Count);
     }
 
     [Fact]

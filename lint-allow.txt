@@ -8,3 +8,4 @@ PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem runs managed object placement off the main thread and converts it to a blob once
 ObjectViewSystem registers object meshes with Entities Graphics and streams tiles around the managed camera
+GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera

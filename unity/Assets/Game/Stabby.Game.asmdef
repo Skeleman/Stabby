@@ -12,7 +12,9 @@
         "Unity.Mathematics",
         "Unity.Mathematics.Extensions",
         "Unity.Transforms",
-        "Unity.Burst"
+        "Unity.Burst",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "allowUnsafeCode": false,
     "autoReferenced": true

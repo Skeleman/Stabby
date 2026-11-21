@@ -96,7 +96,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples (`TerrainMaterials.hlsl`; detail branched on pixel footprint, +0.1 ms at 1080p mid view, up to +1 ms in a 4K rock close-up) | done |
 | Terrain surface pass 2: grass less saturated with crisp near grain instead of smeared bumps, rock sharper up close, dark shale band lighter, sand blotches, camera-relative coordinates for detail precision far from origin | done |
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
-| Close grass reads as saturated green fur; real blades come with objects step 2 foliage. Faint sand crest dashes at 4-8 m | later |
+| Close grass reads as saturated green fur: real blades now cover it within 45 m (objects step 2 grass). Faint sand crest dashes at 4-8 m remain | later |
 | Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
 | Chunk-sized holes at chunk edges: overhead shot shows one chunk as a pit of flat strata bands with hard rectangular edges (likely a missing or wrong-LOD chunk exposing neighbour skirts); gone with the near-field lattice; thin green streaks remain in the chase shot | next |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
@@ -109,7 +109,9 @@ architecture contract. The other steps fit the contract as it stands.
 | Rocks inside one grey strata band read plain grey up close (shared rock material, changes cliffs too) | later |
 | Large boulders as solid-field edits (rule 11), after near field lands | next |
 | Near-field follow-ups: frustum-cull node selection; trim SurfaceNets filler vertices at the source; teardown order (finish terrain mesh jobs before map systems free ground data); 294 ms GC spike mid-tour and 46 ms worst built frame after the merge (not object side: ~10-80 KB/frame steady allocation from terrain or engine) | now |
-| Objects step 2: animated foliage with shader wind | later |
+| Objects step 2a: GPU grass blades near the camera (`GrassScatter.compute` scatters per near terrain mesh from the biome coat, one indirect draw, frustum cull, distance fade into the terrain colour); shared wind globals `_StabbyWind`/`_StabbyGust` from `objects.json` foliage; +0.24 ms at 1080p in the grass close-up | done |
+| Objects step 2b: animated foliage (bushes, trees) on the shared wind | later |
+| Grass follow-ups: no grass on submerged beds (coat test ignores water surface), blade shadows, profiler to confirm chase/far cost with blades on and off | later |
 | Objects step 3: interactive objects with host-authoritative removal | later |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
 

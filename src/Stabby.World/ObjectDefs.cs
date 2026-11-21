@@ -74,6 +74,7 @@ namespace Stabby.World
     {
         public List<ObjectKind> Kinds = new List<ObjectKind>();
         public List<ObjectDef> Objects = new List<ObjectDef>();
+        public FoliageDef Foliage = new FoliageDef();
 
         public ObjectKind KindOf(ObjectDef d)
         {
@@ -135,6 +136,7 @@ namespace Stabby.World
                     foreach (var b in pl.Biomes)
                         if (!Contains(biomeIds, b)) errors.Add(d.Id + ": unknown biome " + b);
             }
+            lib.Foliage.Validate(errors);
             return errors;
         }
 

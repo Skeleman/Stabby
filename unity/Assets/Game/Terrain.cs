@@ -752,6 +752,7 @@ namespace Stabby.Game
             float3 lo = p.Bounds[0], hi = p.Bounds[1];
             p.Bounds.Dispose();
             var mesh = new Mesh { name = $"Terrain L{l} {c.x},{c.y}" };
+            if (l == 0) { mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw; mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw; }
             const MeshUpdateFlags quiet = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers;
             mesh.SetVertexBufferParams(p.Verts.Length, Layout);
             mesh.SetVertexBufferData(p.Verts.AsArray(), 0, 0, p.Verts.Length, 0, quiet);
@@ -977,6 +978,14 @@ namespace Stabby.Game
             if (a > l || b > l) mask |= bit;
             if ((a >= 0 && a < l) || (b >= 0 && b < l)) mask |= bit << 8;
             return mask;
+        }
+
+        public void NearMeshes(float3 eye, float reach, List<Mesh> into)
+        {
+            into.Clear();
+            if (!ready || !drawn.IsCreated) return;
+            foreach (int key in drawn)
+                if (tree.Level(key) == 0 && tree.Distance(key, eye) < reach && meshes.TryGetValue(key, out var m)) into.Add(m);
         }
 
         void Evict(int key)
