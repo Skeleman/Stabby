@@ -1,0 +1,70 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Stabby.World;
+using UnityEngine;
+
+namespace Stabby.Game
+{
+    public static class ObjectFile
+    {
+        [Serializable] class Kind { public string id; public int lods = 3; public float[] lodScreen; public float fadeScreen = 0.006f, shadowScreen = 0.03f; public bool shadows = true, wind, animated, solid = true; }
+        [Serializable] class Part { public string id, shape, solid = "", shadows = "", color = ""; public float[] offset, scale; }
+        [Serializable] class Place
+        {
+            public string[] biomes; public float perHectare, slopeMin, slopeMax = 10f, hardnessMin, hardnessMax = 1f, sizeMinM = 1f, sizeMaxM = 1f;
+            public int clusterCount = 1; public float clusterRadiusM, sink, alignToSlope;
+        }
+        [Serializable] class Obj { public string id, name, kind, color = "#ff00ff"; public int variants = 1; public Part[] parts; public Place placement; }
+        [Serializable] class Dto { public int schemaVersion; public Kind[] kinds; public Obj[] objects; }
+
+        public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "objects.json"));
+
+        static uint Hex(string s) => Convert.ToUInt32(s.TrimStart('#'), 16);
+
+        public static ObjectLibrary Load(string path, IReadOnlyList<string> biomeIds)
+        {
+            var dto = JsonUtility.FromJson<Dto>(File.ReadAllText(path));
+            if (dto.schemaVersion != 1) throw new InvalidDataException($"objects.json schemaVersion {dto.schemaVersion}, expected 1");
+            var lib = new ObjectLibrary();
+            var errors = new List<string>();
+            foreach (var k in dto.kinds ?? Array.Empty<Kind>())
+                lib.Kinds.Add(new ObjectKind
+                {
+                    Id = k.id, Lods = k.lods, LodScreen = k.lodScreen ?? Array.Empty<float>(), FadeScreen = k.fadeScreen,
+                    Shadows = k.shadows, ShadowScreen = k.shadowScreen, Wind = k.wind, Animated = k.animated, Solid = k.solid,
+                });
+            foreach (var o in dto.objects ?? Array.Empty<Obj>())
+            {
+                var def = new ObjectDef { Id = o.id, Name = o.name, Kind = o.kind, Color = Hex(o.color), Variants = o.variants };
+                foreach (var p in o.parts ?? Array.Empty<Part>())
+                {
+                    bool colored = !string.IsNullOrEmpty(p.color);
+                    var part = new ObjectPart
+                    {
+                        Id = p.id, Shape = ObjectLibrary.ShapeOf(p.shape),
+                        Solid = ObjectLibrary.Tri(p.solid), Shadows = ObjectLibrary.Tri(p.shadows),
+                        HasColor = colored, Color = colored ? Hex(p.color) : def.Color,
+                    };
+                    if (part.Solid < -1 || part.Shadows < -1) errors.Add(o.id + ": part " + p.id + " solid/shadows must be \"\", \"on\" or \"off\"");
+                    if ((p.offset != null && p.offset.Length != 0 && p.offset.Length != 3) || (p.scale != null && p.scale.Length != 0 && p.scale.Length != 3))
+                        errors.Add(o.id + ": part " + p.id + " offset/scale need 3 numbers");
+                    if (p.offset != null && p.offset.Length == 3) { part.OffsetX = p.offset[0]; part.OffsetY = p.offset[1]; part.OffsetZ = p.offset[2]; }
+                    if (p.scale != null && p.scale.Length == 3) { part.ScaleX = p.scale[0]; part.ScaleY = p.scale[1]; part.ScaleZ = p.scale[2]; }
+                    def.Parts.Add(part);
+                }
+                var pl = o.placement ?? new Place();
+                def.Placement = new ObjectPlacement
+                {
+                    Biomes = new List<string>(pl.biomes ?? Array.Empty<string>()), PerHectare = pl.perHectare, SlopeMin = pl.slopeMin, SlopeMax = pl.slopeMax,
+                    HardnessMin = pl.hardnessMin, HardnessMax = pl.hardnessMax, SizeMinM = pl.sizeMinM, SizeMaxM = pl.sizeMaxM,
+                    ClusterCount = pl.clusterCount, ClusterRadiusM = pl.clusterRadiusM, Sink = pl.sink, AlignToSlope = pl.alignToSlope,
+                };
+                lib.Objects.Add(def);
+            }
+            errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
+            if (errors.Count > 0) throw new InvalidDataException("objects.json: " + string.Join("; ", errors));
+            return lib;
+        }
+    }
+}

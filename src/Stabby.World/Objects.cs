@@ -115,7 +115,7 @@ namespace Stabby.World
             return chunks[c] ?? (chunks[c] = Place(cx, cz));
         }
 
-        public ObjectInstance[] Place(int cx, int cz)
+        public ObjectInstance[] Place(int cx, int cz, bool solidOnly = false)
         {
             var list = new List<ObjectInstance>();
             float span = WorldChunks.Size * cm;
@@ -126,7 +126,7 @@ namespace Stabby.World
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 var pl = lib.Objects[d].Placement;
-                if (pl.PerHectare <= 0) continue;
+                if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d))) continue;
                 var rng = new Rng(Rng.Mix(stream ^ chunkKey ^ key[d]));
                 float expected = pl.PerHectare * sx * sz / 10000f / pl.ClusterCount;
                 int clusters = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
@@ -225,12 +225,19 @@ namespace Stabby.World
             return (float)Math.Sqrt(ex * ex + ez * ez);
         }
 
+        bool AnySolid(int d)
+        {
+            var def = lib.Objects[d];
+            foreach (var p in def.Parts) if (lib.PartSolid(def, p)) return true;
+            return false;
+        }
+
         public List<ObjectColumn> Columns()
         {
             var list = new List<ObjectColumn>();
             for (int cz = 0; cz < across; cz++)
                 for (int cx = 0; cx < across; cx++)
-                    foreach (var o in Chunk(cx, cz)) AddColumns(lib, heights, o, list);
+                    foreach (var o in chunks[cz * across + cx] ?? Place(cx, cz, true)) AddColumns(lib, heights, o, list);
             return list;
         }
 

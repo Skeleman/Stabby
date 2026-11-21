@@ -6,3 +6,5 @@ TerrainViewSystem applies Mesh objects and registers them with Entities Graphics
 TerrainViewSystem.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
+ObjectColumnsSystem runs managed object placement off the main thread and converts it to a blob once
+ObjectViewSystem registers object meshes with Entities Graphics and streams tiles around the managed camera

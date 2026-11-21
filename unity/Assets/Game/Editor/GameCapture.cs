@@ -152,6 +152,23 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            if (phase == 11)
+            {
+                if (wait == 0)
+                {
+                    if (!Objects(cam)) { GameStatus.Lines["~objects"] = "no objects placed"; phase++; }
+                    else { wait = 180; return; }
+                }
+                else
+                {
+                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    Shot(cam, null, "warmup");
+                    if (wait < 0) GameStatus.Lines["~objects wait"] = $"objects waited {-wait} extra frames";
+                    Shot(cam, dir, "objects");
+                    wait = 0;
+                    phase++;
+                }
+            }
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -197,6 +214,41 @@ namespace Stabby.Game.Editor
             SpikeProbe.Stop();
             SessionState.EraseBool(Key);
             EditorApplication.Exit(code);
+        }
+
+        static bool Objects(Camera cam)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var map = w.GetExistingSystemManaged<ClientMapSystem>().Map;
+                float span = WorldChunks.Size * map.Config.CellMeters, best = float.MaxValue;
+                int n = field.ChunksAcross;
+                ObjectInstance pick = default;
+                bool found = false;
+                for (int cz = 0; cz < n; cz++)
+                    for (int cx = 0; cx < n; cx++)
+                    {
+                        if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 1.5f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 1.5f) continue;
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            if (!field.Library.Objects[o.Def].Id.StartsWith("boulder", System.StringComparison.Ordinal)) continue;
+                            float d = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            if (d < best) { best = d; pick = o; found = true; }
+                        }
+                    }
+                if (!found) return false;
+                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.4f, pick.Z);
+                float back = Mathf.Max(8f, pick.Size * 3.5f);
+                var eye = target + new Vector3(back * 0.8f, back * 0.45f, -back * 0.6f);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 3f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim objects"] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0}, {best:F0} m from the player";
+                return true;
+            }
+            return false;
         }
 
         static bool River(Camera cam)
