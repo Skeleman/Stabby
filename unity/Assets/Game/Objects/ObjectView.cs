@@ -276,7 +276,8 @@ namespace Stabby.Game
                         if (m.Tones != null)
                         {
                             var t0 = new Vector4[vc];
-                            for (int v = 0; v < vc; v++) t0[v] = new Vector4(m.Tones[4 * v], m.Tones[4 * v + 1], m.Tones[4 * v + 2], m.Tones[4 * v + 3]);
+                            float course = parts[k].Shape == ObjectPart.Wall && l == Lods - 1 ? 2 : 0;
+                            for (int v = 0; v < vc; v++) t0[v] = new Vector4(m.Tones[4 * v], m.Tones[4 * v + 1], m.Tones[4 * v + 2], m.Tones[4 * v + 3] + course);
                             set.Uv0[at] = t0;
                         }
                         if (outward < 0)
