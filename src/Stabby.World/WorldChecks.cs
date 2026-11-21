@@ -108,6 +108,7 @@ namespace Stabby.World
             if (w.Sketch != null) CheckSketch(w, e);
             CheckDetail(w, e);
             CheckNearField(w, e);
+            CheckFalls(w, e);
             CheckRiverShape(w, e);
             CheckGeometry(w, e);
             CheckFeatures(w, e);
@@ -149,12 +150,54 @@ namespace Stabby.World
         public const float SeamEpsilonM = 0.01f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f;
         public const int SeamStride = 3, NearCells = 24;
 
+        public const float FallPoolDepthM = 0.5f, FallEdgeM = 1f, FallEdgeShare = 0.5f;
+
+        static void CheckFalls(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var d = new TerrainDetail(w);
+            var hy = w.Water;
+            bool pool = false, edge = false, lake = false;
+            foreach (var s in hy.Rivers)
+                foreach (var f in s.Falls)
+                {
+                    int lip = Cell(n, cm, f.LipX, f.LipZ), bottom = Cell(n, cm, f.BaseX, f.BaseZ);
+                    bool wetLip = w.Sea[lip] || hy.LakeId[lip] >= 0, wetBase = w.Sea[bottom] || hy.LakeId[bottom] >= 0;
+                    if (!lake && (wetLip || wetBase && f.BaseY < hy.WaterSurface[bottom] - SurfaceTolerance))
+                    {
+                        lake = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} lies inside a {(w.Sea[lip] || w.Sea[bottom] ? "sea" : "lake")}: lip {f.LipY:F1}, base {f.BaseY:F1}, water {hy.WaterSurface[wetLip ? lip : bottom]:F1}");
+                    }
+                    float up = d.Sample(f.LipX - f.DirX * FallEdgeM, f.LipZ - f.DirZ * FallEdgeM), down = d.Sample(f.BaseX + f.DirX * FallEdgeM, f.BaseZ + f.DirZ * FallEdgeM);
+                    if (!edge && (f.Drop < Hydrology.FallMinDrop || up - down < FallEdgeShare * f.Drop))
+                    {
+                        edge = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has no lip above its base: drop {f.Drop:F1}, ground {up:F1} above to {down:F1} below");
+                    }
+                    if (wetBase || f.BaseY < Erosion.MinLandHeight + FallPoolDepthM) continue;
+                    float cx = f.LipX + f.DirX * f.PoolRadius * Hydrology.FallPoolCentre, cz = f.LipZ + f.DirZ * f.PoolRadius * Hydrology.FallPoolCentre, g = d.Sample(cx, cz);
+                    if (!pool && g > f.BaseY - FallPoolDepthM)
+                    {
+                        pool = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has no plunge pool: ground {g:F1} at {cx:F0},{cz:F0}, water {f.BaseY:F1}");
+                    }
+                }
+        }
+
+        static int Cell(int n, float cm, float x, float z)
+        {
+            int cx = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(x / cm + 0.5f))), cz = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(z / cm + 0.5f)));
+            return cz * n + cx;
+        }
+
         static void CheckNearField(GeneratedWorld w, List<string> e)
         {
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var pieces = NearField.Pieces(w);
+            var pools = pieces.FindAll(q => q.Fr > 0);
             var spots = new List<(float, float)>();
             for (int y = 1; y < n - 1; y += SeamStride)
                 for (int x = 1; x < n - 1; x += SeamStride)
@@ -165,6 +208,8 @@ namespace Stabby.World
                 {
                     float bx = (float)Math.Floor(sx / cm) * cm + half * 0.5f * cm, bz = (float)Math.Floor(sz / cm) * cm + half * 0.5f * cm;
                     float jx = Jump(d, bx, sz, 1, 0), jz = Jump(d, sx, bz, 0, 1);
+                    if (jx > SeamTolerance && InFall(w, bx, sz)) jx = 0;
+                    if (jz > SeamTolerance && InFall(w, sx, bz)) jz = 0;
                     if (jx > SeamTolerance) { e.Add($"near field jumps {jx:F2} m across x = {bx:F1} at z = {sz:F0}"); return; }
                     if (jz > SeamTolerance) { e.Add($"near field jumps {jz:F2} m across z = {bz:F1} at x = {sx:F0}"); return; }
                 }
@@ -187,7 +232,7 @@ namespace Stabby.World
                     Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
                     float h = d.Sample(x, z), s = NearStepM;
                     float bend = Math.Max(Math.Abs(d.Sample(x + s, z) + d.Sample(x - s, z) - 2 * h), Math.Abs(d.Sample(x, z + s) + d.Sample(x, z - s) - 2 * h));
-                    if (Math.Abs(wy - h) > SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
+                    if (Math.Abs(wy - h) > SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend && !InFall(w, x, z)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
                 }
             }
 
@@ -203,11 +248,22 @@ namespace Stabby.World
                 {
                     float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
                     int bc = NearField.CellOf(bx, bz, cm, n);
-                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s)) continue;
+                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || pools.Exists(o => NearField.PoolNear(o, bx, bz))) continue;
                     float h = d.Sample(bx, bz), held = Math.Min(s, Math.Min(q.Sa, q.Sb) + NearField.Rise(hw));
                     if (h < held - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {held:F1}"); return; }
                 }
             }
+        }
+
+        static bool InFall(GeneratedWorld w, float x, float z)
+        {
+            foreach (var s in w.Water.Rivers)
+                foreach (var f in s.Falls)
+                {
+                    float dx = x - f.LipX, dz = z - f.LipZ, along = dx * f.DirX + dz * f.DirZ, side = Math.Abs(dz * f.DirX - dx * f.DirZ), reach = f.Width + 2 * NearField.PoolReach(f.PoolRadius);
+                    if (along >= -NearField.FallJagM - 2 * NearStepM && along <= reach && side <= reach) return true;
+                }
+            return false;
         }
 
         static float Jump(TerrainDetail d, float x, float z, float ux, float uz)
@@ -286,6 +342,7 @@ namespace Stabby.World
                 if (peak < StepRatio * mean) continue;
                 stepped++;
                 if (at + 1 > last) continue;
+                if (at > 0 && pieces[at - 1].Fr > 0) { falls++; plunged++; continue; }
                 var below = pieces[at + 1];
                 float drop = NearField.PoolDrop(pieces[at].Sa - pieces[at].Sb, pieces[at].Db), sb = below.Sb;
                 if (Foreign(pieces, at + 1, below.Bx, below.Bz)) continue;

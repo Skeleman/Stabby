@@ -26,6 +26,19 @@ namespace Stabby.World
         public RiverEnd End;
         public int Downstream = -1;
         public int LakeId = -1;
+        public List<RiverFall> Falls = new List<RiverFall>();
+    }
+
+    public struct RiverFall
+    {
+        public int K;
+        public float LipX, LipZ, LipY;
+        public float BaseX, BaseZ, BaseY;
+        public float Width;
+        public float DirX, DirZ;
+        public float PoolRadius;
+        public float Discharge;
+        public float Drop => LipY - BaseY;
     }
 
     public sealed class Hydrology
@@ -191,6 +204,7 @@ namespace Stabby.World
                 if (seg.End == RiverEnd.Junction) seg.Downstream = startOf[seg.Downstream];
                 Shape(cfg, seg, meander, wobble);
             }
+            foreach (var seg in hy.Rivers) FindFalls(cfg, seg, sea, hy);
         }
 
         static void Add(WorldConfig c, RiverSegment seg, Hydrology hy, int i)
@@ -268,6 +282,76 @@ namespace Stabby.World
                 seg.X.Add(cell % n + ox);
                 seg.Y.Add(cell / n + oy);
             }
+        }
+
+        public const float FallMinDrop = 4f, FallPoolCentre = 0.8f, FallBaseOffsetM = 0.3f;
+        const float FallStepFraction = 0.5f, FallPoolBaseM = 1.5f, FallPoolScale = 0.9f, FallPoolWidths = 0.75f, FallPoolMaxM = 15f, FallLipT = 0.5f, FallLipStepT = 0.125f;
+        const int FallSpanCells = 2;
+
+        static void FindFalls(WorldConfig c, RiverSegment seg, bool[] sea, Hydrology hy)
+        {
+            int count = seg.Cells.Count;
+            float cm = c.CellMeters, step = FallStepFraction * FallMinDrop;
+            var stage = new float[count];
+            for (int k = 0; k < count; k++) stage[k] = Stage(c, seg, k);
+            for (int k = 0; k + 1 < count; k++)
+            {
+                if (stage[k] - stage[k + 1] < step) continue;
+                int e = k + 1, big = k;
+                while (e + 1 < count && e - k < FallSpanCells && stage[e] - stage[e + 1] >= step)
+                {
+                    if (stage[e] - stage[e + 1] > stage[big] - stage[big + 1]) big = e;
+                    e++;
+                }
+                float drop = stage[k] - stage[e];
+                if (drop >= FallMinDrop)
+                {
+                    float dx = seg.X[big + 1] - seg.X[big], dz = seg.Y[big + 1] - seg.Y[big], len = (float)Math.Sqrt(dx * dx + dz * dz);
+                    if (len > 0) { dx /= len; dz /= len; } else { dx = 1; dz = 0; }
+                    float lx = 0, lz = 0, t = FallLipT;
+                    for (; t >= 0; t -= FallLipStepT)
+                    {
+                        lx = (seg.X[big] + t * (seg.X[big + 1] - seg.X[big])) * cm; lz = (seg.Y[big] + t * (seg.Y[big + 1] - seg.Y[big])) * cm;
+                        if (!Wet(c, sea, hy, lx, lz)) break;
+                    }
+                    float baseY = stage[e], bx = lx + dx * FallBaseOffsetM, bz = lz + dz * FallBaseOffsetM;
+                    if (Wet(c, sea, hy, bx, bz)) baseY = Math.Max(baseY, hy.WaterSurface[CellAt(c, bx, bz)]);
+                    if (t < 0 || stage[k] - baseY < FallMinDrop || InJunction(c, seg, hy, e, lx, lz)) { k = e - 1; continue; }
+                    drop = stage[k] - baseY;
+                    float q = seg.Discharge[big], w = seg.Width[big];
+                    float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
+                    seg.Falls.Add(new RiverFall
+                    {
+                        K = big,
+                        LipX = lx, LipZ = lz, LipY = stage[k],
+                        BaseX = bx, BaseZ = bz, BaseY = baseY,
+                        Width = w, DirX = dx, DirZ = dz,
+                        PoolRadius = pool, Discharge = q,
+                    });
+                }
+                k = e - 1;
+            }
+        }
+
+        static bool InJunction(WorldConfig c, RiverSegment seg, Hydrology hy, int e, float x, float z)
+        {
+            int last = seg.Cells.Count - 1;
+            if (seg.End != RiverEnd.Junction || e != last) return false;
+            float hw = 0.5f * hy.Rivers[seg.Downstream].Width[0], dx = seg.X[last] * c.CellMeters - x, dz = seg.Y[last] * c.CellMeters - z, r = hw + NearField.Bank(hw);
+            return dx * dx + dz * dz < r * r;
+        }
+
+        static int CellAt(WorldConfig c, float x, float z)
+        {
+            int n = c.Size;
+            int cx = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(x / c.CellMeters + 0.5f))), cz = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(z / c.CellMeters + 0.5f)));
+            return cz * n + cx;
+        }
+
+        static bool Wet(WorldConfig c, bool[] sea, Hydrology hy, float x, float z)
+        {
+            int i = CellAt(c, x, z);
+            return sea[i] || hy.LakeId[i] >= 0;
         }
 
         static void CarveBeds(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
