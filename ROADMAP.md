@@ -93,7 +93,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 |---|---|
 | Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (`NearField.Sample`, 64-quad nodes over 9 levels with 2:1 balance; GeneratorVersion 35) | done |
 | Erosion speed: coarse-to-fine erosion (512 grid for all but the last 8 steps) and parallel row loops; 2048 generates in ~5 s (erosion 3 s), 4096 in ~19 s but its checks crash in Features.Dry/Arch (arch endpoints unclamped) | done (e7d12e3) |
-| Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | next |
+| Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | wip (b/grid-2048) |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Water pass 2 (Zach): square pattern along the sea edge; sea, lakes and rivers share one water definition, differing only in flow and swell (`materials.json` `water`, one shader keyed by vertex colour; soft gradient-noise foam, lake shore ring) | done |
 | Water cost: fine wave octave skipped past its fade distance, foam noise skipped away from shores; GPU profile of water and terrain shaders at several resolutions and distances before more effects (water coast 0.9/1.0 ms at 1080p, 1.3/1.8 at 2160p) | done |
@@ -101,11 +101,11 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Terrain surface pass 2: grass less saturated with crisp near grain instead of smeared bumps, rock sharper up close, dark shale band lighter, sand blotches, camera-relative coordinates for detail precision far from origin | done |
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
 | Close grass reads as saturated green fur: real blades now cover it within 45 m (objects step 2 grass). Faint sand crest dashes at 4-8 m remain | later |
-| Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
+| Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | wip (b/terrain-artifacts) |
 | Chunk-sized holes at chunk edges: gone with the near-field lattice; thin green streaks were steep edge-row facets (edge vertices snapped half a cell), fixed by sampling the continuous surface on node edges | done |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
 | Far shoreline: sea and lake depth past 120-240 m read a smooth bed-height field (`_StabbyBed`, 11 m texels, mipped) instead of far terrain facets; +0.1 ms at 1080p, `coast-far` capture shot | done |
-| Stepped sand rim at ~1 km where coarse far-LOD terrain crosses the flat water plane (geometry, not foam): finer far LOD along shorelines | later |
+| Stepped sand rim at ~1 km where coarse far-LOD terrain crosses the flat water plane (geometry, not foam): finer far LOD along shorelines | wip (b/terrain-artifacts) |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` (`Objects`, `ObjectChecks`, instanced view with screen-size LOD) | done |
 | Objects step 1b: rocks use the strata material library, denser and varied placement (clusters at scarp feet, scree on slopes, logs under forest), spawn data unloaded with chunks, instance counts in capture stats; GeneratorVersion 34 | done |
@@ -126,7 +126,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Objects step 2b: animated foliage (bushes, trees) on the shared wind. Zach: realistic, not Punchy's cartoon style; real leaf detail on cutout leaf cards (alpha-tested, alpha-to-coverage) on code-built branches, leaf atlas generated in code at load, runtime-baked billboard impostors far off; needs rule 11 wording change (textures may hold code-generated leaf atlases), awaiting Zach | next |
 | Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | done |
 | Grass follow-ups: no grass on submerged beds (done), blade shadows, profiler to confirm chase/far cost with blades on and off | later |
-| Objects step 3: interactive objects with host-authoritative removal | later |
+| Objects step 3: interactive objects with host-authoritative removal | wip (b/objects-interactive) |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
 
 ## Next
