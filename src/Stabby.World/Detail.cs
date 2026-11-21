@@ -144,3 +144,59 @@ namespace Stabby.World
         public RiverPiece Piece(int p) => pieces[p];
     }
 }
+
+namespace Stabby.World
+{
+    public static class Detail
+    {
+        public const float ReferenceLines = 1080f;
+        public const float ReferenceFov = 60f;
+        public const float Hysteresis = 0.15f;
+        public const float ReferencePixelsPerMetre = 935.3074f;
+
+        public static float PixelsPerMetreAt(float fovDegrees)
+        {
+            double f = Math.Min(Math.Max(fovDegrees, 5f), 170f) * Math.PI / 360.0;
+            return (float)(ReferenceLines / (2.0 * Math.Tan(f)));
+        }
+
+        public static float ScreenSize(float sizeM, float distanceM, float pixelsPerMetre) =>
+            sizeM / Math.Max(distanceM, 0.01f) * pixelsPerMetre;
+
+        public static float Reach(float sizeM, float pixels, float pixelsPerMetre) =>
+            sizeM * pixelsPerMetre / Math.Max(pixels, 1e-3f);
+
+        public static float SimulationReach(float sizeM, float pixels) => Reach(sizeM, pixels, ReferencePixelsPerMetre);
+
+        public struct Thresholds
+        {
+            public float Near, Mid, Far;
+
+            public Thresholds(float near, float mid, float far) { Near = near; Mid = mid; Far = far; }
+
+            public Thresholds Scaled(float quality)
+            {
+                float q = Math.Max(quality, 0.1f);
+                return new Thresholds(Near / q, Mid / q, Far / q);
+            }
+        }
+
+        public static int Tier(float pixels, in Thresholds t, int previous)
+        {
+            int plain = pixels > t.Near ? 0 : pixels > t.Mid ? 1 : pixels > t.Far ? 2 : 3;
+            if (previous < 0 || plain <= previous) return plain;
+            float k = 1f - Hysteresis;
+            int held = pixels > t.Near * k ? 0 : pixels > t.Mid * k ? 1 : pixels > t.Far * k ? 2 : 3;
+            return Math.Max(held, previous);
+        }
+
+        public static bool Holds(float value, float boundary, bool was) =>
+            value > boundary || was && value > boundary * (1f - Hysteresis);
+
+        public static float Crossfade(float value, float from, float to)
+        {
+            float t = Math.Min(Math.Max((value - from) / (to - from), 0f), 1f);
+            return t * t * (3f - 2f * t);
+        }
+    }
+}
