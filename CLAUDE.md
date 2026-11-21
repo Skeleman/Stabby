@@ -8,8 +8,13 @@
    rivers) -> biomes -> features. Each stage reads the one before it and never
    derives a second copy. World geometry is one solid field: the heightfield
    base plus an ordered list of sparse feature edits (overhangs, arches,
-   caves) that add or carve solid only inside their bounds. Every mesh samples
-   that field on one global lattice at cell size; chunks no feature touches
+   caves) that add or carve solid only inside their bounds. One engine-free
+   sample function reads that field at any point: the stored grid smoothly
+   interpolated, plus river and shore profiles from hydrology and
+   material-scaled detail. Meshes, collision and features all call it. Meshes
+   sample on one global lattice, 1 m near the player and doubling per LOD
+   ring, computed per chunk on demand; nothing finer than the stored grid is
+   kept. Chunks no feature touches
    take the heightfield fast path, which must match the general mesher vertex
    for vertex. One material library serves every surface: rock strata by world
    height plus a regional offset, biome coats on upward faces.

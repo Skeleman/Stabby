@@ -87,7 +87,7 @@ architecture contract. The other steps fit the contract as it stands.
 
 | Item | Status |
 |---|---|
-| **Zach:** fine near field (asked about Punchy-style 1 m near the player): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring; replaces the levee. Changes rule 2's "cell size" lattice, so needs his contract OK | next |
+| Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee | now |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Terrain surface (Zach: assets in code): shader-only materials per library entry, detail through procedural normals, cheap parallax where it pays; textures only for heightfield data and shared noise samples | next |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
