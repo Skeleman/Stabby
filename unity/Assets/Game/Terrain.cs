@@ -540,7 +540,7 @@ namespace Stabby.Game
     [CreateAfter(typeof(ClientMapSystem))]
     public partial class TerrainViewSystem : SystemBase
     {
-        public float TargetQuadScreen = 0.01f;
+        TerrainViewDef quads = new TerrainViewDef();
         const float MorphStart = 0.6f;
         const int LakeCells = 32;
         public int ApplyVertices = 150000;
@@ -623,6 +623,12 @@ namespace Stabby.Game
             if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage})"; }
         }
 
+        float Allowed(Camera cam)
+        {
+            var view = DetailView.Refresh(cam);
+            return quads.Allowed(view.PixelsPerMetre, view.Quality);
+        }
+
         static int BuildBudget => math.max(1, JobsUtility.JobWorkerCount / 2);
         string stage => !look.IsCreated ? "load" : !ready ? "initial" : "lod";
 
@@ -632,6 +638,7 @@ namespace Stabby.Game
             if (map.Map == null || !SystemAPI.TryGetSingleton(out ground)) return;
             var world = map.Map;
             var defs = map.Defs;
+            quads = map.Objects?.Terrain ?? quads;
             string materials = MaterialFile.DefaultPath;
             ref var src = ref ground.Blob.Value.Edits;
             var edits = new FeatureEdit[src.Length];
@@ -1033,7 +1040,7 @@ namespace Stabby.Game
             builtKeys.Clear();
             builtKeys.AddRange(meshes.Keys);
             Array.Clear(levelCounts, 0, levelCounts.Length);
-            float allowed = TargetQuadScreen * 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f);
+            float allowed = Allowed(cam);
             int vertices = 0;
             foreach (int key in builtKeys)
             {
@@ -1081,7 +1088,7 @@ namespace Stabby.Game
             lodEye = eye;
             lodTurn = turn;
             lodFov = cam.fieldOfView;
-            float allowed = TargetQuadScreen * 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f);
+            float allowed = Allowed(cam);
             GeometryUtility.CalculateFrustumPlanes(cam, frustum);
             for (int p = 0; p < 6; p++) planes[p] = new float4(frustum[p].normal, frustum[p].distance);
             lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();

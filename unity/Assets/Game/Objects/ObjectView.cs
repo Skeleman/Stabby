@@ -22,13 +22,7 @@ namespace Stabby.Game
     public struct ObjectLod : IComponentData
     {
         public BatchMeshID L0, L1, L2;
-        public float Lod1, Lod2, Fade, ShadowScreen, Radius;
-    }
-
-    public struct ObjectCamera : IComponentData
-    {
-        public float3 Pos;
-        public float InvTan;
+        public float Lod1, Lod2, Fade, Shadow, Radius;
     }
 
     public struct ObjectSpawn
@@ -45,7 +39,7 @@ namespace Stabby.Game
     public partial class ObjectViewSystem : SystemBase
     {
         public const int Lods = 3, RegisterPerFrame = 24, SpawnBudget = 4000;
-        public const float MinTileM = 22.5f, DespawnReach = 1.2f, UnloadReach = 1.5f;
+        public const float DespawnReach = 1f / (1f - Detail.Hysteresis), UnloadReach = 1.5f;
 
         sealed class MeshSet
         {
@@ -75,7 +69,7 @@ namespace Stabby.Game
         int registered;
         Material material;
         BatchMaterialID materialId;
-        Entity castPrefab, flatPrefab, cameraEntity;
+        Entity castPrefab, flatPrefab;
         Task<ChunkParts> chunkTask;
         NativeArray<bool> loaded;
         NativeArray<ObjectSpawn>[] chunkParts;
@@ -147,7 +141,7 @@ namespace Stabby.Game
             loaded = new NativeArray<bool>(across * across, Allocator.Persistent);
             chunkParts = new NativeArray<ObjectSpawn>[across * across];
             chunkKeys = new long[across * across][];
-            float invTan = 1f / (2f * math.tan(math.radians(60f) * 0.5f));
+            float minTile = cm * 0.5f;
             int defs = lib.Objects.Count, count = 0;
             meshBase = new int[defs][];
             reach = new float[defs];
@@ -167,9 +161,9 @@ namespace Stabby.Game
                 }
                 var kind = lib.KindOf(def);
                 kinds[d] = kind;
-                reach[d] = 2f * field.Footprint(d) * def.Placement.SizeMaxM * invTan / math.max(kind.FadeScreen, 1e-4f);
+                reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
                 float t = span;
-                while (t > reach[d] / 3f && t * 0.5f >= MinTileM) t *= 0.5f;
+                while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
                 tile[d] = t;
             }
             meshTask = Task.Run(() => BuildMeshes(shapes, keys));
@@ -234,7 +228,6 @@ namespace Stabby.Game
             materialId = graphics.RegisterMaterial(material);
             castPrefab = Prefab(ShadowCastingMode.On);
             flatPrefab = Prefab(ShadowCastingMode.Off);
-            cameraEntity = EntityManager.CreateSingleton(new ObjectCamera());
             return true;
         }
 
@@ -418,8 +411,8 @@ namespace Stabby.Game
                 EntityManager.SetComponentData(e, new ObjectLod
                 {
                     L0 = meshIds[m], L1 = meshIds[m + math.min(1, lods - 1)], L2 = meshIds[m + math.min(2, lods - 1)],
-                    Lod1 = kind.LodScreen.Length > 0 ? kind.LodScreen[0] : 0, Lod2 = kind.LodScreen.Length > 1 ? kind.LodScreen[1] : 0,
-                    Fade = kind.FadeScreen, ShadowScreen = s.Shadow ? kind.ShadowScreen : float.MaxValue, Radius = s.Radius,
+                    Lod1 = kind.LodPixels.Length > 0 ? kind.LodPixels[0] : 0, Lod2 = kind.LodPixels.Length > 1 ? kind.LodPixels[1] : 0,
+                    Fade = kind.FadePixels, Shadow = s.Shadow ? kind.ShadowPixels : float.MaxValue, Radius = s.Radius,
                 });
                 tileEntities.Add(key, e);
                 liveByDef[s.Def]++;
@@ -437,9 +430,7 @@ namespace Stabby.Game
             var cam = Camera.main;
             if (cam == null) return;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            float3 pos = cam.transform.position;
-            float invTan = 1f / (2f * math.tan(math.radians(cam.fieldOfView) * 0.5f));
-            EntityManager.SetComponentData(cameraEntity, new ObjectCamera { Pos = pos, InvTan = invTan });
+            float3 pos = DetailView.Refresh(cam).Camera;
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
             LoadChunks(pos, maxReach);
@@ -475,7 +466,7 @@ namespace Stabby.Game
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            state.RequireForUpdate<ObjectCamera>();
+            state.RequireForUpdate<ObjectLod>();
             mmi = state.GetComponentLookup<MaterialMeshInfo>();
             fade = state.GetComponentLookup<ObjectFade>();
         }
@@ -484,8 +475,10 @@ namespace Stabby.Game
         public void OnUpdate(ref SystemState state)
         {
             mmi.Update(ref state);
+            var view = DetailView.Current;
+            if (view.PixelsPerMetre <= 0) return;
             fade.Update(ref state);
-            state.Dependency = new LodJob { Cam = SystemAPI.GetSingleton<ObjectCamera>(), Mmi = mmi, Fade = fade }.ScheduleParallel(state.Dependency);
+            state.Dependency = new LodJob { View = view, Mmi = mmi, Fade = fade }.ScheduleParallel(state.Dependency);
         }
 
         [BurstCompile]
@@ -493,21 +486,24 @@ namespace Stabby.Game
         [WithNone(typeof(Prefab))]
         partial struct LodJob : IJobEntity
         {
-            public ObjectCamera Cam;
+            public DetailView View;
             [NativeDisableParallelForRestriction] public ComponentLookup<MaterialMeshInfo> Mmi;
             [NativeDisableParallelForRestriction] public ComponentLookup<ObjectFade> Fade;
 
             void Execute(Entity e, in LocalToWorld ltw, in ObjectLod lod)
             {
-                float d = math.max(math.distance(ltw.Value.c3.xyz, Cam.Pos), 0.01f);
-                float s = 2f * lod.Radius * Cam.InvTan / d;
-                bool on = s >= lod.Fade;
+                float px = View.ScreenSize(2f * lod.Radius, ltw.Value.c3.xyz);
+                var t = new Detail.Thresholds(lod.Lod1, lod.Lod2, lod.Fade).Scaled(View.Quality);
+                bool on = px >= t.Far;
                 if (Mmi.IsComponentEnabled(e) != on) Mmi.SetComponentEnabled(e, on);
                 if (!on) return;
-                var id = s > lod.Lod1 ? lod.L0 : s > lod.Lod2 ? lod.L1 : lod.L2;
                 var m = Mmi[e];
+                int was = m.MeshID.value == lod.L0.value ? 0 : m.MeshID.value == lod.L1.value ? 1 : 2;
+                int tier = math.min(Detail.Tier(px, t, was), 2);
+                var id = tier == 0 ? lod.L0 : tier == 1 ? lod.L1 : lod.L2;
                 if (m.MeshID.value != id.value) { m.MeshID = id; Mmi[e] = m; }
-                var f = new float4(math.round(math.saturate((s - lod.Fade) / (0.5f * lod.Fade)) * 16f) / 16f, s > lod.ShadowScreen ? 1 : 0, 0, 0);
+                bool shadow = Detail.Holds(px, lod.Shadow / View.Quality, Fade[e].Value.y > 0);
+                var f = new float4(math.round(Detail.Crossfade(px, t.Far, 1.5f * t.Far) * 16f) / 16f, shadow ? 1 : 0, 0, 0);
                 if (math.any(Fade[e].Value != f)) Fade[e] = new ObjectFade { Value = f };
             }
         }
