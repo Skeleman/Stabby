@@ -247,6 +247,8 @@ namespace Stabby.World
         }
 
         [ThreadStatic] static List<float> clipCap, clipOut, clipPts;
+        [ThreadStatic] static int[] clipOrder;
+        [ThreadStatic] static float[] clipAng;
 
         static void Clip(List<float[]> polys, float nx, float ny, float nz, float d)
         {
@@ -260,20 +262,24 @@ namespace Stabby.World
                 var poly = polys[pi];
                 int count = poly.Length / 3;
                 outp.Clear();
+                bool cut = false;
                 for (int k = 0; k < count; k++)
                 {
                     int a = k * 3, b = (k + 1) % count * 3;
                     float da = poly[a] * nx + poly[a + 1] * ny + poly[a + 2] * nz - d;
                     float db = poly[b] * nx + poly[b + 1] * ny + poly[b + 2] * nz - d;
                     if (da <= 0) { outp.Add(poly[a]); outp.Add(poly[a + 1]); outp.Add(poly[a + 2]); }
+                    else cut = true;
                     if ((da <= 0) != (db <= 0))
                     {
+                        cut = true;
                         float t = da / (da - db);
                         float x = poly[a] + t * (poly[b] - poly[a]), y = poly[a + 1] + t * (poly[b + 1] - poly[a + 1]), z = poly[a + 2] + t * (poly[b + 2] - poly[a + 2]);
                         outp.Add(x); outp.Add(y); outp.Add(z);
                         cap.Add(x); cap.Add(y); cap.Add(z);
                     }
                 }
+                if (!cut) continue;
                 if (outp.Count >= 9) polys[pi] = outp.ToArray();
                 else polys.RemoveAt(pi);
             }
@@ -294,8 +300,9 @@ namespace Stabby.World
             float el = (float)Math.Sqrt(ex * ex + ey * ey + ez * ez);
             ex /= el; ey /= el; ez /= el;
             float fx = ny * ez - nz * ey, fy = nz * ex - nx * ez, fz = nx * ey - ny * ex;
-            var order = new int[m];
-            var ang = new float[m];
+            if (clipOrder == null || clipOrder.Length < m) { clipOrder = new int[Math.Max(m, 32)]; clipAng = new float[clipOrder.Length]; }
+            var order = clipOrder;
+            var ang = clipAng;
             for (int k = 0; k < m; k++)
             {
                 float px = pts[k * 3] - cx, py = pts[k * 3 + 1] - cy, pz = pts[k * 3 + 2] - cz;
@@ -305,7 +312,7 @@ namespace Stabby.World
                 ang[k] = u >= 0 ? (v >= 0 ? g : 4 + g) : 2 - g;
                 order[k] = k;
             }
-            Array.Sort(ang, order);
+            Array.Sort(ang, order, 0, m);
             var c2 = new float[m * 3];
             for (int k = 0; k < m; k++)
             {
