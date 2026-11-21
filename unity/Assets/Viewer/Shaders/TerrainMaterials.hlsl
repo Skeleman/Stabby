@@ -214,7 +214,7 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float4 grain = TmLN3(q, ra.y, 5.1, gw);
     float4 fine = TmLN3(q, ra.y * 2.9, 11.7, fw2);
     TmOut o;
-    o.grad = g + bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw);
+    o.grad = g + (1 - 0.7 * stone) * bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw);
     float speck = smoothstep(-0.6, 0.6, fine.x) - 0.5;
     float3 lw = float3(0.2126, 0.7152, 0.0722);
     float3 sm = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(0.5, 0.5), 12).rgb;
@@ -233,9 +233,9 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float pt = step(0.62, TmHash(int2((int)il, lb + 1))) * (1 - smoothstep(0, 0.06, fl));
     c *= 1 + flam * (0.1 * lt - 0.12 * pt);
     float fm = TmFade(ra.y * 5, fp);
-    float4 mn = TmLN3(q, ra.y * 5, 43.1, fm);
+    float4 mn = TmLN3(q * float3(1, 3.5, 1), ra.y * 5, 43.1, fm);
     float dm = fm * lerp(0.1, 1.8, smoothstep(-0.25, 0.35, 0.6 * drift.x + 0.4 * drift2.x)), gs = gw * grain.x * 0.5;
-    float lgt = dm * (1 + gs) * smoothstep(0.5, 0.66, mn.x), drk = dm * (1 - gs) * smoothstep(0.5, 0.66, -mn.x);
+    float lgt = dm * (1 + gs) * smoothstep(0.35, 0.75, mn.x), drk = dm * (1 - gs) * smoothstep(0.35, 0.75, -mn.x);
     c = lerp(c, dot(c, lw) * 1.6, 0.2 * lgt) * (1 - 0.17 * drk);
     c *= 1 - 0.5 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4));
     c *= 1 + 0.3 * (1 - 0.5 * stone) * bump.x * ra.w;
@@ -263,8 +263,10 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         float dl = cg * 6 * tc * (1 - tc) / w * (crack.x < 0 ? -1 : 1) * TmQ(0.45);
         o.grad += stone * 0.08 * dl * crack.yzw;
         float pit = smoothstep(0.1, 0.6, -bump.x * ra.w - 0.25 * fwt * weather.x);
-        c *= 1 + stone * (0.22 * fwt * weather.x - 0.75 * seam - 0.3 * pit);
-        o.grad += stone * 0.25 * fwt * weather.yzw;
+        c *= 1 + stone * (0.12 * fwt * weather.x - 0.75 * seam - 0.12 * pit);
+        float cs = dot(c, lw);
+        c = lerp(c, cs * float3(1.04, 1, 0.93), 0.8 * stone);
+        o.grad += stone * 0.06 * fwt * weather.yzw;
     }
     o.albedo = c;
     tmRough = LookRough() + _StabbyLook.w * (0.55 - hard + 0.4 * gw * grain.x);
@@ -464,17 +466,18 @@ void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float
 {
     float fm = TmFade(0.6, fp), fl = TmFade(5.2, fp);
     float4 patch = TmLN3(wp, 0.6, 51.3, fm);
-    float4 spot = TmLN3(wp, 5.2, 61.7, fl);
-    float top = smoothstep(0.45, 0.9, n.y), wet = cw.x + 0.4 * cw.y, dry = cw.z + 0.5 * cw.y;
-    float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.25 * fl * spot.x);
-    float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fl * smoothstep(0.45, 0.65, spot.x) * smoothstep(-0.2, 0.3, patch.x) * (1 - moss);
-    float grey = stone * saturate(0.4 + 0.4 * dry + 0.3 * wet) * smoothstep(-0.5, 0.3, n.y) * fl * smoothstep(0.5, 0.7, -spot.x) * smoothstep(-0.3, 0.2, -patch.x) * (1 - moss);
+    float4 streak = TmLN3(wp * float3(1, 0.12, 1), 5.2, 61.7, fl);
+    float top = smoothstep(0.45, 0.9, n.y), side = 1 - top, wet = cw.x + 0.4 * cw.y, dry = cw.z + 0.5 * cw.y;
+    float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.2 * fl * streak.x);
+    float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fm * smoothstep(0.1, 0.45, patch.x + 0.3 * fl * streak.x) * (1 - moss);
+    float stain = stone * saturate(0.4 + 0.4 * dry + 0.3 * wet) * side * fl * smoothstep(0.15, 0.6, streak.x) * smoothstep(-0.4, 0.2, -patch.x) * (1 - moss);
     float dust = stone * dry * top * fm * smoothstep(0, 0.5, patch.x) * (1 - moss);
     float frost = stone * cw.w * smoothstep(0.55, 0.85, n.y);
-    float3 mossC = lerp(float3(0.045, 0.07, 0.02), float3(0.09, 0.11, 0.03), saturate(0.5 + fl * spot.x));
+    float3 mossC = lerp(float3(0.045, 0.07, 0.02), float3(0.09, 0.11, 0.03), saturate(0.5 + fm * patch.y));
+    float lum = dot(o.albedo, float3(0.2126, 0.7152, 0.0722));
     o.albedo = lerp(o.albedo, m * mossC, moss);
-    o.albedo = lerp(o.albedo, m * float3(0.3, 0.31, 0.22), 0.55 * lichen);
-    o.albedo = lerp(o.albedo, m * float3(0.36, 0.36, 0.34), 0.5 * grey);
+    o.albedo = lerp(o.albedo, lum * float3(1.06, 1.06, 0.9) * 1.2, 0.4 * lichen);
+    o.albedo *= 1 - 0.22 * stain;
     o.albedo = lerp(o.albedo, m * ToLinear(_StabbySand.rgb), 0.3 * dust);
     o.albedo = lerp(o.albedo, m * float3(0.75, 0.79, 0.84), frost);
     o.grad *= 1 - 0.6 * moss - frost;
