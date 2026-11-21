@@ -64,6 +64,7 @@ their geometry is built.
 | Cave rework: tunnels twice as wide, 1-3 main paths branching after the mouth on a gentle grade (no steps or pits, checked in `WorldChecks.CheckCavePaths`), steeper side chambers off the main path, rooms at path ends | done |
 | LOD seam shading: stitched border vertices also take the coarse neighbour's normal, colour, darkening and rock mix (normal checked bitwise in `WorldChecks`), so lighting and texture match across LOD borders | done |
 | Per-pixel terrain shading: every LOD reads one global slope texture (mipmapped) and biome texture, so normals, coat and slope rock match across LODs; the vertex rock lift applies only inside feature edit boxes | done |
+| LOD geomorph: every vertex blends to its coarse vertex by camera distance and is fully coarse at the switch distance, so LODs neither pop nor step at borders; borders next to a finer chunk stay fine | done |
 | Per-cell refinement: subdivide only lattice cells that touch a feature edit, stitched to the coarse neighbours, instead of whole chunks at a finer step | idea |
 | Player collision against the solid field: engine-free `Walk.Step` (step-up, head and radius probes, constant-speed fall, wall slide) shared by server, client prediction and `WorldChecks.CheckCaveWalk`, which walks every cave path | done |
 

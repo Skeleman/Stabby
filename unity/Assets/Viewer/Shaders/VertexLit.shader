@@ -1,6 +1,6 @@
 Shader "Stabby/VertexLit"
 {
-    Properties { _StitchMask ("Stitch mask", Float) = 0 }
+    Properties { _StitchMask ("Stitch mask", Vector) = (0, 0, 0, 0) }
     SubShader
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
@@ -17,14 +17,14 @@ Shader "Stabby/VertexLit"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
-            float _StitchMask;
+            float4 _StitchMask;
             CBUFFER_END
 
             #ifdef UNITY_DOTS_INSTANCING_ENABLED
             UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
-                UNITY_DOTS_INSTANCED_PROP(float, _StitchMask)
+                UNITY_DOTS_INSTANCED_PROP(float4, _StitchMask)
             UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
-            #define _StitchMask UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float, _StitchMask)
+            #define _StitchMask UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _StitchMask)
             #endif
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
@@ -45,13 +45,17 @@ Shader "Stabby/VertexLit"
             {
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
-                bool coarse = ((uint)i.stitch.w & (uint)_StitchMask) != 0;
-                float3 pos = coarse ? i.stitch.xyz : i.positionOS.xyz;
-                VertexPositionInputs p = GetVertexPositionInputs(pos);
+                float4 sm = _StitchMask;
+                uint bits = (uint)i.stitch.w, mask = (uint)sm.x;
+                float t = 0;
+                if (sm.z > 0) t = saturate((distance(TransformObjectToWorld(i.positionOS.xyz), _WorldSpaceCameraPos) - sm.y) / (sm.z - sm.y));
+                if ((bits & (mask >> 8)) != 0) t = 0;
+                if ((bits & mask & 255u) != 0) t = 1;
+                VertexPositionInputs p = GetVertexPositionInputs(lerp(i.positionOS.xyz, i.stitch.xyz, t));
                 o.positionCS = p.positionCS;
-                o.normalWS = TransformObjectToWorldNormal(coarse ? i.stitchNormal.xyz : i.normalOS);
-                o.color = coarse ? i.stitchColor : i.color;
-                o.strata = float4(i.strata.x, coarse ? i.stitchNormal.w : i.strata.y, p.positionWS.y, i.strata.z);
+                o.normalWS = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));
+                o.color = lerp(i.color, i.stitchColor, t);
+                o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y, i.strata.z);
                 o.xz = p.positionWS.xz;
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 return o;

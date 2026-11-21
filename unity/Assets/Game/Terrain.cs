@@ -38,7 +38,7 @@ namespace Stabby.Game
     [MaterialProperty("_StitchMask")]
     public struct TerrainStitch : IComponentData
     {
-        public float Value;
+        public float4 Value;
     }
 
     struct TerrainSite
@@ -51,6 +51,7 @@ namespace Stabby.Game
     struct TerrainChunk
     {
         public int Shown, Built, Pending, Stitch;
+        public float MorphEnd;
         public Entity Entity;
     }
 
@@ -163,11 +164,12 @@ namespace Stabby.Game
             for (int k = 0; k < w; k++)
                 for (int i = 0; i < w; i++)
                 {
-                    if (i != 0 && k != 0 && i != m && k != m) continue;
+                    bool edge = i == 0 || k == 0 || i == m || k == m;
+                    if (!edge && !stitch) continue;
                     int col = 3 * (k * w + i), ci = (chunk.X0 - 1 + i) >> 1, ck = (chunk.Z0 - 1 + k) >> 1;
                     int ic = ci - (chunk.X0 / 2 - 1), kc = ck - (chunk.Z0 / 2 - 1);
                     bool xe = i == 0 || i == m, ze = k == 0 || k == m;
-                    int bits = xe && ze ? 16 << ((i == m ? 1 : 0) + (k == m ? 2 : 0)) : i == 0 ? 1 : i == m ? 2 : k == 0 ? 4 : 8;
+                    int bits = !edge ? 0 : xe && ze ? 16 << ((i == m ? 1 : 0) + (k == m ? 2 : 0)) : i == 0 ? 1 : i == m ? 2 : k == 0 ? 4 : 8;
                     for (int v = sink.Ints[col + 2], j = sink.Ints[col], e = v + sink.Ints[col + 1] - j; v < e; v++, j++)
                     {
                         var p = Verts[v];
@@ -196,7 +198,7 @@ namespace Stabby.Game
                 float cover = Cover(edits, p.Pos, gx, gy), lift = math.smoothstep(2f, 6f, math.abs(cover));
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover));
                 p.Strata = new float4(off, math.max(col.w, lift), 1 - lift, 0);
-                if (p.Stitch.w != 0)
+                if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
                     float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
@@ -314,6 +316,7 @@ namespace Stabby.Game
     public partial class TerrainViewSystem : SystemBase
     {
         public float TargetQuadScreen = 0.01f;
+        const float MorphStart = 0.6f;
         public int ApplyVertices = 150000;
         public float ApplyMs = 4f;
 
@@ -635,14 +638,17 @@ namespace Stabby.Game
                 visible++;
                 lodCounts[lod]++;
             }
+            float allowed = TargetQuadScreen * 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f), cm = ground.Blob.Value.CellMeters;
             for (int c = 0; c < chunks.Length; c++)
             {
                 var ch = chunks[c];
                 if (ch.Shown < 0 || ch.Entity == Entity.Null) continue;
                 int mask = StitchMask(c);
-                if (mask == ch.Stitch) continue;
-                EntityManager.SetComponentData(ch.Entity, new TerrainStitch { Value = mask });
+                float end = ch.Shown < TerrainLods.Coarse ? TerrainLods.Step(ch.Shown + 1) * cm / allowed : 0;
+                if (mask == ch.Stitch && end == ch.MorphEnd) continue;
+                EntityManager.SetComponentData(ch.Entity, new TerrainStitch { Value = new float4(mask, MorphStart * end, end, 0) });
                 ch.Stitch = mask;
+                ch.MorphEnd = end;
                 chunks[c] = ch;
             }
             GameStatus.TerrainBehind = behind;
@@ -672,12 +678,24 @@ namespace Stabby.Game
             if (Coarser(x + 1, z, lod)) mask |= 2;
             if (Coarser(x, z - 1, lod)) mask |= 4;
             if (Coarser(x, z + 1, lod)) mask |= 8;
+            if (Finer(x - 1, z, lod)) mask |= 1 << 8;
+            if (Finer(x + 1, z, lod)) mask |= 2 << 8;
+            if (Finer(x, z - 1, lod)) mask |= 4 << 8;
+            if (Finer(x, z + 1, lod)) mask |= 8 << 8;
             for (int q = 0; q < 4; q++)
             {
                 int dx = (q & 1) == 0 ? -1 : 1, dz = (q & 2) == 0 ? -1 : 1;
                 if (Coarser(x + dx, z, lod) || Coarser(x, z + dz, lod) || Coarser(x + dx, z + dz, lod)) mask |= 16 << q;
+                if (Finer(x + dx, z, lod) || Finer(x, z + dz, lod) || Finer(x + dx, z + dz, lod)) mask |= 16 << (q + 8);
             }
             return mask;
+        }
+
+        bool Finer(int x, int z, int lod)
+        {
+            if (x < 0 || z < 0 || x >= side || z >= side) return false;
+            int n = grid[z * side + x];
+            return n >= 0 && chunks[n].Shown >= 0 && chunks[n].Shown < lod;
         }
 
         bool Coarser(int x, int z, int lod)
