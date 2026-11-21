@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.stabby.content": {
+      "version": "file:../../src/Stabby.Content",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.stabby.world": {
       "version": "file:../../src/Stabby.World",
       "depth": 0,

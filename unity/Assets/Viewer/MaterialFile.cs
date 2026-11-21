@@ -1,83 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using Stabby.World;
-using UnityEngine;
 
 namespace Stabby.Viewer
 {
     public static class MaterialFile
     {
-        public const int SchemaVersion = 2;
+        public static string DefaultPath => ContentFiles.MaterialsPath;
 
-        [Serializable] class Row { public string id, name, color; public float thicknessM, hardness; }
-        [Serializable] class Rock { public float grainAmp, grainWavelengthM, bumpAmp, bumpWavelengthM, bedSpacingM, bedDepthM, jointSpacingM, jointDepthM, parallax; }
-        [Serializable] class Coat { public string[] biomes; public float bumpAmp, bumpWavelengthM, featureAmp, featureWavelengthM, parallax; public float grainAmp = float.NaN, grainWavelengthM = float.NaN, albedoVar = float.NaN; }
-        [Serializable] class Look { public float noiseContrast, albedoVar, detailWavelengthM, saturation, roughness, specular; }
-        [Serializable] class Coats { public Coat grass, soil, sand, snow; }
-        [Serializable] class Surface { public float fadePixels, parallaxFootprintM, windDeg, strataWobbleM, strataWobbleWavelengthM, coatPatchAmp, coatPatchWavelengthM; public Rock rock; public Coats coats; }
-        [Serializable] class Water { public string deepColor, shallowColor; public float clarityM, shoreM, foamWidthM, waveScaleM, waveSpeed, waveStrength, swellScaleM, swellStrength, lakeSwell, flowSpeed, rapidsSlope, bedFieldM; }
-        [Serializable] class Dto { public int schemaVersion; public float offsetAmplitudeM, offsetWavelengthM, tiltPerKm; public Surface surface; public Water water; public Look look; public Row[] strata; }
-
-        public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "materials.json"));
-
-        public static MaterialLibrary Load(string path)
-        {
-            var dto = JsonUtility.FromJson<Dto>(File.ReadAllText(path));
-            if (dto.schemaVersion != SchemaVersion) throw new InvalidDataException($"materials.json schemaVersion {dto.schemaVersion}, expected {SchemaVersion}");
-            var lib = new MaterialLibrary { OffsetAmplitudeM = dto.offsetAmplitudeM, OffsetWavelengthM = dto.offsetWavelengthM, TiltPerKm = dto.tiltPerKm };
-            var s = dto.surface;
-            lib.Surface = s == null ? null : new SurfaceDetail
-            {
-                FadePixels = s.fadePixels, ParallaxFootprintM = s.parallaxFootprintM, WindDeg = s.windDeg,
-                StrataWobbleM = s.strataWobbleM, StrataWobbleWavelengthM = s.strataWobbleWavelengthM,
-                CoatPatchAmp = s.coatPatchAmp, CoatPatchWavelengthM = s.coatPatchWavelengthM,
-                Rock = s.rock == null ? null : new RockSurface
-                {
-                    GrainAmp = s.rock.grainAmp, GrainWavelengthM = s.rock.grainWavelengthM,
-                    BumpAmp = s.rock.bumpAmp, BumpWavelengthM = s.rock.bumpWavelengthM,
-                    BedSpacingM = s.rock.bedSpacingM, BedDepthM = s.rock.bedDepthM,
-                    JointSpacingM = s.rock.jointSpacingM, JointDepthM = s.rock.jointDepthM,
-                    Parallax = s.rock.parallax,
-                },
-            };
-            if (lib.Surface != null && s.coats != null)
-            {
-                var coats = new[] { s.coats.grass, s.coats.soil, s.coats.sand, s.coats.snow };
-                for (int k = 0; k < coats.Length; k++)
-                {
-                    var c = coats[k];
-                    lib.Surface.Coats[k] = c == null ? null : new CoatDef
-                    {
-                        Id = SurfaceDetail.CoatKinds[k], Biomes = new List<string>(c.biomes ?? new string[0]),
-                        BumpAmp = c.bumpAmp, BumpWavelengthM = c.bumpWavelengthM,
-                        GrainAmp = c.grainAmp, GrainWavelengthM = c.grainWavelengthM,
-                        FeatureAmp = c.featureAmp, FeatureWavelengthM = c.featureWavelengthM,
-                        Parallax = c.parallax, AlbedoVar = c.albedoVar,
-                    };
-                }
-            }
-            var w = dto.water;
-            lib.Water = w == null || string.IsNullOrEmpty(w.deepColor) ? null : new WaterDef
-            {
-                DeepColor = Convert.ToUInt32(w.deepColor.TrimStart('#'), 16), ShallowColor = Convert.ToUInt32(w.shallowColor.TrimStart('#'), 16),
-                ClarityM = w.clarityM, ShoreM = w.shoreM, FoamWidthM = w.foamWidthM,
-                WaveScaleM = w.waveScaleM, WaveSpeed = w.waveSpeed, WaveStrength = w.waveStrength,
-                SwellScaleM = w.swellScaleM, SwellStrength = w.swellStrength, LakeSwell = w.lakeSwell,
-                FlowSpeed = w.flowSpeed, RapidsSlope = w.rapidsSlope, BedFieldM = w.bedFieldM,
-            };
-            var lk = dto.look;
-            lib.Look = lk == null ? null : new LookDef
-            {
-                NoiseContrast = lk.noiseContrast, AlbedoVar = lk.albedoVar, DetailWavelengthM = lk.detailWavelengthM,
-                Saturation = lk.saturation, Roughness = lk.roughness, Specular = lk.specular,
-            };
-            lib.FillCoats();
-            foreach (var r in dto.strata)
-                lib.Strata.Add(new StratumDef { Id = r.id, Name = r.name, ThicknessM = r.thicknessM, Hardness = r.hardness, Color = Convert.ToUInt32(r.color.TrimStart('#'), 16) });
-            var errors = MaterialLibrary.Validate(lib);
-            if (errors.Count > 0) throw new InvalidDataException(string.Join("\n", errors));
-            return lib;
-        }
+        public static MaterialLibrary Load(string path) => ContentFiles.Materials(path);
     }
 }

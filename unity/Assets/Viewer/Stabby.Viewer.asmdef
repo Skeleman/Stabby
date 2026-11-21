@@ -1,6 +1,6 @@
 {
   "name": "Stabby.Viewer",
   "rootNamespace": "Stabby.Viewer",
-  "references": ["Stabby.World", "Unity.Mathematics"],
+  "references": ["Stabby.World", "Stabby.Content", "Unity.Mathematics"],
   "autoReferenced": true
 }

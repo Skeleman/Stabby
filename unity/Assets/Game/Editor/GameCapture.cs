@@ -18,7 +18,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait;
-        static readonly bool rockOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY") == "rock";
+        static readonly string only = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY");
         static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -93,6 +93,14 @@ namespace Stabby.Game.Editor
 
         static void Poll()
         {
+            PollBody();
+            SpikeProbe.Exit();
+        }
+
+        static string dir;
+
+        static void PollBody()
+        {
             if (EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) > TimeoutSeconds)
             {
                 Debug.LogError("GameCapture: timed out\n" + Status());
@@ -115,8 +123,7 @@ namespace Stabby.Game.Editor
             if (settle > 0 && --settle > 0) return;
             if (phase == 0 && GameStatus.TerrainBehind > 0 && chaseWait < 1800) { chaseWait++; return; }
 
-            var dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game"));
-            Directory.CreateDirectory(dir);
+            if (dir == null) { dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game")); Directory.CreateDirectory(dir); }
             var cam = Camera.main;
             if (phase == 0)
             {
@@ -143,7 +150,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = rockOnly ? 7 : 1;
+                phase = only == "rock" ? 7 : only == "coast" ? 9 : 1;
             }
             while (phase <= 6)
             {
@@ -191,7 +198,8 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
-                if (phase == 7 && rockOnly)
+                if (phase == 9) GameStatus.Lines["~bench sand"] = Bench(cam, "sand close-up");
+                if (phase == 7 && only == "rock")
                 {
                     File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                     Finish(0);
@@ -237,7 +245,7 @@ namespace Stabby.Game.Editor
                     Shot(cam, dir, "sand-far");
                 }
                 wait = 0;
-                phase++;
+                phase = phase == 9 && only == "coast" ? 13 : phase + 1;
             }
             if (phase == 11)
             {
@@ -266,6 +274,7 @@ namespace Stabby.Game.Editor
             if (phase == 12)
             {
                 if (tourStop < 0) tourStop = 0;
+                SpikeProbe.Touring = true;
                 if (tourStop < TourStops)
                 {
                     if (wait == 0)
@@ -283,6 +292,7 @@ namespace Stabby.Game.Editor
                 }
                 GameStatus.Lines["~objects tour"] = tourParts.Count == 0 ? "objects tour: no stops" :
                     $"objects tour: {tourParts.Count} stops over {TourStops * TourStepM / 1000f:F0} km, parts held per stop {string.Join("/", tourParts)} (max {tourParts.Max()}), chunks held {string.Join("/", tourChunks)}, entities {string.Join("/", tourLive)}, {ObjectViewSystem.ChunksUnloaded} unloaded";
+                SpikeProbe.Touring = false;
                 GameStatus.PutFrames();
                 if (GameStatus.Lines.TryGetValue("~frames", out var after)) GameStatus.Lines["~frames tour"] = "during tour: " + after;
                 phase++;
@@ -305,6 +315,12 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            if (phase == 16 && only == "coast")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
+            }
             while (phase >= 16 && phase <= 17)
             {
                 string name = phase == 16 ? "boulder-close" : "boulder-mid";
@@ -321,7 +337,7 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 18 && phase <= 22)
+            while (phase >= 18 && phase <= 23)
             {
                 string name = FoliageShots[phase - 18];
                 if (wait == 0)
@@ -345,19 +361,19 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 22 && phase <= 23)
+            while (phase >= 24 && phase <= 25)
             {
-                string name = phase == 22 ? "structure-close" : "structure-mid";
+                string name = phase == 24 ? "structure-close" : "structure-mid";
                 if (wait == 0)
                 {
-                    if (!AimStructure(cam, phase == 22)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    if (!AimStructure(cam, phase == 24)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
-                if (phase == 23) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (phase == 25) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
                 wait = 0;
                 phase++;
             }
@@ -647,9 +663,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.15f };
-        static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5 };
-        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close" };
+        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f, 0.65f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.15f, 0.04f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5, 6 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close", "oak-close" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -670,7 +686,7 @@ namespace Stabby.Game.Editor
                         {
                             if (field.Library.Objects[o.Def].Parts.Exists(p => p.Shape == ObjectPart.Broadleaf || p.Shape == ObjectPart.Conifer)) trees.Add(o);
                             if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
-                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 5 ? p.Shape == ObjectPart.Conifer : range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 5 ? p.Shape == ObjectPart.Conifer : range == 6 ? p.Shape == ObjectPart.Broadleaf : range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
                         }
                     }
                 if (near.Count == 0) return false;
@@ -698,14 +714,14 @@ namespace Stabby.Game.Editor
                 if (clear)
                 {
                     ranked.Sort((a, b) => a.score.CompareTo(b.score));
-                    for (int r = 0; r < Mathf.Min(ranked.Count, 150) && !found; r++)
+                    for (int r = 0; r < Mathf.Min(ranked.Count, range == 6 ? 600 : 150) && !found; r++)
                         for (int a = 0; a < 16 && !found; a++)
                         {
                             var c = ranked[r].o;
                             var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(-0.77f, 0, -0.64f);
-                            float len = BackOf(c), strict = range == 5 ? 1.6f : 1f;
+                            float len = BackOf(c), strict = range == 5 ? 1.6f : range == 6 ? 1.3f : 1f;
                             bool open = true;
-                            foreach (var o in range == 5 ? trees : near)
+                            foreach (var o in range >= 5 ? trees : near)
                             {
                                 if (o.Id == c.Id) continue;
                                 var rel = new Vector2(o.X - c.X, o.Z - c.Z);
@@ -718,7 +734,7 @@ namespace Stabby.Game.Editor
                             if (open) { pick = c; crowd = ranked[r].around; dirXZ = d; found = true; }
                         }
                 }
-                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.45f, pick.Z);
+                var target = new Vector3(pick.X, pick.Y + pick.Size * (range == 6 ? 0.32f : 0.45f), pick.Z);
                 float back = BackOf(pick);
                 var eye = target + dirXZ * back + Vector3.up * FoliageUp[range] * (scaled ? Mathf.Max(1f, pick.Size) : 1f);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
@@ -931,7 +947,7 @@ namespace Stabby.Game.Editor
                         int i = z * n + x;
                         if (map.Sea[i] || map.Height[i] < (which == 2 ? 0.5f : 3)) continue;
                         float gx = (map.Height[i + 1] - map.Height[i - 1]) / (2 * cm), gz = (map.Height[i + n] - map.Height[i - n]) / (2 * cm), s = Mathf.Sqrt(gx * gx + gz * gz);
-                        bool ok = which == 0 ? s > 0.8f : which == 2 && map.Height[i] < 3 ? s < 0.1f : s < 0.12f && map.Height[i] >= 3 && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
+                        bool ok = which == 0 ? s > 0.8f : which == 2 && map.Height[i] < 1.2f ? s < 0.1f : s < 0.12f && map.Height[i] >= 3 && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
                         float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
                         if (ok && d < bestD) { bestD = d; best = i; down = new Vector2(-gx, -gz).normalized; }
                     }

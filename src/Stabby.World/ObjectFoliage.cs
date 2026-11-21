@@ -160,7 +160,7 @@ namespace Stabby.World
                 for (int k = 0; k <= sides; k++)
                 {
                     var n = a * c + b * si;
-                    o.Add(l.P[r] + n * rad, n, k / (float)sides * 6.2831853f * rad, along, ao, 0, bend, 0, l.Phase, 0);
+                    o.Add(l.P[r] + n * rad, n, k / (float)sides * 6.2831853f * rad, along, ao, dark ? 0.25f : 0, bend, 0, l.Phase, 0);
                     float nc = c * cs - si * sn;
                     si = c * sn + si * cs;
                     c = nc;
@@ -176,7 +176,7 @@ namespace Stabby.World
                 }
         }
 
-        static void Card(Out o, V at, V up, V face, float size, float width, int cell, bool flip, V center, float crownR, float bend, float phase, float flutterPhase, float aoLow)
+        static void Card(Out o, V at, V up, V face, float size, float width, int cell, bool flip, V center, float crownH, float crownV, float bend, float phase, float flutterPhase, float aoLow)
         {
             var right = V.Cross(up, face).Norm() * (0.5f * size * width);
             var lift = up * size;
@@ -188,14 +188,17 @@ namespace Stabby.World
             var corners = new[] { foot - right, foot + right, foot + right + lift, foot - right + lift };
             float[] us = { u0, u1, u1, u0 }, vs = { v0, v0, v1, v1 }, fl = { 0.15f, 0.15f, 1f, 1f };
             int first = o.Count;
+            float cluster = phase * 7.13f, tag = 1f + 0.3f * (0.75f * (2f * (cluster - (float)Math.Floor(cluster)) - 1f) + 0.25f * (2f * flutterPhase - 1f));
             for (int k = 0; k < 4; k++)
             {
                 var p = corners[k];
                 var radial = (p - center).Norm();
                 var f = V.Dot(face, radial) < 0 ? -face : face;
                 var n = (f * 0.35f + radial * 0.65f).Norm();
-                float depth = Math.Min(1f, (p - center).Length / Math.Max(1e-3f, crownR));
-                o.Add(p, n, us[k], vs[k], aoLow + (1f - aoLow) * depth * depth, 1, bend, fl[k], phase, flutterPhase);
+                var d = p - center;
+                float h = d.Flat / Math.Max(1e-3f, crownH), y = d.Y / Math.Max(1e-3f, crownV);
+                float depth = Math.Min(1f, h * h + y * y), lit = 0.7f + 0.3f * Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * y));
+                o.Add(p, n, us[k], vs[k], aoLow + (1f - aoLow) * depth * lit, tag, bend, fl[k], phase, flutterPhase);
             }
             o.Tri(first, first + 1, first + 2);
             o.Tri(first, first + 2, first + 3);
@@ -341,11 +344,17 @@ namespace Stabby.World
                 foreach (var p in limbs[i].P) { center = center + p; samples++; }
             }
             center = center * (1f / Math.Max(1, samples));
-            float crownR = 0;
+            float crownH = 0, crownV = 0;
             for (int i = 0; i < limbs.Count; i++)
                 if (limbs[i].Depth >= st.MinLeafDepth)
-                    foreach (var p in limbs[i].P) crownR = Math.Max(crownR, (p - center).Length);
-            crownR += 0.5f * st.Card;
+                    foreach (var p in limbs[i].P)
+                    {
+                        var d = p - center;
+                        crownH = Math.Max(crownH, d.Flat);
+                        crownV = Math.Max(crownV, Math.Abs(d.Y));
+                    }
+            crownH += 0.5f * st.Card;
+            crownV += 0.5f * st.Card;
             var o = new Out();
             var sides = st.Sides[lod];
             foreach (var l in limbs) Tube(o, l, sides[Math.Min(sides.Length - 1, l.Depth)], st.DarkWood);
@@ -366,7 +375,7 @@ namespace Stabby.World
                 bool flip = rng.NextFloat() < 0.5f;
                 float phase = rng.NextFloat();
                 if (c >= st.Counts[lod]) continue;
-                Card(o, at, up, face, size, width, st.Cell, flip, center, crownR, l.Bend(t), l.Phase, phase, st.AoLow);
+                Card(o, at, up, face, size, width, st.Cell, flip, center, crownH, crownV, l.Bend(t), l.Phase, phase, st.AoLow);
             }
             float scale = Math.Min(1f / (maxY + 1.2f * st.Card), 0.5f / (maxR + 1.2f * st.Card));
             return o.Finish(scale);

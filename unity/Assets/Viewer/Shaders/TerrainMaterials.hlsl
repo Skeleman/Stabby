@@ -244,11 +244,11 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     c = lerp(c, cl * 1.15, 0.3 * up * up);
     c = lerp(c, cl, 0.6 * dn) * lerp(1, float3(0.94, 0.97, 1.03), dn);
     float steep = saturate(1 - n.y * n.y);
-    float t = dot(q.xz + tmO.xz, normalize(float2(-n.z, n.x) + 1e-5)), fs = steep * TmFade(1.3, fp);
-    float sn = TmN2(float2(t * 1.3, q.y * 0.08), fs).x;
+    float fs = steep * TmFade(1.3, fp);
+    float sn = TmLN3(q * float3(1, 0.06, 1), 1.3, 23.7, fs).x;
     float fb = (q.y + off + wb.x) * _StabbyRockB.x - bed;
-    float seep = fs * layered * (1 - up) * smoothstep(0, 0.85, fb) * smoothstep(1, 0.96, fb) * smoothstep(0.2, 0.45, -sn + 0.3 * gw * grain.x);
-    c *= (1 - 0.14 * fs * layered * saturate(sn)) * (1 - 0.38 * seep * float3(1, 1.03, 1.08));
+    float seep = fs * layered * (0.45 + 0.55 * saturate(fb)) * smoothstep(1, 0.96, fb) * smoothstep(0.2, 0.5, sn + 0.25 * gw * grain.x);
+    c *= (1 - 0.1 * fs * layered * saturate(sn)) * (1 - 0.5 * seep * float3(1, 1.03, 1.08));
     float lic = layered * TmFade(1.1, fp) * smoothstep(-0.2, 0.55, n.y) * smoothstep(0.05, 0.35, drift2.x + 0.35 * gw * grain.x + 0.25 * mn.x);
     c = lerp(c, dot(c, lw) * float3(0.9, 1.03, 0.78) * (1.12 + 0.12 * mn.x), 0.6 * lic);
     [branch] if (stone > 0)
@@ -257,7 +257,7 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         float4 weather = TmLN3(q, 0.9, 3.3, fwt);
         float4 gate = TmLN3(q, 0.22, 7.7, fcr);
         float4 crack = TmLN3(q, 0.45, 23.1, fcr);
-        c *= 1 - stone * 0.12 * fs * saturate(TmN2(float2(t * 2.1, q.y * 0.12) + 9.7, fs).x);
+        c *= 1 - stone * 0.12 * fs * saturate(TmLN3(q * float3(1, 0.057, 1), 2.1, 9.7, fs).x);
         float w = 0.035, ax = abs(crack.x), tc = saturate(ax / w), cg = fcr * smoothstep(-0.1, 0.3, gate.x);
         float seam = (1 - tc * tc * (3 - 2 * tc)) * cg;
         float dl = cg * 6 * tc * (1 - tc) / w * (crack.x < 0 ? -1 : 1) * TmQ(0.45);
@@ -498,8 +498,9 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float fj = TmFade(0.27, fp);
     float3 jn = TmN2(wa * 0.27 + 41.7, fj);
     float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
-    float shore = smoothstep(5.5, 2.5, wp.y);
-    coatColor = lerp(coatColor, ToLinear(_StabbySand.rgb), smoothstep(6, 2, wp.y));
+    float sh = wp.y + 0.45 * TmLN2(wp.xz, 0.035, 19.3, step(wp.y, 3)).x;
+    float shore = smoothstep(2.1, 0.9, sh);
+    coatColor = lerp(coatColor, ToLinear(_StabbySand.rgb), smoothstep(2.8, 1.2, sh));
     cw = lerp(cw, float4(0, 0, 1, 0), shore);
     cw = saturate(cw * (1 + 0.8 * fj * (1 - shore) * float4(jn.x, -jn.x, jn.x * 0.3, -jn.x)));
     cw /= max(dot(cw, 1), 1e-3);

@@ -172,9 +172,9 @@ namespace Stabby.Game
 
         protected override void OnCreate()
         {
-            var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-            var lib = MaterialFile.Load(MaterialFile.DefaultPath);
-            var objects = ObjectFile.ForBiomes(defs);
+            var defs = ContentFiles.Biomes();
+            var lib = ContentFiles.Materials(ContentFiles.MaterialsPath);
+            var objects = ContentFiles.Objects(defs);
             string path = MapFile.PathFor(GameSettings.Seed, GameSettings.Size);
             gen = Task.Run(() =>
             {
@@ -318,9 +318,9 @@ namespace Stabby.Game
 
         protected override void OnCreate()
         {
-            Defs = BiomeFile.Load(BiomeFile.DefaultPath);
-            Materials = MaterialFile.Load(MaterialFile.DefaultPath);
-            Objects = ObjectFile.ForBiomes(Defs);
+            Defs = ContentFiles.Biomes();
+            Materials = ContentFiles.Materials(ContentFiles.MaterialsPath);
+            Objects = ContentFiles.Objects(Defs);
         }
 
         protected override void OnDestroy()
