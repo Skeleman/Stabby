@@ -28,6 +28,7 @@ Shader "Stabby/Water"
             SAMPLER(sampler_StabbyBed);
 
             static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
+            static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
             static const float SlopeRange = 0.1;
 
@@ -61,6 +62,22 @@ Shader "Stabby/Water"
                 UNITY_BRANCH if (fade > 0)
                     g += 0.2 * fade * mul(Turn, Noise(mul(q, Turn) * 7.1 + float2(t * 2.1, -t * 1.7)).yz);
                 return g;
+            }
+
+            float2 StillWaves(float2 q, float t, float fade, float ripple)
+            {
+                float2 wq = q * 0.11;
+                float3 w1 = Noise(mul(Veer, wq) + 31.7);
+                float3 w2 = Noise(wq * 1.7 + 12.9);
+                float m = saturate(0.5 + 0.9 * w2.x);
+                float2 rq = mul(q, Veer) + 1.4 * float2(w1.x, w2.x);
+                float2 g = (1.15 - 0.65 * m) * Noise(rq + float2(t, t * 0.7)).yz;
+                g += (0.3 + 0.6 * m) * mul(Noise(mul(Turn, rq) * 2.3 + float2(-t * 1.3, t * 0.4)).yz, Turn);
+                UNITY_BRANCH if (fade > 0)
+                    g += (0.12 + 0.18 * m) * fade * mul(Turn, Noise(mul(rq, Turn) * 7.1 + float2(t * 2.1, -t * 1.7)).yz);
+                UNITY_BRANCH if (ripple < 1)
+                    g += (1 - ripple) * 0.9 * mul(Noise(mul(Turn, rq) * 0.37 + float2(t * 0.4, 7.7)).yz, Veer);
+                return g * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x));
             }
 
             struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -146,7 +163,7 @@ Shader "Stabby/Water"
                     float2 b = Waves(q - drift * frac(ph + 0.5) + 0.37, t, fade);
                     g = lerp(a, b, wab);
                 }
-                else g = Waves(q, t, fade);
+                else g = StillWaves(q, t, fade, ripple);
                 float swell = i.color.a >= 0.99 ? 1 : i.color.a * 2 * _StabbyWaterFlow.z;
                 float slick = 0;
                 UNITY_BRANCH if (swell > 0)
@@ -187,13 +204,17 @@ Shader "Stabby/Water"
 
                 Light l = GetMainLight();
                 float3 sky = _StabbySky.rgb;
-                float3 tint = lerp(_StabbyWaterShallow.rgb * float3(0.2, 0.3, 0.33), _StabbyWaterDeep.rgb, saturate(path * _StabbyWaterDeep.w / 6));
+                float dk = 1 - exp(-path * _StabbyWaterDeep.w * 0.3);
+                float3 silt = float3(0.5, 0.44, 0.3) * dot(_StabbyWaterShallow.rgb, 1.0 / 3);
+                float3 teal = _StabbyWaterShallow.rgb * float3(0.26, 0.4, 0.42);
+                float3 tint = lerp(lerp(silt, teal, saturate(dk * 2.2)), _StabbyWaterDeep.rgb, smoothstep(0.25, 1, dk));
                 float3 scatter = LookColor(tint, 1.3) * (l.color * saturate(l.direction.y + 0.2) * 0.6 + sky * 0.5);
+                under *= lerp(float3(1.04, 0.99, 0.86), 1, saturate(dk * 3));
                 float3 c = under * trans + scatter * (1 - trans);
                 float ndv = saturate(dot(n, v));
-                float fres = 0.02 + 0.98 * pow(1 - ndv, 5);
+                float fres = 0.02 + (river ? 0.98 : 0.6) * pow(1 - ndv, 5);
                 float3 r = reflect(-v, n);
-                float3 skyR = lerp(sky * 1.35, sky * float3(0.8, 0.88, 1.05), sqrt(saturate(r.y))) + l.color * pow(saturate(dot(r, l.direction)), 6) * 0.25;
+                float3 skyR = lerp(sky * (river ? 1.35 : 1.02), sky * (river ? float3(0.8, 0.88, 1.05) : float3(0.62, 0.76, 0.98)), sqrt(saturate(r.y))) + l.color * pow(saturate(dot(r, l.direction)), 6) * 0.25;
                 c = lerp(c, skyR, fres);
                 c = lerp(c, skyR, slick * 0.2 * (1 - ndv));
                 float e = lerp(900, 60, saturate(dist / 400));
@@ -202,19 +223,28 @@ Shader "Stabby/Water"
 
                 float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, fuv, 0).rg;
                 float shore = depth / max(length(sl), 0.03);
-                float band = saturate(1 - shore / max(wv.w, 0.01)) * (river ? 0.25 + 0.5 * churn : 1);
+                bool sea = i.color.a >= 0.99;
+                float calm = river ? 0.25 + 0.5 * churn : sea ? 1 : 0.4;
+                float band = saturate(1 - shore / max(wv.w, 0.01));
                 float foam = 0;
                 UNITY_BRANCH if (band > 0)
                 {
-                    float2 fp = i.positionWS.xz * 0.35;
+                    float near = saturate(2 - dist / 250);
+                    float2 sdir = sl / max(length(sl), 1e-4);
+                    float3 ph = Noise(xz * 0.021 + 3.1);
+                    float run = 0.5 + 0.5 * sin(_Time.y * 0.5 + 5 * ph.x + 1.7 * Noise(xz * 0.09 + 8.3).x);
+                    float reach = calm * (0.3 + 0.7 * run * (0.75 + 0.5 * ph.x));
+                    float2 fp = (xz + sdir * (wv.w * 0.6 * run)) * 0.35;
                     float lace = 0.5 + Noise(mul(Turn, fp) + float2(t * 0.3, -t * 0.2)).x + 0.5 * Noise(mul(fp, Turn) * 2.7 - float2(t * 0.4, t * 0.1)).x;
                     float fine = Noise(mul(Turn, fp) * 7.3 + float2(t * 0.5, t * 0.7)).x;
-                    lace = lerp(0.6, lace + 0.35 * fine * saturate(2 - dist / 120), saturate(2 - dist / 250));
-                    float surf = 0.5 + 0.5 * sin(6.2832 * (shore / max(wv.w * 0.5, 0.01) + _Time.y * 0.15) + lace * 1.5);
-                    float b = band * band * (3 - 2 * band);
+                    lace = lerp(0.6, lace + 0.35 * fine * saturate(2 - dist / 120), near);
                     float broad = 0.8 + 0.5 * Noise(mul(fp, Turn) * 0.23 + 3.7).x;
-                    float rim = smoothstep(0.5 - 0.3 * saturate(lace * broad - 0.3), 0.85, band);
-                    foam = max(rim * (0.8 + 0.4 * fine), smoothstep(0.35, 0.95, b * lace * broad)) + 0.3 * b * surf * surf * saturate(lace - 0.4);
+                    float sb = shore / max(wv.w, 0.01);
+                    float lap = smoothstep(0.1 + 0.12 * saturate(lace), 0.02, sb - 0.04 * fine) * (0.55 + 0.45 * smoothstep(0.2, 0.8, lace * broad));
+                    float wash = saturate(1 - sb / max(reach, 0.02));
+                    float front = smoothstep(0.55, 0.9, wash) * (1 - smoothstep(0.9, 1, wash) * 0.5);
+                    float patchy = smoothstep(0.4, 0.95, lace * broad + 0.25 * fine);
+                    foam = max(lap * (sea ? 0.85 : 0.6), (sea ? 1 : 0.55) * wash * patchy * (0.5 + 0.5 * front)) * (river ? calm * 2 : 1);
                 }
                 foam = max(foam, white * smoothstep(0.5, 1.0, wl));
                 float slow = 1 - churn, inner = saturate(-i.chan.x * i.chan.z * 1.6);
@@ -237,7 +267,7 @@ Shader "Stabby/Water"
                 foam = max(foam, 0.22 * streak);
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
-                float alpha = saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.15)));
+                float alpha = saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.04)));
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7);
                 return half4(lerp(MixFog(c, i.fog), c, clear), alpha);
             }
