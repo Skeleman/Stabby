@@ -112,7 +112,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float3 lp = float3(p.x - tmO.x, p.y, p.z - tmO.z);
         float hw = p.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
         float2 wd = hw < 4.8 ? TmWet(lp, hw, max(d * _Eye.w, 1e-4)) : 0;
-        float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - tmO.xz, fo)) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));
+        float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - tmO.xz, fo, max(d * _Eye.w, 1e-4)).y) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));
         float cmin = _GrassB.w, gate = cmin + (1 - cmin) * Rand(cell, 3);
         if (gw * 1.2 <= gate) continue;
         float sw = _StabbyStrataWobble.w;
