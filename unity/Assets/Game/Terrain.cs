@@ -597,10 +597,11 @@ namespace Stabby.Game
         }
 
         Task<Prepared> preparing;
+        IEnumerator<string> loading;
         Prepared prepared;
         IEnumerator<bool> upload;
-        const int UploadBytes = 4 << 20;
-        BlobAssetReference<TerrainLookData> look;
+        const int UploadBytes = 2 << 20;
+        BlobAssetReference<TerrainLookData> look, lookReady;
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
         NativeHashSet<int> split, drawn;
@@ -628,8 +629,9 @@ namespace Stabby.Game
         Ground ground;
         int waterApplied, frameVertices, built, evicted, generation;
         bool ready, rootsReady, builtSmooth;
-        float worstMs;
-        string parts = "";
+        float worstMs, worstLoadMs, worstLodsMs, worstCollectMs;
+        string parts = "", lodParts = "";
+        const int EvictBudget = 32;
 
         protected override void OnCreate()
         {
@@ -644,18 +646,31 @@ namespace Stabby.Game
             {
                 if (SmoothOnly != builtSmooth) Reset();
                 if (upload != null && (!upload.MoveNext() || upload.Current)) upload = null;
+                double tu = frame.Elapsed.TotalMilliseconds;
                 Collect();
                 double tc = frame.Elapsed.TotalMilliseconds;
                 Roots(); Statics();
                 double ts = frame.Elapsed.TotalMilliseconds;
+                lodParts = "";
                 Lods();
-                parts = $"collect {tc:F1}, statics {ts - tc:F1}, lods {frame.Elapsed.TotalMilliseconds - ts:F1} ms, {frameVertices} vertices";
+                double lm = frame.Elapsed.TotalMilliseconds - ts;
+                parts = $"upload {tu:F1}, collect {tc - tu:F1}, statics {ts - tc:F1}, lods {lm:F1} ms ({lodParts}), {frameVertices} vertices";
+                if (lm > worstLodsMs) { worstLodsMs = (float)lm; GameStatus.Lines["terrain~lods"] = $"terrain worst lods {lm:F1} ms ({stage}: {lodParts})"; }
+                if (tc - tu > worstCollectMs) { worstCollectMs = (float)(tc - tu); GameStatus.Lines["terrain~collect"] = $"terrain worst collect {tc - tu:F1} ms ({stage}, {frameVertices} vertices)"; }
             }
             else
             {
                 parts = "load";
-                if (preparing == null) Begin();
-                else if (preparing.IsCompleted) Load();
+                if (loading == null && preparing != null && preparing.IsCompleted) loading = Load();
+                if (loading != null)
+                {
+                    bool more = loading.MoveNext();
+                    parts = more ? $"load {loading.Current}" : "load natives";
+                    if (!more) loading = null;
+                    float lt = (float)frame.Elapsed.TotalMilliseconds;
+                    if (lt > worstLoadMs) { worstLoadMs = lt; GameStatus.Lines["terrain~load"] = $"terrain worst load step {lt:F1} ms ({parts})"; }
+                }
+                else if (preparing == null) Begin();
             }
             float ms = (float)frame.Elapsed.TotalMilliseconds;
             GameStatus.TerrainMs = ms;
@@ -783,24 +798,26 @@ namespace Stabby.Game
             return false;
         }
 
-        void Load()
+        IEnumerator<string> Load()
         {
             var task = preparing;
             preparing = null;
-            if (!task.IsCompletedSuccessfully) { UnityEngine.Debug.LogException(task.Exception); return; }
+            if (!task.IsCompletedSuccessfully) { UnityEngine.Debug.LogException(task.Exception); yield break; }
             prepared = task.Result;
             GameStatus.Lines["terrain~prep"] = $"terrain prepared at {since.ElapsedMilliseconds} ms";
-            look = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
+            lookReady = prepared.Look.CreateBlobAssetReference<TerrainLookData>(Allocator.Persistent);
             prepared.Look.Dispose();
-            TerrainLook.ApplyStrata(prepared.Strata);
-            upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
+            yield return "blob";
+            foreach (string step in TerrainLook.StrataSteps(prepared.Strata)) yield return step;
             Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.45f);
             Shader.SetGlobalColor("_StabbyGround", new Color(0.14f, 0.14f, 0.13f));
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             var scene = UnityEngine.Object.FindFirstObjectByType<GameScene>();
             material = graphics.RegisterMaterial(scene != null ? scene.TerrainMaterial : null);
+            yield return "material";
             waterMaterial = scene != null && scene.WaterMaterial != null ? graphics.RegisterMaterial(scene.WaterMaterial) : material;
+            yield return "water material";
             tree = new TerrainTree
             {
                 Offset = new NativeArray<int>(prepared.Offset, Allocator.Persistent),
@@ -821,6 +838,8 @@ namespace Stabby.Game
                 for (int ix = 0; ix < d; ix++) roots.Add(tree.Key(TerrainTree.Root, ix, iz));
             builtSmooth = SmoothOnly;
             layout = new NativeArray<VertexAttributeDescriptor>(Layout, Allocator.Persistent);
+            upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
+            look = lookReady;
         }
 
         TerrainNode Node(int key) => nodes.TryGetValue(key, out var v) ? v : new TerrainNode { Entity = Entity.Null };
@@ -1055,6 +1074,7 @@ namespace Stabby.Game
                 lodScheduled = false;
                 selected = true;
             }
+            double t0 = frame.Elapsed.TotalMilliseconds;
             int behind = selected ? 0 : 1;
             for (int k = 0; k < leaves.Length; k++)
             {
@@ -1064,8 +1084,11 @@ namespace Stabby.Game
                 behind++;
                 if (nd.Pending == 0 && pending.Count < BuildBudget) Request(key);
             }
+            double t1 = frame.Elapsed.TotalMilliseconds;
             drawn.Clear();
             for (int r = 0; r < roots.Length; r++) Draw(roots[r]);
+            double t2 = frame.Elapsed.TotalMilliseconds, evictMs = 0, shadowMs = 0;
+            int evicts = 0, deferred = 0, shadows = 0;
             builtKeys.Clear();
             builtKeys.AddRange(meshes.Keys);
             Array.Clear(levelCounts, 0, levelCounts.Length);
@@ -1077,7 +1100,27 @@ namespace Stabby.Game
             {
                 var nd = nodes[key];
                 bool want = drawn.Contains(key);
-                if (!want && !InTree(key)) { Evict(key); continue; }
+                if (!want && !InTree(key))
+                {
+                    if (evicts == 0 || (evicts < EvictBudget && frame.Elapsed.TotalMilliseconds < ApplyMs))
+                    {
+                        double te = frame.Elapsed.TotalMilliseconds;
+                        Evict(key);
+                        evicts++;
+                        evictMs += frame.Elapsed.TotalMilliseconds - te;
+                    }
+                    else
+                    {
+                        deferred++;
+                        if (nd.Drawn != 0)
+                        {
+                            EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, false);
+                            nd.Drawn = 0;
+                            nodes[key] = nd;
+                        }
+                    }
+                    continue;
+                }
                 bool show = want && !(HideSunk && tree.Sunk(key));
                 sunk += want && !show ? 1 : 0;
                 if (show != (nd.Drawn != 0))
@@ -1087,7 +1130,13 @@ namespace Stabby.Game
                 }
                 MinMaxAABB nb = tree.Box(key);
                 int cast = show && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
-                if (cast != nd.Cast) Shadow(nd.Entity, cast);
+                if (cast != nd.Cast)
+                {
+                    double tsh = frame.Elapsed.TotalMilliseconds;
+                    Shadow(nd.Entity, cast);
+                    shadows++;
+                    shadowMs += frame.Elapsed.TotalMilliseconds - tsh;
+                }
                 nd.Cast = cast;
                 casting += cast;
                 castVertices += cast * nd.Vertices;
@@ -1107,6 +1156,7 @@ namespace Stabby.Game
                 }
                 nodes[key] = nd;
             }
+            lodParts = $"requests {t1 - t0:F1}, draw {t2 - t1:F1}, nodes {frame.Elapsed.TotalMilliseconds - t2:F1} [evict {evicts} {evictMs:F1} ms, {deferred} deferred, shadow {shadows} {shadowMs:F1} ms]";
             GameStatus.TerrainBehind = behind;
             int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices, castVertices);
             for (int i = 0; i < levelCounts.Length; i++) seen = HashCode.Combine(seen, levelCounts[i]);
@@ -1215,6 +1265,7 @@ namespace Stabby.Game
             if (planes.IsCreated) planes.Dispose();
             if (roots.IsCreated) roots.Dispose();
             if (look.IsCreated) look.Dispose();
+            else if (lookReady.IsCreated) lookReady.Dispose();
         }
     }
 }
