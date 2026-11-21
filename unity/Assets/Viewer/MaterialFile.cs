@@ -12,11 +12,12 @@ namespace Stabby.Viewer
 
         [Serializable] class Row { public string id, name, color; public float thicknessM, hardness; }
         [Serializable] class Rock { public float grainAmp, grainWavelengthM, bumpAmp, bumpWavelengthM, bedSpacingM, bedDepthM, jointSpacingM, jointDepthM, parallax; }
-        [Serializable] class Coat { public string[] biomes; public float bumpAmp, bumpWavelengthM, grainAmp, grainWavelengthM, featureAmp, featureWavelengthM, parallax, albedoVar; }
+        [Serializable] class Coat { public string[] biomes; public float bumpAmp, bumpWavelengthM, featureAmp, featureWavelengthM, parallax; public float grainAmp = float.NaN, grainWavelengthM = float.NaN, albedoVar = float.NaN; }
+        [Serializable] class Look { public float noiseContrast, albedoVar, detailWavelengthM, saturation, roughness, specular; }
         [Serializable] class Coats { public Coat grass, soil, sand, snow; }
         [Serializable] class Surface { public float fadePixels, parallaxFootprintM, windDeg, strataWobbleM, strataWobbleWavelengthM, coatPatchAmp, coatPatchWavelengthM; public Rock rock; public Coats coats; }
         [Serializable] class Water { public string deepColor, shallowColor; public float clarityM, shoreM, foamWidthM, waveScaleM, waveSpeed, waveStrength, swellScaleM, swellStrength, lakeSwell, flowSpeed, rapidsSlope, bedFieldM; }
-        [Serializable] class Dto { public int schemaVersion; public float offsetAmplitudeM, offsetWavelengthM, tiltPerKm; public Surface surface; public Water water; public Row[] strata; }
+        [Serializable] class Dto { public int schemaVersion; public float offsetAmplitudeM, offsetWavelengthM, tiltPerKm; public Surface surface; public Water water; public Look look; public Row[] strata; }
 
         public static string DefaultPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "content", "materials.json"));
 
@@ -65,6 +66,13 @@ namespace Stabby.Viewer
                 SwellScaleM = w.swellScaleM, SwellStrength = w.swellStrength, LakeSwell = w.lakeSwell,
                 FlowSpeed = w.flowSpeed, RapidsSlope = w.rapidsSlope, BedFieldM = w.bedFieldM,
             };
+            var lk = dto.look;
+            lib.Look = lk == null ? null : new LookDef
+            {
+                NoiseContrast = lk.noiseContrast, AlbedoVar = lk.albedoVar, DetailWavelengthM = lk.detailWavelengthM,
+                Saturation = lk.saturation, Roughness = lk.roughness, Specular = lk.specular,
+            };
+            lib.FillCoats();
             foreach (var r in dto.strata)
                 lib.Strata.Add(new StratumDef { Id = r.id, Name = r.name, ThicknessM = r.thicknessM, Hardness = r.hardness, Color = Convert.ToUInt32(r.color.TrimStart('#'), 16) });
             var errors = MaterialLibrary.Validate(lib);

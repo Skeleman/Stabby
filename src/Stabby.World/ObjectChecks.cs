@@ -23,7 +23,9 @@ namespace Stabby.World
                 int cx = c % across, cz = c / across;
                 var a = field.Chunk(cx, cz);
                 if (first && !SameObjects(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz))) { e.Add($"objects in chunk {cx},{cz} differ between runs"); return; }
+                if (first && !SolidIdsMatch(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz, true))) { e.Add($"object ids in chunk {cx},{cz} change when only solid objects are placed"); return; }
                 first = false;
+                CheckObjectIds(a, c, e);
                 foreach (var o in a)
                 {
                     var def = w.Objects.Objects[o.Def];
@@ -252,13 +254,32 @@ namespace Stabby.World
             return false;
         }
 
+        static void CheckObjectIds(ObjectInstance[] a, int chunk, List<string> e)
+        {
+            var ids = new HashSet<ulong>();
+            foreach (var o in a)
+            {
+                if (!ids.Add(o.Id)) { e.Add($"object id {o.Id:x} repeats in chunk {chunk}"); return; }
+                if (ObjectIds.Chunk(o.Id) != chunk || ObjectIds.Def(o.Id) != o.Def) { e.Add($"object id {o.Id:x} does not name chunk {chunk} def {o.Def}"); return; }
+            }
+        }
+
+        static bool SolidIdsMatch(ObjectInstance[] all, ObjectInstance[] solid)
+        {
+            var byId = new Dictionary<ulong, ObjectInstance>();
+            foreach (var o in all) byId[o.Id] = o;
+            foreach (var o in solid)
+                if (!byId.TryGetValue(o.Id, out var p) || p.X != o.X || p.Z != o.Z || p.Def != o.Def) return false;
+            return true;
+        }
+
         static bool SameObjects(ObjectInstance[] a, ObjectInstance[] b)
         {
             if (a.Length != b.Length) return false;
             for (int k = 0; k < a.Length; k++)
             {
                 var p = a[k]; var q = b[k];
-                if (p.Def != q.Def || p.Variant != q.Variant || p.X != q.X || p.Y != q.Y || p.Z != q.Z || p.Size != q.Size || p.Qx != q.Qx || p.Qy != q.Qy || p.Qz != q.Qz || p.Qw != q.Qw) return false;
+                if (p.Id != q.Id || p.Def != q.Def || p.Variant != q.Variant || p.X != q.X || p.Y != q.Y || p.Z != q.Z || p.Size != q.Size || p.Qx != q.Qx || p.Qy != q.Qy || p.Qz != q.Qz || p.Qw != q.Qw) return false;
             }
             return true;
         }

@@ -32,6 +32,7 @@ namespace Stabby.Game
         public int Mesh, Def;
         public float Radius, Ground, Size;
         public bool Shadow;
+        public ulong Id;
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
@@ -114,6 +115,7 @@ namespace Stabby.Game
             if (ranges.IsCreated) ranges.Dispose();
             if (spawned.IsCreated) spawned.Dispose();
             if (tileEntities.IsCreated) tileEntities.Dispose();
+            DisposeHidden();
             if (loaded.IsCreated) loaded.Dispose();
             if (meshes != null) foreach (var m in meshes) if (m != null) UnityEngine.Object.Destroy(m);
             if (material != null) UnityEngine.Object.Destroy(material);
@@ -279,6 +281,7 @@ namespace Stabby.Game
                 {
                     M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
                     Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = o.Y + def.Placement.Sink * o.Size, Size = o.Size,
+                    Id = o.Id,
                 };
             }
             order.Dispose();
@@ -391,14 +394,15 @@ namespace Stabby.Game
 
         void SpawnTile(long key, NativeArray<ObjectSpawn> parts, int3 range)
         {
-            int cast = 0;
-            for (int k = 0; k < range.y; k++) if (parts[range.x + k].Shadow) cast++;
+            int cast = 0, shown = 0;
+            for (int k = 0; k < range.y; k++) if (!Hidden(parts[range.x + k].Id)) { shown++; if (parts[range.x + k].Shadow) cast++; }
             var a = EntityManager.Instantiate(castPrefab, cast, Allocator.Temp);
-            var b = EntityManager.Instantiate(flatPrefab, range.y - cast, Allocator.Temp);
+            var b = EntityManager.Instantiate(flatPrefab, shown - cast, Allocator.Temp);
             int ia = 0, ib = 0;
             for (int k = 0; k < range.y; k++)
             {
                 var s = parts[range.x + k];
+                if (Hidden(s.Id)) continue;
                 var e = s.Shadow ? a[ia++] : b[ib++];
                 var kind = kinds[s.Def];
                 int m = s.Mesh * Lods;
@@ -418,7 +422,7 @@ namespace Stabby.Game
                 liveByDef[s.Def]++;
             }
             spawned.Add(key);
-            liveEntities += range.y;
+            liveEntities += shown;
             a.Dispose();
             b.Dispose();
         }

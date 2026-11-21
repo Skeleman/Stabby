@@ -16,7 +16,7 @@ namespace Stabby.Viewer
         public byte[] Coat;
         public int N;
         public float CellM;
-        public Vector4 Surface, Wobble, RockA, RockB, RockC;
+        public Vector4 Surface, Wobble, RockA, RockB, RockC, Look;
         public Vector4[] CoatA, CoatB;
         public Vector4[] Water;
     }
@@ -77,6 +77,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyRockA", s.RockA);
             Shader.SetGlobalVector("_StabbyRockB", s.RockB);
             Shader.SetGlobalVector("_StabbyRockC", s.RockC);
+            Shader.SetGlobalVector("_StabbyLook", s.Look);
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
             Shader.SetGlobalVector("_StabbyWaterDeep", s.Water[0]);
@@ -221,6 +222,7 @@ namespace Stabby.Viewer
                 RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),
                 RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
                 RockC = new Vector4(r.Parallax, 0, 0, 0),
+                Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, 0),
                 CoatA = coatA, CoatB = coatB,
                 Water = WaterLook(lib.Water),
             };

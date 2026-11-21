@@ -9,3 +9,5 @@ ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem runs managed object placement off the main thread and converts it to a blob once
 ObjectViewSystem registers object meshes with Entities Graphics and streams tiles around the managed camera
 GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera
+ServerObjectDeltaSystem validates and replicates object removals against the managed ObjectField at the network boundary
+ClientObjectDeltaSystem resolves replicated object removals against the managed ObjectField and reads UnityEngine.Input

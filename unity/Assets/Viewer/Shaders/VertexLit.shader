@@ -41,6 +41,7 @@ Shader "Stabby/VertexLit"
             float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
 
             #include "TerrainMaterials.hlsl"
+            #include "Look.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -108,8 +109,10 @@ Shader "Stabby/VertexLit"
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
                 Light l = GetMainLight();
+                float2 xv = i.xz + TmOrigin(_WorldSpaceCameraPos);
+                float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
-                float3 c = m.albedo * (l.color * saturate(dot(n, l.direction)) + ambient) * ao;
+                float3 c = (LookColor(m.albedo, 1) * (l.color * saturate(dot(n, l.direction)) + ambient) + LookSheen(n, v, l.direction, l.color, LookRough())) * ao;
                 return half4(MixFog(c, i.fog), 1);
             }
             ENDHLSL
