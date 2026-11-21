@@ -447,6 +447,16 @@ namespace Stabby.World
 
         public List<ObjectColumn> Columns()
         {
+            var rows = ColumnRows();
+            int total = 0;
+            foreach (var r in rows) total += r.Count;
+            var list = new List<ObjectColumn>(total);
+            foreach (var r in rows) list.AddRange(r);
+            return list;
+        }
+
+        public List<ObjectColumn>[] ColumnRows()
+        {
             var rows = new List<ObjectColumn>[across];
             Parallel.For(0, across, cz =>
             {
@@ -462,11 +472,7 @@ namespace Stabby.World
                 }
                 rows[cz] = row;
             });
-            int total = 0;
-            foreach (var r in rows) total += r.Count;
-            var list = new List<ObjectColumn>(total);
-            foreach (var r in rows) list.AddRange(r);
-            return list;
+            return rows;
         }
 
         public static void AddColumns(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
@@ -598,10 +604,16 @@ namespace Stabby.World
             return killed;
         }
 
-        public static ColumnArrays Build(List<ObjectColumn> columns, float cellM = DefaultCellM)
+        public static int Buckets(int count)
         {
             int buckets = 64;
-            while (buckets < columns.Count * 2 && buckets < (1 << 24)) buckets <<= 1;
+            while (buckets < count * 2 && buckets < (1 << 24)) buckets <<= 1;
+            return buckets;
+        }
+
+        public static ColumnArrays Build(List<ObjectColumn> columns, float cellM = DefaultCellM)
+        {
+            int buckets = Buckets(columns.Count);
             var t = new ColumnArrays { Cell = cellM, Starts = new int[buckets + 1], Items = new ObjectColumn[columns.Count] };
             var at = new int[columns.Count];
             for (int k = 0; k < columns.Count; k++)

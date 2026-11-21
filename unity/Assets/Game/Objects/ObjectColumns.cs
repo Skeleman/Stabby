@@ -1,9 +1,10 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.NetCode;
 
@@ -33,13 +34,16 @@ namespace Stabby.Game
         sealed class Prepared
         {
             public ObjectField Field;
-            public BlobAssetReference<ObjectColumnData> Blob;
+            public BlobBuilder Builder;
+            public bool Built;
             public int Columns;
             public long Ms;
             public bool Reused;
         }
 
         Task<Prepared> build;
+        Prepared baking;
+        BlobBake<ObjectColumnData> bake;
         BlobAssetReference<ObjectColumnData> blob;
         ObjectLibrary lib;
 
@@ -51,26 +55,39 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (blob.IsCreated) blob.Dispose();
-            Owned.Release(build, p => p.Blob.Dispose());
+            bake.Release();
+            Owned.Release(build, p => { if (p.Built) p.Builder.Dispose(); });
         }
 
-        static byte[] Pack(ColumnArrays cols)
+        static WorldStore.SharedObjects Sort(ObjectField field, List<ObjectColumn>[] rows)
         {
-            int startsAt = 32, startsBytes = cols.Starts.Length * 4;
-            int itemsAt = (startsAt + startsBytes + 15) & ~15;
-            var itemBytes = MemoryMarshal.AsBytes(cols.Items.AsSpan());
-            var bytes = new byte[itemsAt + itemBytes.Length];
-            var span = bytes.AsSpan();
-            MemoryMarshal.Write(span, ref cols.Cell);
-            MemoryMarshal.Write(span.Slice(4), ref cols.Max);
-            int so = startsAt - 8, sl = cols.Starts.Length, io = itemsAt - 16, il = cols.Items.Length;
-            MemoryMarshal.Write(span.Slice(8), ref so);
-            MemoryMarshal.Write(span.Slice(12), ref sl);
-            MemoryMarshal.Write(span.Slice(16), ref io);
-            MemoryMarshal.Write(span.Slice(20), ref il);
-            MemoryMarshal.AsBytes(cols.Starts.AsSpan()).CopyTo(span.Slice(startsAt));
-            itemBytes.CopyTo(span.Slice(itemsAt));
-            return bytes;
+            int count = 0;
+            foreach (var r in rows) count += r.Count;
+            int buckets = ColumnArrays.Buckets(count);
+            const float cell = ColumnArrays.DefaultCellM;
+            var starts = new NativeArray<int>(buckets + 1, Allocator.Persistent);
+            var items = new NativeArray<ObjectColumn>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            var at = new NativeArray<int>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            var fill = new NativeArray<int>(buckets, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            float max = 0;
+            int k = 0;
+            foreach (var r in rows)
+                foreach (var c in r)
+                {
+                    max = Math.Max(max, c.R);
+                    at[k] = Obstacles.Bucket((int)Math.Floor(c.X / cell), (int)Math.Floor(c.Z / cell), buckets - 1);
+                    starts[at[k++] + 1]++;
+                }
+            for (int b = 0; b < buckets; b++) { starts[b + 1] += starts[b]; fill[b] = starts[b]; }
+            k = 0;
+            for (int j = 0; j < rows.Length; j++)
+            {
+                foreach (var c in rows[j]) items[fill[at[k++]]++] = c;
+                rows[j] = null;
+            }
+            at.Dispose();
+            fill.Dispose();
+            return new WorldStore.SharedObjects { Field = field, Starts = starts, Items = items, Cell = cell, Max = max };
         }
 
         (GeneratedWorld, GroundParts, WorldStore.Entry) MapReady()
@@ -86,7 +103,7 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            if (build == null)
+            if (build == null && baking == null)
             {
                 var (w, parts, entry) = MapReady();
                 if (w == null || parts == null) return;
@@ -97,23 +114,37 @@ namespace Stabby.Game
                     ran = true;
                     var sw = Stopwatch.StartNew();
                     var field = new ObjectField(w, parts.Detail, parts.Edits, objects);
-                    var cols = ColumnArrays.Build(field.Columns());
-                    return new WorldStore.SharedObjects { Field = field, Columns = Pack(cols), Count = cols.Items.Length, Ms = sw.ElapsedMilliseconds };
+                    var shared = Sort(field, field.ColumnRows());
+                    shared.Ms = sw.ElapsedMilliseconds;
+                    return shared;
                 };
-                var source = entry != null ? WorldStore.Objects(entry, make) : Task.Run(make);
+                bool own = entry == null;
+                var source = own ? Task.Run(make) : WorldStore.Objects(entry, make);
                 build = Task.Run(async () =>
                 {
                     var s = await source;
-                    return new Prepared { Field = s.Field, Blob = BlobAssetReference<ObjectColumnData>.Create(s.Columns), Columns = s.Count, Ms = s.Ms, Reused = !ran };
+                    bool built = s.Build(out var b);
+                    int count = s.Count;
+                    if (own) s.Dispose();
+                    return new Prepared { Field = s.Field, Builder = b, Built = built, Columns = count, Ms = s.Ms, Reused = !ran };
                 });
                 return;
             }
-            if (!build.IsCompleted) return;
+            if (baking == null)
+            {
+                if (!build.IsCompleted) return;
+                if (build.IsFaulted) { GameStatus.Failure = build.Exception.ToString(); build = null; Enabled = false; return; }
+                baking = build.Result;
+                build = null;
+                if (!baking.Built) { GameStatus.Failure = $"{World.Name}: shared object columns were released"; Enabled = false; return; }
+                bake = BlobBake<ObjectColumnData>.Start(baking.Builder);
+                return;
+            }
+            if (!bake.IsCompleted) return;
             Enabled = false;
-            if (build.IsFaulted) { GameStatus.Failure = build.Exception.ToString(); build = null; return; }
-            var p = build.Result;
-            build = null;
-            blob = p.Blob;
+            var p = baking;
+            baking = null;
+            blob = bake.Take();
             EntityManager.CreateSingleton(new ObjectColumns { Blob = blob });
             Field = p.Field;
             GameStatus.Lines[World.Name + "~objects"] = $"{World.Name}: {p.Columns} object columns in {p.Ms} ms" + (p.Reused ? ", shared" : "");
