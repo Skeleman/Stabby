@@ -81,7 +81,7 @@ namespace Stabby.World
         public const float CaveChance = 0.35f, CaveMinDrop = 30f, CaveRoof = 12f, CaveGrade = 0.18f, CaveSideChance = 0.4f;
         public const float CaveHollow = 1f - 1.25f * FeatureEdit.Blend;
         public const int CavePieces = 4, CavePaths = 3;
-        public const float LatticeStepCells = 0.25f, MinRadiusSteps = 1.25f;
+        public const float LatticeStepM = 11.25f, MinRadiusSteps = 1.25f;
         public const float UndercutChance = 0.5f, UndercutMinDrop = 30f, UndercutContrast = 0.12f, UndercutStep = 15f;
         public const int UndercutReach = 3;
 
@@ -130,7 +130,7 @@ namespace Stabby.World
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail)
         {
             var list = new List<FeatureEdit>();
-            if (w.Biome == null || 16f < MinRadiusSteps * LatticeStepCells * w.Config.CellMeters) return list.ToArray();
+            if (w.Biome == null || 16f < MinRadiusSteps * LatticeStepM) return list.ToArray();
             if (w.Materials == null) throw new InvalidOperationException("feature placement needs the material library");
             var strata = new StrataField(w.Config, w.Materials);
             int tiles = w.Config.Size / TileCells;

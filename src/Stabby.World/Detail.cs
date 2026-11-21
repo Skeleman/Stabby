@@ -12,10 +12,12 @@ namespace Stabby.World
         readonly float[] h;
         readonly float[] amp;
         readonly uint seed;
+        readonly float cm;
 
         public TerrainDetail(GeneratedWorld w)
         {
             n = w.Config.Size;
+            cm = w.Config.CellMeters;
             h = w.Height;
             seed = Rng.Stream(w.Config.Seed, "detail").NextU32();
             var dist = WetDistance(w);
@@ -42,6 +44,8 @@ namespace Stabby.World
         public uint Seed => seed;
         public float Height(int cell) => h[cell];
         public float Amplitude(int cell) => amp[cell];
+
+        public float Sample(float x, float z) => HeightAt(x / cm, z / cm);
 
         public float HeightAt(float gx, float gy) => DetailSampler.HeightAt(new ArrayCells(h, amp), n, seed, gx, gy);
 

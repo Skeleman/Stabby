@@ -105,6 +105,7 @@ namespace Stabby.World
 
             if (w.Sketch != null) CheckSketch(w, e);
             CheckDetail(w, e);
+            CheckNearField(w, e);
             CheckGeometry(w, e);
             CheckFeatures(w, e);
             return e;
@@ -142,14 +143,90 @@ namespace Stabby.World
                 }
         }
 
-        public const float LatticeStepCells = Features.LatticeStepCells;
+        public const float SeamEpsilonM = 0.005f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f;
+        public const int SeamStride = 3, NearCells = 24;
+
+        static void CheckNearField(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var d = new TerrainDetail(w);
+            var pieces = NearField.Pieces(w);
+            var spots = new List<(float, float)>();
+            for (int y = 1; y < n - 1; y += SeamStride)
+                for (int x = 1; x < n - 1; x += SeamStride)
+                    if (!w.Sea[y * n + x]) spots.Add((x * cm, y * cm));
+            foreach (var p in pieces) spots.Add((0.5f * (p.Ax + p.Bx), 0.5f * (p.Az + p.Bz)));
+            foreach (var (sx, sz) in spots)
+                for (int half = 0; half < 2; half++)
+                {
+                    float bx = (float)Math.Floor(sx / cm) * cm + half * 0.5f * cm, bz = (float)Math.Floor(sz / cm) * cm + half * 0.5f * cm;
+                    float jx = Math.Abs(d.Sample(bx - SeamEpsilonM, sz) - d.Sample(bx + SeamEpsilonM, sz));
+                    float jz = Math.Abs(d.Sample(sx, bz - SeamEpsilonM) - d.Sample(sx, bz + SeamEpsilonM));
+                    if (jx > SeamTolerance) { e.Add($"near field jumps {jx:F2} m across x = {bx:F1} at z = {sz:F0}"); return; }
+                    if (jz > SeamTolerance) { e.Add($"near field jumps {jz:F2} m across z = {bz:F1} at x = {sx:F0}"); return; }
+                }
+
+            int top = 0;
+            for (int i = 1; i < w.Height.Length; i++) if (w.Height[i] > w.Height[top]) top = i;
+            var areas = new List<(float, float)> { (top % n * cm, top / n * cm) };
+            if (pieces.Count > 0) areas.Add((pieces[pieces.Count / 2].Ax, pieces[pieces.Count / 2].Az));
+            var ground = new DetailGround { Detail = d };
+            var none = new EditArray { Items = Array.Empty<FeatureEdit>() };
+            foreach (var (ax, az) in areas)
+            {
+                var c = new NetsChunk { X0 = (int)Math.Floor(ax / NearStepM) - NearCells / 2, Z0 = (int)Math.Floor(az / NearStepM) - NearCells / 2, Cells = NearCells, StepM = NearStepM };
+                var f = new NetsBuffers();
+                SurfaceNets.Heightfield(new DetailColumns { Detail = d, StepM = NearStepM }, c, ref f);
+                for (int v = 0; v < f.Verts.Count; v += 6 * 5)
+                {
+                    float x = f.Verts[v], y = f.Verts[v + 1], z = f.Verts[v + 2], wy = y + 0.5f;
+                    Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
+                    if (Math.Abs(wy - y) > MeshTolerance) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
+                }
+            }
+
+            for (int p = 0; p < pieces.Count; p++)
+            {
+                var q = pieces[p];
+                float mx = 0.5f * (q.Ax + q.Bx), mz = 0.5f * (q.Az + q.Bz), ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (l < 1e-3f) continue;
+                float s = 0.5f * (q.Sa + q.Sb), hw = 0.5f * (q.Wa + q.Wb), depth = 0.5f * (q.Da + q.Db), reach = hw + NearField.Bank(hw);
+                if (!Crowded(pieces, p, mx, mz, -1) && depth > 0.2f && s > Erosion.MinLandHeight + depth && d.Sample(mx, mz) > s - 0.1f * depth)
+                { e.Add($"river bed at {mx:F0},{mz:F0} sits above its water {s:F1}"); return; }
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
+                    int bc = NearField.CellOf(bx, bz, cm, n);
+                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach)) continue;
+                    float h = d.Sample(bx, bz);
+                    if (h < s - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {s:F1}"); return; }
+                }
+            }
+        }
+
+        static bool Crowded(List<RiverPiece> pieces, int self, float x, float z, float own)
+        {
+            for (int r = 0; r < pieces.Count; r++)
+            {
+                if (r == self) continue;
+                var q = pieces[r];
+                NearField.Project(q, x, z, out float d, out float t);
+                float hw = q.Wa + (q.Wb - q.Wa) * t;
+                if (d < hw + NearField.Bank(hw) - 0.5f && (own < 0 || d < own - 0.5f)) return true;
+            }
+            return false;
+        }
+
+        public const float LatticeStepM = Features.LatticeStepM;
 
         static void CheckGeometry(GeneratedWorld w, List<string> e)
         {
             int n = w.Config.Size, top = 0;
             for (int i = 1; i < w.Height.Length; i++) if (w.Height[i] > w.Height[top]) top = i;
-            var cols = new DetailColumns { Detail = new TerrainDetail(w), StepCells = LatticeStepCells };
-            var c = new NetsChunk { X0 = (int)(top % n / LatticeStepCells) - 8, Z0 = (int)(top / n / LatticeStepCells) - 8, Cells = 16, StepM = LatticeStepCells * w.Config.CellMeters };
+            float cm = w.Config.CellMeters;
+            var cols = new DetailColumns { Detail = new TerrainDetail(w), StepM = LatticeStepM };
+            var c = new NetsChunk { X0 = (int)(top % n * cm / LatticeStepM) - 8, Z0 = (int)(top / n * cm / LatticeStepM) - 8, Cells = 16, StepM = LatticeStepM };
             SurfaceNets.HeightRange(cols, c, out int jMin, out int jMax);
             var g = new NetsBuffers();
             SurfaceNets.General(new HeightSolid<DetailColumns> { Columns = cols, StepM = c.StepM }, c, jMin, jMax, ref g);
@@ -181,7 +258,7 @@ namespace Stabby.World
                 {
                     if (step < 0.5f && o == 0) continue;
                     int m = (int)(ChunkCells / step);
-                    var cols = new DetailColumns { Detail = detail, StepCells = step };
+                    var cols = new DetailColumns { Detail = detail, StepM = step * cm };
                     var c = new NetsChunk { X0 = (int)(cx / step), Z0 = (int)(cz / step), Cells = m, StepM = step * cm };
                     float sm = step * cm, x0 = cx * cm, z0 = cz * cm, x1 = x0 + ChunkCells * cm, z1 = z0 + ChunkCells * cm;
                     var meshed = new List<FeatureEdit>();
@@ -230,10 +307,10 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, edits, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
-            float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
+            float cm = w.Config.CellMeters, s = LatticeStepM;
             foreach (var x in edits)
                 if (!Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
-            var cols = new DetailColumns { Detail = detail, StepCells = LatticeStepCells };
+            var cols = new DetailColumns { Detail = detail, StepM = s };
             var seen = new bool[FeatureEdit.Shapes];
             foreach (var x in edits)
             {
@@ -283,8 +360,8 @@ namespace Stabby.World
 
         static void CheckCavePaths(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
         {
-            float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
-            var cols = new DetailColumns { Detail = detail, StepCells = LatticeStepCells };
+            float cm = w.Config.CellMeters, s = LatticeStepM;
+            var cols = new DetailColumns { Detail = detail, StepM = s };
             foreach (var p in edits)
             {
                 if (p.Shape != FeatureEdit.Cave) continue;
@@ -317,8 +394,8 @@ namespace Stabby.World
 
         static void CheckCaveWalk(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
         {
-            float cm = w.Config.CellMeters, s = LatticeStepCells * cm;
-            var ground = new DetailGround { Detail = detail, CellMeters = cm };
+            float cm = w.Config.CellMeters, s = LatticeStepM;
+            var ground = new DetailGround { Detail = detail };
             foreach (var p in edits)
             {
                 if (p.Shape != FeatureEdit.Cave) continue;
