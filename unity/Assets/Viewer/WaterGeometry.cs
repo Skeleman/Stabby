@@ -34,8 +34,9 @@ namespace Stabby.Viewer
         const float SlopeRange = 0.1f;
         const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
         public const float FallMinDrop = 0.3f;
-        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallPoolBase = 2f, FallPoolPerDrop = 1.8f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, MistPerWidth = 7f, MistLift = 0.35f;
-        const int CurtainRows = 7, MistMax = 4;
+        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, MistPerWidth = 7f, MistLift = 0.35f, MistPerPool = 0.5f, MistPerDrop = 0.25f;
+        const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 4;
+        const float CurtainRowStep = 2f;
         static readonly Vector4 NoPool = new Vector4(-1e5f, 0, 0, 0);
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f);
 
@@ -64,16 +65,25 @@ namespace Stabby.Viewer
             lipT = Mathf.Clamp((drop + FallMargin - r.D[k - 1] - r.P[k - 1]) / Mathf.Max(drop + r.P[k] - r.P[k - 1], 1e-3f), FallLipMin, FallLipMax);
             d.Normalize();
             float lx = Mathf.Lerp(r.X[k - 1], r.X[k], lipT), lz = Mathf.Lerp(r.Z[k - 1], r.Z[k], lipT), th = FallThrowAt(drop), w = Mathf.Lerp(r.W[k - 1], r.W[k], lipT);
+            float width = 2 * Mathf.Max(w, 6f), discharge = FallDischargePerArea * w * Mathf.Lerp(r.D[k - 1], r.D[k], lipT);
             f = new FallCurtain
             {
                 K = k - 1, LipX = lx, LipZ = lz, LipY = r.S[k - 1] + RiverLift,
                 BaseX = lx + d.x * th, BaseZ = lz + d.y * th, BaseY = r.S[k] + RiverLift,
-                Width = 2 * Mathf.Max(w, 6f), DirX = d.x, DirZ = d.y,
-                PoolRadius = FallPoolBase + FallPoolPerDrop * drop,
-                Discharge = FallDischargePerArea * w * Mathf.Lerp(r.D[k - 1], r.D[k], lipT),
+                Width = width, DirX = d.x, DirZ = d.y,
+                PoolRadius = PoolRadiusOf(drop, width, discharge),
+                Discharge = discharge,
             };
             return true;
         }
+
+        public static float PoolRadiusOf(float drop, float width, float discharge)
+        {
+            float scour = FallScour * Mathf.Pow(Mathf.Max(drop, 0), FallScourDrop) * Mathf.Pow(Mathf.Max(discharge, 0) / width, FallScourQ);
+            return Mathf.Clamp(0.5f * width + scour, FallPoolMin * width, FallPoolMax * width);
+        }
+
+        public static int CurtainRowsOf(float height) => Mathf.Clamp(Mathf.RoundToInt(height / CurtainRowStep), CurtainRowsMin, CurtainRowsMax);
 
         public static float FallThrowAt(float height) => FallThrow * Mathf.Sqrt(2 * Mathf.Max(height, 0) / 9.81f);
 
@@ -155,9 +165,10 @@ namespace Stabby.Viewer
                 var flow = new Color(f.DirX * 0.5f + 0.5f, f.DirZ * 0.5f + 0.5f, 1, 0);
                 var reach = new Vector4(f.Discharge, f.PoolRadius, along, 0);
                 int b = Verts.Count;
-                for (int j = 0; j < CurtainRows; j++)
+                int rows = CurtainRowsOf(h);
+                for (int j = 0; j < rows; j++)
                 {
-                    float u = j / (CurtainRows - 1f), y = u * u * h;
+                    float u = j / (rows - 1f), y = u * u * h;
                     var p = lip + fwd * FallThrowAt(y) - Vector3.up * y;
                     Verts.Add(p - side);
                     Verts.Add(p + side);
@@ -178,7 +189,7 @@ namespace Stabby.Viewer
                     Tris.Add(v - 1); Tris.Add(v + 1); Tris.Add(v);
                 }
                 int mists = Mathf.Clamp(Mathf.RoundToInt(f.Width / MistPerWidth), 1, MistMax);
-                float radius = Mathf.Clamp(0.5f * f.Drop + 0.3f * f.Width / mists, 2f, 14f);
+                float radius = Mathf.Clamp(MistPerPool * f.PoolRadius + MistPerDrop * f.Drop, 2.5f, 14f);
                 var foot = new Vector3(f.BaseX, f.BaseY + MistLift * radius, f.BaseZ) + fwd * (0.3f * radius);
                 for (int m = 0; m < mists; m++)
                 {
@@ -194,6 +205,8 @@ namespace Stabby.Viewer
                     }
                     Tris.Add(q); Tris.Add(q + 2); Tris.Add(q + 1);
                     Tris.Add(q + 1); Tris.Add(q + 2); Tris.Add(q + 3);
+                    Tris.Add(q); Tris.Add(q + 1); Tris.Add(q + 2);
+                    Tris.Add(q + 1); Tris.Add(q + 3); Tris.Add(q + 2);
                 }
             }
 
