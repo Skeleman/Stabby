@@ -754,8 +754,8 @@ namespace Stabby.Game
             prepared.Look.Dispose();
             TerrainLook.ApplyStrata(prepared.Strata);
             TerrainLook.ApplyField(prepared.Field);
-            Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.9f);
-            Shader.SetGlobalColor("_StabbyGround", new Color(0.3f, 0.27f, 0.22f));
+            Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.45f);
+            Shader.SetGlobalColor("_StabbyGround", new Color(0.16f, 0.15f, 0.12f));
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             var scene = UnityEngine.Object.FindFirstObjectByType<GameScene>();
