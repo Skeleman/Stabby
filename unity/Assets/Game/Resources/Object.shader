@@ -56,10 +56,13 @@ Shader "Stabby/Object"
             SAMPLER(sampler_StabbySlope);
             TEXTURE2D(_StabbyBiome);
             SAMPLER(sampler_StabbyBiome);
+            TEXTURE2D(_StabbyBed);
+            SAMPLER(sampler_StabbyBed);
 
             float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
 
             #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
+            #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Bark.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
@@ -74,6 +77,7 @@ Shader "Stabby/Object"
                 float3 normalOS : TEXCOORD4;
                 float3 axisWS : TEXCOORD5;
                 float4 tone : TEXCOORD6;
+                float3 origin : TEXCOORD7;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -95,6 +99,7 @@ Shader "Stabby/Object"
                 o.normalOS = i.normalOS;
                 o.axisWS = normalize(isLog ? m._m00_m10_m20 : m._m01_m11_m21);
                 o.tone = i.tone;
+                o.origin = m._m03_m13_m23;
                 return o;
             }
 
@@ -200,13 +205,15 @@ Shader "Stabby/Object"
                 nOut = Bumped(n, axis, sgn, g, depth);
             }
 
-            float3 Dressed(float3 albedo, float4 tone, float3 wp, float3 n, float h, float fp)
+            float Dressed(inout float3 albedo, float4 tone, float3 wp)
             {
                 float lum = dot(albedo, float3(0.3, 0.59, 0.11));
                 float3 tint = lerp(float3(1.04, 0.98, 0.9), float3(1.08, 0.95, 0.8), 0.5 + 0.5 * tone.z);
                 albedo = lerp(lum * tint, albedo, 0.25) * (1 + 0.22 * tone.y);
-                float band = 1 - smoothstep(0.04, 0.4, h);
-                return lerp(albedo, albedo * float3(0.5, 0.46, 0.4), 0.75 * band);
+                float on = TmNoise3(wp * 3.3, int3(0, 0, 0)).x + 0.5 * TmNoise3(wp * 11.7 + 4.1, int3(0, 0, 0)).x;
+                float occ = saturate((1 - saturate(tone.x * 2 - 1)) * (1.2 + 0.7 * on));
+                albedo = lerp(albedo, albedo * float3(0.5, 0.47, 0.43), occ);
+                return occ;
             }
 
             half4 frag(Varyings i) : SV_Target
@@ -220,6 +227,7 @@ Shader "Stabby/Object"
                 float fp = max(max(sqrt(la * lb), 0.4 * max(la, lb)), 1e-4);
                 float3 n = normalize(i.normalWS);
                 float3 albedo;
+                float occ = 0;
                 tmRough = LookRough();
                 [branch] if (base.a < 0.5)
                 {
@@ -233,7 +241,8 @@ Shader "Stabby/Object"
                     {
                         float2 o2 = TmOrigin(_WorldSpaceCameraPos);
                         tmO = float3(o2.x, 0, o2.y);
-                        TmOut m = TmRock(wp - tmO, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy, 1);
+                        float3 piece = i.tone.x > 0.25 ? float3(i.tone.y * 31.7 + i.tone.w * 7.3, 0, i.tone.z * 29.1 - i.tone.w * 11.9) : 0;
+                        TmOut m = TmRock(wp - tmO + piece, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy, 1);
                         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wp.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
                         TmStoneCover(m, wp - tmO, n, cw / max(dot(cw, 1), 1e-3), fp, 1, 1);
                         float3 g = m.grad - n * dot(m.grad, n);
@@ -241,7 +250,7 @@ Shader "Stabby/Object"
                         albedo = m.albedo;
                     }
                     albedo *= base.rgb;
-                    [branch] if (i.tone.x > 0.5) albedo = Dressed(albedo, i.tone, wp - tmO, n, i.local.y, fp);
+                    [branch] if (i.tone.x > 0.25) occ = Dressed(albedo, i.tone, wp - tmO);
                 }
                 else
                 {
@@ -249,8 +258,14 @@ Shader "Stabby/Object"
                     [branch] if (_StabbyFieldUV.z > 0) gw = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
                     Wood(i.local, n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, wp, gw, albedo, n);
                 }
-                float above = max(wp.y - fade.z, 0), size = max(fade.w, 0.1);
-                float ao = lerp(0.72, 1, smoothstep(0, min(0.12, 0.2 * size), above)) * lerp(0.75, 1, smoothstep(0, min(0.9, 0.6 * size), above)) * lerp(1, 0.5, saturate(-n.y));
+                float size = max(fade.w, 0.1), ground = fade.z;
+                [branch] if (_StabbyFieldUV.x > 0)
+                {
+                    ground += ContactBed(wp.xz) - ContactBed(i.origin.xz);
+                    albedo = ContactObject(albedo, wp, ground, size);
+                }
+                float above = max(wp.y - ground, 0);
+                float ao = lerp(0.85, 1, smoothstep(0, min(0.9, 0.6 * size), above)) * lerp(1, 0.5, saturate(-n.y)) * (1 - 0.4 * occ);
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp));
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)

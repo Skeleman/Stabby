@@ -251,6 +251,8 @@ public static class ContentLoader
     sealed class TerrainEntry
     {
         public float QuadPixels { get; set; } = new TerrainViewDef().QuadPixels;
+        public float ContactPixels { get; set; } = new TerrainViewDef().ContactPixels;
+        public float ContactTexelPixels { get; set; } = new TerrainViewDef().ContactTexelPixels;
     }
 
     sealed class FoliageEntry
@@ -419,7 +421,7 @@ public static class ContentLoader
             };
             lib.Objects.Add(def);
         }
-        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels };
+        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels };
         if (file.Foliage != null)
         {
             var g = file.Foliage.Grass;
