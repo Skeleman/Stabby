@@ -74,7 +74,7 @@ namespace Stabby.Viewer
                 for (int k = 0; k < r.Cells.Count; k++)
                 {
                     int c = r.Cells[k];
-                    pts.Add(new Vector4(c % n * cm, Mathf.Max(r.Surface[k], world.Height[c]), c / n * cm, r.Width[k]));
+                    pts.Add(new Vector4(r.X[k] * cm, Mathf.Max(r.Surface[k], world.Height[c]), r.Y[k] * cm, r.Width[k]));
                 }
                 for (int it = 0; it < 2; it++) pts = Chaikin(pts);
                 int b = verts.Count;
@@ -85,7 +85,7 @@ namespace Stabby.Viewer
                     var dir = new Vector3(z.x - a.x, 0, z.z - a.z).normalized;
                     var side = new Vector3(dir.z, 0, -dir.x) * Mathf.Max(pts[k].w * 0.5f, 6f);
                     var p = new Vector3(pts[k].x, 0, pts[k].z);
-                    p.y = GroundAt(detail, n, cm, p, side, pts[k].y) + 1f;
+                    p.y = GroundAt(detail, n, cm, p, side, pts[k].y) + 0.5f;
                     verts.Add(p - side);
                     verts.Add(p + side);
                     if (k == 0) continue;

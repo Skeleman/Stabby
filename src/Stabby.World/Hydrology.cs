@@ -21,6 +21,8 @@ namespace Stabby.World
         public List<float> Discharge = new List<float>();
         public List<float> Width = new List<float>();
         public List<float> Depth = new List<float>();
+        public List<float> X = new List<float>();
+        public List<float> Y = new List<float>();
         public RiverEnd End;
         public int Downstream = -1;
         public int LakeId = -1;
@@ -66,6 +68,7 @@ namespace Stabby.World
             for (int i = 0; i < n * n; i++)
                 hy.IsRiver[i] = !sea[i] && hy.LakeId[i] < 0 && hy.DischargeM3s[i] >= c.RiverMinDischarge;
             BuildSegments(c, sea, hy);
+            CarveBeds(c, h, sea, hy);
             return hy;
         }
 
@@ -181,19 +184,99 @@ namespace Stabby.World
                     c = r;
                 }
             }
+            uint meander = Rng.Stream(cfg.Seed, "meander").NextU32();
             foreach (var seg in hy.Rivers)
+            {
                 if (seg.End == RiverEnd.Junction) seg.Downstream = startOf[seg.Downstream];
+                Shape(cfg, seg, meander);
+            }
         }
 
         static void Add(WorldConfig c, RiverSegment seg, Hydrology hy, int i)
         {
-            float q = hy.DischargeM3s[i];
             seg.Cells.Add(i);
             seg.Surface.Add(hy.WaterSurface[i]);
-            seg.Discharge.Add(q);
-            float width = c.RiverWidthAtUnitFlow * (float)FMath.Pow(q, c.RiverWidthExponent);
-            seg.Width.Add(width);
-            seg.Depth.Add(0.3f + width / 25f);
+            seg.Discharge.Add(hy.DischargeM3s[i]);
         }
+
+        static void Shape(WorldConfig c, RiverSegment seg, uint seed)
+        {
+            int n = c.Size, count = seg.Cells.Count;
+            var along = new float[count];
+            for (int k = 1; k < count; k++)
+            {
+                int a = seg.Cells[k - 1], b = seg.Cells[k];
+                along[k] = along[k - 1] + (a % n != b % n && a / n != b / n ? 1.41421356f : 1f);
+            }
+            float total = along[count - 1], phase = 0;
+            int head = seg.Cells[0];
+            for (int k = 0; k < count; k++)
+            {
+                int lo = Math.Max(0, k - SlopeReach), hi = Math.Min(count - 1, k + SlopeReach);
+                float run = (along[hi] - along[lo]) * c.CellMeters;
+                float slope = run > 0 ? Math.Max(0, seg.Surface[lo] - seg.Surface[hi]) / run : 0;
+                float flat = 1f - Grid.Smoothstep(0, c.RiverFlatSlope, slope);
+                float width = c.RiverWidthAtUnitFlow * (float)FMath.Pow(seg.Discharge[k], c.RiverWidthExponent) * (1f + c.RiverLowlandWiden * flat);
+                seg.Width.Add(width);
+                seg.Depth.Add(0.3f + width / 25f);
+
+                int p = seg.Cells[Math.Max(0, k - 2)], q = seg.Cells[Math.Min(count - 1, k + 2)];
+                float dx = q % n - p % n, dy = q / n - p / n, len = (float)Math.Sqrt(dx * dx + dy * dy);
+                float wave = Math.Max(c.MeanderMinWavelengthCells, c.MeanderWavelengthWidths * width / c.CellMeters);
+                if (k > 0) phase += (along[k] - along[k - 1]) / wave;
+                float taper = Grid.Smoothstep(0, MeanderTaperCells, along[k]) * Grid.Smoothstep(0, MeanderTaperCells, total - along[k]);
+                float amp = Math.Min(Math.Min(c.MeanderMaxCells, wave * 0.25f), c.MeanderWidths * width / c.CellMeters) * flat * taper;
+                float o = len > 0 ? amp * Math.Max(-1f, Math.Min(1f, Noise.Gradient(seed, phase, head * 0.618034f))) / len : 0;
+                int cell = seg.Cells[k];
+                seg.X.Add(cell % n - dy * o);
+                seg.Y.Add(cell / n + dx * o);
+            }
+        }
+
+        static void CarveBeds(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
+        {
+            int n = c.Size;
+            float cm = c.CellMeters;
+            foreach (var seg in hy.Rivers)
+            {
+                for (int k = 0; k + 1 < seg.Cells.Count; k++)
+                {
+                    float ax = seg.X[k], ay = seg.Y[k], bx = seg.X[k + 1], by = seg.Y[k + 1];
+                    float half = Math.Max(seg.Width[k], seg.Width[k + 1]) * 0.5f / cm;
+                    float wet = half, reach = half * (1 + c.RiverBankWidths);
+                    int x0 = Math.Max(0, (int)Math.Floor(Math.Min(ax, bx) - reach)), x1 = Math.Min(n - 1, (int)Math.Ceiling(Math.Max(ax, bx) + reach));
+                    int y0 = Math.Max(0, (int)Math.Floor(Math.Min(ay, by) - reach)), y1 = Math.Min(n - 1, (int)Math.Ceiling(Math.Max(ay, by) + reach));
+                    float ex = bx - ax, ey = by - ay, ee = ex * ex + ey * ey;
+                    for (int y = y0; y <= y1; y++)
+                        for (int x = x0; x <= x1; x++)
+                        {
+                            int i = y * n + x;
+                            if (sea[i] || hy.LakeId[i] >= 0) continue;
+                            float t = ee > 0 ? Math.Max(0, Math.Min(1, ((x - ax) * ex + (y - ay) * ey) / ee)) : 0;
+                            float px = ax + ex * t - x, py = ay + ey * t - y, d = (float)Math.Sqrt(px * px + py * py);
+                            if (d >= reach) continue;
+                            float surface = seg.Surface[k] + (seg.Surface[k + 1] - seg.Surface[k]) * t;
+                            float depth = seg.Depth[k] + (seg.Depth[k + 1] - seg.Depth[k]) * t;
+                            float target;
+                            if (d < wet) { float u = d / wet; target = surface - depth * (1 - u * u); }
+                            else
+                            {
+                                float rise = c.RiverBankRise + seg.Width[k] * 0.02f;
+                                target = Math.Min(h[i], surface + rise) + (h[i] - Math.Min(h[i], surface + rise)) * Grid.Smoothstep(wet, reach, d);
+                            }
+                            h[i] = Math.Min(h[i], Math.Max(Erosion.MinLandHeight, target));
+                        }
+                }
+                for (int k = 0; k < seg.Cells.Count; k++)
+                {
+                    int i = seg.Cells[k];
+                    if (sea[i] || hy.LakeId[i] >= 0) continue;
+                    h[i] = Math.Min(h[i], Math.Max(Erosion.MinLandHeight, seg.Surface[k] - 0.5f * seg.Depth[k]));
+                }
+            }
+        }
+
+        const int SlopeReach = 3;
+        const float MeanderTaperCells = 3f;
     }
 }

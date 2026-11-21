@@ -62,6 +62,7 @@ namespace Stabby.World
                     if (s.Surface[k] > s.Surface[k - 1] + SurfaceTolerance)
                     { e.Add($"river {s.Id} flows uphill at point {k}"); break; }
                 }
+                CheckRiverBed(w, s, e);
                 int last = s.Cells[s.Cells.Count - 1];
                 switch (s.End)
                 {
@@ -107,6 +108,22 @@ namespace Stabby.World
             CheckGeometry(w, e);
             CheckFeatures(w, e);
             return e;
+        }
+
+        static void CheckRiverBed(GeneratedWorld w, RiverSegment s, List<string> e)
+        {
+            if (s.X.Count != s.Cells.Count || s.Y.Count != s.Cells.Count) { e.Add($"river {s.Id} has no centreline"); return; }
+            int n = w.Config.Size;
+            float reach = w.Config.MeanderMaxCells + SurfaceTolerance;
+            for (int k = 0; k < s.Cells.Count; k++)
+            {
+                int i = s.Cells[k];
+                float dx = s.X[k] - i % n, dy = s.Y[k] - i / n;
+                if (dx * dx + dy * dy > reach * reach) { e.Add($"river {s.Id} meanders off its cell at point {k}"); return; }
+                if (w.Sea[i] || w.Water.LakeId[i] >= 0) continue;
+                float bed = Math.Max(Erosion.MinLandHeight, s.Surface[k] - 0.5f * s.Depth[k]);
+                if (w.Height[i] > bed + SurfaceTolerance) { e.Add($"river {s.Id} has no bed at point {k}"); return; }
+            }
         }
 
         static void CheckDetail(GeneratedWorld w, List<string> e)

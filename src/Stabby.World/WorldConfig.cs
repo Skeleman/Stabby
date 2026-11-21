@@ -4,7 +4,7 @@ namespace Stabby.World
 
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 25;
+        public const int GeneratorVersion = 26;
 
         public ulong Seed = 1;
         public const float MapMeters = 23040f;
@@ -54,6 +54,8 @@ namespace Stabby.World
         public float LakeMinAreaM2 = 15000f;
         public float RiverMinDischarge = 0.028f;
         public float RiverWidthAtUnitFlow = 85f, RiverWidthExponent = 1f;
+        public float RiverFlatSlope = 0.02f, RiverLowlandWiden = 1f, RiverBankRise = 1.5f, RiverBankWidths = 1.5f;
+        public float MeanderMaxCells = 0.6f, MeanderWidths = 2.5f, MeanderWavelengthWidths = 12f, MeanderMinWavelengthCells = 4f;
 
         public float UniformRainMm;
 

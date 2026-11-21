@@ -105,12 +105,12 @@ namespace Stabby.Game.Editor
                 GameStatus.HoldCamera = true;
                 phase = 1;
             }
-            while (phase <= 4)
+            while (phase <= 5)
             {
-                string name = phase == 1 ? "arch" : phase == 2 ? "overhang" : phase == 3 ? "cave" : "cave-inside";
+                string name = phase == 1 ? "arch" : phase == 2 ? "overhang" : phase == 3 ? "cave" : phase == 4 ? "cave-inside" : "river";
                 if (wait == 0)
                 {
-                    if (!Aim(cam, phase == 1 ? FeatureEdit.Arch : phase == 2 ? FeatureEdit.Overhang : FeatureEdit.Cave, phase == 4)) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
+                    if (!(phase == 5 ? River(cam) : Aim(cam, phase == 1 ? FeatureEdit.Arch : phase == 2 ? FeatureEdit.Overhang : FeatureEdit.Cave, phase == 4))) { GameStatus.Lines["~" + name] = "no " + name + " placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -167,6 +167,29 @@ namespace Stabby.Game.Editor
             SpikeProbe.Stop();
             SessionState.EraseBool(Key);
             EditorApplication.Exit(code);
+        }
+
+        static bool River(Camera cam)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var sys = w.GetExistingSystemManaged<ClientMapSystem>();
+                var map = sys?.Map;
+                if (map == null) continue;
+                float cm = map.Config.CellMeters;
+                RiverSegment best = null;
+                foreach (var r in map.Water.Rivers) if (r.X.Count > 12 && (best == null || r.Width[r.Width.Count / 2] > best.Width[best.Width.Count / 2])) best = r;
+                if (best == null) return false;
+                int k = best.X.Count / 2;
+                var target = new Vector3(best.X[k] * cm, best.Surface[k], best.Y[k] * cm);
+                var along = new Vector3(best.X[k + 4] - best.X[k - 4], 0, best.Y[k + 4] - best.Y[k - 4]).normalized;
+                var side = new Vector3(-along.z, 0, along.x);
+                var eye = target - along * 160f + side * 70f + Vector3.up * 70f;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim river"] = $"river width {best.Width[k]:F0} m at {target.x:F0},{target.z:F0}";
+                return true;
+            }
+            return false;
         }
 
         static bool Aim(Camera cam, int shape, bool inside)
