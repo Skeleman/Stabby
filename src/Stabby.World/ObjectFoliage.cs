@@ -188,6 +188,7 @@ namespace Stabby.World
             var corners = new[] { foot - right, foot + right, foot + right + lift, foot - right + lift };
             float[] us = { u0, u1, u1, u0 }, vs = { v0, v0, v1, v1 }, fl = { 0.15f, 0.15f, 1f, 1f };
             int first = o.Count;
+            float cluster = phase * 7.13f, tag = 1f + 0.3f * (0.75f * (2f * (cluster - (float)Math.Floor(cluster)) - 1f) + 0.25f * (2f * flutterPhase - 1f));
             for (int k = 0; k < 4; k++)
             {
                 var p = corners[k];
@@ -197,7 +198,7 @@ namespace Stabby.World
                 var d = p - center;
                 float h = d.Flat / Math.Max(1e-3f, crownH), y = d.Y / Math.Max(1e-3f, crownV);
                 float depth = Math.Min(1f, h * h + y * y), lit = 0.7f + 0.3f * Math.Max(0f, Math.Min(1f, 0.5f + 0.5f * y));
-                o.Add(p, n, us[k], vs[k], aoLow + (1f - aoLow) * depth * lit, 1, bend, fl[k], phase, flutterPhase);
+                o.Add(p, n, us[k], vs[k], aoLow + (1f - aoLow) * depth * lit, tag, bend, fl[k], phase, flutterPhase);
             }
             o.Tri(first, first + 1, first + 2);
             o.Tri(first, first + 2, first + 3);
