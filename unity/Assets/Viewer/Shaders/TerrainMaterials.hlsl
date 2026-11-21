@@ -355,7 +355,6 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
     float2 g = bump.yz + B.x * calm * dprof * ds + 0.3 * A.z * fg * grain.yz;
     float3 sand = lerp(base, ToLinear(_StabbySand.rgb), 0.5 + 0.5 * shore);
     float3 c = sand * (1 + A.z * fg * grain.x) * (1 - B.w * calm * (1 - prof));
-    c *= 1 - 0.4 * saturate(1 - wp.y / 1.2) * step(0, wp.y);
     TmOut o;
     o.grad = float3(g.x, 0, g.y);
     o.albedo = c;
@@ -500,7 +499,17 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         o.albedo += c * lerp(coatColor, k.albedo, up);
         o.grad += c * up * k.grad;
     }
-    float3 g = o.grad - n * dot(o.grad, n);
+    float wet = 0;
+    [branch] if (wp.y > 0 && wp.y < 1.2)
+    {
+        float fw = TmFade(0.8, fp);
+        float3 tide = TmLN2(wp.xz, 0.11, 7.7, 1);
+        float3 dry = TmLN2(wp.xz, 0.8, 29.1, fw);
+        float top = 0.7 + 0.35 * tide.x + 0.08 * fw * dry.x;
+        wet = smoothstep(top, top - 0.25, wp.y);
+        o.albedo *= 1 - 0.3 * wet;
+    }
+    float3 g = (o.grad - n * dot(o.grad, n)) * (1 - 0.5 * wet);
     o.grad = normalize(n - g);
     return o;
 }
