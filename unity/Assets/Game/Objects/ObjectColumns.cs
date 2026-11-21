@@ -77,25 +77,28 @@ namespace Stabby.Game
             return BlobAssetReference<ObjectColumnData>.Create(bytes);
         }
 
-        GeneratedWorld MapReady()
+        (GeneratedWorld, GroundParts) MapReady()
         {
-            if (World.IsServer()) return World.GetExistingSystemManaged<ServerMapSystem>().Map;
-            var map = World.GetExistingSystemManaged<ClientMapSystem>().Map;
-            return map != null && SystemAPI.HasSingleton<Ground>() ? map : null;
+            if (World.IsServer())
+            {
+                var server = World.GetExistingSystemManaged<ServerMapSystem>();
+                return (server.Map, server.Parts);
+            }
+            var client = World.GetExistingSystemManaged<ClientMapSystem>();
+            return client.Map != null && client.Parts != null && SystemAPI.HasSingleton<Ground>() ? (client.Map, client.Parts) : default;
         }
 
         protected override void OnUpdate()
         {
             if (build == null)
             {
-                var w = MapReady();
-                if (w == null) return;
+                var (w, parts) = MapReady();
+                if (w == null || parts == null) return;
                 var objects = lib;
                 build = Task.Run(() =>
                 {
                     var sw = Stopwatch.StartNew();
-                    var detail = new TerrainDetail(w);
-                    var field = new ObjectField(w, detail, Features.Place(w, detail), objects);
+                    var field = new ObjectField(w, parts.Detail, parts.Edits, objects);
                     var cols = ColumnArrays.Build(field.Columns());
                     var made = Pack(cols);
                     return new Prepared { Field = field, Blob = made, Columns = cols.Items.Length, Ms = sw.ElapsedMilliseconds };

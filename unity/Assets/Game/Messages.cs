@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.NetCode;
 using Stabby.World;
@@ -43,7 +44,7 @@ namespace Stabby.Game
     public struct GroundData
     {
         public int N, Bands, EditAcross;
-        public uint Seed, GullySeed, RockSeed;
+        public uint Seed, GullySeed, RockSeed, CoastSeed;
         public float CellMeters, Top, Period;
         public BlobArray<float> Height, Amp, Offset, Band;
         public BlobArray<int> PieceStart, PieceItems;
@@ -86,6 +87,7 @@ namespace Stabby.Game
             public uint Seed => Blob.Value.Seed;
             public uint GullySeed => Blob.Value.GullySeed;
             public uint RockSeed => Blob.Value.RockSeed;
+            public uint CoastSeed => Blob.Value.CoastSeed;
             public float Period => Blob.Value.Period;
             public int Bands => Blob.Value.Bands;
             public float Height(int i) => Blob.Value.Height[i];
@@ -97,9 +99,10 @@ namespace Stabby.Game
             public RiverPiece Piece(int p) => Blob.Value.Pieces[p];
         }
 
-        public static BlobBuilder Fill(GeneratedWorld w)
+        public static GroundParts Fill(GeneratedWorld w)
         {
             var detail = new TerrainDetail(w);
+            var edits = Features.Place(w, detail);
             var c = detail.Cells;
             int n = c.N, nn = n * n;
             var b = new BlobBuilder(Allocator.Persistent);
@@ -108,6 +111,7 @@ namespace Stabby.Game
             root.Seed = c.Seed;
             root.GullySeed = c.GullySeed;
             root.RockSeed = c.RockSeed;
+            root.CoastSeed = c.CoastSeed;
             root.CellMeters = c.CellMeters;
             root.Period = c.Period;
             root.Bands = c.Bands;
@@ -124,7 +128,6 @@ namespace Stabby.Game
             for (int k = 0; k < c.IndexLength; k++) items[k] = c.PieceAt(k);
             var pieces = b.Allocate(ref root.Pieces, c.PieceCount);
             for (int p = 0; p < c.PieceCount; p++) pieces[p] = c.Piece(p);
-            var edits = Features.Place(w, detail);
             var e = b.Allocate(ref root.Edits, edits.Length);
             for (int i = 0; i < edits.Length; i++) e[i] = edits[i];
             EditGrid.Build(edits, n * c.CellMeters, out root.EditAcross, out var cellStart, out var cellItems);
@@ -132,16 +135,64 @@ namespace Stabby.Game
             for (int i = 0; i < cellStart.Length; i++) es[i] = cellStart[i];
             var ei = b.Allocate(ref root.EditItems, cellItems.Length);
             for (int i = 0; i < cellItems.Length; i++) ei[i] = cellItems[i];
-            return b;
+            return new GroundParts { Detail = detail, Edits = edits, Blob = b };
         }
 
-        public static BlobAssetReference<GroundData> Create(EntityManager em, BlobBuilder filled)
+        public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
         {
-            var blob = filled.CreateBlobAssetReference<GroundData>(Allocator.Persistent);
-            filled.Dispose();
             em.CreateSingleton(new Ground { Blob = blob });
             return blob;
         }
+    }
+
+    public struct BlobBake<T> where T : unmanaged
+    {
+        struct Job : IJob
+        {
+            public BlobBuilder Builder;
+            public NativeReference<BlobAssetReference<T>> Out;
+
+            public void Execute()
+            {
+                Out.Value = Builder.CreateBlobAssetReference<T>(Allocator.Persistent);
+            }
+        }
+
+        NativeReference<BlobAssetReference<T>> result;
+        BlobBuilder builder;
+        JobHandle handle;
+
+        public bool Started => result.IsCreated;
+        public bool IsCompleted => handle.IsCompleted;
+
+        public static BlobBake<T> Start(BlobBuilder builder)
+        {
+            var r = new NativeReference<BlobAssetReference<T>>(Allocator.Persistent);
+            return new BlobBake<T> { result = r, builder = builder, handle = new Job { Builder = builder, Out = r }.Schedule() };
+        }
+
+        public BlobAssetReference<T> Take()
+        {
+            handle.Complete();
+            builder.Dispose();
+            var blob = result.Value;
+            result.Dispose();
+            return blob;
+        }
+
+        public void Release()
+        {
+            if (!result.IsCreated) return;
+            var blob = Take();
+            if (blob.IsCreated) blob.Dispose();
+        }
+    }
+
+    public sealed class GroundParts
+    {
+        public TerrainDetail Detail;
+        public FeatureEdit[] Edits;
+        public BlobBuilder Blob;
     }
 
     public static class Owned

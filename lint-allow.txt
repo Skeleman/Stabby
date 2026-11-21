@@ -4,6 +4,7 @@ ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks
 ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
 TerrainViewSystem applies Mesh objects and registers them with Entities Graphics
 TerrainViewSystem.Complete only after IsCompleted, or at teardown
+BlobBake.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem runs managed object placement off the main thread and converts it to a blob once

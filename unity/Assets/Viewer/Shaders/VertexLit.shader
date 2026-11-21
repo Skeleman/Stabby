@@ -128,6 +128,9 @@ Shader "Stabby/VertexLit"
             float4 vert(Attributes i) : SV_POSITION
             {
                 UNITY_SETUP_INSTANCE_ID(i);
+                float lift = ((uint)i.stitch.w & 4096u) != 0 ? _StitchMask.w * 0.5 + 20 : 0;
+                i.positionOS.y += lift;
+                i.stitch.y += lift;
                 float t = StitchT(i.positionOS.xyz, i.stitch);
                 float3 wp = TransformObjectToWorld(lerp(i.positionOS.xyz, i.stitch.xyz, t));
                 float3 wn = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -435,17 +436,25 @@ namespace Stabby.World
 
         public List<ObjectColumn> Columns()
         {
-            var list = new List<ObjectColumn>();
-            var scratch = new List<ObjectInstance>();
-            for (int cz = 0; cz < across; cz++)
+            var rows = new List<ObjectColumn>[across];
+            Parallel.For(0, across, cz =>
+            {
+                var row = new List<ObjectColumn>();
+                var scratch = new List<ObjectInstance>();
                 for (int cx = 0; cx < across; cx++)
                 {
                     var held = chunks[cz * across + cx];
-                    if (held != null) { foreach (var o in held) AddColumns(lib, shapes, o, list); continue; }
+                    if (held != null) { foreach (var o in held) AddColumns(lib, shapes, o, row); continue; }
                     scratch.Clear();
                     PlaceInto(cx, cz, true, scratch, null);
-                    foreach (var o in scratch) AddColumns(lib, shapes, o, list);
+                    foreach (var o in scratch) AddColumns(lib, shapes, o, row);
                 }
+                rows[cz] = row;
+            });
+            int total = 0;
+            foreach (var r in rows) total += r.Count;
+            var list = new List<ObjectColumn>(total);
+            foreach (var r in rows) list.AddRange(r);
             return list;
         }
 

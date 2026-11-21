@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 
 namespace Stabby.World
@@ -142,9 +143,11 @@ namespace Stabby.World
             tx *= TiltPerKm * cm / 1000f / norm;
             ty *= TiltPerKm * cm / 1000f / norm;
             var off = new float[n * n];
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                     off[y * n + x] = OffsetAmplitudeM * Noise.Fbm(seed, x * scale, y * scale, 3) + tx * x + ty * y;
+            });
             return off;
         }
 

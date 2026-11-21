@@ -15,6 +15,7 @@ namespace Stabby.World
         uint Seed { get; }
         uint GullySeed { get; }
         uint RockSeed { get; }
+        uint CoastSeed { get; }
         float Height(int i);
         float Amp(int i);
         float Offset(int i);
@@ -30,6 +31,7 @@ namespace Stabby.World
     {
         public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
         public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f;
+        public const float CoastWarpCells = 0.5f, CoastWaveCells = 2.5f, CoastBandM = 3f, CoastPin = 0.35f;
         public const int MacroOctaves = 5, Chaikin = 2;
         public const int NodeQuads = 64, NodeLevels = 9;
 
@@ -167,14 +169,27 @@ namespace Stabby.World
         public static float Smooth<T>(T c, float x, float z) where T : struct, INearCells
         {
             float cm = c.CellMeters;
-            return Base(c, x / cm, z / cm);
+            return Coast(c, x / cm, z / cm);
+        }
+
+        public static float Coast<T>(T c, float gx, float gz) where T : struct, INearCells
+        {
+            float b = Base(c, gx, gz), e = Math.Abs(b);
+            if (e >= CoastBandM) return b;
+            float px = gx - (float)Math.Round(gx), pz = gz - (float)Math.Round(gz);
+            float k = CoastWarpCells * (1 - Grid.Smoothstep(0, CoastBandM, e)) * Grid.Smoothstep(0, CoastPin * CoastPin, px * px + pz * pz);
+            if (k <= 0) return b;
+            float u = gx / CoastWaveCells, v = gz / CoastWaveCells;
+            float dx = Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.CoastSeed, u, v)));
+            float dz = Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.CoastSeed, u + 57.31f, v - 23.17f)));
+            return Base(c, gx + k * dx, gz + k * dz);
         }
 
         public static float Sample<T>(T c, float x, float z) where T : struct, INearCells
         {
             int n = c.N;
             float cm = c.CellMeters, gx = x / cm, gz = z / cm;
-            float b = Base(c, gx, gz);
+            float b = Coast(c, gx, gz);
             int x0 = (int)Math.Floor(gx), z0 = (int)Math.Floor(gz);
             float tx = gx - x0, tz = gz - z0;
             int ax = Clamp(x0, n), az = Clamp(z0, n), bx = Clamp(x0 + 1, n), bz = Clamp(z0 + 1, n);

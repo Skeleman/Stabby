@@ -453,7 +453,7 @@ namespace Stabby.Game
                 var local = float4x4.TRS(new float3(part.OffsetX, part.OffsetY, part.OffsetZ) * o.Size, quaternion.identity, scale);
                 float leafTint = 0.88f + 0.24f * math.frac(o.Variant * 0.381966f + o.Z * 0.0171f + o.Size * 1.3f);
                 float hue = 2f * math.frac(o.Variant * 0.7548777f + o.X * 0.0093f + o.Z * 0.0061f) - 1f;
-                var leaf = ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor) * leafTint * (1f + hue * new float3(0.12f, 0.05f, -0.1f)), 2) : float4.zero;
+                var leaf = ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor) * leafTint * (1f + hue * new float3(0.16f, 0.06f, -0.13f)), 2) : float4.zero;
                 parts[i] = new ObjectSpawn
                 {
                     M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,

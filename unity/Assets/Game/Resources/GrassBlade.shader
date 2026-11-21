@@ -24,7 +24,7 @@ Shader "Stabby/GrassBlade"
             float4 _GrassLook;
             float4 _StabbySky, _StabbyGround;
 
-            struct Varyings { float4 positionCS : SV_POSITION; float3 color : COLOR; float3 normalWS : TEXCOORD0; float3 positionWS : TEXCOORD1; float4 look : TEXCOORD2; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 color : COLOR; float3 normalWS : TEXCOORD0; float3 positionWS : TEXCOORD1; float4 look : TEXCOORD2; float4 tint : TEXCOORD3; };
 
             Varyings vert(uint vid : SV_VertexID, uint iid : SV_InstanceID)
             {
@@ -52,10 +52,10 @@ Shader "Stabby/GrassBlade"
                 float lean = length(push);
                 float2 off = push * t * t * h;
                 float rise = h * t * rsqrt(1 + lean * lean * t * t);
-                float wid = head ? bw * (t < 0.72 ? 0.3 : lerp(0.3, 1.6, saturate(1 - abs(t - 0.86) * 7.15))) : bw * pow(saturate(1 - t), 0.7);
+                float wid = head ? bw * (t < 0.72 ? 0.3 : lerp(0.3, 0.8, saturate(1 - abs(t - 0.86) * 7.15))) : bw * pow(saturate(1 - t), 0.7 + 0.6 * dry);
                 float lum = dot(root, float3(0.2126, 0.7152, 0.0722));
-                float3 col = lerp(root, lum * float3(1.6, 1.32, 0.7), dry * smoothstep(0.5, 0.95, t));
-                col = head && t > 0.8 ? lum * float3(1.4, 1.22, 0.78) : col;
+                float3 dryCol = head ? lum * float3(1.3, 1.16, 0.8) : lum * float3(1.45, 1.24, 0.74);
+                float dw = head ? 0.85 * smoothstep(0.72, 0.97, t) : dry * smoothstep(0.55, 1, t);
                 float3 pos = b.p0.xyz + float3(off.x + across.x * side * wid * 0.5, rise, off.y + across.y * side * wid * 0.5);
                 float3 tangent = normalize(float3(push.x * 2 * t, 1, push.y * 2 * t));
                 float3 bn = normalize(cross(float3(across.x, 0, across.y), tangent));
@@ -63,7 +63,9 @@ Shader "Stabby/GrassBlade"
                 o.normalWS = normalize(lerp(gn, bn, 0.6 * t));
                 o.positionWS = pos;
                 o.positionCS = TransformWorldToHClip(pos);
-                o.color = col * (1 + _GrassLook.y * fade * t * t);
+                float glow = 1 + _GrassLook.y * fade * t * t;
+                o.color = root * glow;
+                o.tint = float4(dryCol * glow, dw);
                 o.look = float4(t, shade, fade, ComputeFogFactor(o.positionCS.z));
                 return o;
             }
@@ -77,7 +79,7 @@ Shader "Stabby/GrassBlade"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
                 float occ = 1 - 0.45 * i.look.z * (1 - smoothstep(0, 0.5, i.look.x));
-                float3 c = (LookColor(i.color, 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
+                float3 c = (LookColor(lerp(i.color, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
                 return half4(MixFog(c, i.look.w), 1);
             }
             ENDHLSL

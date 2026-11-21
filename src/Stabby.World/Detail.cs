@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -16,9 +18,17 @@ namespace Stabby.World
             n = w.Config.Size;
             cm = w.Config.CellMeters;
             var h = w.Height;
-            var dist = WetDistance(w);
+            float[] dist = null, offsets = null, bands;
+            List<RiverPiece> pieces = null;
+            int[] index = null, items = null;
+            bool strata = w.Materials != null && w.Materials.Strata.Count > 0;
+            Parallel.Invoke(
+                () => dist = WetDistance(w),
+                () => offsets = strata ? w.Materials.Offsets(w.Config) : new float[n * n],
+                () => { pieces = NearField.Pieces(w); NearField.Index(pieces, n, cm, out index, out items); });
             var amp = new float[n * n];
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
@@ -34,26 +44,22 @@ namespace Stabby.World
                     a *= Grid.Smoothstep(0.5f, 0.5f + WetFadeCells, dist[i]);
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
-            float[] offsets, bands;
+            });
             float period;
-            if (w.Materials != null && w.Materials.Strata.Count > 0)
+            if (strata)
             {
-                var strata = new StrataField(w.Config, w.Materials);
-                offsets = w.Materials.Offsets(w.Config);
+                var field = new StrataField(w.Config, w.Materials);
                 period = w.Materials.PeriodM;
                 bands = new float[BandSamples];
-                for (int k = 0; k < BandSamples; k++) bands[k] = strata.Hardness(0, k * period / BandSamples - offsets[0]);
+                for (int k = 0; k < BandSamples; k++) bands[k] = field.Hardness(0, k * period / BandSamples - offsets[0]);
             }
             else
             {
-                offsets = new float[n * n];
                 period = 1f;
                 bands = new[] { 0.5f };
             }
-            var pieces = NearField.Pieces(w);
-            NearField.Index(pieces, n, cm, out int[] start, out int[] items);
-            cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(),
-                h, amp, offsets, period, bands, pieces.ToArray(), start, items);
+            cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(), Rng.Stream(w.Config.Seed, "near-coast").NextU32(),
+                h, amp, offsets, period, bands, pieces.ToArray(), index, items);
         }
 
         public int Size => n;
@@ -62,6 +68,7 @@ namespace Stabby.World
         public uint Seed => cells.Seed;
         public uint GullySeed => cells.GullySeed;
         public uint RockSeed => cells.RockSeed;
+        public uint CoastSeed => cells.CoastSeed;
         public float Height(int cell) => cells.Height(cell);
         public float Amplitude(int cell) => cells.Amp(cell);
 
@@ -117,11 +124,11 @@ namespace Stabby.World
         readonly int[] start, items;
         readonly int n;
         readonly float cm, period;
-        readonly uint seed, gully, rock;
+        readonly uint seed, gully, rock, coast;
 
-        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items)
+        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, uint coast, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items)
         {
-            this.n = n; this.cm = cm; this.seed = seed; this.gully = gully; this.rock = rock;
+            this.n = n; this.cm = cm; this.seed = seed; this.gully = gully; this.rock = rock; this.coast = coast;
             this.h = h; this.amp = amp; this.off = off; this.period = period; this.bands = bands;
             this.pieces = pieces; this.start = start; this.items = items;
         }
@@ -131,6 +138,7 @@ namespace Stabby.World
         public uint Seed => seed;
         public uint GullySeed => gully;
         public uint RockSeed => rock;
+        public uint CoastSeed => coast;
         public float Period => period;
         public int Bands => bands.Length;
         public int PieceCount => pieces.Length;
