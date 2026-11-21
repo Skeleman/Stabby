@@ -128,6 +128,8 @@ namespace Stabby.World
         public int ChunksAcross => across;
         public ObjectLibrary Library => lib;
         public float Footprint(int def) => footprint[def];
+        public float ChunkMeters => WorldChunks.Size * cm;
+        public void ColumnsOf(ObjectInstance o, List<ObjectColumn> list) => AddColumns(lib, heights, o, list);
 
         public ObjectInstance[] Chunk(int cx, int cz)
         {
@@ -443,6 +445,19 @@ namespace Stabby.World
         public int Start(int bucket) => Starts[bucket];
         public ObjectColumn Column(int k) => Items[k];
 
+        public int Kill(ObjectField field, ObjectInstance o)
+        {
+            var cols = new List<ObjectColumn>();
+            field.ColumnsOf(o, cols);
+            int killed = 0;
+            foreach (var c in cols)
+            {
+                int k = Obstacles.Find(this, c);
+                if (k >= 0) { Items[k] = Obstacles.Dead; killed++; }
+            }
+            return killed;
+        }
+
         public static ColumnArrays Build(List<ObjectColumn> columns, float cellM = DefaultCellM)
         {
             int buckets = 64;
@@ -465,7 +480,21 @@ namespace Stabby.World
 
     public static class Obstacles
     {
+        public static readonly ObjectColumn Dead = new ObjectColumn { Bottom = float.PositiveInfinity, Top = float.NegativeInfinity };
+
         public static int Bucket(int cx, int cz, int mask) => (int)(((uint)cx * 73856093u) ^ ((uint)cz * 19349663u)) & mask;
+
+        public static bool Same(ObjectColumn a, ObjectColumn b) => a.X == b.X && a.Z == b.Z && a.R == b.R && a.Bottom == b.Bottom && a.Top == b.Top;
+
+        public static int Find<T>(T t, ObjectColumn c) where T : struct, IColumnTable
+        {
+            int mask = t.Mask;
+            if (mask < 0) return -1;
+            int b = Bucket((int)Math.Floor(c.X / t.CellM), (int)Math.Floor(c.Z / t.CellM), mask);
+            for (int k = t.Start(b), e = t.Start(b + 1); k < e; k++)
+                if (Same(t.Column(k), c)) return k;
+            return -1;
+        }
 
         public static float Top<T>(T t, float x, float z, float r, float bottom, float top) where T : struct, IColumnTable
         {
