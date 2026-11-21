@@ -421,7 +421,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float3 jn = TmN2(wa * 0.27 + 41.7, fj);
     float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
     float shore = smoothstep(5.5, 2.5, wp.y);
-    coatColor = lerp(coatColor, ToLinear(_StabbySand.rgb), smoothstep(6, 2, wp.y) * step(0, wp.y));
+    coatColor = lerp(coatColor, ToLinear(_StabbySand.rgb), smoothstep(6, 2, wp.y));
     cw = lerp(cw, float4(0, 0, 1, 0), shore);
     cw = saturate(cw * (1 + 0.8 * fj * (1 - shore) * float4(jn.x, -jn.x, jn.x * 0.5, -jn.x)));
     cw /= max(dot(cw, 1), 1e-3);
@@ -487,14 +487,15 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         o.grad += c * up * k.grad;
     }
     float wet = 0;
-    [branch] if (wp.y > 0 && wp.y < 1.2)
+    [branch] if (wp.y < 2.4)
     {
         float fw = TmFade(0.8, fp);
         float3 tide = TmLN2(wp.xz, 0.11, 7.7, 1);
         float3 dry = TmLN2(wp.xz, 0.8, 29.1, fw);
-        float top = 0.7 + 0.35 * tide.x + 0.08 * fw * dry.x;
-        wet = smoothstep(top, top - 0.25, wp.y);
-        o.albedo *= 1 - 0.3 * wet;
+        float t = saturate(wp.y / (1.75 + 0.35 * tide.x));
+        float edge = smoothstep(0.2, 1, t);
+        wet = (1 - smoothstep(0.12, 1, t)) * saturate(1 + edge * (0.5 * fw * dry.x + 0.35 * tide.x));
+        o.albedo *= 1 - 0.38 * wet;
     }
     float3 g = (o.grad - n * dot(o.grad, n)) * (1 - 0.5 * wet);
     o.grad = normalize(n - g);

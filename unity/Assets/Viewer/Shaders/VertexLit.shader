@@ -79,7 +79,7 @@ Shader "Stabby/VertexLit"
                     float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xa * _StabbyFieldUV.z + _StabbyFieldUV.w, 0);
                     float3 fn = normalize(float3(-sl.x, 1, -sl.y)), fc;
                     float fr = 0;
-                    if (h <= 0) fc = ToLinear(lerp(_StabbySand.rgb, _StabbySand.rgb * 0.6, saturate(-h / 30)));
+                    if (h <= 0) fc = ToLinear(_StabbySand.rgb) * lerp(0.62, 0.45, saturate(-h / 30));
                     else
                     {
                         float slope = sqrt(max(0, 1 - fn.y * fn.y)) / max(fn.y, 0.05), shore = saturate(1 - h / 6);
