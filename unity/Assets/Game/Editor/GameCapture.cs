@@ -17,7 +17,7 @@ namespace Stabby.Game.Editor
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 480;
-        static int settle = -1, phase, wait, smooth, chaseWait;
+        static int settle = -1, phase, wait, smooth, chaseWait, impStep;
         static readonly string only = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY");
         static bool bank, lake;
         const float UndercutMaxR = 25f;
@@ -339,7 +339,15 @@ namespace Stabby.Game.Editor
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
-                Shot(cam, dir, name);
+                Shot(cam, dir, phase == 21 && impStep > 0 ? (impStep == 1 ? "foliage-far-mesh" : "foliage-far-impostor") : name);
+                if (phase == 21 && impStep < 2)
+                {
+                    impStep++;
+                    DetailView.ImpostorScale = impStep == 1 ? 0.001f : 1000f;
+                    wait = 30;
+                    return;
+                }
+                if (phase == 21) DetailView.ImpostorScale = 1f;
                 if (phase == 19)
                     GameStatus.Lines["~bench trees"] = FoliageBench(cam, "trees filling the view");
                 if (phase == 20)
