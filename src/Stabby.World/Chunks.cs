@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 namespace Stabby.World
@@ -16,17 +17,36 @@ namespace Stabby.World
         {
             int a = Across(w.Config.Size);
             var sums = new ulong[a * a];
-            Parallel.For(0, a, cy =>
+            var pool = new ConcurrentBag<byte[]>();
+            Parallel.For(0, a, () => pool.TryTake(out var b) ? b : new byte[Size * Size * CellBytes], (cy, _, buf) =>
             {
-                var buf = new byte[Size * Size * CellBytes];
                 for (int cx = 0; cx < a; cx++) sums[cy * a + cx] = Checksum(buf, Pack(w, cx, cy, buf, 0));
-            });
+                return buf;
+            }, pool.Add);
+            return sums;
+        }
+
+        public static ulong[] EmptyChecksums(int n, bool biomes)
+        {
+            var tile = WorldFile.Empty(new WorldConfig { Size = Size, CellMeters = 1 }, biomes ? Array.Empty<string>() : null, null);
+            var buf = new byte[Size * Size * CellBytes];
+            Pack(tile, 0, 0, buf, 0);
+            int a = Across(n);
+            var sums = new ulong[a * a];
+            int lastLength = -1;
+            ulong last = 0;
+            for (int k = 0; k < sums.Length; k++)
+            {
+                int length = Bytes(n, k % a, k / a);
+                if (length != lastLength) { last = Checksum(buf, length); lastLength = length; }
+                sums[k] = last;
+            }
             return sums;
         }
 
         public static ulong Checksum(byte[] data) => Checksum(data, data.Length);
 
-        static ulong Checksum(byte[] data, int length)
+        public static ulong Checksum(byte[] data, int length)
         {
             ulong h = 14695981039346656037UL ^ Version;
             for (int k = 0; k < length; k++) { h ^= data[k]; h *= 1099511628211UL; }

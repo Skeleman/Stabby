@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.NetCode;
 
@@ -59,35 +60,48 @@ namespace Stabby.Game
             Owned.Release(build, p => { if (p.Built) p.Builder.Dispose(); });
         }
 
-        static WorldStore.SharedObjects Sort(ObjectField field, List<ObjectColumn>[] rows)
+        static WorldStore.SharedObjects Sort(ObjectField field)
         {
-            int count = 0;
-            foreach (var r in rows) count += r.Count;
-            int buckets = ColumnArrays.Buckets(count);
-            const float cell = ColumnArrays.DefaultCellM;
-            var starts = new NativeArray<int>(buckets + 1, Allocator.Persistent);
-            var items = new NativeArray<ObjectColumn>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            var at = new NativeArray<int>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            var fill = new NativeArray<int>(buckets, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            float max = 0;
-            int k = 0;
-            foreach (var r in rows)
-                foreach (var c in r)
-                {
-                    max = Math.Max(max, c.R);
-                    at[k] = Obstacles.Bucket((int)Math.Floor(c.X / cell), (int)Math.Floor(c.Z / cell), buckets - 1);
-                    starts[at[k++] + 1]++;
-                }
-            for (int b = 0; b < buckets; b++) { starts[b + 1] += starts[b]; fill[b] = starts[b]; }
-            k = 0;
-            for (int j = 0; j < rows.Length; j++)
+            var rows = new UnsafeList<ObjectColumn>[field.ChunksAcross];
+            for (int j = 0; j < rows.Length; j++) rows[j] = new UnsafeList<ObjectColumn>(0, Allocator.Persistent);
+            try
             {
-                foreach (var c in rows[j]) items[fill[at[k++]]++] = c;
-                rows[j] = null;
+                field.ColumnRows((cz, columns) =>
+                {
+                    ref var row = ref rows[cz];
+                    if (row.Capacity < row.Length + columns.Count) row.SetCapacity(Math.Max(row.Length + columns.Count, row.Capacity * 2));
+                    foreach (var c in columns) row.AddNoResize(c);
+                });
+                int count = 0;
+                foreach (var r in rows) count += r.Length;
+                int buckets = ColumnArrays.Buckets(count);
+                const float cell = ColumnArrays.DefaultCellM;
+                var starts = new NativeArray<int>(buckets + 1, Allocator.Persistent);
+                var items = new NativeArray<ObjectColumn>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                var at = new NativeArray<int>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                var fill = new NativeArray<int>(buckets, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                float max = 0;
+                int k = 0;
+                foreach (var r in rows)
+                    for (int q = 0; q < r.Length; q++)
+                    {
+                        var c = r[q];
+                        max = Math.Max(max, c.R);
+                        at[k] = Obstacles.Bucket((int)Math.Floor(c.X / cell), (int)Math.Floor(c.Z / cell), buckets - 1);
+                        starts[at[k++] + 1]++;
+                    }
+                for (int b = 0; b < buckets; b++) { starts[b + 1] += starts[b]; fill[b] = starts[b]; }
+                k = 0;
+                foreach (var r in rows)
+                    for (int q = 0; q < r.Length; q++) items[fill[at[k++]]++] = r[q];
+                at.Dispose();
+                fill.Dispose();
+                return new WorldStore.SharedObjects { Field = field, Starts = starts, Items = items, Cell = cell, Max = max };
             }
-            at.Dispose();
-            fill.Dispose();
-            return new WorldStore.SharedObjects { Field = field, Starts = starts, Items = items, Cell = cell, Max = max };
+            finally
+            {
+                for (int j = 0; j < rows.Length; j++) rows[j].Dispose();
+            }
         }
 
         (GeneratedWorld, GroundParts, WorldStore.Entry) MapReady()
@@ -114,7 +128,7 @@ namespace Stabby.Game
                     ran = true;
                     var sw = Stopwatch.StartNew();
                     var field = new ObjectField(w, parts.Detail, parts.Edits, objects);
-                    var shared = Sort(field, field.ColumnRows());
+                    var shared = Sort(field);
                     shared.Ms = sw.ElapsedMilliseconds;
                     return shared;
                 };
