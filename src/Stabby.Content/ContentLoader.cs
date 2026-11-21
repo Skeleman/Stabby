@@ -252,6 +252,9 @@ namespace Stabby.Content
                     HasColor = color != null, Color = color != null ? Hex(color) : def.Color,
                     HasLeafColor = leaf != null, LeafColor = leaf != null ? Hex(leaf) : 0,
                 };
+                string ends = p.String("ends", "auto");
+                part.Ends = Array.IndexOf(ObjectPart.EndNames, ends);
+                if (part.Ends < 0) errors.Add(id + ": part " + pid + " has unknown ends \"" + ends + "\"");
                 if (part.Solid < -1 || part.Shadows < -1) errors.Add(id + ": part " + pid + " solid/shadows must be \"\", \"on\" or \"off\"");
                 if (offset != null && offset.Length == 3) { part.OffsetX = offset[0]; part.OffsetY = offset[1]; part.OffsetZ = offset[2]; }
                 if (scale != null && scale.Length == 3) { part.ScaleX = scale[0]; part.ScaleY = scale[1]; part.ScaleZ = scale[2]; }

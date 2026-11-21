@@ -201,6 +201,7 @@ namespace Stabby.Game
             kinds = new ObjectKind[defs];
             var shapes = new List<int>();
             var keys = new List<ulong>();
+            var parts = new List<ObjectPart>();
             var impostors = new List<bool>();
             for (int d = 0; d < defs; d++)
             {
@@ -212,7 +213,7 @@ namespace Stabby.Game
                     meshBase[d][p] = count;
                     for (int v = 0; v < def.Variants; v++)
                     {
-                        shapes.Add(def.Parts[p].Shape); keys.Add(ObjectMeshes.Key(def.Id, p, v));
+                        shapes.Add(def.Parts[p].Shape); parts.Add(def.Parts[p]); keys.Add(ObjectMeshes.Key(def.Id, p, v));
                         impostors.Add(kind.ImpostorPixels > 0 && ObjectPart.IsFoliage(def.Parts[p].Shape));
                         count++;
                     }
@@ -226,12 +227,12 @@ namespace Stabby.Game
             foliageMesh = new bool[shapes.Count];
             bool anyFoliage = false;
             for (int k = 0; k < shapes.Count; k++) anyFoliage |= foliageMesh[k] = ObjectPart.IsFoliage(shapes[k]);
-            meshTask = Task.Run(() => BuildMeshes(shapes, keys, impostors));
+            meshTask = Task.Run(() => BuildMeshes(shapes, parts, keys, impostors));
             if (anyFoliage) atlasTask = Task.Run(() => LeafAtlas.Build());
             return true;
         }
 
-        static MeshSet BuildMeshes(List<int> shapes, List<ulong> keys, List<bool> impostors)
+        static MeshSet BuildMeshes(List<int> shapes, List<ObjectPart> parts, List<ulong> keys, List<bool> impostors)
         {
             int n = shapes.Count * Stride;
             var set = new MeshSet
@@ -243,7 +244,7 @@ namespace Stabby.Game
             {
                 for (int l = 0; l < Lods; l++)
                 {
-                    var m = ObjectMeshes.Build(shapes[k], keys[k], l);
+                    var m = ObjectMeshes.Build(parts[k], keys[k], l);
                     int vc = m.VertexCount, at = k * Stride + l;
                     var pos = new Vector3[vc];
                     var nor = new Vector3[vc];
