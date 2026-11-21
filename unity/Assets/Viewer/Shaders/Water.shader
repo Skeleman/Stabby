@@ -83,9 +83,11 @@ Shader "Stabby/Water"
                 float2 q = i.positionWS.xz / _WaveScale;
                 float3 w1 = NoiseD(q + float2(t, t * 0.7));
                 float3 w2 = NoiseD(q * 2.3 + float2(-t * 1.3, t * 0.4));
-                float3 w3 = NoiseD(q * 7.1 + float2(t * 2.1, -t * 1.7));
                 float fade = saturate(1.5 - dist / (_WaveScale * 120));
-                float2 g = (w1.yz + 0.5 * w2.yz + 0.2 * w3.yz * fade) * _WaveStrength * (0.35 + 0.65 * fade);
+                float2 g = w1.yz + 0.5 * w2.yz;
+                UNITY_BRANCH if (fade > 0)
+                    g += 0.2 * fade * NoiseD(q * 7.1 + float2(t * 2.1, -t * 1.7)).yz;
+                g *= _WaveStrength * (0.35 + 0.65 * fade);
                 float3 n = normalize(float3(-g.x, 1, -g.y));
 
                 float3 deep = i.color.rgb;
@@ -103,8 +105,9 @@ Shader "Stabby/Water"
                 c += l.color * pow(saturate(dot(n, h)), 240) * 1.5;
 
                 float edge = saturate(1 - depth / max(_Foam, 0.01));
-                float foamNoise = NoiseD(i.positionWS.xz * 0.8 + t * 0.5).x;
-                float foam = edge * smoothstep(0.55, 0.75, foamNoise + 0.5 * edge);
+                float foam = 0;
+                UNITY_BRANCH if (edge > 0)
+                    foam = edge * smoothstep(0.55, 0.75, NoiseD(i.positionWS.xz * 0.8 + t * 0.5).x + 0.5 * edge);
                 c = lerp(c, l.color * 0.9 + sky * 0.2, foam * 0.7);
 
                 float alpha = lerp(lerp(0.8, 0.97, k), 1, fres * 0.6) * saturate(depth / max(_Shore, 0.01));
