@@ -741,10 +741,14 @@ TmOut TmEarth(float3 wp, float3 n, float3 base, float fp)
     return o;
 }
 
-float TmFloorCover(float2 p, float4 fo)
+float2 TmFloorCover(float2 p, float4 fo, float fp)
 {
-    float pn = 0.6 * TmL2(p, 0.031, 91.3).x + 0.4 * TmL2(p, 0.11, 93.7).x + 0.08 * TmL2(p, 0.6, 95.1).x;
-    return smoothstep(0.1, 0.42, fo.r + fo.g + 0.22 * pn);
+    float d = smoothstep(0.0, 0.75, fo.r + fo.g + 0.08 * TmL2(p, 0.031, 91.3).x);
+    float fe = TmFade(1.1, fp), fs = TmFade(2.9, fp);
+    float2 wq = p + 2.4 * float2(TmL2(p, 0.15, 85.3).x, TmL2(p, 0.15, 86.9).x);
+    float pn = 0.55 * TmL2(wq, 0.42, 93.7).x + 0.3 * fe * TmL2(wq, 1.1, 95.1).x + 0.15 * fs * TmLN2(p, 2.9, 96.7, fs).x;
+    float fm = TmFade(0.42, fp);
+    return float2(max(lerp(0.7 * smoothstep(0.1, 0.9, d), smoothstep(0.38, 0.62, d + 0.75 * pn), fm), 0.6 * smoothstep(0.55, 0.95, d)), d);
 }
 
 float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
@@ -764,10 +768,15 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
             float mo = 0.5 * dr.x + 0.35 * hm.x + 0.3 * fc * cl.x + 0.2 * fl * lf.x + 0.1 * fx * lx.x;
             float pile = smoothstep(-0.55, 0.3, mo + 0.15 * fl * lf.x);
             float t = saturate(0.5 + 0.55 * (fc * cl.x + 0.8 * fl * lf.x + 0.5 * fx * lx.x - 0.4 * dr.x));
-            float3 leaf = lerp(float3(0.08, 0.046, 0.027), float3(0.13, 0.074, 0.038), t);
-            float3 hum = lerp(float3(0.034, 0.023, 0.016), float3(0.05, 0.031, 0.019), saturate(0.5 + 0.5 * hm.x));
+            float3 leaf = lerp(float3(0.094, 0.056, 0.032), float3(0.15, 0.088, 0.045), t);
+            float3 hum = lerp(float3(0.052, 0.036, 0.023), float3(0.072, 0.047, 0.028), saturate(0.5 + 0.5 * hm.x));
             float3 cb = lerp(hum, leaf, pile) * (1 + 0.24 * fx * lx.x + 0.14 * fl * lf.x);
             cb = lerp(cb, lerp(hum, leaf, 0.55), 0.35 * (1 - fa));
+            float4 dl = TmFleck(p, float2x2(1, 0.6, -0.6, 1), 14, fp, 53, 0.1, 0.3, 0.3);
+            float4 sg = TmFleck(p, float2x2(1, -0.4, 0.4, 1), 27, fp, 59, 0.08, 0.2, 0.25);
+            cb = lerp(cb, float3(0.19, 0.12, 0.066) * (1 + 0.15 * dl.x), 0.7 * dl.w);
+            cb = lerp(cb, hum * 0.75, 0.6 * sg.w * (1 - dl.w));
+            g += bd * (0.06 * dl.yz + 0.03 * sg.yz);
             c += bd * cb;
             g += bd * (0.05 * fc * cl.yz + 0.04 * fl * lf.yz + 0.02 * fx * lx.yz);
         }
@@ -881,7 +890,8 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float br = 0.3 * fj * jn.x + 0.35 * fk * jk.x;
     float sl = min(n.y, face);
     float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
-    float fb = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo);
+    float2 fl2 = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo, fp);
+    float fb = fl2.y;
     float bf = br * (1 - 0.85 * fb);
     float m = saturate(max((rockMix * (1 - 0.8 * fb) - 0.5) * 1.6 + 0.5 + bf, 1 - smoothstep(0.5, 0.72, sl + 0.4 * bf)));
     TmOut o;
@@ -921,13 +931,21 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += lerp(coatColor, grassColor, cw.x) * (1 - kept);
         float can = smoothstep(0.08, 0.35, fo.r + fo.g) * cw.x;
-        k.albedo = lerp(k.albedo, dot(k.albedo, float3(0.2126, 0.7152, 0.0722)) * float3(1.25, 0.95, 0.68) * 0.8, 0.6 * can);
-        float cov = TmLitter(k, wp, fo, fp, fb);
+        k.albedo = lerp(k.albedo, dot(k.albedo, float3(0.2126, 0.7152, 0.0722)) * float3(1.25, 0.95, 0.68) * 0.67, 0.6 * can);
+        float cov = TmLitter(k, wp, fo, fp, fl2.x);
         lc = cov * up;
         mr = TmMicro(wp.xz, fp) * dot(cw, float4(1, 1, 0.3, 0.5));
         k.albedo *= 1 + 0.1 * mr.x;
         k.grad += float3(mr.y, 0, mr.z);
-        float bare = saturate(cw.y + cw.z) * (1 - cw.x) * (1 - cov);
+        float bare = saturate(saturate(cw.y + cw.z) * (1 - cw.x) + can) * (1 - cov);
+        [branch] if (can * (1 - cov) > 0.01)
+        {
+            float4 s1 = TmFleck(wp.xz, float2x2(1, 0.3, -0.3, 1), 9, fp, 43, 0.08, 0.2, 0.15 + 0.35 * can);
+            float4 s2 = TmFleck(wp.xz, float2x2(1, -0.8, 0.8, 1), 15, fp, 47, 0.08, 0.18, 0.1 + 0.3 * can);
+            float sp = saturate(s1.w + s2.w) * (1 - cov);
+            k.albedo = lerp(k.albedo, k.albedo * lerp(float3(0.62, 0.52, 0.42), float3(1.25, 1.08, 0.85), saturate(0.5 + 0.8 * (s1.x + s2.x))), 0.6 * sp);
+            k.grad += (1 - cov) * 0.04 * float3(s1.y + s2.y, 0, s1.z + s2.z);
+        }
         [branch] if (bare > 0.01)
         {
             float4 g1 = TmFleck(wp.xz, float2x2(1, 0, 0, 1), 41, fp, 23, 0.12, 0.32, 1);
