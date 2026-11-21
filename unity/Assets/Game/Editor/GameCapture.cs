@@ -15,7 +15,7 @@ namespace Stabby.Game.Editor
     public static class GameCapture
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
-        const double TimeoutSeconds = 240;
+        const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait;
         static bool bank;
         const float UndercutMaxR = 25f;
