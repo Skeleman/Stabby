@@ -150,7 +150,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : 1;
+                phase = only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "forest" ? 50 : 1;
             }
             while (phase <= 6)
             {
@@ -417,7 +417,24 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "biomes")
+            while (phase >= 50 && phase < 50 + 2 * ForestShots.Length)
+            {
+                int fk = (phase - 50) / 2;
+                bool mid = (phase - 50) % 2 == 1;
+                string name = "forest-" + ForestShots[fk] + (mid ? "-mid" : "-close");
+                if (wait == 0)
+                {
+                    if (!AimBiome(cam, ForestShots[fk]) || !AimForest(cam, ForestShots[fk], mid)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
+            if (only == "biomes" || only == "forest")
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1063,6 +1080,65 @@ namespace Stabby.Game.Editor
         static readonly string[] CloseNames = { "rock", "grass", "sand", "snow" };
 
         static readonly string[] BiomeShots = { "tundra", "alpine", "desert", "cold-desert", "savanna", "steppe" };
+
+        static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };
+
+        static bool AimForest(Camera cam, string id, bool mid)
+        {
+            var near = cam.transform.position + new Vector3(0.77f, 0, 0.64f) * 24f;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var map = w.GetExistingSystemManaged<ClientMapSystem>().Map;
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                int b = System.Array.IndexOf(map.BiomeIds, id), n = map.Config.Size, across = field.ChunksAcross;
+                float cm = map.Config.CellMeters, span = WorldChunks.Size * cm;
+                var trees = new System.Collections.Generic.List<Vector2>();
+                int ncx = (int)(near.x / span), ncz = (int)(near.z / span);
+                for (int cz = Mathf.Max(0, ncz - 1); cz <= Mathf.Min(across - 1, ncz + 1); cz++)
+                    for (int cx = Mathf.Max(0, ncx - 1); cx <= Mathf.Min(across - 1, ncx + 1); cx++)
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            bool tree = false;
+                            foreach (var part in field.Library.Objects[o.Def].Parts) tree |= part.Shape == ObjectPart.Broadleaf || part.Shape == ObjectPart.Conifer;
+                            int gx = Mathf.Clamp((int)(o.X / cm), 0, n - 1), gz = Mathf.Clamp((int)(o.Z / cm), 0, n - 1);
+                            if (tree && map.Biome[gz * n + gx] == b && (new Vector2(o.X - near.x, o.Z - near.z)).sqrMagnitude < 360000f) trees.Add(new Vector2(o.X, o.Z));
+                        }
+                if (trees.Count == 0) return false;
+                int best = -1;
+                float score = float.MinValue;
+                for (int k = 0; k < trees.Count; k += Mathf.Max(1, trees.Count / 1500))
+                {
+                    int count = 0;
+                    foreach (var t in trees) if ((t - trees[k]).sqrMagnitude < 400f) count++;
+                    float hx = ground.HeightAt(trees[k].x + 6, trees[k].y) - ground.HeightAt(trees[k].x - 6, trees[k].y), hz = ground.HeightAt(trees[k].x, trees[k].y + 6) - ground.HeightAt(trees[k].x, trees[k].y - 6);
+                    float sc = count - 0.002f * (trees[k] - new Vector2(near.x, near.z)).magnitude - 2f * Mathf.Sqrt(hx * hx + hz * hz);
+                    if (sc > score) { score = sc; best = k; }
+                }
+                var c = trees[best];
+                Vector3 dir = Vector3.zero, target = Vector3.zero, eye = Vector3.zero;
+                float clear = -1;
+                for (int a = 0; a < 16; a++)
+                {
+                    var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(0.77f, 0, 0.64f);
+                    var t = new Vector3(c.x, 0, c.y) + new Vector3(-d.z, 0, d.x) * 3f;
+                    var e = t - d * (mid ? 22f : 3.5f);
+                    float m = float.MaxValue;
+                    foreach (var tr in trees)
+                        for (float s = 0; s <= 1; s += 0.25f)
+                            m = Mathf.Min(m, (tr - Vector2.Lerp(new Vector2(e.x, e.z), new Vector2(t.x, t.z), s)).sqrMagnitude);
+                    if (m > clear) { clear = m; dir = d; target = t; eye = e; }
+                }
+                eye.y = ground.HeightAt(eye.x, eye.z) + (mid ? 5f : 1.6f);
+                var aim = target + dir * (mid ? 4f : 1.5f);
+                aim.y = ground.HeightAt(aim.x, aim.z);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
+                GameStatus.Lines["~aim forest " + id] = $"{id} stand at {c.x:F0},{c.y:F0}, {trees.Count} trees searched, score {score:F1}";
+                return true;
+            }
+            return false;
+        }
 
         static bool AimBiome(Camera cam, string id)
         {

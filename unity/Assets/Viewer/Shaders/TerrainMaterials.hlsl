@@ -10,6 +10,8 @@ TEXTURE2D(_StabbyCoat);
 SAMPLER(sampler_StabbyCoat);
 TEXTURE2D(_StabbyWaterLevel);
 SAMPLER(sampler_StabbyWaterLevel);
+TEXTURE2D(_StabbyForest);
+SAMPLER(sampler_StabbyForest);
 
 static float3 tmO;
 static float tmGrass;
@@ -590,40 +592,81 @@ TmOut TmEarth(float3 wp, float3 n, float3 base, float fp)
     return o;
 }
 
-void TmLitter(inout TmOut k, float3 wp, float3 base, float fp, float w)
+float TmFloorCover(float2 p, float4 fo)
 {
-    float fo = w * smoothstep(0.3, 0.2, dot(base, float3(0.2126, 0.7152, 0.0722)));
-    [branch] if (fo > 0.01)
+    float pn = 0.6 * TmL2(p, 0.031, 91.3).x + 0.4 * TmL2(p, 0.11, 93.7).x + 0.08 * TmL2(p, 0.6, 95.1).x;
+    return smoothstep(0.1, 0.42, fo.r + fo.g + 0.22 * pn);
+}
+
+float3 TmLeaf(float4 s)
+{
+    float t = 0.5 + 0.5 * s.x / max(s.w, 1e-3);
+    float3 c = t < 0.5 ? lerp(float3(0.15, 0.06, 0.026), float3(0.1, 0.056, 0.03), t * 2) : lerp(float3(0.1, 0.056, 0.03), float3(0.17, 0.11, 0.055), t * 2 - 1);
+    return c * (0.85 + 0.3 * frac(t * 7.31));
+}
+
+float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
+{
+    [branch] if (cov > 0.01)
     {
-        float2 p = wp.xz, g = 0;
-        float nd = smoothstep(1.2, 1.4, base.b / max(base.r, 1e-3));
-        float fl = TmFade(0.7, fp);
-        float3 lp = TmLN2(p, 0.7, 27.1, fl);
-        float lit = fo * (0.16 + 0.3 * fl * smoothstep(-0.2, 0.7, lp.x)), t = 0.45;
-        float fn = TmFade(14, fp) * nd;
-        [branch] if (fn > 0)
+        float2 p = wp.xz;
+        float nd = fo.g / max(fo.r + fo.g, 1e-3), bd = 1 - nd;
+        float fh = TmFade(0.5, fp), fd = TmFade(1.6, fp);
+        float3 hm = TmLN2(p, 0.5, 27.1, fh), dr = TmLN2(p, 1.6, 29.3, fd);
+        float3 c = 0;
+        float2 g = 0.1 * hm.yz + 0.05 * dr.yz;
+        [branch] if (bd > 0.01)
         {
-            float2 g1, g2;
-            float3 b1 = TmBlade(p, float2(0.8, 0.6), 14, 0, g1);
-            float3 b2 = TmBlade(p, float2(-0.6, 0.8), 19, 0, g2);
-            t += fn * 0.35 * (max(b1.x, b2.x) - 0.2);
-            g += fn * 0.04 * (b1.x > b2.x ? g1 / 14 : g2 / 19);
+            float fa = TmFade(24, fp), dens = saturate(0.55 + 0.5 * dr.x + 0.3 * hm.x);
+            float3 mb = float3(0.074, 0.045, 0.026) * (1 + 0.12 * hm.x);
+            float3 cb = lerp(mb, float3(0.032, 0.022, 0.015), fa * (1 - 0.4 * dens));
+            float4 l1 = TmFleck(p, float2x2(1, 0.4, -0.4, 1), 6, fp, 53, 0.22, 0.42, 0.8 * dens);
+            float4 l2 = TmFleck(p, float2x2(1, -0.6, 0.6, 1), 9, fp, 59, 0.2, 0.4, 0.7 * dens);
+            float4 l3 = TmFleck(p, float2x2(1, 0.9, -0.9, 1), 14, fp, 61, 0.18, 0.36, 0.6 * dens);
+            cb = lerp(cb, TmLeaf(l1), l1.w);
+            cb = lerp(cb, TmLeaf(l2), l2.w);
+            cb = lerp(cb, TmLeaf(l3), l3.w);
+            c += bd * cb;
+            g += bd * (0.05 * l1.yz + 0.04 * l2.yz + 0.03 * l3.yz);
         }
-        float fv = 1 - nd;
-        [branch] if (fv > 0.01)
+        [branch] if (nd > 0.01)
         {
-            float4 a = TmFleck(p, float2x2(1, 0.4, -0.4, 1), 6, fp, 53, 0.2, 0.42, 0.7);
-            float4 b = TmFleck(p, float2x2(1, -0.6, 0.6, 1), 9, fp, 59, 0.16, 0.34, 0.55);
-            float4 s = a.w >= b.w ? a : b;
-            lit = lerp(lit, fo * 0.9, fv * s.w * (0.5 + 0.5 * fl * smoothstep(-0.5, 0.5, lp.x)));
-            t = lerp(t, 0.5 + 0.45 * s.x / max(s.w, 1e-3), fv * s.w);
-            g += fv * 0.08 * s.yz;
+            float fn = TmFade(22, fp);
+            float3 mc = float3(0.068, 0.048, 0.034) * (1 + 0.14 * hm.x + 0.08 * dr.x);
+            float3 cn = mc;
+            [branch] if (fn > 0)
+            {
+                float2 g1, g2, g3;
+                float3 wv = float3(2.5 * dr.x + 1.5 * hm.x, 0, 0);
+                float3 b1 = TmBlade(p, float2(0.8, 0.6), 22, wv, g1);
+                float3 b2 = TmBlade(p, float2(-0.6, 0.8), 31, wv * 1.3, g2);
+                float3 b3 = TmBlade(p, float2(0.2, -0.98), 47, wv * 0.7, g3);
+                float t = max(b1.x, max(b2.x, b3.x));
+                float3 sc = lerp(float3(0.045, 0.033, 0.025), float3(0.11, 0.072, 0.047), smoothstep(-0.3, 0.6, t));
+                cn = lerp(mc, sc * (1 + 0.14 * hm.x), 0.75 * fn);
+                g += nd * fn * 0.03 * (b1.x > b2.x ? g1 / 22 : g2 / 31);
+            }
+            float4 cone = TmFleck(p, float2x2(1, 0.7, -0.7, 1), 2.2, fp, 101, 0.26, 0.4, 0.1);
+            cn = lerp(cn, float3(0.05, 0.03, 0.018), 0.85 * cone.w);
+            g += nd * 0.1 * cone.yz;
+            c += nd * cn;
         }
-        float3 dk = lerp(float3(0.085, 0.052, 0.026), float3(0.075, 0.042, 0.022), nd);
-        float3 lt = lerp(float3(0.19, 0.12, 0.05), float3(0.15, 0.088, 0.045), nd);
-        k.albedo = lerp(k.albedo, lerp(dk, lt, saturate(t)), lit);
-        k.grad += fo * float3(g.x, 0, g.y);
+        float fm = TmFade(0.4, fp), fs = TmFade(1.3, fp), fg = TmFade(6, fp);
+        float3 m1 = TmLN2(p, 0.4, 97.3, fm), m2 = TmLN2(p, 1.3, 98.9, fs), mg = TmLN2(p, 6, 99.7, fg);
+        float mv = 0.7 * m1.x + 0.3 * m2.x + 0.1 * fg * mg.x;
+        float moss = smoothstep(0.1, 0.6, fo.b) * smoothstep(0, 0.25, mv + 0.5 * fo.b - 0.2);
+        [branch] if (moss > 0.01)
+        {
+            float3 mossC = lerp(float3(0.035, 0.06, 0.018), float3(0.085, 0.115, 0.03), saturate(0.5 + 0.5 * mg.x * fg + 0.3 * m2.x));
+            c = lerp(c, mossC, moss);
+            g = lerp(g, 0.18 * (0.7 * m1.yz + 0.3 * m2.yz) + 0.05 * fg * mg.yz, moss);
+        }
+        float fc = 1 - TmFade(0.12, fp);
+        c = lerp(c, lerp(float3(0.05, 0.075, 0.028), float3(0.032, 0.055, 0.03), nd) * (1 + 0.1 * hm.x), fc);
+        k.albedo = lerp(k.albedo, c, cov);
+        k.grad = lerp(k.grad, float3(g.x, 0, g.y), cov);
     }
+    return cov;
 }
 
 void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float stone, float m)
@@ -637,7 +680,7 @@ void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float
     float stain = stone * saturate(0.4 + 0.4 * dry + 0.3 * wet) * side * fl * smoothstep(0.15, 0.6, streak.x) * smoothstep(-0.4, 0.2, -patch.x) * (1 - moss);
     float dust = stone * dry * top * fm * smoothstep(0, 0.5, patch.x) * (1 - moss);
     float frost = stone * cw.w * smoothstep(0.55, 0.85, n.y);
-    float3 mossC = lerp(float3(0.045, 0.07, 0.02), float3(0.09, 0.11, 0.03), saturate(0.5 + fm * patch.y));
+    float3 mossC = lerp(float3(0.035, 0.06, 0.018), float3(0.085, 0.115, 0.03), saturate(0.5 + fm * patch.y));
     float lum = dot(o.albedo, float3(0.2126, 0.7152, 0.0722));
     o.albedo = lerp(o.albedo, m * mossC, moss);
     o.albedo = lerp(o.albedo, lum * float3(1.06, 1.06, 0.9) * 1.2, 0.4 * lichen);
@@ -677,7 +720,9 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float3 jk = TmN2(wa * 1.3 + 13.9, fk);
     float br = 0.3 * fj * jn.x + 0.35 * fk * jk.x;
     float sl = min(n.y, face);
-    float m = saturate(max((rockMix - 0.5) * 1.6 + 0.5 + br, 1 - smoothstep(0.5, 0.72, sl + 0.4 * br)));
+    float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    float fb = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo);
+    float m = saturate(max((rockMix * (1 - 0.8 * fb) - 0.5) * 1.6 + 0.5 + br, 1 - smoothstep(0.5, 0.72, sl + 0.4 * br)));
     TmOut o;
     tmRough = LookRough();
     [branch] if (_StabbyDetailOff > 0)
@@ -694,6 +739,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     [branch] if (stone > 0.01) TmStoneCover(o, wp, n, cw, fp, stone, m);
     float c = 1 - m;
     float3 mr = 0;
+    float lc = 0;
     float scr = saturate(6 * m * (1 - m)) * smoothstep(0.95, 0.6, sl);
     float up = saturate((sl - 0.3) / 0.25), ew = 1 - saturate(cw.z + cw.w);
     TmOut e;
@@ -713,11 +759,12 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         if (cw.w > 0.02) TmAdd(k, TmSnow(wp, n, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += lerp(coatColor, grassColor, cw.x) * (1 - kept);
-        TmLitter(k, wp, grassColor, fp, cw.x);
+        float cov = TmLitter(k, wp, fo, fp, fb);
+        lc = cov * up;
         mr = TmMicro(wp.xz, fp) * dot(cw, float4(1, 1, 0.3, 0.5));
         k.albedo *= 1 + 0.1 * mr.x;
         k.grad += float3(mr.y, 0, mr.z);
-        float bare = saturate(cw.y + cw.z) * (1 - cw.x);
+        float bare = saturate(cw.y + cw.z) * (1 - cw.x) * (1 - cov);
         [branch] if (bare > 0.01)
         {
             float4 g1 = TmFleck(wp.xz, float2x2(1, 0, 0, 1), 41, fp, 23, 0.12, 0.32, 1);
@@ -726,10 +773,11 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
             k.albedo *= 1 + bare * (0.06 * g1.x + 0.05 * g2.x - 0.12 * g3.w);
             k.grad += bare * 0.12 * float3(g2.y, 0, g2.z);
         }
-        tmGrass = c * up * cw.x;
+        tmGrass = c * up * cw.x * (1 - cov);
         o.albedo += c * lerp(bank * (1 + 0.1 * mr.x), k.albedo, up);
         o.grad += c * (up * k.grad + (1 - up) * ew * e.grad);
     }
+    scr *= 1 - lc;
     [branch] if (scr > 0.01)
     {
         float3 sm = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(0.5, 0.5), 12).rgb;
