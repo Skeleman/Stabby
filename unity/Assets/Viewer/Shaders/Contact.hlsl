@@ -8,14 +8,14 @@ float4 _StabbyContactUV;
 float3 ContactTint(float3 g)
 {
     float l = dot(g, float3(0.2126, 0.7152, 0.0722));
-    return lerp(g, l.xxx, 0.45) * float3(0.37, 0.35, 0.33);
+    return max(0, lerp(l.xxx, g, 1.2)) * 0.36;
 }
 
 float3 ContactColor(float2 xz, float h)
 {
     float3 g = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
     g = lerp(g, ToLinear(_StabbySand.rgb), smoothstep(6, 2, h));
-    return ContactTint(lerp(g, dot(g, float3(0.2126, 0.7152, 0.0722)).xxx, 0.4));
+    return ContactTint(g);
 }
 
 float ContactBed(float2 xz)
