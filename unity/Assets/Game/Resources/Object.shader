@@ -393,13 +393,15 @@ Shader "Stabby/Object"
                     Wood(i.local, n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, wp, gw, albedo, n);
                 }
                 float size = max(fade.w, 0.1), ground = fade.z;
+                float4x4 mm = UNITY_MATRIX_M;
+                float thick = abs(mm._m10) + abs(mm._m11) + abs(mm._m12);
                 [branch] if (_StabbyFieldUV.x > 0)
                 {
                     ground += ContactBed(wp.xz) - ContactBed(i.origin.xz);
-                    albedo = ContactObject(albedo, wp, ground, size);
+                    albedo = ContactObject(albedo, wp, ground, size, thick);
                 }
                 float above = max(wp.y - ground, 0);
-                float ao = lerp(0.85, 1, smoothstep(0, min(0.9, 0.6 * size), above)) * lerp(1, 0.5, saturate(-n.y)) * (1 - 0.4 * occ);
+                float ao = lerp(0.85, 1, smoothstep(0, min(min(0.9, 0.6 * size), thick), above)) * lerp(1, 0.5, saturate(-n.y)) * (1 - 0.4 * occ);
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp));
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)

@@ -35,14 +35,24 @@ float3 ContactGround(float3 albedo, float2 xz, float h)
     return lerp(albedo, ContactTint(albedo), 0.75 * k * k * (3 - 2 * k));
 }
 
-float3 ContactObject(float3 albedo, float3 wp, float ground, float size)
+float ContactBand(float size, float thick)
+{
+    return min(min(0.5, 0.14 + 0.22 * size), 0.8 * thick);
+}
+
+float3 ContactObject(float3 albedo, float3 wp, float ground, float size, float thick)
 {
     float above = wp.y - ground;
     [branch] if (above > 0.8) return albedo;
     float n = TmNoise2(wp.xz * 2.3 + wp.y * 1.7).x + 0.5 * TmNoise2(float2(wp.x - wp.z, wp.y) * 7.1 + 5.3).x;
-    float band = min(0.5, 0.14 + 0.22 * size) * (1 + 0.4 * n);
+    float band = ContactBand(size, thick) * (1 + 0.4 * n);
     float k = 1 - smoothstep(-0.04, band, above);
     return lerp(albedo, ContactColor(wp.xz, ground), 0.8 * k * k);
+}
+
+float3 ContactObject(float3 albedo, float3 wp, float ground, float size)
+{
+    return ContactObject(albedo, wp, ground, size, 1e4);
 }
 
 #endif
