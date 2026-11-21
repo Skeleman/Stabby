@@ -307,12 +307,12 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 18 && phase <= 20)
+            while (phase >= 18 && phase <= 21)
             {
-                string name = phase == 18 ? "foliage-close" : phase == 19 ? "foliage-mid" : "foliage-far";
+                string name = FoliageShots[phase - 18];
                 if (wait == 0)
                 {
-                    if (!AimFoliage(cam, phase - 18)) { GameStatus.Lines["~" + name] = "no foliage placed"; phase++; continue; }
+                    if (!AimFoliage(cam, FoliageRanges[phase - 18])) { GameStatus.Lines["~" + name] = "no foliage placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -320,6 +320,8 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 19)
+                    GameStatus.Lines["~bench trees"] = FoliageBench(cam, "trees filling the view");
+                if (phase == 20)
                 {
                     AimFoliage(cam, 3);
                     Shot(cam, dir, "foliage-bench");
@@ -580,7 +582,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly float[] FoliageBack = { 2.4f, 14f, 60f, 5f }, FoliageUp = { 0.5f, 3f, 14f, 7f };
+        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -597,25 +601,57 @@ namespace Stabby.Game.Editor
                     {
                         if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
                         foreach (var o in field.Chunk(cx, cz))
-                            if (field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
                     }
                 if (near.Count == 0) return false;
+                bool scaled = range == 0 || range == 4;
                 ObjectInstance pick = default;
                 int crowd = 0;
                 var cells = new System.Collections.Generic.Dictionary<long, int>();
                 long Cell(float x, float z) => ((long)Mathf.FloorToInt(x / 12f) << 32) ^ (uint)Mathf.FloorToInt(z / 12f);
                 foreach (var o in near) { long c = Cell(o.X, o.Z); cells.TryGetValue(c, out int k); cells[c] = k + 1; }
+                bool clear = range == 1 || range == 4;
+                if (clear) scaled = true;
+                var ranked = new System.Collections.Generic.List<(float score, ObjectInstance o, int around)>();
                 foreach (var o in near)
                 {
                     int around = cells[Cell(o.X, o.Z)];
+                    if (range == 1 && field.Library.Objects[o.Def].Parts.TrueForAll(p => p.Shape < ObjectPart.Broadleaf)) continue;
                     float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude - 40f * Mathf.Min(around, 12) - 30f * o.Size;
+                    ranked.Add((score, o, around));
                     if (score < best) { best = score; pick = o; crowd = around; }
                 }
+                if (ranked.Count == 0) return false;
+                var dirXZ = new Vector3(-0.77f, 0, -0.64f);
+                float BackOf(ObjectInstance o) => FoliageBack[range] * (scaled ? Mathf.Max(1f, o.Size) : 1f);
+                if (clear)
+                {
+                    ranked.Sort((a, b) => a.score.CompareTo(b.score));
+                    bool found = false;
+                    for (int r = 0; r < Mathf.Min(ranked.Count, 60) && !found; r++)
+                        for (int a = 0; a < 16 && !found; a++)
+                        {
+                            var c = ranked[r].o;
+                            var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(-0.77f, 0, -0.64f);
+                            float len = BackOf(c);
+                            bool open = true;
+                            foreach (var o in near)
+                            {
+                                if (o.Id == c.Id) continue;
+                                var rel = new Vector2(o.X - c.X, o.Z - c.Z);
+                                float along = Vector2.Dot(rel, new Vector2(d.x, d.z));
+                                if (along < -1f || along > len + o.Size * 0.4f) continue;
+                                float off = (rel - new Vector2(d.x, d.z) * along).magnitude;
+                                if (off < 0.4f * o.Size + 0.25f * c.Size) { open = false; break; }
+                            }
+                            if (open) { pick = c; crowd = ranked[r].around; dirXZ = d; found = true; }
+                        }
+                }
                 var target = new Vector3(pick.X, pick.Y + pick.Size * 0.45f, pick.Z);
-                float back = FoliageBack[range] * (range == 0 ? Mathf.Max(1f, pick.Size) : 1f);
-                var eye = target + new Vector3(-0.77f, 0, -0.64f) * back + Vector3.up * FoliageUp[range] * (range == 0 ? Mathf.Max(1f, pick.Size) : 1f);
+                float back = BackOf(pick);
+                var eye = target + dirXZ * back + Vector3.up * FoliageUp[range] * (scaled ? Mathf.Max(1f, pick.Size) : 1f);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
-                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.2f);
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + (range == 2 ? 10f : 1.2f));
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim foliage " + range] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0} with {crowd} foliage in its 12 m cell, eye {back:F0} m back";
                 return true;

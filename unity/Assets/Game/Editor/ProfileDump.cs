@@ -17,7 +17,7 @@ namespace Stabby.Game.Editor
             var frames = new List<(int f, float ms)>();
             for (int f = ProfilerDriver.firstFrameIndex; f <= ProfilerDriver.lastFrameIndex; f++)
                 using (var v = ProfilerDriver.GetHierarchyFrameDataView(f, 0, HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName, HierarchyFrameDataView.columnTotalTime, false))
-                    if (v.valid) frames.Add((f, v.frameTimeMs));
+                    if (v.valid) frames.Add((f, v.frameTimeMs - Named(v, v.GetRootItemID(), "GameCapture.Poll")));
             sb.AppendLine($"{frames.Count} frames, first {ProfilerDriver.firstFrameIndex}");
             foreach (var (f, ms) in frames.OrderByDescending(x => x.ms).Take(8))
             {
@@ -70,6 +70,16 @@ namespace Stabby.Game.Editor
             }
             Visit(root);
             return true;
+        }
+
+        static float Named(HierarchyFrameDataView v, int id, string part)
+        {
+            var kids = new List<int>();
+            v.GetItemChildren(id, kids);
+            float sum = 0;
+            foreach (int k in kids)
+                sum += v.GetItemName(k).Contains(part) ? v.GetItemColumnDataAsFloat(k, HierarchyFrameDataView.columnTotalTime) : Named(v, k, part);
+            return sum;
         }
 
         static void Walk(HierarchyFrameDataView v, int id, int depth, float min, StringBuilder sb)

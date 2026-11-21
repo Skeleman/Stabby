@@ -36,9 +36,34 @@ namespace Stabby.Game
             if (materials != null) foreach (var m in materials) Object.Destroy(m);
         }
 
-        void Load()
+        Shader shader;
+        int warmed;
+
+        bool Warm()
         {
+            int n = Colors.Length;
+            if (warmed > 1 + 2 * n) return true;
+            if (frames <= 10) return false;
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
+            if (warmed == 0)
+            {
+                shader = Shader.Find("Universal Render Pipeline/Lit");
+                materials = new Material[n];
+                materialIds = new BatchMaterialID[n];
+            }
+            else if (warmed == 1) LoadMesh(graphics);
+            else
+            {
+                int k = (warmed - 2) / 2;
+                if ((warmed & 1) == 0) materials[k] = new Material(shader) { color = Colors[k] };
+                else materialIds[k] = graphics.RegisterMaterial(materials[k]);
+            }
+            warmed++;
+            return false;
+        }
+
+        void LoadMesh(EntitiesGraphicsSystem graphics)
+        {
             var prim = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             var src = prim.GetComponent<MeshFilter>().sharedMesh;
             var verts = src.vertices;
@@ -48,22 +73,13 @@ namespace Stabby.Game
             Object.Destroy(prim);
             bounds = new AABB { Center = mesh.bounds.center, Extents = mesh.bounds.extents };
             meshId = graphics.RegisterMesh(mesh);
-            var shader = Shader.Find("Universal Render Pipeline/Lit");
-            materials = new Material[Colors.Length];
-            materialIds = new BatchMaterialID[Colors.Length];
-            for (int k = 0; k < Colors.Length; k++)
-            {
-                materials[k] = new Material(shader) { color = Colors[k] };
-                materialIds[k] = graphics.RegisterMaterial(materials[k]);
-            }
         }
 
         protected override void OnUpdate()
         {
             Frames();
-            if (!unshown.IsEmpty)
+            if (Warm() && !unshown.IsEmpty)
             {
-                if (mesh == null) Load();
                 var es = unshown.ToEntityArray(Allocator.Temp);
                 var desc = new RenderMeshDescription(ShadowCastingMode.On);
                 foreach (var e in es)
