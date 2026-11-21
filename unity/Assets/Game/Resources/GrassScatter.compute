@@ -104,9 +104,9 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
         float shore = smoothstep(5.5, 2.5, p.y);
         cw = lerp(cw, float4(0, 0, 1, 0), shore);
-        cw = saturate(cw * (1 + 0.8 * (1 - shore) * float4(jn, -jn, jn * 0.3, -jn)));
+        cw = saturate(cw * (1 + 0.2 * (1 - shore) * float4(jn, -jn, jn * 0.3, -jn)));
         cw /= max(dot(cw, 1), 1e-3);
-        float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.3 * jn);
+        float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.12 * jn);
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
         float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
         float3 lp = float3(p.x - tmO.x, p.y, p.z - tmO.z);
@@ -120,7 +120,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float2 dw = mul(float2x2(0.8, -0.6, 0.6, 0.8), xa);
         float dirt = smoothstep(0.35, 1.0, TmNoise2(dw * 0.035 + 31.3).x + 0.5 * TmNoise2(dw * 0.09 + 7.1).x);
         float cl = TmL2(xa - tmO.xz, _StabbyCoatB[0].y, 3.7).x;
-        gw *= saturate(0.85 + 0.45 * cl + 0.55 * hn) * (1 - 0.9 * dirt) * 1.2;
+        gw *= saturate(0.85 + 0.45 * cl + 0.04 * hn) * (1 - 0.05 * dirt) * 1.2;
         if (gw <= gate) continue;
         float2 cg = xa * (1.0 / 0.55), cf = frac(cg), bo = 0;
         int2 ci = (int2)floor(cg), bc = ci;
@@ -138,7 +138,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float dr = saturate(sqrt(best) * 1.5);
         float faceA = atan2(-bo.y, -bo.x) * (1.0 / 6.2831853) + (Rand(cell, 5) - 0.5) * 0.3;
         float leanAmt = saturate((0.2 + 0.8 * dr) * (0.55 + 0.9 * cr4.z));
-        float dry = Rand(cell, 9) < saturate(0.06 + 0.3 * saturate(-1.5 * hn) + 0.3 * dirt + 0.08 * (cr4.y - 0.5)) * smoothstep(0.35, 0.85, col.a) ? 0.45 + 0.55 * Rand(cell, 10) : 0;
+        float dry = Rand(cell, 9) < saturate(0.1 + 0.06 * saturate(-1.5 * hn) + 0.06 * dirt + 0.08 * (cr4.y - 0.5)) * smoothstep(0.35, 0.85, col.a) ? 0.45 + 0.55 * Rand(cell, 10) : 0;
         bool seedHead = Rand(cell, 11) < 0.035 * (0.4 + 1.2 * cr4.z);
         float fp = max(d * _Eye.w, 1e-4);
         float3 root = color;
@@ -151,7 +151,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float lum = dot(root, float3(0.2126, 0.7152, 0.0722));
         float hv = cr4.w - 0.5 + 0.3 * (Rand(cell, 12) - 0.5);
         root = lerp(lum.xxx, root, 0.58 + 0.12 * cr4.x) * float3(1.04 + 0.08 * hv, 1, 0.88 - 0.08 * hv) * (0.86 + 0.16 * cr4.y) * (0.93 + 0.12 * Rand(cell, 8));
-        float yel = Rand(cell, 13) < 0.03 + 0.1 * dirt + 0.06 * saturate(-1.5 * hn) ? 0.35 + 0.4 * Rand(cell, 14) : 0;
+        float yel = Rand(cell, 13) < 0.04 + 0.02 * dirt + 0.02 * saturate(-1.5 * hn) ? 0.35 + 0.4 * Rand(cell, 14) : 0;
         root = lerp(root, dot(root, float3(0.2126, 0.7152, 0.0722)) * float3(1.32, 1.17, 0.76), yel);
         float fadeOut = smoothstep(reach, 0.7 * reach, d);
         float grow = saturate((keep - rank) / (0.3 * keep));
