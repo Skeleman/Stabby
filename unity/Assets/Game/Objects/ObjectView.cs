@@ -58,7 +58,8 @@ namespace Stabby.Game
         {
             public int Chunk;
             public long[] Keys;
-            public ObjectSpawn[] Parts;
+            public int3[] Ranges;
+            public NativeArray<ObjectSpawn> Parts;
         }
 
         ObjectField field;
@@ -84,6 +85,9 @@ namespace Stabby.Game
         NativeParallelMultiHashMap<long, Entity> tileEntities;
         int liveEntities, chunksLoaded, chunksHeld, chunksUnloaded, partsHeld, peakParts, peakChunks;
         int[] liveByDef;
+        ObjectKind[] kinds;
+        int statusHash;
+        float worstUpdate;
 
         public static int Pending { get; private set; } = 1;
         public static int LiveEntities { get; private set; }
@@ -112,6 +116,7 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (chunkParts != null) foreach (var a in chunkParts) if (a.IsCreated) a.Dispose();
+            Owned.Release(chunkTask, r => r.Parts.Dispose());
             if (ranges.IsCreated) ranges.Dispose();
             if (spawned.IsCreated) spawned.Dispose();
             if (tileEntities.IsCreated) tileEntities.Dispose();
@@ -148,6 +153,7 @@ namespace Stabby.Game
             reach = new float[defs];
             tile = new float[defs];
             liveByDef = new int[defs];
+            kinds = new ObjectKind[defs];
             var shapes = new List<int>();
             var keys = new List<ulong>();
             for (int d = 0; d < defs; d++)
@@ -160,6 +166,7 @@ namespace Stabby.Game
                     for (int v = 0; v < def.Variants; v++) { shapes.Add(def.Parts[p].Shape); keys.Add(ObjectMeshes.Key(def.Id, p, v)); count++; }
                 }
                 var kind = lib.KindOf(def);
+                kinds[d] = kind;
                 reach[d] = 2f * field.Footprint(d) * def.Placement.SizeMaxM * invTan / math.max(kind.FadeScreen, 1e-4f);
                 float t = span;
                 while (t > reach[d] / 3f && t * 0.5f >= MinTileM) t *= 0.5f;
@@ -247,31 +254,49 @@ namespace Stabby.Game
         ChunkParts Collect(int c)
         {
             int cx = c % across, cz = c / across;
-            var keys = new List<long>();
-            var list = new List<ObjectSpawn>();
-            foreach (var o in field.Chunk(cx, cz))
+            var placed = field.Chunk(cx, cz);
+            int n = 0;
+            foreach (var o in placed) n += lib.Objects[o.Def].Parts.Count;
+            var order = new NativeArray<SortKey>(n, Allocator.Persistent);
+            var parts = new NativeArray<ObjectSpawn>(n, Allocator.Persistent);
+            for (int i = 0, at = 0; i < placed.Length; i++)
             {
-                var def = lib.Objects[o.Def];
+                var o = placed[i];
                 long key = Key(o.Def, (int)(o.X / tile[o.Def]), (int)(o.Z / tile[o.Def]));
+                for (int p = 0; p < lib.Objects[o.Def].Parts.Count; p++) order[at++] = new SortKey { Key = key, Item = (i << 8) | p };
+            }
+            order.Sort();
+            int distinct = 0;
+            for (int i = 0; i < n; i++) if (i == 0 || order[i].Key != order[i - 1].Key) distinct++;
+            var keys = new long[distinct];
+            var spans = new int3[distinct];
+            for (int i = 0, d = -1; i < n; i++)
+            {
+                if (i == 0 || order[i].Key != order[i - 1].Key) { d++; keys[d] = order[i].Key; spans[d] = new int3(i, 0, c); }
+                spans[d].y++;
+                var o = placed[order[i].Item >> 8];
+                int p = order[i].Item & 255;
+                var def = lib.Objects[o.Def];
+                var part = def.Parts[p];
                 var root = float4x4.TRS(new float3(o.X, o.Y, o.Z), new quaternion(o.Qx, o.Qy, o.Qz, o.Qw), new float3(1));
                 float tint = 0.86f + 0.28f * math.frac(o.Variant * 0.618034f + o.Size * 3.7f + o.X * 0.013f);
-                for (int p = 0; p < def.Parts.Count; p++)
+                var scale = new float3(part.ScaleX, part.ScaleY, part.ScaleZ) * o.Size;
+                var local = float4x4.TRS(new float3(part.OffsetX, part.OffsetY, part.OffsetZ) * o.Size, quaternion.identity, scale);
+                parts[i] = new ObjectSpawn
                 {
-                    var part = def.Parts[p];
-                    var scale = new float3(part.ScaleX, part.ScaleY, part.ScaleZ) * o.Size;
-                    var local = float4x4.TRS(new float3(part.OffsetX, part.OffsetY, part.OffsetZ) * o.Size, quaternion.identity, scale);
-                    keys.Add(key);
-                    list.Add(new ObjectSpawn
-                    {
-                        M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
-                        Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part),
-                    });
-                }
+                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
+                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part),
+                };
             }
-            var k = keys.ToArray();
-            var a = list.ToArray();
-            Array.Sort(k, a);
-            return new ChunkParts { Chunk = c, Keys = k, Parts = a };
+            order.Dispose();
+            return new ChunkParts { Chunk = c, Keys = keys, Ranges = spans, Parts = parts };
+        }
+
+        struct SortKey : IComparable<SortKey>
+        {
+            public long Key;
+            public int Item;
+            public int CompareTo(SortKey o) => Key != o.Key ? Key.CompareTo(o.Key) : Item.CompareTo(o.Item);
         }
 
         float RectDistance(float3 cam, float x0, float z0, float size)
@@ -289,16 +314,10 @@ namespace Stabby.Game
                 if (chunkTask.IsFaulted) { GameStatus.Failure = chunkTask.Exception.ToString(); chunkTask = null; return; }
                 var r = chunkTask.Result;
                 chunkTask = null;
-                var distinct = new List<long>();
-                for (int i = 0; i < r.Keys.Length;)
-                {
-                    int j = i;
-                    while (j < r.Keys.Length && r.Keys[j] == r.Keys[i]) j++;
-                    if (ranges.TryAdd(r.Keys[i], new int3(i, j - i, r.Chunk))) distinct.Add(r.Keys[i]);
-                    i = j;
-                }
-                chunkParts[r.Chunk] = new NativeArray<ObjectSpawn>(r.Parts, Allocator.Persistent);
-                chunkKeys[r.Chunk] = distinct.ToArray();
+                for (int i = 0; i < r.Keys.Length; i++)
+                    if (!ranges.TryAdd(r.Keys[i], r.Ranges[i])) r.Keys[i] = -1;
+                chunkParts[r.Chunk] = r.Parts;
+                chunkKeys[r.Chunk] = r.Keys;
                 loaded[r.Chunk] = true;
                 chunksLoaded++;
                 chunksHeld++;
@@ -309,7 +328,7 @@ namespace Stabby.Game
             for (int c = 0; c < loaded.Length; c++)
             {
                 if (!loaded[c] || RectDistance(cam, (c % across) * span, (c / across) * span, span) <= maxReach * UnloadReach) continue;
-                foreach (long key in chunkKeys[c]) ranges.Remove(key);
+                foreach (long key in chunkKeys[c]) if (key >= 0) ranges.Remove(key);
                 partsHeld -= chunkParts[c].Length;
                 chunkParts[c].Dispose();
                 chunkKeys[c] = null;
@@ -388,7 +407,7 @@ namespace Stabby.Game
             {
                 var s = parts[range.x + k];
                 var e = s.Shadow ? a[ia++] : b[ib++];
-                var kind = lib.KindOf(lib.Objects[s.Def]);
+                var kind = kinds[s.Def];
                 int m = s.Mesh * Lods;
                 int lods = math.clamp(kind.Lods, 1, Lods);
                 EntityManager.SetComponentData(e, new LocalToWorld { Value = s.M });
@@ -417,6 +436,7 @@ namespace Stabby.Game
             if (!Register()) return;
             var cam = Camera.main;
             if (cam == null) return;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             float3 pos = cam.transform.position;
             float invTan = 1f / (2f * math.tan(math.radians(cam.fieldOfView) * 0.5f));
             EntityManager.SetComponentData(cameraEntity, new ObjectCamera { Pos = pos, InvTan = invTan });
@@ -432,7 +452,14 @@ namespace Stabby.Game
             ChunksUnloaded = chunksUnloaded;
             liveByDefShared = liveByDef;
             libShared = lib;
-            GameStatus.Lines["~objects view"] = $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts})";
+            if (GameStatus.TerrainBuilt && UnityEngine.Time.frameCount - GameStatus.ToolFrame > 1)
+            {
+                worstUpdate = math.max(worstUpdate, (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000f / System.Diagnostics.Stopwatch.Frequency);
+            }
+            int hash = HashCode.Combine(liveEntities, chunksHeld, chunksLoaded, chunksUnloaded, partsHeld, (int)(worstUpdate * 10));
+            if (hash == statusHash) return;
+            statusHash = hash;
+            GameStatus.Lines["~objects view"] = $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}); worst view update after terrain built {worstUpdate:F1} ms";
         }
     }
 
