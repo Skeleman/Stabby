@@ -218,14 +218,20 @@ public static class ContentLoader
         return d;
     }
 
-    public const int ObjectSchemaVersion = 1;
+    public const int ObjectSchemaVersion = 2;
 
     sealed class ObjectFile
     {
         public int SchemaVersion { get; set; }
         public List<KindEntry> Kinds { get; set; } = new();
         public List<ObjectEntry> Objects { get; set; } = new();
+        public TerrainEntry? Terrain { get; set; }
         public FoliageEntry? Foliage { get; set; }
+    }
+
+    sealed class TerrainEntry
+    {
+        public float QuadPixels { get; set; } = new TerrainViewDef().QuadPixels;
     }
 
     sealed class FoliageEntry
@@ -249,13 +255,13 @@ public static class ContentLoader
     {
         static readonly GrassDef D = new();
         public float PerM2 { get; set; } = D.PerM2;
-        public float NearM { get; set; } = D.NearM;
-        public float ReachM { get; set; } = D.ReachM;
+        public float NearPixels { get; set; } = D.NearPixels;
+        public float ReachPixels { get; set; } = D.ReachPixels;
         public float ThinPow { get; set; } = D.ThinPow;
         public float Widen { get; set; } = D.Widen;
         public float WidthMaxM { get; set; } = D.WidthMaxM;
-        public float Lod1M { get; set; } = D.Lod1M;
-        public float Lod2M { get; set; } = D.Lod2M;
+        public float Lod1Pixels { get; set; } = D.Lod1Pixels;
+        public float Lod2Pixels { get; set; } = D.Lod2Pixels;
         public float HeightMinM { get; set; } = D.HeightMinM;
         public float HeightMaxM { get; set; } = D.HeightMaxM;
         public float WidthM { get; set; } = D.WidthM;
@@ -271,10 +277,10 @@ public static class ContentLoader
     {
         public string Id { get; set; } = "";
         public int Lods { get; set; }
-        public float[] LodScreen { get; set; } = Array.Empty<float>();
-        public float FadeScreen { get; set; }
+        public float[] LodPixels { get; set; } = Array.Empty<float>();
+        public float FadePixels { get; set; }
         public bool Shadows { get; set; }
-        public float ShadowScreen { get; set; }
+        public float ShadowPixels { get; set; }
         public bool Wind { get; set; }
         public bool Animated { get; set; }
         public bool Solid { get; set; }
@@ -342,8 +348,8 @@ public static class ContentLoader
         foreach (var k in file.Kinds)
             lib.Kinds.Add(new ObjectKind
             {
-                Id = k.Id, Lods = k.Lods, LodScreen = k.LodScreen, FadeScreen = k.FadeScreen,
-                Shadows = k.Shadows, ShadowScreen = k.ShadowScreen, Wind = k.Wind, Animated = k.Animated, Solid = k.Solid,
+                Id = k.Id, Lods = k.Lods, LodPixels = k.LodPixels, FadePixels = k.FadePixels,
+                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, Wind = k.Wind, Animated = k.Animated, Solid = k.Solid,
             });
         foreach (var o in file.Objects)
         {
@@ -374,6 +380,7 @@ public static class ContentLoader
             };
             lib.Objects.Add(def);
         }
+        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels };
         if (file.Foliage != null)
         {
             var g = file.Foliage.Grass;
@@ -387,8 +394,8 @@ public static class ContentLoader
                 },
                 Grass = new GrassDef
                 {
-                    PerM2 = g.PerM2, NearM = g.NearM, ReachM = g.ReachM, ThinPow = g.ThinPow, Widen = g.Widen, WidthMaxM = g.WidthMaxM,
-                    Lod1M = g.Lod1M, Lod2M = g.Lod2M, HeightMinM = g.HeightMinM, HeightMaxM = g.HeightMaxM,
+                    PerM2 = g.PerM2, NearPixels = g.NearPixels, ReachPixels = g.ReachPixels, ThinPow = g.ThinPow, Widen = g.Widen, WidthMaxM = g.WidthMaxM,
+                    Lod1Pixels = g.Lod1Pixels, Lod2Pixels = g.Lod2Pixels, HeightMinM = g.HeightMinM, HeightMaxM = g.HeightMaxM,
                     WidthM = g.WidthM, Bend = g.Bend, TipLight = g.TipLight, Translucency = g.Translucency,
                     CoatMin = g.CoatMin, SlopeMax = g.SlopeMax, MaxBlades = g.MaxBlades,
                 },

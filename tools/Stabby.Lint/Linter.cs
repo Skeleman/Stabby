@@ -13,6 +13,8 @@ public static class Linter
     const string UnityDir = "unity/Assets/";
     static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete" };
     static readonly string[] NativeMembers = { "linear", "gamma", "GammaToLinearSpace", "LinearToGammaSpace", "PerlinNoise" };
+    static readonly string[] WorldDetailFiles = { "src/Stabby.World/Detail.cs", "src/Stabby.World/FoliageDefs.cs", "src/Stabby.World/ObjectDefs.cs" };
+    static readonly string[] DistanceCalls = { "distance", "distancesq", "Distance", "RectDistance", "length", "lengthsq", "magnitude", "sqrMagnitude" };
 
     public static IEnumerable<string> SourceFiles(string repo) =>
         Roots.Select(r => Path.Combine(repo, r)).Where(Directory.Exists)
@@ -60,6 +62,8 @@ public static class Linter
                 foreach (var p in EcsProblems(file, root, allow, used)) problems.Add(p);
             if (file.StartsWith(UnityDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
                 foreach (var p in BlockingProblems(file, root, allow, used)) problems.Add(p);
+            if (IsDetailCode(file))
+                foreach (var p in MetreProblems(file, root, allow, used)) problems.Add(p);
         }
         foreach (var key in allow.Keys.Where(k => !used.Contains(k)))
             problems.Add($"{AllowFile}: '{key}' matches nothing; remove it");
@@ -115,6 +119,76 @@ public static class Linter
             yield return $"{file}:{line}: {acc} calls native engine code, unsafe on worker threads; use a managed version or list {key} in {AllowFile} with a reason";
         }
     }
+
+    public static bool IsDetailCode(string file) =>
+        WorldDetailFiles.Contains(file) || file.StartsWith(GameDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal);
+
+    public static List<string> MetreProblems(string file, string text, Dictionary<string, string> allow) =>
+        MetreProblems(file, Parse(text).GetRoot(), allow, new HashSet<string>(StringComparer.Ordinal)).ToList();
+
+    static IEnumerable<string> MetreProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used)
+    {
+        foreach (var cmp in root.DescendantNodes().OfType<BinaryExpressionSyntax>())
+        {
+            if (!cmp.IsKind(SyntaxKind.LessThanExpression) && !cmp.IsKind(SyntaxKind.LessThanOrEqualExpression) &&
+                !cmp.IsKind(SyntaxKind.GreaterThanExpression) && !cmp.IsKind(SyntaxKind.GreaterThanOrEqualExpression)) continue;
+            ExpressionSyntax limit;
+            if (IsDistance(cmp.Left)) limit = cmp.Right;
+            else if (IsDistance(cmp.Right)) limit = cmp.Left;
+            else continue;
+            if (!IsMetres(limit)) continue;
+            string owner = cmp.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
+            string member = cmp.Ancestors().OfType<MemberDeclarationSyntax>().Select(MemberName).FirstOrDefault(n => n.Length > 0) ?? "";
+            string key = $"{owner}.{member}";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = cmp.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: {cmp} compares a distance with metres; use Detail.ScreenSize/Reach with a pixel threshold in content/ or list {key} in {AllowFile} with a reason";
+        }
+    }
+
+    static string MemberName(MemberDeclarationSyntax m) => m switch
+    {
+        MethodDeclarationSyntax x => x.Identifier.Text,
+        PropertyDeclarationSyntax x => x.Identifier.Text,
+        ConstructorDeclarationSyntax x => x.Identifier.Text,
+        FieldDeclarationSyntax x => x.Declaration.Variables.First().Identifier.Text,
+        _ => "",
+    };
+
+    static bool IsDistance(ExpressionSyntax e) =>
+        !e.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(c => CalledName(c.Expression) == "ScreenSize") &&
+        e.DescendantNodesAndSelf().Any(n => n switch
+        {
+            InvocationExpressionSyntax call => DistanceCalls.Contains(CalledName(call.Expression)),
+            MemberAccessExpressionSyntax acc => acc.Name.Identifier.Text is "magnitude" or "sqrMagnitude",
+            IdentifierNameSyntax id => IsDistanceName(id.Identifier.Text),
+            _ => false,
+        });
+
+    static string CalledName(ExpressionSyntax e) => e switch
+    {
+        MemberAccessExpressionSyntax m => m.Name.Identifier.Text,
+        IdentifierNameSyntax i => i.Identifier.Text,
+        _ => "",
+    };
+
+    static bool IsDistanceName(string n) =>
+        n is "dist" or "distance" || n.EndsWith("Distance", StringComparison.Ordinal) || n.EndsWith("Dist", StringComparison.Ordinal);
+
+    static bool IsMetres(ExpressionSyntax e) =>
+        e.DescendantNodesAndSelf().Any(n => n switch
+        {
+            LiteralExpressionSyntax lit when lit.IsKind(SyntaxKind.NumericLiteralExpression) => !IsFactor(lit, e) && Math.Abs(Convert.ToDouble(lit.Token.Value, System.Globalization.CultureInfo.InvariantCulture)) >= 1,
+            IdentifierNameSyntax id => IsMetreName(id.Identifier.Text),
+            _ => false,
+        });
+
+    static bool IsFactor(SyntaxNode lit, SyntaxNode top) =>
+        lit.Ancestors().TakeWhile(n => n != top.Parent).Any(n => n.IsKind(SyntaxKind.MultiplyExpression) || n.IsKind(SyntaxKind.DivideExpression));
+
+    static bool IsMetreName(string n) =>
+        n.Length > 1 && (n.EndsWith("Meters", StringComparison.Ordinal) || n.EndsWith("Metres", StringComparison.Ordinal) ||
+        n[^1] == 'M' && char.IsLower(n[^2]));
 
     static bool IsGuarded(MemberAccessExpressionSyntax acc)
     {

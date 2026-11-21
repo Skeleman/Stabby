@@ -2,10 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby world objects",
   "type": "object",
-  "required": ["schemaVersion", "kinds", "objects", "foliage"],
+  "required": ["schemaVersion", "kinds", "objects", "terrain", "foliage"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
+    "terrain": {
+      "type": "object",
+      "required": ["quadPixels"],
+      "additionalProperties": false,
+      "properties": {
+        "quadPixels": { "type": "number", "minimum": 1, "maximum": 100 }
+      }
+    },
     "foliage": {
       "type": "object",
       "required": ["wind", "grass"],
@@ -26,17 +34,17 @@
         },
         "grass": {
           "type": "object",
-          "required": ["perM2", "nearM", "reachM", "thinPow", "widen", "widthMaxM", "lod1M", "lod2M", "heightMinM", "heightMaxM", "widthM", "bend", "tipLight", "translucency", "coatMin", "slopeMax", "maxBlades"],
+          "required": ["perM2", "nearPixels", "reachPixels", "thinPow", "widen", "widthMaxM", "lod1Pixels", "lod2Pixels", "heightMinM", "heightMaxM", "widthM", "bend", "tipLight", "translucency", "coatMin", "slopeMax", "maxBlades"],
           "additionalProperties": false,
           "properties": {
             "perM2": { "type": "number", "minimum": 0, "maximum": 400 },
-            "nearM": { "type": "number", "exclusiveMinimum": 0 },
-            "reachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 120 },
+            "nearPixels": { "type": "number", "exclusiveMinimum": 0 },
+            "reachPixels": { "type": "number", "exclusiveMinimum": 0 },
             "thinPow": { "type": "number", "minimum": 0.5, "maximum": 3 },
             "widen": { "type": "number", "minimum": 0, "maximum": 1 },
             "widthMaxM": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
-            "lod1M": { "type": "number", "exclusiveMinimum": 0 },
-            "lod2M": { "type": "number", "exclusiveMinimum": 0 },
+            "lod1Pixels": { "type": "number", "exclusiveMinimum": 0 },
+            "lod2Pixels": { "type": "number", "exclusiveMinimum": 0 },
             "heightMinM": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
             "heightMaxM": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
             "widthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.5 },
@@ -55,15 +63,15 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "lods", "lodScreen", "fadeScreen", "shadows", "shadowScreen", "wind", "animated", "solid"],
+        "required": ["id", "lods", "lodPixels", "fadePixels", "shadows", "shadowPixels", "wind", "animated", "solid"],
         "additionalProperties": false,
         "properties": {
           "id": { "enum": ["static", "interactive", "animated", "structure"] },
           "lods": { "type": "integer", "minimum": 1, "maximum": 4 },
-          "lodScreen": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, "maxItems": 3 },
-          "fadeScreen": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+          "lodPixels": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 }, "maxItems": 3 },
+          "fadePixels": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1080 },
           "shadows": { "type": "boolean" },
-          "shadowScreen": { "type": "number", "minimum": 0 },
+          "shadowPixels": { "type": "number", "minimum": 0 },
           "wind": { "type": "boolean" },
           "animated": { "type": "boolean" },
           "solid": { "type": "boolean" }

@@ -144,7 +144,11 @@ namespace Stabby.Game
             if (data == null || data.scriptableRenderer == null) return;
             for (int i = 0; i < TextureIds.Length; i++) if (Shader.GetGlobalTexture(TextureIds[i]) == null) return;
             Vector3 eye = cam.transform.position;
-            terrain.NearMeshes(eye, grass.ReachM + 64f, near);
+            var view = DetailView.Refresh(cam);
+            float ppm = Mathf.Min(view.PixelsPerMetre, Detail.MaxZoom * Detail.ReferencePixelsPerMetre), q = view.Quality;
+            float reachM = grass.ReachAt(grass.ReachPixels / q, ppm), nearM = grass.ReachAt(grass.NearPixels / q, ppm);
+            float lod1M = grass.ReachAt(grass.Lod1Pixels / q, ppm), lod2M = grass.ReachAt(grass.Lod2Pixels / q, ppm);
+            terrain.NearMeshes(eye, reachM + grass.HeightMaxM, near);
             if (near.Count != lastNear)
             {
                 lastNear = near.Count;
@@ -154,7 +158,7 @@ namespace Stabby.Game
             float fpScale = 2f * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, cam.pixelHeight);
             var rot = cam.transform.rotation;
             var eyeKey = new Vector4(eye.x, eye.y, eye.z, fpScale * cam.aspect);
-            var lookKey = new Vector4(rot.x, rot.y, rot.z, rot.w + 4f * Shader.GetGlobalFloat(DetailOffId));
+            var lookKey = new Vector4(rot.x, rot.y, rot.z, rot.w + 4f * Shader.GetGlobalFloat(DetailOffId) + 16f * reachM);
             int meshKey = near.Count;
             foreach (var mesh in near) meshKey = meshKey * 31 + mesh.GetHashCode();
             if (scattered && !Rescatter && eyeKey == lastEye && lookKey == lastLook && meshKey == lastMeshes)
@@ -182,10 +186,10 @@ namespace Stabby.Game
             for (int i = 0; i < 6; i++) planeVecs[i] = new Vector4(planes[i].normal.x, planes[i].normal.y, planes[i].normal.z, planes[i].distance);
             cmd.SetComputeVectorArrayParam(scatter, PlanesId, planeVecs);
             cmd.SetComputeVectorParam(scatter, EyeId, new Vector4(eye.x, eye.y, eye.z, fpScale));
-            cmd.SetComputeVectorParam(scatter, GrassAId, new Vector4(grass.PerM2, grass.NearM, grass.ReachM, grass.SlopeMax));
+            cmd.SetComputeVectorParam(scatter, GrassAId, new Vector4(grass.PerM2, nearM, reachM, grass.SlopeMax));
             cmd.SetComputeVectorParam(scatter, GrassBId, new Vector4(grass.HeightMinM, grass.HeightMaxM, grass.WidthM, grass.CoatMin));
-            cmd.SetComputeVectorParam(scatter, GrassCId, new Vector4(grass.TipLight, grass.MaxBlades, grass.Bend, grass.Lod2M));
-            cmd.SetComputeVectorParam(scatter, GrassDId, new Vector4(grass.ThinPow, grass.Widen, grass.WidthMaxM, grass.Lod1M));
+            cmd.SetComputeVectorParam(scatter, GrassCId, new Vector4(grass.TipLight, grass.MaxBlades, grass.Bend, lod2M));
+            cmd.SetComputeVectorParam(scatter, GrassDId, new Vector4(grass.ThinPow, grass.Widen, grass.WidthMaxM, lod1M));
             cmd.SetComputeBufferParam(scatter, kernel, ArgsId, args);
             cmd.SetComputeBufferParam(scatter, kernel, BladesId, blades);
             foreach (var mesh in near)

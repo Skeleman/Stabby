@@ -85,11 +85,15 @@ architecture contract. The other steps fit the contract as it stands.
 
 ## Next: surface look and objects (before bigger caves)
 
+Art direction (Zach): stylised natural realism. Real-world colour palettes (no saturated cartoon hues), shader surfaces that mimic real materials, and enough noise and imperfection to feel organic. Fidelity can stay modest; palette and material believability come first.
+
+One visual identity (Zach): every shader follows the same look budget, with shared limits on noise contrast, detail scale, saturation and specular range, so terrain, water, objects and grass read as one pipeline. Ground colours are hue-locked and narrow; sand is flat and grainy; wet bands fade gradually.
+
 | Item | Status |
 |---|---|
 | Fine near field (approved by Zach; rule 2 text awaiting his review): keep the stored grid, add one engine-free sample function (smooth base, river and shore profiles from hydrology centrelines, material-scaled detail) that meshes, collision and features all read; 1 m near, doubling per LOD ring, computed per chunk on demand; replaces the levee (`NearField.Sample`, 64-quad nodes over 9 levels with 2:1 balance; GeneratorVersion 35) | done |
 | Erosion speed: coarse-to-fine erosion (512 grid for all but the last 8 steps) and parallel row loops; 2048 generates in ~5 s (erosion 3 s), 4096 in ~19 s but its checks crash in Features.Dry/Arch (arch endpoints unclamped) | done (e7d12e3) |
-| Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | next |
+| Base grid to 2048 (11 m cells) once near field lands; 4096 after the Features clamp fix | wip (b/grid-2048) |
 | Water look: one water shader for sea, lakes and rivers (depth tint, shoreline, waves, fresnel) | done (2227ad1) |
 | Water pass 2 (Zach): square pattern along the sea edge; sea, lakes and rivers share one water definition, differing only in flow and swell (`materials.json` `water`, one shader keyed by vertex colour; soft gradient-noise foam, lake shore ring) | done |
 | Water cost: fine wave octave skipped past its fade distance, foam noise skipped away from shores; GPU profile of water and terrain shaders at several resolutions and distances before more effects (water coast 0.9/1.0 ms at 1080p, 1.3/1.8 at 2160p) | done |
@@ -97,11 +101,11 @@ architecture contract. The other steps fit the contract as it stands.
 | Terrain surface pass 2: grass less saturated with crisp near grain instead of smeared bumps, rock sharper up close, dark shale band lighter, sand blotches, camera-relative coordinates for detail precision far from origin | done |
 | Terrain surface pass 3: gradient noise instead of value noise (blocky midground grass), no swirls in near grass, sand ripple moire, grass blade pop at 1024 m tile lines, far-origin offset test | done |
 | Close grass reads as saturated green fur: real blades now cover it within 45 m (objects step 2 grass). Faint sand crest dashes at 4-8 m remain | later |
-| Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | next |
+| Flat untextured green wall in chase and overhead shots (mesh, not material; check after near field) | wip (b/terrain-artifacts) |
 | Chunk-sized holes at chunk edges: gone with the near-field lattice; thin green streaks were steep edge-row facets (edge vertices snapped half a cell), fixed by sampling the continuous surface on node edges | done |
 | Captures pick a free UDP port (`STABBY_PORT`) so parallel lane captures never collide; overhead shot framed from 800 m | done |
 | Far shoreline: sea and lake depth past 120-240 m read a smooth bed-height field (`_StabbyBed`, 11 m texels, mipped) instead of far terrain facets; +0.1 ms at 1080p, `coast-far` capture shot | done |
-| Stepped sand rim at ~1 km where coarse far-LOD terrain crosses the flat water plane (geometry, not foam): finer far LOD along shorelines | later |
+| Stepped sand rim at ~1 km where coarse far-LOD terrain crosses the flat water plane (geometry, not foam): finer far LOD along shorelines | wip (b/terrain-artifacts) |
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Objects step 1: static rocks and debris, collision shared by `Walk.Step` (`Objects`, `ObjectChecks`, instanced view with screen-size LOD) | done |
 | Objects step 1b: rocks use the strata material library, denser and varied placement (clusters at scarp feet, scree on slopes, logs under forest), spawn data unloaded with chunks, instance counts in capture stats; GeneratorVersion 34 | done |
@@ -109,10 +113,12 @@ architecture contract. The other steps fit the contract as it stands.
 | Rocks inside one grey strata band read plain grey up close (shared rock material, changes cliffs too) | later |
 | Large boulders as solid-field edits (rule 11): draws at or above `editMinSizeM` (3.6 m) become two Add capsule lumps on their own streams, checked in WorldChecks (bounds, no water, mesher match, collision within a cell of the mesh); GeneratorVersion 36 | done |
 | Boulder follow-ups: coarse-LOD inflate (`FeatureEdit.AtStep`), per-cell edit index (`EditGrid`), 12-boulder mesh check; also fixed large boulders never reaching the game (Unity loader dropped `editMinSizeM`, map had no object library) | done |
-| Screen-size detail (Zach, rule 12): port Punchy's DetailPolicy as engine-free `Detail` (ScreenSize in reference pixels, Reach, per-kind rules with tiers, hysteresis, crossfade, quality scale, fixed-FOV simulation reach); move grass lod1M/lod2M/nearM/reachM, object tile reach/despawn/unload and terrain ring reach onto screen-size thresholds in content; a lint or check so new metre thresholds can't creep back | now |
+| Screen-size detail (Zach, rule 12): port Punchy's DetailPolicy as engine-free `Detail` (ScreenSize in reference pixels, Reach, per-kind rules with tiers, hysteresis, crossfade, quality scale, fixed-FOV simulation reach); move grass lod1M/lod2M/nearM/reachM, object tile reach/despawn/unload and terrain ring reach onto screen-size thresholds in content; a lint or check so new metre thresholds can't creep back | done |
 | River water tiling (Zach): float hash at world coordinates made wave and foam cells disagree at edges; integer hash, gentler rapids from content rapidsSlope, smoother ribbon slope | done |
 | Boulder coat: edit solid above the heightfield takes the full biome coat, so big boulders read as grassy lumps; steep coated faces show flat untextured olive bands with jagged cutoffs. Fade coat by height above ground and soften the slope cutoff in the material library | done |
 | Boulder rock: boulders read as layer-cake barrels (world-height strata bands across a 3 m rock, grey stratum ring at the crown); one stratum per boulder picked at its base, weathered noise, cracks and lichen instead of bands | done |
+| Look budget (Zach): one shared block of soft target values in content/materials.json (noise contrast, detail scale, saturation, specular/roughness) that every shader reads as defaults through one HLSL include; coats may still deviate. Judge by before/after shots of terrain, water, grass and objects; no hard limits or rule until Zach has seen results (b/punchy-ground) | next |
+| Weathered rock palette (Zach): boulders and cliff strata from saturated orange to weathered grey-brown and buff stone, lichen variety, water streaks, dust in hollows, roughness variation (step 6 of b/punchy-ground) | now |
 | Punchy ground look (Zach): bring Punchy's terrain style into the one material library: three-octave soft micro-relief each fading by its own screen size, grain flecks on bare ground, ground under blades takes the grass colour, far grass carries the blades' gust bands, patchy wet shore band, puddles in hollows when wet (later, with weather), object grounding (contact darkening, downward faces); Punchy is Zach's code, PunchyReferences NC-SA files ideas only | now |
 | Near-field follow-ups: frustum-cull node selection (offscreen nodes split at 2x distance), teardown waits for jobs before freeing ground data, terrain status string cached; 294 ms spike not seen since | done |
 | Near-field follow-ups 2: terrain node entities pooled and frames string lazy (done); capture spill frames excluded (done, 10 frames); left: pre-fill the terrain pool; SurfaceNets filler trim dropped (index layout is the fast-path contract; Terrain.cs already compacts) | now |
@@ -120,7 +126,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Objects step 2b: animated foliage (bushes, trees) on the shared wind. Zach: realistic, not Punchy's cartoon style; real leaf detail on cutout leaf cards (alpha-tested, alpha-to-coverage) on code-built branches, leaf atlas generated in code at load, runtime-baked billboard impostors far off; needs rule 11 wording change (textures may hold code-generated leaf atlases), awaiting Zach | next |
 | Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | done |
 | Grass follow-ups: no grass on submerged beds (done), blade shadows, profiler to confirm chase/far cost with blades on and off | later |
-| Objects step 3: interactive objects with host-authoritative removal | later |
+| Objects step 3: interactive objects with host-authoritative removal | wip (b/objects-interactive) |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
 
 ## Next

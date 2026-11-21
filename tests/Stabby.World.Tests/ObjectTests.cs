@@ -11,7 +11,7 @@ public class ObjectTests
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
 
-    static readonly float[] RisingLods = { 0.01f, 0.05f };
+    static readonly float[] RisingLods = { 10f, 50f };
 
     static GeneratedWorld Gen(ulong seed, int size = 256) =>
         WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects);
@@ -48,10 +48,12 @@ public class ObjectTests
         Matches(foliage.GetProperty("properties").GetProperty("wind"), fd.GetProperty("wind"));
         Matches(foliage.GetProperty("properties").GetProperty("grass"), fd.GetProperty("grass"));
         Assert.Equal(fd.GetProperty("wind").GetProperty("gustScaleM").GetSingle(), Objects.Foliage.Wind.GustScaleM);
-        Assert.Equal(fd.GetProperty("grass").GetProperty("reachM").GetSingle(), Objects.Foliage.Grass.ReachM);
-        Assert.True(Objects.Foliage.Grass.ReachM > Objects.Foliage.Grass.NearM);
+        Assert.Equal(fd.GetProperty("grass").GetProperty("reachPixels").GetSingle(), Objects.Foliage.Grass.ReachPixels);
+        Assert.Equal(80f, Objects.Foliage.Grass.ReachAt(Objects.Foliage.Grass.ReachPixels, Detail.ReferencePixelsPerMetre), 1);
+        Assert.Equal(data.RootElement.GetProperty("terrain").GetProperty("quadPixels").GetSingle(), Objects.Terrain.QuadPixels);
+        Assert.True(Objects.Foliage.Grass.NearPixels > Objects.Foliage.Grass.ReachPixels);
         var bad = new FoliageDef();
-        bad.Grass.NearM = 90;
+        bad.Grass.NearPixels = 5;
         bad.Wind.GustScaleM = 0;
         var errors = new List<string>();
         bad.Validate(errors);
@@ -75,7 +77,7 @@ public class ObjectTests
         try { Assert.Contains(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()), e => e.Contains("unknown biome moon")); }
         finally { log.Placement.Biomes.Remove("moon"); }
         var bad = new ObjectLibrary();
-        bad.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodScreen = RisingLods });
+        bad.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodPixels = RisingLods });
         bad.Objects.Add(new ObjectDef { Id = "x", Kind = "animated", Variants = 0 });
         Assert.Equal(4, ObjectLibrary.Validate(bad).Count);
     }
