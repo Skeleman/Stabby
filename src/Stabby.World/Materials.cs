@@ -11,8 +11,17 @@ namespace Stabby.World
         public float ThicknessM;
     }
 
+    public sealed class SurfaceDetail
+    {
+        public float StrataWobbleM, StrataWobbleWavelengthM;
+        public float CoatPatchAmp, CoatPatchWavelengthM;
+        public float CoatGrainAmp, CoatGrainWavelengthM;
+        public float RockGrainAmp, RockGrainWavelengthM;
+    }
+
     public sealed class MaterialLibrary
     {
+        public SurfaceDetail Surface = new SurfaceDetail();
         public List<StratumDef> Strata = new List<StratumDef>();
         public float OffsetAmplitudeM;
         public float OffsetWavelengthM;
@@ -73,6 +82,16 @@ namespace Stabby.World
             if (!(lib.OffsetAmplitudeM >= 0)) errors.Add("offsetAmplitudeM must be >= 0");
             if (!(lib.OffsetWavelengthM > 0)) errors.Add("offsetWavelengthM must be > 0");
             if (!(lib.TiltPerKm >= 0)) errors.Add("tiltPerKm must be >= 0");
+            var d = lib.Surface;
+            if (d == null) errors.Add("surface: required");
+            else
+            {
+                if (!(d.StrataWobbleM >= 0 && d.StrataWobbleM <= 50)) errors.Add($"surface.strataWobbleM {d.StrataWobbleM} outside 0..50");
+                foreach (var (name, a) in new[] { ("coatPatchAmp", d.CoatPatchAmp), ("coatGrainAmp", d.CoatGrainAmp), ("rockGrainAmp", d.RockGrainAmp) })
+                    if (!(a >= 0 && a <= 1)) errors.Add($"surface.{name} {a} outside 0..1");
+                foreach (var (name, l) in new[] { ("strataWobbleWavelengthM", d.StrataWobbleWavelengthM), ("coatPatchWavelengthM", d.CoatPatchWavelengthM), ("coatGrainWavelengthM", d.CoatGrainWavelengthM), ("rockGrainWavelengthM", d.RockGrainWavelengthM) })
+                    if (!(l >= 0.1f && l <= 1000)) errors.Add($"surface.{name} {l} outside 0.1..1000");
+            }
             return errors;
         }
     }

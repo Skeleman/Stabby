@@ -178,6 +178,14 @@ public class WorldTests
         var topNames = data.RootElement.EnumerateObject().Select(p => p.Name).ToList();
         Assert.Empty(top.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).Except(topNames));
         Assert.Empty(topNames.Except(top.GetProperty("properties").EnumerateObject().Select(p => p.Name)));
+        var surface = top.GetProperty("properties").GetProperty("surface");
+        var surfaceNames = data.RootElement.GetProperty("surface").EnumerateObject().Select(p => p.Name).ToList();
+        Assert.Empty(surface.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).Except(surfaceNames));
+        Assert.Empty(surfaceNames.Except(surface.GetProperty("properties").EnumerateObject().Select(p => p.Name)));
+        var lib = ContentLoader.LoadMaterials(root);
+        Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.RockGrainWavelengthM > 0);
+        lib.Surface.CoatGrainAmp = 2;
+        Assert.Contains(MaterialLibrary.Validate(lib), e => e.Contains("coatGrainAmp"));
         var item = top.GetProperty("properties").GetProperty("strata").GetProperty("items");
         var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).ToList();
         var allowed = item.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();

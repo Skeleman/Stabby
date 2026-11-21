@@ -15,7 +15,20 @@ public static class ContentLoader
         public float OffsetAmplitudeM { get; set; }
         public float OffsetWavelengthM { get; set; }
         public float TiltPerKm { get; set; }
+        public SurfaceEntry? Surface { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
+    }
+
+    sealed class SurfaceEntry
+    {
+        public float StrataWobbleM { get; set; }
+        public float StrataWobbleWavelengthM { get; set; }
+        public float CoatPatchAmp { get; set; }
+        public float CoatPatchWavelengthM { get; set; }
+        public float CoatGrainAmp { get; set; }
+        public float CoatGrainWavelengthM { get; set; }
+        public float RockGrainAmp { get; set; }
+        public float RockGrainWavelengthM { get; set; }
     }
 
     sealed class StratumEntry
@@ -86,6 +99,13 @@ public static class ContentLoader
         var lib = new MaterialLibrary
         {
             OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
+            Surface = file.Surface == null ? null! : new SurfaceDetail
+            {
+                StrataWobbleM = file.Surface.StrataWobbleM, StrataWobbleWavelengthM = file.Surface.StrataWobbleWavelengthM,
+                CoatPatchAmp = file.Surface.CoatPatchAmp, CoatPatchWavelengthM = file.Surface.CoatPatchWavelengthM,
+                CoatGrainAmp = file.Surface.CoatGrainAmp, CoatGrainWavelengthM = file.Surface.CoatGrainWavelengthM,
+                RockGrainAmp = file.Surface.RockGrainAmp, RockGrainWavelengthM = file.Surface.RockGrainWavelengthM,
+            },
             Strata = file.Strata.Select(s => new StratumDef
             {
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM,

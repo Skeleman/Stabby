@@ -27,7 +27,7 @@ Shader "Stabby/VertexLit"
             #define _StitchMask UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _StitchMask)
             #endif
 
-            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyDetailAmp, _StabbyDetailFreq;
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -37,6 +37,26 @@ Shader "Stabby/VertexLit"
             SAMPLER(sampler_StabbyBiome);
 
             float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
+
+            float Hash(float3 p)
+            {
+                p = frac(p * 0.3183099 + 0.1);
+                p *= 17.0;
+                return frac(p.x * p.y * p.z * (p.x + p.y + p.z));
+            }
+
+            float Noise(float3 x)
+            {
+                float3 i = floor(x), f = x - i;
+                f = f * f * (3 - 2 * f);
+                return lerp(lerp(lerp(Hash(i), Hash(i + float3(1, 0, 0)), f.x), lerp(Hash(i + float3(0, 1, 0)), Hash(i + float3(1, 1, 0)), f.x), f.y),
+                            lerp(lerp(Hash(i + float3(0, 0, 1)), Hash(i + float3(1, 0, 1)), f.x), lerp(Hash(i + float3(0, 1, 1)), Hash(i + float3(1, 1, 1)), f.x), f.y), f.z);
+            }
+
+            float Detail(float3 p, float freq, float footprint)
+            {
+                return (Noise(p * freq) - 0.5) * saturate(1.5 - footprint * freq * 2);
+            }
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; };
@@ -84,10 +104,14 @@ Shader "Stabby/VertexLit"
                     off = lerp(off, bo.a, f);
                     mix = lerp(mix, fr, f);
                 }
+                float3 wp = float3(i.xz.x, h, i.xz.y);
+                float fp = max(length(fwidth(wp)), 1e-4);
+                float4 da = _StabbyDetailAmp, df = _StabbyDetailFreq;
+                color *= 1 + 2 * da.y * Detail(wp * float3(1, 0.25, 1), df.y, fp) + 2 * da.z * Detail(wp, df.z, fp);
                 Light l = GetMainLight();
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
-                float u = (h + off) / max(_StabbyStrataPeriod, 1);
-                float3 rock = SAMPLE_TEXTURE2D(_StabbyStrata, sampler_StabbyStrata, float2(u, 0.5)).rgb;
+                float u = (h + off + 2 * da.x * Detail(wp * float3(1, 0, 1) + 17.3, df.x, fp)) / max(_StabbyStrataPeriod, 1);
+                float3 rock = SAMPLE_TEXTURE2D(_StabbyStrata, sampler_StabbyStrata, float2(u, 0.5)).rgb * (1 + 2 * da.w * Detail(wp * float3(1, 2.5, 1), df.w, fp));
                 float3 c = lerp(color, rock, saturate(mix)) * (l.color * saturate(dot(n, l.direction)) + ambient) * i.color.a;
                 return half4(MixFog(c, i.fog), 1);
             }

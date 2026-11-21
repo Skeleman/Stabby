@@ -3,6 +3,12 @@
   "offsetAmplitudeM": 18,
   "offsetWavelengthM": 2400,
   "tiltPerKm": 6,
+  "surface": {
+    "strataWobbleM": 2.5, "strataWobbleWavelengthM": 30,
+    "coatPatchAmp": 0.22, "coatPatchWavelengthM": 28,
+    "coatGrainAmp": 0.12, "coatGrainWavelengthM": 1.2,
+    "rockGrainAmp": 0.18, "rockGrainWavelengthM": 1.6
+  },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8c8a83", "thicknessM": 14 },
     { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#9a6248", "thicknessM": 6 },

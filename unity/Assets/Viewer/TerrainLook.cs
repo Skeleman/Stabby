@@ -12,6 +12,7 @@ namespace Stabby.Viewer
         public float[] Offsets;
         public float3[] Bands;
         public float PeriodM;
+        public Vector4 DetailAmp, DetailFreq;
     }
 
     public sealed class FieldLook
@@ -61,6 +62,8 @@ namespace Stabby.Viewer
             strataTexture.Apply(true);
             Shader.SetGlobalTexture("_StabbyStrata", strataTexture);
             Shader.SetGlobalFloat("_StabbyStrataPeriod", s.PeriodM);
+            Shader.SetGlobalVector("_StabbyDetailAmp", s.DetailAmp);
+            Shader.SetGlobalVector("_StabbyDetailFreq", s.DetailFreq);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -149,7 +152,13 @@ namespace Stabby.Viewer
             var ids = lib.Bands(BandStepM);
             var bands = new float3[ids.Length];
             for (int k = 0; k < ids.Length; k++) bands[k] = Unpack(lib.Strata[ids[k]].Color);
-            return new StrataLook { Offsets = lib.Offsets(w), Bands = bands, PeriodM = lib.PeriodM };
+            var d = lib.Surface;
+            return new StrataLook
+            {
+                Offsets = lib.Offsets(w), Bands = bands, PeriodM = lib.PeriodM,
+                DetailAmp = new Vector4(d.StrataWobbleM, d.CoatPatchAmp, d.CoatGrainAmp, d.RockGrainAmp),
+                DetailFreq = new Vector4(1f / d.StrataWobbleWavelengthM, 1f / d.CoatPatchWavelengthM, 1f / d.CoatGrainWavelengthM, 1f / d.RockGrainWavelengthM),
+            };
         }
     }
 }
