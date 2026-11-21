@@ -18,6 +18,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 240;
         static int settle = -1, phase, wait, smooth, chaseWait;
+        static readonly bool rockOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY") == "rock";
         static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -142,7 +143,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = 1;
+                phase = rockOnly ? 7 : 1;
             }
             while (phase <= 6)
             {
@@ -190,6 +191,12 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
+                if (phase == 7 && rockOnly)
+                {
+                    File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                    Finish(0);
+                    return;
+                }
                 if (phase == 7)
                 {
                     lows.Add(("rock", cam.transform.position, cam.transform.rotation));
