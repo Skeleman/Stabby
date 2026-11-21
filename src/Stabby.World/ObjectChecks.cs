@@ -24,6 +24,7 @@ namespace Stabby.World
                 var a = field.Chunk(cx, cz);
                 if (first && !SameObjects(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz))) { e.Add($"objects in chunk {cx},{cz} differ between runs"); return; }
                 if (first && !SolidIdsMatch(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz, true))) { e.Add($"object ids in chunk {cx},{cz} change when only solid objects are placed"); return; }
+                if (first) { string fault = RegionFault(field, new ObjectField(w, detail, edits, w.Objects), a, c); if (fault != null) { e.Add($"collision region {cx},{cz} {fault}"); return; } }
                 first = false;
                 CheckObjectIds(a, c, e);
                 foreach (var o in a)
@@ -50,6 +51,29 @@ namespace Stabby.World
                     if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
                 }
             }
+        }
+
+        static string RegionFault(ObjectField full, ObjectField fresh, ObjectInstance[] placed, int c)
+        {
+            var columns = new List<ObjectColumn>();
+            var owners = new List<ulong>();
+            ColumnRegion.Collect(full, placed, columns, owners);
+            var want = ColumnRegion.Of(c, columns, owners);
+            var got = ColumnRegion.Build(fresh, c);
+            if (!want.Grid.Equals(got.Grid)) return "has a different grid when built alone";
+            if (want.Count != got.Count) return $"holds {got.Count} columns, its placements give {want.Count}";
+            for (int k = 0; k < want.Count; k++)
+            {
+                var x = want.Items[k]; var y = got.Items[k];
+                if (want.Owners[k] != got.Owners[k] || x.X != y.X || x.Z != y.Z || x.R != y.R || x.Bottom != y.Bottom || x.Top != y.Top) return $"column {k} differs from its chunk placements";
+                if (ObjectIds.Chunk(got.Owners[k]) != c) return $"column {k} belongs to chunk {ObjectIds.Chunk(got.Owners[k])}";
+            }
+            for (int b = 0; b <= got.Grid.Cells; b++)
+                if (want.Starts[b] != got.Starts[b]) return "cell starts differ from its chunk placements";
+            for (int b = 0; b < got.Grid.Cells; b++)
+                for (int k = got.Starts[b]; k < got.Starts[b + 1]; k++)
+                    if ((ColumnRegion.CellOf(got.Items[k].Z) - got.Grid.Z0) * got.Grid.W + ColumnRegion.CellOf(got.Items[k].X) - got.Grid.X0 != b) return $"column {k} sits in the wrong cell";
+            return null;
         }
 
         public const int StructureSweep = 16;

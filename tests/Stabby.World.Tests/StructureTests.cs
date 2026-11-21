@@ -66,7 +66,7 @@ public class StructureTests
         Assert.True(list.Count > 10);
         Assert.All(list, c => Assert.True(Math.Abs(c.X - 10) < 0.6f * 12 * Structures.WallBase && Math.Abs(c.Z) <= 6.1f, $"{c.X:F2},{c.Z:F2}"));
         Assert.True(list.Max(c => c.Top) > Walk.StepUp);
-        var cols = ColumnArrays.Build(list);
+        var cols = ColumnRegions.Whole(list);
         float x = 6, y = 0, z = 1;
         for (int k = 0; k < 80; k++) Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0.1f, 0, 1);
         Assert.True(x < 10 && y < Walk.StepUp, $"walked to {x:F2},{y:F2}");

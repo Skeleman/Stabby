@@ -297,17 +297,19 @@ public class ObjectTests
         Assert.Equal(RemoveResult.AlreadyRemoved, deltas.TryRemove(host, stone.Id, stone.X, stone.Y, stone.Z, out _));
         Assert.False(deltas.Nearest(host, stone.X, stone.Y, stone.Z, out ulong again) && again == stone.Id);
 
-        var table = ColumnArrays.Build(new ObjectField(w, detail, edits, Objects).Columns());
+        var regionField = new ObjectField(w, detail, edits, Objects);
+        var table = ColumnRegions.For(regionField);
+        table.Put(ColumnRegion.Build(regionField, ObjectIds.Chunk(wood.Id)));
         var cols = new List<ObjectColumn>();
         host.ColumnsOf(wood, cols);
         Assert.NotEmpty(cols);
-        Assert.All(cols, c => Assert.True(Obstacles.Find(table, c) >= 0));
+        Assert.Equal(cols.Count, table.Slots[ObjectIds.Chunk(wood.Id)].Alive(wood.Id));
         float before = Obstacles.Top(table, cols[0].X, cols[0].Z, 0.05f, cols[0].Bottom, cols[0].Top);
         Assert.True(before >= cols[0].Top);
         Assert.Equal(RemoveResult.Ok, deltas.TryRemove(host, wood.Id, wood.X, wood.Y, wood.Z, out var woodGot));
-        Assert.Equal(cols.Count, table.Kill(host, woodGot));
-        Assert.All(cols, c => Assert.Equal(-1, Obstacles.Find(table, c)));
-        Assert.Equal(0, table.Kill(host, woodGot));
+        Assert.Equal(cols.Count, table.Kill(woodGot.Id));
+        Assert.Equal(0, table.Slots[ObjectIds.Chunk(wood.Id)].Alive(wood.Id));
+        Assert.Equal(0, table.Kill(woodGot.Id));
 
         var client = new ObjectDeltas();
         var joiner = new ObjectField(w, detail, edits, Objects);
@@ -329,7 +331,7 @@ public class ObjectTests
     {
         var flat = new FlatGround();
         var none = default(NoEdits);
-        var cols = ColumnArrays.Build(new List<ObjectColumn>
+        var cols = ColumnRegions.Whole(new List<ObjectColumn>
         {
             new ObjectColumn { X = 5, Z = 0, R = 0.6f, Bottom = 0, Top = 0.5f },
             new ObjectColumn { X = 5, Z = 10, R = 0.8f, Bottom = 0, Top = 2.5f },
