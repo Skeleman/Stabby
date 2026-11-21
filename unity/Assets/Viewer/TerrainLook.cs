@@ -54,33 +54,13 @@ namespace Stabby.Viewer
             return new float4(ToLinear(c), math.saturate((slope - 0.25f) / 0.35f) * (1 - shore));
         }
 
-        public const int ApplySteps = 3;
-
         public static void ApplyStrata(StrataLook s)
         {
-            for (int step = 0; step < ApplySteps; step++) ApplyStrata(s, step);
+            foreach (string _ in StrataSteps(s)) { }
         }
 
-        public static void ApplyStrata(StrataLook s, int step)
+        public static IEnumerable<string> StrataSteps(StrataLook s)
         {
-            if (step == 1)
-            {
-                if (coatTexture != null) UnityEngine.Object.Destroy(coatTexture);
-                coatTexture = new Texture2D(s.N, s.N, TextureFormat.RGBA32, false, true) { name = "Coats", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-                coatTexture.SetPixelData(s.Coat, 0);
-                coatTexture.Apply(false, true);
-                Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
-                return;
-            }
-            if (step == 2)
-            {
-                if (levelTexture != null) UnityEngine.Object.Destroy(levelTexture);
-                levelTexture = new Texture2D(s.N, s.N, TextureFormat.RFloat, false, true) { name = "WaterLevel", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-                levelTexture.SetPixelData(s.WaterLevel, 0);
-                levelTexture.Apply(false, true);
-                Shader.SetGlobalTexture("_StabbyWaterLevel", levelTexture);
-                return;
-            }
             if (strataTexture == null) strataTexture = new Texture2D(s.Bands.Length, 1, TextureFormat.RGBA32, true, true) { name = "Strata", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
             else strataTexture.Reinitialize(s.Bands.Length, 1);
             var px = new Color32[s.Bands.Length];
@@ -91,7 +71,20 @@ namespace Stabby.Viewer
             }
             strataTexture.SetPixels32(px);
             strataTexture.Apply(true);
+            yield return "strata bands";
+            if (coatTexture != null) UnityEngine.Object.Destroy(coatTexture);
+            coatTexture = new Texture2D(s.N, s.N, TextureFormat.RGBA32, false, true) { name = "Coats", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            coatTexture.SetPixelData(s.Coat, 0);
+            coatTexture.Apply(false, true);
+            yield return "strata coats";
             Shader.SetGlobalTexture("_StabbyStrata", strataTexture);
+            Shader.SetGlobalTexture("_StabbyCoat", coatTexture);
+            if (levelTexture != null) UnityEngine.Object.Destroy(levelTexture);
+            levelTexture = new Texture2D(s.N, s.N, TextureFormat.RFloat, false, true) { name = "WaterLevel", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            levelTexture.SetPixelData(s.WaterLevel, 0);
+            levelTexture.Apply(false, true);
+            yield return "strata water level";
+            Shader.SetGlobalTexture("_StabbyWaterLevel", levelTexture);
             Shader.SetGlobalFloat("_StabbyStrataPeriod", s.PeriodM);
             Shader.SetGlobalVector("_StabbyCoatUV", new Vector4(1f / (s.CellM * s.N), 0.5f / s.N, 0, 0));
             Shader.SetGlobalVector("_StabbySurface", s.Surface);
@@ -207,6 +200,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalTexture("_StabbySlope", slopeField);
             Shader.SetGlobalTexture("_StabbyBed", bedField);
             Shader.SetGlobalTexture("_StabbyBiome", biomeField);
+            yield return false;
             Shader.SetGlobalVector("_StabbyFieldUV", new Vector4(1f / (f.TexelM * f.Res), 0.5f / f.Res, 1f / (f.CellM * f.N), 0.5f / f.N));
             Shader.SetGlobalVector("_StabbySand", new Vector4(Sand.x, Sand.y, Sand.z, 0));
             int spent = 0;

@@ -30,10 +30,11 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream;
         readonly float[][] density;
         readonly float[] footprint;
-        readonly float[][][] heights;
+        readonly PartShapes shapes;
+        readonly float[][] seats;
         readonly ulong[] key;
         readonly int[] blockStart, blockItems;
         readonly FeatureEdit[] edits;
@@ -52,10 +53,14 @@ namespace Stabby.World
             thinStream = Rng.Stream(w.Config.Seed, "objects-thin").NextU64();
             boulderStream = Rng.Stream(w.Config.Seed, "boulders").NextU64();
             boulderThinStream = Rng.Stream(w.Config.Seed, "boulders-thin").NextU64();
+            structureStream = Rng.Stream(w.Config.Seed, "structures").NextU64();
+            structureThinStream = Rng.Stream(w.Config.Seed, "structures-thin").NextU64();
+            chainStream = Rng.Stream(w.Config.Seed, "structures-chain").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
-            heights = PartHeights(lib);
+            shapes = PartShapes.Of(lib);
+            seats = new float[defs][];
             density = new float[defs][];
             footprint = new float[defs];
             key = new ulong[defs];
@@ -73,6 +78,7 @@ namespace Stabby.World
                 }
                 footprint[d] = def.FootprintRadius();
                 key[d] = Key(def.Id);
+                seats[d] = Seats(def);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
             }
             foreach (var r in w.Water.Rivers)
@@ -130,7 +136,7 @@ namespace Stabby.World
         public ObjectLibrary Library => lib;
         public float Footprint(int def) => footprint[def];
         public float ChunkMeters => WorldChunks.Size * cm;
-        public void ColumnsOf(ObjectInstance o, List<ObjectColumn> list) => AddColumns(lib, heights, o, list);
+        public void ColumnsOf(ObjectInstance o, List<ObjectColumn> list) => AddColumns(lib, shapes, o, list);
 
         public ObjectInstance[] Chunk(int cx, int cz)
         {
@@ -168,9 +174,9 @@ namespace Stabby.World
                 int ordinal = 0;
                 var pl = lib.Objects[d].Placement;
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
-                bool foot = pl.FootRiseM > 0;
-                var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
-                var thin = new Rng(Rng.Mix((boulders != null ? boulderThinStream : thinStream) ^ chunkKey ^ key[d]));
+                bool foot = pl.FootRiseM > 0, built = seats[d] != null;
+                var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : built ? structureStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
+                var thin = new Rng(Rng.Mix((boulders != null ? boulderThinStream : built ? structureThinStream : thinStream) ^ chunkKey ^ key[d]));
                 float expected = pl.PerHectare * sx * sz / 10000f / pl.ClusterCount;
                 int clusters = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
                 for (int k = 0; k < clusters; k++)
@@ -193,8 +199,71 @@ namespace Stabby.World
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
+                        if (pl.ChainMax > 1 && boulders == null) Chain(d, o, chunk, chunkKey, x0, z0, sx, sz, ref ordinal, list);
                     }
                 }
+            }
+        }
+
+        void Chain(int d, ObjectInstance o, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> list)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var rng = new Rng(Rng.Mix(chainStream ^ chunkKey ^ key[d] ^ ((ulong)ordinal * 0x9E3779B97F4A7C15UL)));
+            int count = rng.Range(pl.ChainMin, pl.ChainMax + 1) - 1;
+            float size = o.Size, span = Structures.WallSpan * size, thick = Structures.WallBase * size;
+            Rotate(o, 1, 0, 0, out float ux, out _, out float uz);
+            float ex = o.X + ux * 0.5f * span, ez = o.Z + uz * 0.5f * span;
+            for (int k = 0; k < count; k++)
+            {
+                float roll = rng.NextFloat(), turn = rng.NextFloat() < 0.5f ? -1f : 1f, wander = rng.Range(-0.1f, 0.1f);
+                int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                bool gate = rng.NextFloat() < pl.ChainGate, corner = roll < pl.ChainCorner;
+                float bx = ex, bz = ez;
+                if (corner)
+                {
+                    bx -= ux * 0.5f * thick; bz -= uz * 0.5f * thick;
+                    float t = ux; ux = -uz * turn; uz = t * turn;
+                }
+                else
+                {
+                    float gx = GroundAt(detail, cm, ex + SlopeStepM, ez) - GroundAt(detail, cm, ex - SlopeStepM, ez);
+                    float gz = GroundAt(detail, cm, ex, ez + SlopeStepM) - GroundAt(detail, cm, ex, ez - SlopeStepM);
+                    float gl = (float)Math.Sqrt(gx * gx + gz * gz);
+                    if (gl > 0.02f * SlopeStepM)
+                    {
+                        float cx = -gz / gl, cz = gx / gl;
+                        if (cx * ux + cz * uz < 0) { cx = -cx; cz = -cz; }
+                        ux += 0.8f * (cx - ux); uz += 0.8f * (cz - uz);
+                    }
+                    float px = -uz, pz = ux;
+                    ux += wander * px; uz += wander * pz;
+                    float ul = (float)Math.Sqrt(ux * ux + uz * uz);
+                    ux /= ul; uz /= ul;
+                    bx -= ux * Structures.WallOverlap * size; bz -= uz * Structures.WallOverlap * size;
+                }
+                if (gate) { ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span; continue; }
+                bool placed = false;
+                float ax = ux, az = uz, sbx = bx, sbz = bz;
+                for (int tries = 0; tries < (corner ? 1 : 3) && !placed; tries++)
+                {
+                    if (tries > 0)
+                    {
+                        float side = tries == 1 ? turn : -turn;
+                        bx = sbx - ax * 0.5f * thick; bz = sbz - az * 0.5f * thick;
+                        ux = -az * side; uz = ax * side;
+                    }
+                    float mx = bx + ux * 0.5f * span, mz = bz + uz * 0.5f * span, fx = bx + ux * span, fz = bz + uz * span;
+                    if (Math.Min(bx, fx) < x0 || Math.Min(bz, fz) < z0 || Math.Max(bx, fx) >= x0 + sx || Math.Max(bz, fz) >= z0 + sz) continue;
+                    float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
+                    if (!Accept(d, mx, mz, size, qw, qy, out var s)) continue;
+                    s.Variant = variant;
+                    s.Id = ObjectIds.Make(chunk, d, ordinal++);
+                    list.Add(s);
+                    ex = fx; ez = fz;
+                    placed = true;
+                }
+                if (!placed) return;
             }
         }
 
@@ -290,7 +359,35 @@ namespace Stabby.World
                 Y = y - pl.Sink * size - slope * r * 0.5f * (1 - pl.AlignToSlope),
                 Qx = tx * yw - tz * yy, Qy = tw * yy, Qz = tz * yw + tx * yy, Qw = tw * yw,
             };
+            if (seats[d] == null) return true;
+            SeatRange(detail, cm, seats[d], o, out float lo, out float hi);
+            if (hi - lo > Structures.SeatM) return false;
+            o.Y = lo - pl.Sink * size;
             return true;
+        }
+
+        public static float[] Seats(ObjectDef def)
+        {
+            List<float> pts = null;
+            foreach (var p in def.Parts)
+            {
+                if (!ObjectPart.IsStructure(p.Shape)) continue;
+                pts = pts ?? new List<float>();
+                var seat = Structures.Seat(p.Shape);
+                for (int k = 0; k < seat.Length; k += 2) { pts.Add(p.OffsetX + seat[k] * p.ScaleX); pts.Add(p.OffsetZ + seat[k + 1] * p.ScaleZ); }
+            }
+            return pts?.ToArray();
+        }
+
+        public static void SeatRange(TerrainDetail detail, float cellMeters, float[] seat, ObjectInstance o, out float lo, out float hi)
+        {
+            lo = float.MaxValue; hi = float.MinValue;
+            for (int k = 0; k < seat.Length; k += 2)
+            {
+                Rotate(o, seat[k] * o.Size, 0, seat[k + 1] * o.Size, out float rx, out _, out float rz);
+                float g = GroundAt(detail, cellMeters, o.X + rx, o.Z + rz);
+                lo = Math.Min(lo, g); hi = Math.Max(hi, g);
+            }
         }
 
         bool Clear(int i, int gx, int gz, float x, float y, float z, float r)
@@ -347,10 +444,10 @@ namespace Stabby.World
                 for (int cx = 0; cx < across; cx++)
                 {
                     var held = chunks[cz * across + cx];
-                    if (held != null) { foreach (var o in held) AddColumns(lib, heights, o, row); continue; }
+                    if (held != null) { foreach (var o in held) AddColumns(lib, shapes, o, row); continue; }
                     scratch.Clear();
                     PlaceInto(cx, cz, true, scratch, null);
-                    foreach (var o in scratch) AddColumns(lib, heights, o, row);
+                    foreach (var o in scratch) AddColumns(lib, shapes, o, row);
                 }
                 rows[cz] = row;
             });
@@ -361,32 +458,25 @@ namespace Stabby.World
             return list;
         }
 
-        public static float[][][] PartHeights(ObjectLibrary lib)
-        {
-            var h = new float[lib.Objects.Count][][];
-            for (int d = 0; d < h.Length; d++)
-            {
-                var def = lib.Objects[d];
-                h[d] = new float[def.Parts.Count][];
-                for (int p = 0; p < def.Parts.Count; p++)
-                {
-                    h[d][p] = new float[def.Variants];
-                    for (int v = 0; v < def.Variants; v++)
-                        h[d][p][v] = def.Parts[p].Shape == ObjectPart.Rock ? ObjectMeshes.RockHeight(ObjectMeshes.Key(def.Id, p, v)) : 1f;
-                }
-            }
-            return h;
-        }
-
-        public static void AddColumns(ObjectLibrary lib, float[][][] heights, ObjectInstance o, List<ObjectColumn> list)
+        public static void AddColumns(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
         {
             var def = lib.Objects[o.Def];
             for (int pi = 0; pi < def.Parts.Count; pi++)
             {
                 var p = def.Parts[pi];
                 if (!lib.PartSolid(def, p)) continue;
-                float tall = p.ScaleY * o.Size * heights[o.Def][pi][o.Variant];
-                if (p.Shape == ObjectPart.Log)
+                float tall = p.ScaleY * o.Size * shapes.Heights[o.Def][pi][o.Variant];
+                var local = shapes.Columns[o.Def][pi];
+                if (local != null)
+                {
+                    float rs = Math.Min(p.ScaleX, p.ScaleZ) * o.Size;
+                    foreach (var c in local[o.Variant])
+                    {
+                        Rotate(o, (p.OffsetX + c.X * p.ScaleX) * o.Size, (p.OffsetY + c.Bottom * p.ScaleY) * o.Size, (p.OffsetZ + c.Z * p.ScaleZ) * o.Size, out float cx, out float cy, out float cz);
+                        list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = c.R * rs, Bottom = cy + o.Y, Top = cy + o.Y + (c.Top - c.Bottom) * p.ScaleY * o.Size });
+                    }
+                }
+                else if (p.Shape == ObjectPart.Log)
                 {
                     Rotate(o, p.OffsetX * o.Size, (p.OffsetY + 0.5f * p.ScaleY) * o.Size, p.OffsetZ * o.Size, out float cx, out float cy, out float cz);
                     cx += o.X; cy += o.Y; cz += o.Z;
@@ -415,6 +505,36 @@ namespace Stabby.World
             rx = vx + q.Qw * tx + (q.Qy * tz - q.Qz * ty);
             ry = vy + q.Qw * ty + (q.Qz * tx - q.Qx * tz);
             rz = vz + q.Qw * tz + (q.Qx * ty - q.Qy * tx);
+        }
+    }
+
+    public sealed class PartShapes
+    {
+        public float[][][] Heights;
+        public ObjectColumn[][][][] Columns;
+
+        public static PartShapes Of(ObjectLibrary lib)
+        {
+            var s = new PartShapes { Heights = new float[lib.Objects.Count][][], Columns = new ObjectColumn[lib.Objects.Count][][][] };
+            for (int d = 0; d < lib.Objects.Count; d++)
+            {
+                var def = lib.Objects[d];
+                s.Heights[d] = new float[def.Parts.Count][];
+                s.Columns[d] = new ObjectColumn[def.Parts.Count][][];
+                for (int p = 0; p < def.Parts.Count; p++)
+                {
+                    int shape = def.Parts[p].Shape;
+                    s.Heights[d][p] = new float[def.Variants];
+                    if (ObjectPart.IsStructure(shape)) s.Columns[d][p] = new ObjectColumn[def.Variants][];
+                    for (int v = 0; v < def.Variants; v++)
+                    {
+                        ulong k = ObjectMeshes.Key(def.Id, p, v);
+                        s.Heights[d][p][v] = shape == ObjectPart.Rock ? ObjectMeshes.RockHeight(k) : 1f;
+                        if (s.Columns[d][p] != null) s.Columns[d][p][v] = Structures.Layout(shape, k).Columns.ToArray();
+                    }
+                }
+            }
+            return s;
         }
     }
 

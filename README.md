@@ -58,7 +58,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 `sweep --jobs 1` (one seed at a time; stages use all cores), Release, generator 32. CI (`.github/workflows/ci.yml`)
 runs build, tests, lint, `sweep --count 100 --size 256` and `--count 10 --size 512` on every push.
-256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0`. At generator 41, 2048 (opt-in)
+256 is 20 seeds, 512 and 1024 are 5, 2048 is 3, 4096 is 1 with `--checks 0`. At generator 42, 2048 (opt-in)
 sweeps at about 5.2 s median idle (16 seeds, checks about 24 s) and 4096 at about 29 s median with
 checks about 64 s (3 seeds). Total excludes checks. Peak working set is about 0.8 GB at 2048 and 2.7 GB at 4096.
 

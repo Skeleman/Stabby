@@ -214,6 +214,11 @@ namespace Stabby.Game.Editor
                     cam.transform.SetPositionAndRotation(gp, Quaternion.LookRotation(gf - new Vector3(0, 0.12f, 0)));
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "grass-fade");
+                    var mp = gp - gf * 18f;
+                    mp.y = GroundHeight(mp.x, mp.z) + 4.5f;
+                    cam.transform.SetPositionAndRotation(mp, Quaternion.LookRotation(gf - new Vector3(0, 0.2f, 0)));
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "grass-meadow");
                 }
                 if (phase == 9)
                 {
@@ -330,6 +335,22 @@ namespace Stabby.Game.Editor
                     GameStatus.Lines["~bench foliage"] = FoliageBench(cam, "foliage looking down on the densest bushes");
                     AimFoliage(cam, 1);
                 }
+                wait = 0;
+                phase++;
+            }
+            while (phase >= 22 && phase <= 23)
+            {
+                string name = phase == 22 ? "structure-close" : "structure-mid";
+                if (wait == 0)
+                {
+                    if (!AimStructure(cam, phase == 22)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 23) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
                 wait = 0;
                 phase++;
             }
@@ -691,6 +712,47 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + (range == 2 ? 10f : 1.2f));
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim foliage " + range] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0} with {crowd} foliage in its 12 m cell, eye {back:F0} m back";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimStructure(Camera cam, bool close)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                    {
+                        var chunk = field.Chunk(cx, cz);
+                        foreach (var o in chunk)
+                        {
+                            if (!field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsStructure(p.Shape))) continue;
+                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            if (field.Library.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall)
+                            {
+                                int run = 0;
+                                foreach (var b in chunk)
+                                    if (b.Def == o.Def && (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z) < 36f * o.Size * o.Size) run++;
+                                score -= run >= 4 ? 400f + 40f * run : 0f;
+                            }
+                            if (score < best) { best = score; pick = o; }
+                        }
+                    }
+                if (best == float.MaxValue) return false;
+                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.1f, pick.Z);
+                var across = new Vector3(2 * (pick.Qx * pick.Qz + pick.Qw * pick.Qy), 0, 1 - 2 * (pick.Qx * pick.Qx + pick.Qy * pick.Qy)).normalized;
+                var along = new Vector3(across.z, 0, -across.x);
+                float back = close ? 0.75f * pick.Size : 30f * Mathf.Max(1f, 0.25f * pick.Size);
+                var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : 0.3f * back);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim structure " + (close ? "close" : "mid")] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
                 return true;
             }
             return false;

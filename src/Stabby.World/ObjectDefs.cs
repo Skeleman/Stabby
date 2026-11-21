@@ -18,9 +18,11 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Shapes = 6;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer" };
-        public static bool IsFoliage(int shape) => shape >= Shrub;
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Shapes = 8;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn" };
+        public static bool IsFoliage(int shape) => shape >= Shrub && shape <= Conifer;
+        public static bool IsStructure(int shape) => shape >= Wall && shape < Shapes;
+        public static bool IsStone(int shape) => shape == Rock || IsStructure(shape);
 
         public string Id;
         public int Shape;
@@ -46,6 +48,8 @@ namespace Stabby.World
         public float AlignToSlope;
         public float FootRiseM, FootReachM = 12f;
         public float EditMinSizeM;
+        public int ChainMin = 1, ChainMax = 1;
+        public float ChainCorner, ChainGate;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
     }
 
@@ -95,7 +99,7 @@ namespace Stabby.World
 
         public static readonly string[] KindNames = { "static", "interactive", "animated", "structure" };
         public static readonly string[] Verbs = { "take", "cut" };
-        public const string Interactive = "interactive";
+        public const string Interactive = "interactive", Structure = "structure";
         public const int MaxDefs = 256;
 
         public bool IsInteractive(int def) => Objects[def].Kind == Interactive;
@@ -132,6 +136,7 @@ namespace Stabby.World
                     if (p.Shape < 0 || p.Shape >= ObjectPart.Shapes) errors.Add(d.Id + ": part " + p.Id + " has an unknown shape");
                     if (ObjectPart.IsFoliage(p.Shape) && !p.HasLeafColor) errors.Add(d.Id + ": part " + p.Id + " needs a leafColor");
                     if (p.ScaleX <= 0 || p.ScaleY <= 0 || p.ScaleZ <= 0) errors.Add(d.Id + ": part " + p.Id + " scale must be above 0");
+                    if (ObjectPart.IsStructure(p.Shape) != (d.Kind == Structure)) errors.Add(d.Id + ": structure shapes belong only to structure objects");
                 }
                 var pl = d.Placement;
                 if (pl.PerHectare < 0 || pl.PerHectare > 400) errors.Add(d.Id + ": perHectare must be 0-400");
@@ -142,6 +147,12 @@ namespace Stabby.World
                 if (pl.ClusterRadiusM < 0 || pl.ClusterRadiusM > 30) errors.Add(d.Id + ": clusterRadiusM must be 0-30");
                 if (pl.Sink < 0 || pl.Sink > 0.9f) errors.Add(d.Id + ": sink must be 0-0.9");
                 if (pl.AlignToSlope < 0 || pl.AlignToSlope > 1) errors.Add(d.Id + ": alignToSlope must be 0-1");
+                if (d.Kind == Structure && (pl.AlignToSlope != 0 || pl.ClusterCount != 1 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0))
+                    errors.Add(d.Id + ": structures stand level, alone, with no footRiseM or editMinSizeM");
+                if (pl.ChainMin < 1 || pl.ChainMax < pl.ChainMin || pl.ChainMax > 24) errors.Add(d.Id + ": chainMin/chainMax must be increasing, 1-24");
+                if (pl.ChainCorner < 0 || pl.ChainCorner > 1 || pl.ChainGate < 0 || pl.ChainGate > 1) errors.Add(d.Id + ": chainCorner and chainGate must be 0-1");
+                if ((pl.ChainMax > 1 || pl.ChainCorner > 0 || pl.ChainGate > 0) && !(d.Kind == Structure && d.Parts.Count == 1 && d.Parts[0].Shape == ObjectPart.Wall))
+                    errors.Add(d.Id + ": chains belong only to single-part wall structures");
                 if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
                 if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
                 if (pl.EditMinSizeM < 0 || pl.EditMinSizeM > 20) errors.Add(d.Id + ": editMinSizeM must be 0-20");
