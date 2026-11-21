@@ -195,12 +195,19 @@ namespace Stabby.Game
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
 
-        float Cover(NativeEdits edits, GroundColumns columns, float3 p)
+        float Cover(NativeEdits edits, GroundColumns columns, float3 p, out float stone, out float boulderBase)
         {
+            stone = 0;
+            boulderBase = 0;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
-                if (p.x >= e.MinX && p.x <= e.MaxX && p.z >= e.MinZ && p.z <= e.MaxZ) return columns.At(p.x, p.z) - p.y;
+                if (p.x >= e.MinX && p.x <= e.MaxX && p.z >= e.MinZ && p.z <= e.MaxZ)
+                {
+                    float cover = columns.At(p.x, p.z) - p.y;
+                    if (e.Shape == FeatureEdit.Boulder) { stone = Lift(math.min(cover, 0)); boulderBase = e.Ay - ObjectField.BoulderLift * e.R; }
+                    return cover;
+                }
             }
             return 0;
         }
@@ -382,18 +389,18 @@ namespace Stabby.Game
                 int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
                 float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
-                float cover = Cover(edits, columns, p.Pos), lift = Lift(cover);
-                p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover));
-                p.Strata = new float4(off, math.max(col.w, lift), 1 - lift, math.clamp(Water(ref g, ref look, p.Pos.x, p.Pos.z) - p.Pos.y, -4, 4));
+                float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
+                p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, math.clamp(Water(ref g, ref look, p.Pos.x, p.Pos.z) - p.Pos.y, -4, 4));
                 if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
                     float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
-                    float sCover = Cover(near, coarse, p.Stitch.xyz);
-                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, Lift(sCover))));
-                    p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover)));
+                    float sCover = Cover(near, coarse, p.Stitch.xyz, out float sStone, out _), sLift = Lift(sCover);
+                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, sLift)));
+                    p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover) + sStone));
                 }
                 Verts[v] = p;
                 lo = math.min(lo, p.Pos);

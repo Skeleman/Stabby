@@ -70,7 +70,7 @@ Shader "Stabby/VertexLit"
             {
                 float3 n = normalize(i.normalWS);
                 float3 color = i.color.rgb;
-                float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w);
+                float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1);
                 if (f > 0)
                 {
                     float2 xa = i.xz + TmOrigin(_WorldSpaceCameraPos);
@@ -94,13 +94,14 @@ Shader "Stabby/VertexLit"
                 {
                     float2 xa = i.xz + TmOrigin(_WorldSpaceCameraPos);
                     float bed = SAMPLE_TEXTURE2D_LOD(_StabbyBed, sampler_StabbyBed, xa * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).r;
-                    mix = lerp(mix, min(mix, 0.5), (1 - f) * smoothstep(0.8, 0.97, n.y) * smoothstep(-1, 0, h - bed));
+                    mix = lerp(mix, min(mix, 0.5), (1 - f) * (1 - stone) * smoothstep(0.8, 0.97, n.y) * smoothstep(-1, 0, h - bed));
+                    ao *= lerp(1, lerp(0.5, 1, saturate((h - bed) / 0.8)) * lerp(0.7, 1, saturate(n.y + 0.8)), stone);
                 }
-                TmOut m = TmEvaluate(float3(i.xz.x, h, i.xz.y), n, color, off, mix);
+                TmOut m = TmEvaluate(float3(i.xz.x, h, i.xz.y), n, color, off, mix, stone);
                 n = m.grad;
                 Light l = GetMainLight();
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
-                float3 c = m.albedo * (l.color * saturate(dot(n, l.direction)) + ambient) * i.color.a;
+                float3 c = m.albedo * (l.color * saturate(dot(n, l.direction)) + ambient) * ao;
                 return half4(MixFog(c, i.fog), 1);
             }
             ENDHLSL
