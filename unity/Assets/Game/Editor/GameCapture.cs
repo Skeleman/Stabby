@@ -328,7 +328,7 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 18 && phase <= 22)
+            while (phase >= 18 && phase <= 23)
             {
                 string name = FoliageShots[phase - 18];
                 if (wait == 0)
@@ -352,19 +352,19 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 23 && phase <= 24)
+            while (phase >= 24 && phase <= 25)
             {
-                string name = phase == 23 ? "structure-close" : "structure-mid";
+                string name = phase == 24 ? "structure-close" : "structure-mid";
                 if (wait == 0)
                 {
-                    if (!AimStructure(cam, phase == 23)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    if (!AimStructure(cam, phase == 24)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
-                if (phase == 24) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (phase == 25) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
                 wait = 0;
                 phase++;
             }
@@ -654,9 +654,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.15f };
-        static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5 };
-        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close" };
+        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f, 0.65f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.15f, 0.04f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5, 6 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close", "oak-close" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -677,7 +677,7 @@ namespace Stabby.Game.Editor
                         {
                             if (field.Library.Objects[o.Def].Parts.Exists(p => p.Shape == ObjectPart.Broadleaf || p.Shape == ObjectPart.Conifer)) trees.Add(o);
                             if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
-                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 5 ? p.Shape == ObjectPart.Conifer : range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 5 ? p.Shape == ObjectPart.Conifer : range == 6 ? p.Shape == ObjectPart.Broadleaf : range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
                         }
                     }
                 if (near.Count == 0) return false;
@@ -705,14 +705,14 @@ namespace Stabby.Game.Editor
                 if (clear)
                 {
                     ranked.Sort((a, b) => a.score.CompareTo(b.score));
-                    for (int r = 0; r < Mathf.Min(ranked.Count, 150) && !found; r++)
+                    for (int r = 0; r < Mathf.Min(ranked.Count, range == 6 ? 600 : 150) && !found; r++)
                         for (int a = 0; a < 16 && !found; a++)
                         {
                             var c = ranked[r].o;
                             var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(-0.77f, 0, -0.64f);
-                            float len = BackOf(c), strict = range == 5 ? 1.6f : 1f;
+                            float len = BackOf(c), strict = range == 5 ? 1.6f : range == 6 ? 1.3f : 1f;
                             bool open = true;
-                            foreach (var o in range == 5 ? trees : near)
+                            foreach (var o in range >= 5 ? trees : near)
                             {
                                 if (o.Id == c.Id) continue;
                                 var rel = new Vector2(o.X - c.X, o.Z - c.Z);
@@ -725,7 +725,7 @@ namespace Stabby.Game.Editor
                             if (open) { pick = c; crowd = ranked[r].around; dirXZ = d; found = true; }
                         }
                 }
-                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.45f, pick.Z);
+                var target = new Vector3(pick.X, pick.Y + pick.Size * (range == 6 ? 0.32f : 0.45f), pick.Z);
                 float back = BackOf(pick);
                 var eye = target + dirXZ * back + Vector3.up * FoliageUp[range] * (scaled ? Mathf.Max(1f, pick.Size) : 1f);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
