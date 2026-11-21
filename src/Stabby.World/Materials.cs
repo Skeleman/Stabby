@@ -64,9 +64,19 @@ namespace Stabby.World
         }
     }
 
+    public sealed class WaterDef
+    {
+        public uint DeepColor, ShallowColor;
+        public float ClarityM, ShoreM, FoamWidthM;
+        public float WaveScaleM, WaveSpeed, WaveStrength;
+        public float SwellScaleM, SwellStrength, LakeSwell;
+        public float FlowSpeed, RapidsSlope;
+    }
+
     public sealed class MaterialLibrary
     {
         public SurfaceDetail Surface = new SurfaceDetail();
+        public WaterDef Water = new WaterDef();
         public List<StratumDef> Strata = new List<StratumDef>();
         public float OffsetAmplitudeM;
         public float OffsetWavelengthM;
@@ -172,6 +182,22 @@ namespace Stabby.World
                     Len(errors, n + ".featureWavelengthM", c.FeatureWavelengthM);
                     if (!(c.Parallax >= 0 && c.Parallax <= 2)) errors.Add($"{n}.parallax {c.Parallax} outside 0..2");
                 }
+            }
+            var w = lib.Water;
+            if (w == null) errors.Add("water: required");
+            else
+            {
+                if (!(w.ClarityM >= 0.1f && w.ClarityM <= 100)) errors.Add($"water.clarityM {w.ClarityM} outside 0.1..100");
+                if (!(w.ShoreM >= 0.01f && w.ShoreM <= 5)) errors.Add($"water.shoreM {w.ShoreM} outside 0.01..5");
+                if (!(w.FoamWidthM >= 0 && w.FoamWidthM <= 50)) errors.Add($"water.foamWidthM {w.FoamWidthM} outside 0..50");
+                Len(errors, "water.waveScaleM", w.WaveScaleM);
+                Len(errors, "water.swellScaleM", w.SwellScaleM);
+                if (!(w.WaveSpeed >= 0 && w.WaveSpeed <= 10)) errors.Add($"water.waveSpeed {w.WaveSpeed} outside 0..10");
+                if (!(w.FlowSpeed >= 0 && w.FlowSpeed <= 10)) errors.Add($"water.flowSpeed {w.FlowSpeed} outside 0..10");
+                Amp(errors, "water.waveStrength", w.WaveStrength);
+                Amp(errors, "water.swellStrength", w.SwellStrength);
+                Amp(errors, "water.lakeSwell", w.LakeSwell);
+                if (!(w.RapidsSlope > 0 && w.RapidsSlope <= 1)) errors.Add($"water.rapidsSlope {w.RapidsSlope} outside 0..1");
             }
             return errors;
         }
