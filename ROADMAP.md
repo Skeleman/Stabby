@@ -77,9 +77,9 @@ architecture contract. The other steps fit the contract as it stands.
 | Item | Status |
 |---|---|
 | More biomes (alpine, wetland, mangrove, cold desert): optional height, distance-to-water and distance-to-coast conditions per biome in `biomes.json`; distances derived inside `Biomes` from hydrology and sea | done |
-| River overhaul inside `Drainage` and hydrology: meanders, wider lowland beds, banks; no second river array | next |
+| River overhaul inside `Drainage` and hydrology: meanders, wider lowland beds, carved banks; centreline per segment, no second river array | done |
 | Cliffs (approved by Zach): hard strata resist erosion, which makes scarps. Generation reads rock hardness per stratum from the material library, so material changes bump `GeneratorVersion`. Caves share the same strata for wall faces and can later prefer softer layers | done |
-| Undercut cliff faces as overhang edits along scarps (cliffs done) | later |
+| Undercut cliff faces as overhang edits along scarps (cliffs done) | next |
 | Cross-runtime erosion drift: Unity (Mono) and .NET generate seed 3 up to ~60 m apart before strata, ~180 m with them. The host map is authoritative and chunk sync corrects clients, so bake shipped maps on one runtime | later |
 | **Zach:** cave expansion beyond the current fundamentals (cave networks, a dungeon scale) | later |
 
