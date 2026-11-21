@@ -270,7 +270,7 @@ namespace Stabby.Game
             for (int f = 0; f < g.Edits.Length; f++)
             {
                 var e = g.Edits[f];
-                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) edits.Items.Add(e);
+                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) edits.Items.Add(e.AtStep(s));
             }
             if (edits.Count > 0) SurfaceNets.Edited(columns, edits, chunk, ref sink);
             else SurfaceNets.Heightfield(columns, chunk, ref sink);
@@ -281,7 +281,7 @@ namespace Stabby.Game
             for (int f = 0; stitch && f < g.Edits.Length; f++)
             {
                 var e = g.Edits[f];
-                if (e.MeshedIn(2 * s, x0m - m * s, z0m - m * s, x1m + m * s, z1m + m * s)) near.Items.Add(e);
+                if (e.MeshedIn(2 * s, x0m - m * s, z0m - m * s, x1m + m * s, z1m + m * s)) near.Items.Add(e.AtStep(2 * s));
             }
 
             int ringCount = 4 * m;

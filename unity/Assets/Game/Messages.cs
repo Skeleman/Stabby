@@ -42,13 +42,14 @@ namespace Stabby.Game
 
     public struct GroundData
     {
-        public int N, Bands;
+        public int N, Bands, EditAcross;
         public uint Seed, GullySeed, RockSeed;
         public float CellMeters, Top, Period;
         public BlobArray<float> Height, Amp, Offset, Band;
         public BlobArray<int> PieceStart, PieceItems;
         public BlobArray<RiverPiece> Pieces;
         public BlobArray<FeatureEdit> Edits;
+        public BlobArray<int> EditStart, EditItems;
     }
 
     public struct Ground : IComponentData, IGroundHeight
@@ -60,6 +61,14 @@ namespace Stabby.Game
         public float WalkStep => Features.LatticeStepM;
 
         public GroundEdits Edits => new GroundEdits { Blob = Blob };
+
+        public GroundEdits EditsNear(float x, float z, float reach)
+        {
+            ref var g = ref Blob.Value;
+            if (reach > EditGrid.PadM) return Edits;
+            int c = EditGrid.CellOf(z, g.EditAcross) * g.EditAcross + EditGrid.CellOf(x, g.EditAcross);
+            return new GroundEdits { Blob = Blob, Cell = true, Start = g.EditStart[c], N = g.EditStart[c + 1] - g.EditStart[c] };
+        }
 
         public NearCells Cells => new NearCells { Blob = Blob };
 
@@ -118,6 +127,11 @@ namespace Stabby.Game
             var edits = Features.Place(w, detail);
             var e = b.Allocate(ref root.Edits, edits.Length);
             for (int i = 0; i < edits.Length; i++) e[i] = edits[i];
+            EditGrid.Build(edits, n * c.CellMeters, out root.EditAcross, out var cellStart, out var cellItems);
+            var es = b.Allocate(ref root.EditStart, cellStart.Length);
+            for (int i = 0; i < cellStart.Length; i++) es[i] = cellStart[i];
+            var ei = b.Allocate(ref root.EditItems, cellItems.Length);
+            for (int i = 0; i < cellItems.Length; i++) ei[i] = cellItems[i];
             return b;
         }
 
@@ -142,8 +156,10 @@ namespace Stabby.Game
     public struct GroundEdits : IEditList
     {
         public BlobAssetReference<GroundData> Blob;
-        public int Count => Blob.Value.Edits.Length;
-        public FeatureEdit At(int k) => Blob.Value.Edits[k];
+        public bool Cell;
+        public int Start, N;
+        public int Count => Cell ? N : Blob.Value.Edits.Length;
+        public FeatureEdit At(int k) => Cell ? Blob.Value.Edits[Blob.Value.EditItems[Start + k]] : Blob.Value.Edits[k];
     }
 
     public struct SpawnPoint : IComponentData
