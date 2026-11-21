@@ -244,10 +244,19 @@ namespace Stabby.Game
                         set.Uv0[at] = u0;
                         set.Uv1[at] = u1;
                     }
-                    else if (outward < 0)
+                    else
                     {
-                        for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
-                        for (int v = 0; v < vc; v++) nor[v] = -nor[v];
+                        if (m.Tones != null)
+                        {
+                            var t0 = new Vector4[vc];
+                            for (int v = 0; v < vc; v++) t0[v] = new Vector4(m.Tones[4 * v], m.Tones[4 * v + 1], m.Tones[4 * v + 2], m.Tones[4 * v + 3]);
+                            set.Uv0[at] = t0;
+                        }
+                        if (outward < 0)
+                        {
+                            for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
+                            for (int v = 0; v < vc; v++) nor[v] = -nor[v];
+                        }
                     }
                     set.Positions[at] = pos; set.Normals[at] = nor; set.Indices[at] = idx;
                     if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * (m.Uvs != null ? 0.56f : 0.5f) };
@@ -380,7 +389,7 @@ namespace Stabby.Game
                 if (meshSet.Uv0[registered] != null)
                 {
                     m.SetUVs(0, meshSet.Uv0[registered]);
-                    m.SetUVs(1, meshSet.Uv1[registered]);
+                    if (meshSet.Uv1[registered] != null) m.SetUVs(1, meshSet.Uv1[registered]);
                 }
                 m.RecalculateBounds();
                 meshes[registered] = m;
