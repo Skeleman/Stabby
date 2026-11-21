@@ -542,7 +542,7 @@ namespace Stabby.Game
         public int ApplyVertices = 150000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
-        public static bool Casting = true;
+        public static bool Casting = true, HideSunk = true;
 
         sealed class Prepared
         {
@@ -1031,24 +1031,26 @@ namespace Stabby.Game
             float allowed = Allowed(cam);
             float3 eye = cam.transform.position;
             float reach = Casting && UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.shadowDistance : 0;
-            int vertices = 0, casting = 0, castVertices = 0;
+            int vertices = 0, casting = 0, castVertices = 0, sunk = 0;
             foreach (int key in builtKeys)
             {
                 var nd = nodes[key];
                 bool want = drawn.Contains(key);
                 if (!want && !InTree(key)) { Evict(key); continue; }
-                if (want != (nd.Drawn != 0))
+                bool show = want && !(HideSunk && tree.Sunk(key));
+                sunk += want && !show ? 1 : 0;
+                if (show != (nd.Drawn != 0))
                 {
-                    EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, want);
-                    nd.Drawn = want ? 1 : 0;
+                    EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, show);
+                    nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
-                int cast = want && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
+                int cast = show && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
                 if (cast != nd.Cast) Shadow(nd.Entity, cast);
                 nd.Cast = cast;
                 casting += cast;
                 castVertices += cast * nd.Vertices;
-                if (want)
+                if (show)
                 {
                     int l = tree.Level(key);
                     levelCounts[l]++;
@@ -1070,7 +1072,7 @@ namespace Stabby.Game
             if (seen != statusSeen || !GameStatus.Lines.ContainsKey("terrain"))
             {
                 statusSeen = seen;
-                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count} drawn, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, {casting} casting ({castVertices} vertices), by level {string.Join("/", levelCounts)}";
+                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count - sunk} drawn, {sunk} sunk hidden, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, {casting} casting ({castVertices} vertices), by level {string.Join("/", levelCounts)}";
             }
             ScheduleLods(cam);
         }

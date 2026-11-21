@@ -733,6 +733,16 @@ namespace Stabby.Game.Editor
                 }
                 GameStatus.Lines.TryGetValue("terrain", out var t);
                 GameStatus.Lines["~bench " + label + " terrain casting"] = $"bench {label} 1080p terrain casting off/on (ms, full): {ms[0]:F2}/{ms[1]:F2}; {t}";
+                var sunk = new double[4];
+                for (int k = 0; k < 8; k++)
+                {
+                    TerrainViewSystem.HideSunk = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    sunk[k & 1] += BenchAt(cam, 1920, 1080) / 4;
+                    sunk[2 + (k & 1)] += BenchAt(cam, 3840, 2160) / 4;
+                }
+                GameStatus.Lines.TryGetValue("terrain", out t);
+                GameStatus.Lines["~bench " + label + " sunk nodes"] = $"bench {label} sunk nodes drawn/hidden (ms, full): 1080p {sunk[0]:F2}/{sunk[1]:F2}, 4K {sunk[2]:F2}/{sunk[3]:F2}; {t}";
             }
             var sun = Object.FindFirstObjectByType<Light>();
             var keep = sun.transform.rotation;
