@@ -18,7 +18,7 @@ namespace Stabby.World
         public static readonly Scenario[] All =
         {
             new Scenario { Name = "river-through-range", Seed = 49, Find = RiverThroughRange },
-            new Scenario { Name = "river-by-highland", Seed = 8, Find = RiverByHighland },
+            new Scenario { Name = "river-by-highland", Seed = 14, Find = RiverByHighland },
             new Scenario { Name = "lake-outlet-river", Seed = 3, Find = LakeOutletRiver },
             new Scenario { Name = "cliff-meets-beach-or-valley", Seed = 5, Find = CliffMeetsBeachOrValley },
             new Scenario { Name = "narrow-channel", Seed = 4, Find = NarrowChannel },

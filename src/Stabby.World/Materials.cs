@@ -9,6 +9,7 @@ namespace Stabby.World
         public string Name;
         public uint Color;
         public float ThicknessM;
+        public float Hardness;
     }
 
     public sealed class SurfaceDetail
@@ -52,11 +53,13 @@ namespace Stabby.World
             return bands;
         }
 
-        public float[] Offsets(GeneratedWorld w)
+        public float[] Offsets(GeneratedWorld w) => Offsets(w.Config);
+
+        public float[] Offsets(WorldConfig c)
         {
-            int n = w.Config.Size;
-            float cm = w.Config.CellMeters, scale = cm / Math.Max(1f, OffsetWavelengthM);
-            var r = Rng.Stream(w.Config.Seed, "strata");
+            int n = c.Size;
+            float cm = c.CellMeters, scale = cm / Math.Max(1f, OffsetWavelengthM);
+            var r = Rng.Stream(c.Seed, "strata");
             uint seed = r.NextU32();
             float tx = r.Range(-1f, 1f), ty = r.Range(-1f, 1f);
             float norm = (float)Math.Sqrt(tx * tx + ty * ty) + 1e-6f;
@@ -78,6 +81,7 @@ namespace Stabby.World
             {
                 if (string.IsNullOrEmpty(s.Id) || !ids.Add(s.Id)) errors.Add($"strata: id '{s.Id}' missing or repeated");
                 if (!(s.ThicknessM >= 0.5f && s.ThicknessM <= 500f)) errors.Add($"strata {s.Id}: thicknessM {s.ThicknessM} outside 0.5..500");
+                if (!(s.Hardness >= 0 && s.Hardness <= 0.99f)) errors.Add($"strata {s.Id}: hardness {s.Hardness} outside 0..0.99");
             }
             if (!(lib.OffsetAmplitudeM >= 0)) errors.Add("offsetAmplitudeM must be >= 0");
             if (!(lib.OffsetWavelengthM > 0)) errors.Add("offsetWavelengthM must be > 0");

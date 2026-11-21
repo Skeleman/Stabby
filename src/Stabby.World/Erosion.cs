@@ -125,7 +125,7 @@ namespace Stabby.World
 
         static float Dist(float x, float y) => (float)Math.Sqrt(x * x + y * y);
 
-        public static void Run(WorldConfig c, WorldSketch s, float[] h, float[] precipitationMm)
+        public static void Run(WorldConfig c, WorldSketch s, MaterialLibrary lib, float[] h, float[] precipitationMm)
         {
             int n = c.Size;
             bool[] sea = SeaOf(s.Land);
@@ -150,6 +150,8 @@ namespace Stabby.World
                 erod[i] = c.Erodibility * (1 - c.CaprockHardness * caprock[i]) * (1 - c.SummitHardness * SummitCore(s, i % n, i / n));
             }
 
+            var strata = new Strata(c, lib);
+            var hard = new float[n * n];
             float dt = c.TimeStepYears;
             var scratch = new DrainageScratch(n);
             var src = new float[n * n];
@@ -161,6 +163,7 @@ namespace Stabby.World
                 var q = Drainage.Accumulate(stack, recv, runoff, scratch.Acc);
 
                 for (int i = 0; i < n * n; i++) if (!sea[i]) h[i] += s.Uplift[i] * c.MaxUplift * dt;
+                for (int i = 0; i < n * n; i++) hard[i] = sea[i] ? 0 : strata.Hardness(i, h[i]);
 
                 foreach (int i in stack)
                 {
@@ -170,12 +173,12 @@ namespace Stabby.World
                     float hr = sea[r] ? s.Cliff[i] * h[i] : h[r];
                     if (h[i] <= hr) continue;
                     float len = Drainage.StepLength(n, i, r, c.CellMeters);
-                    float f = erod[i] * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
+                    float f = erod[i] * strata.Softness(hard[i]) * dt * (float)FMath.Pow(q[i], c.AreaExponent) / len;
                     h[i] = Math.Max(hr, (h[i] + f * hr) / (1 + f));
-                    h[i] = Math.Min(h[i], hr + slope[i] * len);
+                    h[i] = Math.Min(h[i], hr + slope[i] * (1 + c.StrataSlope * hard[i]) * len);
                 }
 
-                Diffuse(c, s, caprock, h, sea, src);
+                Diffuse(c, s, caprock, hard, h, sea, src);
                 for (int i = 0; i < n * n; i++)
                     if (!sea[i]) h[i] = Math.Max(MinLandHeight, Math.Min(h[i], beachCap[i]));
             }
@@ -270,7 +273,7 @@ namespace Stabby.World
             return w;
         }
 
-        static void Diffuse(WorldConfig c, WorldSketch s, float[] caprock, float[] h, bool[] sea, float[] src)
+        static void Diffuse(WorldConfig c, WorldSketch s, float[] caprock, float[] hard, float[] h, bool[] sea, float[] src)
         {
             int n = c.Size;
             float k = c.Diffusion * c.TimeStepYears / (c.CellMeters * c.CellMeters);
@@ -286,9 +289,46 @@ namespace Stabby.World
                     lap += (sea[i + 1] ? wall : src[i + 1]) - src[i];
                     lap += (sea[i - n] ? wall : src[i - n]) - src[i];
                     lap += (sea[i + n] ? wall : src[i + n]) - src[i];
-                    h[i] = src[i] + k * (1 - caprock[i]) * lap;
+                    h[i] = src[i] + k * (1 - caprock[i]) * (1 - hard[i]) * lap;
                 }
         }
+
+        sealed class Strata
+        {
+            readonly float[] off, band;
+            readonly float period, norm;
+
+            public Strata(WorldConfig c, MaterialLibrary lib)
+            {
+                off = lib.Offsets(c);
+                period = lib.PeriodM;
+                var ids = lib.Bands(BandStepM);
+                int n = ids.Length, reach = (int)(BandBlendM / BandStepM);
+                band = new float[n];
+                for (int k = 0; k < n; k++)
+                {
+                    float sum = 0;
+                    for (int d = -reach; d <= reach; d++) sum += lib.Strata[ids[((k + d) % n + n) % n]].Hardness;
+                    band[k] = sum / (2 * reach + 1) * c.StrataContrast;
+                }
+                double soft = 0, total = 0;
+                foreach (var st in lib.Strata) { soft += (1 - st.Hardness * c.StrataContrast) * st.ThicknessM; total += st.ThicknessM; }
+                norm = (float)(total / soft);
+            }
+
+            public float Hardness(int i, float h)
+            {
+                float u = (h + off[i]) / period;
+                u = (u - (float)Math.Floor(u)) * band.Length;
+                int k = Math.Min(band.Length - 1, (int)u);
+                float t = u - k;
+                return band[k] + (band[(k + 1) % band.Length] - band[k]) * t;
+            }
+
+            public float Softness(float hard) => (1 - hard) * norm;
+        }
+
+        const float BandStepM = 0.5f, BandBlendM = 4f;
 
         public static bool[] SeaOf(bool[] land)
         {

@@ -101,7 +101,8 @@ namespace Stabby.Viewer
             {
                 var sw = Stopwatch.StartNew();
                 var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-                var (world, source) = path != null ? MapFile.LoadOrGenerate(path, BiomeFile.DefaultPath, c, defs, true) : (WorldGenerator.Generate(c, defs), $"generated in {sw.ElapsedMilliseconds} ms");
+                var lib = MaterialFile.Load(materials);
+                var (world, source) = path != null ? MapFile.LoadOrGenerate(path, c, defs, lib, true) : (WorldGenerator.Generate(c, defs, lib), $"generated in {sw.ElapsedMilliseconds} ms");
                 long genMs = sw.ElapsedMilliseconds;
                 var p = Prepare(world, defs, materials, cells, token);
                 p.GenMs = genMs;

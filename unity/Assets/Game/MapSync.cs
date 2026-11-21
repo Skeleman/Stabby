@@ -72,11 +72,12 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             var defs = BiomeFile.Load(BiomeFile.DefaultPath);
-            string path = MapFile.PathFor(GameSettings.Seed, GameSettings.Size), content = BiomeFile.DefaultPath;
+            var lib = MaterialFile.Load(MaterialFile.DefaultPath);
+            string path = MapFile.PathFor(GameSettings.Seed, GameSettings.Size);
             gen = Task.Run(() =>
             {
                 var sw = Stopwatch.StartNew();
-                var (w, source) = MapFile.LoadOrGenerate(path, content, MapGen.Config(GameSettings.Seed), defs, true);
+                var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.Seed), defs, lib, true);
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
                 var sums = WorldChunks.Checksums(w);
                 long sumsMs = sw.ElapsedMilliseconds;
@@ -152,11 +153,13 @@ namespace Stabby.Game
         Entity inbox;
 
         public List<BiomeDef> Defs { get; private set; }
+        public MaterialLibrary Materials { get; private set; }
         public GeneratedWorld Map { get; private set; }
 
         protected override void OnCreate()
         {
             Defs = BiomeFile.Load(BiomeFile.DefaultPath);
+            Materials = MaterialFile.Load(MaterialFile.DefaultPath);
         }
 
         protected override void OnDestroy()
@@ -184,9 +187,10 @@ namespace Stabby.Game
                 hostSeed = i.Seed;
                 clock = Stopwatch.StartNew();
                 var defs = Defs;
+                var lib = Materials;
                 ulong s = i.Seed;
                 bool empty = World.Name == GameSettings.FullStreamClient;
-                string path = MapFile.PathFor(s, GameSettings.Size), content = BiomeFile.DefaultPath;
+                string path = MapFile.PathFor(s, GameSettings.Size);
                 gen = Task.Run(() =>
                 {
                     GeneratedWorld w;
@@ -197,7 +201,7 @@ namespace Stabby.Game
                         w = WorldFile.Empty(new WorldConfig { Seed = s, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) }, ids);
                         source = "started empty";
                     }
-                    else (w, source) = MapFile.LoadOrGenerate(path, content, MapGen.Config(s), defs, false);
+                    else (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
                     return (w, WorldChunks.Checksums(w));
                 });
             }

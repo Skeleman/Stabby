@@ -11,11 +11,12 @@ namespace Stabby.Viewer
         public static string PathFor(ulong seed, int size) =>
             Path.GetFullPath(Path.Combine(UnityEngine.Application.dataPath, "..", "..", "out", "maps", $"seed{seed}-{size}.stabbymap"));
 
-        public static (GeneratedWorld, string) LoadOrGenerate(string path, string contentPath, WorldConfig c, IReadOnlyList<BiomeDef> defs, bool save)
+        public static (GeneratedWorld, string) LoadOrGenerate(string path, WorldConfig c, IReadOnlyList<BiomeDef> defs, MaterialLibrary materials, bool save)
         {
             var sw = Stopwatch.StartNew();
             string why = "no map file";
-            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(contentPath)) why = "map file older than biomes.json";
+            if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(BiomeFile.DefaultPath)) why = "map file older than biomes.json";
+            else if (File.Exists(path) && File.GetLastWriteTimeUtc(path) < File.GetLastWriteTimeUtc(MaterialFile.DefaultPath)) why = "map file older than materials.json";
             else if (File.Exists(path))
             {
                 try
@@ -32,7 +33,7 @@ namespace Stabby.Viewer
                 }
                 catch (Exception e) when (e is FormatException || e is IOException) { why = $"map file unreadable: {e.Message}"; }
             }
-            var g = WorldGenerator.Generate(c, defs);
+            var g = WorldGenerator.Generate(c, defs, materials);
             string note = $"generated in {sw.ElapsedMilliseconds} ms ({why})";
             if (!save) return (g, note);
             Directory.CreateDirectory(Path.GetDirectoryName(path));

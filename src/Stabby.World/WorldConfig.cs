@@ -4,7 +4,7 @@ namespace Stabby.World
 
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 24;
+        public const int GeneratorVersion = 25;
 
         public ulong Seed = 1;
         public const float MapMeters = 23040f;
@@ -43,7 +43,7 @@ namespace Stabby.World
         public float ShelfDepth = 40f, ShelfMeters = 900f, SlopeMeters = 2250f, DeepDepth = 300f;
         public float PlateauHeight = 60f, CaprockHardness = 0.995f;
         public float CliffRise = 90f, CliffTiltMeters = 1800f, CliffStepMeters = 18f;
-        public float CliffSlope = 3f, CliffFootDepth = 25f;
+        public float CliffSlope = 3f, CliffFootDepth = 25f, StrataSlope = 2f, StrataContrast = 0.5f;
         public float PeakStrength = 1.8f, PeakRadius = 0.2f, SummitHardness = 0.75f, ShoulderStrength = 0.8f;
         public float RangeTaper = 0.7f, RangeNarrowing = 0.7f, RangeCrestNoise = 0.35f;
         public float HighlandRadiusMin = 0.16f, HighlandRadiusMax = 0.24f, TablelandFall = 0.06f, TablelandRelief = 12f, TablelandShare = 0.5f;

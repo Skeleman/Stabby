@@ -37,6 +37,7 @@ public static class ContentLoader
         public string Name { get; set; } = "";
         public string Color { get; set; } = "#ff00ff";
         public float ThicknessM { get; set; }
+        public float Hardness { get; set; }
     }
 
     sealed class BiomeFile
@@ -114,7 +115,7 @@ public static class ContentLoader
             },
             Strata = file.Strata.Select(s => new StratumDef
             {
-                Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM,
+                Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
                 Color = uint.Parse(s.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
             }).ToList(),
         };

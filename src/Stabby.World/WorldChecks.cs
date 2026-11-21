@@ -325,7 +325,7 @@ namespace Stabby.World
 
         static float CaveFloor<TSolid>(TSolid solid, int i, int k, float centre, float s) where TSolid : struct, ISolidField
         {
-            int j = (int)Math.Floor(centre / s);
+            int j = (int)Math.Round(centre / s);
             if (solid.Density(i, j, k) >= 0) return float.NaN;
             for (int n = 0; n < 64; n++, j--)
             {

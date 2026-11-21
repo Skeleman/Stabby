@@ -29,13 +29,14 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "name", "color", "thicknessM"],
+        "required": ["id", "name", "color", "thicknessM", "hardness"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
           "name": { "type": "string" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-          "thicknessM": { "type": "number", "minimum": 0.5, "maximum": 500 }
+          "thicknessM": { "type": "number", "minimum": 0.5, "maximum": 500 },
+          "hardness": { "type": "number", "minimum": 0, "maximum": 0.99 }
         }
       }
     }

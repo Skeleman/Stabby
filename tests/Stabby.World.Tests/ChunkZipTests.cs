@@ -8,7 +8,7 @@ namespace Stabby.World.Tests;
 public class ChunkZipTests
 {
     static GeneratedWorld World() => WorldGenerator.Generate(new WorldConfig { Seed = 7, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) },
-        ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory)));
+        ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory)), ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory)));
 
     [Fact]
     public void DeflatedChunksRoundTrip()

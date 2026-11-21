@@ -7,11 +7,12 @@ namespace Stabby.World.Tests;
 public class WorldTests
 {
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
+    static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
     static WorldConfig Cfg(ulong seed, int size = 256) =>
         new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) };
 
-    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes);
+    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials);
 
     [Fact]
     public void HundredSeedsPassEveryCheck()
@@ -59,16 +60,16 @@ public class WorldTests
     public void EditedSketchRoundTripsToSameWorld()
     {
         var c = Cfg(9);
-        var a = WorldGenerator.Generate(c, Biomes);
+        var a = WorldGenerator.Generate(c, Biomes, Materials);
         var again = SketchFile.Read(SketchFile.Write(a.Sketch, c), Cfg(1, 64));
-        Assert.Equal(a.Fingerprint(), WorldGenerator.Generate(c, Biomes, again).Fingerprint());
+        Assert.Equal(a.Fingerprint(), WorldGenerator.Generate(c, Biomes, Materials, again).Fingerprint());
     }
 
     [Fact]
     public void SketchMatchesItsSchema()
     {
         var c = Cfg(9);
-        var json = System.Text.Json.Nodes.JsonNode.Parse(SketchFile.Write(WorldGenerator.Generate(c, Biomes).Sketch, c))!.AsObject();
+        var json = System.Text.Json.Nodes.JsonNode.Parse(SketchFile.Write(WorldGenerator.Generate(c, Biomes, Materials).Sketch, c))!.AsObject();
         var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
         var schema = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(root, "schemas", "sketch.schema.json")))!.AsObject();
         Assert.Equal(SketchFile.SchemaVersion, (int)schema["properties"]!["schemaVersion"]!["const"]!);
@@ -95,13 +96,13 @@ public class WorldTests
     public void AuthoredEditsAreHonoured()
     {
         var c = Cfg(11);
-        var s = WorldGenerator.Generate(c, Biomes).Sketch;
+        var s = WorldGenerator.Generate(c, Biomes, Materials).Sketch;
         var big = s.Landmasses[0];
         s.Regions.Clear();
         s.Regions.Add(new RegionSketch { Biome = "desert", X = big.X, Y = big.Y, Radius = big.Radius * 0.5f });
         s.Landmarks.Add(new LandmarkSketch { Kind = "town", X = big.X + big.Radius * 0.3f, Y = big.Y });
         s.Build(c);
-        var w = WorldGenerator.Generate(c, Biomes, s);
+        var w = WorldGenerator.Generate(c, Biomes, Materials, s);
         Assert.Empty(WorldChecks.Run(w));
         int n = c.Size, centre = (int)big.Y * n + (int)big.X;
         if (!w.Sea[centre] && w.Water.LakeId[centre] < 0) Assert.Equal("desert", w.BiomeIds[w.Biome[centre]]);
@@ -112,7 +113,7 @@ public class WorldTests
     {
         var c = Cfg(5);
         c.UniformRainMm = 1200;
-        var w = WorldGenerator.Generate(c, Biomes);
+        var w = WorldGenerator.Generate(c, Biomes, Materials);
         Assert.Null(w.Biome);
         Assert.Empty(WorldChecks.Run(w));
         Assert.True(w.Water.Rivers.Count > 0);
@@ -169,7 +170,7 @@ public class WorldTests
     public void ConditionalBiomesFollowTheirConditions()
     {
         var c = Cfg(3); c.SeaLevelTempC = 26;
-        var w = WorldGenerator.Generate(c, Biomes);
+        var w = WorldGenerator.Generate(c, Biomes, Materials);
         int n = c.Size, mangrove = World.Biomes.IndexOf(Biomes, "mangrove"), alpine = World.Biomes.IndexOf(Biomes, "alpine");
         var coast = World.Biomes.Distance(n, w.Sea, c.CellMeters);
         int m = 0;

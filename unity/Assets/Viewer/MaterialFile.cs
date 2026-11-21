@@ -8,7 +8,7 @@ namespace Stabby.Viewer
 {
     public static class MaterialFile
     {
-        [Serializable] class Row { public string id, name, color; public float thicknessM; }
+        [Serializable] class Row { public string id, name, color; public float thicknessM, hardness; }
         [Serializable] class Surface { public float strataWobbleM, strataWobbleWavelengthM, coatPatchAmp, coatPatchWavelengthM, coatGrainAmp, coatGrainWavelengthM, rockGrainAmp, rockGrainWavelengthM; }
         [Serializable] class Dto { public int schemaVersion; public float offsetAmplitudeM, offsetWavelengthM, tiltPerKm; public Surface surface; public Row[] strata; }
 
@@ -28,7 +28,7 @@ namespace Stabby.Viewer
                 RockGrainAmp = s.rockGrainAmp, RockGrainWavelengthM = s.rockGrainWavelengthM,
             };
             foreach (var r in dto.strata)
-                lib.Strata.Add(new StratumDef { Id = r.id, Name = r.name, ThicknessM = r.thicknessM, Color = Convert.ToUInt32(r.color.TrimStart('#'), 16) });
+                lib.Strata.Add(new StratumDef { Id = r.id, Name = r.name, ThicknessM = r.thicknessM, Hardness = r.hardness, Color = Convert.ToUInt32(r.color.TrimStart('#'), 16) });
             var errors = MaterialLibrary.Validate(lib);
             if (errors.Count > 0) throw new InvalidDataException(string.Join("\n", errors));
             return lib;

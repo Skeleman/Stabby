@@ -86,7 +86,7 @@ namespace Stabby.World
 
     public static class WorldGenerator
     {
-        public static GeneratedWorld Generate(WorldConfig c, IReadOnlyList<BiomeDef> biomes, WorldSketch sketch = null, Action<string> stage = null)
+        public static GeneratedWorld Generate(WorldConfig c, IReadOnlyList<BiomeDef> biomes, MaterialLibrary materials, WorldSketch sketch = null, Action<string> stage = null)
         {
             sketch = sketch ?? WorldSketch.Generate(c);
             stage?.Invoke("sketch");
@@ -94,7 +94,7 @@ namespace Stabby.World
             var h = Erosion.InitialHeight(c, sketch);
             bool terrainOnly = c.UniformRainMm > 0;
             var provisional = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
-            Erosion.Run(c, sketch, h, provisional.PrecipitationMm);
+            Erosion.Run(c, sketch, materials, h, provisional.PrecipitationMm);
             Erosion.FlattenTableland(c, sketch, h);
             Erosion.CarveLakes(c, sketch, h);
             stage?.Invoke("erosion");

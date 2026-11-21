@@ -6,9 +6,10 @@ namespace Stabby.World.Tests;
 public class ChunkTests
 {
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
+    static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
     static GeneratedWorld Gen(ulong seed) =>
-        WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes);
+        WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, Materials);
 
     static int[] Differing(ulong[] a, ulong[] b) => Enumerable.Range(0, a.Length).Where(k => a[k] != b[k]).ToArray();
 

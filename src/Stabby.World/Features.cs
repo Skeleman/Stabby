@@ -241,7 +241,12 @@ namespace Stabby.World
 
             public bool Add(int shape, float r, float ax, float ay, float az, float bx, float by, float bz)
             {
-                if (!Covered(bx, by, bz, r) || !Covered((ax + bx) * 0.5f, (ay + by) * 0.5f, (az + bz) * 0.5f, r)) return false;
+                int steps = Math.Max(2, (int)Math.Ceiling(Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az))));
+                for (int t = 1; t <= steps; t++)
+                {
+                    float f = t / (float)steps;
+                    if (!Covered(ax + (bx - ax) * f, ay + (by - ay) * f, az + (bz - az) * f, r)) return false;
+                }
                 var e = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = shape, R = r, Ax = ax * Cm, Ay = ay, Az = az * Cm, Bx = bx * Cm, By = by, Bz = bz * Cm };
                 if (!Inside(e, Cm)) return false;
                 Output.Add(e);

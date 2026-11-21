@@ -7,6 +7,7 @@ public class ScenarioTests
 {
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
+    static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
 
     public static TheoryData<string> Names()
     {
@@ -22,7 +23,7 @@ public class ScenarioTests
         var s = Scenarios.All.Single(x => x.Name == name);
         var c = new WorldConfig { Seed = s.Seed, Size = Scenarios.Size, CellMeters = WorldConfig.CellMetersFor(Scenarios.Size) };
         var sketch = s.Sketch == null ? null : ContentLoader.LoadSketch(Root, s.Sketch, c);
-        var w = WorldGenerator.Generate(c, Biomes, sketch);
+        var w = WorldGenerator.Generate(c, Biomes, Materials, sketch);
         Assert.Empty(WorldChecks.Run(w));
         Assert.True(s.Find(w) >= 0, $"{name}: seed {s.Seed} no longer shows the scenario; rescan with `stabby scenarios --scan 100` and repin");
     }
