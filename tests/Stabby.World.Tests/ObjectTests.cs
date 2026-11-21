@@ -187,7 +187,7 @@ public class ObjectTests
                 for (int i = 0; i < m.VertexCount; i++)
                     outward += m.Normals[3 * i] * (m.Positions[3 * i] - mx) + m.Normals[3 * i + 1] * (m.Positions[3 * i + 1] - my) + m.Normals[3 * i + 2] * (m.Positions[3 * i + 2] - mz);
                 Assert.True(outward > 0, $"lod {lod} variant {v} faces inward");
-                for (int i = 0; i < m.VertexCount; i++) Assert.InRange(m.Tones[4 * i], 0f, 4f);
+                for (int i = 0; i < m.VertexCount; i++) Assert.InRange(m.Tones[4 * i], 0f, 5f);
                 prev = m.TriangleCount;
             }
             Assert.Equal(ObjectMeshes.Build(shape, k, 0, aspect, ends).Positions, ObjectMeshes.Build(shape, k, 0, aspect, ends).Positions);

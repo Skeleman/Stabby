@@ -237,7 +237,7 @@ namespace Stabby.World
         }
 
         const float StumpR0 = 0.5f / 1.35f;
-        const float CodeOak = 0, CodeSpruce = 1, CodeGrain = 2, CodeSoil = 3, CodeRoot = 4;
+        const float CodeOak = 0, CodeSpruce = 1, CodeGrain = 2, CodeSoil = 3, CodeRoot = 4, CodeStone = 5;
 
         struct WoodBuilder
         {
@@ -312,7 +312,7 @@ namespace Stabby.World
             t.Core = rng.Range(-0.2f, 0.6f);
             t.Hollow = !sawn && age > 0.6f && rng.NextFloat() < 0.5f;
             if (t.Hollow) t.Core = -rng.Range(1f, 2.5f);
-            t.Spikes = rng.Range(1, 4);
+            t.Spikes = rng.Range(2, 4);
             t.Spike0 = rng.NextFloat(); t.Spike1 = rng.NextFloat(); t.Spike2 = rng.NextFloat();
             t.Height0 = rng.Range(spikeMin, spikeMax); t.Height1 = rng.Range(spikeMin, spikeMax) * 0.7f; t.Height2 = rng.Range(spikeMin, spikeMax) * 0.5f;
             return t;
@@ -334,6 +334,9 @@ namespace Stabby.World
             return d == 0 ? 1f : d == 1 ? 0.45f : 0f;
         }
 
+        static float TornRim(ref Rng jr, in Teeth t, int k, int segments, float c, float s) =>
+            0.35f * t.Amp * Math.Max(0f, 0.5f + 0.5f * t.Jag.At(c, s)) + 0.3f * SpikeAt(t, k, segments) + jr.Range(0f, 0.3f);
+
         static int Nearest(float frac, int segments) => (int)(frac * segments + 0.5f) % segments;
 
         static void Cap(ref WoodBuilder w, ref Rng jr, int[] rim, int segments, in Teeth t, ObjectFoliage.V centre, ObjectFoliage.V axis, ObjectFoliage.V e1, ObjectFoliage.V e2, float radius, float moss, float age)
@@ -352,8 +355,10 @@ namespace Stabby.World
             {
                 Ring(segments, k, out float c, out float s);
                 float spike = SpikeAt(t, k, segments);
-                float frac = t.Hollow ? 0.8f : spike > 0 ? 0.78f : 0.62f;
-                float lift = t.Hollow ? jr.Range(-0.1f, 0.15f) : t.Base + t.Amp * (0.5f + 0.5f * t.Jag.At(c, s)) + jr.Range(0f, 0.25f) + spike;
+                float jag = Math.Max(0f, 0.5f + 0.5f * t.Jag.At(c, s));
+                float tooth = (k & 1) == 0 ? jr.Range(0.15f, 0.6f) * (0.4f + t.Amp) * Math.Min(radius, 1.2f) : 0f;
+                float frac = t.Hollow ? jr.Range(0.74f, 0.86f) : spike > 0 ? jr.Range(0.72f, 0.84f) : jr.Range(0.5f, 0.72f);
+                float lift = t.Hollow ? 0.4f * t.Amp * jag + jr.Range(-0.1f, 0.3f) + 0.6f * spike + tooth : t.Base + t.Amp * jag + jr.Range(0f, 0.4f) + spike + tooth;
                 float rim0 = ObjectFoliage.V.Dot(w.R[rim[k]] - centre, axis);
                 inner[k] = w.Add(centre + (e1 * c + e2 * s) * (radius * frac) + axis * (lift + rim0 * frac), CodeGrain, moss, extra, age);
             }
@@ -406,8 +411,8 @@ namespace Stabby.World
                     Ring(seg, k, out float c, out float s);
                     float rr = radii[r] * (1 + section.At(c, s) + jr.Range(-0.02f, 0.02f));
                     float ax = 0;
-                    if (r == 0) ax = -(tiltY0 * c + tiltZ0 * s) * (sawn ? 0.3f : 1f) - (sawn || rooted ? 0 : jr.Range(0f, 0.25f));
-                    if (r == rings - 1) ax = (tiltY1 * c + tiltZ1 * s) * (sawn ? 0.3f : 1f) + (sawn ? 0 : jr.Range(0f, 0.25f));
+                    if (r == 0) ax = -(tiltY0 * c + tiltZ0 * s) * (sawn ? 0.3f : 1f) - (sawn || rooted ? 0 : TornRim(ref jr, teeth0, k, seg, c, s));
+                    if (r == rings - 1) ax = (tiltY1 * c + tiltZ1 * s) * (sawn ? 0.3f : 1f) + (sawn ? 0 : TornRim(ref jr, teeth1, k, seg, c, s));
                     ringIdx[r][k] = w.Add(centres[r] + new ObjectFoliage.V(ax, c * rr, s * rr), code, moss, 0, age);
                 }
             }
@@ -515,7 +520,7 @@ namespace Stabby.World
         static void Plate(ref WoodBuilder w, ref Rng rng, ref Rng jr, int seg, int lod, float baseX, float rp, float yc, float thick, float moss, float age)
         {
             float tilt = rng.Range(0.1f, 0.3f), xp = baseX + 0.3f, bulge = rng.Range(0.1f, 0.35f);
-            var rim = Harmonics.Draw(ref rng, 0.08f, true);
+            var rim = Harmonics.Draw(ref rng, 0.16f, true);
             float darkB = rng.Range(0.3f, 0.6f);
             float pitScale = rng.Range(0.8f, 1f), rimRise = rng.Range(0.5f, 0.9f);
             var pitRim = Harmonics.Draw(ref rng, 0.15f, true);
@@ -524,42 +529,79 @@ namespace Stabby.World
             var rootLen = new float[roots];
             var rootRad = new float[roots];
             for (int i = 0; i < roots; i++) { rootFrac[i] = rng.NextFloat(); rootLen[i] = rng.Range(1f, 3f); rootRad[i] = rng.Range(0.15f, 0.32f); }
+            int strands = rng.Range(14, 22);
+            var sc = new float[strands];
+            var ss = new float[strands];
+            var sr0 = new float[strands];
+            var sr1 = new float[strands];
+            var srad = new float[strands];
+            for (int i = 0; i < strands; i++) { Dir2(ref rng, out sc[i], out ss[i]); sr0[i] = rng.Range(0.15f, 0.45f); sr1[i] = rng.Range(0.95f, 1.3f); srad[i] = rng.Range(0.07f, 0.17f); }
+            int lumps = rng.Range(16, 26);
+            var lc = new float[lumps];
+            var ls = new float[lumps];
+            var lrho = new float[lumps];
+            var lsize = new float[lumps];
+            var lside = new int[lumps];
+            var lstone = new bool[lumps];
+            for (int i = 0; i < lumps; i++)
+            {
+                Dir2(ref rng, out lc[i], out ls[i]);
+                lrho[i] = rng.Range(0.2f, 0.92f);
+                lsize[i] = rng.Range(0.15f, 0.45f);
+                float u = rng.NextFloat();
+                lside[i] = u < 0.35f ? 0 : u < 0.8f ? 1 : 2;
+                lstone[i] = rng.NextFloat() < 0.35f;
+            }
             var ex = new ObjectFoliage.V(1, 0, 0);
             var ey = new ObjectFoliage.V(0, 1, 0);
-            var rhoAt = new[] { 0.45f, 1f };
-            var front = new int[2][];
-            var back = new int[2][];
-            var rimP = new ObjectFoliage.V[seg];
-            for (int q = 0; q < 2; q++)
+            var rhoAt = lod == 0 ? new[] { 0.3f, 0.55f, 0.8f, 1f } : lod == 1 ? new[] { 0.4f, 0.75f, 1f } : new[] { 0.45f, 1f };
+            int rings = rhoAt.Length, last = rings - 1;
+            var rimS = new float[seg];
+            for (int k = 0; k < seg; k++)
+            {
+                Ring(seg, k, out float c, out float s);
+                rimS[k] = Math.Max(0.7f, Math.Min(1.25f, RimAt(rim, c, s) + jr.Range(-0.08f, 0.08f)));
+            }
+            var front = new int[rings][];
+            var back = new int[rings][];
+            for (int q = 0; q < rings; q++)
             {
                 front[q] = new int[seg];
                 back[q] = new int[seg];
+                float rho = rhoAt[q];
+                bool outer = q == last;
                 for (int k = 0; k < seg; k++)
                 {
                     Ring(seg, k, out float c, out float s);
-                    float rho = rhoAt[q], rr = rp * rho * (q == 1 ? Math.Max(0.75f, Math.Min(1.15f, 1 + rim.At(c, s) + jr.Range(-0.04f, 0.04f))) : 1f);
+                    float rr = rp * rho * (1 + (rimS[k] - 1) * rho * rho) * (outer ? 1f : 1 + jr.Range(-0.05f, 0.05f));
                     var d = new ObjectFoliage.V(xp - tilt * c * rr, yc + c * rr, s * rr);
-                    if (q == 1) rimP[k] = d;
-                    front[q][k] = w.Add(d + ex * (bulge * (1 - rho * rho)), CodeSoil, 0.8f, 0.1f, age);
-                    back[q][k] = w.Add(d - ex * (thick * (1 - 0.7f * rho * rho)), CodeSoil, 0.1f, darkB, age);
+                    float bumpF = outer ? jr.Range(-0.12f, 0.12f) : jr.Range(-0.12f, 0.25f);
+                    float bumpB = outer ? jr.Range(-0.12f, 0.12f) : jr.Range(-0.2f, 0.15f);
+                    float con = Contact(d.Y);
+                    front[q][k] = w.Add(d + ex * (bulge * (1 - rho * rho) + bumpF), CodeSoil, 0.1f + 0.3f * rho * rho * rho, Math.Max(0.1f, con), age);
+                    back[q][k] = w.Add(d - ex * (thick * (1 - 0.7f * rho * rho) + bumpB), CodeSoil, 0.08f, Math.Max(darkB, con), age);
                 }
             }
-            int fc = w.Add(new ObjectFoliage.V(xp + bulge, yc, 0), CodeSoil, 0.8f, 0.1f, age);
-            int bc = w.Add(new ObjectFoliage.V(xp - thick, yc, 0), CodeSoil, 0.1f, darkB, age);
+            int fc = w.Add(new ObjectFoliage.V(xp + bulge, yc, 0), CodeSoil, 0.1f, 0.1f, age);
+            int bc = w.Add(new ObjectFoliage.V(xp - thick, yc, 0), CodeSoil, 0.08f, darkB, age);
             for (int k = 0; k < seg; k++)
             {
                 int k1 = (k + 1) % seg;
                 w.Tri(fc, front[0][k], front[0][k1], ex);
-                w.Quad(front[0][k], front[0][k1], front[1][k1], front[1][k], ex);
                 w.Tri(bc, back[0][k], back[0][k1], -ex);
-                w.Quad(back[0][k], back[0][k1], back[1][k1], back[1][k], -ex);
+                for (int q = 0; q < last; q++)
+                {
+                    w.Quad(front[q][k], front[q][k1], front[q + 1][k1], front[q + 1][k], ex);
+                    w.Quad(back[q][k], back[q][k1], back[q + 1][k1], back[q + 1][k], -ex);
+                }
             }
             var band0 = new int[seg];
             var band1 = new int[seg];
             for (int k = 0; k < seg; k++)
             {
-                band0[k] = w.Add(w.R[front[1][k]], CodeSoil, 0.5f, 0.3f, age);
-                band1[k] = w.Add(w.R[back[1][k]], CodeSoil, 0.2f, darkB, age);
+                float con0 = Contact(w.R[front[last][k]].Y), con1 = Contact(w.R[back[last][k]].Y);
+                band0[k] = w.Add(w.R[front[last][k]], CodeSoil, 0.3f, Math.Max(0.2f, con0), age);
+                band1[k] = w.Add(w.R[back[last][k]], CodeSoil, 0.1f, Math.Max(darkB, con1), age);
             }
             for (int k = 0; k < seg; k++)
             {
@@ -569,6 +611,7 @@ namespace Stabby.World
                 w.Quad(band0[k], band0[k1], band1[k1], band1[k], new ObjectFoliage.V(0, c0 + c1, s0 + s1));
             }
             if (lod < 2)
+            {
                 for (int i = 0; i < roots; i++)
                 {
                     if (lod == 1 && (i & 1) == 1) continue;
@@ -579,8 +622,43 @@ namespace Stabby.World
                     var d = new ObjectFoliage.V(-0.6f, c - 0.3f, s).Norm();
                     var tip = start + d * rootLen[i];
                     if (tip.Y < -1.05f) tip = new ObjectFoliage.V(tip.X, -1.05f, tip.Z);
-                    Root(ref w, ref jr, start, tip, rootRad[i], age);
+                    Root(ref w, ref jr, start, tip, rootRad[i], age, start + (tip - start) * 0.5f + new ObjectFoliage.V(0, -0.1f * (tip - start).Length, 0));
                 }
+                for (int i = 0; i < strands; i++)
+                {
+                    if (lod == 1 && (i & 1) == 1) continue;
+                    float c = sc[i], s = ss[i], rimR = RimAt(rim, c, s);
+                    bool onFront = i % 3 == 0;
+                    float rho0 = sr0[i], rhoM = 0.5f * (rho0 + 1), r0 = rp * rho0, rm = rp * rhoM, r1 = rp * Math.Min(1.22f, sr1[i] * rimR);
+                    ObjectFoliage.V start, mid, tip;
+                    if (onFront)
+                    {
+                        start = new ObjectFoliage.V(xp - tilt * c * r0 + bulge * (1 - rho0 * rho0), yc + c * r0, s * r0);
+                        mid = new ObjectFoliage.V(xp - tilt * c * rm + bulge * (1 - rhoM * rhoM) + 0.5f * srad[i], yc + c * rm, s * rm);
+                        tip = new ObjectFoliage.V(xp - tilt * c * r1 - 0.3f * thick, yc + c * r1, s * r1);
+                    }
+                    else
+                    {
+                        start = new ObjectFoliage.V(xp - tilt * c * r0 - thick * (1 - 0.7f * rho0 * rho0) + 0.05f, yc + c * r0, s * r0);
+                        mid = new ObjectFoliage.V(xp - tilt * c * rm - thick * (1 - 0.7f * rhoM * rhoM) - 0.5f * srad[i], yc + c * rm, s * rm);
+                        tip = new ObjectFoliage.V(xp - tilt * c * r1 - 0.5f * thick - 0.3f * sr1[i], yc + c * r1, s * r1);
+                    }
+                    if (start.Y < -0.95f) continue;
+                    if (tip.Y < -1.05f) tip = new ObjectFoliage.V(tip.X, -1.05f, tip.Z);
+                    Root(ref w, ref jr, start, tip, srad[i], age, mid);
+                }
+                for (int i = 0; i < lumps; i++)
+                {
+                    if (lod == 1 && (i & 1) == 1) continue;
+                    float c = lc[i], s = ls[i], rho = lrho[i], rimR = RimAt(rim, c, s);
+                    float rr = lside[i] == 2 ? rp * rimR - 0.7f * lsize[i] : rp * rho * (1 + (rimR - 1) * rho * rho);
+                    float x = lside[i] == 0 ? bulge * (1 - rho * rho) : lside[i] == 1 ? -thick * (1 - 0.7f * rho * rho) : -0.3f * thick * rho;
+                    var pos = new ObjectFoliage.V(xp - tilt * c * rr + x, yc + c * rr, s * rr);
+                    if (pos.Y < -0.9f) continue;
+                    var up = lside[i] == 0 ? ex : lside[i] == 1 ? -ex : new ObjectFoliage.V(0, c, s);
+                    Lump(ref w, ref jr, pos, up, lsize[i], lstone[i] ? CodeStone : CodeSoil, lstone[i] ? 0.05f : 0.15f, Math.Max(0.1f, Contact(pos.Y)), age);
+                }
+            }
             float rpit = rp * pitScale, pcx = xp - thick - 0.55f * rpit;
             var pitRho = new[] { 0.55f, 1f, 1.5f };
             var pitY = new[] { -0.94f, 0f, -1.1f };
@@ -607,7 +685,40 @@ namespace Stabby.World
             }
         }
 
-        static void Root(ref WoodBuilder w, ref Rng jr, ObjectFoliage.V start, ObjectFoliage.V tip, float radius, float age)
+        static float RimAt(in Harmonics rim, float c, float s) => Math.Max(0.7f, Math.Min(1.2f, 1 + rim.At(c, s)));
+
+        static float Contact(float y) => 0.9f * Math.Max(0f, Math.Min(1f, (-0.35f - y) / 0.65f));
+
+        static void Dir2(ref Rng rng, out float c, out float s)
+        {
+            while (true)
+            {
+                c = rng.Range(-1f, 1f);
+                s = rng.Range(-1f, 1f);
+                float l = c * c + s * s;
+                if (l < 0.04f || l > 1f) continue;
+                l = (float)Math.Sqrt(l);
+                c /= l;
+                s /= l;
+                return;
+            }
+        }
+
+        static void Lump(ref WoodBuilder w, ref Rng jr, ObjectFoliage.V centre, ObjectFoliage.V up, float size, float code, float y, float z, float age)
+        {
+            up = up.Norm();
+            var a = ObjectFoliage.V.Cross(up, Math.Abs(up.Y) < 0.9f ? new ObjectFoliage.V(0, 1, 0) : new ObjectFoliage.V(1, 0, 0)).Norm();
+            var b = ObjectFoliage.V.Cross(up, a);
+            var dirs = new[] { a, -a, b, -b, up * 0.7f, -up * 0.5f };
+            var idx = new int[6];
+            for (int i = 0; i < 6; i++) idx[i] = w.Add(centre + dirs[i] * (size * jr.Range(0.65f, 1.3f)), code, y, z, age);
+            for (int i = 0; i < 2; i++)
+                for (int j = 2; j < 4; j++)
+                    for (int p = 4; p < 6; p++)
+                        w.Tri(idx[i], idx[j], idx[p], dirs[i] + dirs[j] + dirs[p]);
+        }
+
+        static void Root(ref WoodBuilder w, ref Rng jr, ObjectFoliage.V start, ObjectFoliage.V tip, float radius, float age, ObjectFoliage.V mid)
         {
             var d = (tip - start).Norm();
             var e1 = ObjectFoliage.V.Cross(d, new ObjectFoliage.V(0, 1, 0));
@@ -616,7 +727,6 @@ namespace Stabby.World
             var e2 = ObjectFoliage.V.Cross(d, e1);
             var tc = new[] { 1f, -0.5f, -0.5f };
             var ts = new[] { 0f, 0.8660254f, -0.8660254f };
-            var mid = start + (tip - start) * 0.5f + new ObjectFoliage.V(0, -0.1f * (tip - start).Length, 0);
             var a = new int[3];
             var b = new int[3];
             float soil = jr.Range(0.3f, 0.8f);

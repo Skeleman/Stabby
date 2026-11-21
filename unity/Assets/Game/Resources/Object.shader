@@ -123,16 +123,19 @@ Shader "Stabby/Object"
                 float moss = 0.9 * saturate(mossAmt * smoothstep(0.35, 0.85, n.y + 0.3 * mn.y) * patch * 1.3);
                 float3 mossC = lerp(float3(0.07, 0.09, 0.03), float3(0.16, 0.18, 0.07), 0.5 + 0.5 * mf.y);
                 float decay = lerp(1, 0.62, age * age);
-                [branch] if (code == 3)
+                [branch] if (code == 3 || code == 5)
                 {
-                    float3 dirt = float3(0.06, 0.045, 0.032) * (0.8 + 0.4 * mn.y);
+                    float4 cl = TmNoise3(wp * 3.3 + 1.7, int3(0, 0, 0));
+                    float3 dirt = float3(0.115, 0.07, 0.038) * (0.75 + 0.4 * mn.y) * (0.8 + 0.35 * cl.x);
                     float3 nz = TmNoise3(wp * 6.1 + 4.4, int3(0, 0, 0)).yzw;
                     float pebble = smoothstep(0.55, 0.75, TmNoise3(wp * 13.7, int3(0, 0, 0)).x);
-                    albedo = lerp(dirt, gc * 0.55, 0.5 * saturate(tone.y * (0.7 + 0.6 * mn.x))) * (1 - 0.55 * tone.z);
-                    albedo = lerp(albedo, ToLinear(float3(0.42, 0.4, 0.37)), 0.5 * pebble * (1 - tone.y));
-                    float fib = smoothstep(0.82, 0.95, 1 - abs(TmNoise2(wp.xz * 7 + wp.y * 3.1).x)) * (1 - tone.y) * TmFade(7, fp);
+                    float3 contact = lerp(dirt * 0.4, gc * 0.25, 0.35);
+                    albedo = lerp(dirt, gc * 0.5, 0.22 * saturate(tone.y * (0.7 + 0.6 * mn.x)));
+                    albedo = code == 5 ? lerp(ToLinear(float3(0.43, 0.41, 0.38)) * (0.7 + 0.45 * mf.x), dirt, 0.25 + 0.2 * mn.z) : lerp(albedo, ToLinear(float3(0.42, 0.4, 0.37)), 0.5 * pebble * (1 - tone.y));
+                    albedo = lerp(albedo, contact, 0.75 * tone.z);
+                    float fib = smoothstep(0.82, 0.95, 1 - abs(TmNoise2(wp.xz * 7 + wp.y * 3.1).x)) * (1 - tone.y) * TmFade(7, fp) * (code == 5 ? 0 : 1);
                     albedo = lerp(albedo, ToLinear(float3(0.32, 0.25, 0.18)), 0.6 * fib);
-                    float3 g = 0.06 * nz * TmFade(6, fp);
+                    float3 g = (0.06 + 0.06 * (code == 5)) * nz * TmFade(6, fp) + 0.05 * cl.yzw * TmFade(3.3, fp);
                     nOut = normalize(n - (g - n * dot(g, n)));
                     return;
                 }
