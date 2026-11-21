@@ -12,13 +12,21 @@ namespace Stabby.Game
 
         public static byte[] Deflate(byte[] raw, int length, byte[] scratch)
         {
+            var m = new MemoryStream(length / 2);
+            Deflate(raw, length, scratch, m);
+            return m.ToArray();
+        }
+
+        public static int Deflate(byte[] raw, int length, byte[] scratch, MemoryStream into)
+        {
             if (length % Stride != 0) throw new InvalidDataException($"chunk of {length} bytes is not whole cells");
             int cells = length / Stride;
             for (int c = 0; c < cells; c++)
                 for (int b = 0, s = c * Stride; b < Stride; b++) scratch[b * cells + c] = raw[s + b];
-            var m = new MemoryStream(length / 2);
-            using (var z = new DeflateStream(m, CompressionLevel.Optimal, true)) z.Write(scratch, 0, length);
-            return m.ToArray();
+            long start = into.Length;
+            into.Position = start;
+            using (var z = new DeflateStream(into, CompressionLevel.Optimal, true)) z.Write(scratch, 0, length);
+            return (int)(into.Length - start);
         }
 
         public static byte[] Inflate(byte[] packed, int bytes)
