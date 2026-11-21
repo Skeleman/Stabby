@@ -1,0 +1,92 @@
+using System.Collections.Generic;
+using System.Linq;
+using Unity.Entities;
+using Unity.Profiling;
+using Unity.Profiling.LowLevel.Unsafe;
+using UnityEngine;
+using UnityEngine.Profiling;
+
+namespace Stabby.Game.Editor
+{
+    static class ObjectScale
+    {
+        const int Frames = 120;
+        static readonly string[] Wanted = { "LodJob", "ObjectLodSystem", "ObjectViewSystem", "EntitiesGraphicsSystem" };
+        static readonly List<(string name, ProfilerRecorder rec, double[] ms)> recs = new List<(string, ProfilerRecorder, double[])>();
+        static readonly List<string> sets = new List<string>();
+        static int frame = -1;
+        static double[] view = new double[Frames];
+
+        public static string Density => System.Environment.GetEnvironmentVariable("STABBY_OBJECT_DENSITY") ?? "1";
+
+        public static bool Sample(string label)
+        {
+            if (frame < 0)
+            {
+                if (recs.Count == 0) Start();
+                frame = 0;
+                return false;
+            }
+            for (int r = 0; r < recs.Count; r++) recs[r].ms[frame] = recs[r].rec.LastValue / 1e6;
+            view[frame] = ObjectViewSystem.LastMs;
+            if (++frame < Frames) return false;
+            var parts = new List<string> { $"view system {Avg(view):F3} avg / {view.Max():F2} max" };
+            foreach (var (name, _, ms) in recs) if (ms.Max() > 0) parts.Add($"{name} {Avg(ms):F3} avg / {ms.Max():F2} max");
+            sets.Add($"scale {label} over {Frames} frames (ms): {string.Join(", ", parts)}; {ObjectViewSystem.LiveEntities} object entities, {ObjectViewSystem.PartsHeld} parts held in {ObjectViewSystem.ChunksHeld} chunks");
+            frame = -1;
+            return true;
+        }
+
+        static double Avg(double[] a) => a.Sum() / a.Length;
+
+        static void Start()
+        {
+            var handles = new List<ProfilerRecorderHandle>();
+            ProfilerRecorderHandle.GetAvailable(handles);
+            var seen = new HashSet<string>();
+            foreach (var h in handles)
+            {
+                var d = ProfilerRecorderHandle.GetDescription(h);
+                if (!Wanted.Any(w => d.Name.Contains(w)) || !seen.Add(d.Name)) continue;
+                recs.Add((d.Name, ProfilerRecorder.StartNew(d.Category, d.Name, 1, ProfilerRecorderOptions.Default), new double[Frames]));
+            }
+        }
+
+        public static string Forced()
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                if (w.Name != GameSettings.ViewClient) continue;
+                var lod = w.GetExistingSystem<ObjectLodSystem>();
+                w.EntityManager.CompleteAllTrackedJobs();
+                var ms = new double[30];
+                for (int k = 0; k < ms.Length; k++)
+                {
+                    long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                    lod.Update(w.Unmanaged);
+                    w.EntityManager.CompleteAllTrackedJobs();
+                    ms[k] = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                }
+                System.Array.Sort(ms);
+                int all = w.EntityManager.UniversalQuery.CalculateEntityCount();
+                return $"scale lod forced (update + complete, 30 runs, ms): median {ms[15]:F3}, best {ms[0]:F3}; {all} entities in the view world";
+            }
+            return "scale lod forced: no view world";
+        }
+
+        public static string Memory()
+        {
+            long mb = 1024 * 1024;
+            using var p = System.Diagnostics.Process.GetCurrentProcess();
+            return $"scale memory (MB): unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, process private {p.PrivateMemorySize64 / mb}";
+        }
+
+        public static string Report() => $"scale density {Density}\n" + string.Join("\n", sets);
+
+        public static void Stop()
+        {
+            foreach (var r in recs) r.rec.Dispose();
+            recs.Clear();
+        }
+    }
+}

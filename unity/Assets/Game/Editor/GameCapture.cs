@@ -38,7 +38,7 @@ namespace Stabby.Game.Editor
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.intensity = 0.8f;
-            sun.shadows = LightShadows.Hard;
+            sun.shadows = LightShadows.Soft;
             sun.color = new Color(1f, 0.96f, 0.88f);
             sun.transform.rotation = Quaternion.Euler(38f, 140f, 0);
 
@@ -153,19 +153,19 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "rivers" ? 70 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "floor" ? 26 + BiomeShots.Length : 1;
             }
-            if (phase == 70)
+            if (phase == 50)
             {
-                if (job == null) job = RiverTour(cam, dir);
+                if (job == null) job = CliffTour(cam, dir);
                 if (job.MoveNext()) return;
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
                 return;
             }
-            if (phase == 50)
+            if (phase == 120)
             {
-                if (job == null) job = CliffTour(cam, dir);
+                if (job == null) job = ScaleTour(cam, dir);
                 if (job.MoveNext()) return;
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -453,14 +453,14 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 60 && phase < 60 + 2 * ForestShots.Length)
+            while (phase >= 60 && phase <= 60 + 2 * ForestShots.Length)
             {
-                int fk = (phase - 60) / 2;
-                bool mid = (phase - 60) % 2 == 1;
-                string name = "forest-" + ForestShots[fk] + (mid ? "-mid" : "-close");
+                bool wide = phase == 60 + 2 * ForestShots.Length;
+                int fk = wide ? 0 : (phase - 60) / 2, view = wide ? 2 : (phase - 60) % 2;
+                string name = "forest-" + ForestShots[fk] + (view == 2 ? "-wide" : view == 1 ? "-mid" : "-close");
                 if (wait == 0)
                 {
-                    if (!AimBiome(cam, ForestShots[fk]) || !AimForest(cam, ForestShots[fk], mid)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    if (!AimBiome(cam, ForestShots[fk]) || !AimForest(cam, ForestShots[fk], view)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -470,16 +470,36 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "biomes" || only == "beach" || only == "forest")
+            while (phase >= 80 && phase < 80 + RiverShots.Length)
+            {
+                string name = RiverShots[phase - 80];
+                if (wait == 0)
+                {
+                    if (!AimRiver(cam, phase - 80)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
+            if (only == "river")
+            {
+                if (job == null) job = RiverTour(cam, dir);
+                if (job.MoveNext()) return;
+            }
+            if (only == "biomes" || only == "beach" || only == "forest" || only == "river")
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
                 return;
             }
             int f0 = 26 + BiomeShots.Length;
-            while (phase >= f0 && phase <= f0 + 2)
+            while (phase >= f0 && phase <= f0 + 4)
             {
-                string name = phase == f0 ? "floor-near" : phase == f0 + 1 ? "floor-mid" : "cliff-foot";
+                string name = phase == f0 ? "floor-near" : phase == f0 + 1 ? "floor-mid" : phase == f0 + 2 ? "cliff-foot" : phase == f0 + 3 ? "floor-windthrow" : "floor-snapped";
                 if (wait == 0)
                 {
                     if (!AimFloor(cam, phase - f0)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
@@ -491,6 +511,12 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 wait = 0;
                 phase++;
+            }
+            if (only == "floor")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             if (!castDone) { job = CastTour(cam, dir); castDone = true; }
             if (job != null && job.MoveNext()) return;
@@ -782,6 +808,41 @@ namespace Stabby.Game.Editor
         static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5, 6 };
         static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close", "oak-close" };
 
+        static System.Collections.IEnumerator ScaleTour(Camera cam, string dir)
+        {
+            var pose = System.Environment.GetEnvironmentVariable("STABBY_SCALE_POSE")?.Split(',').Select(v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (pose != null && pose.Length == 7) cam.transform.SetPositionAndRotation(new Vector3(pose[0], pose[1], pose[2]), new Quaternion(pose[3], pose[4], pose[5], pose[6]));
+            else if (!AimFoliage(cam, 1)) { GameStatus.Lines["~scale"] = "scale: no forest found"; yield break; }
+            var at = cam.transform;
+            GameStatus.Lines["~scale pose"] = string.Format(System.Globalization.CultureInfo.InvariantCulture, "scale pose {0:F2},{1:F2},{2:F2},{3:F5},{4:F5},{5:F5},{6:F5}", at.position.x, at.position.y, at.position.z, at.rotation.x, at.rotation.y, at.rotation.z, at.rotation.w);
+            var settle = System.Diagnostics.Stopwatch.StartNew();
+            int frames = 0;
+            for (; frames < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && settle.Elapsed.TotalSeconds < 150); frames++) yield return null;
+            GameStatus.Lines["~scale settle"] = $"scale settle: {frames} frames, {settle.Elapsed.TotalSeconds:F1} s, objects pending {ObjectViewSystem.Pending}, terrain behind {GameStatus.TerrainBehind}";
+            while (!ObjectScale.Sample("still forest")) yield return null;
+            GameStatus.Lines["~scale lod"] = ObjectScale.Forced();
+            GameStatus.Lines["~scale memory"] = ObjectScale.Memory();
+            GameStatus.Lines["~objects draw"] = DrawStats();
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "scale-forest");
+            GameStatus.Lines["~bench scale forest"] = Bench(cam, "forest with grass, shadows, terrain and water");
+            GameStatus.Lines["~bench scale forest shadows"] = ShadowBench(cam, "forest", true);
+            GameStatus.Lines["~bench trees"] = FoliageBench(cam, "trees filling the view");
+            var p = at.position;
+            var fwd = Vector3.ProjectOnPlane(at.forward, Vector3.up).normalized;
+            float rise = p.y - GroundHeight(p.x, p.z);
+            do
+            {
+                p += fwd * 2f;
+                p.y = GroundHeight(p.x, p.z) + rise;
+                at.position = p;
+                yield return null;
+            }
+            while (!ObjectScale.Sample("walking 2 m per frame"));
+            GameStatus.Lines["~scale"] = ObjectScale.Report();
+            ObjectScale.Stop();
+        }
+
         static bool AimFoliage(Camera cam, int range)
         {
             foreach (var w in Unity.Entities.World.All)
@@ -911,6 +972,7 @@ namespace Stabby.Game.Editor
                 var lib = field.Library.Objects;
                 ObjectInstance pick = default;
                 float best = float.MaxValue;
+                string want = mode < 2 ? "fallen-log" : mode == 2 ? "cliff-scree" : mode == 3 ? "windthrow" : "snapped-tree";
                 for (int cz = 0; cz < field.ChunksAcross; cz++)
                     for (int cx = 0; cx < field.ChunksAcross; cx++)
                     {
@@ -918,13 +980,13 @@ namespace Stabby.Game.Editor
                         foreach (var o in chunk)
                         {
                             string id = lib[o.Def].Id;
-                            if (mode < 2 ? id != "fallen-log" : id != "cliff-scree") continue;
+                            if (id != want) continue;
                             int near = 0;
                             foreach (var b in chunk)
                             {
                                 string bid = lib[b.Def].Id;
                                 float d2 = (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z);
-                                if (d2 < 400f && (mode < 2 ? bid == "fallen-log" || bid == "stump" : bid == "cliff-scree")) near++;
+                                if (d2 < 400f && (mode == 2 ? bid == "cliff-scree" : bid == "fallen-log" || bid == "stump" || bid == "windthrow" || bid == "snapped-tree")) near++;
                             }
                             float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude * 0.02f - near;
                             if (score < best) { best = score; pick = o; }
@@ -933,7 +995,7 @@ namespace Stabby.Game.Editor
                 if (best == float.MaxValue) return false;
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 var trees = new System.Collections.Generic.List<Vector2>();
-                float reach = mode == 0 ? 10f : 30f;
+                float reach = mode == 0 || mode > 2 ? 12f : 30f;
                 for (int cz = 0; cz < field.ChunksAcross; cz++)
                     for (int cx = 0; cx < field.ChunksAcross; cx++)
                         foreach (var o in field.Chunk(cx, cz))
@@ -955,7 +1017,7 @@ namespace Stabby.Game.Editor
                 float gx = ground.HeightAt(pick.X + 4f, pick.Z) - ground.HeightAt(pick.X - 4f, pick.Z), gz = ground.HeightAt(pick.X, pick.Z + 4f) - ground.HeightAt(pick.X, pick.Z - 4f);
                 var up = new Vector3(gx, 0, gz);
                 up = up.sqrMagnitude > 1e-4f ? up.normalized : Vector3.forward;
-                float back = mode == 0 ? 4f : mode == 1 ? 16f : 26f, rise = mode == 0 ? 1.4f : mode == 1 ? 5f : 4f;
+                float back = mode == 0 ? 4f : mode == 1 ? 16f : mode == 2 ? 26f : 7f, rise = mode == 0 ? 1.4f : mode == 1 ? 5f : mode == 2 ? 4f : 2.2f;
                 if (mode == 2) target += Vector3.up * 3f;
                 Vector3 eye = target - up * back + Vector3.up * rise;
                 float clearBest = float.MinValue;
@@ -1178,8 +1240,57 @@ namespace Stabby.Game.Editor
         }
 
         static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };
+        static readonly string[] RiverShots = { "river-close", "river-bend", "river-steep", "river-steep-mid" };
 
-        static bool AimForest(Camera cam, string id, bool mid)
+        static bool AimRiver(Camera cam, int view)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                if (map == null) continue;
+                float cm = map.Config.CellMeters, best = float.MinValue, turnAt = 0;
+                RiverSegment pick = null;
+                int pk = 0;
+                foreach (var r in map.Water.Rivers)
+                    for (int k = 8; k + 8 < r.X.Count; k += 2)
+                    {
+                        if (r.Width[k] < 5f) continue;
+                        var a = new Vector2(r.X[k - 8], r.Y[k - 8]) * cm;
+                        var p = new Vector2(r.X[k], r.Y[k]) * cm;
+                        var z = new Vector2(r.X[k + 8], r.Y[k + 8]) * cm;
+                        var din = (p - a).normalized;
+                        var dout = (z - p).normalized;
+                        float slope = Mathf.Max(0, r.Surface[k - 8] - r.Surface[k + 8]) / Mathf.Max((z - a).magnitude, 1f);
+                        float turn = din.x * dout.y - din.y * dout.x;
+                        float s = view == 0 ? 1 - 20 * slope - Mathf.Abs(turn) : view == 1 ? Mathf.Abs(turn) - 10 * slope : slope;
+                        s /= 1 + (p - new Vector2(home.x, home.z)).magnitude / 1500f;
+                        if (s <= best) continue;
+                        best = s;
+                        pick = r;
+                        pk = k;
+                        turnAt = turn;
+                    }
+                if (pick == null) return false;
+                float wy = Hydrology.Stage(map.Config, pick, pk), half = Mathf.Max(pick.Width[pk] * 0.5f, 6f);
+                var c = new Vector3(pick.X[pk] * cm, wy, pick.Y[pk] * cm);
+                var along = new Vector3(pick.X[pk + 4] - pick.X[pk - 4], 0, pick.Y[pk + 4] - pick.Y[pk - 4]).normalized;
+                var left = new Vector3(-along.z, 0, along.x);
+                var inner = turnAt >= 0 ? left : -left;
+                Vector3 eye, target;
+                float lift;
+                if (view == 0) { eye = c + left * (half + 5f) - along * 4f; target = c + along * 14f - left * (half * 0.3f); lift = 2.2f; }
+                else if (view == 1) { eye = c - inner * (half + 4f) - along * 6f; target = c + inner * (half * 0.55f) + along * 4f; lift = 4f; }
+                else if (view == 2) { eye = c - along * 10f + left * (half + 3f); target = c + along * 10f; lift = 3.5f; }
+                else { eye = c - along * 45f + left * (half + 30f); target = c + along * 10f; lift = 22f; }
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), wy) + lift;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + RiverShots[view]] = $"river {pick.Id} at {c.x:F0},{c.y:F0},{c.z:F0}, width {pick.Width[pk]:F0} m, turn {turnAt:F2}, score {best:F3}";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimForest(Camera cam, string id, int view)
         {
             var near = cam.transform.position + new Vector3(0.77f, 0, 0.64f) * 24f;
             foreach (var w in Unity.Entities.World.All)
@@ -1219,15 +1330,15 @@ namespace Stabby.Game.Editor
                 {
                     var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(0.77f, 0, 0.64f);
                     var t = new Vector3(c.x, 0, c.y) + new Vector3(-d.z, 0, d.x) * 3f;
-                    var e = t - d * (mid ? 22f : 3.5f);
+                    var e = t - d * (view == 2 ? 48f : view == 1 ? 22f : 3.5f);
                     float m = float.MaxValue;
                     foreach (var tr in trees)
                         for (float s = 0; s <= 1; s += 0.25f)
                             m = Mathf.Min(m, (tr - Vector2.Lerp(new Vector2(e.x, e.z), new Vector2(t.x, t.z), s)).sqrMagnitude);
                     if (m > clear) { clear = m; dir = d; target = t; eye = e; }
                 }
-                eye.y = ground.HeightAt(eye.x, eye.z) + (mid ? 5f : 1.6f);
-                var aim = target + dir * (mid ? 4f : 1.5f);
+                eye.y = ground.HeightAt(eye.x, eye.z) + (view == 2 ? 11f : view == 1 ? 5f : 1.6f);
+                var aim = target + dir * (view == 2 ? 6f : view == 1 ? 4f : 1.5f);
                 aim.y = ground.HeightAt(aim.x, aim.z);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
                 GameStatus.Lines["~aim forest " + id] = $"{id} stand at {c.x:F0},{c.y:F0}, {trees.Count} trees searched, score {score:F1}";
@@ -1573,7 +1684,7 @@ namespace Stabby.Game.Editor
         {
             poses.Add((label, cam.transform.position, cam.transform.rotation));
             var sun = Object.FindFirstObjectByType<Light>();
-            var modes = new[] { LightShadows.None, LightShadows.Hard };
+            var modes = new[] { LightShadows.None, LightShadows.Soft };
             var sb = new System.Text.StringBuilder($"bench {label} 1080p shadows off/on (ms, full):");
             for (int pass = 0; pass < (blades ? 2 : 1); pass++)
             {
@@ -1587,7 +1698,7 @@ namespace Stabby.Game.Editor
                 sb.Append(pass == 0 ? " blades on " : ", blades off ").Append($"{ms[0]:F2}/{ms[1]:F2}");
             }
             GrassViewSystem.Paused = false;
-            sun.shadows = LightShadows.Hard;
+            sun.shadows = LightShadows.Soft;
             return sb.ToString();
         }
 

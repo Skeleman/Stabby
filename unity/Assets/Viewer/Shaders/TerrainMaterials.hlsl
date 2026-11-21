@@ -836,6 +836,17 @@ void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float
     tmRough = lerp(tmRough, _StabbyCoatRough.w, frost) + _StabbyLook.w * (moss + 0.5 * lichen);
 }
 
+float2 TmWet(float3 wp, float hw, float fp)
+{
+    float fw = TmFade(0.8, fp);
+    float3 tide = TmLN2(wp.xz, 0.11, 7.7, 1);
+    float3 dry = TmLN2(wp.xz, 0.8, 29.1, fw);
+    float t = saturate(hw / (1.75 + 0.35 * tide.x));
+    float edge = smoothstep(0.2, 1, t);
+    float wet = (1 - smoothstep(0.12, 1, t)) * saturate(1 + edge * (0.5 * fw * dry.x + 0.35 * tide.x));
+    return float2(wet, (1 - smoothstep(0.6, 4.2 + 0.5 * tide.x, hw + 0.6 * fw * dry.x)) * (1 - wet));
+}
+
 TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix, float stone)
 {
     float3 grassColor = coatColor;
@@ -905,6 +916,8 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         if (cw.w > 0.02) TmAdd(k, TmSnow(wp, n, coatColor, fp, _StabbyCoatA[3], _StabbyCoatB[3]), cw.w);
         float kept = (cw.x > 0.02 ? cw.x : 0) + (cw.y > 0.02 ? cw.y : 0) + (cw.z > 0.02 ? cw.z : 0) + (cw.w > 0.02 ? cw.w : 0);
         k.albedo += lerp(coatColor, grassColor, cw.x) * (1 - kept);
+        float can = smoothstep(0.08, 0.35, fo.r + fo.g) * cw.x;
+        k.albedo = lerp(k.albedo, dot(k.albedo, float3(0.2126, 0.7152, 0.0722)) * float3(1.25, 0.95, 0.68) * 0.8, 0.6 * can);
         float cov = TmLitter(k, wp, fo, fp, fb);
         lc = cov * up;
         mr = TmMicro(wp.xz, fp) * dot(cw, float4(1, 1, 0.3, 0.5));
@@ -932,16 +945,15 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
         o.grad += 0.55 * scr * ew * e.grad;
     }
     float wet = 0;
-    [branch] if (hw < 2.4)
+    [branch] if (hw < 4.8)
     {
-        float fw = TmFade(0.8, fp);
-        float3 tide = TmLN2(wp.xz, 0.11, 7.7, 1);
-        float3 dry = TmLN2(wp.xz, 0.8, 29.1, fw);
-        float t = saturate(hw / (1.75 + 0.35 * tide.x));
-        float edge = smoothstep(0.2, 1, t);
-        wet = (1 - smoothstep(0.12, 1, t)) * saturate(1 + edge * (0.5 * fw * dry.x + 0.35 * tide.x));
-        o.albedo *= 1 - 0.38 * wet;
-        tmRough *= 1 - 0.55 * wet;
+        float2 wd = TmWet(wp, hw, fp);
+        wet = wd.x;
+        float damp = wd.y;
+        tmGrass *= 1 - 0.85 * smoothstep(0.45, 1, wet);
+        float lum = dot(o.albedo, float3(0.2126, 0.7152, 0.0722));
+        o.albedo = max(0, lerp(lum, o.albedo, 1 + 0.3 * wet + 0.12 * damp)) * (1 - 0.38 * wet - 0.15 * damp);
+        tmRough *= 1 - 0.55 * wet - 0.12 * damp;
     }
     float3 g = (o.grad - n * dot(o.grad, n)) * (1 - 0.5 * wet);
     o.grad = normalize(n - g);
