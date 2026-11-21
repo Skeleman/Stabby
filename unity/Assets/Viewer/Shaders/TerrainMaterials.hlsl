@@ -746,13 +746,6 @@ float TmFloorCover(float2 p, float4 fo)
     return smoothstep(0.1, 0.42, fo.r + fo.g + 0.22 * pn);
 }
 
-float3 TmLeaf(float4 s)
-{
-    float t = 0.5 + 0.5 * s.x / max(s.w, 1e-3);
-    float3 c = t < 0.5 ? lerp(float3(0.15, 0.06, 0.026), float3(0.1, 0.056, 0.03), t * 2) : lerp(float3(0.1, 0.056, 0.03), float3(0.17, 0.11, 0.055), t * 2 - 1);
-    return c * (0.85 + 0.3 * frac(t * 7.31));
-}
-
 float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
 {
     [branch] if (cov > 0.01)
@@ -765,17 +758,17 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         float2 g = 0.1 * hm.yz + 0.05 * dr.yz;
         [branch] if (bd > 0.01)
         {
-            float fa = TmFade(24, fp), dens = saturate(0.55 + 0.5 * dr.x + 0.3 * hm.x);
-            float3 mb = float3(0.074, 0.045, 0.026) * (1 + 0.12 * hm.x);
-            float3 cb = lerp(mb, float3(0.032, 0.022, 0.015), fa * (1 - 0.4 * dens));
-            float4 l1 = TmFleck(p, float2x2(1, 0.4, -0.4, 1), 6, fp, 53, 0.22, 0.42, 0.8 * dens);
-            float4 l2 = TmFleck(p, float2x2(1, -0.6, 0.6, 1), 9, fp, 59, 0.2, 0.4, 0.7 * dens);
-            float4 l3 = TmFleck(p, float2x2(1, 0.9, -0.9, 1), 14, fp, 61, 0.18, 0.36, 0.6 * dens);
-            cb = lerp(cb, TmLeaf(l1), l1.w);
-            cb = lerp(cb, TmLeaf(l2), l2.w);
-            cb = lerp(cb, TmLeaf(l3), l3.w);
+            float fa = TmFade(24, fp), fc = TmFade(3.2, fp), fl = TmFade(8.5, fp), fx = TmFade(19, fp);
+            float3 cl = TmLN2(p, 3.2, 63.1, fc), lf = TmLN2(p, 8.5, 67.3, fl), lx = TmLN2(p, 19, 71.9, fx);
+            float mo = 0.5 * dr.x + 0.35 * hm.x + 0.3 * fc * cl.x + 0.2 * fl * lf.x + 0.1 * fx * lx.x;
+            float pile = smoothstep(-0.55, 0.3, mo + 0.15 * fl * lf.x);
+            float t = saturate(0.5 + 0.55 * (fc * cl.x + 0.8 * fl * lf.x + 0.5 * fx * lx.x - 0.4 * dr.x));
+            float3 leaf = lerp(float3(0.08, 0.046, 0.027), float3(0.13, 0.074, 0.038), t);
+            float3 hum = lerp(float3(0.034, 0.023, 0.016), float3(0.05, 0.031, 0.019), saturate(0.5 + 0.5 * hm.x));
+            float3 cb = lerp(hum, leaf, pile) * (1 + 0.24 * fx * lx.x + 0.14 * fl * lf.x);
+            cb = lerp(cb, lerp(hum, leaf, 0.55), 0.35 * (1 - fa));
             c += bd * cb;
-            g += bd * (0.05 * l1.yz + 0.04 * l2.yz + 0.03 * l3.yz);
+            g += bd * (0.05 * fc * cl.yz + 0.04 * fl * lf.yz + 0.02 * fx * lx.yz);
         }
         [branch] if (nd > 0.01)
         {
@@ -801,8 +794,12 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         }
         float fm = TmFade(0.4, fp), fs = TmFade(1.3, fp), fg = TmFade(6, fp);
         float3 m1 = TmLN2(p, 0.4, 97.3, fm), m2 = TmLN2(p, 1.3, 98.9, fs), mg = TmLN2(p, 6, 99.7, fg);
-        float mv = 0.7 * m1.x + 0.3 * m2.x + 0.1 * fg * mg.x;
-        float moss = smoothstep(0.1, 0.6, fo.b) * smoothstep(0, 0.25, mv + 0.5 * fo.b - 0.2);
+        float fe = TmFade(4.5, fp), fe2 = TmFade(12, fp);
+        float3 e1 = TmLN2(p, 4.5, 102.7, fe), e2 = TmLN2(p, 12, 104.3, fe2);
+        float mv = 0.7 * m1.x + 0.3 * m2.x + 0.1 * fg * mg.x + 0.16 * fe * e1.x + 0.08 * fe2 * e2.x;
+        float wf = smoothstep(0.1, 0.6, fo.b), ms = mv + 0.5 * fo.b - 0.2;
+        float moss = wf * smoothstep(-0.2, 0.32, ms);
+        c *= 1 - 0.18 * wf * smoothstep(-0.55, -0.05, ms) * (1 - moss);
         [branch] if (moss > 0.01)
         {
             float3 mossC = lerp(float3(0.035, 0.06, 0.018), float3(0.085, 0.115, 0.03), saturate(0.5 + 0.5 * mg.x * fg + 0.3 * m2.x));
