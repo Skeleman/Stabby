@@ -113,6 +113,7 @@ architecture contract. The other steps fit the contract as it stands.
 | Near-field follow-ups 2: trim SurfaceNets filler vertices at the source; worst frame 75 ms with a 19.6 ms terrain LOD update; Presentation builds its frames string every frame | next |
 | Objects step 2a: GPU grass blades near the camera (`GrassScatter.compute` scatters per near terrain mesh from the biome coat, one indirect draw, frustum cull, distance fade into the terrain colour); shared wind globals `_StabbyWind`/`_StabbyGust` from `objects.json` foliage; +0.24 ms at 1080p in the grass close-up | done |
 | Objects step 2b: animated foliage (bushes, trees) on the shared wind | later |
+| Grass blanket (Zach): far denser blades so meadows read as a continuous carpet; cheaper blades with distance, blades out to chase-camera distance, budget about 1 ms at 1080p | now |
 | Grass follow-ups: no grass on submerged beds (coat test ignores water surface), blade shadows, profiler to confirm chase/far cost with blades on and off | later |
 | Objects step 3: interactive objects with host-authoritative removal | later |
 | Objects step 4: structures from hierarchical pieces, merged LOD | later |
