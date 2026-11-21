@@ -17,16 +17,7 @@ Shader "Stabby/VertexLit"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            CBUFFER_START(UnityPerMaterial)
-            float4 _StitchMask;
-            CBUFFER_END
-
-            #ifdef UNITY_DOTS_INSTANCING_ENABLED
-            UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
-                UNITY_DOTS_INSTANCED_PROP(float4, _StitchMask)
-            UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
-            #define _StitchMask UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _StitchMask)
-            #endif
+            #include "TerrainStitch.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
             float _StabbyStrataPeriod, _StabbyCellMeters;
@@ -53,11 +44,7 @@ Shader "Stabby/VertexLit"
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 sm = _StitchMask;
-                uint bits = (uint)i.stitch.w, mask = (uint)sm.x;
-                float t = 0;
-                if (sm.z > 0) t = saturate((distance(TransformObjectToWorld(i.positionOS.xyz), _WorldSpaceCameraPos) - sm.y) / (sm.z - sm.y));
-                if ((bits & (mask >> 8)) != 0) t = 0;
-                if ((bits & mask & 255u) != 0) t = 1;
+                float t = StitchT(i.positionOS.xyz, i.stitch);
                 VertexPositionInputs p = GetVertexPositionInputs(lerp(i.positionOS.xyz, i.stitch.xyz, t));
                 o.positionCS = p.positionCS;
                 o.normalWS = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));
@@ -117,6 +104,43 @@ Shader "Stabby/VertexLit"
                 float3 c = (LookColor(m.albedo, 1) * (l.color * saturate(dot(n, l.direction)) + ambient) + LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
                 return half4(MixFog(c, i.fog), 1);
             }
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+            ZWrite On
+            ColorMask 0
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+            #include "TerrainStitch.hlsl"
+
+            float3 _LightDirection;
+
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; UNITY_VERTEX_INPUT_INSTANCE_ID };
+
+            float4 vert(Attributes i) : SV_POSITION
+            {
+                UNITY_SETUP_INSTANCE_ID(i);
+                float t = StitchT(i.positionOS.xyz, i.stitch);
+                float3 wp = TransformObjectToWorld(lerp(i.positionOS.xyz, i.stitch.xyz, t));
+                float3 wn = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));
+                float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, wn, _LightDirection));
+                #if UNITY_REVERSED_Z
+                cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                return cs;
+            }
+
+            half4 frag() : SV_Target { return 0; }
             ENDHLSL
         }
     }

@@ -188,6 +188,12 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
+                if (phase == 7)
+                {
+                    lows.Add(("cliff", cam.transform.position, cam.transform.rotation));
+                    Vector3 fwd = cam.transform.forward, at = cam.transform.position + fwd * 12f, back = cam.transform.position - new Vector3(fwd.x, 0, fwd.z).normalized * 30f + Vector3.up * 10f;
+                    lows.Add(("cliff-wide", back, Quaternion.LookRotation(at - back)));
+                }
                 if (phase == 8)
                 {
                     GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
@@ -295,6 +301,7 @@ namespace Stabby.Game.Editor
                 if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
+                if (phase == 16) lows.Add((name, cam.transform.position, cam.transform.rotation));
                 wait = 0;
                 phase++;
             }
@@ -320,6 +327,9 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            if (!castDone) { job = CastTour(cam, dir); castDone = true; }
+            if (job != null && job.MoveNext()) return;
+            job = null;
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -802,8 +812,63 @@ namespace Stabby.Game.Editor
             return sb.ToString();
         }
 
+        static readonly System.Collections.Generic.List<(string, Vector3, Quaternion)> poses = new System.Collections.Generic.List<(string, Vector3, Quaternion)>(), lows = new System.Collections.Generic.List<(string, Vector3, Quaternion)>();
+        static System.Collections.IEnumerator job;
+        static bool castDone;
+
+        static System.Collections.IEnumerator Settle(int frames)
+        {
+            for (int k = 0; k < frames || (GameStatus.TerrainBehind > 0 && k < 1800); k++) yield return null;
+        }
+
+        static System.Collections.IEnumerator CastTour(Camera cam, string dir)
+        {
+            foreach (var (label, pos, rot) in poses)
+            {
+                cam.transform.SetPositionAndRotation(pos, rot);
+                for (var w = Settle(180); w.MoveNext();) yield return null;
+                var ms = new double[2];
+                for (int k = 0; k < 4; k++)
+                {
+                    TerrainViewSystem.Casting = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    ms[k & 1] += BenchAt(cam, 1920, 1080) / 2;
+                }
+                GameStatus.Lines.TryGetValue("terrain", out var t);
+                GameStatus.Lines["~bench " + label + " terrain casting"] = $"bench {label} 1080p terrain casting off/on (ms, full): {ms[0]:F2}/{ms[1]:F2}; {t}";
+                var sunk = new double[4];
+                for (int k = 0; k < 8; k++)
+                {
+                    TerrainViewSystem.HideSunk = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    sunk[k & 1] += BenchAt(cam, 1920, 1080) / 4;
+                    sunk[2 + (k & 1)] += BenchAt(cam, 3840, 2160) / 4;
+                }
+                GameStatus.Lines.TryGetValue("terrain", out t);
+                GameStatus.Lines["~bench " + label + " sunk nodes"] = $"bench {label} sunk nodes drawn/hidden (ms, full): 1080p {sunk[0]:F2}/{sunk[1]:F2}, 4K {sunk[2]:F2}/{sunk[3]:F2}; {t}";
+            }
+            var sun = Object.FindFirstObjectByType<Light>();
+            var keep = sun.transform.rotation;
+            foreach (var (name, pos, rot) in lows)
+            {
+                cam.transform.SetPositionAndRotation(pos, rot);
+                sun.transform.rotation = Quaternion.Euler(14f, rot.eulerAngles.y + 100f, 0);
+                for (var w = Settle(180); w.MoveNext();) yield return null;
+                for (int c = 0; c < 2; c++)
+                {
+                    TerrainViewSystem.Casting = c == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, name + (c == 0 ? "-low-nocast" : "-low"));
+                }
+            }
+            sun.transform.rotation = keep;
+            TerrainViewSystem.Casting = true;
+        }
+
         static string ShadowBench(Camera cam, string label, bool blades)
         {
+            poses.Add((label, cam.transform.position, cam.transform.rotation));
             var sun = Object.FindFirstObjectByType<Light>();
             var modes = new[] { LightShadows.None, LightShadows.Hard };
             var sb = new System.Text.StringBuilder($"bench {label} 1080p shadows off/on (ms, full):");
