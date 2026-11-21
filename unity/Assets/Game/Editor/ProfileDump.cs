@@ -56,14 +56,15 @@ namespace Stabby.Game.Editor
                 using (var v = ProfilerDriver.GetHierarchyFrameDataView(f, 0, HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName, HierarchyFrameDataView.columnTotalTime, false))
                     if (v.valid) frames.Add((f, v.frameTimeMs - Named(v, v.GetRootItemID(), "GameCapture.Poll")));
             sb.AppendLine($"{frames.Count} frames, first {ProfilerDriver.firstFrameIndex}");
-            foreach (var (f, ms) in frames.OrderByDescending(x => x.ms).Take(2))
+            var asked = (System.Environment.GetEnvironmentVariable("STABBY_DUMP_FRAMES") ?? "").Split(',').Where(s => int.TryParse(s, out _)).Select(int.Parse).ToHashSet();
+            foreach (var (f, ms) in frames.OrderByDescending(x => x.ms).Take(2).Concat(frames.Where(x => asked.Contains(x.f)).OrderBy(x => x.f)))
             {
                 sb.AppendLine($"=== frame {f} {ms:F0} ms");
                 for (int t = 0; ; t++)
                 {
                     using var v = ProfilerDriver.GetHierarchyFrameDataView(f, t, HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName, HierarchyFrameDataView.columnTotalTime, false);
                     if (!v.valid) break;
-                    float min = t == 0 ? 2f : 10f;
+                    float min = asked.Contains(f) ? 0.5f : t == 0 ? 2f : 10f;
                     var lines = new StringBuilder();
                     Walk(v, v.GetRootItemID(), 0, min, lines);
                     if (lines.Length > 0) sb.Append($"-- thread {v.threadName}\n").Append(lines);
