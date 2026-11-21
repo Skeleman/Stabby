@@ -246,7 +246,7 @@ namespace Stabby.Game
                     mid /= Mathf.Max(1, vc);
                     float outward = 0;
                     for (int v = 0; v < vc; v++) outward += Vector3.Dot(nor[v], pos[v] - mid);
-                    var idx = (int[])m.Indices.Clone();
+                    var idx = m.Indices;
                     if (m.Uvs != null)
                     {
                         var u0 = new Vector4[vc];

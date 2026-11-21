@@ -44,11 +44,16 @@ namespace Stabby.World
             return l;
         }
 
+        [ThreadStatic] static List<float> buildP, buildTones, blockPos;
+        [ThreadStatic] static List<int> buildI, blockInd;
+        [ThreadStatic] static List<float[]> blockPolys;
+
         public static ObjectMesh Build(int shape, ulong key, int lod)
         {
             int tier = Math.Max(0, Math.Min(Tiers - 1, lod));
-            var b = ObjectMeshes.Builder.New();
-            var tones = new List<float>();
+            var b = new ObjectMeshes.Builder { P = buildP ??= new List<float>(), I = buildI ??= new List<int>() };
+            var tones = buildTones ??= new List<float>();
+            b.P.Clear(); b.I.Clear(); tones.Clear();
             foreach (var p in Layout(shape, key).Pieces)
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
@@ -100,7 +105,8 @@ namespace Stabby.World
         static float[] Block(ulong key, bool slab, out int[] idx)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x2C1B3C6D4E5F6071UL));
-            var polys = new List<float[]>();
+            var polys = blockPolys ??= new List<float[]>();
+            polys.Clear();
             for (int f = 0; f < 6; f++)
             {
                 int ax = f >> 1, ua = (ax + 1) % 3, va = (ax + 2) % 3;
@@ -134,8 +140,9 @@ namespace Stabby.World
                 nx /= len; ny /= len; nz /= len;
                 Clip(polys, nx, ny, nz, (Math.Abs(nx) + Math.Abs(ny) + Math.Abs(nz)) * rng.Range(slab ? 0.92f : 0.84f, 0.97f));
             }
-            var pos = new List<float>();
-            var ind = new List<int>();
+            var pos = blockPos ??= new List<float>();
+            var ind = blockInd ??= new List<int>();
+            pos.Clear(); ind.Clear();
             foreach (var poly in polys)
             {
                 int first = pos.Count / 3, count = poly.Length / 3;
@@ -146,14 +153,20 @@ namespace Stabby.World
             return pos.ToArray();
         }
 
+        [ThreadStatic] static List<float> clipCap, clipOut, clipPts;
+
         static void Clip(List<float[]> polys, float nx, float ny, float nz, float d)
         {
-            var cap = new List<float>();
+            var cap = clipCap ??= new List<float>();
+            var outp = clipOut ??= new List<float>();
+            var pts = clipPts ??= new List<float>();
+            cap.Clear();
+            pts.Clear();
             for (int pi = polys.Count - 1; pi >= 0; pi--)
             {
                 var poly = polys[pi];
                 int count = poly.Length / 3;
-                var outp = new List<float>();
+                outp.Clear();
                 for (int k = 0; k < count; k++)
                 {
                     int a = k * 3, b = (k + 1) % count * 3;
@@ -171,7 +184,6 @@ namespace Stabby.World
                 if (outp.Count >= 9) polys[pi] = outp.ToArray();
                 else polys.RemoveAt(pi);
             }
-            var pts = new List<float>();
             for (int k = 0; k < cap.Count; k += 3)
             {
                 bool dup = false;

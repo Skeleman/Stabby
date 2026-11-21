@@ -150,7 +150,22 @@ namespace Stabby.World
             }
         }
 
-        static Builder Icosphere(int levels)
+        static readonly float[][] IcoP = new float[RockLevels.Length][];
+        static readonly int[][] IcoI = new int[RockLevels.Length][];
+
+        static ObjectMeshes()
+        {
+            for (int l = 0; l < IcoP.Length; l++)
+            {
+                var b = BuildIcosphere(l);
+                IcoP[l] = b.P.ToArray();
+                IcoI[l] = b.I.ToArray();
+            }
+        }
+
+        static Builder Icosphere(int levels) => new Builder { P = new List<float>(IcoP[levels]), I = new List<int>(IcoI[levels]) };
+
+        static Builder BuildIcosphere(int levels)
         {
             var b = Builder.New();
             float t = 1.618034f;
