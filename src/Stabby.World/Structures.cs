@@ -20,7 +20,7 @@ namespace Stabby.World
     {
         public const int Tiers = 3;
         public const float SeatM = 0.5f;
-        public const float WallHeight = 0.2f, WallBase = 0.12f, WallBatter = 0.3f, WallColumnStep = 0.05f;
+        public const float WallHeight = 0.2f, WallBase = 0.12f, WallBatter = 0.3f, WallColumnStep = 0.05f, Squareness = 0.45f;
         static readonly int[] TierRock = { 1, 0, 0 };
         static readonly float[] Dir =
         {
@@ -51,18 +51,34 @@ namespace Stabby.World
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
                 var m = ObjectMeshes.Rock(p.Key, TierRock[tier]);
-                float top = 0;
-                for (int v = 1; v < m.Positions.Length; v += 3) top = Math.Max(top, m.Positions[v]);
-                float sy = p.Sy / Math.Max(1e-3f, top);
-                int first = b.P.Count / 3;
-                for (int v = 0; v < m.Positions.Length; v += 3)
+                var u = Bounds(m.Positions);
+                for (int v = 0; v < u.Length; v += 3)
                 {
-                    float x = m.Positions[v] * p.Sx, y = m.Positions[v + 1] * sy, z = m.Positions[v + 2] * p.Sz;
+                    float inf = Math.Max(Math.Abs(u[v]), Math.Max(Math.Abs(u[v + 1]), Math.Abs(u[v + 2])));
+                    if (inf < 1e-4f) continue;
+                    float k = 1 + Squareness * ((float)Math.Sqrt(u[v] * u[v] + u[v + 1] * u[v + 1] + u[v + 2] * u[v + 2]) / inf - 1);
+                    u[v] *= k; u[v + 1] *= k; u[v + 2] *= k;
+                }
+                u = Bounds(u);
+                int first = b.P.Count / 3;
+                for (int v = 0; v < u.Length; v += 3)
+                {
+                    float x = 0.5f * u[v] * p.Sx, y = 0.5f * (u[v + 1] + 1) * p.Sy, z = 0.5f * u[v + 2] * p.Sz;
                     b.Add(p.X + p.C * x - p.S * z, p.Y + y, p.Z + p.S * x + p.C * z);
                 }
                 foreach (int i in m.Indices) b.I.Add(first + i);
             }
             return b.Finish();
+        }
+
+        static float[] Bounds(float[] pos)
+        {
+            var min = new[] { float.MaxValue, float.MaxValue, float.MaxValue };
+            var max = new[] { float.MinValue, float.MinValue, float.MinValue };
+            for (int v = 0; v < pos.Length; v++) { min[v % 3] = Math.Min(min[v % 3], pos[v]); max[v % 3] = Math.Max(max[v % 3], pos[v]); }
+            var u = new float[pos.Length];
+            for (int v = 0; v < pos.Length; v++) u[v] = (2 * pos[v] - min[v % 3] - max[v % 3]) / Math.Max(1e-4f, max[v % 3] - min[v % 3]);
+            return u;
         }
 
         static void Add(StructureLayout l, ulong key, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi)
@@ -177,7 +193,7 @@ namespace Stabby.World
             float t = a;
             while (e - t > 0.015f)
             {
-                float th = rng.Range(0.022f, 0.034f), sy = rng.Range(0.035f, 0.05f);
+                float th = rng.Range(0.02f, 0.032f), sy = rng.Range(0.026f, 0.038f);
                 float xc = t + 0.5f * th;
                 if (xc < gapA - 0.5f * th || xc > gapB + 0.5f * th)
                 {
