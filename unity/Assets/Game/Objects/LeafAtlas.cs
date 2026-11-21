@@ -38,7 +38,10 @@ namespace Stabby.Game
                 });
             }
 
-            public void Leaf(float bx, float by, float dirX, float dirY, float length, float halfWidth, float skew, float round, float serrate, float shade, float hue, float veins)
+            public void Leaf(float bx, float by, float dirX, float dirY, float length, float halfWidth, float skew, float round, float serrate, float shade, float hue, float veins) =>
+                Leaf(bx, by, dirX, dirY, length, halfWidth, skew, round, serrate, shade, hue, veins, 0, 0);
+
+            public void Leaf(float bx, float by, float dirX, float dirY, float length, float halfWidth, float skew, float round, float serrate, float shade, float hue, float veins, float lobes, float lobeDepth)
             {
                 float il = 1f / Math.Max((float)Math.Sqrt(dirX * dirX + dirY * dirY), 1e-6f);
                 float fx = dirX * il, fy = dirY * il;
@@ -54,6 +57,12 @@ namespace Stabby.Game
                     float sc = Math.Max(0, Math.Min(1, s));
                     float w = halfWidth * (float)Math.Pow(Math.Max(0, Math.Sin(Math.PI * Math.Pow(sc, skew))), round);
                     if (serrate > 0) w *= 1f - serrate * Math.Abs((float)Math.Sin(sc * 38f));
+                    if (lobes > 0)
+                    {
+                        float ph = (float)Math.PI * (lobes * sc + (t > 0 ? 0.5f : 0f) + 0.25f);
+                        float sinus = (float)Math.Pow(Math.Abs(Math.Cos(ph)), 5);
+                        w *= 1f - lobeDepth * sinus * Math.Min(1, sc * 5f) * Math.Min(1, (1 - sc) * 4f);
+                    }
                     float edge = Math.Abs(t) - w;
                     float ends = Math.Max(-s, s - 1) * length;
                     float c = Coverage(Math.Max(edge, ends));
@@ -138,18 +147,40 @@ namespace Stabby.Game
         {
             var xs = new float[9];
             var ys = new float[9];
-            Twig(cv, ref rng, 0.5f, 0.0f, 0.52f, 0.62f, 0.06f, 0.012f, 0.005f, 8, xs, ys);
-            for (int k = 1; k < 8; k++)
+            Twig(cv, ref rng, 0.5f, 0.0f, 0.5f, 0.56f, 0.05f, 0.012f, 0.005f, 8, xs, ys);
+            for (int b = 0; b < 2; b++)
             {
-                float side = k % 2 == 0 ? 1 : -1;
-                float ang = rng.Range(0.55f, 1.0f);
-                float dx = side * (float)Math.Sin(ang), dy = (float)Math.Cos(ang);
-                float len = rng.Range(0.26f, 0.34f) * (1 - 0.25f * k / 8f);
-                float stalk = 0.035f;
-                cv.Stroke(xs[k], ys[k], xs[k] + dx * stalk, ys[k] + dy * stalk, 0.004f, 0.003f, 0.6f);
-                cv.Leaf(xs[k] + dx * stalk, ys[k] + dy * stalk, dx, dy, len, len * rng.Range(0.3f, 0.38f), 0.75f, 0.85f, 0.05f, rng.Range(0.72f, 1.05f), Hue(ref rng), 1);
+                var sx = new float[5];
+                var sy = new float[5];
+                float dir = b == 0 ? -1 : 1;
+                int k = 3 + b;
+                Twig(cv, ref rng, xs[k], ys[k], xs[k] + dir * 0.18f, ys[k] + 0.2f, -dir * 0.06f, 0.007f, 0.004f, 4, sx, sy);
+                OakCluster(cv, ref rng, sx[4], sy[4], dir * 0.75f, 0.75f, 4);
+                OakLeaf(cv, ref rng, sx[2], sy[2], -dir * 0.3f, 1, 0.16f);
             }
-            cv.Leaf(xs[8], ys[8], 0.04f, 1, 0.33f, 0.11f, 0.75f, 0.85f, 0.05f, rng.Range(0.85f, 1.05f), Hue(ref rng), 1);
+            for (int k = 1; k < 7; k += 2)
+                OakLeaf(cv, ref rng, xs[k], ys[k], (k % 4 == 1 ? -1 : 1) * 0.9f, 0.6f, 0.17f);
+            OakCluster(cv, ref rng, xs[8], ys[8], 0.05f, 1, 5);
+        }
+
+        static void OakCluster(Canvas cv, ref Rng rng, float x, float y, float dirX, float dirY, int count)
+        {
+            float baseAng = (float)Math.Atan2(dirX, dirY);
+            for (int n = 0; n < count; n++)
+            {
+                float a = baseAng + (n - (count - 1) * 0.5f) * 0.62f + rng.Range(-0.12f, 0.12f);
+                float len = rng.Range(0.19f, 0.24f) * (n == count / 2 ? 1.1f : 1f);
+                OakLeaf(cv, ref rng, x, y, (float)Math.Sin(a), (float)Math.Cos(a), len);
+            }
+        }
+
+        static void OakLeaf(Canvas cv, ref Rng rng, float x, float y, float dx, float dy, float len)
+        {
+            float il = 1f / (float)Math.Sqrt(dx * dx + dy * dy);
+            dx *= il; dy *= il;
+            float stalk = 0.018f;
+            cv.Stroke(x, y, x + dx * stalk, y + dy * stalk, 0.003f, 0.0025f, 0.6f);
+            cv.Leaf(x + dx * stalk, y + dy * stalk, dx, dy, len, len * rng.Range(0.34f, 0.4f), 1.35f, 0.7f, 0, rng.Range(0.76f, 1.04f), rng.Range(0.47f, 0.53f), 0.8f, rng.Range(3.6f, 4.6f), rng.Range(0.5f, 0.62f));
         }
 
         static void Needles(Canvas cv, ref Rng rng)

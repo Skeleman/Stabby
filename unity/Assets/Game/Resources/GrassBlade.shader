@@ -79,7 +79,7 @@ Shader "Stabby/GrassBlade"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
                 float occ = 1 - 0.45 * i.look.z * (1 - smoothstep(0, 0.5, i.look.x));
-                float3 c = (LookColor(lerp(i.color, i.tint.rgb, i.tint.a * lerp(0.3, 1, l.shadowAttenuation)), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
+                float3 c = (LookColor(lerp(i.color, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
                 return half4(MixFog(c, i.look.w), 1);
             }
             ENDHLSL
