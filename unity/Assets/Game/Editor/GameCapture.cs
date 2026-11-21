@@ -119,6 +119,10 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, "chase");
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
+                GameStatus.Lines["~bench chase blades"] = GrassViewSystem.Counts();
+                GrassViewSystem.Rescatter = true;
+                GameStatus.Lines["~bench chase moving"] = Bench(cam, "chase rescattering grass every frame");
+                GrassViewSystem.Rescatter = false;
                 var fwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
                 var focus = home + fwd * 22f;
                 focus.y = GroundHeight(focus.x, focus.z);
@@ -129,6 +133,7 @@ namespace Stabby.Game.Editor
                 cam.transform.SetPositionAndRotation(home + new Vector3(0, 90, 0), Quaternion.LookRotation(fwd - new Vector3(0, 0.25f, 0)));
                 Shot(cam, dir, "far");
                 GameStatus.Lines["~bench far"] = Bench(cam, "far");
+                GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.HoldCamera = true;
                 phase = 1;
             }
@@ -177,6 +182,10 @@ namespace Stabby.Game.Editor
                 if (phase == 8)
                 {
                     GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
+                    GameStatus.Lines["~bench grass blades"] = GrassViewSystem.Counts();
+                    GrassViewSystem.Rescatter = true;
+                    GameStatus.Lines["~bench grass moving"] = Bench(cam, "grass close-up rescattering grass every frame");
+                    GrassViewSystem.Rescatter = false;
                     GrassViewSystem.Paused = true;
                     GameStatus.Lines["~bench grass off"] = Bench(cam, "grass close-up without blades");
                     GrassViewSystem.Paused = false;

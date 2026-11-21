@@ -14,9 +14,13 @@ namespace Stabby.World
 
     public sealed class GrassDef
     {
-        public float PerM2 = 48f;
-        public float NearM = 6f;
-        public float ReachM = 45f;
+        public float PerM2 = 160f;
+        public float NearM = 5f;
+        public float ReachM = 80f;
+        public float ThinPow = 1.2f;
+        public float Widen = 0.9f;
+        public float WidthMaxM = 0.25f;
+        public float Lod1M = 10f, Lod2M = 25f;
         public float HeightMinM = 0.25f, HeightMaxM = 0.6f;
         public float WidthM = 0.035f;
         public float Bend = 0.35f;
@@ -24,7 +28,7 @@ namespace Stabby.World
         public float Translucency = 0.35f;
         public float CoatMin = 0.35f;
         public float SlopeMax = 0.7f;
-        public int MaxBlades = 262144;
+        public int MaxBlades = 131072;
     }
 
     public sealed class FoliageDef
@@ -43,6 +47,10 @@ namespace Stabby.World
             var g = Grass;
             if (g.PerM2 < 0 || g.PerM2 > 400) errors.Add("foliage grass: perM2 must be 0-400");
             if (g.NearM <= 0 || g.ReachM <= g.NearM || g.ReachM > 120) errors.Add("foliage grass: nearM must be above 0 and below reachM, at most 120");
+            if (g.ThinPow < 0.5f || g.ThinPow > 3) errors.Add("foliage grass: thinPow must be 0.5-3");
+            if (g.Widen < 0 || g.Widen > 1) errors.Add("foliage grass: widen must be 0-1");
+            if (g.WidthMaxM < g.WidthM || g.WidthMaxM > 1) errors.Add("foliage grass: widthMaxM must be at least widthM, at most 1");
+            if (g.Lod1M <= 0 || g.Lod2M < g.Lod1M) errors.Add("foliage grass: lod1M/lod2M must be increasing and above 0");
             if (g.HeightMinM <= 0 || g.HeightMaxM < g.HeightMinM || g.HeightMaxM > 3) errors.Add("foliage grass: heightMinM/heightMaxM must be increasing, 0-3 m");
             if (g.WidthM <= 0 || g.WidthM > 0.5f) errors.Add("foliage grass: widthM must be above 0, at most 0.5");
             if (g.Bend < 0 || g.Bend > 1.5f) errors.Add("foliage grass: bend must be 0-1.5");

@@ -26,12 +26,17 @@
         },
         "grass": {
           "type": "object",
-          "required": ["perM2", "nearM", "reachM", "heightMinM", "heightMaxM", "widthM", "bend", "tipLight", "translucency", "coatMin", "slopeMax", "maxBlades"],
+          "required": ["perM2", "nearM", "reachM", "thinPow", "widen", "widthMaxM", "lod1M", "lod2M", "heightMinM", "heightMaxM", "widthM", "bend", "tipLight", "translucency", "coatMin", "slopeMax", "maxBlades"],
           "additionalProperties": false,
           "properties": {
             "perM2": { "type": "number", "minimum": 0, "maximum": 400 },
             "nearM": { "type": "number", "exclusiveMinimum": 0 },
             "reachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 120 },
+            "thinPow": { "type": "number", "minimum": 0.5, "maximum": 3 },
+            "widen": { "type": "number", "minimum": 0, "maximum": 1 },
+            "widthMaxM": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "lod1M": { "type": "number", "exclusiveMinimum": 0 },
+            "lod2M": { "type": "number", "exclusiveMinimum": 0 },
             "heightMinM": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
             "heightMaxM": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
             "widthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.5 },

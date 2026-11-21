@@ -251,6 +251,11 @@ public static class ContentLoader
         public float PerM2 { get; set; } = D.PerM2;
         public float NearM { get; set; } = D.NearM;
         public float ReachM { get; set; } = D.ReachM;
+        public float ThinPow { get; set; } = D.ThinPow;
+        public float Widen { get; set; } = D.Widen;
+        public float WidthMaxM { get; set; } = D.WidthMaxM;
+        public float Lod1M { get; set; } = D.Lod1M;
+        public float Lod2M { get; set; } = D.Lod2M;
         public float HeightMinM { get; set; } = D.HeightMinM;
         public float HeightMaxM { get; set; } = D.HeightMaxM;
         public float WidthM { get; set; } = D.WidthM;
@@ -382,7 +387,8 @@ public static class ContentLoader
                 },
                 Grass = new GrassDef
                 {
-                    PerM2 = g.PerM2, NearM = g.NearM, ReachM = g.ReachM, HeightMinM = g.HeightMinM, HeightMaxM = g.HeightMaxM,
+                    PerM2 = g.PerM2, NearM = g.NearM, ReachM = g.ReachM, ThinPow = g.ThinPow, Widen = g.Widen, WidthMaxM = g.WidthMaxM,
+                    Lod1M = g.Lod1M, Lod2M = g.Lod2M, HeightMinM = g.HeightMinM, HeightMaxM = g.HeightMaxM,
                     WidthM = g.WidthM, Bend = g.Bend, TipLight = g.TipLight, Translucency = g.Translucency,
                     CoatMin = g.CoatMin, SlopeMax = g.SlopeMax, MaxBlades = g.MaxBlades,
                 },
