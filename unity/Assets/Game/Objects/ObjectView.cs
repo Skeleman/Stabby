@@ -452,7 +452,7 @@ namespace Stabby.Game
             ChunksUnloaded = chunksUnloaded;
             liveByDefShared = liveByDef;
             libShared = lib;
-            if (GameStatus.TerrainBuilt && UnityEngine.Time.frameCount - GameStatus.ToolFrame > 1)
+            if (GameStatus.TerrainBuilt && !GameStatus.AfterTool)
             {
                 worstUpdate = math.max(worstUpdate, (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000f / System.Diagnostics.Stopwatch.Frequency);
             }

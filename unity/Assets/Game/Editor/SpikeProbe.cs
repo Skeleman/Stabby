@@ -35,7 +35,7 @@ namespace Stabby.Game.Editor
             if (!gcFrame.Valid) gcFrame = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
             long gc = gcFrame.LastValue;
             if (GameStatus.TerrainBuilt) gcBuilt += gc; else gcBefore += gc;
-            if (GameStatus.TerrainBuilt && Time.frameCount - GameStatus.ToolFrame > 2) { gcPlay += gc; playFrames++; }
+            if (GameStatus.TerrainBuilt && !GameStatus.AfterTool) { gcPlay += gc; playFrames++; }
             int runs = GC.CollectionCount(0);
             bool collected = runs != gcRuns;
             gcRuns = runs;
@@ -43,7 +43,7 @@ namespace Stabby.Game.Editor
             if (cur.Length < recs.Count) { Array.Resize(ref cur, recs.Count); Array.Resize(ref last, recs.Count); }
             for (int r = 0; r < recs.Count; r++) cur[r] = recs[r].rec.LastValue;
             float dt = Time.unscaledDeltaTime * 1000f;
-            if (frame > 10 && dt > Limit && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
+            if (frame > 10 && dt > Limit && !GameStatus.AfterTool && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
             (cur, last) = (last, cur);
         }
 
