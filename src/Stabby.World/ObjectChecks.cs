@@ -24,6 +24,7 @@ namespace Stabby.World
                 var a = field.Chunk(cx, cz);
                 if (first && !SameObjects(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz))) { e.Add($"objects in chunk {cx},{cz} differ between runs"); return; }
                 if (first && !SolidIdsMatch(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz, true))) { e.Add($"object ids in chunk {cx},{cz} change when only solid objects are placed"); return; }
+                if (first) { string fault = RegionFault(field, new ObjectField(w, detail, edits, w.Objects), a, c); if (fault != null) { e.Add($"collision region {cx},{cz} {fault}"); return; } }
                 first = false;
                 CheckObjectIds(a, c, e);
                 foreach (var o in a)
@@ -35,9 +36,10 @@ namespace Stabby.World
                     int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
                     float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
                     if (w.Sea[i]) Fail(1, at + " stands in the sea");
-                    int lake = w.Water.LakeId[i];
-                    if (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0) Fail(2, at + $" stands in lake {lake}");
-                    if (OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
+                    int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
+                    if (site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, at + $" stands in lake {lake}");
+                    if (site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
+                    if (site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, at + " is off its river or lake bank");
                     grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                     if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
@@ -50,6 +52,29 @@ namespace Stabby.World
                     if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
                 }
             }
+        }
+
+        static string RegionFault(ObjectField full, ObjectField fresh, ObjectInstance[] placed, int c)
+        {
+            var columns = new List<ObjectColumn>();
+            var owners = new List<ulong>();
+            ColumnRegion.Collect(full, placed, columns, owners);
+            var want = ColumnRegion.Of(c, columns, owners);
+            var got = ColumnRegion.Build(fresh, c);
+            if (!want.Grid.Equals(got.Grid)) return "has a different grid when built alone";
+            if (want.Count != got.Count) return $"holds {got.Count} columns, its placements give {want.Count}";
+            for (int k = 0; k < want.Count; k++)
+            {
+                var x = want.Items[k]; var y = got.Items[k];
+                if (want.Owners[k] != got.Owners[k] || x.X != y.X || x.Z != y.Z || x.R != y.R || x.Bottom != y.Bottom || x.Top != y.Top) return $"column {k} differs from its chunk placements";
+                if (ObjectIds.Chunk(got.Owners[k]) != c) return $"column {k} belongs to chunk {ObjectIds.Chunk(got.Owners[k])}";
+            }
+            for (int b = 0; b <= got.Grid.Cells; b++)
+                if (want.Starts[b] != got.Starts[b]) return "cell starts differ from its chunk placements";
+            for (int b = 0; b < got.Grid.Cells; b++)
+                for (int k = got.Starts[b]; k < got.Starts[b + 1]; k++)
+                    if ((ColumnRegion.CellOf(got.Items[k].Z) - got.Grid.Z0) * got.Grid.W + ColumnRegion.CellOf(got.Items[k].X) - got.Grid.X0 != b) return $"column {k} sits in the wrong cell";
+            return null;
         }
 
         public const int StructureSweep = 16;
@@ -237,6 +262,26 @@ namespace Stabby.World
                 if (picked.Count >= ObjectCheckChunks) break;
             }
             return picked;
+        }
+
+        static bool OnBank(GeneratedWorld w, TerrainDetail detail, int site, int gx, int gz, float x, float z, float ground)
+        {
+            if (BankSites.Nearest(detail.Cells, x, z, out var q, out float d, out float t))
+            {
+                float hw = q.Wa + (q.Wb - q.Wa) * t;
+                if (d <= hw + NearField.Bank(hw) + BankSites.ReachPadM && BankSites.InBand(site, ground - (q.Sa + (q.Sb - q.Sa) * t))) return true;
+            }
+            if (site != BankSites.Reed) return false;
+            int n = w.Config.Size;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = gx + dx, az = gz + dz;
+                    if (ax < 0 || az < 0 || ax >= n || az >= n) continue;
+                    int l = w.Water.LakeId[az * n + ax];
+                    if (l >= 0 && BankSites.InBand(site, ground - w.Water.Lakes[l].Level)) return true;
+                }
+            return false;
         }
 
         static int NearLake(GeneratedWorld w, int gx, int gz, float y)

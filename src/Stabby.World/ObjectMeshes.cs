@@ -42,6 +42,7 @@ namespace Stabby.World
             lod = Math.Max(0, Math.Min(MaxLods - 1, lod));
             if (ObjectPart.IsStructure(shape)) return Structures.Build(shape, key, lod);
             if (shape == ObjectPart.Shrub) return ObjectFoliage.Shrub(key, lod);
+            if (shape == ObjectPart.Reed) return ObjectFoliage.Reed(key, lod);
             if (shape == ObjectPart.Broadleaf) return ObjectFoliage.Broadleaf(key, lod);
             if (shape == ObjectPart.Conifer) return ObjectFoliage.Conifer(key, lod);
             if (shape == ObjectPart.Log) return Log(key, lod, aspect > 0 ? aspect : 0.11f, ends);
@@ -337,6 +338,35 @@ namespace Stabby.World
         static float TornRim(ref Rng jr, in Teeth t, int k, int segments, float c, float s) =>
             0.35f * t.Amp * Math.Max(0f, 0.5f + 0.5f * t.Jag.At(c, s)) + 0.3f * SpikeAt(t, k, segments) + jr.Range(0f, 0.3f);
 
+        static float WornRim(ref Rng jr, float tiltY, float tiltZ, float c, float s) => 0.25f * (tiltY * c + tiltZ * s) + jr.Range(0f, 0.12f);
+
+        static void Dome(ref WoodBuilder w, ref Rng jr, int[] rim, int segments, ObjectFoliage.V centre, ObjectFoliage.V axis, ObjectFoliage.V e1, ObjectFoliage.V e2, float radius, float age)
+        {
+            float[] fracs = { 0.78f, 0.42f }, lifts = { 0.32f, 0.58f };
+            var prev = new int[segments];
+            for (int k = 0; k < segments; k++) prev[k] = w.Add(w.R[rim[k]], CodeGrain, 0, 0, age);
+            float rimAt = 0;
+            for (int k = 0; k < segments; k++) rimAt += ObjectFoliage.V.Dot(w.R[rim[k]] - centre, axis) / segments;
+            for (int r = 0; r < fracs.Length; r++)
+            {
+                var next = new int[segments];
+                for (int k = 0; k < segments; k++)
+                {
+                    Ring(segments, k, out float c, out float s);
+                    float f = fracs[r] * (1 + jr.Range(-0.06f, 0.06f));
+                    next[k] = w.Add(centre + (e1 * c + e2 * s) * (radius * f) + axis * (rimAt + radius * lifts[r] * (1 + jr.Range(-0.15f, 0.15f))), CodeGrain, 0, 0, age);
+                }
+                for (int k = 0; k < segments; k++)
+                {
+                    int k1 = (k + 1) % segments;
+                    w.Quad(prev[k], prev[k1], next[k1], next[k], axis);
+                }
+                prev = next;
+            }
+            int mid = w.Add(centre + axis * (rimAt + radius * jr.Range(0.62f, 0.72f)), CodeGrain, 0, 0, age);
+            for (int k = 0; k < segments; k++) w.Tri(mid, prev[k], prev[(k + 1) % segments], axis);
+        }
+
         static int Nearest(float frac, int segments) => (int)(frac * segments + 0.5f) % segments;
 
         static void Cap(ref WoodBuilder w, ref Rng jr, int[] rim, int segments, in Teeth t, ObjectFoliage.V centre, ObjectFoliage.V axis, ObjectFoliage.V e1, ObjectFoliage.V e2, float radius, float moss, float age)
@@ -385,9 +415,10 @@ namespace Stabby.World
             var jr = new Rng(Rng.Mix(key ^ 0x7A3D5E1F0C2B4968UL ^ (ulong)seg));
             float h = 0.5f * Math.Max(aspect, 0.01f), half = 0.5f / h;
             var w = WoodBuilder.New(h, 0.5f, 0.5f, 0.5f);
-            bool rooted = ends == ObjectPart.EndsRooted, sawn = ends == ObjectPart.EndsSawn;
+            bool rooted = ends == ObjectPart.EndsRooted, sawn = ends == ObjectPart.EndsSawn, worn = ends == ObjectPart.EndsWorn;
             float code = rng.NextFloat() < 0.5f ? CodeOak : CodeSpruce;
             float moss = rng.NextFloat() < 0.65f ? rng.Range(0.4f, 1f) : 0f, age = rng.NextFloat();
+            if (worn) { code = CodeGrain; moss = 0; age = 0.15f + 0.35f * age; }
             float taper = rng.Range(0.72f, 0.92f), sag = rng.Range(-0.1f, 0.25f), bow = rng.Range(-0.8f, 0.8f), wave = rng.Range(-1f, 1f);
             float lift = rooted ? rng.Range(0.25f, 0.5f) : 0f, flare = rooted ? rng.Range(0.3f, 0.55f) : 0f;
             var section = Harmonics.Draw(ref rng, 0.06f, false);
@@ -411,8 +442,8 @@ namespace Stabby.World
                     Ring(seg, k, out float c, out float s);
                     float rr = radii[r] * (1 + section.At(c, s) + jr.Range(-0.02f, 0.02f));
                     float ax = 0;
-                    if (r == 0) ax = -(tiltY0 * c + tiltZ0 * s) * (sawn ? 0.3f : 1f) - (sawn || rooted ? 0 : TornRim(ref jr, teeth0, k, seg, c, s));
-                    if (r == rings - 1) ax = (tiltY1 * c + tiltZ1 * s) * (sawn ? 0.3f : 1f) + (sawn ? 0 : TornRim(ref jr, teeth1, k, seg, c, s));
+                    if (r == 0) ax = worn ? -WornRim(ref jr, tiltY0, tiltZ0, c, s) : -(tiltY0 * c + tiltZ0 * s) * (sawn ? 0.3f : 1f) - (sawn || rooted ? 0 : TornRim(ref jr, teeth0, k, seg, c, s));
+                    if (r == rings - 1) ax = worn ? WornRim(ref jr, tiltY1, tiltZ1, c, s) : (tiltY1 * c + tiltZ1 * s) * (sawn ? 0.3f : 1f) + (sawn ? 0 : TornRim(ref jr, teeth1, k, seg, c, s));
                     ringIdx[r][k] = w.Add(centres[r] + new ObjectFoliage.V(ax, c * rr, s * rr), code, moss, 0, age);
                 }
             }
@@ -427,8 +458,16 @@ namespace Stabby.World
             var ex = new ObjectFoliage.V(1, 0, 0);
             var ey = new ObjectFoliage.V(0, 1, 0);
             var ez = new ObjectFoliage.V(0, 0, 1);
-            if (!rooted) Cap(ref w, ref jr, ringIdx[0], seg, teeth0, centres[0], -ex, ey, ez, radii[0], moss, age);
-            Cap(ref w, ref jr, ringIdx[rings - 1], seg, teeth1, centres[rings - 1], ex, ey, ez, radii[rings - 1], moss, age);
+            if (worn)
+            {
+                Dome(ref w, ref jr, ringIdx[0], seg, centres[0], -ex, ey, ez, radii[0], age);
+                Dome(ref w, ref jr, ringIdx[rings - 1], seg, centres[rings - 1], ex, ey, ez, radii[rings - 1], age);
+            }
+            else
+            {
+                if (!rooted) Cap(ref w, ref jr, ringIdx[0], seg, teeth0, centres[0], -ex, ey, ez, radii[0], moss, age);
+                Cap(ref w, ref jr, ringIdx[rings - 1], seg, teeth1, centres[rings - 1], ex, ey, ez, radii[rings - 1], moss, age);
+            }
             int stubs = rng.Range(3, 8), limbs = rng.Range(0, 3);
             var stubU = new float[stubs + limbs];
             var stubDir = new ObjectFoliage.V[stubs + limbs];

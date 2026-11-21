@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -20,7 +19,7 @@ namespace Stabby.World
         public static int Ordinal(ulong id) => (int)(uint)id;
     }
 
-    public sealed class ObjectField
+    public sealed partial class ObjectField
     {
         public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f;
         public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
@@ -31,13 +30,13 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
         readonly float[][] seats;
         readonly ulong[] key;
-        readonly int[] blockStart, blockItems;
+        readonly int[] blockStart, blockItems, bankSite, bankStart, bankItems;
         readonly FeatureEdit[] edits;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly ObjectInstance[][] chunks;
@@ -57,6 +56,8 @@ namespace Stabby.World
             structureStream = Rng.Stream(w.Config.Seed, "structures").NextU64();
             structureThinStream = Rng.Stream(w.Config.Seed, "structures-thin").NextU64();
             chainStream = Rng.Stream(w.Config.Seed, "structures-chain").NextU64();
+            bankStream = Rng.Stream(w.Config.Seed, "objects-bank").NextU64();
+            lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -82,6 +83,7 @@ namespace Stabby.World
                 seats[d] = Seats(def);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
             }
+            BankIndex(detail, lib, across, cm, out bankSite, out bankStart, out bankItems);
             foreach (var r in w.Water.Rivers)
                 for (int k = 0; k + 1 < r.X.Count; k++)
                 {
@@ -155,6 +157,14 @@ namespace Stabby.World
             return list.ToArray();
         }
 
+        public void SolidInto(int cx, int cz, List<ObjectInstance> list)
+        {
+            list.Clear();
+            var cached = chunks[cz * across + cx];
+            if (cached != null) list.AddRange(cached);
+            else PlaceInto(cx, cz, true, list, null);
+        }
+
         public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
@@ -185,6 +195,11 @@ namespace Stabby.World
             {
                 int ordinal = 0;
                 var pl = lib.Objects[d].Placement;
+                if (bankSite[d] >= 0)
+                {
+                    if (boulders == null && (!solidOnly || AnySolid(d))) PlaceBank(d, chunk, chunkKey, x0, z0, sx, sz, list);
+                    continue;
+                }
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
                 bool foot = pl.FootRiseM > 0, built = seats[d] != null;
                 var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : built ? structureStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
@@ -375,10 +390,10 @@ namespace Stabby.World
             return b >= 0 && density[d][b] > 0;
         }
 
-        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o)
+        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false)
         {
             o = default;
-            if (!Open(d, x, z)) return false;
+            if (!bank && !Open(d, x, z)) return false;
             var pl = lib.Objects[d].Placement;
             int gx = Cell(x), gz = Cell(z), i = gz * n + gx;
             float r = footprint[d] * size;
@@ -390,7 +405,7 @@ namespace Stabby.World
             if (slope < pl.SlopeMin || slope > pl.SlopeMax) return false;
             float hard = strata.Hardness(i, y) / contrast;
             if (hard < pl.HardnessMin || hard > pl.HardnessMax) return false;
-            if (!Clear(i, gx, gz, x, y, z, r)) return false;
+            if (!Clear(i, gx, gz, x, y, z, r, bank)) return false;
             float nx = -gxs * pl.AlignToSlope, nz = -gzs * pl.AlignToSlope, nl = (float)Math.Sqrt(nx * nx + 1 + nz * nz);
             nx /= nl; nz /= nl;
             float ny = 1f / nl;
@@ -435,7 +450,7 @@ namespace Stabby.World
             }
         }
 
-        bool Clear(int i, int gx, int gz, float x, float y, float z, float r)
+        bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank)
         {
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
@@ -445,7 +460,7 @@ namespace Stabby.World
                     int j = az * n + ax;
                     if (w.Sea[j] && (j == i || y < ShoreClearM)) return false;
                     int lake = w.Water.LakeId[j];
-                    if (lake >= 0 && (j == i || y < w.Water.Lakes[lake].Level + ShoreClearM)) return false;
+                    if (!bank && lake >= 0 && (j == i || y < w.Water.Lakes[lake].Level + ShoreClearM)) return false;
                 }
             for (int k = blockStart[i]; k < blockStart[i + 1]; k++)
             {
@@ -456,6 +471,7 @@ namespace Stabby.World
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;
                     continue;
                 }
+                if (bank) continue;
                 float dist = Distance(item, x, z), hw = phw[item];
                 if (dist < hw + r + RiverClearM) return false;
                 if (dist < 2 * hw + r + BankReachM && y < psurf[item] + ShoreClearM) return false;
@@ -477,41 +493,6 @@ namespace Stabby.World
             var def = lib.Objects[d];
             foreach (var p in def.Parts) if (lib.PartSolid(def, p)) return true;
             return false;
-        }
-
-        public List<ObjectColumn> Columns()
-        {
-            var rows = new List<ObjectColumn>[across];
-            for (int k = 0; k < across; k++) rows[k] = new List<ObjectColumn>();
-            ColumnRows((cz, columns) => rows[cz].AddRange(columns));
-            int total = 0;
-            foreach (var r in rows) total += r.Count;
-            var list = new List<ObjectColumn>(total);
-            foreach (var r in rows) list.AddRange(r);
-            return list;
-        }
-
-        public void ColumnRows(ColumnSink sink)
-        {
-            var pool = new ConcurrentBag<(List<ObjectColumn>, List<ObjectInstance>)>();
-            Parallel.For(0, across, () => pool.TryTake(out var p) ? p : (new List<ObjectColumn>(), new List<ObjectInstance>()), (cz, _, t) =>
-            {
-                var (columns, scratch) = t;
-                for (int cx = 0; cx < across; cx++)
-                {
-                    columns.Clear();
-                    var held = chunks[cz * across + cx];
-                    if (held != null) foreach (var o in held) AddColumns(lib, shapes, o, columns);
-                    else
-                    {
-                        scratch.Clear();
-                        PlaceInto(cx, cz, true, scratch, null);
-                        foreach (var o in scratch) AddColumns(lib, shapes, o, columns);
-                    }
-                    if (columns.Count > 0) sink(cz, columns);
-                }
-                return t;
-            }, pool.Add);
         }
 
         public static void AddColumns(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
@@ -576,8 +557,6 @@ namespace Stabby.World
         }
     }
 
-    public delegate void ColumnSink(int row, List<ObjectColumn> columns);
-
     public sealed class PartShapes
     {
         public float[][][] Heights;
@@ -616,108 +595,54 @@ namespace Stabby.World
     public interface IColumnTable
     {
         float CellM { get; }
-        float MaxR { get; }
-        int Mask { get; }
-        int Start(int bucket);
-        ObjectColumn Column(int k);
+        float RegionM { get; }
+        int Across { get; }
+        bool Grid(int region, out RegionGrid g);
+        int Start(int region, int cell);
+        ObjectColumn Column(int region, int k);
     }
 
     public struct NoColumns : IColumnTable
     {
         public float CellM => 1;
-        public float MaxR => 0;
-        public int Mask => -1;
-        public int Start(int bucket) => 0;
-        public ObjectColumn Column(int k) => default;
-    }
-
-    public struct ColumnArrays : IColumnTable
-    {
-        public const float DefaultCellM = 8f;
-        public float Cell, Max;
-        public int[] Starts;
-        public ObjectColumn[] Items;
-
-        public float CellM => Cell;
-        public float MaxR => Max;
-        public int Mask => Starts == null ? -1 : Starts.Length - 2;
-        public int Start(int bucket) => Starts[bucket];
-        public ObjectColumn Column(int k) => Items[k];
-
-        public int Kill(ObjectField field, ObjectInstance o)
-        {
-            var cols = new List<ObjectColumn>();
-            field.ColumnsOf(o, cols);
-            int killed = 0;
-            foreach (var c in cols)
-            {
-                int k = Obstacles.Find(this, c);
-                if (k >= 0) { Items[k] = Obstacles.Dead; killed++; }
-            }
-            return killed;
-        }
-
-        public static int Buckets(int count)
-        {
-            int buckets = 64;
-            while (buckets < count * 2 && buckets < (1 << 24)) buckets <<= 1;
-            return buckets;
-        }
-
-        public static ColumnArrays Build(List<ObjectColumn> columns, float cellM = DefaultCellM)
-        {
-            int buckets = Buckets(columns.Count);
-            var t = new ColumnArrays { Cell = cellM, Starts = new int[buckets + 1], Items = new ObjectColumn[columns.Count] };
-            var at = new int[columns.Count];
-            for (int k = 0; k < columns.Count; k++)
-            {
-                var c = columns[k];
-                t.Max = Math.Max(t.Max, c.R);
-                at[k] = Obstacles.Bucket((int)Math.Floor(c.X / cellM), (int)Math.Floor(c.Z / cellM), buckets - 1);
-                t.Starts[at[k] + 1]++;
-            }
-            for (int b = 0; b < buckets; b++) t.Starts[b + 1] += t.Starts[b];
-            var fill = (int[])t.Starts.Clone();
-            for (int k = 0; k < columns.Count; k++) t.Items[fill[at[k]]++] = columns[k];
-            return t;
-        }
+        public float RegionM => 1;
+        public int Across => 0;
+        public bool Grid(int region, out RegionGrid g) { g = default; return false; }
+        public int Start(int region, int cell) => 0;
+        public ObjectColumn Column(int region, int k) => default;
     }
 
     public static class Obstacles
     {
         public static readonly ObjectColumn Dead = new ObjectColumn { Bottom = float.PositiveInfinity, Top = float.NegativeInfinity };
 
-        public static int Bucket(int cx, int cz, int mask) => (int)(((uint)cx * 73856093u) ^ ((uint)cz * 19349663u)) & mask;
-
-        public static bool Same(ObjectColumn a, ObjectColumn b) => a.X == b.X && a.Z == b.Z && a.R == b.R && a.Bottom == b.Bottom && a.Top == b.Top;
-
-        public static int Find<T>(T t, ObjectColumn c) where T : struct, IColumnTable
-        {
-            int mask = t.Mask;
-            if (mask < 0) return -1;
-            int b = Bucket((int)Math.Floor(c.X / t.CellM), (int)Math.Floor(c.Z / t.CellM), mask);
-            for (int k = t.Start(b), e = t.Start(b + 1); k < e; k++)
-                if (Same(t.Column(k), c)) return k;
-            return -1;
-        }
+        public static bool IsDead(ObjectColumn c) => c.Top < c.Bottom;
 
         public static float Top<T>(T t, float x, float z, float r, float bottom, float top) where T : struct, IColumnTable
         {
             float best = float.NegativeInfinity;
-            int mask = t.Mask;
-            if (mask < 0) return best;
-            float reach = r + t.MaxR, cell = t.CellM;
-            int x0 = (int)Math.Floor((x - reach) / cell), x1 = (int)Math.Floor((x + reach) / cell);
-            int z0 = (int)Math.Floor((z - reach) / cell), z1 = (int)Math.Floor((z + reach) / cell);
-            for (int cz = z0; cz <= z1; cz++)
-                for (int cx = x0; cx <= x1; cx++)
+            int across = t.Across;
+            if (across <= 0) return best;
+            float size = t.RegionM, cell = t.CellM;
+            int rx = (int)Math.Floor(x / size), rz = (int)Math.Floor(z / size);
+            for (int qz = Math.Max(0, rz - 1); qz <= Math.Min(across - 1, rz + 1); qz++)
+                for (int qx = Math.Max(0, rx - 1); qx <= Math.Min(across - 1, rx + 1); qx++)
                 {
-                    int b = Bucket(cx, cz, mask);
-                    for (int k = t.Start(b), e = t.Start(b + 1); k < e; k++)
+                    int region = qz * across + qx;
+                    if (!t.Grid(region, out var g) || g.W == 0) continue;
+                    float reach = r + g.Max;
+                    int x0 = Math.Max(g.X0, (int)Math.Floor((x - reach) / cell)), x1 = Math.Min(g.X0 + g.W - 1, (int)Math.Floor((x + reach) / cell));
+                    int z0 = Math.Max(g.Z0, (int)Math.Floor((z - reach) / cell)), z1 = Math.Min(g.Z0 + g.H - 1, (int)Math.Floor((z + reach) / cell));
+                    if (x0 > x1 || z0 > z1) continue;
+                    for (int cz = z0; cz <= z1; cz++)
                     {
-                        var c = t.Column(k);
-                        float dx = c.X - x, dz = c.Z - z, rr = r + c.R;
-                        if (dx * dx + dz * dz < rr * rr && c.Bottom < top && c.Top > bottom && c.Top > best) best = c.Top;
+                        int row = (cz - g.Z0) * g.W - g.X0;
+                        for (int k = t.Start(region, row + x0), e = t.Start(region, row + x1 + 1); k < e; k++)
+                        {
+                            var c = t.Column(region, k);
+                            float dx = c.X - x, dz = c.Z - z, rr = r + c.R;
+                            if (dx * dx + dz * dz < rr * rr && c.Bottom < top && c.Top > bottom && c.Top > best) best = c.Top;
+                        }
                     }
                 }
             return best;

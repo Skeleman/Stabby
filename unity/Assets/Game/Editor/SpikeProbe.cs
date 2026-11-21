@@ -44,13 +44,14 @@ namespace Stabby.Game.Editor
             touringNow = Touring;
         }
 
-        static readonly bool Record = Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
+        static readonly int[] LoadFrames = (Environment.GetEnvironmentVariable("STABBY_PROFILE_LOAD") ?? "").Split('-').Where(s => int.TryParse(s, out _)).Select(int.Parse).ToArray();
+        static readonly bool Record =Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
 
         public static void Tick()
         {
             if (Record)
             {
-                bool play = GameStatus.TerrainBuilt && !GameStatus.AfterTool && recorded < Segment;
+                bool play = LoadFrames.Length == 2 ? frame >= LoadFrames[0] && frame <= LoadFrames[1] : GameStatus.TerrainBuilt && !GameStatus.AfterTool && recorded < Segment;
                 if (play && !Profiler.enabled)
                 {
                     Profiler.logFile = System.IO.Path.GetFullPath($"../out/unity/spike-{resumes++:D3}.raw");

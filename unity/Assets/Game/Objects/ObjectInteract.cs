@@ -32,21 +32,6 @@ namespace Stabby.Game
     {
         public const int PerRpc = 60;
 
-        public static int Kill(ObjectField field, ObjectColumns oc, ObjectInstance o, List<ObjectColumn> scratch)
-        {
-            scratch.Clear();
-            field.ColumnsOf(o, scratch);
-            int killed = 0;
-            foreach (var c in scratch)
-            {
-                int k = Obstacles.Find(oc, c);
-                if (k < 0) continue;
-                oc.Blob.Value.Items[k] = Obstacles.Dead;
-                killed++;
-            }
-            return killed;
-        }
-
         public static void Send(EntityCommandBuffer ecb, Entity conn, IEnumerable<ulong> ids)
         {
             var rpc = new ObjectDeltaRpc();
@@ -97,7 +82,6 @@ namespace Stabby.Game
 
         readonly ObjectDeltas deltas = new ObjectDeltas();
         readonly List<Ask> asks = new List<Ask>();
-        readonly List<ObjectColumn> scratch = new List<ObjectColumn>();
         readonly List<ulong> fresh = new List<ulong>();
         Task<List<Verdict>> check;
         int accepted, rejected, killed;
@@ -173,7 +157,7 @@ namespace Stabby.Game
                 {
                     accepted++;
                     fresh.Add(v.Ask.Id);
-                    if (cols) killed += ObjectDeltaApply.Kill(field, oc, v.Found, scratch);
+                    if (cols) killed += oc.Kill(v.Ask.Id);
                 }
                 else rejected++;
                 if (v.Ask.From != Entity.Null) Rpc.Send(ecb, v.Ask.From, new ObjectReplyRpc { Id = v.Ask.Id, Code = (byte)r });
@@ -205,7 +189,6 @@ namespace Stabby.Game
 
         readonly ObjectDeltas deltas = new ObjectDeltas();
         readonly List<ulong> pending = new List<ulong>();
-        readonly List<ObjectColumn> scratch = new List<ObjectColumn>();
         readonly List<ulong> sendQueue = new List<ulong>();
         Task<List<Found>> resolve;
         Task<List<ulong>> pick;
@@ -306,7 +289,7 @@ namespace Stabby.Game
             {
                 if (!f.Ok) { unknown++; continue; }
                 if (!deltas.Apply(f.Id)) continue;
-                if (cols) killed += ObjectDeltaApply.Kill(field, oc, f.Instance, scratch);
+                if (cols) killed += oc.Kill(f.Id);
                 if (view != null && view.Enabled) view.Hide(f.Instance);
             }
             Status();

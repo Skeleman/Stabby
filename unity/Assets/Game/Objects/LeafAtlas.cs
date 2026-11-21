@@ -117,7 +117,7 @@ namespace Stabby.Game
                 if (cell == ObjectFoliage.BroadLeaves) Broad(cv, ref rng);
                 else if (cell == ObjectFoliage.Needles) Needles(cv, ref rng);
                 else if (cell == ObjectFoliage.ShrubLeaves) Shrub(cv, ref rng);
-                else Round(cv, ref rng);
+                else Reeds(cv, ref rng);
             }
             return new Pixels { Mips = Mips(cv) };
         }
@@ -257,19 +257,21 @@ namespace Stabby.Game
             }
         }
 
-        static void Round(Canvas cv, ref Rng rng)
+        static void Reeds(Canvas cv, ref Rng rng)
         {
-            var xs = new float[9];
-            var ys = new float[9];
-            Twig(cv, ref rng, 0.5f, 0.0f, 0.5f, 0.6f, 0.05f, 0.011f, 0.005f, 8, xs, ys);
-            for (int k = 1; k < 9; k++)
+            for (int k = 0; k < 15; k++)
             {
-                float side = k % 2 == 0 ? 1 : -1;
-                float ang = k == 8 ? 0.05f : rng.Range(0.5f, 1.05f);
-                float dx = side * (float)Math.Sin(ang), dy = (float)Math.Cos(ang);
-                float len = rng.Range(0.2f, 0.26f);
-                cv.Stroke(xs[k], ys[k], xs[k] + dx * 0.05f, ys[k] + dy * 0.05f, 0.004f, 0.003f, 0.6f);
-                cv.Leaf(xs[k] + dx * 0.05f, ys[k] + dy * 0.05f, dx, dy, len, len * rng.Range(0.42f, 0.5f), 0.9f, 0.55f, 0.03f, rng.Range(0.72f, 1.05f), Hue(ref rng), 1);
+                float bx = rng.Range(0.12f, 0.88f), lean = (bx - 0.5f) * rng.Range(0.25f, 0.6f) + rng.Range(-0.08f, 0.08f);
+                float len = rng.Range(0.55f, 0.97f);
+                cv.Leaf(bx, 0f, lean, 1f, len, rng.Range(0.009f, 0.017f), 0.45f, 0.35f, 0, rng.Range(0.62f, 1f), Hue(ref rng), 0.4f);
+            }
+            for (int k = 0; k < 3; k++)
+            {
+                float bx = 0.3f + 0.2f * k + rng.Range(-0.06f, 0.06f), lean = rng.Range(-0.06f, 0.06f), top = rng.Range(0.78f, 0.95f);
+                float hx = bx + lean * top, head = rng.Range(0.1f, 0.15f), r = rng.Range(0.014f, 0.019f);
+                cv.Leaf(bx, 0f, lean, 1f, top, 0.0045f, 1f, 0.05f, 0, rng.Range(0.7f, 0.9f), Hue(ref rng), 0);
+                cv.Stroke(hx - lean * head, top - head, hx, top - 0.01f, r * 0.85f, r, rng.Range(0.5f, 0.68f));
+                cv.Stroke(hx, top - 0.01f, hx + lean * 0.05f, Math.Min(0.995f, top + 0.05f), 0.003f, 0.0015f, 0.6f);
             }
         }
 
@@ -292,10 +294,6 @@ namespace Stabby.Game
                 if (level > 0)
                 {
                     int m = n / 2;
-                    var r2 = new float[m * m];
-                    var g2 = new float[m * m];
-                    var b2 = new float[m * m];
-                    var a2 = new float[m * m];
                     for (int y = 0; y < m; y++)
                         for (int x = 0; x < m; x++)
                         {
@@ -307,9 +305,9 @@ namespace Stabby.Game
                                 sa += a[i]; sr += r[i] * a[i]; sg += g[i] * a[i]; sb += b[i] * a[i];
                             }
                             float inv = sa > 1e-5f ? 1f / sa : 0;
-                            r2[o] = sr * inv; g2[o] = sg * inv; b2[o] = sb * inv; a2[o] = sa * 0.25f;
+                            r[o] = sr * inv; g[o] = sg * inv; b[o] = sb * inv; a[o] = sa * 0.25f;
                         }
-                    r = r2; g = g2; b = b2; a = a2; n = m;
+                    n = m;
                 }
                 var px = new Color32[n * n];
                 int across = ObjectFoliage.CellsAcross, cellN = Math.Max(1, n / across);

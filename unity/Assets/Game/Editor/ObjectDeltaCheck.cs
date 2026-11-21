@@ -97,6 +97,9 @@ namespace Stabby.Game.Editor
             }
             if (phase == 1)
             {
+                int region = ObjectIds.Chunk(near);
+                if (!Columns(null).Resident(region) || GameSettings.Clients.Any(c => !Columns(c).Resident(region))) { Expect(phase, 1200); return; }
+                tries = 0;
                 Isolated(field);
                 Shot("before");
                 Sys<ClientObjectDeltaSystem>(GameSettings.FullStreamClient).Request(far);
@@ -125,8 +128,7 @@ namespace Stabby.Game.Editor
                 field.ColumnsOf(target, cols);
                 foreach (string w in new[] { null, GameSettings.ViewClient, GameSettings.FullStreamClient })
                 {
-                    var oc = Columns(w);
-                    int left = cols.Count(c => Obstacles.Find(oc, c) >= 0);
+                    int left = Columns(w).Alive(near);
                     Check(left == 0, $"{w ?? "server"}: {cols.Count} columns of the removed object, {left} left in the static collision");
                 }
                 var view = Sys<ObjectViewSystem>(GameSettings.ViewClient);
@@ -156,22 +158,19 @@ namespace Stabby.Game.Editor
             var cols = new List<ObjectColumn>();
             field.ColumnsOf(target, cols);
             var oc = Columns(GameSettings.FullStreamClient);
+            int region = ObjectIds.Chunk(target.Id);
+            var data = oc.Regions[region];
             var saved = new List<(int, ObjectColumn)>();
-            foreach (var c in cols)
-            {
-                int k = Obstacles.Find(oc, c);
-                if (k < 0) continue;
-                saved.Add((k, oc.Blob.Value.Items[k]));
-                oc.Blob.Value.Items[k] = Obstacles.Dead;
-            }
-            Check(saved.Count == cols.Count && cols.Count > 0, $"{GameSettings.FullStreamClient}: killed {saved.Count} of {cols.Count} columns in its own copy");
+            for (int k = 0; k < data.Owners.Length; k++)
+                if (data.Owners[k] == target.Id) saved.Add((k, data.Items[k]));
+            int killed = oc.Kill(target.Id);
+            Check(killed == cols.Count && cols.Count > 0 && oc.Alive(target.Id) == 0, $"{GameSettings.FullStreamClient}: killed {killed} of {cols.Count} columns in its own copy");
             foreach (string w in new[] { null, GameSettings.ViewClient })
             {
-                var other = Columns(w);
-                int left = cols.Count(c => Obstacles.Find(other, c) >= 0);
+                int left = Columns(w).Alive(target.Id);
                 Check(left == cols.Count, $"{w ?? "server"}: {left} of {cols.Count} columns kept after a kill in {GameSettings.FullStreamClient}");
             }
-            foreach (var (k, c) in saved) oc.Blob.Value.Items[k] = c;
+            foreach (var (k, c) in saved) data.Items[k] = c;
             log.Add($"kill isolation: {cols.Count} columns killed in {GameSettings.FullStreamClient} only, then restored");
         }
 

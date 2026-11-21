@@ -76,7 +76,7 @@ public class InnTests
         var o = new ObjectInstance { Def = d, Variant = 0, X = 0, Y = 0, Z = 0, Qw = 1, Size = 19 };
         var list = new List<ObjectColumn>();
         ObjectField.AddColumns(Objects, shapes, o, list);
-        var cols = ColumnArrays.Build(list);
+        var cols = ColumnRegions.Whole(list);
         int entered = 0;
         for (float sx = -4.5f; sx <= 4.5f; sx += 0.25f)
         {

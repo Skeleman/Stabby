@@ -631,6 +631,7 @@ namespace Stabby.Game
 
         Task<Prepared> preparing;
         IEnumerator<string> loading;
+        public bool Loading => loading != null || look.IsCreated;
         Prepared prepared;
         TerrainLook.FieldUpload upload;
         const int UploadBytes = 2 << 20;

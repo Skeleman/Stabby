@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -429,19 +429,28 @@ namespace Stabby.Game.Editor
             }
             while (phase >= 24 && phase <= 25)
             {
-                string name = phase == 24 ? "structure-close" : "structure-mid";
+                int step = phase == 24 ? 0 : 1 + structStep;
+                string name = StructureShots[step];
                 if (wait == 0)
                 {
-                    if (!AimStructure(cam, phase == 24)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    if (!AimStructure(cam, step)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
-                if (phase == 25) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (step == 1) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (step == 3) GameStatus.Lines["~bench structure far"] = Bench(cam, "structure far");
                 wait = 0;
+                if (phase == 25 && ++structStep < StructureShots.Length - 1) continue;
                 phase++;
+            }
+            if (only == "structure")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             while (phase >= 26 && phase < 26 + BiomeShots.Length)
             {
@@ -509,7 +518,29 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "biomes" || only == "beach" || only == "forest" || only == "river")
+            if (only == "river")
+            {
+                if (job == null) job = RiverTour(cam, dir);
+                if (job.MoveNext()) return;
+            }
+            while (phase >= 140 && phase < 140 + WaterShots.Length)
+            {
+                string name = WaterShots[phase - 140];
+                if (wait == 0)
+                {
+                    if (!AimWater(cam, phase - 140)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 140) GameStatus.Lines["~bench water coast"] = Bench(cam, "water coast low");
+                if (phase == 145) GameStatus.Lines["~bench water far"] = Bench(cam, "water far sea");
+                wait = 0;
+                phase++;
+            }
+            if (only == "biomes" || only == "beach" || only == "forest" || only == "river" || only == "water")
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -689,7 +720,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static bool AimLake(Camera cam)
+        static bool AimLake(Camera cam, bool close = false)
         {
             foreach (var w in Unity.Entities.World.All)
             {
@@ -714,8 +745,9 @@ namespace Stabby.Game.Editor
                 if (edge < 0) return false;
                 var shore = new Vector2(edge % n * cm, edge / n * cm);
                 var dir = (mid - shore).sqrMagnitude > 1f ? (mid - shore).normalized : Vector2.right;
-                var eye = new Vector3(shore.x - dir.x * 25f, 0, shore.y - dir.y * 25f);
-                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), pick.Level) + 6f;
+                float back = close ? 7f : 25f;
+                var eye = new Vector3(shore.x - dir.x * back, 0, shore.y - dir.y * back);
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), pick.Level) + (close ? 1.8f : 6f);
                 var target = new Vector3(shore.x + dir.x * 60f, pick.Level, shore.y + dir.y * 60f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim lake"] = $"lake {pick.Id} ({pick.Cells.Count} cells) shore at {shore.x:F0},{shore.y:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
@@ -994,8 +1026,13 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static bool AimStructure(Camera cam, bool close)
+        static readonly string[] StructureShots = { "structure-close", "structure-mid", "structure-lod1", "structure-far" };
+        static readonly float[] StructureBack = { 0.75f, 7.5f, 17f, 30f };
+        static int structStep;
+
+        static bool AimStructure(Camera cam, int step)
         {
+            bool close = step == 0;
             foreach (var w in Unity.Entities.World.All)
             {
                 var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
@@ -1016,7 +1053,7 @@ namespace Stabby.Game.Editor
                                 int run = 0;
                                 foreach (var b in chunk)
                                     if (b.Def == o.Def && (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z) < 36f * o.Size * o.Size) run++;
-                                score -= run >= 4 ? 400f + 40f * run : 0f;
+                                score -= 1e6f + (run >= 4 ? 400f + 40f * run : 0f);
                             }
                             if (score < best) { best = score; pick = o; }
                         }
@@ -1025,12 +1062,12 @@ namespace Stabby.Game.Editor
                 var target = new Vector3(pick.X, pick.Y + pick.Size * 0.1f, pick.Z);
                 var across = new Vector3(2 * (pick.Qx * pick.Qz + pick.Qw * pick.Qy), 0, 1 - 2 * (pick.Qx * pick.Qx + pick.Qy * pick.Qy)).normalized;
                 var along = new Vector3(across.z, 0, -across.x);
-                float back = close ? 0.75f * pick.Size : 30f * Mathf.Max(1f, 0.25f * pick.Size);
-                var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : 0.3f * back);
+                float back = StructureBack[step] * pick.Size;
+                var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : (step == 1 ? 0.3f : 0.4f) * back);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~aim structure " + (close ? "close" : "mid")] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
+                GameStatus.Lines["~aim " + StructureShots[step]] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
                 return true;
             }
             return false;
@@ -1394,6 +1431,22 @@ namespace Stabby.Game.Editor
             return false;
         }
 
+        static readonly string[] WaterShots = { "coast-low", "beach-close", "beach-mid", "lake", "lake-close", "sea-far", "sea-low" };
+
+        static bool AimWater(Camera cam, int view)
+        {
+            switch (view)
+            {
+                case 0: return Coast(cam, 40f);
+                case 1: return AimBeach(cam, 0, false);
+                case 2: return AimBeach(cam, 0, true);
+                case 3: return AimLake(cam, false);
+                case 4: return AimLake(cam, true);
+                case 5: return FarCoast(cam, 1000f, 250f);
+                default: return FarCoast(cam, 260f, 9f);
+            }
+        }
+
         static readonly string[] ForestShots = { "temperate-forest", "boreal", "temperate-rain" };
         static readonly string[] RiverShots = { "river-close", "river-bend", "river-steep", "river-steep-mid" };
 
@@ -1589,6 +1642,133 @@ namespace Stabby.Game.Editor
         }
 
         public static float Sedimentary(float off) => MaterialLibrary.Sedimentary(off);
+
+        static System.Collections.IEnumerator RiverTour(Camera cam, string dir)
+        {
+            ClientMapSystem sys = null;
+            Ground ground = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var s = w.GetExistingSystemManaged<ClientMapSystem>();
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (s?.Map == null || q.CalculateEntityCount() != 1) continue;
+                sys = s;
+                ground = q.GetSingleton<Ground>();
+                break;
+            }
+            if (sys == null) { GameStatus.Lines["~rivers"] = "no map"; yield break; }
+            var map = sys.Map;
+            float cm = map.Config.CellMeters;
+            string[] kinds = { "bend", "steep" };
+            var spots = new Vector3[2];
+            var alongs = new Vector3[2];
+            var turns = new float[2];
+            var widths = new float[2];
+            var dist = new float[] { float.MaxValue, float.MaxValue };
+            foreach (var r in map.Water.Rivers)
+                for (int k = 3; k + 3 < r.X.Count; k++)
+                {
+                    float ax = r.X[k] - r.X[k - 3], az = r.Y[k] - r.Y[k - 3], bx = r.X[k + 3] - r.X[k], bz = r.Y[k + 3] - r.Y[k];
+                    float la = Mathf.Sqrt(ax * ax + az * az), lb = Mathf.Sqrt(bx * bx + bz * bz);
+                    if (la < 1e-3f || lb < 1e-3f) continue;
+                    float turn = (ax * bz - az * bx) / (la * lb), hw = 0.5f * r.Width[k];
+                    float bend = Mathf.Abs(turn) * hw / (0.5f * (la + lb) * cm);
+                    float slope = (r.Surface[k - 3] - r.Surface[k + 3]) / ((la + lb) * cm);
+                    var p = new Vector3(r.X[k] * cm, r.Surface[k], r.Y[k] * cm);
+                    float d = (new Vector2(p.x, p.z) - new Vector2(home.x, home.z)).sqrMagnitude;
+                    int pick = r.Width[k] >= 12f && bend >= 0.12f ? 0 : r.Width[k] >= 5f && slope >= 0.05f && r.Surface[k] >= 25f ? 1 : -1;
+                    if (pick < 0 || d >= dist[pick]) continue;
+                    dist[pick] = d; spots[pick] = p; turns[pick] = turn; widths[pick] = r.Width[k];
+                    alongs[pick] = new Vector3(bx + ax, 0, bz + az).normalized;
+                }
+            for (int k = 0; k < 2; k++)
+            {
+                if (dist[k] == float.MaxValue) { GameStatus.Lines["~river " + kinds[k]] = "no " + kinds[k] + " found"; continue; }
+                var t = spots[k];
+                var al = alongs[k];
+                var left = new Vector3(-al.z, 0, al.x);
+                float hw = 0.5f * widths[k];
+                var inner = turns[k] > 0 ? left : -left;
+                GameStatus.Lines["~river " + kinds[k]] = $"{kinds[k]} at {t.x:F0},{t.y:F0},{t.z:F0}, width {widths[k]:F0} m, turn {turns[k]:F2}, {Mathf.Sqrt(dist[k]):F0} m from the player";
+                var eyes = new Vector3[]
+                {
+                    k == 0 ? t + inner * (hw + 14f) + Vector3.up * 5f : t + al * (hw + 35f) + Vector3.up * 7f,
+                    t - al * (hw * 2.5f + 25f) + inner * hw * 0.5f + Vector3.up * (hw * 0.4f + 8f),
+                    t - al * 160f + inner * 120f + Vector3.up * 260f,
+                };
+                var looks = new Vector3[] { k == 0 ? t - inner * hw : t, t - inner * hw * 0.3f, t };
+                string[] names = { "close", "along", "aerial" };
+                for (int v = 0; v < 3; v++)
+                {
+                    var eye = eyes[v];
+                    eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.8f);
+                    var look = looks[v];
+                    look.y = Mathf.Max(ground.HeightAt(look.x, look.z), t.y);
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                    for (var w = Settle(180); w.MoveNext();) yield return null;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "river-" + kinds[k] + "-" + names[v]);
+                }
+            }
+            for (var d = BankDetails(cam, dir, ground); d.MoveNext();) yield return null;
+        }
+
+        static readonly string[] BankShots = { "reeds", "river-gravel", "driftwood", "wet-stone" };
+
+        static System.Collections.IEnumerator BankDetails(Camera cam, string dir, Ground ground)
+        {
+            ObjectField field = null;
+            float span = 0;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient)
+                {
+                    field = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+                    var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                    if (map != null) span = WorldChunks.Size * map.Config.CellMeters;
+                }
+            if (field == null || span <= 0) { GameStatus.Lines["~bank details"] = "no object field"; yield break; }
+            int across = field.ChunksAcross, hx = (int)(home.x / span), hz = (int)(home.z / span);
+            foreach (var id in BankShots)
+            {
+                int def = field.Library.Objects.FindIndex(o => o.Id == id);
+                var all = new System.Collections.Generic.List<ObjectInstance>();
+                for (int cz = Mathf.Max(0, hz - 2); cz <= Mathf.Min(across - 1, hz + 2); cz++)
+                    for (int cx = Mathf.Max(0, hx - 2); cx <= Mathf.Min(across - 1, hx + 2); cx++)
+                        foreach (var o in field.Chunk(cx, cz)) if (o.Def == def) all.Add(o);
+                if (all.Count == 0) { GameStatus.Lines["~bank " + id] = "no " + id + " near the player"; continue; }
+                ObjectInstance pick = all[0];
+                float best = float.MinValue;
+                for (int k = 0; k < all.Count; k += Mathf.Max(1, all.Count / 800))
+                {
+                    var a = all[k];
+                    int count = 0;
+                    for (int j = 0; j < all.Count; j += Mathf.Max(1, all.Count / 4000))
+                        if ((all[j].X - a.X) * (all[j].X - a.X) + (all[j].Z - a.Z) * (all[j].Z - a.Z) < 64f) count++;
+                    float sc = count - (new Vector2(a.X - home.x, a.Z - home.z)).magnitude / 300f;
+                    if (sc > best) { best = sc; pick = a; }
+                }
+                float back = id == "driftwood" ? 5f + pick.Size : id == "reeds" ? 6.5f : 1.8f;
+                Vector3 eye = Vector3.zero, shore = Vector3.zero;
+                float low = float.MaxValue, high = float.MinValue;
+                for (int a = 0; a < 8; a++)
+                {
+                    var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
+                    var e = new Vector3(pick.X, 0, pick.Z) + d * back;
+                    float h = ground.HeightAt(e.x, e.z);
+                    if (h < low) { low = h; eye = e; }
+                    if (h > high && h < pick.Y + 3f) { high = h; shore = e; }
+                }
+                bool landward = (id == "reeds" || id == "driftwood" || id == "river-gravel") && high > float.MinValue;
+                if (landward) { eye = shore; low = high; }
+                eye.y = Mathf.Max(low, pick.Y) + (id == "reeds" ? 2.4f : id == "driftwood" ? 1.6f : id == "wet-stone" ? 6f : 2.8f);
+                var look = new Vector3(pick.X, pick.Y + (id == "reeds" ? 0.6f * pick.Size : 0.2f), pick.Z);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                GameStatus.Lines["~bank " + id] = $"{id} at {pick.X:F0},{pick.Y:F1},{pick.Z:F0}, {all.Count} near, cluster {best:F1}";
+                for (int k = 0; k < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && k < 1800); k++) yield return null;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "bank-" + id);
+            }
+        }
 
         static System.Collections.IEnumerator CliffTour(Camera cam, string dir)
         {

@@ -231,7 +231,8 @@ namespace Stabby.World
                 float swell = along[k] * c.CellMeters / Math.Max(c.CellMeters, c.RiverWobbleWavelengthWidths * width);
                 width *= 1f + c.RiverWidthWobble * Math.Max(-1f, Math.Min(1f, Noise.Gradient(wobble, swell, lane)));
                 seg.Width.Add(width);
-                seg.Depth.Add(0.3f + width / 25f);
+                float depth = Math.Min(c.RiverDepthMin + c.RiverDepthAtUnitFlow * (float)FMath.Pow(seg.Discharge[k], c.RiverDepthExponent), c.RiverDepthPerWidth * width);
+                seg.Depth.Add(k > 0 ? Math.Max(depth, seg.Depth[k - 1]) : depth);
             }
             var sx = new float[count];
             var sy = new float[count];

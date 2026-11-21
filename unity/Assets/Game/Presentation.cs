@@ -52,7 +52,11 @@ namespace Stabby.Game
                 materialIds = new BatchMaterialID[n];
             }
             else if (warmed == 1) LoadMesh(graphics);
-            else if (warmed == 2 + 2 * n) WarmEntity();
+            else if (warmed == 2 + 2 * n)
+            {
+                if (!TerrainLoading()) return false;
+                WarmEntity();
+            }
             else
             {
                 int k = (warmed - 2) / 2;
@@ -74,6 +78,12 @@ namespace Stabby.Game
             Object.Destroy(prim);
             bounds = new AABB { Center = mesh.bounds.center, Extents = mesh.bounds.extents };
             meshId = graphics.RegisterMesh(mesh);
+        }
+
+        bool TerrainLoading()
+        {
+            var terrain = World.GetExistingSystemManaged<TerrainViewSystem>();
+            return terrain == null || !terrain.Enabled || terrain.Loading;
         }
 
         void WarmEntity()

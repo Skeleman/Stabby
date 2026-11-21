@@ -166,6 +166,7 @@ public class ObjectTests
     [InlineData(ObjectPart.Log, ObjectPart.EndsTorn, 0.3f)]
     [InlineData(ObjectPart.Log, ObjectPart.EndsSawn, 0.11f)]
     [InlineData(ObjectPart.Log, ObjectPart.EndsRooted, 0.12f)]
+    [InlineData(ObjectPart.Log, ObjectPart.EndsWorn, 0.09f)]
     [InlineData(ObjectPart.Stump, ObjectPart.EndsAuto, 1.11f)]
     [InlineData(ObjectPart.Stump, ObjectPart.EndsSawn, 1.11f)]
     [InlineData(ObjectPart.Stump, ObjectPart.EndsSnapped, 0.5f)]
@@ -297,17 +298,19 @@ public class ObjectTests
         Assert.Equal(RemoveResult.AlreadyRemoved, deltas.TryRemove(host, stone.Id, stone.X, stone.Y, stone.Z, out _));
         Assert.False(deltas.Nearest(host, stone.X, stone.Y, stone.Z, out ulong again) && again == stone.Id);
 
-        var table = ColumnArrays.Build(new ObjectField(w, detail, edits, Objects).Columns());
+        var regionField = new ObjectField(w, detail, edits, Objects);
+        var table = ColumnRegions.For(regionField);
+        table.Put(ColumnRegion.Build(regionField, ObjectIds.Chunk(wood.Id)));
         var cols = new List<ObjectColumn>();
         host.ColumnsOf(wood, cols);
         Assert.NotEmpty(cols);
-        Assert.All(cols, c => Assert.True(Obstacles.Find(table, c) >= 0));
+        Assert.Equal(cols.Count, table.Slots[ObjectIds.Chunk(wood.Id)].Alive(wood.Id));
         float before = Obstacles.Top(table, cols[0].X, cols[0].Z, 0.05f, cols[0].Bottom, cols[0].Top);
         Assert.True(before >= cols[0].Top);
         Assert.Equal(RemoveResult.Ok, deltas.TryRemove(host, wood.Id, wood.X, wood.Y, wood.Z, out var woodGot));
-        Assert.Equal(cols.Count, table.Kill(host, woodGot));
-        Assert.All(cols, c => Assert.Equal(-1, Obstacles.Find(table, c)));
-        Assert.Equal(0, table.Kill(host, woodGot));
+        Assert.Equal(cols.Count, table.Kill(woodGot.Id));
+        Assert.Equal(0, table.Slots[ObjectIds.Chunk(wood.Id)].Alive(wood.Id));
+        Assert.Equal(0, table.Kill(woodGot.Id));
 
         var client = new ObjectDeltas();
         var joiner = new ObjectField(w, detail, edits, Objects);
@@ -329,7 +332,7 @@ public class ObjectTests
     {
         var flat = new FlatGround();
         var none = default(NoEdits);
-        var cols = ColumnArrays.Build(new List<ObjectColumn>
+        var cols = ColumnRegions.Whole(new List<ObjectColumn>
         {
             new ObjectColumn { X = 5, Z = 0, R = 0.6f, Bottom = 0, Top = 0.5f },
             new ObjectColumn { X = 5, Z = 10, R = 0.8f, Bottom = 0, Top = 2.5f },
@@ -423,5 +426,20 @@ public class ObjectTests
         Assert.True(perDef[talus] > 1000, report);
         Assert.True(talusFoot * 2 > perDef[talus] * 0.4f * 2 && talusFoot * (double)perDef[rock] > 5.0 * rockFoot * perDef[talus], report);
         Assert.True(sparseCells == 0 || rockSparse / (double)sparseCells < 0.4 * rockDense / denseCells, report);
+    }
+
+    [Fact]
+    public void RiverBanksGrowReedsBarsDriftAndWetStones()
+    {
+        var w = Gen(5, 512);
+        var detail = new TerrainDetail(w);
+        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        var ids = new[] { "reeds", "driftwood", "drift-root", "river-gravel", "river-cobble", "wet-stone" };
+        var perDef = new int[Objects.Objects.Count];
+        foreach (var o in Enumerable.Range(0, field.ChunksAcross * field.ChunksAcross).SelectMany(c => field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross)))
+            perDef[o.Def]++;
+        string report = string.Join(", ", ids.Select(id => id + " " + perDef[Objects.Objects.FindIndex(o => o.Id == id)]));
+        foreach (var id in ids) Assert.True(perDef[Objects.Objects.FindIndex(o => o.Id == id)] > 0, report);
+        Assert.Empty(WorldChecks.Run(w));
     }
 }

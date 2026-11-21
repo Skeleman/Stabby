@@ -144,9 +144,9 @@ int Sweep()
     ulong from = ulong.Parse(Opt("from", "1"), CultureInfo.InvariantCulture);
     int count = int.Parse(Opt("count", "100"), CultureInfo.InvariantCulture), size = int.Parse(Opt("size", "256"), CultureInfo.InvariantCulture);
     var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
-    var times = new System.Collections.Concurrent.ConcurrentBag<long>();
+    var times = new System.Collections.Concurrent.ConcurrentBag<(long, ulong, string)>();
     var stages = new System.Collections.Concurrent.ConcurrentBag<(string, double, long)>();
-    var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", "-1"), CultureInfo.InvariantCulture) };
+    var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture) };
     bool checks = Opt("checks", "1") != "0";
     Parallel.For(0, count, par, k =>
     {
@@ -161,14 +161,16 @@ int Sweep()
             stages.Add((name, now - last, b - bytes));
             (last, bytes) = (now, b);
         }
-        var w = WorldGenerator.Generate(c, biomes, materials, null, Mark, objects);
-        times.Add(sw.ElapsedMilliseconds);
+        var mine = new List<(string, double)>();
+        void Note(string name) { double before = last; Mark(name); mine.Add((name, last - before)); }
+        var w = WorldGenerator.Generate(c, biomes, materials, null, Note, objects);
+        times.Add((sw.ElapsedMilliseconds, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
         foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
         Mark("checks");
     });
-    var t = times.OrderBy(x => x).ToArray();
-    Console.WriteLine($"{count} seeds at {size}x{size}: median {t[t.Length / 2]} ms, max {t[^1]} ms, {failures.Count} violations");
+    var t = times.OrderBy(x => x.Item1).ToArray();
+    Console.WriteLine($"{count} seeds at {size}x{size}: median {t[t.Length / 2].Item1} ms, max {t[^1].Item1} ms (seed {t[^1].Item2}: {t[^1].Item3}), {failures.Count} violations");
     foreach (var g in stages.GroupBy(s => s.Item1).OrderBy(g => Array.IndexOf(order, g.Key)))
     {
         var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();
