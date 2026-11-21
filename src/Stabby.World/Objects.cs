@@ -144,11 +144,22 @@ namespace Stabby.World
             return chunks[c] ?? (chunks[c] = Place(cx, cz));
         }
 
+        [ThreadStatic] static List<ObjectInstance> scratch;
+
         public ObjectInstance[] Place(int cx, int cz, bool solidOnly = false)
         {
-            var list = new List<ObjectInstance>();
+            var list = scratch ?? (scratch = new List<ObjectInstance>());
+            list.Clear();
             PlaceInto(cx, cz, solidOnly, list, null);
             return list.ToArray();
+        }
+
+        public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
+        {
+            list.Clear();
+            var cached = chunks[cz * across + cx];
+            if (cached != null) list.AddRange(cached);
+            else PlaceInto(cx, cz, false, list, null);
         }
 
         public FeatureEdit[] Boulders()

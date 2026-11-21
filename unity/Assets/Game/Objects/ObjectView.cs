@@ -59,12 +59,19 @@ namespace Stabby.Game
             public int SlotCount;
         }
 
-        sealed class ChunkParts
+        struct ChunkParts
         {
             public int Chunk;
-            public long[] Keys;
-            public int3[] Ranges;
+            public NativeArray<long> Keys;
+            public NativeArray<int3> Ranges;
             public NativeArray<ObjectSpawn> Parts;
+
+            public void Dispose()
+            {
+                Keys.Dispose();
+                Ranges.Dispose();
+                Parts.Dispose();
+            }
         }
 
         ObjectField field;
@@ -87,16 +94,21 @@ namespace Stabby.Game
         Texture2D atlas;
         RenderTexture impA, impB;
         Task<ChunkParts> chunkTask;
+        Func<ChunkParts> collectNext;
+        int collecting;
+        readonly List<ObjectInstance> placed = new List<ObjectInstance>();
+        readonly int[] groupCounts = new int[4], groupAt = new int[4];
+        readonly NativeArray<Entity>[] groupMade = new NativeArray<Entity>[4];
+        readonly Entity[] groupPrefabs = new Entity[4];
         NativeArray<bool> loaded;
         NativeArray<ObjectSpawn>[] chunkParts;
-        long[][] chunkKeys;
+        NativeArray<long>[] chunkKeys;
         NativeParallelHashMap<long, int3> ranges;
         NativeParallelHashSet<long> spawned;
         NativeParallelMultiHashMap<long, Entity> tileEntities;
         int liveEntities, chunksLoaded, chunksHeld, chunksUnloaded, partsHeld, peakParts, peakChunks;
         int[] liveByDef;
         ObjectKind[] kinds;
-        int statusHash;
         float worstUpdate;
 
         public static int Pending { get; private set; } = 1;
@@ -125,8 +137,10 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
+            if (GameStatus.Live.Remove("~objects view")) GameStatus.Lines["~objects view"] = Status();
             if (chunkParts != null) foreach (var a in chunkParts) if (a.IsCreated) a.Dispose();
-            Owned.Release(chunkTask, r => r.Parts.Dispose());
+            if (chunkKeys != null) foreach (var a in chunkKeys) if (a.IsCreated) a.Dispose();
+            Owned.Release(chunkTask, r => r.Dispose());
             if (ranges.IsCreated) ranges.Dispose();
             if (spawned.IsCreated) spawned.Dispose();
             if (tileEntities.IsCreated) tileEntities.Dispose();
@@ -165,7 +179,8 @@ namespace Stabby.Game
             across = field.ChunksAcross;
             loaded = new NativeArray<bool>(across * across, Allocator.Persistent);
             chunkParts = new NativeArray<ObjectSpawn>[across * across];
-            chunkKeys = new long[across * across][];
+            chunkKeys = new NativeArray<long>[across * across];
+            collectNext = () => Collect(collecting);
             float minTile = cm * 0.5f;
             int defs = lib.Objects.Count, count = 0;
             meshBase = new int[defs][];
@@ -432,12 +447,12 @@ namespace Stabby.Game
         ChunkParts Collect(int c)
         {
             int cx = c % across, cz = c / across;
-            var placed = field.Chunk(cx, cz);
+            field.PlaceInto(cx, cz, placed);
             int n = 0;
-            foreach (var o in placed) n += lib.Objects[o.Def].Parts.Count;
+            for (int i = 0; i < placed.Count; i++) n += lib.Objects[placed[i].Def].Parts.Count;
             var order = new NativeArray<SortKey>(n, Allocator.Persistent);
             var parts = new NativeArray<ObjectSpawn>(n, Allocator.Persistent);
-            for (int i = 0, at = 0; i < placed.Length; i++)
+            for (int i = 0, at = 0; i < placed.Count; i++)
             {
                 var o = placed[i];
                 long key = Key(o.Def, (int)(o.X / tile[o.Def]), (int)(o.Z / tile[o.Def]));
@@ -446,12 +461,12 @@ namespace Stabby.Game
             order.Sort();
             int distinct = 0;
             for (int i = 0; i < n; i++) if (i == 0 || order[i].Key != order[i - 1].Key) distinct++;
-            var keys = new long[distinct];
-            var spans = new int3[distinct];
+            var keys = new NativeArray<long>(distinct, Allocator.Persistent);
+            var spans = new NativeArray<int3>(distinct, Allocator.Persistent);
             for (int i = 0, d = -1; i < n; i++)
             {
                 if (i == 0 || order[i].Key != order[i - 1].Key) { d++; keys[d] = order[i].Key; spans[d] = new int3(i, 0, c); }
-                spans[d].y++;
+                spans[d] += new int3(0, 1, 0);
                 var o = placed[order[i].Item >> 8];
                 int p = order[i].Item & 255;
                 var def = lib.Objects[o.Def];
@@ -498,6 +513,7 @@ namespace Stabby.Game
                 chunkTask = null;
                 for (int i = 0; i < r.Keys.Length; i++)
                     if (!ranges.TryAdd(r.Keys[i], r.Ranges[i])) r.Keys[i] = -1;
+                r.Ranges.Dispose();
                 chunkParts[r.Chunk] = r.Parts;
                 chunkKeys[r.Chunk] = r.Keys;
                 loaded[r.Chunk] = true;
@@ -513,7 +529,7 @@ namespace Stabby.Game
                 foreach (long key in chunkKeys[c]) if (key >= 0) ranges.Remove(key);
                 partsHeld -= chunkParts[c].Length;
                 chunkParts[c].Dispose();
-                chunkKeys[c] = null;
+                chunkKeys[c].Dispose();
                 loaded[c] = false;
                 chunksHeld--;
                 chunksUnloaded++;
@@ -526,7 +542,7 @@ namespace Stabby.Game
                 float d = RectDistance(cam, (c % across) * span, (c / across) * span, span);
                 if (d < bestD) { bestD = d; best = c; }
             }
-            if (best >= 0) chunkTask = Task.Run(() => Collect(best));
+            if (best >= 0) { collecting = best; chunkTask = Task.Run(collectNext); }
             Pending = best >= 0 || chunkTask != null ? 1 : 0;
         }
 
@@ -580,13 +596,16 @@ namespace Stabby.Game
 
         void SpawnTile(long key, NativeArray<ObjectSpawn> parts, int3 range)
         {
-            var counts = new int[4];
+            var counts = groupCounts;
+            System.Array.Clear(counts, 0, 4);
+            System.Array.Clear(groupAt, 0, 4);
             int shown = 0;
             for (int k = 0; k < range.y; k++) if (!Hidden(parts[range.x + k].Id)) { shown++; counts[Group(parts[range.x + k])]++; }
-            var prefabs = new[] { flatPrefab, castPrefab, flatFoliagePrefab, castFoliagePrefab };
-            var made = new NativeArray<Entity>[4];
+            var prefabs = groupPrefabs;
+            prefabs[0] = flatPrefab; prefabs[1] = castPrefab; prefabs[2] = flatFoliagePrefab; prefabs[3] = castFoliagePrefab;
+            var made = groupMade;
             for (int g = 0; g < 4; g++) made[g] = EntityManager.Instantiate(prefabs[g], counts[g], Allocator.Temp);
-            var at = new int[4];
+            var at = groupAt;
             for (int k = 0; k < range.y; k++)
             {
                 var s = parts[range.x + k];
@@ -662,11 +681,10 @@ namespace Stabby.Game
             {
                 worstUpdate = math.max(worstUpdate, (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000f / System.Diagnostics.Stopwatch.Frequency);
             }
-            int hash = HashCode.Combine(liveEntities, chunksHeld, chunksLoaded, chunksUnloaded, partsHeld, (int)(worstUpdate * 10));
-            if (hash == statusHash) return;
-            statusHash = hash;
-            GameStatus.Lines["~objects view"] = $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}); worst view update after terrain built {worstUpdate:F1} ms";
+            if (!GameStatus.Live.ContainsKey("~objects view")) GameStatus.Live["~objects view"] = Status;
         }
+
+        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}); worst view update after terrain built {worstUpdate:F1} ms";
     }
 
     [BurstCompile]

@@ -712,7 +712,7 @@ namespace Stabby.Game
             var parts = map.Parts;
             var defs = map.Defs;
             quads = map.Objects?.Terrain ?? quads;
-            string materials = MaterialFile.DefaultPath;
+            string materials = ContentFiles.MaterialsPath;
             since.Restart();
             preparing = Task.Run(() => Prepare(world, parts.Detail, defs, materials, parts.Edits));
         }
@@ -734,7 +734,7 @@ namespace Stabby.Game
             root.N = n;
             var arr = p.Look.Allocate(ref root.Colors, colors.Length);
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
-            var lib = MaterialFile.Load(materials);
+            var lib = ContentFiles.Materials(materials);
             p.Strata = TerrainLook.Strata(world, lib, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
             p.Deep = lib.Water == null ? float.NegativeInfinity : -math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
