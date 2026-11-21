@@ -228,22 +228,35 @@ namespace Stabby.World
             }
         }
 
+        static void Tone(List<float> t, float moss, float broken, float age) { t.Add(0); t.Add(moss); t.Add(broken); t.Add(age); }
+
         static ObjectMesh Log(ulong key, int segments)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x2545F4914F6CDD1DUL));
             var b = Builder.New();
+            var tones = new List<float>();
             const int rings = 5;
             float bend = rng.Range(-0.03f, 0.03f), taper = rng.Range(0.8f, 0.95f);
             var wob = new float[segments];
             for (int k = 0; k < segments; k++) wob[k] = rng.Range(0.92f, 1.06f);
+            float moss = rng.NextFloat() < 0.55f ? rng.Range(0.5f, 1f) : 0f, age = rng.NextFloat();
+            var broken = new bool[] { rng.NextFloat() < 0.5f, rng.NextFloat() < 0.65f };
+            var jag = new float[2 * segments];
+            for (int end = 0; end < 2; end++)
+                for (int k = 0; k < segments; k++)
+                    jag[end * segments + k] = broken[end] ? rng.Range(0f, 0.04f) * ((k & 1) == 0 ? 1f : 0.3f) : 0f;
+            var tip = new float[] { rng.Range(-0.015f, 0.02f), rng.Range(-0.015f, 0.02f) };
             for (int r = 0; r < rings; r++)
             {
                 float u = r / (float)(rings - 1), x = u - 0.5f, rad = 0.5f * (1 + (taper - 1) * u);
                 float yo = bend * 4 * u * (1 - u);
+                int end = r == 0 ? 0 : r == rings - 1 ? 1 : -1;
                 for (int k = 0; k < segments; k++)
                 {
                     Ring(segments, k, out float c, out float s);
-                    b.Add(x, 0.5f + yo + c * rad * wob[k], s * rad * wob[k]);
+                    float j = end < 0 ? 0 : jag[end * segments + k], rr = rad * wob[k] * (1 - 6f * j);
+                    b.Add(x + (end == 0 ? -j : j), 0.5f + yo + c * rr, s * rr);
+                    Tone(tones, moss, 0, age);
                 }
             }
             for (int r = 0; r + 1 < rings; r++)
@@ -255,13 +268,15 @@ namespace Stabby.World
             for (int end = 0; end < 2; end++)
             {
                 int ring = end == 0 ? 0 : rings - 1;
-                float u = end, rad = 0.5f * (1 + (taper - 1) * u);
-                int center = b.Add(u - 0.5f, 0.5f, 0);
+                float u = end, cap = broken[end] ? 1 : 0;
+                int center = b.Add(u - 0.5f + (end == 0 ? -tip[end] : tip[end]) * cap, 0.5f, 0);
+                Tone(tones, moss, cap, age);
                 int first = b.P.Count / 3;
                 for (int k = 0; k < segments; k++)
                 {
                     int src = (ring * segments + k) * 3;
                     b.Add(b.P[src], b.P[src + 1], b.P[src + 2]);
+                    Tone(tones, moss, cap, age);
                 }
                 for (int k = 0; k < segments; k++)
                 {
@@ -270,18 +285,28 @@ namespace Stabby.World
                     else b.Tri(center, first + k, first + k1);
                 }
             }
-            return b.Finish();
+            var mesh = b.Finish();
+            mesh.Tones = tones.ToArray();
+            return mesh;
         }
 
         static ObjectMesh Stump(ulong key, int segments)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x9FB21C651E98DF25UL));
             var b = Builder.New();
+            var tones = new List<float>();
             const int rings = 4;
             var top = new float[segments];
             var flare = new float[segments];
-            float tilt = rng.Range(0.75f, 0.95f);
-            for (int k = 0; k < segments; k++) { top[k] = rng.Range(tilt, 1f); flare[k] = rng.Range(1f, 1.35f); }
+            bool broken = rng.NextFloat() < 0.5f;
+            float moss = rng.NextFloat() < 0.4f ? rng.Range(0.4f, 1f) : 0f, age = rng.NextFloat();
+            float h0 = broken ? rng.Range(0.55f, 0.7f) : rng.Range(0.75f, 0.95f), sx = rng.Range(-0.12f, 0.12f), sz = rng.Range(-0.12f, 0.12f);
+            for (int k = 0; k < segments; k++)
+            {
+                Ring(segments, k, out float c, out float s);
+                top[k] = broken ? ((k & 1) == 0 ? rng.Range(0.85f, 1.3f) : rng.Range(0.6f, 0.85f)) : h0 + c * sx + s * sz;
+                flare[k] = rng.Range(1f, 1.35f);
+            }
             for (int r = 0; r < rings; r++)
             {
                 float u = r / (float)(rings - 1);
@@ -289,8 +314,9 @@ namespace Stabby.World
                 {
                     Ring(segments, k, out float c, out float s);
                     float f = 1 + (flare[k] - 1) * (1 - u) * (1 - u) * (1 - u);
-                    float rad = 0.5f * f / 1.35f;
+                    float rad = 0.5f * f / 1.35f * (broken && r == rings - 1 && (k & 1) == 0 ? 0.88f : 1f);
                     b.Add(c * rad, u * top[k], s * rad);
+                    Tone(tones, moss * u, 0, age);
                 }
             }
             for (int r = 0; r + 1 < rings; r++)
@@ -299,15 +325,20 @@ namespace Stabby.World
                     int k1 = (k + 1) % segments;
                     b.Quad(r * segments + k, (r + 1) * segments + k, (r + 1) * segments + k1, r * segments + k1);
                 }
-            int center = b.Add(0, tilt, 0);
+            float cap = broken ? 1 : 0;
+            int center = b.Add(0, h0, 0);
+            Tone(tones, moss, cap, age);
             int first = b.P.Count / 3;
             for (int k = 0; k < segments; k++)
             {
                 int src = ((rings - 1) * segments + k) * 3;
                 b.Add(b.P[src], b.P[src + 1], b.P[src + 2]);
+                Tone(tones, moss, cap, age);
             }
             for (int k = 0; k < segments; k++) b.Tri(center, first + (k + 1) % segments, first + k);
-            return b.Finish();
+            var mesh = b.Finish();
+            mesh.Tones = tones.ToArray();
+            return mesh;
         }
     }
 }

@@ -41,6 +41,9 @@ namespace Stabby.World
                     grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                     if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
+                    float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
+                    float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
+                    if (slope < def.Placement.SlopeMin - 1e-3f || slope > def.Placement.SlopeMax + 1e-3f) Fail(8, at + $" stands on slope {slope:F2} outside {def.Placement.SlopeMin:F2}-{def.Placement.SlopeMax:F2}");
                     string seat = SeatFault(w, detail, o);
                     if (seat != null) Fail(7, at + seat);
                     var biomes = def.Placement.Biomes;
