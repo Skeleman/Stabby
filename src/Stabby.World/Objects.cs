@@ -633,6 +633,7 @@ namespace Stabby.World
                     float reach = r + g.Max;
                     int x0 = Math.Max(g.X0, (int)Math.Floor((x - reach) / cell)), x1 = Math.Min(g.X0 + g.W - 1, (int)Math.Floor((x + reach) / cell));
                     int z0 = Math.Max(g.Z0, (int)Math.Floor((z - reach) / cell)), z1 = Math.Min(g.Z0 + g.H - 1, (int)Math.Floor((z + reach) / cell));
+                    if (x0 > x1 || z0 > z1) continue;
                     for (int cz = z0; cz <= z1; cz++)
                     {
                         int row = (cz - g.Z0) * g.W - g.X0;
