@@ -414,6 +414,8 @@ namespace Stabby.Game.Editor
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
+                var cu = Shader.GetGlobalVector("_StabbyContactUV");
+                if (cu.x > 0 && name.StartsWith("contact")) GameStatus.Lines["~" + name + " contact"] = $"{name}: contact window centre {(0.5f - cu.y) / cu.x:F0},{(0.5f - cu.z) / cu.x:F0}, camera {cam.transform.position.x:F0},{cam.transform.position.z:F0}";
                 wait = 0;
                 phase++;
             }
@@ -424,18 +426,20 @@ namespace Stabby.Game.Editor
                 return;
             }
             int f0 = 26 + BiomeShots.Length;
-            while (phase >= f0 && phase <= f0 + 2)
+            while (phase >= f0 && phase <= f0 + 6)
             {
-                string name = phase == f0 ? "floor-near" : phase == f0 + 1 ? "floor-mid" : "cliff-foot";
+                string name = phase - f0 < ContactShots.Length ? ContactShots[phase - f0] : "";
                 if (wait == 0)
                 {
-                    if (!AimFloor(cam, phase - f0)) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
+                    if (!(phase < f0 + 3 ? AimFloor(cam, phase - f0) : AimContact(cam, phase - f0 - 3))) { GameStatus.Lines["~" + name] = "no " + name + " found"; phase++; continue; }
                     wait = 180;
                     return;
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
+                var cu = Shader.GetGlobalVector("_StabbyContactUV");
+                if (cu.x > 0 && name.StartsWith("contact")) GameStatus.Lines["~" + name + " contact"] = $"{name}: contact window centre {(0.5f - cu.y) / cu.x:F0},{(0.5f - cu.z) / cu.x:F0}, camera {cam.transform.position.x:F0},{cam.transform.position.z:F0}";
                 wait = 0;
                 phase++;
             }
@@ -727,7 +731,8 @@ namespace Stabby.Game.Editor
 
         static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f, 0.65f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.15f, 0.04f };
         static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5, 6 };
-        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close", "oak-close" };
+        static readonly string[] ContactShots = { "floor-near", "floor-mid", "cliff-foot", "contact-gate", "contact-log", "contact-tree", "contact-boulder" };
+        static readonly string[] FoliageShots ={ "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close", "oak-close" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -924,6 +929,88 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim floor " + mode] = $"{lib[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, score {best:F1}, tree clearance {clearBest:F1} m";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimContact(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var lib = field.Library.Objects;
+                float best = float.MaxValue;
+                Vector3 target = default, side = Vector3.forward;
+                float back = 3f, rise = 1.2f;
+                string what = "";
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                    {
+                        var chunk = field.Chunk(cx, cz);
+                        foreach (var o in chunk)
+                        {
+                            var def = lib[o.Def];
+                            var sh = def.Parts[0].Shape;
+                            float dist = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            ObjectField.Rotate(o, 1, 0, 0, out float ux, out _, out float uz);
+                            var u = new Vector3(ux, 0, uz).normalized;
+                            if (mode == 0 && sh == ObjectPart.Wall)
+                            {
+                                float span = Structures.WallSpan * o.Size;
+                                var end = new Vector3(o.X, o.Y, o.Z) + u * 0.5f * span;
+                                foreach (var b in chunk)
+                                {
+                                    if (b.Def != o.Def || b.Id == o.Id) continue;
+                                    ObjectField.Rotate(b, 1, 0, 0, out float bx, out _, out float bz);
+                                    var start = new Vector3(b.X, b.Y, b.Z) - new Vector3(bx, 0, bz).normalized * 0.5f * span;
+                                    float gap = new Vector2(start.x - end.x, start.z - end.z).magnitude;
+                                    if (gap < 0.35f * span || gap > 0.75f * span || dist >= best) continue;
+                                    best = dist;
+                                    target = 0.5f * (end + start) + Vector3.up * 0.08f * o.Size;
+                                    side = new Vector3(-u.z, 0, u.x) * 0.9f + u * 0.45f;
+                                    back = 0.9f * o.Size; rise = 0.25f * o.Size;
+                                    what = def.Id + " gate";
+                                }
+                            }
+                            else if (mode == 1 && sh == ObjectPart.Log && dist < best)
+                            {
+                                best = dist;
+                                target = new Vector3(o.X, o.Y + 0.2f * o.Size, o.Z);
+                                side = new Vector3(-u.z, 0, u.x) + 0.3f * u;
+                                back = Mathf.Max(2.2f, 1.6f * o.Size); rise = 0.9f;
+                                what = def.Id;
+                            }
+                            else if ((mode == 2 && (sh == ObjectPart.Broadleaf || sh == ObjectPart.Conifer) || mode == 3 && sh == ObjectPart.Rock && o.Size >= 1f) && dist < best)
+                            {
+                                best = dist;
+                                target = new Vector3(o.X, o.Y + (mode == 3 ? 0.15f * o.Size : 0.5f), o.Z);
+                                side = Vector3.forward;
+                                back = mode == 3 ? 1.2f * o.Size + 1.5f : 3.2f; rise = mode == 3 ? 0.4f * o.Size + 0.6f : 1.1f;
+                                what = def.Id;
+                            }
+                        }
+                    }
+                if (best == float.MaxValue) return false;
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                side = side.normalized;
+                Vector3 eye = target + side * back + Vector3.up * rise;
+                if (mode != 0)
+                {
+                    float low = float.MaxValue;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        float ang = k * Mathf.PI / 4f;
+                        var d = Quaternion.AngleAxis(ang * Mathf.Rad2Deg, Vector3.up) * side;
+                        var e = target + d * back + Vector3.up * rise;
+                        float g = ground.HeightAt(e.x, e.z);
+                        if (g < low - 0.05f) { low = g; eye = e; }
+                    }
+                }
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 0.8f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim contact " + mode] = $"{what} at {target.x:F0},{target.y:F0},{target.z:F0}, eye {back:F1} m back";
                 return true;
             }
             return false;

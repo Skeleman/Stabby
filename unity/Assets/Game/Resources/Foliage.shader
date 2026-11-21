@@ -139,7 +139,11 @@ Shader "Stabby/Foliage"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-            float4 _StabbySky, _StabbyGround, _StabbySand;
+            float4 _StabbySky, _StabbyGround, _StabbySand, _StabbyFieldUV;
+            TEXTURE2D(_StabbyBiome);
+            SAMPLER(sampler_StabbyBiome);
+            TEXTURE2D(_StabbyBed);
+            SAMPLER(sampler_StabbyBed);
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -147,6 +151,7 @@ Shader "Stabby/Foliage"
             float3 ToLinear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
 
             #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
+            #include "Assets/Viewer/Shaders/Contact.hlsl"
 
             struct Varyings
             {
@@ -155,6 +160,7 @@ Shader "Stabby/Foliage"
                 float3 positionWS : TEXCOORD1;
                 float4 uv : TEXCOORD2;
                 float fog : TEXCOORD3;
+                float3 origin : TEXCOORD4;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -176,6 +182,7 @@ Shader "Stabby/Foliage"
                 o.positionWS = wp;
                 o.positionCS = _StabbyFoliageOff > 0 ? float4(0, 0, -2, 1) : TransformWorldToHClip(wp);
                 o.normalWS = n;
+                o.origin = UNITY_MATRIX_M._m03_m13_m23;
                 o.fog = ComputeFogFactor(o.positionCS.z);
                 return o;
             }
@@ -304,6 +311,7 @@ Shader "Stabby/Foliage"
                     float4 lc = TmNoise3(wp * 4.7 + 31.1, int3(0, 0, 0));
                     float lic = smoothstep(0.42, 0.62, lc.x) * (spruce ? 0.35 : 0.55) * (1 - moss) * BarkFade(4.7, fp);
                     albedo = lerp(albedo, dot(albedo, lw) * float3(0.9, 1.03, 0.78) * (2.1 + 0.3 * lc.y), 0.6 * lic);
+                    [branch] if (_StabbyFieldUV.x > 0 && above < 1) albedo = ContactObject(albedo, wp, fade.z + ContactBed(wp.xz) - ContactBed(i.origin.xz), size);
                     float3 dp2perp = cross(dp2, n), dp1perp = cross(n, dp1);
                     float3 T = dp2perp * dm1.x + dp1perp * dm2.x, B = dp2perp * dm1.y + dp1perp * dm2.y;
                     float inv = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-12));

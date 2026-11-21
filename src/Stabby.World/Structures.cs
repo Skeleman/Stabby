@@ -47,16 +47,22 @@ namespace Stabby.World
         [ThreadStatic] static List<float> buildP, buildTones, blockPos;
         [ThreadStatic] static List<int> buildI, blockInd;
         [ThreadStatic] static List<float[]> blockPolys;
+        [ThreadStatic] static List<StructurePiece> buildUsed;
+        [ThreadStatic] static List<int> buildStarts;
 
         public static ObjectMesh Build(int shape, ulong key, int lod)
         {
             int tier = Math.Max(0, Math.Min(Tiers - 1, lod));
             var b = new ObjectMeshes.Builder { P = buildP ??= new List<float>(), I = buildI ??= new List<int>() };
             var tones = buildTones ??= new List<float>();
-            b.P.Clear(); b.I.Clear(); tones.Clear();
+            var used = buildUsed ??= new List<StructurePiece>();
+            var starts = buildStarts ??= new List<int>();
+            b.P.Clear(); b.I.Clear(); tones.Clear(); used.Clear(); starts.Clear();
             foreach (var p in Layout(shape, key).Pieces)
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
+                used.Add(p);
+                starts.Add(b.P.Count / 3);
                 var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
                 float tv = tr.Range(-1f, 1f), th = tr.Range(-1f, 1f), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
@@ -97,10 +103,97 @@ namespace Stabby.World
                 }
                 for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(tl); }
             }
+            starts.Add(b.P.Count / 3);
             var mesh = b.Finish();
             mesh.Tones = tones.ToArray();
+            Occlude(mesh, used, starts);
             return mesh;
         }
+
+        static bool Inside(in StructurePiece p, float px, float py, float pz)
+        {
+            float y = py - p.Y;
+            if (y <= 0 || y >= p.Sy) return false;
+            float dx = px - p.X, dz = pz - p.Z, dy = y - 0.5f * p.Sy;
+            float x = p.C * dx + p.S * dz - p.L * dy, z = p.C * dz - p.S * dx - p.B * dy;
+            return Math.Abs(x) < 0.5f * p.Sx && Math.Abs(z) < 0.5f * (p.Sz - 2 * p.T * dy);
+        }
+
+        static void Occlude(ObjectMesh mesh, List<StructurePiece> pieces, List<int> starts)
+        {
+            int n = pieces.Count;
+            if (n == 0) return;
+            var lo = new float[n * 3];
+            var hi = new float[n * 3];
+            float cell = 0;
+            for (int k = 0; k < n; k++)
+            {
+                var p = pieces[k];
+                float r = 0.5f * (Math.Abs(p.C) + Math.Abs(p.S)) * Math.Max(p.Sx, p.Sz) + 0.5f * p.Sy * (Math.Abs(p.L) + Math.Abs(p.B));
+                lo[3 * k] = p.X - r; hi[3 * k] = p.X + r;
+                lo[3 * k + 1] = p.Y; hi[3 * k + 1] = p.Y + p.Sy;
+                lo[3 * k + 2] = p.Z - r; hi[3 * k + 2] = p.Z + r;
+                cell += Math.Max(p.Sx, Math.Max(p.Sy, p.Sz));
+            }
+            cell = Math.Max(2 * cell / n, 1e-3f);
+            var grid = new Dictionary<long, List<int>>();
+            for (int k = 0; k < n; k++)
+                for (int gx = (int)Math.Floor(lo[3 * k] / cell); gx <= (int)Math.Floor(hi[3 * k] / cell); gx++)
+                    for (int gz = (int)Math.Floor(lo[3 * k + 2] / cell); gz <= (int)Math.Floor(hi[3 * k + 2] / cell); gz++)
+                    {
+                        long c = ((long)gx << 32) ^ (uint)gz;
+                        if (!grid.TryGetValue(c, out var list)) grid[c] = list = new List<int>();
+                        list.Add(k);
+                    }
+            var pos = mesh.Positions;
+            var nor = mesh.Normals;
+            var near = new List<int>();
+            for (int k = 0; k < n; k++)
+            {
+                float span = Math.Min(pieces[k].Sx, Math.Min(pieces[k].Sy, pieces[k].Sz)), reach = 0.9f * span;
+                for (int v = starts[k]; v < starts[k + 1]; v++)
+                {
+                    float px = pos[3 * v], py = pos[3 * v + 1], pz = pos[3 * v + 2];
+                    float nx = nor[3 * v], ny = nor[3 * v + 1], nz = nor[3 * v + 2];
+                    float tx, ty, tz;
+                    if (Math.Abs(ny) < 0.9f) { tx = nz; ty = 0; tz = -nx; }
+                    else { tx = 0; ty = -nz; tz = ny; }
+                    float tl = Math.Max((float)Math.Sqrt(tx * tx + ty * ty + tz * tz), 1e-6f);
+                    tx /= tl; ty /= tl; tz /= tl;
+                    float sx = ny * tz - nz * ty, sy = nz * tx - nx * tz, sz = nx * ty - ny * tx;
+                    near.Clear();
+                    for (int gx = (int)Math.Floor((px - reach) / cell); gx <= (int)Math.Floor((px + reach) / cell); gx++)
+                        for (int gz = (int)Math.Floor((pz - reach) / cell); gz <= (int)Math.Floor((pz + reach) / cell); gz++)
+                            if (grid.TryGetValue(((long)gx << 32) ^ (uint)gz, out var list))
+                                foreach (int j in list)
+                                    if (j != k && !near.Contains(j) && px + reach > lo[3 * j] && px - reach < hi[3 * j] && py + reach > lo[3 * j + 1] && py - reach < hi[3 * j + 1] && pz + reach > lo[3 * j + 2] && pz - reach < hi[3 * j + 2])
+                                        near.Add(j);
+                    float hit = 0, total = 0;
+                    for (int d = 0; d < OccDirs.Length; d += 3)
+                    {
+                        float a = OccDirs[d], bt = OccDirs[d + 1], bs = OccDirs[d + 2];
+                        float dx = a * nx + bt * tx + bs * sx, dy = a * ny + bt * ty + bs * sy, dz = a * nz + bt * tz + bs * sz;
+                        for (int ri = 0; ri < OccRadii.Length; ri++)
+                        {
+                            float r = OccRadii[ri] * span, w = 1 - 0.4f * ri;
+                            float qx = px + dx * r, qy = py + dy * r, qz = pz + dz * r;
+                            total += w;
+                            foreach (int j in near)
+                                if (Inside(pieces[j], qx, qy, qz)) { hit += w; break; }
+                        }
+                    }
+                    float open = (1 - hit / total) * (1 - 0.35f * Math.Max(0, -ny));
+                    mesh.Tones[4 * v] = 0.5f + 0.5f * Math.Max(0, Math.Min(1, open));
+                }
+            }
+        }
+
+        static readonly float[] OccDirs =
+        {
+            1, 0, 0, 0.7f, 0.7f, 0, 0.7f, -0.7f, 0, 0.7f, 0, 0.7f, 0.7f, 0, -0.7f,
+            0.2f, 1, 0, 0.2f, -1, 0, 0.2f, 0, 1, 0.2f, 0, -1,
+        };
+        static readonly float[] OccRadii = { 0.3f, 0.75f };
 
         static float[] Block(ulong key, bool slab, out int[] idx)
         {
