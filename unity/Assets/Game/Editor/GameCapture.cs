@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "floor" ? 26 + BiomeShots.Length : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : 1;
             }
             if (phase == 50)
             {
@@ -407,19 +407,28 @@ namespace Stabby.Game.Editor
             }
             while (phase >= 24 && phase <= 25)
             {
-                string name = phase == 24 ? "structure-close" : "structure-mid";
+                int step = phase == 24 ? 0 : 1 + structStep;
+                string name = StructureShots[step];
                 if (wait == 0)
                 {
-                    if (!AimStructure(cam, phase == 24)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    if (!AimStructure(cam, step)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
-                if (phase == 25) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (step == 1) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
+                if (step == 3) GameStatus.Lines["~bench structure far"] = Bench(cam, "structure far");
                 wait = 0;
+                if (phase == 25 && ++structStep < StructureShots.Length - 1) continue;
                 phase++;
+            }
+            if (only == "structure")
+            {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
             }
             while (phase >= 26 && phase < 26 + BiomeShots.Length)
             {
@@ -946,8 +955,13 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static bool AimStructure(Camera cam, bool close)
+        static readonly string[] StructureShots = { "structure-close", "structure-mid", "structure-lod1", "structure-far" };
+        static readonly float[] StructureBack = { 0.75f, 7.5f, 17f, 30f };
+        static int structStep;
+
+        static bool AimStructure(Camera cam, int step)
         {
+            bool close = step == 0;
             foreach (var w in Unity.Entities.World.All)
             {
                 var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
@@ -967,7 +981,7 @@ namespace Stabby.Game.Editor
                                 int run = 0;
                                 foreach (var b in chunk)
                                     if (b.Def == o.Def && (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z) < 36f * o.Size * o.Size) run++;
-                                score -= run >= 4 ? 400f + 40f * run : 0f;
+                                score -= 1e6f + (run >= 4 ? 400f + 40f * run : 0f);
                             }
                             if (score < best) { best = score; pick = o; }
                         }
@@ -976,12 +990,12 @@ namespace Stabby.Game.Editor
                 var target = new Vector3(pick.X, pick.Y + pick.Size * 0.1f, pick.Z);
                 var across = new Vector3(2 * (pick.Qx * pick.Qz + pick.Qw * pick.Qy), 0, 1 - 2 * (pick.Qx * pick.Qx + pick.Qy * pick.Qy)).normalized;
                 var along = new Vector3(across.z, 0, -across.x);
-                float back = close ? 0.75f * pick.Size : 30f * Mathf.Max(1f, 0.25f * pick.Size);
-                var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : 0.3f * back);
+                float back = StructureBack[step] * pick.Size;
+                var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : (step == 1 ? 0.3f : 0.4f) * back);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~aim structure " + (close ? "close" : "mid")] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
+                GameStatus.Lines["~aim " + StructureShots[step]] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
                 return true;
             }
             return false;
