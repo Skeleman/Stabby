@@ -112,6 +112,10 @@ namespace Stabby.Game.Editor
                 var focus = cam.transform.position + cam.transform.forward * 24f;
                 cam.transform.SetPositionAndRotation(focus + new Vector3(-30, 28, -38), Quaternion.LookRotation(new Vector3(30, -28, 38)));
                 Shot(cam, dir, "overhead");
+                var fwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                cam.transform.SetPositionAndRotation(home + new Vector3(0, 90, 0), Quaternion.LookRotation(fwd - new Vector3(0, 0.25f, 0)));
+                Shot(cam, dir, "far");
+                GameStatus.Lines["~bench far"] = Bench(cam, "far");
                 GameStatus.HoldCamera = true;
                 phase = 1;
             }
@@ -293,9 +297,9 @@ namespace Stabby.Game.Editor
                     for (int x = 1; x < n - 1; x++)
                     {
                         int i = z * n + x;
-                        if (map.Sea[i] || map.Height[i] < 3) continue;
+                        if (map.Sea[i] || map.Height[i] < (which == 2 ? 0.5f : 3)) continue;
                         float gx = (map.Height[i + 1] - map.Height[i - 1]) / (2 * cm), gz = (map.Height[i + n] - map.Height[i - n]) / (2 * cm), s = Mathf.Sqrt(gx * gx + gz * gz);
-                        bool ok = which == 0 ? s > 0.8f : s < 0.12f && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
+                        bool ok = which == 0 ? s > 0.8f : which == 2 && map.Height[i] < 3 ? s < 0.1f : s < 0.12f && map.Height[i] >= 3 && map.Biome != null && map.Biome[i] >= 0 && sys.Materials.Surface.CoatOf(map.BiomeIds[map.Biome[i]]) == (which == 1 ? 0 : which);
                         float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
                         if (ok && d < bestD) { bestD = d; best = i; down = new Vector2(-gx, -gz).normalized; }
                     }
@@ -313,8 +317,22 @@ namespace Stabby.Game.Editor
 
         static string Bench(Camera cam, string label)
         {
+            var sb = new System.Text.StringBuilder($"bench {label} (ms, base/full):");
+            foreach (var (w, h) in new[] { (1920, 1080), (2560, 1440), (3840, 2160) })
+            {
+                Shader.SetGlobalFloat("_StabbyDetailOff", 1);
+                double b = BenchAt(cam, w, h);
+                Shader.SetGlobalFloat("_StabbyDetailOff", 0);
+                double f = BenchAt(cam, w, h);
+                sb.Append($" {h}p {b:F2}/{f:F2}");
+            }
+            return sb.ToString();
+        }
+
+        static double BenchAt(Camera cam, int w, int h)
+        {
             GameStatus.ToolFrame = Time.frameCount;
-            var rt = new RenderTexture(1600, 900, 24);
+            var rt = new RenderTexture(w, h, 24);
             var px = new Texture2D(1, 1, TextureFormat.RGB24, false);
             cam.targetTexture = rt;
             RenderTexture.active = rt;
@@ -328,7 +346,7 @@ namespace Stabby.Game.Editor
             cam.targetTexture = null;
             Object.DestroyImmediate(rt);
             Object.DestroyImmediate(px);
-            return $"bench {label}: {ms:F2} ms per 1600x900 frame over {frames} synced renders";
+            return ms;
         }
 
         static void Wire(Camera cam, string dir, string name)
