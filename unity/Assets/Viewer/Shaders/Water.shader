@@ -96,7 +96,10 @@ Shader "Stabby/Water"
                 float4 wv = _StabbyWaterWave;
                 float t = _Time.y * wv.y;
                 float2 q = i.positionWS.xz * wv.x;
-                float fade = saturate(1.5 - dist * wv.x / 120);
+                float2 xz = i.positionWS.xz;
+                float fp = max(length(ddx(xz)), length(ddy(xz)));
+                float fade = saturate(1.5 - fp * wv.x * 10);
+                float ripple = saturate(1.5 - fp * wv.x * (i.color.a >= 0.99 ? 4 : 1.6));
                 float2 flow = i.color.rg * 2 - 1;
                 float slope = i.color.b * SlopeRange;
                 float rapids = smoothstep(1, 2.25, slope * _StabbyWaterFlow.y);
@@ -110,12 +113,20 @@ Shader "Stabby/Water"
                     g = lerp(a, b, abs(1 - 2 * ph));
                 }
                 else g = Waves(q, t, fade);
-                g *= wv.z * (0.35 + 0.65 * fade) * (1 + rapids);
                 float swell = i.color.a >= 0.99 ? 1 : i.color.a * 2 * _StabbyWaterFlow.z;
+                float slick = 0;
                 UNITY_BRANCH if (swell > 0)
                 {
-                    float2 sq = mul(Turn, i.positionWS.xz * _StabbyWaterSwell.x) + float2(_Time.y * 0.05, _Time.y * 0.02);
-                    g += swell * _StabbyWaterSwell.y * mul(Noise(sq).yz, Turn);
+                    float2 wq = mul(Turn, xz * _StabbyWaterSwell.x);
+                    float sn = Noise(wq * float2(0.12, 0.4) + _Time.y * float2(0.003, 0.001)).x + 0.5 * Noise(wq * 0.5 + 5.3).x;
+                    slick = swell * smoothstep(0.0, 0.4, sn);
+                }
+                g *= wv.z * (0.15 + 0.85 * ripple) * (1 - 0.85 * slick) * (1 + rapids);
+                UNITY_BRANCH if (swell > 0)
+                {
+                    float2 sq = mul(Turn, xz * _StabbyWaterSwell.x) + float2(_Time.y * 0.05, _Time.y * 0.02);
+                    float2 sg = mul(Noise(sq).yz, Turn) + 0.7 * Noise(mul(sq, Turn) * 0.43 + float2(-_Time.y * 0.02, 1.7)).yz;
+                    g += swell * _StabbyWaterSwell.y * saturate(1.6 - fp * _StabbyWaterSwell.x * 6) * (1.2 - 0.5 * ripple) * (1 - 0.5 * slick) * sg;
                 }
                 float3 n = normalize(float3(-g.x, 1, -g.y));
 
@@ -128,7 +139,8 @@ Shader "Stabby/Water"
 
                 Light l = GetMainLight();
                 float3 sky = _StabbySky.rgb;
-                float3 scatter = LookColor(_StabbyWaterDeep.rgb, 1.3) * (l.color * saturate(l.direction.y + 0.2) * 0.6 + sky * 0.5);
+                float3 tint = lerp(_StabbyWaterShallow.rgb * float3(0.22, 0.3, 0.29), _StabbyWaterDeep.rgb, saturate(path * _StabbyWaterDeep.w / 6));
+                float3 scatter = LookColor(tint, 1.3) * (l.color * saturate(l.direction.y + 0.2) * 0.6 + sky * 0.5);
                 float3 c = under * trans + scatter * (1 - trans);
                 float ndv = saturate(dot(n, v));
                 float fres = 0.02 + 0.98 * pow(1 - ndv, 5);
