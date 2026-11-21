@@ -32,7 +32,7 @@ namespace Stabby.Game
         sealed class Prepared
         {
             public ObjectField Field;
-            public BlobBuilder Blob;
+            public BlobAssetReference<ObjectColumnData> Blob;
             public int Columns;
             public long Ms;
         }
@@ -85,7 +85,9 @@ namespace Stabby.Game
                     for (int k = 0; k < cols.Starts.Length; k++) s[k] = cols.Starts[k];
                     var items = b.Allocate(ref root.Items, cols.Items.Length);
                     for (int k = 0; k < cols.Items.Length; k++) items[k] = cols.Items[k];
-                    return new Prepared { Field = field, Blob = b, Columns = cols.Items.Length, Ms = sw.ElapsedMilliseconds };
+                    var made = b.CreateBlobAssetReference<ObjectColumnData>(Allocator.Persistent);
+                    b.Dispose();
+                    return new Prepared { Field = field, Blob = made, Columns = cols.Items.Length, Ms = sw.ElapsedMilliseconds };
                 });
                 return;
             }
@@ -94,8 +96,7 @@ namespace Stabby.Game
             if (build.IsFaulted) { GameStatus.Failure = build.Exception.ToString(); build = null; return; }
             var p = build.Result;
             build = null;
-            blob = p.Blob.CreateBlobAssetReference<ObjectColumnData>(Allocator.Persistent);
-            p.Blob.Dispose();
+            blob = p.Blob;
             EntityManager.CreateSingleton(new ObjectColumns { Blob = blob });
             Field = p.Field;
             GameStatus.Lines[World.Name + "~objects"] = $"{World.Name}: {p.Columns} object columns in {p.Ms} ms";
