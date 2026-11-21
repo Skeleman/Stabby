@@ -14,8 +14,8 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 
 | Command | Does |
 |---|---|
-| `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
-| `bake --seed N [--size 512] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
+| `gen --seed N [--size 2048] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
+| `bake --seed N [--size 2048] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
 | `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings, `--checks 0` times generation alone |
 | `scenarios [--out out/scenarios] [--scan 100]` | Generates each named acceptance scenario and writes a review sheet with the witness marked; `--scan` lists which seeds show each one |
 
@@ -26,7 +26,7 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 - `--rain mm` stops after terrain and hydrology with uniform rainfall: no
   climate, no biomes. Useful for isolating erosion and rivers.
 - `--size` changes resolution, not extent: every size spans about 23 km
-  (default 512 cells of 45 m); smaller sizes use coarser cells. Above
+  (default 2048 cells of 11.25 m); smaller sizes use coarser cells. Above
   `ErosionSize` (512) erosion runs coarse-to-fine: all but `FineSteps` (8)
   steps on the 512 grid, then the rest at full resolution.
 - `--scale` sets PNG pixels per cell (default 3 at 256 and below, 2 at 512, 1 above).
@@ -114,7 +114,7 @@ Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seed
 ## Unity game prototype
 
 `Assets/Scenes/Game.unity` runs a host and two clients in one process with
-Netcode for Entities. The host loads `out/maps/seed<N>-512.stabbymap`
+Netcode for Entities. The host loads `out/maps/seed<N>-2048.stabbymap`
 (`WorldFile`: raw chunks, rebuilt with `Relink`, about 25 ms) instead of generating
 (about 4 s in Unity). If the file is missing, from another generator version or
 older than `content/biomes.json`, the host generates and saves it, so run
