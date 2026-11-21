@@ -31,7 +31,7 @@ Shader "Stabby/Water"
             static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
             static const float SlopeRange = 0.1;
-            static const float MistPxLo = 6, MistPxHi = 24, LipPx = 1.5, MistPeriod = 7, MistRise = 0.7, MistReach = 2.2;
+            static const float MistPxLo = 6, MistPxHi = 24, LipPx = 1.5, MistPeriod = 7, MistRise = 0.7, MistReach = 2.2, MistStretch = 1.2;
             static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05;
 
             float2 Grad(int2 p)
@@ -150,24 +150,52 @@ Shader "Stabby/Water"
             half4 Mist(Varyings i, float3 v, float dist, float2 uv)
             {
                 float2 p = i.fall.xy;
-                float rad = i.fall.z, t = i.chan.x, life = i.chan.y, seed = i.chan.z, flowQ = i.chan.w, r2 = dot(p, p);
-                UNITY_BRANCH if (r2 >= 1 || life <= 0) return half4(0, 0, 0, 0);
-                float2 q = p * 1.6 + seed * 31.7 + float2(0, -t * 0.9);
-                float n = Noise(q).x + 0.5 * Noise(mul(Turn, q) * 2.1 + 5.3).x + 0.25 * Noise(q * 4.3 + 11.9).x;
-                float body = 1 - r2 * (1.2 - 0.4 * t);
-                float dens = saturate((body + 0.75 * n - 0.15) * 1.8) * saturate((1 - r2) * 3);
-                dens *= dens;
+                float rad = i.fall.z, kind = i.fall.w - 2, seed = i.chan.z, flowQ = i.chan.w, tm = _Time.y, e2 = dot(p, p);
+                UNITY_BRANCH if (e2 >= 1 || i.chan.y <= 0) return half4(0, 0, 0, 0);
+                float n, dens, op;
+                UNITY_BRANCH if (kind < 0.5)
+                {
+                    float t = i.chan.x;
+                    float2 q = p * 1.3 + seed * 31.7 + float2(tm * 0.11, -tm * 0.23 - t);
+                    float3 n1 = Noise(q);
+                    float2 pw = p + 0.2 * n1.yz;
+                    float3 n2 = Noise(mul(Turn, pw) * 2.7 + seed * 13.1 + float2(-tm * 0.31, tm * 0.17));
+                    n = n1.x + 0.55 * n2.x;
+                    dens = saturate((0.9 - dot(pw, pw) * (1.15 - 0.35 * t) + 1.2 * n) * 1.5) * saturate((1 - e2) * 2.5);
+                    dens *= dens * i.chan.y;
+                    op = 0.24 + 0.16 * flowQ;
+                }
+                else if (kind < 1.5)
+                {
+                    float2 q = float2(p.x, p.y * i.chan.x) * 1.7 + seed * 17.3 + float2(0, -tm * 0.35);
+                    float3 n1 = Noise(q);
+                    float2 pw = p + 0.15 * n1.yz;
+                    float3 n2 = Noise(mul(Turn, q) * 2.3 + float2(tm * 0.21, -tm * 0.5));
+                    n = n1.x + 0.55 * n2.x;
+                    dens = saturate((0.6 - dot(pw, pw) + 1.1 * n) * 1.4) * saturate((1 - e2) * 2) * (1 - 0.5 * saturate(p.y * 0.5 + 0.5));
+                    op = 0.26 + 0.14 * flowQ;
+                }
+                else
+                {
+                    float vy = p.y * 0.5 + 0.5;
+                    float2 q = float2(p.x * 2.2, p.y * 2.2 * i.chan.x) + seed * 7.1 + float2(0, -tm * 0.9);
+                    float3 n1 = Noise(q);
+                    float3 n2 = Noise(float2(q.x * 2.6 + 0.4 * n1.y, q.y * 1.3 - tm * 0.6) + 5.1);
+                    n = n1.x + 0.55 * n2.x;
+                    dens = saturate((1 - vy) * (1 - vy) * 1.3 - 0.2 + 1.1 * n) * (1 - p.x * p.x) * smoothstep(0, 0.1, vy);
+                    op = 0.16 + 0.1 * flowQ;
+                }
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float soft = saturate((scene - surface) / min(rad * 0.4, 3));
-                float near = saturate((surface - _ProjectionParams.y - 0.5) / rad);
+                float near = saturate((surface - _ProjectionParams.y - 0.5) / min(rad, 6));
                 float px = smoothstep(MistPxLo, MistPxHi, ScreenPx(rad, dist));
                 Light l = GetMainLight();
                 float sun = saturate(l.direction.y * 2 + 0.1);
                 float fwd = pow(saturate(dot(-v, l.direction)), 4);
-                float3 c = _StabbySky.rgb * 0.55 + l.color * sun * (0.55 + 0.9 * fwd);
-                c *= 0.85 + 0.15 * saturate(n * 0.5 + 0.5);
-                return half4(MixFog(c, i.fog), dens * soft * near * px * life * (0.3 + 0.35 * flowQ));
+                float3 c = _StabbySky.rgb * 0.5 + l.color * sun * (0.5 + 0.8 * fwd);
+                c *= (0.85 + 0.15 * saturate(n * 0.5 + 0.5)) * (1 - 0.15 * dens);
+                return half4(MixFog(c, i.fog), dens * soft * near * px * op);
             }
 
             Varyings vert(Attributes i)
@@ -178,19 +206,25 @@ Shader "Stabby/Water"
                 float4 mist = 0;
                 UNITY_BRANCH if (i.fall.w > 1.5)
                 {
-                    float rad = i.fall.z, ph = i.chan.x, h = i.chan.y;
-                    float2 fd = normalize(i.color.rg * 2 - 1);
-                    float t = frac(_Time.y / (MistPeriod * (0.8 + 0.4 * frac(ph * 7.31))) + ph);
-                    float3 dr = Noise(float2(ph * 17.3, _Time.y * 0.15 + ph * 5.1));
-                    float3 f3 = float3(fd.x, 0, fd.y), s3d = float3(fd.y, 0, -fd.x);
-                    wp += float3(0, rad * 0.25 + min(h * MistRise, rad * MistReach) * t, 0) + f3 * (rad * (0.6 * t + 0.2 * dr.x)) + s3d * (rad * 0.35 * dr.y);
-                    float px = ScreenPx(rad, length(_WorldSpaceCameraPos - wp));
-                    float size = px < MistPxLo ? 0 : rad * (0.55 + 0.75 * t);
-                    float sa, ca;
-                    sincos(ph * 6.2832 + t * 0.6, sa, ca);
-                    float2 xy = float2(ca * i.fall.x - sa * i.fall.y, sa * i.fall.x + ca * i.fall.y);
-                    wp += (UNITY_MATRIX_V[0].xyz * xy.x + UNITY_MATRIX_V[1].xyz * xy.y) * size;
-                    mist = float4(t, smoothstep(0, 0.2, t) * (1 - smoothstep(0.55, 1, t)), ph, saturate(log2(1 + i.reach.x) / 9));
+                    float rad = i.fall.z, ph = i.chan.x, h = i.chan.y, flowQ = saturate(log2(1 + i.reach.x) / 9);
+                    UNITY_BRANCH if (i.fall.w < 2.5)
+                    {
+                        float2 fd = normalize(i.color.rg * 2 - 1);
+                        float t = frac(_Time.y / (MistPeriod * (0.8 + 0.4 * frac(ph * 7.31))) + ph);
+                        float3 dr = Noise(float2(ph * 17.3, _Time.y * 0.15 + ph * 5.1));
+                        float3 f3 = float3(fd.x, 0, fd.y), s3d = float3(fd.y, 0, -fd.x);
+                        wp += float3(0, rad * 0.2 + min(h * MistRise, rad * MistReach) * t, 0) + f3 * (rad * (0.7 * t + 0.2 * dr.x)) + s3d * (rad * 0.35 * dr.y);
+                        float px = ScreenPx(rad, length(_WorldSpaceCameraPos - wp));
+                        float size = px < MistPxLo ? 0 : rad * (0.5 + 0.6 * t);
+                        float3 d3 = normalize(lerp(float3(0, 1, 0), f3, saturate(t * 1.6)) + s3d * (0.4 * dr.z));
+                        float2 ax = float2(dot(d3, UNITY_MATRIX_V[0].xyz), dot(d3, UNITY_MATRIX_V[1].xyz));
+                        float e = length(ax), st = MistStretch * (0.7 + 0.6 * frac(ph * 3.17)) * e;
+                        ax = e > 0.01 ? ax / e : float2(1, 0);
+                        float3 va = UNITY_MATRIX_V[0].xyz * ax.x + UNITY_MATRIX_V[1].xyz * ax.y, vb = UNITY_MATRIX_V[1].xyz * ax.x - UNITY_MATRIX_V[0].xyz * ax.y;
+                        wp += (va * (i.fall.x * (1 + st)) + vb * (i.fall.y * (1 - 0.3 * st))) * size;
+                        mist = float4(t, smoothstep(0, 0.2, t) * (1 - smoothstep(0.55, 1, t)), ph, flowQ);
+                    }
+                    else mist = float4(h, 1, ph, flowQ);
                 }
                 UNITY_BRANCH if (i.fall.w > 0.5 && i.fall.w < 1.5)
                 {
