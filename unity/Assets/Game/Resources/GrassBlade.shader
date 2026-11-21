@@ -24,7 +24,7 @@ Shader "Stabby/GrassBlade"
             float4 _GrassLook;
             float4 _StabbySky, _StabbyGround;
 
-            struct Varyings { float4 positionCS : SV_POSITION; float3 color : COLOR; float3 normalWS : TEXCOORD0; float3 positionWS : TEXCOORD1; float4 look : TEXCOORD2; float4 tint : TEXCOORD3; };
+            struct Varyings { float4 positionCS : SV_POSITION; float4 color : COLOR; float3 normalWS : TEXCOORD0; float3 positionWS : TEXCOORD1; float4 look : TEXCOORD2; float4 tint : TEXCOORD3; };
 
             Varyings vert(uint vid : SV_VertexID, uint iid : SV_InstanceID)
             {
@@ -64,7 +64,7 @@ Shader "Stabby/GrassBlade"
                 o.positionWS = pos;
                 o.positionCS = TransformWorldToHClip(pos);
                 float glow = 1 + _GrassLook.y * fade * t * t;
-                o.color = root * glow;
+                o.color = float4(root * glow, fade * (0.3 + 0.4 * frac(seed * 13.7)));
                 o.tint = float4(dryCol * glow, dw);
                 o.look = float4(t, shade, fade, ComputeFogFactor(o.positionCS.z));
                 return o;
@@ -78,8 +78,8 @@ Shader "Stabby/GrassBlade"
                 float3 v = normalize(_WorldSpaceCameraPos - i.positionWS);
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
-                float occ = 1 - 0.45 * i.look.z * (1 - smoothstep(0, 0.5, i.look.x));
-                float3 c = (LookColor(lerp(i.color, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
+                float occ = 1 - i.color.a * (1 - smoothstep(0, 0.5, i.look.x));
+                float3 c = (LookColor(lerp(i.color.rgb, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
                 return half4(MixFog(c, i.look.w), 1);
             }
             ENDHLSL
