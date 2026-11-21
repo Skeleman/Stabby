@@ -7,7 +7,7 @@
     { "id": "temperate-forest", "name": "Temperate forest",     "tempMinC": 6,   "tempMaxC": 20, "precipMinMm": 650,  "precipMaxMm": 2000, "color": "#4f8a3c" },
     { "id": "temperate-rain",   "name": "Temperate rainforest", "tempMinC": 6,   "tempMaxC": 18, "precipMinMm": 2000, "precipMaxMm": 5000, "color": "#2b6b45" },
     { "id": "shrubland",        "name": "Shrubland",            "tempMinC": 12,  "tempMaxC": 30, "precipMinMm": 300,  "precipMaxMm": 900,  "color": "#a39552" },
-    { "id": "desert",           "name": "Desert",               "tempMinC": 10,  "tempMaxC": 38, "precipMinMm": 0,    "precipMaxMm": 300,  "color": "#d9c48a" },
+    { "id": "desert",           "name": "Desert",               "tempMinC": 10,  "tempMaxC": 38, "precipMinMm": 0,    "precipMaxMm": 300,  "color": "#d6b57d" },
     { "id": "savanna",          "name": "Savanna",              "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 700,  "precipMaxMm": 1500, "color": "#a9ad4f" },
     { "id": "tropical-forest",  "name": "Tropical forest",      "tempMinC": 20,  "tempMaxC": 35, "precipMinMm": 1500, "precipMaxMm": 5000, "color": "#2f7d32" },
     { "id": "cold-desert",      "name": "Cold desert",          "tempMinC": -10, "tempMaxC": 10, "precipMinMm": 0,    "precipMaxMm": 250,  "color": "#c8bfa4" },

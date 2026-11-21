@@ -52,7 +52,7 @@ namespace Stabby.Viewer.Editor
 
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.intensity = 1.1f;
+            sun.intensity = 0.8f;
             sun.color = new Color(1f, 0.96f, 0.88f);
             sun.transform.rotation = Quaternion.Euler(38f, 140f, 0);
 

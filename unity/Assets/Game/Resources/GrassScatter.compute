@@ -104,7 +104,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
         float shore = smoothstep(5.5, 2.5, p.y);
         cw = lerp(cw, float4(0, 0, 1, 0), shore);
-        cw = saturate(cw * (1 + 0.8 * (1 - shore) * float4(jn, -jn, jn * 0.5, -jn)));
+        cw = saturate(cw * (1 + 0.8 * (1 - shore) * float4(jn, -jn, jn * 0.3, -jn)));
         cw /= max(dot(cw, 1), 1e-3);
         float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.3 * jn);
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
@@ -116,7 +116,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         [branch] if (_StabbyDetailOff <= 0)
         {
             TmOut g = TmGrass(float3(p.x - tmO.x, p.y, p.z - tmO.z), color, fp, _StabbyCoatA[0], _StabbyCoatB[0]);
-            root = lerp(color, g.albedo, up);
+            root = lerp(TmGrassGreen(color), g.albedo, 0.2 * up);
         }
         float fadeOut = smoothstep(reach, 0.7 * reach, d);
         float grow = saturate((keep - rank) / (0.3 * keep));
