@@ -40,11 +40,16 @@ namespace Stabby.Game
         public float Value;
     }
 
-    struct TerrainChunk
+    struct TerrainSite
     {
         public int2 Cell;
         public AABB Box;
-        public int Want, Shown, Built, Pending, Finest, Stitch;
+        public int Finest;
+    }
+
+    struct TerrainChunk
+    {
+        public int Shown, Built, Pending, Stitch;
         public Entity Entity;
     }
 
@@ -228,7 +233,8 @@ namespace Stabby.Game
     [BurstCompile(CompileSynchronously = true)]
     struct TerrainLodJob : IJob
     {
-        public NativeArray<TerrainChunk> Chunks;
+        [ReadOnly] public NativeArray<TerrainSite> Sites;
+        public NativeArray<int> Wants;
         [ReadOnly] public NativeArray<float4> Planes;
         [ReadOnly] public NativeArray<int> Grid;
         public int Side;
@@ -237,10 +243,10 @@ namespace Stabby.Game
 
         public void Execute()
         {
-            for (int c = 0; c < Chunks.Length; c++)
+            for (int c = 0; c < Sites.Length; c++)
             {
-                var ch = Chunks[c];
-                var box = ch.Box;
+                var site = Sites[c];
+                var box = site.Box;
                 float d = math.max(1f, math.distance(Eye, math.clamp(Eye, box.Min, box.Max)));
                 bool vis = d < Far;
                 for (int p = 0; p < Planes.Length && vis; p++)
@@ -249,28 +255,27 @@ namespace Stabby.Game
                 if (vis)
                 {
                     float allowed = Allowed * d;
-                    lod = ch.Finest;
+                    lod = site.Finest;
                     while (lod < TerrainLods.Coarse && TerrainLods.Step(lod + 1) * Cm <= allowed) lod++;
                 }
-                ch.Want = lod;
-                Chunks[c] = ch;
+                Wants[c] = lod;
             }
             for (bool changed = true; changed;)
             {
                 changed = false;
-                for (int c = 0; c < Chunks.Length; c++)
+                for (int c = 0; c < Sites.Length; c++)
                 {
-                    var ch = Chunks[c];
-                    if (ch.Want < 0) continue;
+                    int want = Wants[c];
+                    if (want < 0) continue;
                     for (int dz = -1; dz <= 1; dz++)
                         for (int dx = -1; dx <= 1; dx++)
                         {
-                            int n = Neighbour(ch.Cell, dx, dz);
-                            if (n < 0 || Chunks[n].Want < 0 || Chunks[n].Want + 1 >= ch.Want) continue;
-                            ch.Want = Chunks[n].Want + 1;
+                            int n = Neighbour(Sites[c].Cell, dx, dz);
+                            if (n < 0 || Wants[n] < 0 || Wants[n] + 1 >= want) continue;
+                            want = Wants[n] + 1;
                             changed = true;
                         }
-                    Chunks[c] = ch;
+                    Wants[c] = want;
                 }
             }
         }
@@ -313,6 +318,13 @@ namespace Stabby.Game
         Prepared prepared;
         BlobAssetReference<TerrainLookData> look;
         NativeArray<TerrainChunk> chunks;
+        NativeArray<TerrainSite> sites;
+        NativeArray<int> wants;
+        NativeArray<float4> lodPlanes;
+        JobHandle lodHandle;
+        float3 lodEye;
+        quaternion lodTurn;
+        float lodFov = -1f;
         NativeArray<int> grid;
         int side;
         Mesh[] meshes;
@@ -419,6 +431,10 @@ namespace Stabby.Game
             material = graphics.RegisterMaterial(scene != null ? scene.TerrainMaterial : null);
             int count = prepared.Cells.Count;
             chunks = new NativeArray<TerrainChunk>(count, Allocator.Persistent);
+            sites = new NativeArray<TerrainSite>(count, Allocator.Persistent);
+            wants = new NativeArray<int>(count, Allocator.Persistent);
+            lodPlanes = new NativeArray<float4>(6, Allocator.Persistent);
+            for (int k = 0; k < count; k++) wants[k] = -1;
             side = (ground.Blob.Value.N + TerrainLods.Cells - 1) / TerrainLods.Cells;
             grid = new NativeArray<int>(side * side, Allocator.Persistent);
             for (int k = 0; k < grid.Length; k++) grid[k] = -1;
@@ -427,7 +443,8 @@ namespace Stabby.Game
             for (int c = 0; c < count; c++)
             {
                 var cell = prepared.Cells[c];
-                chunks[c] = new TerrainChunk { Cell = cell, Box = prepared.Boxes[c], Want = -1, Shown = -1, Finest = Featured(cell) ? 0 : 1, Entity = Entity.Null };
+                sites[c] = new TerrainSite { Cell = cell, Box = prepared.Boxes[c], Finest = Featured(cell) ? 0 : 1 };
+                chunks[c] = new TerrainChunk { Shown = -1, Entity = Entity.Null };
                 grid[cell.y / TerrainLods.Cells * side + cell.x / TerrainLods.Cells] = c;
             }
         }
@@ -452,11 +469,12 @@ namespace Stabby.Game
         void Request(int c, int lod)
         {
             var ch = chunks[c];
+            var site = sites[c];
             int m = TerrainLods.Quads(lod), verts = TerrainLods.Vertices(m);
             var vl = new NativeList<TerrainVertex>(verts, Allocator.Persistent);
             var tl = new NativeList<int>(TerrainLods.Indices(m), Allocator.Persistent);
             var bounds = new NativeArray<float3>(2, Allocator.Persistent);
-            var job = new TerrainMeshJob { Ground = ground, Look = look, Cx = ch.Cell.x, Cy = ch.Cell.y, M = m, Step = TerrainLods.Step(lod), Verts = vl, Tris = tl, Bounds = bounds };
+            var job = new TerrainMeshJob { Ground = ground, Look = look, Cx = site.Cell.x, Cy = site.Cell.y, M = m, Step = TerrainLods.Step(lod), Verts = vl, Tris = tl, Bounds = bounds };
             pending.Add(new Pending { Chunk = c, Lod = lod, Vertices = verts, Handle = job.Schedule(), Verts = vl, Tris = tl, Bounds = bounds });
             ch.Pending |= 1 << lod;
             chunks[c] = ch;
@@ -485,9 +503,10 @@ namespace Stabby.Game
         void Apply(Pending p)
         {
             var ch = chunks[p.Chunk];
+            var site = sites[p.Chunk];
             float3 lo = p.Bounds[0], hi = p.Bounds[1];
             p.Bounds.Dispose();
-            var mesh = new Mesh { name = $"Terrain {ch.Cell.x},{ch.Cell.y} x{TerrainLods.Step(p.Lod)}" };
+            var mesh = new Mesh { name = $"Terrain {site.Cell.x},{site.Cell.y} x{TerrainLods.Step(p.Lod)}" };
             const MeshUpdateFlags quiet = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers;
             mesh.SetVertexBufferParams(p.Verts.Length, Layout);
             mesh.SetVertexBufferData(p.Verts.AsArray(), 0, 0, p.Verts.Length, 0, quiet);
@@ -503,11 +522,11 @@ namespace Stabby.Game
             built++;
             ch.Pending &= ~(1 << p.Lod);
             ch.Built |= 1 << p.Lod;
-            MinMaxAABB box = ch.Box;
-            if (math.any(lo < box.Min - 0.01f) || math.any(hi > box.Max + 0.01f)) UnityEngine.Debug.LogWarning($"terrain chunk {ch.Cell} lod {p.Lod} mesh {lo}..{hi} outside bounds {box.Min}..{box.Max}");
+            MinMaxAABB box = site.Box;
+            if (math.any(lo < box.Min - 0.01f) || math.any(hi > box.Max + 0.01f)) UnityEngine.Debug.LogWarning($"terrain chunk {site.Cell} lod {p.Lod} mesh {lo}..{hi} outside bounds {box.Min}..{box.Max}");
             if (ch.Entity == Entity.Null)
             {
-                ch.Entity = Spawn(meshIds[slot], ch.Box);
+                ch.Entity = Spawn(meshIds[slot], site.Box);
                 EntityManager.AddComponentData(ch.Entity, new TerrainStitch());
                 ch.Shown = p.Lod;
                 coarseApplied++;
@@ -566,19 +585,14 @@ namespace Stabby.Game
         {
             var cam = Camera.main;
             if (cam == null || coarseApplied < chunks.Length) return;
-            GeometryUtility.CalculateFrustumPlanes(cam, planes);
-            var pl = new NativeArray<float4>(6, Allocator.TempJob);
-            for (int k = 0; k < 6; k++) pl[k] = new float4(planes[k].normal, planes[k].distance);
-            float k2 = 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f);
-            new TerrainLodJob { Chunks = chunks, Grid = grid, Side = side, Planes = pl, Eye = cam.transform.position, Allowed = TargetQuadScreen * k2, Far = cam.farClipPlane, Cm = ground.Blob.Value.CellMeters }.Run();
-            pl.Dispose();
+            lodHandle.Complete();
             int visible = 0, behind = 0;
             System.Array.Clear(lodCounts, 0, lodCounts.Length);
             for (int c = 0; c < chunks.Length; c++)
             {
                 var ch = chunks[c];
-                if (ch.Want < 0) continue;
-                int want = ch.Want;
+                int want = wants[c];
+                if (want < 0) continue;
                 for (int l = 0; l < want - 1; l++)
                     if ((ch.Built & (1 << l)) != 0) { Evict(c * TerrainLods.Count + l); ch.Built &= ~(1 << l); chunks[c] = ch; }
                 if ((ch.Built & (1 << want)) == 0 && (ch.Pending & (1 << want)) == 0 && pending.Count < BuildBudget) { Request(c, want); ch = chunks[c]; }
@@ -598,27 +612,43 @@ namespace Stabby.Game
             {
                 var ch = chunks[c];
                 if (ch.Shown < 0 || ch.Entity == Entity.Null) continue;
-                int mask = StitchMask(ch);
+                int mask = StitchMask(c);
                 if (mask == ch.Stitch) continue;
                 EntityManager.SetComponentData(ch.Entity, new TerrainStitch { Value = mask });
                 ch.Stitch = mask;
                 chunks[c] = ch;
             }
             GameStatus.TerrainBehind = behind;
+            ScheduleLods(cam);
             GameStatus.Lines["terrain"] = $"terrain chunks {visible}/{chunks.Length} visible, {built} meshes built, {built - evicted} live, by LOD {string.Join("/", lodCounts)}";
         }
 
-        int StitchMask(TerrainChunk ch)
+        void ScheduleLods(Camera cam)
         {
-            int x = ch.Cell.x / TerrainLods.Cells, z = ch.Cell.y / TerrainLods.Cells, mask = 0;
-            if (Coarser(x - 1, z, ch.Shown)) mask |= 1;
-            if (Coarser(x + 1, z, ch.Shown)) mask |= 2;
-            if (Coarser(x, z - 1, ch.Shown)) mask |= 4;
-            if (Coarser(x, z + 1, ch.Shown)) mask |= 8;
+            var t = cam.transform;
+            float3 eye = t.position;
+            quaternion turn = t.rotation;
+            if (math.distancesq(eye, lodEye) < 0.0001f && math.abs(math.dot(turn.value, lodTurn.value)) > 0.999999f && cam.fieldOfView == lodFov) return;
+            lodEye = eye;
+            lodTurn = turn;
+            lodFov = cam.fieldOfView;
+            GeometryUtility.CalculateFrustumPlanes(cam, planes);
+            for (int k = 0; k < 6; k++) lodPlanes[k] = new float4(planes[k].normal, planes[k].distance);
+            float k2 = 2f * math.tan(math.radians(cam.fieldOfView) * 0.5f);
+            lodHandle = new TerrainLodJob { Sites = sites, Wants = wants, Grid = grid, Side = side, Planes = lodPlanes, Eye = eye, Allowed = TargetQuadScreen * k2, Far = cam.farClipPlane, Cm = ground.Blob.Value.CellMeters }.Schedule();
+        }
+
+        int StitchMask(int c)
+        {
+            int x = sites[c].Cell.x / TerrainLods.Cells, z = sites[c].Cell.y / TerrainLods.Cells, mask = 0, lod = chunks[c].Shown;
+            if (Coarser(x - 1, z, lod)) mask |= 1;
+            if (Coarser(x + 1, z, lod)) mask |= 2;
+            if (Coarser(x, z - 1, lod)) mask |= 4;
+            if (Coarser(x, z + 1, lod)) mask |= 8;
             for (int q = 0; q < 4; q++)
             {
                 int dx = (q & 1) == 0 ? -1 : 1, dz = (q & 2) == 0 ? -1 : 1;
-                if (Coarser(x + dx, z, ch.Shown) || Coarser(x, z + dz, ch.Shown) || Coarser(x + dx, z + dz, ch.Shown)) mask |= 16 << q;
+                if (Coarser(x + dx, z, lod) || Coarser(x, z + dz, lod) || Coarser(x + dx, z + dz, lod)) mask |= 16 << q;
             }
             return mask;
         }
@@ -640,6 +670,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
+            lodHandle.Complete();
             foreach (var p in pending)
             {
                 p.Handle.Complete();
@@ -654,6 +685,9 @@ namespace Stabby.Game
             foreach (var mesh in statics) Object.Destroy(mesh);
             if (chunks.IsCreated) chunks.Dispose();
             if (grid.IsCreated) grid.Dispose();
+            if (sites.IsCreated) sites.Dispose();
+            if (wants.IsCreated) wants.Dispose();
+            if (lodPlanes.IsCreated) lodPlanes.Dispose();
             if (look.IsCreated) look.Dispose();
         }
     }
