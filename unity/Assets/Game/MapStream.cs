@@ -41,7 +41,9 @@ namespace Stabby.Game
         public int SumsIn, Remaining, Streamed, PiecesIn;
         public long BytesIn;
 
-        public int Length(int k) => Slots[k].Pieces == 0 ? 0 : (Slots[k].Pieces - 1) * GameSettings.PieceBytes + Slots[k].Last;
+        public int Length(int k) => Length(Slots[k]);
+
+        public static int Length(ChunkSlot s) => s.Pieces == 0 ? 0 : (s.Pieces - 1) * GameSettings.PieceBytes + s.Last;
 
         public void Dispose()
         {
@@ -61,12 +63,14 @@ namespace Stabby.Game
     public partial struct ServerChunkStreamSystem : ISystem
     {
         BufferLookup<OutPiece> outboxes;
+        BufferLookup<OutgoingRpcDataStreamBuffer> backlogs;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<ChunkStore>();
             outboxes = state.GetBufferLookup<OutPiece>();
+            backlogs = state.GetBufferLookup<OutgoingRpcDataStreamBuffer>(true);
         }
 
         [BurstCompile]
@@ -92,9 +96,11 @@ namespace Stabby.Game
                 for (int p = 0; p < pieces; p++) q.Add(new OutPiece { Chunk = k, Piece = p });
             }
 
+            backlogs.Update(ref state);
             foreach (var (q, conn) in SystemAPI.Query<DynamicBuffer<OutPiece>>().WithEntityAccess())
             {
-                int send = math.min(GameSettings.PiecesPerTick, q.Length);
+                int queued = backlogs.TryGetBuffer(conn, out var backlog) ? backlog.Length : 0;
+                int send = math.min(math.min(GameSettings.PiecesPerTick, q.Length), math.max(0, (GameSettings.BacklogBytes - queued) / GameSettings.PieceBytes));
                 if (send == 0) continue;
                 for (int s = 0; s < send; s++)
                 {

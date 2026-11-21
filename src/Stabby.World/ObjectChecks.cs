@@ -41,10 +41,42 @@ namespace Stabby.World
                     grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                     if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
+                    string seat = SeatFault(w, detail, o);
+                    if (seat != null) Fail(7, at + seat);
                     var biomes = def.Placement.Biomes;
                     if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
                 }
             }
+        }
+
+        public const int StructureSweep = 16;
+
+        static string SeatFault(GeneratedWorld w, TerrainDetail detail, ObjectInstance o)
+        {
+            var def = w.Objects.Objects[o.Def];
+            var seat = ObjectField.Seats(def);
+            if (seat == null) return null;
+            ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
+            float sink = def.Placement.Sink * o.Size;
+            if (o.Y > lo + 0.05f) return $" floats above its lowest seat ({o.Y:F2} vs {lo:F2})";
+            if (hi - o.Y > Structures.SeatM + sink + 0.05f) return $" is buried {hi - o.Y:F2} m at its highest seat";
+            return null;
+        }
+
+        static void CheckStructures(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        {
+            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
+            int across = field.ChunksAcross, found = 0;
+            for (int c = 0; c < across * across && found < StructureSweep; c++)
+                foreach (var o in field.Place(c % across, c / across, true))
+                {
+                    if (ObjectField.Seats(w.Objects.Objects[o.Def]) == null) continue;
+                    found++;
+                    int own = ObjectIds.Chunk(o.Id), ox = (int)Math.Floor(o.X / field.ChunkMeters), oz = (int)Math.Floor(o.Z / field.ChunkMeters);
+                    if (own != c || ox != c % across || oz != c / across) { e.Add($"{w.Objects.Objects[o.Def].Id} at {o.X:F0},{o.Z:F0} leaves its object chunk"); return; }
+                    string seat = SeatFault(w, detail, o);
+                    if (seat != null) { e.Add($"{w.Objects.Objects[o.Def].Id} at {o.X:F0},{o.Z:F0}" + seat); return; }
+                }
         }
 
         public const float BoulderStepM = 1f, BoulderTolerance = 1f;

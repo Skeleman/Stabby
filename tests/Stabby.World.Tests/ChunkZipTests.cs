@@ -33,7 +33,6 @@ public class ChunkZipTests
         Assert.Throws<InvalidDataException>(() => ChunkZip.Inflate(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x13 }, max));
         Assert.Throws<InvalidDataException>(() => ChunkZip.Inflate(zipped, max - 1));
         Assert.Throws<InvalidDataException>(() => ChunkZip.Inflate(ChunkZip.Deflate(new byte[max * 4]), max));
-        var truncated = ChunkZip.Inflate(zipped[..(zipped.Length / 2)], max);
-        Assert.Throws<ArgumentException>(() => WorldChunks.Unpack(w, 0, 0, truncated));
+        Assert.Throws<InvalidDataException>(() => ChunkZip.Inflate(zipped[..(zipped.Length / 2)], max));
     }
 }

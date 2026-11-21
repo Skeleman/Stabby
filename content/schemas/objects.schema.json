@@ -111,7 +111,7 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
@@ -141,6 +141,10 @@
               "footRiseM": { "type": "number", "minimum": 0, "maximum": 100 },
               "footReachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
               "editMinSizeM": { "type": "number", "minimum": 0, "maximum": 20 },
+              "chainMin": { "type": "integer", "minimum": 1, "maximum": 24 },
+              "chainMax": { "type": "integer", "minimum": 1, "maximum": 24 },
+              "chainCorner": { "type": "number", "minimum": 0, "maximum": 1 },
+              "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
               "biomeDensity": {
                 "type": "array",
                 "items": {

@@ -316,6 +316,7 @@ namespace Stabby.World
             var grid = new EditGrid(edits, w.Config.Size * cm);
             CheckChunkBounds(w, grid, e);
             if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, grid, e);
+            if (w.Objects != null && w.Biome != null) CheckStructures(w, detail, grid, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
             if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);

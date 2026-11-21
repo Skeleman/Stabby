@@ -59,7 +59,7 @@ namespace Stabby.World
             public int Cell;
             public float Card, Along, Lift, Jitter, From, AoLow, Width = 1;
             public int MinLeafDepth;
-            public bool Uniform;
+            public bool Uniform, DarkWood;
             public int[] Counts;
             public int[][] Sides;
         }
@@ -78,8 +78,8 @@ namespace Stabby.World
 
         static readonly Style ConiferStyle = new Style
         {
-            Cell = Needles, Card = 0.06f, Along = 0.85f, Lift = -0.1f, Jitter = 0.25f, From = 0.04f, AoLow = 0.2f, MinLeafDepth = 1, Width = 1.7f, Uniform = true,
-            Counts = new[] { 1200, 360, 110 }, Sides = new[] { new[] { 7, 3, 3 }, new[] { 5, 0, 0 }, new[] { 4, 0, 0 } },
+            Cell = Needles, Card = 0.072f, Along = 0.7f, Lift = -0.3f, Jitter = 0.2f, From = 0.22f, AoLow = 0.15f, MinLeafDepth = 1, Width = 1.4f, Uniform = true, DarkWood = true,
+            Counts = new[] { 1300, 380, 110 }, Sides = new[] { new[] { 7, 3, 0 }, new[] { 5, 0, 0 }, new[] { 4, 0, 0 } },
         };
 
         sealed class Out
@@ -141,7 +141,7 @@ namespace Stabby.World
             return d;
         }
 
-        static void Tube(Out o, Limb l, int sides)
+        static void Tube(Out o, Limb l, int sides, bool dark)
         {
             if (sides < 3) return;
             int s = Math.Min(8, sides) - 3;
@@ -156,7 +156,7 @@ namespace Stabby.World
                 var b = V.Cross(d, a);
                 if (r > 0) along += (l.P[r] - l.P[r - 1]).Length;
                 float t = r / (float)(rings - 1), rad = l.R[r], c = 1, si = 0;
-                float bend = l.Bend(t), ao = 0.35f + 0.5f * t;
+                float bend = l.Bend(t), ao = !dark || l.Depth == 0 ? 0.35f + 0.5f * t : 0.15f + 0.3f * t;
                 for (int k = 0; k <= sides; k++)
                 {
                     var n = a * c + b * si;
@@ -297,7 +297,7 @@ namespace Stabby.World
             var trunk = Grow(ref rng, new V(0, 0, 0), new V(0, 1, 0), 1f, 8, TrunkRadius * 1.1f, 0.003f, 0.012f, new V(0, 0.5f, 0), 0, 0.3f, rng.NextFloat(), 0);
             limbs.Add(trunk);
             float crown = rng.Range(0.26f, 0.33f), start = rng.Range(0.08f, 0.16f);
-            int whorls = rng.Range(22, 28);
+            int whorls = rng.Range(15, 19);
             var spin = Flat(ref rng);
             for (int w = 0; w < whorls; w++)
             {
@@ -306,7 +306,7 @@ namespace Stabby.World
                 var at = trunk.At(t, out _);
                 float left = 1.02f - t;
                 float reach = crown * left / (1.02f - start) + 0.015f;
-                int count = rng.Range(6, 9);
+                int count = rng.Range(5, 8);
                 spin = Around(spin, rng.Range(0.1f, 0.4f));
                 for (int k = 0; k < count; k++)
                 {
@@ -315,7 +315,7 @@ namespace Stabby.World
                     var bd = (dir + new V(0, -0.15f - 0.35f * (1 - t), 0)).Norm();
                     var branch = Grow(ref rng, at, bd, reach * rng.Range(0.85f, 1.1f), 4, TrunkRadius * (0.15f + 0.4f * (1 - t)), 0.002f, 0.06f, new V(0, droop, 0), trunk.Bend(t), 0.8f, rng.NextFloat(), 1);
                     limbs.Add(branch);
-                    if (reach > 0.05f) Twigs(ref rng, limbs, branch, 4, 0.2f, 0.9f, reach * 0.25f, reach * 0.45f, 0.9f, new V(0, -0.4f, 0), 1f);
+                    if (reach > 0.05f) Twigs(ref rng, limbs, branch, 3, 0.3f, 0.9f, reach * 0.3f, reach * 0.5f, 0.85f, new V(0, -0.5f, 0), 1f);
                 }
             }
             return Leaves(key, lod, limbs, ConiferStyle);
@@ -348,7 +348,7 @@ namespace Stabby.World
             crownR += 0.5f * st.Card;
             var o = new Out();
             var sides = st.Sides[lod];
-            foreach (var l in limbs) Tube(o, l, sides[Math.Min(sides.Length - 1, l.Depth)]);
+            foreach (var l in limbs) Tube(o, l, sides[Math.Min(sides.Length - 1, l.Depth)], st.DarkWood);
             var rng = new Rng(Rng.Mix(key ^ 0x3C6EF372FE94F82BUL));
             float grow = (float)Math.Sqrt(st.Counts[0] / (float)st.Counts[lod]);
             for (int c = 0; c < st.Counts[0]; c++)

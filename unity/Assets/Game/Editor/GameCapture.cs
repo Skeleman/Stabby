@@ -16,8 +16,9 @@ namespace Stabby.Game.Editor
     public static class GameCapture
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
-        const double TimeoutSeconds = 240;
+        const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait;
+        static readonly bool rockOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY") == "rock";
         static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -142,7 +143,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = 1;
+                phase = rockOnly ? 7 : 1;
             }
             while (phase <= 6)
             {
@@ -190,6 +191,12 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
+                if (phase == 7 && rockOnly)
+                {
+                    File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                    Finish(0);
+                    return;
+                }
                 if (phase == 7)
                 {
                     lows.Add(("rock", cam.transform.position, cam.transform.rotation));
@@ -314,7 +321,7 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            while (phase >= 18 && phase <= 21)
+            while (phase >= 18 && phase <= 22)
             {
                 string name = FoliageShots[phase - 18];
                 if (wait == 0)
@@ -335,6 +342,22 @@ namespace Stabby.Game.Editor
                     GameStatus.Lines["~bench foliage"] = FoliageBench(cam, "foliage looking down on the densest bushes");
                     AimFoliage(cam, 1);
                 }
+                wait = 0;
+                phase++;
+            }
+            while (phase >= 22 && phase <= 23)
+            {
+                string name = phase == 22 ? "structure-close" : "structure-mid";
+                if (wait == 0)
+                {
+                    if (!AimStructure(cam, phase == 22)) { GameStatus.Lines["~" + name] = "no structure placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 23) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
                 wait = 0;
                 phase++;
             }
@@ -624,9 +647,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f };
-        static readonly int[] FoliageRanges = { 0, 4, 1, 2 };
-        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far" };
+        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f, 0.9f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f, 0.05f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2, 5 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far", "spruce-close" };
 
         static bool AimFoliage(Camera cam, int range)
         {
@@ -643,16 +666,16 @@ namespace Stabby.Game.Editor
                     {
                         if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
                         foreach (var o in field.Chunk(cx, cz))
-                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 5 ? p.Shape == ObjectPart.Conifer : range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
                     }
                 if (near.Count == 0) return false;
-                bool scaled = range == 0 || range == 4;
+                bool scaled = range == 0 || range >= 4;
                 ObjectInstance pick = default;
                 int crowd = 0;
                 var cells = new System.Collections.Generic.Dictionary<long, int>();
                 long Cell(float x, float z) => ((long)Mathf.FloorToInt(x / 12f) << 32) ^ (uint)Mathf.FloorToInt(z / 12f);
                 foreach (var o in near) { long c = Cell(o.X, o.Z); cells.TryGetValue(c, out int k); cells[c] = k + 1; }
-                bool clear = range == 1 || range == 4;
+                bool clear = range == 1 || range >= 4;
                 if (clear) scaled = true;
                 var ranked = new System.Collections.Generic.List<(float score, ObjectInstance o, int around)>();
                 foreach (var o in near)
@@ -696,6 +719,47 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + (range == 2 ? 10f : 1.2f));
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim foliage " + range] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0} with {crowd} foliage in its 12 m cell, eye {back:F0} m back";
+                return true;
+            }
+            return false;
+        }
+
+        static bool AimStructure(Camera cam, bool close)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                    {
+                        var chunk = field.Chunk(cx, cz);
+                        foreach (var o in chunk)
+                        {
+                            if (!field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsStructure(p.Shape))) continue;
+                            float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                            if (field.Library.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall)
+                            {
+                                int run = 0;
+                                foreach (var b in chunk)
+                                    if (b.Def == o.Def && (b.X - o.X) * (b.X - o.X) + (b.Z - o.Z) * (b.Z - o.Z) < 36f * o.Size * o.Size) run++;
+                                score -= run >= 4 ? 400f + 40f * run : 0f;
+                            }
+                            if (score < best) { best = score; pick = o; }
+                        }
+                    }
+                if (best == float.MaxValue) return false;
+                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.1f, pick.Z);
+                var across = new Vector3(2 * (pick.Qx * pick.Qz + pick.Qw * pick.Qy), 0, 1 - 2 * (pick.Qx * pick.Qx + pick.Qy * pick.Qy)).normalized;
+                var along = new Vector3(across.z, 0, -across.x);
+                float back = close ? 0.75f * pick.Size : 30f * Mathf.Max(1f, 0.25f * pick.Size);
+                var eye = target + (across * 0.85f + along * 0.5f) * back + Vector3.up * (close ? 0.25f * pick.Size : 0.3f * back);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.4f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim structure " + (close ? "close" : "mid")] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {back:F0} m back";
                 return true;
             }
             return false;

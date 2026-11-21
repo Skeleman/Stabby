@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -15,63 +16,80 @@ namespace Stabby.World
         {
             int a = Across(w.Config.Size);
             var sums = new ulong[a * a];
-            for (int cy = 0; cy < a; cy++)
-                for (int cx = 0; cx < a; cx++)
-                    sums[cy * a + cx] = Checksum(Pack(w, cx, cy));
+            Parallel.For(0, a, cy =>
+            {
+                var buf = new byte[Size * Size * CellBytes];
+                for (int cx = 0; cx < a; cx++) sums[cy * a + cx] = Checksum(buf, Pack(w, cx, cy, buf, 0));
+            });
             return sums;
         }
 
-        public static ulong Checksum(byte[] data)
+        public static ulong Checksum(byte[] data) => Checksum(data, data.Length);
+
+        static ulong Checksum(byte[] data, int length)
         {
             ulong h = 14695981039346656037UL ^ Version;
-            foreach (byte b in data) { h ^= b; h *= 1099511628211UL; }
+            for (int k = 0; k < length; k++) { h ^= data[k]; h *= 1099511628211UL; }
             return h;
         }
 
         public static byte[] Pack(GeneratedWorld w, int cx, int cy)
         {
-            int n = w.Config.Size;
-            var hy = w.Water;
-            var data = new byte[Cells(n, cx, cy) * CellBytes];
-            int o = 0;
-            ForCells(n, cx, cy, i =>
-            {
-                PutFloat(data, ref o, w.Height[i]);
-                PutFloat(data, ref o, hy.WaterSurface[i]);
-                PutFloat(data, ref o, hy.DischargeM3s[i]);
-                PutFloat(data, ref o, w.Climate.TemperatureC[i]);
-                PutFloat(data, ref o, w.Climate.PrecipitationMm[i]);
-                PutInt(data, ref o, hy.LakeId[i]);
-                PutInt(data, ref o, w.Biome != null ? w.Biome[i] : -1);
-                data[o++] = Direction(n, i, hy.Receiver[i]);
-                data[o++] = (byte)((w.Sea[i] ? SeaFlag : 0) | (hy.IsRiver[i] ? RiverFlag : 0));
-                data[o++] = 0; data[o++] = 0;
-            });
+            var data = new byte[Bytes(w.Config.Size, cx, cy)];
+            Pack(w, cx, cy, data, 0);
             return data;
+        }
+
+        public static int Pack(GeneratedWorld w, int cx, int cy, byte[] data, int at)
+        {
+            int n = w.Config.Size, o = at;
+            var hy = w.Water;
+            int x1 = Math.Min(n, (cx + 1) * Size), y1 = Math.Min(n, (cy + 1) * Size);
+            for (int y = cy * Size; y < y1; y++)
+                for (int i = y * n + cx * Size, e = y * n + x1; i < e; i++)
+                {
+                    PutFloat(data, ref o, w.Height[i]);
+                    PutFloat(data, ref o, hy.WaterSurface[i]);
+                    PutFloat(data, ref o, hy.DischargeM3s[i]);
+                    PutFloat(data, ref o, w.Climate.TemperatureC[i]);
+                    PutFloat(data, ref o, w.Climate.PrecipitationMm[i]);
+                    PutInt(data, ref o, hy.LakeId[i]);
+                    PutInt(data, ref o, w.Biome != null ? w.Biome[i] : -1);
+                    data[o++] = Direction(n, i, hy.Receiver[i]);
+                    data[o++] = (byte)((w.Sea[i] ? SeaFlag : 0) | (hy.IsRiver[i] ? RiverFlag : 0));
+                    data[o++] = 0; data[o++] = 0;
+                }
+            return o - at;
         }
 
         public static void Unpack(GeneratedWorld w, int cx, int cy, byte[] data)
         {
-            int n = w.Config.Size;
-            if (data.Length != Cells(n, cx, cy) * CellBytes) throw new ArgumentException($"chunk {cx},{cy} has {data.Length} bytes");
+            if (data.Length != Bytes(w.Config.Size, cx, cy)) throw new ArgumentException($"chunk {cx},{cy} has {data.Length} bytes");
+            Unpack(w, cx, cy, data, 0);
+        }
+
+        public static void Unpack(GeneratedWorld w, int cx, int cy, byte[] data, int at)
+        {
+            int n = w.Config.Size, o = at;
             var hy = w.Water;
-            int o = 0;
-            ForCells(n, cx, cy, i =>
-            {
-                w.Height[i] = GetFloat(data, ref o);
-                hy.WaterSurface[i] = GetFloat(data, ref o);
-                hy.DischargeM3s[i] = GetFloat(data, ref o);
-                w.Climate.TemperatureC[i] = GetFloat(data, ref o);
-                w.Climate.PrecipitationMm[i] = GetFloat(data, ref o);
-                hy.LakeId[i] = GetInt(data, ref o);
-                int biome = GetInt(data, ref o);
-                if (w.Biome != null) w.Biome[i] = biome;
-                hy.Receiver[i] = Neighbour(n, i, data[o++]);
-                byte flags = data[o++];
-                w.Sea[i] = (flags & SeaFlag) != 0;
-                hy.IsRiver[i] = (flags & RiverFlag) != 0;
-                o += 2;
-            });
+            int x1 = Math.Min(n, (cx + 1) * Size), y1 = Math.Min(n, (cy + 1) * Size);
+            for (int y = cy * Size; y < y1; y++)
+                for (int i = y * n + cx * Size, e = y * n + x1; i < e; i++)
+                {
+                    w.Height[i] = GetFloat(data, ref o);
+                    hy.WaterSurface[i] = GetFloat(data, ref o);
+                    hy.DischargeM3s[i] = GetFloat(data, ref o);
+                    w.Climate.TemperatureC[i] = GetFloat(data, ref o);
+                    w.Climate.PrecipitationMm[i] = GetFloat(data, ref o);
+                    hy.LakeId[i] = GetInt(data, ref o);
+                    int biome = GetInt(data, ref o);
+                    if (w.Biome != null) w.Biome[i] = biome;
+                    hy.Receiver[i] = Neighbour(n, i, data[o++]);
+                    byte flags = data[o++];
+                    w.Sea[i] = (flags & SeaFlag) != 0;
+                    hy.IsRiver[i] = (flags & RiverFlag) != 0;
+                    o += 2;
+                }
         }
 
         public static void Relink(GeneratedWorld w) => Hydrology.Relink(w.Config, w.Sea, w.Water);
@@ -79,13 +97,6 @@ namespace Stabby.World
         public static int Bytes(int n, int cx, int cy) => Cells(n, cx, cy) * CellBytes;
 
         static int Cells(int n, int cx, int cy) => (Math.Min(n, (cx + 1) * Size) - cx * Size) * (Math.Min(n, (cy + 1) * Size) - cy * Size);
-
-        static void ForCells(int n, int cx, int cy, Action<int> f)
-        {
-            for (int y = cy * Size; y < Math.Min(n, (cy + 1) * Size); y++)
-                for (int x = cx * Size; x < Math.Min(n, (cx + 1) * Size); x++)
-                    f(y * n + x);
-        }
 
         static byte Direction(int n, int i, int r)
         {
