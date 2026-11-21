@@ -107,7 +107,8 @@ architecture contract. The other steps fit the contract as it stands.
 | Objects step 1b: rocks use the strata material library, denser and varied placement (clusters at scarp feet, scree on slopes, logs under forest), spawn data unloaded with chunks, instance counts in capture stats; GeneratorVersion 34 | done |
 | Rock strata tint (rocks share the terrain's camera-relative origin and detail fade); object column build and chunk packing moved off the main thread (17 ms main-thread copy gone); 33 ms worst frame was noise | done |
 | Rocks inside one grey strata band read plain grey up close (shared rock material, changes cliffs too) | later |
-| Large boulders as solid-field edits (rule 11), after near field lands | next |
+| Large boulders as solid-field edits (rule 11): draws at or above `editMinSizeM` (3.6 m) become two Add capsule lumps on their own streams, checked in WorldChecks (bounds, no water, mesher match, collision within a cell of the mesh); GeneratorVersion 36 | done |
+| Boulder follow-ups: boulders vanish at coarse LOD rings (needs a screen-size fallback); per-chunk edit index for Walk and Features.Edit; boulder tops take the biome coat; mesh check covers only the first boulder | next |
 | Near-field follow-ups: frustum-cull node selection (offscreen nodes split at 2x distance), teardown waits for jobs before freeing ground data, terrain status string cached; 294 ms spike not seen since | done |
 | Near-field follow-ups 2: trim SurfaceNets filler vertices at the source; worst frame 75 ms with a 19.6 ms terrain LOD update; Presentation builds its frames string every frame | next |
 | Objects step 2a: GPU grass blades near the camera (`GrassScatter.compute` scatters per near terrain mesh from the biome coat, one indirect draw, frustum cull, distance fade into the terrain colour); shared wind globals `_StabbyWind`/`_StabbyGust` from `objects.json` foliage; +0.24 ms at 1080p in the grass close-up | done |
