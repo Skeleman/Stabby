@@ -1699,31 +1699,43 @@ namespace Stabby.Game.Editor
             }
         }
 
+        const float BasinPitch = 35f;
+
         static System.Collections.IEnumerator FallsTour(Camera cam, string dir, GeneratedWorld map, Ground ground)
         {
             var best = default(Stabby.Viewer.FallCurtain);
             bool found = false;
+            int falls = 0, rows = 0;
             foreach (var l in NearField.Lines(map))
                 for (int k = 1; k < l.X.Length; k++)
-                    if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _) && (!found || f.Drop > best.Drop)) { best = f; found = true; }
+                    if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _))
+                    {
+                        falls++;
+                        rows += Stabby.Viewer.WaterGeometry.CurtainRowsOf(f.Drop + 0.5f);
+                        if (!found || f.Drop > best.Drop) { best = f; found = true; }
+                    }
             if (!found) { GameStatus.Lines["~falls"] = "no falls found"; yield break; }
             var fd = new Vector3(best.DirX, 0, best.DirZ);
             var side = new Vector3(-fd.z, 0, fd.x);
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, w = best.Width;
-            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}";
+            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)}; {falls} falls, curtain rows {rows}, verts {2 * rows}, tris {4 * (rows - falls)}";
             var eyes = new[]
             {
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
                 foot + fd * (4f * h + 40f) + side * (0.6f * w + 15f) + Vector3.up * (h + 10f),
                 foot + fd * (6f * h + 170f) + side * (w + 90f) + Vector3.up * (2f * h + 70f),
+                default,
             };
-            string[] names = { "falls-close", "falls-mid", "falls-far" };
-            var look = (lip + foot) * 0.5f;
-            for (int v = 0; v < 3; v++)
+            string[] names = { "falls-close", "falls-mid", "falls-far", "falls-basin" };
+            var basin = foot + fd * (0.3f * w);
+            float reach = Mathf.Max(1.5f * h, 3f * w) + 20f;
+            eyes[3] = basin + (fd * Mathf.Cos(BasinPitch * Mathf.Deg2Rad) + Vector3.up * Mathf.Sin(BasinPitch * Mathf.Deg2Rad)) * reach;
+            for (int v = 0; v < eyes.Length; v++)
             {
                 var eye = eyes[v];
+                var look = v == 3 ? basin : (lip + foot) * 0.5f;
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.8f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 for (var s = Settle(180); s.MoveNext();) yield return null;
