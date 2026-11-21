@@ -109,6 +109,7 @@ namespace Stabby.World
                 if (pass == 0) { blockStart[0] = 0; for (int i = 1; i <= n * n; i++) blockStart[i] += blockStart[i - 1]; }
                 else blockItems = items;
             }
+            InitSites();
         }
 
         void Mark(float x0, float z0, float x1, float z1, int item, int[] fill, int[] items)
@@ -183,7 +184,7 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders)
+        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false)
         {
             float span = WorldChunks.Size * cm;
             float x0 = cx * span, z0 = cz * span;
@@ -191,13 +192,15 @@ namespace Stabby.World
             if (sx <= 0 || sz <= 0) return;
             int chunk = cz * across + cx;
             ulong chunkKey = Rng.Mix((ulong)chunk + 1);
+            var near = sitesOnly ? null : SitesNear(cx, cz);
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 int ordinal = 0;
                 var pl = lib.Objects[d].Placement;
+                if (sitesOnly && siteBox[d] == null) continue;
                 if (bankSite[d] >= 0)
                 {
-                    if (boulders == null && (!solidOnly || AnySolid(d))) PlaceBank(d, chunk, chunkKey, x0, z0, sx, sz, list);
+                    if (boulders == null && (!solidOnly || AnySolid(d))) PlaceBank(d, chunk, chunkKey, x0, z0, sx, sz, near, list);
                     continue;
                 }
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
@@ -230,6 +233,7 @@ namespace Stabby.World
                         if (Density(d, px, pz) < 1f && thin.NextFloat() >= Density(d, px, pz)) continue;
                         float size = (pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t) * grade;
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
+                        if (!built && Cleared(near, px, pz, footprint[d] * size * (boulders != null ? BoulderReach : 1f))) continue;
                         if (!Accept(d, px, pz, size, qa, qb, out var o)) continue;
                         o.Variant = variant;
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);

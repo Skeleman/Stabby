@@ -54,6 +54,37 @@ namespace Stabby.World
             }
         }
 
+        public const int SiteCheckLimit = 6;
+
+        static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        {
+            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
+            int across = field.ChunksAcross, checkedSites = 0;
+            float span = field.ChunkMeters;
+            var columns = new List<ObjectColumn>();
+            for (int c = 0; c < across * across && checkedSites < SiteCheckLimit; c++)
+                foreach (var s in field.Sites(c % across, c / across))
+                {
+                    if (checkedSites++ >= SiteCheckLimit) break;
+                    string at = $"{w.Objects.Objects[s.Def].Id} at {s.X:F0},{s.Z:F0}";
+                    float reach = 2 * s.Size;
+                    foreach (var f in grid.Edits)
+                        if (f.Shape == FeatureEdit.Boulder && field.SiteGap(s, 0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ)) < f.R) { e.Add($"boulder edit sits inside {at}"); return; }
+                    int x0 = Math.Max(0, (int)((s.X - reach) / span)), x1 = Math.Min(across - 1, (int)((s.X + reach) / span));
+                    int z0 = Math.Max(0, (int)((s.Z - reach) / span)), z1 = Math.Min(across - 1, (int)((s.Z + reach) / span));
+                    for (int cz = z0; cz <= z1; cz++)
+                        for (int cx = x0; cx <= x1; cx++)
+                            foreach (var o in field.Chunk(cx, cz))
+                            {
+                                if (field.IsSite(o.Def) || w.Objects.Objects[o.Def].Kind == ObjectLibrary.Structure) continue;
+                                columns.Clear();
+                                field.ColumnsOf(o, columns);
+                                foreach (var col in columns)
+                                    if (field.SiteGap(s, col.X, col.Z) < col.R) { e.Add($"{w.Objects.Objects[o.Def].Id} at {o.X:F0},{o.Z:F0} has a column inside {at}"); return; }
+                            }
+                }
+        }
+
         static string RegionFault(ObjectField full, ObjectField fresh, ObjectInstance[] placed, int c)
         {
             var columns = new List<ObjectColumn>();
