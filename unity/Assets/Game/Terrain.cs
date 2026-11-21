@@ -8,6 +8,7 @@ using Stabby.World;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Entities.Graphics;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -16,6 +17,7 @@ using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Stabby.Game
 {
@@ -45,7 +47,7 @@ namespace Stabby.Game
 
     struct TerrainNode
     {
-        public int Built, Pending, Drawn, Stitch, Vertices;
+        public int Built, Pending, Drawn, Stitch, Vertices, Cast;
         public float MorphEnd;
         public Entity Entity;
         public BatchMeshID Mesh;
@@ -430,6 +432,28 @@ namespace Stabby.Game
     }
 
     [BurstCompile(CompileSynchronously = true)]
+    struct TerrainMeshWriteJob : IJob
+    {
+        [ReadOnly] public NativeList<TerrainVertex> Verts;
+        [ReadOnly] public NativeList<int> Tris;
+        [ReadOnly] public NativeArray<float3> Bounds;
+        [ReadOnly] public NativeArray<VertexAttributeDescriptor> Layout;
+        public Mesh.MeshDataArray Data;
+
+        public void Execute()
+        {
+            var md = Data[0];
+            md.SetVertexBufferParams(Verts.Length, Layout);
+            md.GetVertexData<TerrainVertex>().CopyFrom(Verts.AsArray());
+            md.SetIndexBufferParams(Tris.Length, IndexFormat.UInt32);
+            md.GetIndexData<int>().CopyFrom(Tris.AsArray());
+            md.subMeshCount = 1;
+            float3 lo = Bounds[0], hi = Bounds[1];
+            md.SetSubMesh(0, new SubMeshDescriptor(0, Tris.Length) { bounds = new Bounds((lo + hi) * 0.5f, hi - lo), vertexCount = Verts.Length }, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
+        }
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
     struct TerrainSelectJob : IJob
     {
         public TerrainTree Tree;
@@ -540,6 +564,7 @@ namespace Stabby.Game
         public int ApplyVertices = 150000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
+        public static bool Casting = true, HideSunk = true;
 
         sealed class Prepared
         {
@@ -560,10 +585,21 @@ namespace Stabby.Game
             public NativeList<TerrainVertex> Verts;
             public NativeList<int> Tris;
             public NativeArray<float3> Bounds;
+            public Mesh.MeshDataArray Data;
+
+            public void Dispose()
+            {
+                Verts.Dispose();
+                Tris.Dispose();
+                Bounds.Dispose();
+                Data.Dispose();
+            }
         }
 
         Task<Prepared> preparing;
         Prepared prepared;
+        IEnumerator<bool> upload;
+        const int UploadBytes = 4 << 20;
         BlobAssetReference<TerrainLookData> look;
         BlobBake<TerrainLookData> lookBake;
         int loadStep;
@@ -595,6 +631,7 @@ namespace Stabby.Game
         int waterApplied, frameVertices, built, evicted, generation;
         bool ready, rootsReady, builtSmooth;
         float worstMs;
+        string parts = "";
 
         protected override void OnCreate()
         {
@@ -608,16 +645,26 @@ namespace Stabby.Game
             if (look.IsCreated)
             {
                 if (SmoothOnly != builtSmooth) Reset();
-                Collect(); Roots(); Statics(); Lods();
+                if (upload != null && (!upload.MoveNext() || upload.Current)) upload = null;
+                Collect();
+                double tc = frame.Elapsed.TotalMilliseconds;
+                Roots(); Statics();
+                double ts = frame.Elapsed.TotalMilliseconds;
+                Lods();
+                parts = $"collect {tc:F1}, statics {ts - tc:F1}, lods {frame.Elapsed.TotalMilliseconds - ts:F1} ms, {frameVertices} vertices";
             }
-            else if (prepared != null) Unpack();
-            else if (preparing == null) Begin();
-            else if (preparing.IsCompleted) Load();
+            else
+            {
+                parts = "load";
+                if (prepared != null) Unpack();
+                else if (preparing == null) Begin();
+                else if (preparing.IsCompleted) Load();
+            }
             float ms = (float)frame.Elapsed.TotalMilliseconds;
             GameStatus.TerrainMs = ms;
             GameStatus.TerrainStage = stage;
             GameStatus.TerrainVertices = frameVertices;
-            if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage})"; }
+            if (ms > worstMs) { worstMs = ms; GameStatus.Lines["terrain~"] = $"terrain worst update {worstMs:F1} ms ({stage}: {parts})"; }
         }
 
         float Allowed(Camera cam)
@@ -750,11 +797,11 @@ namespace Stabby.Game
         void Unpack()
         {
             if (loadStep < TerrainLook.ApplySteps) { TerrainLook.ApplyStrata(prepared.Strata, loadStep++); return; }
-            if (loadStep < 2 * TerrainLook.ApplySteps) { TerrainLook.ApplyField(prepared.Field, loadStep++ - TerrainLook.ApplySteps); return; }
             if (!lookBake.IsCompleted) return;
             look = lookBake.Take();
+            upload = TerrainLook.ApplyField(prepared.Field, UploadBytes).GetEnumerator();
             Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.45f);
-            Shader.SetGlobalColor("_StabbyGround", new Color(0.16f, 0.15f, 0.12f));
+            Shader.SetGlobalColor("_StabbyGround", new Color(0.14f, 0.14f, 0.13f));
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             var scene = UnityEngine.Object.FindFirstObjectByType<GameScene>();
@@ -779,6 +826,7 @@ namespace Stabby.Game
             for (int iz = 0; iz < d; iz++)
                 for (int ix = 0; ix < d; ix++) roots.Add(tree.Key(TerrainTree.Root, ix, iz));
             builtSmooth = SmoothOnly;
+            layout = new NativeArray<VertexAttributeDescriptor>(Layout, Allocator.Persistent);
         }
 
         TerrainNode Node(int key) => nodes.TryGetValue(key, out var v) ? v : new TerrainNode { Entity = Entity.Null };
@@ -819,8 +867,10 @@ namespace Stabby.Game
             var vl = new NativeList<TerrainVertex>(TerrainTree.Vertices, Allocator.Persistent);
             var tl = new NativeList<int>(TerrainTree.Indices, Allocator.Persistent);
             var bounds = new NativeArray<float3>(2, Allocator.Persistent);
-            var job = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Smooth = builtSmooth, Verts = vl, Tris = tl, Bounds = bounds };
-            pending.Add(new Pending { Key = key, Generation = generation, Handle = job.Schedule(), Verts = vl, Tris = tl, Bounds = bounds });
+            var data = Mesh.AllocateWritableMeshData(1);
+            var job = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Smooth = builtSmooth, Verts = vl, Tris = tl, Bounds = bounds }.Schedule();
+            job = new TerrainMeshWriteJob { Verts = vl, Tris = tl, Bounds = bounds, Layout = layout, Data = data }.Schedule(job);
+            pending.Add(new Pending { Key = key, Generation = generation, Handle = job, Verts = vl, Tris = tl, Bounds = bounds, Data = data });
             nd.Pending = 1;
             nodes[key] = nd;
         }
@@ -842,7 +892,7 @@ namespace Stabby.Game
                 if (!stale && !Spend(TerrainTree.Vertices)) return;
                 p.Handle.Complete();
                 pending.RemoveAt(k--);
-                if (stale) { p.Verts.Dispose(); p.Tris.Dispose(); p.Bounds.Dispose(); }
+                if (stale) p.Dispose();
                 else Apply(p);
             }
         }
@@ -853,20 +903,15 @@ namespace Stabby.Game
             int l = tree.Level(p.Key);
             var c = tree.Cell(p.Key, l);
             float3 lo = p.Bounds[0], hi = p.Bounds[1];
-            p.Bounds.Dispose();
             var mesh = new Mesh { name = $"Terrain L{l} {c.x},{c.y}" };
             if (l == 0) { mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw; mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw; }
-            const MeshUpdateFlags quiet = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers;
-            mesh.SetVertexBufferParams(p.Verts.Length, Layout);
-            mesh.SetVertexBufferData(p.Verts.AsArray(), 0, 0, p.Verts.Length, 0, quiet);
-            mesh.SetIndexBufferParams(p.Tris.Length, IndexFormat.UInt32);
-            mesh.SetIndexBufferData(p.Tris.AsArray(), 0, 0, p.Tris.Length, quiet);
-            mesh.SetSubMesh(0, new SubMeshDescriptor(0, p.Tris.Length) { bounds = new Bounds((lo + hi) * 0.5f, hi - lo), vertexCount = p.Verts.Length }, quiet);
+            Mesh.ApplyAndDisposeWritableMeshData(p.Data, mesh, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
             mesh.bounds = new Bounds((lo + hi) * 0.5f, hi - lo);
             nd.Vertices = p.Verts.Length;
             if (p.Verts.Length > 30000) UnityEngine.Debug.LogWarning($"terrain big node L{l} {c} {p.Verts.Length} verts {p.Tris.Length / 3} tris y {lo.y}..{hi.y}");
             p.Verts.Dispose();
             p.Tris.Dispose();
+            p.Bounds.Dispose();
             meshes[p.Key] = mesh;
             nd.Mesh = graphics.RegisterMesh(mesh);
             built++;
@@ -879,6 +924,8 @@ namespace Stabby.Game
             nd.Stitch = -1;
             nodes[p.Key] = nd;
         }
+
+        NativeArray<VertexAttributeDescriptor> layout;
 
         static readonly VertexAttributeDescriptor[] Layout =
         {
@@ -1029,18 +1076,28 @@ namespace Stabby.Game
             builtKeys.AddRange(meshes.Keys);
             Array.Clear(levelCounts, 0, levelCounts.Length);
             float allowed = Allowed(cam);
-            int vertices = 0;
+            float3 eye = cam.transform.position;
+            float reach = Casting && UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.shadowDistance : 0;
+            int vertices = 0, casting = 0, castVertices = 0, sunk = 0;
             foreach (int key in builtKeys)
             {
                 var nd = nodes[key];
                 bool want = drawn.Contains(key);
                 if (!want && !InTree(key)) { Evict(key); continue; }
-                if (want != (nd.Drawn != 0))
+                bool show = want && !(HideSunk && tree.Sunk(key));
+                sunk += want && !show ? 1 : 0;
+                if (show != (nd.Drawn != 0))
                 {
-                    EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, want);
-                    nd.Drawn = want ? 1 : 0;
+                    EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, show);
+                    nd.Drawn = show ? 1 : 0;
                 }
-                if (want)
+                MinMaxAABB nb = tree.Box(key);
+                int cast = show && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
+                if (cast != nd.Cast) Shadow(nd.Entity, cast);
+                nd.Cast = cast;
+                casting += cast;
+                castVertices += cast * nd.Vertices;
+                if (show)
                 {
                     int l = tree.Level(key);
                     levelCounts[l]++;
@@ -1057,12 +1114,12 @@ namespace Stabby.Game
                 nodes[key] = nd;
             }
             GameStatus.TerrainBehind = behind;
-            int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices);
+            int seen = HashCode.Combine(drawn.Count, leaves.Length, behind, built, evicted, vertices, castVertices);
             for (int i = 0; i < levelCounts.Length; i++) seen = HashCode.Combine(seen, levelCounts[i]);
             if (seen != statusSeen || !GameStatus.Lines.ContainsKey("terrain"))
             {
                 statusSeen = seen;
-                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count} drawn, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, by level {string.Join("/", levelCounts)}";
+                GameStatus.Lines["terrain"] = $"terrain nodes {drawn.Count - sunk} drawn, {sunk} sunk hidden, {leaves.Length} wanted, {behind} behind, {built} built, {built - evicted} live, {vertices} drawn vertices, {casting} casting ({castVertices} vertices), by level {string.Join("/", levelCounts)}";
             }
             ScheduleLods(cam);
         }
@@ -1118,11 +1175,19 @@ namespace Stabby.Game
                 if (tree.Level(key) == 0 && tree.Distance(key, eye) < reach && meshes.TryGetValue(key, out var m)) into.Add(m);
         }
 
+        void Shadow(Entity e, int cast)
+        {
+            var f = EntityManager.GetSharedComponentManaged<RenderFilterSettings>(e);
+            f.ShadowCastingMode = cast != 0 ? ShadowCastingMode.On : ShadowCastingMode.Off;
+            EntityManager.SetSharedComponentManaged(e, f);
+        }
+
         void Evict(int key)
         {
             var nd = nodes[key];
             if (nd.Entity != Entity.Null)
             {
+                if (nd.Cast != 0) Shadow(nd.Entity, 0);
                 EntityManager.SetComponentEnabled<MaterialMeshInfo>(nd.Entity, false);
                 spare.Add(nd.Entity);
             }
@@ -1140,11 +1205,10 @@ namespace Stabby.Game
             foreach (var p in pending)
             {
                 p.Handle.Complete();
-                p.Verts.Dispose();
-                p.Tris.Dispose();
-                p.Bounds.Dispose();
+                p.Dispose();
             }
             pending.Clear();
+            if (layout.IsCreated) layout.Dispose();
             Owned.Release(preparing, p => p.Look.Dispose());
             lookBake.Release();
             foreach (var mesh in meshes.Values) UnityEngine.Object.Destroy(mesh);

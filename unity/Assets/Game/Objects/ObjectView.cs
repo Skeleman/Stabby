@@ -19,16 +19,22 @@ namespace Stabby.Game
     [MaterialProperty("_Fade")]
     public struct ObjectFade : IComponentData { public float4 Value; }
 
+    [MaterialProperty("_Leaf")]
+    public struct ObjectLeaf : IComponentData { public float4 Value; }
+
+    [MaterialProperty("_Imp")]
+    public struct ObjectImp : IComponentData { public float Value; }
+
     public struct ObjectLod : IComponentData
     {
-        public BatchMeshID L0, L1, L2;
-        public float Lod1, Lod2, Fade, Shadow, Radius;
+        public BatchMeshID L0, L1, L2, Imp, Blend;
+        public float Lod1, Lod2, Fade, Shadow, Radius, Sway, Flutter, Impostor;
     }
 
     public struct ObjectSpawn
     {
         public float4x4 M;
-        public float4 Color;
+        public float4 Color, Leaf;
         public int Mesh, Def;
         public float Radius, Ground, Size;
         public bool Shadow;
@@ -39,14 +45,18 @@ namespace Stabby.Game
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial class ObjectViewSystem : SystemBase
     {
-        public const int Lods = 3, RegisterPerFrame = 24, SpawnBudget = 4000;
+        public const int Lods = 3, Stride = Lods + 2, RegisterPerFrame = 24, SpawnBudget = 4000, Frames = 8, Cell = 64;
         public const float DespawnReach = 1f / (1f - Detail.Hysteresis), UnloadReach = 1.5f;
 
         sealed class MeshSet
         {
             public Vector3[][] Positions, Normals;
+            public Vector4[][] Uv0, Uv1;
             public int[][] Indices;
             public AABB[] Bounds;
+            public Vector4[] Centers;
+            public int[] Slots;
+            public int SlotCount;
         }
 
         sealed class ChunkParts
@@ -68,9 +78,14 @@ namespace Stabby.Game
         Mesh[] meshes;
         BatchMeshID[] meshIds;
         int registered;
-        Material material;
-        BatchMaterialID materialId;
-        Entity castPrefab, flatPrefab;
+        public const int FoliageLayer = 8;
+        Material material, foliageMaterial;
+        BatchMaterialID materialId, foliageMaterialId;
+        Entity castPrefab, flatPrefab, castFoliagePrefab, flatFoliagePrefab;
+        bool[] foliageMesh;
+        Task<LeafAtlas.Pixels> atlasTask;
+        Texture2D atlas;
+        RenderTexture impA, impB;
         Task<ChunkParts> chunkTask;
         NativeArray<bool> loaded;
         NativeArray<ObjectSpawn>[] chunkParts;
@@ -119,14 +134,22 @@ namespace Stabby.Game
             if (loaded.IsCreated) loaded.Dispose();
             if (meshes != null) foreach (var m in meshes) if (m != null) UnityEngine.Object.Destroy(m);
             if (material != null) UnityEngine.Object.Destroy(material);
+            if (foliageMaterial != null) UnityEngine.Object.Destroy(foliageMaterial);
+            if (atlas != null) UnityEngine.Object.Destroy(atlas);
+            if (impA != null) { impA.Release(); UnityEngine.Object.Destroy(impA); }
+            if (impB != null) { impB.Release(); UnityEngine.Object.Destroy(impB); }
         }
 
         static float4 Linear(uint rgb, float tint, int shape)
         {
             if (shape == ObjectPart.Rock) return new float4(tint, tint, tint, 0);
+            return new float4(Decode(rgb) * tint, shape);
+        }
+
+        static float3 Decode(uint rgb)
+        {
             var c = new float3((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255) / 255f;
-            c = math.select(math.pow((c + 0.055f) / 1.055f, 2.4f), c / 12.92f, c <= 0.04045f);
-            return new float4(c * tint, shape);
+            return math.select(math.pow((c + 0.055f) / 1.055f, 2.4f), c / 12.92f, c <= 0.04045f);
         }
 
         bool Prepare()
@@ -152,35 +175,50 @@ namespace Stabby.Game
             kinds = new ObjectKind[defs];
             var shapes = new List<int>();
             var keys = new List<ulong>();
+            var impostors = new List<bool>();
             for (int d = 0; d < defs; d++)
             {
                 var def = lib.Objects[d];
+                var kind = lib.KindOf(def);
                 meshBase[d] = new int[def.Parts.Count];
                 for (int p = 0; p < def.Parts.Count; p++)
                 {
                     meshBase[d][p] = count;
-                    for (int v = 0; v < def.Variants; v++) { shapes.Add(def.Parts[p].Shape); keys.Add(ObjectMeshes.Key(def.Id, p, v)); count++; }
+                    for (int v = 0; v < def.Variants; v++)
+                    {
+                        shapes.Add(def.Parts[p].Shape); keys.Add(ObjectMeshes.Key(def.Id, p, v));
+                        impostors.Add(kind.ImpostorPixels > 0 && ObjectPart.IsFoliage(def.Parts[p].Shape));
+                        count++;
+                    }
                 }
-                var kind = lib.KindOf(def);
                 kinds[d] = kind;
                 reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
                 float t = span;
                 while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
                 tile[d] = t;
             }
-            meshTask = Task.Run(() => BuildMeshes(shapes, keys));
+            foliageMesh = new bool[shapes.Count];
+            bool anyFoliage = false;
+            for (int k = 0; k < shapes.Count; k++) anyFoliage |= foliageMesh[k] = ObjectPart.IsFoliage(shapes[k]);
+            meshTask = Task.Run(() => BuildMeshes(shapes, keys, impostors));
+            if (anyFoliage) atlasTask = Task.Run(() => LeafAtlas.Build());
             return true;
         }
 
-        static MeshSet BuildMeshes(List<int> shapes, List<ulong> keys)
+        static MeshSet BuildMeshes(List<int> shapes, List<ulong> keys, List<bool> impostors)
         {
-            int n = shapes.Count * Lods;
-            var set = new MeshSet { Positions = new Vector3[n][], Normals = new Vector3[n][], Indices = new int[n][], Bounds = new AABB[shapes.Count] };
+            int n = shapes.Count * Stride;
+            var set = new MeshSet
+            {
+                Positions = new Vector3[n][], Normals = new Vector3[n][], Uv0 = new Vector4[n][], Uv1 = new Vector4[n][], Indices = new int[n][], Bounds = new AABB[shapes.Count],
+                Centers = new Vector4[shapes.Count], Slots = new int[shapes.Count],
+            };
             for (int k = 0; k < shapes.Count; k++)
+            {
                 for (int l = 0; l < Lods; l++)
                 {
                     var m = ObjectMeshes.Build(shapes[k], keys[k], l);
-                    int vc = m.VertexCount, at = k * Lods + l;
+                    int vc = m.VertexCount, at = k * Stride + l;
                     var pos = new Vector3[vc];
                     var nor = new Vector3[vc];
                     Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity, mid = Vector3.zero;
@@ -194,15 +232,125 @@ namespace Stabby.Game
                     float outward = 0;
                     for (int v = 0; v < vc; v++) outward += Vector3.Dot(nor[v], pos[v] - mid);
                     var idx = (int[])m.Indices.Clone();
-                    if (outward < 0)
+                    if (m.Uvs != null)
+                    {
+                        var u0 = new Vector4[vc];
+                        var u1 = new Vector4[vc];
+                        for (int v = 0; v < vc; v++)
+                        {
+                            u0[v] = new Vector4(m.Uvs[4 * v], m.Uvs[4 * v + 1], m.Uvs[4 * v + 2], m.Uvs[4 * v + 3]);
+                            u1[v] = new Vector4(m.Winds[4 * v], m.Winds[4 * v + 1], m.Winds[4 * v + 2], m.Winds[4 * v + 3]);
+                        }
+                        set.Uv0[at] = u0;
+                        set.Uv1[at] = u1;
+                    }
+                    else if (outward < 0)
                     {
                         for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
                         for (int v = 0; v < vc; v++) nor[v] = -nor[v];
                     }
                     set.Positions[at] = pos; set.Normals[at] = nor; set.Indices[at] = idx;
-                    if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * 0.5f };
+                    if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * (m.Uvs != null ? 0.56f : 0.5f) };
                 }
+                set.Slots[k] = -1;
+                if (impostors[k] && set.Uv0[k * Stride] != null) Impostor(set, k);
+            }
             return set;
+        }
+
+        static void Impostor(MeshSet set, int k)
+        {
+            var pos = set.Positions[k * Stride];
+            Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity;
+            foreach (var p in pos) { lo = Vector3.Min(lo, p); hi = Vector3.Max(hi, p); }
+            var c = (lo + hi) * 0.5f;
+            float r = 0;
+            foreach (var p in pos) r = Mathf.Max(r, new Vector2(p.x - c.x, p.z - c.z).magnitude);
+            float s = Mathf.Max(2f * r, hi.y - lo.y) * 1.02f;
+            int slot = set.SlotCount++;
+            set.Slots[k] = slot;
+            set.Centers[k] = new Vector4(c.x, c.y, c.z, s);
+            var b = set.Bounds[k];
+            b.Extents = math.max(b.Extents, new float3(0.5f * s, 0.5f * s, 0.5f * s));
+            b.Center = c;
+            set.Bounds[k] = b;
+            var qp = new Vector3[4];
+            var qn = new Vector3[4];
+            var q0 = new Vector4[4];
+            var q1 = new Vector4[4];
+            for (int v = 0; v < 4; v++)
+            {
+                float x = v == 0 || v == 3 ? -1 : 1, y = v < 2 ? -1 : 1;
+                qp[v] = c + new Vector3(x * 0.5f * s, y * 0.5f * s, 0);
+                qn[v] = Vector3.forward;
+                q0[v] = new Vector4(x, y, slot, 2);
+                q1[v] = set.Centers[k];
+            }
+            int at = k * Stride + Lods;
+            set.Positions[at] = qp; set.Normals[at] = qn; set.Uv0[at] = q0; set.Uv1[at] = q1; set.Indices[at] = new[] { 0, 1, 2, 0, 2, 3 };
+            int l2 = k * Stride + Lods - 1, vc = set.Positions[l2].Length;
+            set.Positions[at + 1] = Concat(set.Positions[l2], qp);
+            set.Normals[at + 1] = Concat(set.Normals[l2], qn);
+            set.Uv0[at + 1] = Concat(set.Uv0[l2], q0);
+            set.Uv1[at + 1] = Concat(set.Uv1[l2], q1);
+            var idx = new int[set.Indices[l2].Length + 6];
+            set.Indices[l2].CopyTo(idx, 0);
+            for (int i = 0; i < 6; i++) idx[set.Indices[l2].Length + i] = vc + set.Indices[at][i];
+            set.Indices[at + 1] = idx;
+        }
+
+        static T[] Concat<T>(T[] a, T[] b)
+        {
+            var r = new T[a.Length + b.Length];
+            a.CopyTo(r, 0);
+            b.CopyTo(r, a.Length);
+            return r;
+        }
+
+        void Bake(CommandBuffer cmd)
+        {
+            int size = Cell;
+            while ((size / Cell) * (size / Cell) < meshSet.SlotCount * Frames) size *= 2;
+            int cols = size / Cell;
+            float fill = (Cell - 4f) / Cell;
+            impA = Target(size, "Stabby impostor albedo");
+            impB = Target(size, "Stabby impostor normal");
+            var depth = new RenderTexture(size, size, 24, RenderTextureFormat.Depth) { name = "Stabby impostor depth" };
+            depth.Create();
+            cmd.SetRenderTarget(new RenderTargetIdentifier[] { impA, impB }, depth.depthBuffer);
+            cmd.ClearRenderTarget(true, true, Color.clear);
+            cmd.SetGlobalVector("_StabbyBakeGrid", new Vector4(cols, fill, 0, 0));
+            int pass = foliageMaterial.FindPass("Bake");
+            for (int k = 0; k < meshSet.Slots.Length; k++)
+            {
+                if (meshSet.Slots[k] < 0) continue;
+                cmd.SetGlobalVector("_StabbyBakeCenter", meshSet.Centers[k]);
+                for (int f = 0; f < Frames; f++)
+                {
+                    float a = f * 2f * Mathf.PI / Frames;
+                    int cell = meshSet.Slots[k] * Frames + f;
+                    cmd.SetGlobalVector("_StabbyBakeFrame", new Vector4(Mathf.Sin(a), Mathf.Cos(a), cell % cols, cell / cols));
+                    cmd.DrawMesh(meshes[k * Stride], Matrix4x4.identity, foliageMaterial, 0, pass);
+                }
+            }
+            cmd.GenerateMips(impA);
+            cmd.GenerateMips(impB);
+            Graphics.ExecuteCommandBuffer(cmd);
+            depth.Release();
+            UnityEngine.Object.Destroy(depth);
+            foliageMaterial.SetTexture("_ImpA", impA);
+            foliageMaterial.SetTexture("_ImpB", impB);
+            foliageMaterial.SetVector("_ImpGrid", new Vector4(cols, fill, Frames, 0));
+        }
+
+        static RenderTexture Target(int size, string name)
+        {
+            var rt = new RenderTexture(new RenderTextureDescriptor(size, size, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm, 0) { useMipMap = true, autoGenerateMips = false })
+            {
+                name = name, filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp,
+            };
+            rt.Create();
+            return rt;
         }
 
         bool Register()
@@ -216,25 +364,53 @@ namespace Stabby.Game
                 meshes = new Mesh[meshSet.Positions.Length];
                 meshIds = new BatchMeshID[meshes.Length];
             }
+            if (atlasTask != null)
+            {
+                if (!atlasTask.IsCompleted) return false;
+                if (atlasTask.IsFaulted) { GameStatus.Failure = atlasTask.Exception.ToString(); atlasTask = null; return false; }
+                atlas = LeafAtlas.Create(atlasTask.Result);
+                atlasTask = null;
+            }
             if (registered >= meshes.Length) return true;
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             for (int end = Math.Min(meshes.Length, registered + RegisterPerFrame); registered < end; registered++)
             {
+                if (meshSet.Positions[registered] == null) continue;
                 var m = new Mesh { name = "Object " + registered, vertices = meshSet.Positions[registered], normals = meshSet.Normals[registered], triangles = meshSet.Indices[registered] };
+                if (meshSet.Uv0[registered] != null)
+                {
+                    m.SetUVs(0, meshSet.Uv0[registered]);
+                    m.SetUVs(1, meshSet.Uv1[registered]);
+                }
                 m.RecalculateBounds();
                 meshes[registered] = m;
                 meshIds[registered] = graphics.RegisterMesh(m);
             }
             if (registered < meshes.Length) return false;
-            castPrefab = Prefab(ShadowCastingMode.On);
-            flatPrefab = Prefab(ShadowCastingMode.Off);
+            castPrefab = Prefab(ShadowCastingMode.On, materialId, false);
+            flatPrefab = Prefab(ShadowCastingMode.Off, materialId, false);
+            if (atlas != null)
+            {
+                foliageMaterial = new Material(Shader.Find("Stabby/Foliage")) { name = "Stabby foliage", enableInstancing = true };
+                foliageMaterial.SetTexture("_LeafAtlas", atlas);
+                if (meshSet.SlotCount > 0)
+                {
+                    using var cmd = new CommandBuffer { name = "Stabby impostor bake" };
+                    Bake(cmd);
+                }
+                foliageMaterialId = graphics.RegisterMaterial(foliageMaterial);
+                castFoliagePrefab = Prefab(ShadowCastingMode.On, foliageMaterialId, true);
+                flatFoliagePrefab = Prefab(ShadowCastingMode.Off, foliageMaterialId, true);
+            }
             return true;
         }
 
-        Entity Prefab(ShadowCastingMode shadows)
+        Entity Prefab(ShadowCastingMode shadows, BatchMaterialID mat, bool foliage)
         {
             var e = EntityManager.CreateEntity();
-            RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(shadows, true, MotionVectorGenerationMode.ForceNoMotion), new MaterialMeshInfo(materialId, meshIds[0]));
+            RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(shadows, true, MotionVectorGenerationMode.ForceNoMotion, foliage ? FoliageLayer : 0), new MaterialMeshInfo(mat, meshIds[0]));
+            if (foliage) EntityManager.AddComponentData(e, new ObjectLeaf { Value = new float4(0.2f, 0.3f, 0.1f, 2) });
+            if (foliage) EntityManager.AddComponentData(e, new ObjectImp());
             EntityManager.AddComponentData(e, new ObjectColor { Value = new float4(1, 1, 1, 0) });
             EntityManager.AddComponentData(e, new ObjectFade { Value = new float4(1, 1, 0, 0) });
             EntityManager.AddComponentData(e, new ObjectLod());
@@ -275,9 +451,12 @@ namespace Stabby.Game
                 float tint = 0.86f + 0.28f * math.frac(o.Variant * 0.618034f + o.Size * 3.7f + o.X * 0.013f);
                 var scale = new float3(part.ScaleX, part.ScaleY, part.ScaleZ) * o.Size;
                 var local = float4x4.TRS(new float3(part.OffsetX, part.OffsetY, part.OffsetZ) * o.Size, quaternion.identity, scale);
+                float leafTint = 0.88f + 0.24f * math.frac(o.Variant * 0.381966f + o.Z * 0.0171f + o.Size * 1.3f);
+                float hue = 2f * math.frac(o.Variant * 0.7548777f + o.X * 0.0093f + o.Z * 0.0061f) - 1f;
+                var leaf = ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor) * leafTint * (1f + hue * new float3(0.12f, 0.05f, -0.1f)), 2) : float4.zero;
                 parts[i] = new ObjectSpawn
                 {
-                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
+                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
                     Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = o.Y + def.Placement.Sink * o.Size, Size = o.Size,
                     Id = o.Id,
                 };
@@ -392,38 +571,47 @@ namespace Stabby.Game
 
         void SpawnTile(long key, NativeArray<ObjectSpawn> parts, int3 range)
         {
-            int cast = 0, shown = 0;
-            for (int k = 0; k < range.y; k++) if (!Hidden(parts[range.x + k].Id)) { shown++; if (parts[range.x + k].Shadow) cast++; }
-            var a = EntityManager.Instantiate(castPrefab, cast, Allocator.Temp);
-            var b = EntityManager.Instantiate(flatPrefab, shown - cast, Allocator.Temp);
-            int ia = 0, ib = 0;
+            var counts = new int[4];
+            int shown = 0;
+            for (int k = 0; k < range.y; k++) if (!Hidden(parts[range.x + k].Id)) { shown++; counts[Group(parts[range.x + k])]++; }
+            var prefabs = new[] { flatPrefab, castPrefab, flatFoliagePrefab, castFoliagePrefab };
+            var made = new NativeArray<Entity>[4];
+            for (int g = 0; g < 4; g++) made[g] = EntityManager.Instantiate(prefabs[g], counts[g], Allocator.Temp);
+            var at = new int[4];
             for (int k = 0; k < range.y; k++)
             {
                 var s = parts[range.x + k];
                 if (Hidden(s.Id)) continue;
-                var e = s.Shadow ? a[ia++] : b[ib++];
+                int group = Group(s);
+                var e = made[group][at[group]++];
                 var kind = kinds[s.Def];
-                int m = s.Mesh * Lods;
+                int m = s.Mesh * Stride;
+                bool imp = group >= 2 && kind.ImpostorPixels > 0 && meshSet.Slots[s.Mesh] >= 0;
                 int lods = math.clamp(kind.Lods, 1, Lods);
+                bool foliage = group >= 2;
                 EntityManager.SetComponentData(e, new LocalToWorld { Value = s.M });
                 EntityManager.SetComponentData(e, new RenderBounds { Value = meshSet.Bounds[s.Mesh] });
-                EntityManager.SetComponentData(e, new MaterialMeshInfo(materialId, meshIds[m]));
+                EntityManager.SetComponentData(e, new MaterialMeshInfo(foliage ? foliageMaterialId : materialId, meshIds[m]));
                 EntityManager.SetComponentData(e, new ObjectColor { Value = s.Color });
                 EntityManager.SetComponentData(e, new ObjectFade { Value = new float4(1, s.Shadow ? 1 : 0, s.Ground, s.Size) });
+                if (foliage) EntityManager.SetComponentData(e, new ObjectLeaf { Value = s.Leaf });
                 EntityManager.SetComponentData(e, new ObjectLod
                 {
                     L0 = meshIds[m], L1 = meshIds[m + math.min(1, lods - 1)], L2 = meshIds[m + math.min(2, lods - 1)],
                     Lod1 = kind.LodPixels.Length > 0 ? kind.LodPixels[0] : 0, Lod2 = kind.LodPixels.Length > 1 ? kind.LodPixels[1] : 0,
                     Fade = kind.FadePixels, Shadow = s.Shadow ? kind.ShadowPixels : float.MaxValue, Radius = s.Radius,
+                    Sway = kind.Wind ? kind.SwayPixels : float.MaxValue, Flutter = kind.Wind ? kind.FlutterPixels : float.MaxValue,
+                    Imp = imp ? meshIds[m + Lods] : default, Blend = imp ? meshIds[m + Lods + 1] : default, Impostor = imp ? kind.ImpostorPixels : 0,
                 });
                 tileEntities.Add(key, e);
                 liveByDef[s.Def]++;
             }
             spawned.Add(key);
             liveEntities += shown;
-            a.Dispose();
-            b.Dispose();
+            foreach (var arr in made) arr.Dispose();
         }
+
+        int Group(in ObjectSpawn s) => (s.Shadow ? 1 : 0) + (foliageMaterial != null && foliageMesh[s.Mesh] ? 2 : 0);
 
         bool Warm()
         {
@@ -480,6 +668,8 @@ namespace Stabby.Game
     {
         ComponentLookup<MaterialMeshInfo> mmi;
         ComponentLookup<ObjectFade> fade;
+        ComponentLookup<ObjectLeaf> leaf;
+        ComponentLookup<ObjectImp> imp;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -487,6 +677,8 @@ namespace Stabby.Game
             state.RequireForUpdate<ObjectLod>();
             mmi = state.GetComponentLookup<MaterialMeshInfo>();
             fade = state.GetComponentLookup<ObjectFade>();
+            leaf = state.GetComponentLookup<ObjectLeaf>();
+            imp = state.GetComponentLookup<ObjectImp>();
         }
 
         [BurstCompile]
@@ -496,7 +688,9 @@ namespace Stabby.Game
             var view = DetailView.Current;
             if (view.PixelsPerMetre <= 0) return;
             fade.Update(ref state);
-            state.Dependency = new LodJob { View = view, Mmi = mmi, Fade = fade }.ScheduleParallel(state.Dependency);
+            leaf.Update(ref state);
+            imp.Update(ref state);
+            state.Dependency = new LodJob { View = view, Mmi = mmi, Fade = fade, Leaf = leaf, Imp = imp }.ScheduleParallel(state.Dependency);
         }
 
         [BurstCompile]
@@ -507,6 +701,8 @@ namespace Stabby.Game
             public DetailView View;
             [NativeDisableParallelForRestriction] public ComponentLookup<MaterialMeshInfo> Mmi;
             [NativeDisableParallelForRestriction] public ComponentLookup<ObjectFade> Fade;
+            [NativeDisableParallelForRestriction] public ComponentLookup<ObjectLeaf> Leaf;
+            [NativeDisableParallelForRestriction] public ComponentLookup<ObjectImp> Imp;
 
             void Execute(Entity e, in LocalToWorld ltw, in ObjectLod lod)
             {
@@ -519,11 +715,24 @@ namespace Stabby.Game
                 int was = m.MeshID.value == lod.L0.value ? 0 : m.MeshID.value == lod.L1.value ? 1 : 2;
                 int tier = math.min(Detail.Tier(px, t, was), 2);
                 var id = tier == 0 ? lod.L0 : tier == 1 ? lod.L1 : lod.L2;
+                if (lod.Impostor > 0)
+                {
+                    float ip = lod.Impostor / math.max(View.Quality, 0.1f);
+                    float b = tier == 2 ? math.round((1f - Detail.Crossfade(px, ip, 1.5f * ip)) * 16f) / 16f : 0;
+                    if (b >= 1) id = lod.Imp;
+                    else if (b > 0) id = lod.Blend;
+                    if (Imp[e].Value != b) Imp[e] = new ObjectImp { Value = b };
+                }
                 if (m.MeshID.value != id.value) { m.MeshID = id; Mmi[e] = m; }
                 var old = Fade[e].Value;
                 bool shadow = Detail.Holds(px, lod.Shadow / View.Quality, old.y > 0);
                 var f = new float4(math.round(Detail.Crossfade(px, t.Far, 1.5f * t.Far) * 16f) / 16f, shadow ? 1 : 0, old.z, old.w);
                 if (math.any(old != f)) Fade[e] = new ObjectFade { Value = f };
+                if (!Leaf.HasComponent(e)) return;
+                float sway = lod.Sway / View.Quality, flutter = lod.Flutter / View.Quality;
+                float w = math.round((Detail.Crossfade(px, sway, 1.5f * sway) + Detail.Crossfade(px, flutter, 1.5f * flutter)) * 16f) / 16f;
+                var lv = Leaf[e].Value;
+                if (lv.w != w) { lv.w = w; Leaf[e] = new ObjectLeaf { Value = lv }; }
             }
         }
     }

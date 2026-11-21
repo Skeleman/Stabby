@@ -301,6 +301,9 @@ public static class ContentLoader
         public bool Shadows { get; set; }
         public float ShadowPixels { get; set; }
         public bool Wind { get; set; }
+        public float SwayPixels { get; set; } = 16.2f;
+        public float FlutterPixels { get; set; } = 54f;
+        public float ImpostorPixels { get; set; }
         public bool Animated { get; set; }
         public bool Solid { get; set; }
     }
@@ -332,6 +335,7 @@ public static class ContentLoader
         public string Solid { get; set; } = "";
         public string Shadows { get; set; } = "";
         public string? Color { get; set; }
+        public string? LeafColor { get; set; }
     }
 
     sealed class PlacementEntry
@@ -375,7 +379,7 @@ public static class ContentLoader
             lib.Kinds.Add(new ObjectKind
             {
                 Id = k.Id, Lods = k.Lods, LodPixels = k.LodPixels, FadePixels = k.FadePixels,
-                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, Wind = k.Wind, Animated = k.Animated, Solid = k.Solid,
+                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, ImpostorPixels = k.ImpostorPixels, Animated = k.Animated, Solid = k.Solid,
             });
         foreach (var o in file.Objects)
         {
@@ -389,6 +393,7 @@ public static class ContentLoader
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
                     HasColor = p.Color != null, Color = p.Color != null ? Hex(p.Color) : def.Color,
+                    HasLeafColor = p.LeafColor != null, LeafColor = p.LeafColor != null ? Hex(p.LeafColor) : 0,
                 };
                 if (part.Solid < -1 || part.Shadows < -1) errors.Add(o.Id + ": part " + p.Id + " solid/shadows must be \"\", \"on\" or \"off\"");
                 if (p.Offset is { Length: 3 }) { part.OffsetX = p.Offset[0]; part.OffsetY = p.Offset[1]; part.OffsetZ = p.Offset[2]; }

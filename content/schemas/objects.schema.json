@@ -73,6 +73,9 @@
           "shadows": { "type": "boolean" },
           "shadowPixels": { "type": "number", "minimum": 0 },
           "wind": { "type": "boolean" },
+          "swayPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
+          "impostorPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
+          "flutterPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
           "animated": { "type": "boolean" },
           "solid": { "type": "boolean" }
         }
@@ -108,12 +111,13 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
                 "shadows": { "enum": ["", "on", "off"] },
-                "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+                "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+                "leafColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
               }
             }
           },

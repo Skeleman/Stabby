@@ -8,8 +8,8 @@ namespace Stabby.Game
 {
     public static class ObjectFile
     {
-        [Serializable] class Kind { public string id; public int lods = 3; public float[] lodPixels; public float fadePixels = 6.48f, shadowPixels = 32.4f; public bool shadows = true, wind, animated, solid = true; }
-        [Serializable] class Part { public string id, shape, solid = "", shadows = "", color = ""; public float[] offset, scale; }
+        [Serializable] class Kind { public string id; public int lods = 3; public float[] lodPixels; public float fadePixels = 6.48f, shadowPixels = 32.4f, swayPixels = 16.2f, flutterPixels = 54f, impostorPixels; public bool shadows = true, wind, animated, solid = true; }
+        [Serializable] class Part { public string id, shape, solid = "", shadows = "", color = "", leafColor = ""; public float[] offset, scale; }
         [Serializable] class Place
         {
             public string[] biomes; public float perHectare, slopeMin, slopeMax = 10f, hardnessMin, hardnessMax = 1f, sizeMinM = 1f, sizeMaxM = 1f;
@@ -53,19 +53,19 @@ namespace Stabby.Game
                 lib.Kinds.Add(new ObjectKind
                 {
                     Id = k.id, Lods = k.lods, LodPixels = k.lodPixels ?? Array.Empty<float>(), FadePixels = k.fadePixels,
-                    Shadows = k.shadows, ShadowPixels = k.shadowPixels, Wind = k.wind, Animated = k.animated, Solid = k.solid,
+                    Shadows = k.shadows, ShadowPixels = k.shadowPixels, Wind = k.wind, SwayPixels = k.swayPixels, FlutterPixels = k.flutterPixels, ImpostorPixels = k.impostorPixels, Animated = k.animated, Solid = k.solid,
                 });
             foreach (var o in dto.objects ?? Array.Empty<Obj>())
             {
                 var def = new ObjectDef { Id = o.id, Name = o.name, Kind = o.kind, Color = Hex(o.color), Variants = o.variants, Verb = string.IsNullOrEmpty(o.interact?.verb) ? null : o.interact.verb, ReachM = o.interact?.reachM ?? 0 };
                 foreach (var p in o.parts ?? Array.Empty<Part>())
                 {
-                    bool colored = !string.IsNullOrEmpty(p.color);
+                    bool colored = !string.IsNullOrEmpty(p.color), leafy = !string.IsNullOrEmpty(p.leafColor);
                     var part = new ObjectPart
                     {
                         Id = p.id, Shape = ObjectLibrary.ShapeOf(p.shape),
                         Solid = ObjectLibrary.Tri(p.solid), Shadows = ObjectLibrary.Tri(p.shadows),
-                        HasColor = colored, Color = colored ? Hex(p.color) : def.Color,
+                        HasColor = colored, Color = colored ? Hex(p.color) : def.Color, HasLeafColor = leafy, LeafColor = leafy ? Hex(p.leafColor) : 0,
                     };
                     if (part.Solid < -1 || part.Shadows < -1) errors.Add(o.id + ": part " + p.id + " solid/shadows must be \"\", \"on\" or \"off\"");
                     if ((p.offset != null && p.offset.Length != 0 && p.offset.Length != 3) || (p.scale != null && p.scale.Length != 0 && p.scale.Length != 3))

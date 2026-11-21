@@ -16,7 +16,7 @@ namespace Stabby.Game.Editor
         static readonly List<(string name, ProfilerRecorder rec)> recs = new List<(string, ProfilerRecorder)>();
         static readonly HashSet<string> names = new HashSet<string>();
         static readonly List<string> report = new List<string>();
-        static int frame, gcRuns;
+        static int frame, gcRuns, builtSpikes, loadSpikes;
         static long gcBuilt, gcBefore, gcPlay;
         static int playFrames;
         static ProfilerRecorder gcFrame;
@@ -43,7 +43,7 @@ namespace Stabby.Game.Editor
             if (cur.Length < recs.Count) { Array.Resize(ref cur, recs.Count); Array.Resize(ref last, recs.Count); }
             for (int r = 0; r < recs.Count; r++) cur[r] = recs[r].rec.LastValue;
             float dt = Time.unscaledDeltaTime * 1000f;
-            if (frame > 10 && dt > Limit && !GameStatus.AfterTool && report.Count < 40) report.Add($"frame {frame} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
+            if (frame > 10 && dt > Limit && !GameStatus.AfterTool && (GameStatus.TerrainBuilt ? builtSpikes++ : loadSpikes++) < 40) report.Add($"frame {frame}{(GameStatus.TerrainBuilt ? " built" : "")} {dt:F0} ms, gc {gc / 1024} KB{(collected ? ", collection" : "")}\n  this: {Top(cur)}\n  prev: {Top(last)}");
             (cur, last) = (last, cur);
         }
 

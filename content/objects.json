@@ -3,7 +3,7 @@
   "kinds": [
     { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
     { "id": "interactive", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 6.48, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
-    { "id": "animated", "lods": 3, "lodPixels": [108, 32.4], "fadePixels": 6.48, "shadows": true, "shadowPixels": 43.2, "wind": true, "animated": true, "solid": false },
+    { "id": "animated", "lods": 3, "lodPixels": [108, 32.4], "fadePixels": 6.48, "shadows": true, "shadowPixels": 43.2, "wind": true, "swayPixels": 16.2, "flutterPixels": 54, "impostorPixels": 16.2, "animated": true, "solid": false },
     { "id": "structure", "lods": 3, "lodPixels": [129.6, 43.2], "fadePixels": 3.24, "shadows": true, "shadowPixels": 21.6, "wind": false, "animated": false, "solid": true }
   ],
   "objects": [
@@ -64,6 +64,24 @@
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 4, "slopeMax": 0.8, "sizeMinM": 0.5, "sizeMaxM": 1, "sink": 0.05, "alignToSlope": 0.5 }
     },
     {
+      "id": "bush", "name": "Bush", "kind": "animated", "color": "#4c3f33", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "leafColor": "#587234" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "shrubland", "savanna", "tropical-forest", "boreal", "wetland"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 0.7, "sizeMaxM": 2.2, "clusterCount": 3, "clusterRadiusM": 3, "sink": 0.04, "alignToSlope": 0.2,
+        "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.5 }, { "biome": "temperate-rain", "scale": 0.5 }, { "biome": "tropical-forest", "scale": 0.5 }, { "biome": "boreal", "scale": 0.2 }, { "biome": "savanna", "scale": 0.25 }, { "biome": "wetland", "scale": 0.25 } ] }
+    },
+    {
+      "id": "sagebrush", "name": "Sagebrush", "kind": "animated", "color": "#6b5e50", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.3, 1, 1.3], "leafColor": "#8b977c" } ],
+      "placement": { "biomes": ["steppe", "cold-desert", "desert", "shrubland"], "perHectare": 50, "slopeMax": 0.7, "sizeMinM": 0.4, "sizeMaxM": 1.2, "clusterCount": 4, "clusterRadiusM": 5, "sink": 0.05, "alignToSlope": 0.3,
+        "biomeDensity": [ { "biome": "desert", "scale": 0.3 }, { "biome": "shrubland", "scale": 0.6 } ] }
+    },
+    {
+      "id": "dwarf-willow", "name": "Dwarf willow", "kind": "animated", "color": "#5a4a3c", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.5, 1, 1.5], "leafColor": "#6c7a3e" } ],
+      "placement": { "biomes": ["tundra", "alpine", "boreal"], "perHectare": 45, "slopeMax": 0.9, "sizeMinM": 0.25, "sizeMaxM": 0.7, "clusterCount": 6, "clusterRadiusM": 4, "sink": 0.05, "alignToSlope": 0.5,
+        "biomeDensity": [ { "biome": "boreal", "scale": 0.3 } ] }
+    },
+    {
       "id": "loose-stone", "name": "Loose stone", "kind": "interactive", "color": "#958f84", "variants": 6,
       "interact": { "verb": "take", "reachM": 2.5 },
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1], "solid": "off" } ],
@@ -78,6 +96,24 @@
         { "id": "c", "shape": "log", "offset": [-0.1, 0.05, -0.1], "scale": [0.7, 0.05, 0.05], "solid": "off", "color": "#7a6247" }
       ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "shrubland"], "perHectare": 2, "slopeMax": 0.7, "sizeMinM": 1.4, "sizeMaxM": 2.2, "sink": 0.02, "alignToSlope": 1 }
+    },
+    {
+      "id": "oak", "name": "Oak", "kind": "animated", "color": "#5f5446", "variants": 8,
+      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "leafColor": "#4d6a2b" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "wetland", "savanna"], "perHectare": 60, "slopeMax": 0.6, "sizeMinM": 7, "sizeMaxM": 16, "clusterCount": 4, "clusterRadiusM": 10, "sink": 0.02,
+        "biomeDensity": [ { "biome": "temperate-rain", "scale": 0.4 }, { "biome": "wetland", "scale": 0.25 }, { "biome": "savanna", "scale": 0.08 } ] }
+    },
+    {
+      "id": "rainforest-tree", "name": "Rainforest tree", "kind": "animated", "color": "#6d6352", "variants": 8,
+      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "scale": [1.15, 1, 1.15], "leafColor": "#3b6224" } ],
+      "placement": { "biomes": ["tropical-forest", "mangrove"], "perHectare": 70, "slopeMax": 0.7, "sizeMinM": 10, "sizeMaxM": 20, "clusterCount": 3, "clusterRadiusM": 10, "sink": 0.02,
+        "biomeDensity": [ { "biome": "mangrove", "scale": 0.3 } ] }
+    },
+    {
+      "id": "spruce", "name": "Spruce", "kind": "animated", "color": "#4b3d33", "variants": 8,
+      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafColor": "#3b5a3a" } ],
+      "placement": { "biomes": ["boreal", "temperate-rain", "temperate-forest", "alpine"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 6, "sizeMaxM": 19, "clusterCount": 5, "clusterRadiusM": 8, "sink": 0.02,
+        "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.2 }, { "biome": "temperate-rain", "scale": 0.7 }, { "biome": "alpine", "scale": 0.08 } ] }
     }
   ],
   "terrain": { "quadPixels": 10.8 },

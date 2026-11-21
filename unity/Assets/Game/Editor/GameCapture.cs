@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Unity.Entities;
 using Unity.NetCode;
 using Unity.Transforms;
@@ -17,7 +18,7 @@ namespace Stabby.Game.Editor
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait;
-        static bool bank;
+        static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
 
@@ -152,13 +153,14 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) { if (wait == 0) wait = -1; return; }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) { if (wait == 0) wait = -1; return; }
                 Shot(cam, null, "warmup");
                 if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
-                Shot(cam, dir, phase == 5 && bank ? "riverbank" : name);
+                Shot(cam, dir, phase == 5 && lake ? "lake" : phase == 5 && bank ? "riverbank" : name);
                 if (phase == 2) Wire(cam, dir, name + "-wire");
-                if (phase == 5 && bank && GameStatus.Lines.TryGetValue("~grass view", out var gv)) GameStatus.Lines["~riverbank grass"] = "riverbank " + gv;
+                if (phase == 5 && bank && !lake && GameStatus.Lines.TryGetValue("~grass view", out var gv)) GameStatus.Lines["~riverbank grass"] = "riverbank " + gv;
                 if (phase == 5 && !bank && Bank(cam)) { bank = true; wait = 180; return; }
+                if (phase == 5 && !lake && AimLake(cam)) { lake = true; wait = 180; return; }
                 wait = 0;
                 phase++;
             }
@@ -188,10 +190,18 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, name);
                 if (phase == 7) GameStatus.Lines["~bench rock"] = Bench(cam, "rock close-up");
                 if (phase == 7) GameStatus.Lines["~bench rock shadows"] = ShadowBench(cam, "rock close-up", false);
+                if (phase == 7)
+                {
+                    lows.Add(("rock", cam.transform.position, cam.transform.rotation));
+                    lows.Add(("cliff", cam.transform.position, cam.transform.rotation));
+                    Vector3 fwd = cam.transform.forward, at = cam.transform.position + fwd * 12f, back = cam.transform.position - new Vector3(fwd.x, 0, fwd.z).normalized * 30f + Vector3.up * 10f;
+                    lows.Add(("cliff-wide", back, Quaternion.LookRotation(at - back)));
+                }
                 if (phase == 8)
                 {
                     GameStatus.Lines["~bench grass"] = Bench(cam, "grass close-up");
                     GameStatus.Lines["~bench grass blades"] = GrassViewSystem.Counts();
+                    lows.Add(("grass", cam.transform.position, cam.transform.rotation));
                     GrassViewSystem.Rescatter = true;
                     GameStatus.Lines["~bench grass moving"] = Bench(cam, "grass close-up rescattering grass every frame");
                     GrassViewSystem.Rescatter = false;
@@ -295,9 +305,37 @@ namespace Stabby.Game.Editor
                 if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
+                if (phase == 16) lows.Add((name, cam.transform.position, cam.transform.rotation));
                 wait = 0;
                 phase++;
             }
+            while (phase >= 18 && phase <= 21)
+            {
+                string name = FoliageShots[phase - 18];
+                if (wait == 0)
+                {
+                    if (!AimFoliage(cam, FoliageRanges[phase - 18])) { GameStatus.Lines["~" + name] = "no foliage placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 19)
+                    GameStatus.Lines["~bench trees"] = FoliageBench(cam, "trees filling the view");
+                if (phase == 20)
+                {
+                    AimFoliage(cam, 3);
+                    Shot(cam, dir, "foliage-bench");
+                    GameStatus.Lines["~bench foliage"] = FoliageBench(cam, "foliage looking down on the densest bushes");
+                    AimFoliage(cam, 1);
+                }
+                wait = 0;
+                phase++;
+            }
+            if (!castDone) { job = CastTour(cam, dir); castDone = true; }
+            if (job != null && job.MoveNext()) return;
+            job = null;
             GameStatus.Lines["~prediction"] = Prediction();
             GameStatus.Lines["~spikes"] = SpikeProbe.Report();
             File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -445,6 +483,41 @@ namespace Stabby.Game.Editor
             return false;
         }
 
+        static bool AimLake(Camera cam)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
+                if (map == null) continue;
+                Lake pick = null;
+                foreach (var l in map.Water.Lakes) if (pick == null || l.Cells.Count > pick.Cells.Count) pick = l;
+                if (pick == null) return false;
+                int n = map.Config.Size, edge = -1;
+                float cm = map.Config.CellMeters, bestD = float.MaxValue;
+                var mid = Vector2.zero;
+                foreach (int i in pick.Cells) mid += new Vector2(i % n, i / n);
+                mid = mid / pick.Cells.Count * cm;
+                foreach (int i in pick.Cells)
+                {
+                    int x = i % n, z = i / n;
+                    if (x < 1 || z < 1 || x >= n - 1 || z >= n - 1) continue;
+                    if (map.Water.LakeId[i + 1] == pick.Id && map.Water.LakeId[i - 1] == pick.Id && map.Water.LakeId[i + n] == pick.Id && map.Water.LakeId[i - n] == pick.Id) continue;
+                    float d = (new Vector2(x * cm, z * cm) - new Vector2(home.x, home.z)).sqrMagnitude;
+                    if (d < bestD) { bestD = d; edge = i; }
+                }
+                if (edge < 0) return false;
+                var shore = new Vector2(edge % n * cm, edge / n * cm);
+                var dir = (mid - shore).sqrMagnitude > 1f ? (mid - shore).normalized : Vector2.right;
+                var eye = new Vector3(shore.x - dir.x * 25f, 0, shore.y - dir.y * 25f);
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z), pick.Level) + 6f;
+                var target = new Vector3(shore.x + dir.x * 60f, pick.Level, shore.y + dir.y * 60f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim lake"] = $"lake {pick.Id} ({pick.Cells.Count} cells) shore at {shore.x:F0},{shore.y:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
+
         static bool Bank(Camera cam)
         {
             foreach (var w in Unity.Entities.World.All)
@@ -544,6 +617,121 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static readonly float[] FoliageBack = { 2.4f, 3.2f, 60f, 5f, 1.7f }, FoliageUp = { 0.5f, 0.35f, 14f, 7f, 0.1f };
+        static readonly int[] FoliageRanges = { 0, 4, 1, 2 };
+        static readonly string[] FoliageShots = { "foliage-close", "tree-close", "foliage-mid", "foliage-far" };
+
+        static bool AimFoliage(Camera cam, int range)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var map = w.GetExistingSystemManaged<ClientMapSystem>().Map;
+                float span = WorldChunks.Size * map.Config.CellMeters, best = float.MaxValue;
+                int n = field.ChunksAcross;
+                var near = new System.Collections.Generic.List<ObjectInstance>();
+                for (int cz = 0; cz < n; cz++)
+                    for (int cx = 0; cx < n; cx++)
+                    {
+                        if (Mathf.Abs((cx + 0.5f) * span - home.x) > span * 3f || Mathf.Abs((cz + 0.5f) * span - home.z) > span * 3f) continue;
+                        foreach (var o in field.Chunk(cx, cz))
+                            if (field.Library.Objects[o.Def].Parts.Exists(p => range == 4 ? p.Shape >= ObjectPart.Broadleaf : range == 0 || range == 3 ? p.Shape == ObjectPart.Shrub : ObjectPart.IsFoliage(p.Shape))) near.Add(o);
+                    }
+                if (near.Count == 0) return false;
+                bool scaled = range == 0 || range == 4;
+                ObjectInstance pick = default;
+                int crowd = 0;
+                var cells = new System.Collections.Generic.Dictionary<long, int>();
+                long Cell(float x, float z) => ((long)Mathf.FloorToInt(x / 12f) << 32) ^ (uint)Mathf.FloorToInt(z / 12f);
+                foreach (var o in near) { long c = Cell(o.X, o.Z); cells.TryGetValue(c, out int k); cells[c] = k + 1; }
+                bool clear = range == 1 || range == 4;
+                if (clear) scaled = true;
+                var ranked = new System.Collections.Generic.List<(float score, ObjectInstance o, int around)>();
+                foreach (var o in near)
+                {
+                    int around = cells[Cell(o.X, o.Z)];
+                    if (range == 1 && field.Library.Objects[o.Def].Parts.TrueForAll(p => p.Shape < ObjectPart.Broadleaf)) continue;
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude - 40f * Mathf.Min(around, 12) - 30f * o.Size;
+                    ranked.Add((score, o, around));
+                    if (score < best) { best = score; pick = o; crowd = around; }
+                }
+                if (ranked.Count == 0) return false;
+                var dirXZ = new Vector3(-0.77f, 0, -0.64f);
+                float BackOf(ObjectInstance o) => FoliageBack[range] * (scaled ? Mathf.Max(1f, o.Size) : 1f);
+                if (clear)
+                {
+                    ranked.Sort((a, b) => a.score.CompareTo(b.score));
+                    bool found = false;
+                    for (int r = 0; r < Mathf.Min(ranked.Count, 60) && !found; r++)
+                        for (int a = 0; a < 16 && !found; a++)
+                        {
+                            var c = ranked[r].o;
+                            var d = Quaternion.Euler(0, a * 22.5f, 0) * new Vector3(-0.77f, 0, -0.64f);
+                            float len = BackOf(c);
+                            bool open = true;
+                            foreach (var o in near)
+                            {
+                                if (o.Id == c.Id) continue;
+                                var rel = new Vector2(o.X - c.X, o.Z - c.Z);
+                                float along = Vector2.Dot(rel, new Vector2(d.x, d.z));
+                                if (along < -1f || along > len + o.Size * 0.4f) continue;
+                                float off = (rel - new Vector2(d.x, d.z) * along).magnitude;
+                                if (off < 0.4f * o.Size + 0.25f * c.Size) { open = false; break; }
+                            }
+                            if (open) { pick = c; crowd = ranked[r].around; dirXZ = d; found = true; }
+                        }
+                }
+                var target = new Vector3(pick.X, pick.Y + pick.Size * 0.45f, pick.Z);
+                float back = BackOf(pick);
+                var eye = target + dirXZ * back + Vector3.up * FoliageUp[range] * (scaled ? Mathf.Max(1f, pick.Size) : 1f);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + (range == 2 ? 10f : 1.2f));
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim foliage " + range] = $"{field.Library.Objects[pick.Def].Id} size {pick.Size:F1} m at {pick.X:F0},{pick.Z:F0} with {crowd} foliage in its 12 m cell, eye {back:F0} m back";
+                return true;
+            }
+            return false;
+        }
+
+        static string FoliageBench(Camera cam, string label)
+        {
+            int seen = 0, total = 0;
+            var planes = GeometryUtility.CalculateFrustumPlanes(cam);
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var c = cam.transform.position;
+                float span = WorldChunks.Size * w.GetExistingSystemManaged<ClientMapSystem>().Map.Config.CellMeters;
+                for (int cz = 0; cz < field.ChunksAcross; cz++)
+                    for (int cx = 0; cx < field.ChunksAcross; cx++)
+                    {
+                        if (Mathf.Abs((cx + 0.5f) * span - c.x) > 0.5f * span + 300f || Mathf.Abs((cz + 0.5f) * span - c.z) > 0.5f * span + 300f) continue;
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            if (!field.Library.Objects[o.Def].Parts.Exists(p => ObjectPart.IsFoliage(p.Shape))) continue;
+                            if ((new Vector3(o.X, o.Y, o.Z) - c).sqrMagnitude > 300f * 300f) continue;
+                            total++;
+                            if (GeometryUtility.TestPlanesAABB(planes, new Bounds(new Vector3(o.X, o.Y + 0.5f * o.Size, o.Z), Vector3.one * o.Size))) seen++;
+                        }
+                    }
+            }
+            int mask = cam.cullingMask;
+            double[] off = new double[3], on = new double[3];
+            for (int k = 0; k < 3; k++)
+            {
+                cam.cullingMask = mask & ~(1 << ObjectViewSystem.FoliageLayer);
+                Shader.SetGlobalFloat("_StabbyFoliageOff", 1);
+                off[k] = BenchAt(cam, 1920, 1080);
+                cam.cullingMask = mask;
+                Shader.SetGlobalFloat("_StabbyFoliageOff", 0);
+                on[k] = BenchAt(cam, 1920, 1080);
+            }
+            double a = off.Min(), b = on.Min();
+            return $"bench {label} 1080p (ms, foliage culled/drawn, best of 3): {a:F2}/{b:F2}, foliage {b - a:F2} ms; {seen} of {total} foliage objects within 300 m in the frustum";
         }
 
         static bool AimBoulder(Camera cam, bool close)
@@ -699,8 +887,81 @@ namespace Stabby.Game.Editor
             return sb.ToString();
         }
 
+        static readonly System.Collections.Generic.List<(string, Vector3, Quaternion)> poses = new System.Collections.Generic.List<(string, Vector3, Quaternion)>(), lows = new System.Collections.Generic.List<(string, Vector3, Quaternion)>();
+        static System.Collections.IEnumerator job;
+        static bool castDone;
+
+        static System.Collections.IEnumerator Settle(int frames)
+        {
+            for (int k = 0; k < frames || (GameStatus.TerrainBehind > 0 && k < 1800); k++) yield return null;
+        }
+
+        static System.Collections.IEnumerator CastTour(Camera cam, string dir)
+        {
+            foreach (var (label, pos, rot) in poses)
+            {
+                cam.transform.SetPositionAndRotation(pos, rot);
+                for (var w = Settle(180); w.MoveNext();) yield return null;
+                var ms = new double[2];
+                for (int k = 0; k < 4; k++)
+                {
+                    TerrainViewSystem.Casting = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    ms[k & 1] += BenchAt(cam, 1920, 1080) / 2;
+                }
+                GameStatus.Lines.TryGetValue("terrain", out var t);
+                GameStatus.Lines["~bench " + label + " terrain casting"] = $"bench {label} 1080p terrain casting off/on (ms, full): {ms[0]:F2}/{ms[1]:F2}; {t}";
+                var urp = (UniversalRenderPipelineAsset)UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+                bool keepCopy = urp.supportsCameraOpaqueTexture;
+                var copy = new double[2];
+                for (int k = 0; k < 8; k++)
+                {
+                    urp.supportsCameraOpaqueTexture = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    copy[k & 1] += BenchAt(cam, 1920, 1080) / 4;
+                }
+                urp.supportsCameraOpaqueTexture = keepCopy;
+                GameStatus.Lines["~bench " + label + " opaque copy"] = $"bench {label} 1080p opaque copy off/on (ms, full): {copy[0]:F2}/{copy[1]:F2}";
+                var sunk = new double[4];
+                for (int k = 0; k < 8; k++)
+                {
+                    TerrainViewSystem.HideSunk = (k & 1) == 1;
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    sunk[k & 1] += BenchAt(cam, 1920, 1080) / 4;
+                    sunk[2 + (k & 1)] += BenchAt(cam, 3840, 2160) / 4;
+                }
+                GameStatus.Lines.TryGetValue("terrain", out t);
+                GameStatus.Lines["~bench " + label + " sunk nodes"] = $"bench {label} sunk nodes drawn/hidden (ms, full): 1080p {sunk[0]:F2}/{sunk[1]:F2}, 4K {sunk[2]:F2}/{sunk[3]:F2}; {t}";
+            }
+            var sun = Object.FindFirstObjectByType<Light>();
+            var keep = sun.transform.rotation;
+            foreach (var (name, pos, rot) in lows)
+            {
+                cam.transform.SetPositionAndRotation(pos, rot);
+                sun.transform.rotation = name == "rock" ? keep : Quaternion.Euler(name == "grass" ? 6f : 14f, rot.eulerAngles.y + (name == "grass" ? 160f : 100f), 0);
+                for (var w = Settle(180); w.MoveNext();) yield return null;
+                string[] tags = name == "rock" ? new[] { "-nocast", "-cast", "-detailoff", "-nojoints" } : new[] { "-low-nocast", "-low", "-low-detailoff", "-low-nojoints" };
+                var rockB = Shader.GetGlobalVector("_StabbyRockB");
+                for (int c = 0; c < (name == "cliff" || name == "rock" ? tags.Length : 2); c++)
+                {
+                    TerrainViewSystem.Casting = c > 0;
+                    bool rock = name == "rock";
+                    Shader.SetGlobalFloat("_StabbyDetailOff", c == 2 ? 1 : 0);
+                    for (var w = Settle(4); w.MoveNext();) yield return null;
+                    Shader.SetGlobalVector("_StabbyRockB", c == 3 ? new Vector4(rockB.x, rockB.y, rockB.z, 0) : rockB);
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, (rock ? "close-rock" : name) + tags[c]);
+                }
+                Shader.SetGlobalFloat("_StabbyDetailOff", 0);
+                Shader.SetGlobalVector("_StabbyRockB", rockB);
+            }
+            sun.transform.rotation = keep;
+            TerrainViewSystem.Casting = true;
+        }
+
         static string ShadowBench(Camera cam, string label, bool blades)
         {
+            poses.Add((label, cam.transform.position, cam.transform.rotation));
             var sun = Object.FindFirstObjectByType<Light>();
             var modes = new[] { LightShadows.None, LightShadows.Hard };
             var sb = new System.Text.StringBuilder($"bench {label} 1080p shadows off/on (ms, full):");
