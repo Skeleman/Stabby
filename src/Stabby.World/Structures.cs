@@ -21,7 +21,7 @@ namespace Stabby.World
         public const int Tiers = 3;
         public const float SeatM = 0.5f;
         public const float WallHeight = 0.2f, WallBase = 0.12f, WallBatter = 0.3f, WallColumnStep = 0.05f, Squareness = 0.45f;
-        public const float WallSpan = 0.96f, WallOverlap = 0.012f, GateSpan = 0.55f;
+        public const float WallSpan = 0.96f, WallOverlap = 0.012f, GateSpan = 0.55f, FootReach = 0.12f;
         static readonly int[] TierRock = { 1, 0, 0 };
         static readonly float[] Dir =
         {

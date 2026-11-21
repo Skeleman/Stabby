@@ -206,7 +206,12 @@ namespace Stabby.Content
             var terrain = root.Object("terrain");
             if (terrain != null)
             {
-                lib.Terrain = new TerrainViewDef { QuadPixels = terrain.Float("quadPixels", new TerrainViewDef().QuadPixels) };
+                var t0 = new TerrainViewDef();
+                lib.Terrain = new TerrainViewDef
+                {
+                    QuadPixels = terrain.Float("quadPixels", t0.QuadPixels), ContactPixels = terrain.Float("contactPixels", t0.ContactPixels),
+                    ContactTexelPixels = terrain.Float("contactTexelPixels", t0.ContactTexelPixels),
+                };
                 terrain.End();
             }
             var foliage = root.Object("foliage");

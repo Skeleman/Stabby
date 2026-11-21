@@ -13,4 +13,3 @@ GrassViewSystem dispatches grass compute and an indirect draw on managed Graphic
 ServerObjectDeltaSystem validates and replicates object removals against the managed ObjectField at the network boundary
 ClientObjectDeltaSystem resolves replicated object removals against the managed ObjectField and reads UnityEngine.Input
 ContactFieldSystem splats object footprints into the ground contact texture off the main thread and uploads it
-ContactFieldSystem.OnUpdate recentres its fixed texel window after a fraction of the window span; it gates no detail

@@ -11,7 +11,9 @@
       "required": ["quadPixels"],
       "additionalProperties": false,
       "properties": {
-        "quadPixels": { "type": "number", "minimum": 1, "maximum": 100 }
+        "quadPixels": { "type": "number", "minimum": 1, "maximum": 100 },
+        "contactPixels": { "type": "number", "minimum": 1, "maximum": 100 },
+        "contactTexelPixels": { "type": "number", "minimum": 0.1, "maximum": 20 }
       }
     },
     "foliage": {

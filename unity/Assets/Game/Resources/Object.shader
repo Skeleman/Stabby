@@ -190,7 +190,8 @@ Shader "Stabby/Object"
                     {
                         float2 o2 = TmOrigin(_WorldSpaceCameraPos);
                         tmO = float3(o2.x, 0, o2.y);
-                        TmOut m = TmRock(wp - tmO, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy, 1);
+                        float3 piece = i.tone.x > 0.25 ? float3(i.tone.y * 31.7 + i.tone.w * 7.3, 0, i.tone.z * 29.1 - i.tone.w * 11.9) : 0;
+                        TmOut m = TmRock(wp - tmO + piece, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy, 1);
                         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wp.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
                         TmStoneCover(m, wp - tmO, n, cw / max(dot(cw, 1), 1e-3), fp, 1, 1);
                         float3 g = m.grad - n * dot(m.grad, n);

@@ -36,13 +36,23 @@ namespace Stabby.World
 
     public sealed class TerrainViewDef
     {
-        public float QuadPixels = 10.8f;
+        public const float ContactSizeM = 1f, ContactMaxTexelM = 1f;
+        public float QuadPixels = 10.8f, ContactPixels = 7.3f, ContactTexelPixels = 1.8f;
 
         public float Allowed(float pixelsPerMetre, float quality) => QuadPixels / (pixelsPerMetre * Math.Max(quality, 0.1f));
+
+        public void ContactWindow(float pixelsPerMetre, float quality, int texels, out float radiusM, out float texelM)
+        {
+            float q = Math.Max(quality, 0.1f);
+            radiusM = Math.Min(Detail.Reach(ContactSizeM, ContactPixels / q, pixelsPerMetre), 0.5f * texels * ContactMaxTexelM);
+            texelM = Math.Max(ContactTexelPixels / q * radiusM / pixelsPerMetre, 2f * radiusM / texels);
+        }
 
         public void Validate(List<string> errors)
         {
             if (QuadPixels < 1 || QuadPixels > 100) errors.Add("terrain: quadPixels must be 1-100");
+            if (ContactPixels < 1 || ContactPixels > 100) errors.Add("terrain: contactPixels must be 1-100");
+            if (ContactTexelPixels < 0.1f || ContactTexelPixels > 20) errors.Add("terrain: contactTexelPixels must be 0.1-20");
         }
     }
 
