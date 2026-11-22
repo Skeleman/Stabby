@@ -472,6 +472,8 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
                 clip(fade.x - Bayer(i.positionCS.xy));
+                bool flat = i.tone.w > 15.5;
+                i.tone.w -= flat ? 16 : 0;
                 float4 base = _BaseColor;
                 float3 wp = i.positionWS;
                 float la = length(ddx(wp)), lb = length(ddy(wp));
@@ -565,7 +567,7 @@ Shader "Stabby/Object"
                 }
                 float size = max(fade.w, 0.1), ground = fade.z;
                 float4x4 mm = UNITY_MATRIX_M;
-                float thick = abs(mm._m10) + abs(mm._m11) + abs(mm._m12);
+                float thick = flat ? 0.05 : abs(mm._m10) + abs(mm._m11) + abs(mm._m12);
                 [branch] if (_StabbyFieldUV.x > 0)
                 {
                     ground += ContactBed(wp.xz) - ContactBed(i.origin.xz);

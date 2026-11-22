@@ -19,6 +19,7 @@ namespace Stabby.Game.Editor
         const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait, impStep;
         static readonly string only = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY");
+        static readonly string variantOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_VARIANT");
         static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -1437,7 +1438,7 @@ namespace Stabby.Game.Editor
                 float best = float.MaxValue;
                 foreach (var o in field.Discoveries())
                 {
-                    if (field.Library.Objects[o.Def].Parts[0].Shape != shape) continue;
+                    if (field.Library.Objects[o.Def].Parts[0].Shape != shape || (variantOnly == "niche" && !Structures.WaysideNiche(ObjectMeshes.Key(field.Library.Objects[o.Def].Id, 0, o.Variant))) || (variantOnly != null && variantOnly != "niche" && o.Variant.ToString() != variantOnly)) continue;
                     float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
                     if (score < best) { best = score; pick = o; }
                 }
@@ -1453,7 +1454,7 @@ namespace Stabby.Game.Editor
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~aim " + shots[mode]] = $"{label} variant {pick.Variant} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
+                GameStatus.Lines["~aim " + shots[mode]] = $"{label} variant {pick.Variant}{(shape == ObjectPart.Wayside && Structures.WaysideNiche(ObjectMeshes.Key(field.Library.Objects[pick.Def].Id, 0, pick.Variant)) ? " niche" : "")} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
                 return true;
             }
             return false;
