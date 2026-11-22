@@ -93,9 +93,7 @@ Shader "Stabby/Object"
                 {
                     float3 org = UNITY_MATRIX_M._m03_m13_m23;
                     p.positionWS.y += _Fade.z - org.y + ContactBed(p.positionWS.xz) - ContactBed(org.xz);
-                    float yf = floor(i.tone.w);
-                    float pull = yf > 3.5 && yf < 7.5 && abs(i.tone.y) + abs(i.tone.z) < 0.3 ? 0.1 : 0;
-                    p.positionCS = TransformWorldToHClip(p.positionWS + normalize(_WorldSpaceCameraPos - p.positionWS) * pull);
+                    p.positionCS = TransformWorldToHClip(p.positionWS);
                 }
                 o.positionCS = p.positionCS;
                 o.positionWS = p.positionWS;
