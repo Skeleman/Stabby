@@ -3,22 +3,59 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
+    public sealed class MesaSketch
+    {
+        public float X, Z, Half, Top, Cap, Base, Hi, Spread, Tx, Tz, Flat;
+        public uint Seed;
+        public float[] L;
+        public bool Butte;
+    }
+
     public static class Mesas
     {
+        public static readonly string[] Biomes = { "desert", "cold-desert", "steppe", "shrubland" };
         public const float SpacingM = 640f, GroupGapM = 3000f, AridRainMm = 700f, AridMinTempC = 0f, SmallScale = 0.6f;
         public const int MaxGroups = 4, Tries = 6, Lobes = 3, MaxButtes = 3;
-        public const float MinHalfM = 110f, MaxHalfM = 300f, MinRiseM = 75f, MaxRiseM = 130f, ReliefShare = 1.2f, HeadroomShare = 0.5f;
+        public const float MinHalfM = 95f, MaxHalfM = 190f, MinAcrossM = 150f, MaxAcrossM = 600f, MinRiseM = 75f, MaxRiseM = 130f, ReliefShare = 1.2f, HeadroomShare = 0.5f;
         public const float CapShare = 0.45f, CliffGrade = 4.5f, TalusSpread = 2.3f, OutlineNoise = 0.18f, NotchM = 7f, TopNoiseM = 1.2f, MaxTilt = 0.008f;
         public const float ButteMinHalfM = 26f, ButteMaxHalfM = 42f, ButteCapShare = 0.6f, ButteTalusSpread = 1.6f, ButteMinGapM = 50f, ButteMaxGapM = 200f, ButteSlack = 5f;
         public const float CoastPadM = 100f, FlowAreaM2 = 1.5e6f, ValleyMax = 0.2f, GullyShare = 0.12f, SampleM = 20f, PedimentShare = 0.6f, PedimentFlat = 0.8f;
+        public const float LipChance = 0.8f, LipMinR = 16f, LipMaxR = 22f, LipMinLength = 30f, LipMaxLength = 60f, LipMinT = 4f, LipMaxT = 8f, LipMinDrop = 25f, LipFlatM = 4f, LipRimM = 2f, LipStepM = 2f;
 
-        public static readonly int[] Rej = new int[12];
-
-        sealed class Body
+        public static void Lip(GeneratedWorld w, TerrainDetail detail, bool[] biomes, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
-            public float X, Z, Half, Top, Cap, Base, Hi, Spread, Tx, Tz, Flat;
-            public uint Seed;
-            public float[] L;
+            float roll = r.NextFloat(), radius = r.Range(LipMinR, LipMaxR), length = r.Range(LipMinLength, LipMaxLength), thick = r.Range(LipMinT, LipMaxT);
+            if (roll >= LipChance) return;
+            int n = w.Config.Size, best = -1, bestDir = 0, cells = Features.TileCells, margin = Features.MarginCells;
+            float cm = w.Config.CellMeters, bestDrop = Math.Min(LipMinDrop, LipMinDrop / Features.ReferenceCellM * cm);
+            for (int y = ty * cells + margin; y < (ty + 1) * cells - margin; y++)
+                for (int x = tx * cells + margin; x < (tx + 1) * cells - margin; x++)
+                {
+                    int i = y * n + x, b = w.Biome[i];
+                    if (b < 0 || !biomes[b] || !Features.Dry(w, i)) continue;
+                    for (int k = 0; k < 8; k += 2)
+                    {
+                        int j = i + Grid.DY[k] * n + Grid.DX[k], back = i - Grid.DY[k] * n - Grid.DX[k];
+                        float drop = w.Height[i] - w.Height[j];
+                        if (drop > bestDrop && Math.Abs(w.Height[back] - w.Height[i]) <= LipFlatM && Features.Dry(w, j)) { bestDrop = drop; best = i; bestDir = k; }
+                    }
+                }
+            if (best < 0) return;
+            float gx = Grid.DX[bestDir], gz = Grid.DY[bestDir], bx = best % n, bz = best / n, top = detail.HeightAt(bx, bz);
+            float y0 = top - thick - radius, foot = -1f;
+            for (float d = 0f; d <= cm; d += LipStepM)
+                if (detail.HeightAt(bx + gx * d / cm, bz + gz * d / cm) <= y0) { foot = d; break; }
+            if (foot < 0f) return;
+            float axis = foot - 0.5f * radius, cx = bx + gx * axis / cm, cz = bz + gz * axis / cm;
+            if (detail.HeightAt(cx - gx * radius / cm, cz - gz * radius / cm) < y0 + radius + thick - LipRimM) return;
+            if (detail.HeightAt(bx + gx * (foot + radius) / cm, bz + gz * (foot + radius) / cm) > y0 - 0.3f * radius) return;
+            float half = length * 0.5f;
+            output.Add(new FeatureEdit
+            {
+                Kind = FeatureEdit.Carve, Shape = FeatureEdit.Lip, R = radius,
+                Ax = cx * cm - gz * half, Az = cz * cm + gx * half, Ay = y0,
+                Bx = cx * cm + gz * half, Bz = cz * cm - gx * half, By = y0,
+            });
         }
 
         public static void Raise(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate)
@@ -52,10 +89,11 @@ namespace Stabby.World
                     float rise = Mix(MinRiseM, MaxRiseM, v[2 * Tries + 1]);
                     if (!Site(c, s, sea, h, climate, b, Reach(b, rise), rise)) continue;
                     flow ??= Flow(c, sea, h);
-                    if (Wet(c, flow, b.X, b.Z, Core(b, rise))) { Rej[7]++; continue; }
+                    if (Wet(c, flow, b.X, b.Z, Core(b, rise))) continue;
                     b.Top = Math.Max(b.Base + rise, b.Hi + HeadroomShare * rise);
                     b.Cap = CapShare * (b.Top - b.Base);
                     Stamp(c, sea, h, b);
+                    s.Mesas.Add(b);
                     Buttes(c, s, sea, h, climate, flow, b, v, 2 * Tries + 5 + 4 * (Lobes - 1));
                     placed.Add(x); placed.Add(z);
                     break;
@@ -83,10 +121,10 @@ namespace Stabby.World
             x /= l; z /= l;
         }
 
-        static Body Main(float x, float z, float[] v, int o, float scale)
+        static MesaSketch Main(float x, float z, float[] v, int o, float scale)
         {
             float half = Math.Max(MinHalfM, scale * Mix(MinHalfM, MaxHalfM, v[o]));
-            var b = new Body { X = x, Z = z, Half = half, Spread = TalusSpread, Flat = PedimentFlat, Tx = MaxTilt * (2f * v[o + 2] - 1f), Tz = MaxTilt * (2f * v[o + 3] - 1f), Seed = (uint)(v[o + 4] * 16777216f) * 0x9E3779B1u + 0x2545F491u, L = new float[3 * Lobes] };
+            var b = new MesaSketch { X = x, Z = z, Half = half, Spread = TalusSpread, Flat = PedimentFlat, Tx = MaxTilt * (2f * v[o + 2] - 1f), Tz = MaxTilt * (2f * v[o + 3] - 1f), Seed = (uint)(v[o + 4] * 16777216f) * 0x9E3779B1u + 0x2545F491u, L = new float[3 * Lobes] };
             b.L[0] = x; b.L[1] = z; b.L[2] = 0.85f * half;
             for (int k = 1; k < Lobes; k++)
             {
@@ -98,7 +136,7 @@ namespace Stabby.World
             return b;
         }
 
-        static float Extent(Body b)
+        public static float Extent(MesaSketch b)
         {
             float e = 0f;
             for (int k = 0; k < b.L.Length; k += 3)
@@ -109,11 +147,17 @@ namespace Stabby.World
             return e + OutlineNoise * b.Half + NotchM;
         }
 
-        static float Core(Body b, float rise) => Extent(b) + rise / CliffGrade + b.Spread * rise;
+        static float Core(MesaSketch b, float rise) => Extent(b) + rise / CliffGrade + b.Spread * rise;
 
-        static float Reach(Body b, float rise) => Core(b, rise) + (b.Flat > 0f ? PedimentShare : 0f) * b.Spread * rise;
+        public static float Toe(MesaSketch b, float rise)
+        {
+            float fall = b.Top - b.Cap - b.Base;
+            return b.Cap / CliffGrade + (fall > rise ? b.Spread * fall * (1f - (float)Math.Sqrt(rise / fall)) : 0f);
+        }
 
-        static float Dist(Body b, float x, float z)
+        public static float Reach(MesaSketch b, float rise) => Core(b, rise) + (b.Flat > 0f ? PedimentShare : 0f) * b.Spread * rise;
+
+        public static float Dist(MesaSketch b, float x, float z)
         {
             float d = float.MaxValue;
             for (int k = 0; k < b.L.Length; k += 3)
@@ -125,7 +169,7 @@ namespace Stabby.World
             return d + OutlineNoise * b.Half * Noise.Fbm(b.Seed, x * f, z * f, 3) + NotchM * Noise.Fbm(b.Seed ^ 0x5BD1E995u, x / 40f, z / 40f, 2);
         }
 
-        static float Profile(Body b, float x, float z, float d)
+        static float Profile(MesaSketch b, float x, float z, float d)
         {
             float top = b.Top + b.Tx * (x - b.X) + b.Tz * (z - b.Z) + TopNoiseM * Noise.Fbm(b.Seed ^ 0x27D4EB2Fu, x / 60f, z / 60f, 2);
             if (d <= 0f) return top;
@@ -139,7 +183,7 @@ namespace Stabby.World
             return b.Base + fall * w * w - GullyShare * fall * 4f * u * w * Math.Max(0f, Noise.Fbm(b.Seed ^ 0x165667B1u, x / 30f, z / 30f, 2));
         }
 
-        static void Stamp(WorldConfig c, bool[] sea, float[] h, Body b)
+        static void Stamp(WorldConfig c, bool[] sea, float[] h, MesaSketch b)
         {
             int n = c.Size;
             float cm = c.CellMeters, reach = Reach(b, b.Top - b.Base);
@@ -168,11 +212,11 @@ namespace Stabby.World
             int i = y * n + x;
             if (climate.PrecipitationMm[i] <= AridRainMm && climate.TemperatureC[i] >= AridMinTempC) return true;
             foreach (var g in s.Regions)
-                if (Array.IndexOf(Landforms.ButteBiomes, g.Biome) >= 0 && (x - g.X) * (x - g.X) + (y - g.Y) * (y - g.Y) <= g.Radius * g.Radius) return true;
+                if (Array.IndexOf(Biomes, g.Biome) >= 0 && (x - g.X) * (x - g.X) + (y - g.Y) * (y - g.Y) <= g.Radius * g.Radius) return true;
             return false;
         }
 
-        static bool Site(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate, Body b, float reach, float rise)
+        static bool Site(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate, MesaSketch b, float reach, float rise)
         {
             int n = c.Size;
             float cm = c.CellMeters;
@@ -180,19 +224,19 @@ namespace Stabby.World
             float core = Core(b, rise);
             int coast = (int)Math.Ceiling((c.BeachMeters + CoastPadM + core) / cm);
             int edge = Math.Max(coast, (int)Math.Ceiling(reach / cm));
-            if (cx - edge < 1 || cy - edge < 1 || cx + edge >= n - 1 || cy + edge >= n - 1) { Rej[0]++; return false; }
-            if (!Arid(s, climate, n, cx, cy)) { Rej[1]++; return false; }
+            if (cx - edge < 1 || cy - edge < 1 || cx + edge >= n - 1 || cy + edge >= n - 1) return false;
+            if (!Arid(s, climate, n, cx, cy)) return false;
             int hr = (int)Math.Round(b.Half / cm);
             int wet = 0;
             for (int k = 0; k < 8; k++)
                 if (!Arid(s, climate, n, cx + Grid.DX[k] * hr, cy + Grid.DY[k] * hr)) wet++;
-            if (wet > 3) { Rej[2]++; return false; }
+            if (wet > 3) return false;
             foreach (var lake in s.Lakes)
-                if (lake.Gap(cx, cy, 1) < core / cm) { Rej[3]++; return false; }
+                if (lake.Gap(cx, cy, 1) < core / cm) return false;
             int step = Math.Max(1, coast / 24);
             for (int dy = -coast; dy <= coast; dy += step)
                 for (int dx = -coast; dx <= coast; dx += step)
-                    if (dx * dx + dy * dy <= coast * coast && sea[(cy + dy) * n + cx + dx]) { Rej[4]++; return false; }
+                    if (dx * dx + dy * dy <= coast * coast && sea[(cy + dy) * n + cx + dx]) return false;
             int rr = (int)Math.Ceiling(reach / cm), inner = (int)Math.Ceiling(1.2f * b.Half / cm);
             step = Math.Max(1, (int)Math.Round(SampleM / cm));
             float lo = float.MaxValue, hi = float.MinValue;
@@ -204,15 +248,12 @@ namespace Stabby.World
                     int d2 = dx * dx + dy * dy;
                     if (d2 > rr * rr) continue;
                     int i = (cy + dy) * n + cx + dx;
-                    if (s.Landmark[i]) { Rej[5]++; return false; }
-                    if (s.Plateau[i] > 0f) { Rej[8]++; return false; }
-                    if (s.Cliff[i] > 0f) { Rej[9]++; return false; }
-                    if (s.Valley[i] > ValleyMax) { Rej[10]++; return false; }
+                    if (s.Landmark[i] || s.Plateau[i] > 0f || s.Cliff[i] > 0f || s.Valley[i] > ValleyMax) return false;
                     if (d2 > inner * inner) continue;
                     lo = Math.Min(lo, h[i]); hi = Math.Max(hi, h[i]);
                     sum += h[i]; count++;
                 }
-            if (count == 0 || hi - lo > ReliefShare * rise) { Rej[6]++; Rej[11] += (int)(hi - lo); return false; }
+            if (count == 0 || hi - lo > ReliefShare * rise) return false;
             b.Base = (float)(sum / count);
             b.Hi = hi;
             return true;
@@ -245,7 +286,7 @@ namespace Stabby.World
             return false;
         }
 
-        static void Buttes(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate, float[] flow, Body m, float[] v, int o)
+        static void Buttes(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate, float[] flow, MesaSketch m, float[] v, int o)
         {
             int count = (int)(v[o] * (MaxButtes + 1));
             float cm = c.CellMeters;
@@ -259,7 +300,7 @@ namespace Stabby.World
                 float half = Mix(ButteMinHalfM, ButteMaxHalfM, v[p + 3]), away = edge + m.Cap / CliffGrade + Mix(ButteMinGapM, ButteMaxGapM, v[p + 2]) + half;
                 float x = m.X + dx * away, z = m.Z + dz * away;
                 Dir(v[p + 6], v[p + 7], out float lx, out float lz);
-                var b = new Body { X = x, Z = z, Half = half, Spread = ButteTalusSpread, Tx = 0f, Tz = 0f, Seed = (uint)(v[p + 5] * 16777216f) * 0x85EBCA77u + 0x68E31DA4u, L = new float[6] };
+                var b = new MesaSketch { Butte = true, X = x, Z = z, Half = half, Spread = ButteTalusSpread, Tx = 0f, Tz = 0f, Seed = (uint)(v[p + 5] * 16777216f) * 0x85EBCA77u + 0x68E31DA4u, L = new float[6] };
                 b.L[0] = x; b.L[1] = z; b.L[2] = half;
                 b.L[3] = x + lx * 0.5f * half; b.L[4] = z + lz * 0.5f * half; b.L[5] = 0.7f * half;
                 float top = m.Top - ButteSlack * v[p + 4];
@@ -274,6 +315,7 @@ namespace Stabby.World
                 b.Top = top;
                 b.Cap = ButteCapShare * rise;
                 Stamp(c, sea, h, b);
+                s.Mesas.Add(b);
             }
         }
     }

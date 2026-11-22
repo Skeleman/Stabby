@@ -82,6 +82,7 @@ namespace Stabby.World
         public List<LandmassSketch> Lakes = new List<LandmassSketch>();
         public List<ShoreSketch> Shores = new List<ShoreSketch>();
         public List<HighlandSketch> Highlands = new List<HighlandSketch>();
+        public List<MesaSketch> Mesas = new List<MesaSketch>();
 
         public bool[] Land;
         public float[] Uplift;

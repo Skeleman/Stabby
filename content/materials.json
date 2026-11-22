@@ -127,6 +127,8 @@
     { "id": "spruce-needle",    "name": "Spruce needle",    "color": "#33503f" },
     { "id": "reed-leaf",        "name": "Reed leaf",        "color": "#5d6847" },
     { "id": "mushroom-cap",     "name": "Mushroom cap",     "color": "#b8a58a" },
+    { "id": "columnar-basalt",  "name": "Columnar basalt",  "color": "#5f5d5a" },
+    { "id": "rock-crystal",     "name": "Rock crystal",     "color": "#c3cbcc" },
     { "id": "lush-turf",        "name": "Lush turf",        "color": "#4f6b35" }
   ],
   "strata": [

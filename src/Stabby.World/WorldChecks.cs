@@ -106,6 +106,7 @@ namespace Stabby.World
                     if (!w.Sea[i] && w.Biome[i] < 0 && hy.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
 
             if (w.Sketch != null) CheckSketch(w, e);
+            if (w.Sketch != null) CheckMesas(w, e);
             CheckDetail(w, e);
             CheckNearField(w, e);
             CheckFalls(w, e);
@@ -575,7 +576,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.Lip ? "mesa lip" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -594,8 +595,6 @@ namespace Stabby.World
             float cm = w.Config.CellMeters, span = w.Config.Size * cm;
             int n = w.Config.Size;
             var count = new Dictionary<int, int>();
-            bool[] buttes = null, basalt = null;
-            int[] sea = null;
             foreach (var x in edits)
             {
                 if (!Landforms.Of(x.Shape)) continue;
@@ -611,13 +610,6 @@ namespace Stabby.World
                 for (int j = j0; j <= j1; j++)
                     for (int i = i0; i <= i1; i++)
                         if (x.Under(i * cm, j * cm) && !Features.Dry(w, j * n + i)) { e.Add(at + " stands in water"); return; }
-                int ci = Math.Min(n - 1, Math.Max(0, (int)Math.Round(0.5f * (x.Ax + x.Bx) / cm))), cj = Math.Min(n - 1, Math.Max(0, (int)Math.Round(0.5f * (x.Az + x.Bz) / cm)));
-                int cb = w.Biome == null ? -1 : w.Biome[cj * n + ci];
-                if (x.Shape == FeatureEdit.Butte && (cb < 0 || !(buttes ??= Landforms.BiomeMask(w, Landforms.ButteBiomes))[cb])) { e.Add(at + " stands outside dry open country"); return; }
-                if (x.Shape == FeatureEdit.Butte && (sea ??= Landforms.SeaDistance(w, Landforms.ButteCoastCells(w)))[cj * n + ci] * cm < w.Config.BeachMeters + x.R + x.W) { e.Add(at + " stands on the coast"); return; }
-                if (x.Shape == FeatureEdit.Butte && x.T > 0f && x.P < Landforms.ButteMinWall) { e.Add(at + " has slumped walls"); return; }
-                if (x.Shape == FeatureEdit.Basalt && x.W > 0f && !(basalt ??= Landforms.BasaltMask(w))[cj * n + ci]) { e.Add(at + " is neither highland nor coast"); return; }
-                if (x.Shape == FeatureEdit.Basalt && x.W > 0f && Landforms.Relief(w, ci, cj, Math.Max(1, (int)Math.Ceiling(x.W / cm))) > Landforms.BasaltFlat * (2f * x.H - Landforms.BasaltSink)) { e.Add(at + " is buried in a slope steeper than its rise"); return; }
                 foreach (var y in edits)
                     if (!Landforms.Of(y.Shape) && y.Shape != FeatureEdit.Boulder && Features.TileOf(y, cm) == tile
                         && x.MinX < y.MaxX && x.MaxX > y.MinX && x.MinY < y.MaxY && x.MaxY > y.MinY && x.MinZ < y.MaxZ && x.MaxZ > y.MinZ) { e.Add(at + " overlaps a terrain feature"); return; }
