@@ -57,42 +57,36 @@ namespace Stabby.Game.Editor
         static bool PickFarHerd(BlobAssetReference<CreaturePlanData> planRef, float2 player, double now, float despawn, out int herd, out Vector3 eye, out int members)
         {
             ref var plan = ref planRef.Value;
-            var ground = new CreatureGround { Plan = planRef };
             herd = -1;
             eye = default;
             members = 0;
-            float best = 0;
-            int last = int.MinValue;
-            for (int i = 0; i < plan.Spawns.Length; i++)
+            foreach (float limit in ReliefLimits)
             {
-                int h = CreaturePlan.HerdOf(plan.Spawns[i].Id);
-                if (h == last) continue;
-                last = h;
-                if (!PlanHerd(planRef, h, now, out var p, out int n, out int body) || n < 2) continue;
-                float d = math.distance(p, player);
-                if (d < 1.5f * despawn || d > 6f * despawn) continue;
-                PlanHerd(planRef, h, now + FarSimSeconds, out var p1, out _, out _);
-                PlanHerd(planRef, h, now + 2 * FarSimSeconds + FarAwaySeconds, out var p2, out _, out _);
-                float score = math.distance(p, p1) + math.distance(p1, p2) - d / (6f * despawn);
-                if (score <= best) continue;
-                float stand = plan.Wary[body].Alert * 1.4f;
-                var target = new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y);
-                for (int k = 0; k < 8; k++)
+                float best = 0;
+                int last = int.MinValue;
+                for (int i = 0; i < plan.Spawns.Length; i++)
                 {
-                    float a = k * math.PI / 4;
-                    float2 at = p + new float2(math.sin(a), math.cos(a)) * stand;
-                    if (ground.Blocked(at.x, at.y)) continue;
-                    var e = new Vector3(at.x, 0, at.y);
-                    e.y = Mathf.Max(GroundHeight(at.x, at.y) + 3f, target.y + 4f);
-                    if (!Clear(e, target)) continue;
+                    int h = CreaturePlan.HerdOf(plan.Spawns[i].Id);
+                    if (h == last) continue;
+                    last = h;
+                    if (!PlanHerd(planRef, h, now, out var p, out int n, out int body) || n < 2) continue;
+                    float d = math.distance(p, player);
+                    if (d < 1.5f * despawn || d > 6f * despawn) continue;
+                    PlanHerd(planRef, h, now + FarSimSeconds, out var p1, out _, out _);
+                    PlanHerd(planRef, h, now + 2 * FarSimSeconds + FarAwaySeconds, out var p2, out _, out _);
+                    float score = math.distance(p, p1) + math.distance(p1, p2) - d / (6f * despawn);
+                    if (score <= best) continue;
+                    if (Relief(p) > limit || Relief(p1) > limit) continue;
+                    float stand = plan.Wary[body].Alert * 1.4f;
+                    if (EyeFor(planRef, p, stand, math.normalizesafe(p - player, new float2(0, 1)), out var e) > 0) continue;
                     best = score;
                     herd = h;
                     eye = e;
                     members = n;
-                    break;
                 }
+                if (herd >= 0) return true;
             }
-            return herd >= 0;
+            return false;
         }
 
         static void AimAt(Camera cam, Vector3 eye, float2 at)
@@ -316,22 +310,111 @@ namespace Stabby.Game.Editor
             return q.CalculateEntityCount();
         }
 
-        static bool EyeFor(BlobAssetReference<CreaturePlanData> planRef, float2 p, float dist, float2 prefer, out Vector3 eye)
+        static readonly float[] EyeSteps = { 1f, 1.25f, 1.5f, 1.8f }, RangeSteps = { 1f }, ReliefLimits = { 8f, 14f, 24f, float.MaxValue };
+
+        static float Relief(float2 p)
+        {
+            float g = GroundHeight(p.x, p.y), top = g;
+            for (int r = 1; r <= 3; r++)
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = k * math.PI / 8;
+                    top = Mathf.Max(top, GroundHeight(p.x + 20f * r * math.cos(a), p.y + 20f * r * math.sin(a)));
+                }
+            return top - g;
+        }
+
+        static float FirstHit(Vector3 eye, Vector3 end)
+        {
+            for (int i = 1; i <= 32; i++)
+            {
+                var q = Vector3.Lerp(eye, end, i / 32f);
+                if (GroundHeight(q.x, q.z) > q.y - 0.25f) return i / 32f;
+            }
+            return 2f;
+        }
+
+        static int EyeFor(BlobAssetReference<CreaturePlanData> planRef, float2 p, float dist, float2 prefer, out Vector3 eye, float fov = WakeFov, float[] steps = null, int lifts = 2)
         {
             var ground = new CreatureGround { Plan = planRef };
+            var field = ViewField();
             var target = new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y);
-            for (int k = 0; k < 16; k++)
-            {
-                float a = (k >> 1) * math.PI / 8 * ((k & 1) == 0 ? 1 : -1);
-                float2 d = new float2(prefer.x * math.cos(a) - prefer.y * math.sin(a), prefer.x * math.sin(a) + prefer.y * math.cos(a));
-                float2 at = p + d * dist;
-                if (ground.Blocked(at.x, at.y)) continue;
-                eye = new Vector3(at.x, 0, at.y);
-                eye.y = Mathf.Max(GroundHeight(at.x, at.y) + 3f, target.y + 4f);
-                if (Clear(eye, target)) return true;
-            }
+            int best = int.MaxValue;
             eye = default;
-            return false;
+            foreach (float step in steps ?? EyeSteps)
+                for (int lift = 0; lift < lifts; lift++)
+                    for (int k = 0; k < 16; k++)
+                    {
+                        float a = (k >> 1) * math.PI / 8 * ((k & 1) == 0 ? 1 : -1);
+                        float2 d = new float2(prefer.x * math.cos(a) - prefer.y * math.sin(a), prefer.x * math.sin(a) + prefer.y * math.cos(a));
+                        float2 at = p + d * dist * step;
+                        if (ground.Blocked(at.x, at.y)) continue;
+                        var e = new Vector3(at.x, 0, at.y);
+                        e.y = Mathf.Max(GroundHeight(at.x, at.y) + 3f + 5f * lift, target.y + 4f + 4f * lift);
+                        int b = Blockers(field, e, target, fov);
+                        if (b >= best) continue;
+                        best = b;
+                        eye = e;
+                        if (b == 0) return 0;
+                    }
+            return best;
+        }
+
+        static ObjectField ViewField()
+        {
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient) return w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+            return null;
+        }
+
+        static readonly List<ObjectColumn> sightColumns = new List<ObjectColumn>();
+
+        static float PartTop(ObjectDef def)
+        {
+            float top = 0;
+            foreach (var part in def.Parts) top = Mathf.Max(top, part.OffsetY + part.ScaleY);
+            return top;
+        }
+
+        static int Blockers(ObjectField field, Vector3 eye, Vector3 target, float fov)
+        {
+            var flat = new Vector3(target.x - eye.x, 0, target.z - eye.z);
+            float dist = flat.magnitude;
+            var right = Vector3.Cross(Vector3.up, flat / Mathf.Max(dist, 0.01f));
+            float vhalf = Mathf.Tan(0.5f * fov * Mathf.Deg2Rad) * (target - eye).magnitude, half = vhalf * 16f / 9f;
+            var view = (target - eye).normalized;
+            var up = Vector3.Cross(view, right);
+            int blocked = 0;
+            for (int v = -1; v <= 1; v++)
+                for (int s = -2; s <= 2; s++)
+                    if (FirstHit(eye, target + right * (0.45f * half * s) + up * (0.6f * vhalf * v)) < 0.8f) blocked += s == 0 && v == 0 ? 4 : 1;
+            if (field == null) return blocked;
+            float span = field.ChunkMeters, margin = 16f;
+            int n = field.ChunksAcross;
+            float minX = Mathf.Min(eye.x, target.x) - margin, maxX = Mathf.Max(eye.x, target.x) + margin;
+            float minZ = Mathf.Min(eye.z, target.z) - margin, maxZ = Mathf.Max(eye.z, target.z) + margin;
+            int cx0 = Mathf.Max(0, Mathf.FloorToInt(minX / span)), cx1 = Mathf.Min(n - 1, Mathf.FloorToInt(maxX / span));
+            int cz0 = Mathf.Max(0, Mathf.FloorToInt(minZ / span)), cz1 = Mathf.Min(n - 1, Mathf.FloorToInt(maxZ / span));
+            var a = new Vector2(eye.x, eye.z);
+            var ab = new Vector2(flat.x, flat.z);
+            float len2 = Mathf.Max(ab.sqrMagnitude, 0.0001f);
+            for (int cz = cz0; cz <= cz1; cz++)
+                for (int cx = cx0; cx <= cx1; cx++)
+                    foreach (var o in field.Chunk(cx, cz))
+                    {
+                        if (o.X < minX || o.X > maxX || o.Z < minZ || o.Z > maxZ) continue;
+                        float r = field.Footprint(o.Def) * o.Size, top = o.Y + PartTop(field.Library.Objects[o.Def]) * o.Size;
+                        sightColumns.Clear();
+                        field.ColumnsOf(o, sightColumns);
+                        foreach (var c in sightColumns) top = Mathf.Max(top, c.Top);
+                        var pc = new Vector2(o.X, o.Z);
+                        float t = Mathf.Clamp01(Vector2.Dot(pc - a, ab) / len2);
+                        if (t > 0.97f) continue;
+                        float y = Mathf.Lerp(eye.y, target.y, t);
+                        if (Vector2.Distance(a + ab * t, pc) > r + 0.5f || y < o.Y - 0.5f || y > top + 0.5f) continue;
+                        blocked += 2;
+                    }
+            return blocked;
         }
 
         static bool Settling() => GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0;
@@ -398,7 +481,7 @@ namespace Stabby.Game.Editor
                 yield return null;
                 fr.Add(sem, view.EntityManager, hostRec, buildRec, mainRec);
                 PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
-                if (f % 15 == 0 && !Clear(eye, new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y)) && EyeFor(planRef, p, eyeDist, math.normalizesafe(new float2(eye.x, eye.z) - p, toEye), out var e2)) { eye = e2; moves++; }
+                if (f % 15 == 0 && Blockers(ViewField(), eye, new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y), WakeFov) > 0 && EyeFor(planRef, p, eyeDist, math.normalizesafe(new float2(eye.x, eye.z) - p, toEye), out var e2) == 0) { eye = e2; moves++; }
                 AimAt(cam, eye, p);
                 if (wakeErr < 0)
                 {
@@ -408,10 +491,11 @@ namespace Stabby.Game.Editor
                 var wake = WakeOf(view, herd);
                 if (!shot && wake.Count == members && wake.Mean >= 0.4f && wake.Mean <= 0.7f)
                 {
+                    int wakeBlock = Blockers(ViewField(), eye, new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y), WakeFov);
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "creature-far-wake");
                     shot = true;
-                    lines.Add($"wake shot: camera {math.distance(new float2(eye.x, eye.z), p):F0} m from the herd at {WakeFov:F0} degree FOV (moved {moves} times to keep a clear sightline), player {math.distance(player, p):F0} m from the herd, {wake.Count} members on the client, wake mean {wake.Mean:F2} (min {wake.Min:F2}, max {wake.Max:F2})");
+                    lines.Add($"wake shot: camera {math.distance(new float2(eye.x, eye.z), p):F0} m from the herd at {WakeFov:F0} degree FOV (moved {moves} times to keep a clear sightline, {wakeBlock} terrain or feature blockers on the shot), player {math.distance(player, p):F0} m from the herd, {wake.Count} members on the client, wake mean {wake.Mean:F2} (min {wake.Min:F2}, max {wake.Max:F2})");
                 }
                 if (player.Equals(stand) && wakeErr >= 0 && wake.Count == members && wake.Min >= 1) settled++;
             }
@@ -443,17 +527,7 @@ namespace Stabby.Game.Editor
             float q = math.max(DetailView.Current.Quality, 0.1f);
             float px = 0.5f * (wakeInfo.LowPx + wakeInfo.FadePx) / q;
             float range = Detail.Reach(math.max(wakeInfo.Length, 0.5f), math.max(px, 1f), DetailView.Current.PixelsPerMetre);
-            Vector3 rangeEye = default;
-            bool clear = false;
-            for (int k = 0; k < 16 && !clear; k++)
-            {
-                float a = (k >> 1) * math.PI / 4 * ((k & 1) == 0 ? 1 : -1);
-                float2 d = new float2(toEye.x * math.cos(a) - toEye.y * math.sin(a), toEye.x * math.sin(a) + toEye.y * math.cos(a));
-                float2 at = ps1 + d * range;
-                rangeEye = new Vector3(at.x, 0, at.y);
-                rangeEye.y = Mathf.Max(GroundHeight(at.x, at.y) + 4f, GroundHeight(ps1.x, ps1.y) + 6f);
-                clear = Clear(rangeEye, new Vector3(ps1.x, GroundHeight(ps1.x, ps1.y) + 0.9f, ps1.y));
-            }
+            bool clear = EyeFor(planRef, ps1, range, toEye, out Vector3 rangeEye, HerdFov, RangeSteps, 3) == 0;
             for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
             {
                 PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
@@ -463,7 +537,7 @@ namespace Stabby.Game.Editor
             Shot(cam, null, "warmup");
             Shot(cam, dir, "creature-far-range");
             HerdCentre(server, herd, out int liveAtRange, out _);
-            lines.Add($"range shot: camera {range:F0} m from the herd ({px:F1} px target between low {wakeInfo.LowPx / q:F1} and fade {wakeInfo.FadePx / q:F1} px), clear view {clear}, {liveAtRange} live");
+            lines.Add($"range shot: camera {range:F0} m from the herd ({px:F1} px target between low {wakeInfo.LowPx / q:F1} and fade {wakeInfo.FadePx / q:F1} px), clear view {clear} from {rangeEye.y - GroundHeight(ps1.x, ps1.y):F0} m above the herd, {liveAtRange} live");
 
             PlanHerd(planRef, herd, server.Time.ElapsedTime, out var pLeave, out _, out _);
             float2 away = pLeave + toEye * (3 * despawn);
