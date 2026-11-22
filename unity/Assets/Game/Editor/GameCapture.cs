@@ -160,7 +160,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -285,6 +285,14 @@ namespace Stabby.Game.Editor
             if (phase == 50)
             {
                 if (job == null) job = CliffTour(cam, dir);
+                if (job.MoveNext()) return;
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
+            }
+            if (phase == 220)
+            {
+                if (job == null) job = LandformTour(cam, dir);
                 if (job.MoveNext()) return;
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1158,6 +1166,96 @@ namespace Stabby.Game.Editor
                 if (q.CalculateEntityCount() == 1) return q.GetSingleton<Ground>().HeightAt(x, z);
             }
             return float.NegativeInfinity;
+        }
+
+        static System.Collections.IEnumerator LandformTour(Camera cam, string dir)
+        {
+            Ground ground = default;
+            bool found = false;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (q.CalculateEntityCount() != 1) continue;
+                ground = q.GetSingleton<Ground>();
+                found = true;
+                break;
+            }
+            if (!found) { GameStatus.Lines["~landforms"] = "landforms: no ground"; yield break; }
+            foreach (var (name, eye, target) in LandformShots(ground))
+            {
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                var settle = System.Diagnostics.Stopwatch.StartNew();
+                for (int f = 0; f < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && settle.Elapsed.TotalSeconds < 120); f++) yield return null;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                GameStatus.Lines["~" + name] = $"{name} from {eye.x:F0},{eye.y:F0},{eye.z:F0} at {target.x:F0},{target.y:F0},{target.z:F0}";
+            }
+        }
+
+        static System.Collections.Generic.List<(string name, Vector3 eye, Vector3 target)> LandformShots(Ground ground)
+        {
+            var shots = new System.Collections.Generic.List<(string name, Vector3 eye, Vector3 target)>();
+            for (int s = 0; s < 2; s++)
+            {
+                int shape = s == 0 ? FeatureEdit.Tor : FeatureEdit.Hoodoo, count = 0, best = -1, bestNear = 0;
+                ref var g = ref ground.Blob.Value;
+                for (int k = 0; k < g.Edits.Length; k++)
+                {
+                    if (g.Edits[k].Shape != shape) continue;
+                    count++;
+                    int near = 0;
+                    for (int j = 0; j < g.Edits.Length; j++)
+                        if (g.Edits[j].Shape == shape && Mathf.Abs(g.Edits[j].Ax - g.Edits[k].Ax) < 60 && Mathf.Abs(g.Edits[j].Az - g.Edits[k].Az) < 60) near++;
+                    if (near > bestNear) { bestNear = near; best = k; }
+                }
+                string kind = s == 0 ? "tor" : "hoodoo";
+                GameStatus.Lines["~landforms " + kind] = $"{count} {kind} edits, densest group {bestNear} at edit {best}";
+                if (best < 0) continue;
+                Vector3 c = Vector3.zero, top = Vector3.zero;
+                int n = 0;
+                for (int j = 0; j < g.Edits.Length; j++)
+                {
+                    var e = g.Edits[j];
+                    if (e.Shape != shape || Mathf.Abs(e.Ax - g.Edits[best].Ax) >= 60 || Mathf.Abs(e.Az - g.Edits[best].Az) >= 60) continue;
+                    c += new Vector3((e.Ax + e.Bx) * 0.5f, (e.Ay + e.By) * 0.5f, (e.Az + e.Bz) * 0.5f);
+                    if (e.MaxY > top.y) top = new Vector3(e.Ax, e.MaxY, e.Az);
+                    n++;
+                }
+                c /= n;
+                var dirOut = Vector3.zero;
+                float low = float.MaxValue;
+                for (int a = 0; a < 8; a++)
+                {
+                    var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
+                    float h = ground.HeightAt(c.x + d.x * 70, c.z + d.z * 70);
+                    if (h < low) { low = h; dirOut = d; }
+                }
+                var target = new Vector3(c.x, (c.y + top.y) * 0.5f, c.z);
+                float back = s == 0 ? 55f : 80f;
+                var eye = c + dirOut * back;
+                eye.y = Clear(ground, target, eye, Mathf.Max(ground.HeightAt(eye.x, eye.z) + 3f, target.y - 4f), 0.3f);
+                shots.Add((s == 0 ? "landform-tor" : "landform-hoodoos", eye, target));
+                var far = Vector3.zero;
+                far.y = float.MaxValue;
+                for (int a = 0; a < 8; a++)
+                {
+                    var p = c + Quaternion.Euler(0, a * 45f, 0) * Vector3.forward * 420f;
+                    p.y = Clear(ground, target, p, Mathf.Max(ground.HeightAt(p.x, p.z) + 40f, target.y + 30f), 0.05f);
+                    if (p.y < far.y) far = p;
+                }
+                shots.Add((s == 0 ? "landform-tor-far" : "landform-hoodoos-far", far, target));
+            }
+            return shots;
+        }
+
+        static float Clear(Ground ground, Vector3 target, Vector3 eye, float y, float from)
+        {
+            for (float t = from; t <= 1f; t += 0.05f)
+            {
+                float h = ground.HeightAt(target.x + (eye.x - target.x) * t, target.z + (eye.z - target.z) * t) + 5f;
+                y = Mathf.Max(y, target.y + (h - target.y) / t);
+            }
+            return y;
         }
 
         static bool Aim(Camera cam, int shape, bool inside, bool undercut)
