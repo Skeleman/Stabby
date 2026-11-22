@@ -14,6 +14,7 @@ namespace Stabby.World
         public float[] X, Z, S, W, D, K, P, R;
         public RiverFall[] Falls;
         public int[] Lip;
+        public int Liquid;
     }
 
     public interface INearCells
@@ -84,7 +85,7 @@ namespace Stabby.World
                     if (at < 0) continue;
                     falls.Add(f); lips.Add(at); from = at + 2;
                 }
-                var line = new RiverLine { X = px.ToArray(), Z = pz.ToArray(), S = ps.ToArray(), W = pw.ToArray(), D = pd.ToArray(), Falls = falls.ToArray(), Lip = lips.ToArray() };
+                var line = new RiverLine { X = px.ToArray(), Z = pz.ToArray(), S = ps.ToArray(), W = pw.ToArray(), D = pd.ToArray(), Falls = falls.ToArray(), Lip = lips.ToArray(), Liquid = r.Liquid };
                 Bends(line);
                 Steps(line, cm, ref rng);
                 lines.Add(line);

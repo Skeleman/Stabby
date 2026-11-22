@@ -112,33 +112,6 @@
         }
       }
     },
-    "surface": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "clay": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "grey": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "roughness": { "$ref": "#/$defs/amp" }
-      }
-    },
-    "water": {
-      "type": "object",
-      "required": ["deepColor", "shallowColor", "clarityM", "shoreM", "foamWidthM", "waveScaleM", "waveSpeed", "waveStrength", "swellScaleM", "swellStrength", "lakeSwell", "flowSpeed", "rapidsSlope", "bedFieldM"],
-      "additionalProperties": false,
-      "properties": {
-        "deepColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "shallowColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "clarityM": { "type": "number", "minimum": 0.1, "maximum": 100 },
-        "shoreM": { "type": "number", "minimum": 0.01, "maximum": 5 },
-        "foamWidthM": { "type": "number", "minimum": 0, "maximum": 50 },
-        "waveScaleM": { "type": "number", "minimum": 0.01, "maximum": 1000 },
-        "waveSpeed": { "type": "number", "minimum": 0, "maximum": 10 },
-        "waveStrength": { "type": "number", "minimum": 0, "maximum": 1 },
-        "swellScaleM": { "type": "number", "minimum": 0.01, "maximum": 1000 },
-        "swellStrength": { "type": "number", "minimum": 0, "maximum": 1 },
-        "lakeSwell": { "type": "number", "minimum": 0, "maximum": 1 },
-        "flowSpeed": { "type": "number", "minimum": 0, "maximum": 10 },
-        "rapidsSlope": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
-        "bedFieldM": { "type": "number", "minimum": 1, "maximum": 5000 }
-      }
-    },
     "surface": {
       "type": "object",
       "required": ["fadePixels", "parallaxFootprintM", "windDeg", "strataWobbleM", "strataWobbleWavelengthM", "coatPatchAmp", "coatPatchWavelengthM", "rock", "coats"],

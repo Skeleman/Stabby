@@ -221,7 +221,12 @@ public class WorldTests
         Same(rock, surfaceData.GetProperty("rock"));
         Same(surface.GetProperty("properties").GetProperty("coats"), surfaceData.GetProperty("coats"));
         foreach (var c in surfaceData.GetProperty("coats").EnumerateObject()) Same(coat, c.Value);
-        Same(top.GetProperty("properties").GetProperty("water"), data.RootElement.GetProperty("water"));
+        var liquid = top.GetProperty("properties").GetProperty("liquids").GetProperty("items");
+        foreach (var l in data.RootElement.GetProperty("liquids").EnumerateArray())
+        {
+            Same(liquid, l);
+            Same(liquid.GetProperty("properties").GetProperty("fall"), l.GetProperty("fall"));
+        }
         var lib = ContentLoader.LoadMaterials(root);
         Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.Rock.BedSpacingM > 0);
         Assert.True(lib.Water.DeepColor != 0 && lib.Water.ShoreM > 0 && lib.Water.FoamWidthM > 0);

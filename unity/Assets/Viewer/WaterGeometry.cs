@@ -24,6 +24,7 @@ namespace Stabby.Viewer
         public float DirX, DirZ;
         public float PoolRadius;
         public float Discharge;
+        public int Liquid;
         public float U0, U1;
         public float[] Runs;
         public float Drop => LipY - BaseY;
@@ -79,7 +80,7 @@ namespace Stabby.Viewer
                     K = k - 1, LipX = rf.LipX, LipZ = rf.LipZ, LipY = rf.LipY + RiverLift,
                     BaseX = rf.LipX + rf.DirX * FallThrowAt(rf.Drop), BaseZ = rf.LipZ + rf.DirZ * FallThrowAt(rf.Drop), BaseY = rf.BaseY + RiverLift,
                     Width = 2 * rf.SheetHalf, Bow = rf.ShelfBow, DirX = rf.DirX, DirZ = rf.DirZ,
-                    PoolRadius = rf.PoolRadius, Discharge = rf.Discharge, U0 = -1, U1 = 1,
+                    PoolRadius = rf.PoolRadius, Discharge = rf.Discharge, Liquid = r.Liquid, U0 = -1, U1 = 1,
                 };
                 if (rf.LipPts != null)
                 {
@@ -103,7 +104,7 @@ namespace Stabby.Viewer
                 BaseX = lx + d.x * th, BaseZ = lz + d.y * th, BaseY = r.S[k] + RiverLift,
                 Width = width, DirX = d.x, DirZ = d.y,
                 PoolRadius = PoolRadiusOf(drop, width, discharge),
-                Discharge = discharge, U0 = -1, U1 = 1,
+                Discharge = discharge, Liquid = r.Liquid, U0 = -1, U1 = 1,
             };
             return true;
         }
@@ -203,6 +204,7 @@ namespace Stabby.Viewer
             float cm = world.Config.CellMeters, half = cm * 0.5f;
             var verts = new List<Vector3>();
             var tris = new List<int>();
+            var kinds = new List<Vector4>();
             for (int y = cy; y < Mathf.Min(cy + cells, n); y++)
                 for (int x = cx; x < Mathf.Min(cx + cells, n); x++)
                 {
@@ -215,9 +217,29 @@ namespace Stabby.Viewer
                     verts.Add(new Vector3(x * cm + half, h, y * cm + half));
                     tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
                     tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
+                    var kind = new Vector4(0, 0, 0, LakeLiquid(world, x, y));
+                    for (int k = 0; k < 4; k++) kinds.Add(kind);
                 }
-            return verts.Count == 0 ? null : Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
+            if (verts.Count == 0) return null;
+            var lake = Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
+            lake.Uvs = new Vector2[verts.Count];
+            lake.Uv1 = kinds.ToArray();
+            lake.Uv2 = new Vector4[verts.Count];
+            return lake;
         }
+
+        static int LakeLiquid(GeneratedWorld world, int x, int y)
+        {
+            int n = world.Config.Size, id = world.Water.LakeId[y * n + x];
+            for (int k = 0; k < 8 && id < 0; k++)
+            {
+                int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
+                if (nx >= 0 && ny >= 0 && nx < n && ny < n) id = world.Water.LakeId[ny * n + nx];
+            }
+            return id < 0 ? 0 : world.Water.Lakes[id].Liquid;
+        }
+
+        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || world.Materials.Liquids[liquid].Spray == LiquidDef.SprayMist;
 
         public static float LakeHeight(GeneratedWorld world, int x, int y)
         {
@@ -300,7 +322,7 @@ namespace Stabby.Viewer
                 var side = new Vector3(f.DirZ, 0, -f.DirX) * half;
                 var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
                 var flow = new Color(f.DirX * 0.5f + 0.5f, f.DirZ * 0.5f + 0.5f, 1, 0);
-                var reach = new Vector4(f.Discharge, f.PoolRadius, along, 0);
+                var reach = new Vector4(f.Discharge, f.PoolRadius, along, f.Liquid);
                 int b = Verts.Count, rows = CurtainRowsOf(h), cols = CurtainColsOf(f.RunWidth);
                 var off = CurtainOffsets(f, detail);
                 for (int j = 0; j < rows; j++)
@@ -444,28 +466,36 @@ namespace Stabby.Viewer
                         for (int m = 0; m < JetPuffs + ColumnSteamPuffs; m++)
                             mist.Column(c, duty, start, m < JetPuffs ? 0 : 1, Mathf.Repeat(seed + (m < JetPuffs ? (float)m / JetPuffs : m * MistPhase), 1f), ColumnRadius * r, h, interval);
                     }
-                    int b = verts.Count;
-                    float tag = kind == ObjectField.MudPot ? -1 : 1;
-                    for (int s = 0; s <= SpringSides; s++) { tags.Add(tag); rims.Add(s > 0 && tag < 0 ? 1 : 0); }
-                    verts.Add(c);
-                    float edge = r + SpringOverlap * u;
-                    for (int s = 0; s < SpringSides; s++)
-                    {
-                        float a = s * (2 * Mathf.PI / SpringSides);
-                        verts.Add(c + new Vector3(Mathf.Cos(a) * edge, 0, Mathf.Sin(a) * edge));
-                        tris.Add(b); tris.Add(b + 1 + (s + 1) % SpringSides); tris.Add(b + 1 + s);
-                    }
+                    Disc(c, r + SpringOverlap * u, field.LiquidOf(o), field.Materials, verts, tris, tags, rims);
                 }
                 if (mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
             }
             if (mist.Verts.Count > 0) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
+            var bogs = field.BogPools();
+            int peat = field.Materials == null ? 0 : Mathf.Max(0, field.Materials.Liquid("peat"));
+            for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+                Disc(new Vector3(bogs[k], bogs[k + 3], bogs[k + 1]), bogs[k + 2] + ObjectField.BogLipM, peat, field.Materials, verts, tris, tags, rims);
             if (verts.Count == 0) return;
-            var pool = Flat("Spring pools", verts, null, tris, SpringKind);
+            var pool = Flat("Liquid pools", verts, null, tris, SpringKind);
             pool.Uvs = new Vector2[verts.Count];
             pool.Uv1 = new Vector4[verts.Count];
             pool.Uv2 = new Vector4[verts.Count];
             for (int k = 0; k < verts.Count; k++) pool.Uv1[k] = new Vector4(rims[k], 0, 0, tags[k]);
             water.Add(pool);
+        }
+
+        static void Disc(Vector3 c, float edge, int liquid, MaterialLibrary lib, List<Vector3> verts, List<int> tris, List<float> tags, List<float> rims)
+        {
+            int b = verts.Count;
+            bool opaque = lib != null && lib.Liquids[liquid].Opacity > 0.5f;
+            for (int s = 0; s <= SpringSides; s++) { tags.Add(liquid); rims.Add(s > 0 && opaque ? 1 : 0); }
+            verts.Add(c);
+            for (int s = 0; s < SpringSides; s++)
+            {
+                float a = s * (2 * Mathf.PI / SpringSides);
+                verts.Add(c + new Vector3(Mathf.Cos(a) * edge, 0, Mathf.Sin(a) * edge));
+                tris.Add(b); tris.Add(b + 1 + (s + 1) % SpringSides); tris.Add(b + 1 + s);
+            }
         }
 
         public static List<MeshParts> Rivers(GeneratedWorld world, TerrainDetail detail, List<MeshParts> mists)
@@ -481,6 +511,7 @@ namespace Stabby.Viewer
                     buf.Clear();
                 }
                 if (mist != null && mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
+                var spray = Sprays(world, r.Liquid) ? mist : null;
                 var pts = new List<Vector4>();
                 for (int k = 0; k < r.X.Length; k++)
                     pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));
@@ -513,7 +544,7 @@ namespace Stabby.Viewer
                     for (int j = Mathf.Max(k - PlungeReach, 0); j <= k; j++)
                         plunge = Mathf.Max(plunge, slopes[j] * (1 - (k - j) / (float)(PlungeReach + 1)));
                     if (pool.x > NoPool.x) half = Mathf.Max(half, pool.z * (1 - Mathf.Clamp01((s - pool.x) / (PoolSpread * pool.z))));
-                    var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, 0);
+                    var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, r.Liquid);
                     bool join = k > 0;
                     if (k > 0 && FallAt(r, k, out var f, out float lt))
                     {
@@ -521,19 +552,19 @@ namespace Stabby.Viewer
                         var prev = new Vector3(pts[k - 1].x, 0, pts[k - 1].z);
                         float sl = s - seg * (1 - lt), th = FallThrowAt(f.Drop), ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
                         var lipRow = new Vector3(f.LipX, f.LipY, f.LipZ);
-                        buf.Row(lipRow, fd, 0.5f * f.Width, slopes[k - 1], new Vector4(rv.x, rv.y, sl, 0), pool, true);
+                        buf.Row(lipRow, fd, 0.5f * f.Width, slopes[k - 1], new Vector4(rv.x, rv.y, sl, rv.w), pool, true);
                         float shove = 0;
                         foreach (var part in Split(f))
                         {
-                            if (f.Bow > 0) buf.Shelf(part, slopes[k - 1], new Vector4(rv.x, rv.y, sl, 0), pool);
-                            shove = Mathf.Max(shove, buf.Curtain(part, sl, detail, mist));
+                            if (f.Bow > 0) buf.Shelf(part, slopes[k - 1], new Vector4(rv.x, rv.y, sl, rv.w), pool);
+                            shove = Mathf.Max(shove, buf.Curtain(part, sl, detail, spray));
                         }
                         th += shove;
                         ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
                         pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);
                         var footRow = Vector3.Lerp(prev, new Vector3(p.x, 0, p.z), ft);
                         footRow.y = f.BaseY;
-                        buf.Row(footRow, fd, Mathf.Lerp(0.5f * f.Width, half, (ft - lt) / (1 - lt)), slopes[k], new Vector4(rv.x, rv.y, s - seg * (1 - ft), 0), pool, false);
+                        buf.Row(footRow, fd, Mathf.Lerp(0.5f * f.Width, half, (ft - lt) / (1 - lt)), slopes[k], new Vector4(rv.x, rv.y, s - seg * (1 - ft), rv.w), pool, false);
                     }
                     buf.Row(p, dir, half, slopes[k], rv, pool, join);
                 }

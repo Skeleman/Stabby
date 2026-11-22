@@ -364,6 +364,8 @@ namespace Stabby.World
         public static bool Pooled(int kind) => kind == Spring || kind == Geyser || kind == MudPot;
         public int VentKind(ObjectInstance o) => lib.Objects[o.Def].Placement.Discovery;
 
+        public MaterialLibrary Materials => w.Materials;
+
         public int LiquidOf(ObjectInstance o)
         {
             string id = lib.Objects[o.Def].Placement.Liquid;
