@@ -240,6 +240,18 @@ namespace Stabby.World
             l.Columns.Add(new ObjectColumn { X = f.X + f.U * (f.C * x - f.S * z), Z = f.Z + f.U * (f.S * x + f.C * z), R = f.U * r, Bottom = f.Y + f.U * bottom, Top = f.Y + f.U * top });
         }
 
+        static void Touch(StructureLayout l, in Frame f, float x, float y, float z, float r)
+        {
+            if (f.Lo > 0) return;
+            l.Contacts.Add(new ObjectColumn { X = f.X + f.U * (f.C * x - f.S * z), Z = f.Z + f.U * (f.S * x + f.C * z), R = f.U * r, Bottom = f.Y + f.U * y, Top = f.Y + f.U * y });
+        }
+
+        static void Band(StructureLayout l, in Frame f, float x, float z, float r, float width)
+        {
+            if (f.Lo > 0) return;
+            l.Lush.Add(new ObjectColumn { X = f.X + f.U * (f.C * x - f.S * z), Z = f.Z + f.U * (f.S * x + f.C * z), R = f.U * r, Bottom = f.U * width, Top = f.Y });
+        }
+
         static void Grain(in StructurePiece p, out float gx, out float gz)
         {
             if (p.G == GX) { gx = p.C; gz = p.S; return; }

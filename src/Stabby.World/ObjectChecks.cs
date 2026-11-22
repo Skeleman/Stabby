@@ -18,6 +18,7 @@ namespace Stabby.World
             bool first = true;
             var seen = new HashSet<int>();
             void Fail(int kind, string message) { if (seen.Add(kind)) e.Add(message); }
+            var contacts = new List<ObjectColumn>();
             foreach (int c in ObjectChunks(w, edits, across, span))
             {
                 int cx = c % across, cz = c / across;
@@ -51,6 +52,12 @@ namespace Stabby.World
                     if (seat != null) Fail(7, at + seat);
                     var biomes = def.Placement.Biomes;
                     if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
+                    for (int pi = 0; pi < def.Parts.Count; pi++)
+                    {
+                        contacts.Clear();
+                        field.PartContactsOf(o, pi, contacts);
+                        if (!contacts.Exists(c => ObjectField.Stamps(w.Objects, o, c))) Fail(10, at + $" part {def.Parts[pi].Id} leaves no contact stamp");
+                    }
                 }
             }
         }

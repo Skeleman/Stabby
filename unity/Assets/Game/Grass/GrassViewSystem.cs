@@ -63,6 +63,7 @@ namespace Stabby.Game
 
         static readonly int[] TextureIds = { Shader.PropertyToID("_StabbyCoat"), Shader.PropertyToID("_StabbySlope"), Shader.PropertyToID("_StabbyBiome"), Shader.PropertyToID("_StabbyForest"), Shader.PropertyToID("_StabbyWaterLevel") };
         static readonly int[] VectorIds = { Shader.PropertyToID("_StabbySand"), Shader.PropertyToID("_StabbyFieldUV"), Shader.PropertyToID("_StabbyCoatUV"), Shader.PropertyToID("_StabbySurface"), Shader.PropertyToID("_StabbyStrataWobble") };
+        static readonly int ContactId = Shader.PropertyToID("_StabbyContact"), ContactUVId = Shader.PropertyToID("_StabbyContactUV");
         static readonly int CoatAId = Shader.PropertyToID("_StabbyCoatA"), CoatBId = Shader.PropertyToID("_StabbyCoatB"), DetailOffId = Shader.PropertyToID("_StabbyDetailOff"), GrassFarId = Shader.PropertyToID("_StabbyGrassFar");
 
         public static bool Paused, Rescatter;
@@ -177,6 +178,9 @@ namespace Stabby.Game
             cmd.SetBufferData(args, reset);
             for (int i = 0; i < TextureIds.Length; i++) cmd.SetComputeTextureParam(scatter, kernel, TextureIds[i], Shader.GetGlobalTexture(TextureIds[i]));
             for (int i = 0; i < VectorIds.Length; i++) cmd.SetComputeVectorParam(scatter, VectorIds[i], Shader.GetGlobalVector(VectorIds[i]));
+            var contact = Shader.GetGlobalTexture(ContactId);
+            cmd.SetComputeTextureParam(scatter, kernel, ContactId, contact != null ? contact : Texture2D.blackTexture);
+            cmd.SetComputeVectorParam(scatter, ContactUVId, contact != null ? Shader.GetGlobalVector(ContactUVId) : Vector4.zero);
             CopyArray(CoatAId, coatA);
             CopyArray(CoatBId, coatB);
             cmd.SetComputeVectorArrayParam(scatter, CoatAId, coatA);

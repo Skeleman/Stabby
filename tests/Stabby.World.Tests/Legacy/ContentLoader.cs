@@ -263,7 +263,7 @@ public static class ContentLoader
         return d;
     }
 
-    public const int ObjectSchemaVersion = 2;
+    public const int ObjectSchemaVersion = 3;
 
     sealed class ObjectFile
     {
@@ -345,7 +345,7 @@ public static class ContentLoader
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Kind { get; set; } = "";
-        public string Color { get; set; } = "#ff00ff";
+        public string Material { get; set; } = "";
         public int Variants { get; set; } = 1;
         public InteractEntry? Interact { get; set; }
         public List<PartEntry> Parts { get; set; } = new();
@@ -366,8 +366,8 @@ public static class ContentLoader
         public float[]? Scale { get; set; }
         public string Solid { get; set; } = "";
         public string Shadows { get; set; } = "";
-        public string? Color { get; set; }
-        public string? LeafColor { get; set; }
+        public string? Material { get; set; }
+        public string? LeafMaterial { get; set; }
         public string Ends { get; set; } = "auto";
     }
 
@@ -418,6 +418,8 @@ public static class ContentLoader
             throw new InvalidDataException($"{path}: schemaVersion {file.SchemaVersion}, expected {ObjectSchemaVersion}");
         var errors = new List<string>();
         var lib = new ObjectLibrary();
+        var materials = LoadMaterials(contentRoot);
+        uint Mat(string id) => materials.Find(id)?.Color ?? 0;
         foreach (var k in file.Kinds)
             lib.Kinds.Add(new ObjectKind
             {
@@ -426,7 +428,7 @@ public static class ContentLoader
             });
         foreach (var o in file.Objects)
         {
-            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Hex(o.Color), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
             foreach (var p in o.Parts)
             {
                 if ((p.Offset != null && p.Offset.Length != 3) || (p.Scale != null && p.Scale.Length != 3))
@@ -435,8 +437,8 @@ public static class ContentLoader
                 {
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
-                    HasColor = p.Color != null, Color = p.Color != null ? Hex(p.Color) : def.Color,
-                    HasLeafColor = p.LeafColor != null, LeafColor = p.LeafColor != null ? Hex(p.LeafColor) : 0,
+                    HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color,
+                    HasLeafColor = p.LeafMaterial != null, LeafColor = p.LeafMaterial != null ? Mat(p.LeafMaterial) : 0,
                 };
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, p.Ends);
                 if (part.Ends < 0) errors.Add(o.Id + ": part " + p.Id + " has unknown ends \"" + p.Ends + "\"");

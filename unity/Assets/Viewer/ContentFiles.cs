@@ -22,7 +22,7 @@ namespace Stabby.Viewer
         {
             var ids = new List<string>(defs.Count);
             foreach (var d in defs) ids.Add(d.Id);
-            var lib = ContentLoader.ParseObjects(File.ReadAllText(ObjectsPath), ids, ObjectsPath);
+            var lib = ContentLoader.ParseObjects(File.ReadAllText(ObjectsPath), ids, ObjectsPath, Materials(MaterialsPath));
             if (ObjectDensity != 1f)
                 foreach (var d in lib.Objects)
                     if (d.Placement.EditMinSizeM <= 0 && d.Kind != ObjectLibrary.Structure) d.Placement.PerHectare *= ObjectDensity;
