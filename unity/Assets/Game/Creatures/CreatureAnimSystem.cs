@@ -285,6 +285,7 @@ namespace Stabby.Game
                 ref var rig = ref c.Rig.Value;
                 bool present = Present && States.HasComponent(c.Ghost);
                 if (present) Follow(ref c, ref rig, States[c.Ghost]);
+                c.Wake = math.min(1, c.Wake + Dt / Detail.CrossfadeSeconds);
                 float gy = Ground.HeightAt(c.Position.x, c.Position.z);
                 float3 centre = new float3(c.Position.x, gy + rig.Stand, c.Position.z);
                 float q = math.max(View.Quality, 0.1f);
@@ -310,7 +311,8 @@ namespace Stabby.Game
                     FurOut[3 * index + 2] = fur.Dark;
                 }
                 float fadeX = math.round(Detail.Crossfade(px, far, 1.5f * far) * 16f) / 16f;
-                float highX = 1 - blend, lowX = blend >= 1 ? fadeX : -blend;
+                float wake = Hold.Override != 0 ? 1 : Detail.Crossfade(c.Wake, 0, 1);
+                float highX = (1 - blend) * wake, lowX = blend >= 1 ? fadeX * wake : -blend * wake;
                 float anim = Detail.Crossfade(px, rig.AnimPx / q, 1.5f * rig.AnimPx / q);
                 float ik = Detail.Crossfade(px, rig.IkPx / q, 1.5f * rig.IkPx / q);
 
