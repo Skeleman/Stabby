@@ -158,7 +158,7 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var hy = w.Water;
-            bool pool = false, edge = false, lake = false;
+            bool pool = false, edge = false, lake = false, sheet = false;
             foreach (var s in hy.Rivers)
                 foreach (var f in s.Falls)
                 {
@@ -176,11 +176,19 @@ namespace Stabby.World
                         e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has no lip above its base: drop {f.Drop:F1}, ground {up:F1} above to {down:F1} below");
                     }
                     if (wetBase || f.BaseY < Erosion.MinLandHeight + FallPoolDepthM) continue;
-                    float cx = f.LipX + f.DirX * f.PoolRadius * Hydrology.FallPoolCentre, cz = f.LipZ + f.DirZ * f.PoolRadius * Hydrology.FallPoolCentre, g = d.Sample(cx, cz);
+                    float cx = f.LipX + f.DirX * f.PoolCentre, cz = f.LipZ + f.DirZ * f.PoolCentre, g = d.Sample(cx, cz);
                     if (!pool && g > f.BaseY - FallPoolDepthM)
                     {
                         pool = true;
                         e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has no plunge pool: ground {g:F1} at {cx:F0},{cz:F0}, water {f.BaseY:F1}");
+                    }
+                    float th = Hydrology.FallThrow(f.Drop), half = 0.5f * Hydrology.SheetWidth(f.Width);
+                    for (float a = -half; !sheet && a <= half; a += 0.5f * NearStepM)
+                    {
+                        float x = f.LipX + f.DirX * th + f.DirZ * a, z = f.LipZ + f.DirZ * th - f.DirX * a, h = d.Sample(x, z);
+                        if (h <= f.BaseY + BankTolerance) continue;
+                        sheet = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has rock inside its sheet foot: ground {h:F1} at {x:F0},{z:F0}, {a:F1} m off centre, water {f.BaseY:F1}");
                     }
                 }
         }
@@ -232,7 +240,7 @@ namespace Stabby.World
                     Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
                     float h = d.Sample(x, z), s = NearStepM;
                     float bend = Math.Max(Math.Abs(d.Sample(x + s, z) + d.Sample(x - s, z) - 2 * h), Math.Abs(d.Sample(x, z + s) + d.Sample(x, z - s) - 2 * h));
-                    if (Math.Abs(wy - h) > SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend && !InFall(w, x, z, true)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
+                    if (Math.Abs(wy - h) > SeamEpsilonM && wy > y + 0.5f - Walk.Reach + SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend && !InFall(w, x, z, true)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
                 }
             }
 
@@ -258,7 +266,7 @@ namespace Stabby.World
                 for (int f = 0; f < l.Lip.Length; f++)
                 {
                     var fall = l.Falls[f];
-                    float run = 0, reach = NearField.PoolReach(fall.PoolRadius);
+                    float run = 0, reach = NearField.PoolReach(fall.PoolCentre, fall.PoolRadius);
                     for (int k = l.Lip[f] + 1; k + 1 < l.X.Length && run < reach; k++)
                     {
                         float ex = l.X[k + 1] - l.X[k], ez = l.Z[k + 1] - l.Z[k], len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -278,8 +286,8 @@ namespace Stabby.World
                 foreach (var f in s.Falls)
                 {
                     float dx = x - f.LipX, dz = z - f.LipZ, along = dx * f.DirX + dz * f.DirZ, side = Math.Abs(dz * f.DirX - dx * f.DirZ);
-                    float c = Hydrology.FallPoolCentre * f.PoolRadius, r = NearField.PoolReach(f.PoolRadius) - c + NearStepM;
-                    float lip = NearField.FallJagM + NearStepM, span = f.Width + NearField.PoolReach(f.PoolRadius) + f.Drop / NearField.FallOutletSlope;
+                    float c = f.PoolCentre, r = NearField.PoolReach(f.PoolCentre, f.PoolRadius) - c + NearStepM;
+                    float lip = NearField.FallJagM + NearStepM, span = f.Width + NearField.PoolReach(f.PoolCentre, f.PoolRadius) + f.Drop / NearField.FallOutletSlope;
                     if (along <= lip && along >= -lip - Math.Max(0, side - 0.5f * f.Width) && side <= span) return true;
                     if (wall && along >= -NearField.FallJagM - NearStepM && (along - c) * (along - c) + side * side < r * r) return true;
                 }
