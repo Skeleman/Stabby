@@ -409,7 +409,87 @@ namespace Stabby.World
                     f.PoolCentre = centre;
                     seg.Falls[i] = f;
                 }
+            Islands(c, hy);
         }
+
+        public const float IslandChance = 0.95f, IslandTwoChance = 0.45f, IslandSpread = 0.3f, IslandPair = 0.5f;
+        public const int IslandGapMin = 2, IslandGapMax = 3, IslandPairGap = 1, IslandRunMin = 3, IslandTwoPts = 11;
+
+        static void Islands(WorldConfig c, Hydrology hy)
+        {
+            var rng = Rng.Stream(c.Seed, "fall-island");
+            foreach (var seg in hy.Rivers)
+                for (int i = 0; i < seg.Falls.Count; i++)
+                {
+                    var f = seg.Falls[i];
+                    if (f.LipPts == null) continue;
+                    float roll = rng.NextFloat(), two = rng.NextFloat(), p0 = rng.NextFloat(), p1 = rng.NextFloat();
+                    int k0 = rng.Range(IslandGapMin, IslandGapMax + 1);
+                    if (roll >= IslandChance) continue;
+                    int count = f.LipPts.Length / 2, mid = count / 2;
+                    var drop = new bool[count];
+                    if (count >= IslandTwoPts && two < IslandTwoChance)
+                    {
+                        int off = Math.Max((IslandRunMin + 1) / 2, Math.Min(mid - IslandRunMin, (int)Math.Round(mid * (IslandPair + IslandSpread * (p0 - 0.5f)))));
+                        Gap(drop, mid - off, IslandPairGap);
+                        Gap(drop, mid + off, IslandPairGap);
+                    }
+                    else
+                    {
+                        int lo = IslandRunMin + k0 / 2, hi = count - IslandRunMin - k0 + k0 / 2;
+                        Gap(drop, Math.Max(lo, Math.Min(hi, mid + (int)Math.Round(mid * IslandSpread * (2 * p1 - 1)))), k0);
+                    }
+                    if (!Runs(drop, IslandRunMin)) continue;
+                    var pts = new List<float>();
+                    for (int k = 0; k < count; k++)
+                        if (!drop[k]) { pts.Add(f.LipPts[2 * k]); pts.Add(f.LipPts[2 * k + 1]); }
+                    f.LipPts = pts.ToArray();
+                    seg.Falls[i] = f;
+                }
+        }
+
+        static void Gap(bool[] drop, int centre, int k)
+        {
+            for (int j = 0; j < k; j++)
+            {
+                int at = centre - k / 2 + j;
+                if (at >= 0 && at < drop.Length) drop[at] = true;
+            }
+        }
+
+        static bool Runs(bool[] drop, int min)
+        {
+            int run = 0;
+            for (int k = 0; k <= drop.Length; k++)
+            {
+                if (k < drop.Length && !drop[k]) { run++; continue; }
+                if (run < min) return false;
+                run = 0;
+                while (k + 1 < drop.Length && drop[k + 1]) k++;
+            }
+            return true;
+        }
+
+        public static List<float> LipRuns(in RiverFall f)
+        {
+            var runs = new List<float>();
+            var p = f.LipPts;
+            if (p == null) { runs.Add(-f.SheetHalf); runs.Add(f.SheetHalf); return runs; }
+            float step = float.MaxValue;
+            for (int k = 2; k < p.Length; k += 2) step = Math.Min(step, Side(f, p[k], p[k + 1]) - Side(f, p[k - 2], p[k - 1]));
+            float start = Side(f, p[0], p[1]), prev = start;
+            for (int k = 2; k < p.Length; k += 2)
+            {
+                float s = Side(f, p[k], p[k + 1]);
+                if (s - prev > IslandGapStep * step) { runs.Add(start); runs.Add(prev); start = s; }
+                prev = s;
+            }
+            runs.Add(start);
+            runs.Add(prev);
+            return runs;
+        }
+
+        public const float IslandGapStep = 1.5f;
 
         static float Upstream(WorldConfig c, RiverSegment seg, int fall)
         {

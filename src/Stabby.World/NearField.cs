@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct RiverPiece
     {
         public float Ax, Az, Bx, Bz, Sa, Sb, Wa, Wb, Da, Db, Ka, Kb, Pa, Pb, Ra, Rb;
-        public float Lx, Lz, Ux, Uz, Fy, Fr, Fd, Fc, Ft, Fh, Fs, Fb, Fw;
+        public float Lx, Lz, Ux, Uz, Fy, Fr, Fd, Fc, Ft, Fh, Fs, Fb, Fw, Ia, Ib, Ja, Jb, Iy;
     }
 
     public sealed class RiverLine
@@ -231,12 +231,50 @@ namespace Stabby.World
                         bool pool = k + 1 == lip, clip = k >= lip && along[k] - along[lip] <= Reach(Math.Max(q.Wa, q.Wb), cm) + PoolReach(fall.PoolCentre, fall.PoolRadius) + fall.ShelfHalf + fall.ShelfBow;
                         if (!pool && !clip) continue;
                         q.Lx = fall.LipX; q.Lz = fall.LipZ; q.Ux = fall.DirX; q.Uz = fall.DirZ; q.Fs = fall.ShelfHalf; q.Fb = fall.ShelfBow;
-                        if (pool) { q.Fy = fall.BaseY; q.Fr = fall.PoolRadius; q.Fc = fall.PoolCentre; q.Fd = Math.Min(FallDepthFrac * fall.PoolRadius, FallDepthBaseM + FallDepthPerDrop * fall.Drop); q.Ft = Hydrology.FallThrow(fall.Drop); q.Fh = fall.LipPts == null ? fall.SheetHalf : 0; q.Fw = fall.LipPts == null ? q.Wb : l.W[Math.Min(lip + 1, l.W.Length - 1)]; break; }
+                        if (pool) { q.Fy = fall.BaseY; q.Fr = fall.PoolRadius; q.Fc = fall.PoolCentre; q.Fd = Math.Min(FallDepthFrac * fall.PoolRadius, FallDepthBaseM + FallDepthPerDrop * fall.Drop); q.Ft = Hydrology.FallThrow(fall.Drop); q.Fh = fall.LipPts == null ? fall.SheetHalf : 0; q.Fw = fall.LipPts == null ? q.Wb : l.W[Math.Min(lip + 1, l.W.Length - 1)]; Isles(ref q, fall); break; }
                     }
                     list.Add(q);
                 }
             }
             return list;
+        }
+
+        static void Isles(ref RiverPiece q, in RiverFall f)
+        {
+            var runs = Hydrology.LipRuns(f);
+            q.Iy = f.LipY;
+            if (runs.Count >= 4) { q.Ia = 0.5f * (runs[1] + runs[2]); q.Ja = 0.5f * (runs[2] - runs[1]); }
+            if (runs.Count >= 6) { q.Ib = 0.5f * (runs[3] + runs[4]); q.Jb = 0.5f * (runs[4] - runs[3]); }
+        }
+
+        public const float IsleRadiusFrac = 0.6f, IsleStretch = 1.4f, IsleRiseM = 1f, IsleRisePerHalf = 0.6f, IsleSlope = 40f, IsleBack = 1f, IsleWaveM = 1.7f, IsleNoise = 0.25f, IsleCap = 0.4f;
+
+        public static float Isle(RiverPiece q, uint seed, float x, float z)
+        {
+            float best = float.MinValue;
+            for (int j = 0; j < 2; j++)
+            {
+                float half = j == 0 ? q.Ja : q.Jb, at = j == 0 ? q.Ia : q.Ib;
+                if (half <= 0) continue;
+                float lx = x - q.Lx, lz = z - q.Lz, along = lx * q.Ux + lz * q.Uz, side = lx * q.Uz - lz * q.Ux;
+                float u = q.Fs > 0 ? Math.Max(-1f, Math.Min(1f, at / q.Fs)) : 0;
+                float n = Math.Max(-1f, Math.Min(1f, Noise.Gradient(seed, x / IsleWaveM + 7.1f * j, z / IsleWaveM - 3.9f * j)));
+                float r = IsleRadiusFrac * half * (1 + IsleNoise * n), rise = (IsleRiseM + IsleRisePerHalf * half) * (1 + IsleNoise * n);
+                float a = (along - q.Fb * u * u) / IsleStretch + IsleBack * IsleRadiusFrac * half, sd = side - at, e = (float)Math.Sqrt(a * a + sd * sd);
+                float top = q.Iy + rise - IsleCap * rise * Sq(Math.Min(1f, e / r));
+                best = Math.Max(best, e <= r ? top : top - IsleSlope * (e - r));
+            }
+            return best;
+        }
+
+        static float Isles<T>(T c, int s0, int s1, float x, float z, float h) where T : struct, INearCells
+        {
+            for (int k = s0; k < s1; k++)
+            {
+                var q = c.Piece(c.PieceAt(k));
+                if (q.Ja > 0) h = Math.Max(h, Isle(q, c.RiverSeed + 6u, x, z));
+            }
+            return h;
         }
 
         static bool Wet(GeneratedWorld w, int n, float cm, float x, float z)
@@ -352,6 +390,7 @@ namespace Stabby.World
                         wlo = Math.Min(wlo, Math.Min(Math.Min(p.Sa - p.Da * Deepest - p.Pa, p.Sb - p.Db * Deepest - p.Pb), 0.5f * Math.Min(Math.Min(p.Sa, p.Sb), Erosion.MinLandHeight)));
                         whi = Math.Max(whi, Math.Max(p.Sa + Rise(p.Wa), p.Sb + Rise(p.Wb)) + 1f);
                         if (p.Fr > 0) wlo = Math.Min(wlo, p.Fy - FallLowFrac * p.Fd);
+                        if (p.Ja > 0) whi = Math.Max(whi, p.Iy + (IsleRiseM + IsleRisePerHalf * Math.Max(p.Ja, p.Jb)) * (1 + IsleNoise) + 1f);
                     }
                 }
             lo -= DetailReach * amp; hi += DetailReach * amp;
@@ -408,7 +447,7 @@ namespace Stabby.World
                 float m = Noise.Fbm(c.Seed, x / MacroM, z / MacroM, MacroOctaves);
                 h += fade * (a * Math.Max(-1f, Math.Min(1f, m)) + Fine(c, x, z, b, a, tx, tz, ax, az, bx, bz));
             }
-            if (!near) return h;
+            if (!near) return Isles(c, s0, s1, x, z, h);
             h = Carve(c, s0, s1, x, z, h, f);
 
             float raised = h;
@@ -454,7 +493,7 @@ namespace Stabby.World
                 }
                 cut = Math.Min(cut, p + (1 - gate) * Math.Max(0, raised + FallClearM - p));
             }
-            return Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low);
+            return Isles(c, s0, s1, x, z, Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low));
         }
 
         static float Hold<T>(T c, int s0, int s1, float x, float z, float h, float s, float f) where T : struct, INearCells
