@@ -61,7 +61,41 @@ namespace Stabby.World
                     if (h.Value < def.HerdMin || h.Value > def.HerdMax) e.Add("creature site " + kv.Key + " herd of " + h.Value + " " + def.Id);
                 }
             }
+            FleeStaysAshore(w, lib, a, e);
             return e;
+        }
+
+        public const int FleeDirections = 8;
+
+        static void FleeStaysAshore(GeneratedWorld w, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        {
+            var ground = CreaturePlan.Ground(w);
+            var done = new HashSet<int>();
+            const float dt = 0.25f;
+            foreach (var s in plan)
+            {
+                int herd = CreaturePlan.HerdOf(s.Id);
+                if (!done.Add(herd)) continue;
+                var def = lib.Bodies[s.Body];
+                var wary = CreaturePlan.Wary(def);
+                for (int d = 0; d < FleeDirections; d++)
+                {
+                    float a = d * 6.2831853f / FleeDirections;
+                    float dx = (float)Math.Sin(a), dz = (float)Math.Cos(a);
+                    float px = s.X - dx * wary.Flee * 0.5f, pz = s.Z - dz * wary.Flee * 0.5f;
+                    float x = s.X, z = s.Z;
+                    var mind = HerdMind.Start(s.HerdSeed);
+                    for (float t = 0; t < HerdMind.FleeMax + 10f; t += dt)
+                    {
+                        float ax = x - px, az = z - pz;
+                        mind.Step(wary, (float)Math.Sqrt(ax * ax + az * az), ax, az, x, z, ref ground, dt);
+                        if (mind.Mode != HerdMode.Flee) continue;
+                        x += (float)Math.Sin(mind.Heading) * def.RunSpeed * dt;
+                        z += (float)Math.Cos(mind.Heading) * def.RunSpeed * dt;
+                        if (ground.Blocked(x, z)) { e.Add("creature herd " + herd + " fleeing from heading " + d + " ran into water or off the map at " + (int)x + "," + (int)z); break; }
+                    }
+                }
+            }
         }
 
         static bool Same(CreatureSpawn a, CreatureSpawn b) =>

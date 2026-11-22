@@ -41,6 +41,7 @@ namespace Stabby.Game
             public CreatureLibrary Lib;
             public int Across;
             public float SiteMeters;
+            public WaterGround Ground;
         }
 
         Task<Built> plan;
@@ -73,7 +74,7 @@ namespace Stabby.Game
                 plan = Task.Run(() =>
                 {
                     var lib = ContentFiles.Creatures(biomes);
-                    return new Built { Spawns = CreaturePlan.Build(map, lib), Lib = lib, Across = CreaturePlan.SitesAcross(map.Config.Size), SiteMeters = CreaturePlan.SiteCells * map.Config.CellMeters };
+                    return new Built { Spawns = CreaturePlan.Build(map, lib), Lib = lib, Across = CreaturePlan.SitesAcross(map.Config.Size), SiteMeters = CreaturePlan.SiteCells * map.Config.CellMeters, Ground = CreaturePlan.Ground(map) };
                 });
                 return;
             }
@@ -99,6 +100,10 @@ namespace Stabby.Game
             root.MaxReach = max;
             var wary = b.Allocate(ref root.Wary, p.Lib.Bodies.Count);
             for (int i = 0; i < wary.Length; i++) wary[i] = CreaturePlan.Wary(p.Lib.Bodies[i]);
+            root.Size = p.Ground.Size;
+            root.CellMeters = p.Ground.CellMeters;
+            var wet = b.Allocate(ref root.Wet, p.Ground.Wet.Length);
+            for (int i = 0; i < wet.Length; i++) wet[i] = p.Ground.Wet[i];
             var start = b.Allocate(ref root.SiteStart, p.Across * p.Across + 1);
             var rows = b.Allocate(ref root.Spawns, p.Spawns.Count);
             int site = 0;
@@ -141,7 +146,9 @@ namespace Stabby.Game
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            ref var plan = ref SystemAPI.GetSingleton<CreaturePlanBlob>().Value.Value;
+            var planRef = SystemAPI.GetSingleton<CreaturePlanBlob>().Value;
+            ref var plan = ref planRef.Value;
+            var ground = new CreatureGround { Plan = planRef };
             var prefab = SystemAPI.GetSingleton<CreaturePrefab>().Value;
             float dt = SystemAPI.Time.DeltaTime;
             bool hold = SystemAPI.HasSingleton<CreatureFreeze>();
@@ -155,7 +162,7 @@ namespace Stabby.Game
             }
 
             var live = new NativeHashSet<int>(256, Allocator.Temp);
-            var threats = new NativeHashMap<int, float3>(64, Allocator.Temp);
+            var threats = new NativeHashMap<int, HerdThreat>(64, Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
             foreach (var (s, brain, e) in SystemAPI.Query<RefRO<CreatureState>, RefRO<CreatureBrain>>().WithEntityAccess())
             {
@@ -168,7 +175,7 @@ namespace Stabby.Game
                 if (Herds.TryGetValue(herd, out var h) && !h.Seen) { h.Seen = true; Herds[herd] = h; }
                 float2 away = Nearest(players, s.ValueRO.Position);
                 float d = math.length(away);
-                if (!threats.TryGetValue(herd, out var t) || d < t.x) threats[herd] = new float3(d, away);
+                if (!threats.TryGetValue(herd, out var t) || d < t.Distance) threats[herd] = new HerdThreat { Distance = d, Away = away, At = s.ValueRO.Position };
             }
 
             var keys = Herds.GetKeyArray(Allocator.Temp);
@@ -180,8 +187,8 @@ namespace Stabby.Game
                 h.Rehome = false;
                 if (!hold)
                 {
-                    float3 t = threats.TryGetValue(keys[i], out var v) ? v : new float3(float.MaxValue, 0, 1);
-                    h.Rehome = h.Mind.Step(plan.Wary[h.Body], t.x, t.y, t.z, dt);
+                    if (threats.TryGetValue(keys[i], out var t)) h.Rehome = h.Mind.Step(plan.Wary[h.Body], t.Distance, t.Away.x, t.Away.y, t.At.x, t.At.y, ref ground, dt);
+                    else h.Rehome = h.Mind.Step(plan.Wary[h.Body], float.MaxValue, 0, 1, dt);
                 }
                 Herds[keys[i]] = h;
             }
@@ -190,7 +197,7 @@ namespace Stabby.Game
                 foreach (var (s, brain) in SystemAPI.Query<RefRW<CreatureState>, RefRW<CreatureBrain>>())
                 {
                     if (!Herds.TryGetValue(brain.ValueRO.Herd, out var h)) continue;
-                    Behave(ref s.ValueRW, ref brain.ValueRW, h, plan.Wary[s.ValueRO.Body], Nearest(players, s.ValueRO.Position), dt);
+                    Behave(ref s.ValueRW, ref brain.ValueRW, h, plan.Wary[s.ValueRO.Body], Nearest(players, s.ValueRO.Position), ref ground, dt);
                 }
 
             float pad = plan.MaxReach + plan.Spread;
@@ -243,6 +250,12 @@ namespace Stabby.Game
             }
         }
 
+        struct HerdThreat
+        {
+            public float Distance;
+            public float2 Away, At;
+        }
+
         static float2 Nearest(NativeList<float2> players, float2 at)
         {
             float2 best = new float2(0, float.MaxValue);
@@ -254,7 +267,7 @@ namespace Stabby.Game
             return best;
         }
 
-        static void Behave(ref CreatureState s, ref CreatureBrain b, in CreatureHerd h, in CreatureWary w, float2 away, float dt)
+        static void Behave(ref CreatureState s, ref CreatureBrain b, in CreatureHerd h, in CreatureWary w, float2 away, ref CreatureGround ground, float dt)
         {
             if (h.Rehome) { b.Home = s.Position; b.Walking = false; b.Timer = 1 + (s.Seed % 383) / 383f * 2; }
             switch (h.Mind.Mode)
@@ -273,6 +286,8 @@ namespace Stabby.Game
                     s.Alert = math.lerp(s.Alert, 0.3f, math.min(1, 3 * dt));
                     s.Heading = HerdMind.Toward(s.Heading, h.Mind.Heading + HerdMind.MemberOffset(s.Seed), 3 * dt);
                     s.Move = math.lerp(s.Move, w.RunRatio, math.min(1, 2.5f * dt));
+                    float2 next = s.Position + new float2(math.sin(s.Heading), math.cos(s.Heading)) * (s.Move * s.WalkSpeed * dt);
+                    if (ground.Blocked(next.x, next.y)) s.Move = 0;
                     break;
             }
             s.Position += new float2(math.sin(s.Heading), math.cos(s.Heading)) * (s.Move * s.WalkSpeed * dt);

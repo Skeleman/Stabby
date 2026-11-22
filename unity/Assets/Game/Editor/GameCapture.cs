@@ -973,11 +973,14 @@ namespace Stabby.Game.Editor
             }
         }
 
+        const float HerdEyeM = 14f, HerdFov = 40f;
+
         static void AimHerd(Camera cam, Vector2 centre, Vector2 side)
         {
             var target = new Vector3(centre.x, GroundHeight(centre.x, centre.y) + 0.9f, centre.y);
-            var eye = target + new Vector3(side.x, 0, side.y) * 32f;
-            eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 1.7f, target.y + 4f);
+            var eye = target + new Vector3(side.x, 0, side.y) * HerdEyeM;
+            eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 1.7f, target.y + 2.5f);
+            cam.fieldOfView = HerdFov;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
         }
 
@@ -998,13 +1001,15 @@ namespace Stabby.Game.Editor
                 d = new Vector2(Mathf.Sin(a), Mathf.Cos(a));
                 side = new Vector2(d.y, -d.x);
                 var t = new Vector3(start.x, GroundHeight(start.x, start.y) + 0.9f, start.y);
-                var e = t + new Vector3(side.x, 0, side.y) * 32f;
-                e.y = Mathf.Max(GroundHeight(e.x, e.z) + 1.7f, t.y + 4f);
+                var e = t + new Vector3(side.x, 0, side.y) * HerdEyeM;
+                e.y = Mathf.Max(GroundHeight(e.x, e.z) + 1.7f, t.y + 2.5f);
                 if (Clear(e, t)) break;
             }
             const float startM = 90f, stopM = 12f, walk = 4f;
             float along = startM, clock = 0, modeClock = 0, lag = 0, peak = 0;
             var log = new System.Collections.Generic.List<string>();
+            var lags = new System.Collections.Generic.List<float>();
+            float sinceShot = 10f, lagSettled = 0;
             HerdMode last = HerdMode.Calm;
             bool calmShot = false, alertShot = false, fleeShot = false, fled = false;
             Vector2 aim = HerdCentre(view, herd, out int seen0, out _);
@@ -1033,7 +1038,12 @@ namespace Stabby.Game.Editor
                 {
                     peak = Mathf.Max(peak, move);
                     float c = CreatureCompare(false);
-                    if (c < float.MaxValue) lag = Mathf.Max(lag, c);
+                    if (c < float.MaxValue)
+                    {
+                        lag = Mathf.Max(lag, c);
+                        lags.Add(c);
+                        if (sinceShot > 0.5f) lagSettled = Mathf.Max(lagSettled, c);
+                    }
                 }
                 string name = !calmShot && clock >= 4f ? "creature-approach-calm"
                     : walking && !alertShot && !fled && mind.Mode == HerdMode.Alert && modeClock > 1.5f ? "creature-approach-alert"
@@ -1046,10 +1056,12 @@ namespace Stabby.Game.Editor
                     if (name.EndsWith("flee")) fleeShot = true;
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, name);
+                    sinceShot = 0;
                 }
                 if (fled && mind.Mode == HerdMode.Calm && modeClock > 2f) break;
                 clock += dt;
                 modeClock += dt;
+                sinceShot += dt;
                 yield return null;
             }
             for (float rest = 0; rest < 15f && CreatureCompare(false) > 0.02f; rest += Time.deltaTime)
@@ -1063,8 +1075,11 @@ namespace Stabby.Game.Editor
             Shot(cam, null, "warmup");
             Shot(cam, dir, "creature-approach-settled");
             CreatureCompare(true);
+            cam.fieldOfView = 60f;
             GameStatus.Lines["~approach"] = $"approach: herd {herd} of {members} at {start.x:F0},{start.y:F0}, player walked {startM:F0}->{stopM:F0} m at {walk} m/s along {d.x:F2},{d.y:F2}; " + string.Join("; ", log);
             GameStatus.Lines["~approach result"] = $"approach result: herd moved {Vector2.Distance(start, end):F1} m and settled {Vector2.Distance(start + d * along, end):F1} m from the player; peak mean move {peak:F2} x walk; max server-client position delta while fleeing {lag:F3} m";
+            lags.Sort();
+            if (lags.Count > 0) GameStatus.Lines["~approach lag"] = $"approach flee lag over {lags.Count} frames: median {lags[lags.Count / 2]:F3} m, p95 {lags[(int)(lags.Count * 0.95f)]:F3} m, max {lag:F3} m, max outside 0.5 s after a shot {lagSettled:F3} m";
             if (!alertShot || !fleeShot) GameStatus.Lines["~approach missing"] = $"approach missing shots: alert {alertShot}, flee {fleeShot}";
         }
 
