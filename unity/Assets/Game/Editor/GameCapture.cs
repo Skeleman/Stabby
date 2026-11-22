@@ -59,6 +59,13 @@ namespace Stabby.Game.Editor
             var game = new GameObject("Game").AddComponent<GameScene>();
             game.TerrainMaterial = mat;
             game.WaterMaterial = water;
+            var mist = AssetDatabase.LoadAssetAtPath<Material>("Assets/Viewer/Mist.mat");
+            if (mist == null)
+            {
+                mist = new Material(Shader.Find("Stabby/FallMist"));
+                AssetDatabase.CreateAsset(mist, "Assets/Viewer/Mist.mat");
+            }
+            game.MistMaterial = mist;
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
@@ -2253,6 +2260,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, names[v]);
                 if (v == 0) GameStatus.Lines["~bench falls"] = Bench(cam, "falls close");
+                if (v == 0) GameStatus.Lines["~bench falls mist"] = BenchMist(cam, "falls close");
             }
         }
 
@@ -2357,6 +2365,23 @@ namespace Stabby.Game.Editor
                 sb.Append($" {h}p {b:F2}/{f:F2}");
             }
             if (GameStatus.Line("terrain", out var t)) sb.Append("; ").Append(t);
+            return sb.ToString();
+        }
+
+        static string BenchMist(Camera cam, string label)
+        {
+            var sb = new System.Text.StringBuilder($"bench {label} mist (ms, off/on):");
+            foreach (var (w, h) in new[] { (1920, 1080), (3840, 2160) })
+            {
+                var ms = new double[2];
+                for (int k = 0; k < 4; k++)
+                {
+                    Shader.SetGlobalFloat("_StabbyMistOff", (k & 1) == 0 ? 1 : 0);
+                    ms[k & 1] += BenchAt(cam, w, h) / 2;
+                }
+                Shader.SetGlobalFloat("_StabbyMistOff", 0);
+                sb.Append($" {h}p {ms[0]:F2}/{ms[1]:F2}");
+            }
             return sb.ToString();
         }
 
