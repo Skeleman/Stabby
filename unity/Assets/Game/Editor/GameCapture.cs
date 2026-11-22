@@ -161,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -333,7 +333,24 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
+            if (phase >= 340 && phase < 340 + MesaShots.Length)
+            {
+                string name = MesaShots[phase - 340];
+                if (wait == 0)
+                {
+                    if (!AimMesa(cam, phase - 340)) { GameStatus.Lines["~" + name] = "no pose in STABBY_MESA_AT"; phase++; }
+                    else { wait = 180; return; }
+                }
+                else
+                {
+                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, name);
+                    wait = 0;
+                    phase++;
+                }
+            }
+            if ((only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1691,6 +1708,46 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(c - eye));
                 GameStatus.Lines["~aim " + BogShots[mode]] = $"bog pool r {r:F2} m depth {bogs[pick + 3] - bogs[pick + 4]:F2} m at {c.x:F0},{c.y:F1},{c.z:F0}, {bogs.Length / ObjectField.BogStride} pools";
+                return true;
+            }
+            return false;
+        }
+
+        static readonly string[] MesaShots = { "mesa", "butte" };
+        const string MesaVariable = "STABBY_MESA_AT";
+
+        static bool AimMesa(Camera cam, int mode)
+        {
+            var spots = System.Environment.GetEnvironmentVariable(MesaVariable)?.Split(';');
+            if (spots == null || spots.Length <= mode) return false;
+            var v = spots[mode].Split(',').Select(t => float.Parse(t, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (q.CalculateEntityCount() != 1) continue;
+                var ground = q.GetSingleton<Ground>();
+                Vector3 eye, target;
+                if (v.Length >= 6)
+                {
+                    eye = new Vector3(v[0], v[1], v[2]);
+                    target = new Vector3(v[3], v[4], v[5]);
+                }
+                else
+                {
+                    float r = v[2], back = (mode == 0 ? 3f : 4.5f) * r, low = float.MaxValue;
+                    var dirOut = Vector3.forward;
+                    for (int a = 0; a < 8; a++)
+                    {
+                        var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
+                        float h = ground.HeightAt(v[0] + d.x * back, v[1] + d.z * back);
+                        if (h < low) { low = h; dirOut = d; }
+                    }
+                    target = new Vector3(v[0], 0.5f * (ground.HeightAt(v[0], v[1]) + low), v[1]);
+                    eye = target + dirOut * back;
+                    eye.y = Clear(ground, target, eye, Mathf.Max(low + 20f, target.y), 0.3f);
+                }
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + MesaShots[mode]] = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F0},{1:F0},{2:F0},{3:F0},{4:F0},{5:F0} top {6:F0}", eye.x, eye.y, eye.z, target.x, target.y, target.z, ground.HeightAt(target.x, target.z));
                 return true;
             }
             return false;

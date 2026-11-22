@@ -39,6 +39,21 @@ public class WorldTests
     }
 
     [Fact]
+    public void DrySeedsRaiseMesasAndButtes()
+    {
+        int mesas = 0, buttes = 0, lips = 0;
+        Parallel.For(1, 21, s =>
+        {
+            var w = Gen((ulong)s);
+            foreach (var m in w.Sketch.Mesas)
+                if (m.Butte) Interlocked.Increment(ref buttes); else Interlocked.Increment(ref mesas);
+            foreach (var e in Features.Place(w, new TerrainDetail(w)))
+                if (e.Shape == FeatureEdit.Lip) Interlocked.Increment(ref lips);
+        });
+        Assert.True(mesas >= 10 && buttes >= 4 && lips >= 6, $"{mesas} mesas, {buttes} buttes, {lips} lips in 20 seeds");
+    }
+
+    [Fact]
     public void SameSeedSameWorld()
     {
         Assert.Equal(Gen(42).Fingerprint(), Gen(42).Fingerprint());

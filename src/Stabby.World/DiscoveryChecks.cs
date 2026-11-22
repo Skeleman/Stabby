@@ -34,6 +34,7 @@ namespace Stabby.World
             var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             CheckBogs(w, field, e);
             var found = field.Discoveries();
+            CheckMesaClearings(w, field, found, e);
             int n = w.Config.Size, across = field.ChunksAcross;
             float cm = w.Config.CellMeters, worldM = n * cm, span = field.ChunkMeters;
             for (int a = 0; a < found.Length; a++)

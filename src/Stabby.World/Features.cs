@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Shapes = 8;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Shapes = 9;
 
         public const float Blend = 0.5f;
 
@@ -334,6 +334,8 @@ namespace Stabby.World
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "caves").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
+            ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64();
+            var lips = Landforms.BiomeMask(w, Mesas.Biomes);
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
             int from = 0;
@@ -366,6 +368,10 @@ namespace Stabby.World
                     tile.Clear();
                     Landforms.Hoodoo(w, detail, strata, hoodoos, tx, ty, ref r, tile);
                     if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rl + t));
+                    tile.Clear();
+                    Mesas.Lip(w, detail, lips, tx, ty, ref r, tile);
+                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
                     from = list.Count;
                 }
             return list.ToArray();

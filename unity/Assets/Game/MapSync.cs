@@ -170,11 +170,11 @@ namespace Stabby.Game
             var defs = ContentFiles.Biomes();
             var lib = ContentFiles.Materials(ContentFiles.MaterialsPath);
             var objects = ContentFiles.Objects(defs);
-            string path = MapFile.PathFor(GameSettings.Seed, GameSettings.Size);
+            string path = MapFile.PathFor(GameSettings.ActiveSeed, GameSettings.Size);
             gen = Task.Run(() =>
             {
                 var sw = Stopwatch.StartNew();
-                var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.Seed), defs, lib, true);
+                var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.ActiveSeed), defs, lib, true);
                 w.Objects = objects;
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
                 p.Fill = Task.Run(() =>
@@ -292,7 +292,7 @@ namespace Stabby.Game
             WorldStore.Publish(entry, filled, ground);
             Map = p.Map;
             int size = Map.Config.Size;
-            GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.Seed} {p.Source}, detail at {p.FillMs} ms, +5 m mound at cell {p.Mound % size},{p.Mound / size}";
+            GameStatus.Lines[World.Name] = $"{World.Name}: seed {GameSettings.ActiveSeed} {p.Source}, detail at {p.FillMs} ms, +5 m mound at cell {p.Mound % size},{p.Mound / size}";
         }
     }
 

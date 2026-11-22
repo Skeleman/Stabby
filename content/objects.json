@@ -59,6 +59,16 @@
         "biomeDensity": [ { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
+      "id": "basalt-columns", "name": "Basalt columns", "kind": "static", "material": "columnar-basalt", "variants": 6,
+      "parts": [ { "id": "body", "shape": "basalt-columns", "scale": [1, 1.3, 1] } ],
+      "placement": { "biomes": ["steppe", "shrubland", "cold-desert", "tundra", "alpine"], "perHectare": 0.15, "slopeMax": 0.9, "hardnessMin": 0.5, "sizeMinM": 2.5, "sizeMaxM": 6, "sink": 0.08, "alignToSlope": 0.1 }
+    },
+    {
+      "id": "crystal-cluster", "name": "Crystal cluster", "kind": "static", "material": "rock-crystal", "variants": 6,
+      "parts": [ { "id": "body", "shape": "crystal-cluster", "scale": [1, 1.2, 1], "solid": "off" } ],
+      "placement": { "biomes": ["desert", "cold-desert", "alpine"], "perHectare": 0.12, "slopeMax": 1, "hardnessMin": 0.4, "sizeMinM": 0.5, "sizeMaxM": 1.4, "clusterCount": 3, "clusterRadiusM": 4, "sink": 0.1, "alignToSlope": 0.4 }
+    },
+    {
       "id": "fallen-log", "name": "Fallen log", "kind": "static", "material": "dark-bark", "variants": 6,
       "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.11, 0.11] } ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "wetland", "savanna", "alpine"], "perHectare": 10, "slopeMax": 0.6, "sizeMinM": 3, "sizeMaxM": 8, "clusterCount": 2, "clusterRadiusM": 6, "sink": 0.02, "alignToSlope": 1,

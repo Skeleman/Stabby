@@ -47,6 +47,8 @@ namespace Stabby.World
             if (shape == ObjectPart.Conifer) return ObjectFoliage.Conifer(key, lod);
             if (shape == ObjectPart.Log) return Log(key, lod, aspect > 0 ? aspect : 0.11f, ends);
             if (shape == ObjectPart.Stump) return Stump(key, lod, aspect > 0 ? aspect : 1.11f, ends);
+            if (shape == ObjectPart.BasaltColumns) return Columns(key, lod);
+            if (shape == ObjectPart.Crystals) return Crystals(key, lod);
             return Rock(key, RockLevels[lod]);
         }
 
@@ -84,6 +86,138 @@ namespace Stabby.World
                 }
                 return new ObjectMesh { Positions = pos, Normals = nor, Indices = idx };
             }
+        }
+
+        static readonly float[] HexX = { 0.8660254f, 0f, -0.8660254f, -0.8660254f, 0f, 0.8660254f };
+        static readonly float[] HexZ = { 0.5f, 1f, 0.5f, -0.5f, -1f, -0.5f };
+        static readonly int[] HexQ = { 0, 1, 0, -1, -1, 0, 1, 2, 1, 0, -1, -2, -2, -2, -1, 0, 1, 2, 2 };
+        static readonly int[] HexR = { 0, 0, 1, 1, 0, -1, -1, 0, 1, 2, 2, 2, 1, 0, -1, -2, -2, -2, -1 };
+        static readonly float[] ColumnOdds = { 1f, 0.85f, 0.35f };
+        public const float PrismSkirt = 0.12f, PrismFlare = 1.12f, PrismBevel = 0.82f;
+
+        struct Prism
+        {
+            public float Cx, Cz, Ax, Ay, Az, Ux, Uy, Uz, Vx, Vy, Vz, R, TiltU, TiltV;
+
+            public static Prism Along(float cx, float cz, float ax, float ay, float az, float r)
+            {
+                float l = (float)Math.Sqrt(ax * ax + ay * ay + az * az);
+                ax /= l; ay /= l; az /= l;
+                float ox = Math.Abs(az) < 0.9f ? 0f : 1f, oz = 1f - ox;
+                float ux = ay * oz, uy = az * ox - ax * oz, uz = -ay * ox;
+                float ul = (float)Math.Sqrt(ux * ux + uy * uy + uz * uz);
+                ux /= ul; uy /= ul; uz /= ul;
+                return new Prism { Cx = cx, Cz = cz, Ax = ax, Ay = ay, Az = az, Ux = ux, Uy = uy, Uz = uz, Vx = uy * az - uz * ay, Vy = uz * ax - ux * az, Vz = ux * ay - uy * ax, R = r };
+            }
+
+            public void Ring(float t, float s, float lift, float[] ring)
+            {
+                for (int k = 0; k < 6; k++)
+                {
+                    float hx = HexX[k] * R * s, hz = HexZ[k] * R * s, tk = t + lift * (TiltU * HexX[k] + TiltV * HexZ[k]);
+                    ring[k * 3] = Cx + Ax * tk + Ux * hx + Vx * hz;
+                    ring[k * 3 + 1] = Ay * tk + Uy * hx + Vy * hz;
+                    ring[k * 3 + 2] = Cz + Az * tk + Uz * hx + Vz * hz;
+                }
+            }
+        }
+
+        static void Band(ref Builder b, float[] lo, float[] hi)
+        {
+            for (int k = 0; k < 6; k++)
+            {
+                int j = (k + 1) % 6;
+                int a = b.Add(lo[k * 3], lo[k * 3 + 1], lo[k * 3 + 2]), c = b.Add(hi[j * 3], hi[j * 3 + 1], hi[j * 3 + 2]);
+                int d = b.Add(hi[k * 3], hi[k * 3 + 1], hi[k * 3 + 2]), e = b.Add(lo[j * 3], lo[j * 3 + 1], lo[j * 3 + 2]);
+                b.Quad(a, d, c, e);
+            }
+        }
+
+        static void Fan(ref Builder b, float[] ring, float x, float y, float z)
+        {
+            for (int k = 0; k < 6; k++)
+            {
+                int j = (k + 1) % 6;
+                b.Tri(b.Add(x, y, z), b.Add(ring[j * 3], ring[j * 3 + 1], ring[j * 3 + 2]), b.Add(ring[k * 3], ring[k * 3 + 1], ring[k * 3 + 2]));
+            }
+        }
+
+        static void Shaft(ref Builder b, in Prism p, int lod, float bottom, float top, float topScale, bool apex, float tipT)
+        {
+            float[] lo = new float[18], hi = new float[18];
+            p.Ring(bottom, PrismFlare, 0f, lo);
+            if (lod == 0)
+            {
+                p.Ring(0f, 1f, 0f, hi);
+                Band(ref b, lo, hi);
+                (lo, hi) = (hi, lo);
+            }
+            if (lod < 2)
+            {
+                p.Ring(top, 1f, p.R, hi);
+                Band(ref b, lo, hi);
+                (lo, hi) = (hi, lo);
+                top += 0.12f * p.R;
+            }
+            p.Ring(top, topScale, p.R, hi);
+            Band(ref b, lo, hi);
+            float tt = apex ? tipT : top + 0.04f * p.R;
+            Fan(ref b, hi, p.Cx + p.Ax * tt, p.Ay * tt, p.Cz + p.Az * tt);
+        }
+
+        static ObjectMesh Normalised(Builder b)
+        {
+            int count = b.P.Count / 3;
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue, maxY = 1e-3f;
+            for (int v = 0; v < count; v++)
+            {
+                float x = b.P[v * 3], z = b.P[v * 3 + 2];
+                minX = Math.Min(minX, x); maxX = Math.Max(maxX, x); minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z); maxY = Math.Max(maxY, b.P[v * 3 + 1]);
+            }
+            float sh = 1f / Math.Max(1e-3f, Math.Max(maxX - minX, maxZ - minZ)), cx = 0.5f * (minX + maxX), cz = 0.5f * (minZ + maxZ);
+            for (int v = 0; v < count; v++)
+            {
+                b.P[v * 3] = (b.P[v * 3] - cx) * sh;
+                b.P[v * 3 + 1] /= maxY;
+                b.P[v * 3 + 2] = (b.P[v * 3 + 2] - cz) * sh;
+            }
+            return b.Finish();
+        }
+
+        internal static ObjectMesh Columns(ulong key, int lod)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0xBA5A17C0FFEE1234UL));
+            var b = Builder.New();
+            float peak = rng.Range(3f, 6f), tu = rng.Range(-0.12f, 0.12f), tv = rng.Range(-0.12f, 0.12f), d = 2f * 0.8660254f;
+            for (int c = 0; c < HexQ.Length; c++)
+            {
+                int ring = c == 0 ? 0 : c < 7 ? 1 : 2;
+                float keep = rng.NextFloat(), h = peak * (1f - 0.18f * ring) * rng.Range(0.7f, 1f), r = rng.Range(0.88f, 0.96f);
+                float du = rng.Range(-0.05f, 0.05f), dv = rng.Range(-0.05f, 0.05f);
+                if (keep >= ColumnOdds[ring]) continue;
+                var p = Prism.Along(d * (HexQ[c] + 0.5f * HexR[c]), d * 0.8660254f * HexR[c], 0f, 1f, 0f, r);
+                p.TiltU = tu + du;
+                p.TiltV = tv + dv;
+                Shaft(ref b, p, lod, -PrismSkirt * peak, h, PrismBevel, false, 0f);
+            }
+            return Normalised(b);
+        }
+
+        internal static ObjectMesh Crystals(ulong key, int lod)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0xC7157A1D00D5EEDUL));
+            var b = Builder.New();
+            int count = rng.Range(4, 9);
+            for (int c = 0; c < count; c++)
+            {
+                Unit(ref rng, out float x, out float y, out float z);
+                float lean = c == 0 ? 0.15f : rng.Range(0.3f, 0.9f), r = c == 0 ? 0.5f : rng.Range(0.22f, 0.42f), len = r * rng.Range(3f, 6f), off = c == 0 ? 0f : rng.Range(0.15f, 0.45f), tip = rng.Range(0.8f, 1.4f);
+                float hl = Math.Max(1e-3f, (float)Math.Sqrt(x * x + z * z));
+                var p = Prism.Along(off * x / hl, off * z / hl, lean * x / hl, 1f, lean * z / hl, r);
+                float side = (float)Math.Sqrt(Math.Max(0f, 1f - p.Ay * p.Ay));
+                Shaft(ref b, p, lod, -(PrismSkirt * len + r * side) / p.Ay, len, 1f, true, len + r * tip);
+            }
+            return Normalised(b);
         }
 
         internal static ObjectMesh Rock(ulong key, int levels)
