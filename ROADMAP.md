@@ -57,8 +57,9 @@ and converts once into native data.
   b/creatures-5 done; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd).
   Then far herds (b/creatures-far): herds beyond the spawn reach drawn from plan data and
   the shared clock with no entities or ghosts, waking into live creatures through the
-  crossfade (Punchy only does this for sky birds; Stabby's own design). (2) Full-world stress: 251k objects with terrain, grass, shadows,
-  water and objects all on (b/stress-full, warm-up lane after the parallax bench).
+  crossfade (Punchy only does this for sky birds; Stabby's own design). (2) Full-world stress done (b/stress-full, measure only): density 1 already places 1.79M
+  objects; ~30k resident entities, 1080p full 8.6/10.0 ms median/p99 standing, 12.2/14.1 walking,
+  2160p full 18.0/19.5 ms; 2.5 GB peak. No hitch worth fixing.
   (3) Loading: ~450 MB allocated after terrain build, mid-load heap growth, a 76 ms collect.
   (4) Light budgets below come before fires and torches. Towns wait until the site
   hierarchy's streaming and collision are measured.
