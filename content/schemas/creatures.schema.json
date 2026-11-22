@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stabby creatures",
+  "type": "object",
+  "required": ["schemaVersion", "parts", "bodies"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "parts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "role", "segments"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["leg", "neck", "head", "tail", "ear", "eye"] },
+          "segments": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["length", "radius"],
+              "additionalProperties": false,
+              "properties": {
+                "length": { "type": "number", "minimum": 0, "maximum": 3 },
+                "radius": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, "minItems": 2, "maxItems": 2 },
+                "flatten": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+                "tone": { "enum": ["base", "accent", "dark"] },
+                "belly": { "type": "number", "minimum": 0, "maximum": 1 },
+                "rump": { "type": "number", "minimum": 0, "maximum": 1 },
+                "tip": { "type": "number", "minimum": 0, "maximum": 1 },
+                "idle": { "$ref": "#/$defs/angles" },
+                "reach": { "$ref": "#/$defs/angles" },
+                "push": { "$ref": "#/$defs/angles" },
+                "lift": { "$ref": "#/$defs/angles" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "bodies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "biomes", "length", "radius", "colors", "size", "walkSpeed", "herd", "detail", "slots"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "biomes": { "type": "array", "items": { "type": "string" } },
+          "length": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+          "radius": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+          "taper": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+          "flatten": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+          "colors": {
+            "type": "object",
+            "required": ["base", "accent", "dark"],
+            "additionalProperties": false,
+            "properties": {
+              "base": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              "dark": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+            }
+          },
+          "size": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 2, "maxItems": 2 },
+          "walkSpeed": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
+          "herd": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 },
+          "jitter": { "type": "number", "minimum": 0, "maximum": 0.25 },
+          "detail": {
+            "type": "object",
+            "required": ["fadePixels", "shadowPixels", "animPixels", "ikPixels"],
+            "additionalProperties": false,
+            "properties": {
+              "fadePixels": { "type": "number", "exclusiveMinimum": 0 },
+              "shadowPixels": { "type": "number", "exclusiveMinimum": 0 },
+              "animPixels": { "type": "number", "exclusiveMinimum": 0 },
+              "ikPixels": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["part", "socket"],
+              "additionalProperties": false,
+              "properties": {
+                "part": { "type": "string" },
+                "parent": { "type": "string" },
+                "socket": { "$ref": "#/$defs/vector" },
+                "direction": { "$ref": "#/$defs/angles" },
+                "mirror": { "type": "boolean" },
+                "phase": { "type": "number", "minimum": 0, "maximum": 1 },
+                "mirrorPhase": { "type": "number", "minimum": 0, "maximum": 1 },
+                "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "angles": { "type": "array", "items": { "type": "number", "minimum": -360, "maximum": 360 }, "minItems": 3, "maxItems": 3 },
+    "vector": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+  }
+}

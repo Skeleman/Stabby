@@ -11,6 +11,7 @@ namespace Stabby.Content
         public const int BiomeSchemaVersion = 1;
         public const int MaterialSchemaVersion = 2;
         public const int ObjectSchemaVersion = 2;
+        public const int CreatureSchemaVersion = 1;
 
         public static string FindContentRoot(string start)
         {
@@ -36,6 +37,12 @@ namespace Stabby.Content
         {
             var path = Path.Combine(contentRoot, "objects.json");
             return ParseObjects(File.ReadAllText(path), biomeIds, path);
+        }
+
+        public static CreatureLibrary LoadCreatures(string contentRoot, IReadOnlyList<string> biomeIds = null)
+        {
+            var path = Path.Combine(contentRoot, "creatures.json");
+            return ParseCreatures(File.ReadAllText(path), biomeIds, path);
         }
 
         public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
@@ -222,6 +229,89 @@ namespace Stabby.Content
             }
             root.End();
             errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
+            Check(errors, source);
+            return lib;
+        }
+
+        public static CreatureLibrary ParseCreatures(string json, IReadOnlyList<string> biomeIds, string source)
+        {
+            var root = Root(json, source, CreatureSchemaVersion);
+            var errors = new List<string>();
+            var lib = new CreatureLibrary();
+            var zero = new float[3];
+            foreach (var p in root.Objects("parts", true))
+            {
+                var part = new CreaturePartDef { Id = p.String("id", "") };
+                string role = p.String("role", "");
+                part.Role = Array.IndexOf(CreaturePartDef.RoleNames, role);
+                foreach (var s in p.Objects("segments", true))
+                {
+                    var radius = s.Floats("radius", null);
+                    if (radius == null || radius.Length != 2) { errors.Add(part.Id + ": radius needs 2 numbers"); radius = new float[] { 0, 0 }; }
+                    string tone = s.String("tone", "base");
+                    var idle = s.Floats("idle", zero);
+                    part.Segments.Add(new CreatureSegmentDef
+                    {
+                        Length = s.Float("length", 0), RadiusStart = radius[0], RadiusEnd = radius[1], Flatten = s.Float("flatten", 1),
+                        Tone = Array.IndexOf(CreatureSegmentDef.ToneNames, tone),
+                        Belly = s.Float("belly", 0), Rump = s.Float("rump", 0), Tip = s.Float("tip", 0),
+                        Idle = idle, Reach = s.Floats("reach", idle), Push = s.Floats("push", idle), Lift = s.Floats("lift", idle),
+                    });
+                    s.End();
+                }
+                lib.Parts.Add(part);
+                p.End();
+            }
+            foreach (var b in root.Objects("bodies", true))
+            {
+                string id = b.String("id", "");
+                var def = new CreatureDef
+                {
+                    Id = id, Name = b.String("name", ""), Biomes = b.Strings("biomes", new List<string>()),
+                    Length = b.Float("length", 0), Radius = b.Float("radius", 0), Taper = b.Float("taper", 1), Flatten = b.Float("flatten", 1),
+                    WalkSpeed = b.Float("walkSpeed", 0), Jitter = b.Float("jitter", 0),
+                };
+                var colors = b.Object("colors");
+                if (colors == null) errors.Add(id + ": colors missing");
+                else
+                {
+                    string path = id + ".colors";
+                    def.Base = Hex(colors.String("base", ""), path, "base");
+                    def.Accent = Hex(colors.String("accent", ""), path, "accent");
+                    def.Dark = Hex(colors.String("dark", ""), path, "dark");
+                    colors.End();
+                }
+                var size = b.Floats("size", null);
+                if (size == null || size.Length != 2) errors.Add(id + ": size needs 2 numbers");
+                else { def.SizeMin = size[0]; def.SizeMax = size[1]; }
+                var herd = b.Floats("herd", null);
+                if (herd == null || herd.Length != 2) errors.Add(id + ": herd needs 2 numbers");
+                else { def.HerdMin = (int)herd[0]; def.HerdMax = (int)herd[1]; }
+                var detail = b.Object("detail");
+                if (detail == null) errors.Add(id + ": detail missing");
+                else
+                {
+                    def.FadePixels = detail.Float("fadePixels", def.FadePixels);
+                    def.ShadowPixels = detail.Float("shadowPixels", def.ShadowPixels);
+                    def.AnimPixels = detail.Float("animPixels", def.AnimPixels);
+                    def.IkPixels = detail.Float("ikPixels", def.IkPixels);
+                    detail.End();
+                }
+                foreach (var s in b.Objects("slots", true))
+                {
+                    def.Slots.Add(new CreatureSlot
+                    {
+                        Part = s.String("part", ""), Parent = s.String("parent", null),
+                        Socket = s.Floats("socket", Array.Empty<float>()), Direction = s.Floats("direction", zero),
+                        Mirror = s.Bool("mirror", false), Phase = s.Float("phase", 0), MirrorPhase = s.Float("mirrorPhase", 0), Scale = s.Float("scale", 1),
+                    });
+                    s.End();
+                }
+                lib.Bodies.Add(def);
+                b.End();
+            }
+            root.End();
+            errors.AddRange(CreatureLibrary.Validate(lib, biomeIds));
             Check(errors, source);
             return lib;
         }
