@@ -232,7 +232,7 @@ namespace Stabby.World
                     Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
                     float h = d.Sample(x, z), s = NearStepM;
                     float bend = Math.Max(Math.Abs(d.Sample(x + s, z) + d.Sample(x - s, z) - 2 * h), Math.Abs(d.Sample(x, z + s) + d.Sample(x, z - s) - 2 * h));
-                    if (Math.Abs(wy - h) > SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend && !InFall(w, x, z)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
+                    if (Math.Abs(wy - h) > SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend && !InFall(w, x, z, true)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
                 }
             }
 
@@ -248,20 +248,40 @@ namespace Stabby.World
                 {
                     float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
                     int bc = NearField.CellOf(bx, bz, cm, n);
-                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || pools.Exists(o => NearField.PoolNear(o, bx, bz))) continue;
+                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || InFall(w, bx, bz) || pools.Exists(o => NearField.InPoolWater(o, bx, bz))) continue;
                     float h = d.Sample(bx, bz), held = Math.Min(s, Math.Min(q.Sa, q.Sb) + NearField.Rise(hw));
                     if (h < held - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {held:F1}"); return; }
                 }
             }
+
+            foreach (var l in NearField.Lines(w))
+                for (int f = 0; f < l.Lip.Length; f++)
+                {
+                    var fall = l.Falls[f];
+                    float run = 0, reach = NearField.PoolReach(fall.PoolRadius);
+                    for (int k = l.Lip[f] + 1; k + 1 < l.X.Length && run < reach; k++)
+                    {
+                        float ex = l.X[k + 1] - l.X[k], ez = l.Z[k + 1] - l.Z[k], len = (float)Math.Sqrt(ex * ex + ez * ez);
+                        for (float a = 0; a < len && run + a < reach; a += NearStepM)
+                        {
+                            float x = l.X[k] + ex * a / len, z = l.Z[k] + ez * a / len, g = d.Sample(x, z);
+                            if (run + a > NearField.FallJagM + NearStepM && g > fall.BaseY + BankTolerance) { e.Add($"plunge pool below fall at {fall.LipX:F0},{fall.LipZ:F0} has no outlet: ground {g:F1} at {x:F0},{z:F0}, {run + a:F0} m down, above water {fall.BaseY:F1}"); return; }
+                        }
+                        run += len;
+                    }
+                }
         }
 
-        static bool InFall(GeneratedWorld w, float x, float z)
+        static bool InFall(GeneratedWorld w, float x, float z, bool wall = false)
         {
             foreach (var s in w.Water.Rivers)
                 foreach (var f in s.Falls)
                 {
-                    float dx = x - f.LipX, dz = z - f.LipZ, along = dx * f.DirX + dz * f.DirZ, side = Math.Abs(dz * f.DirX - dx * f.DirZ), reach = f.Width + 2 * NearField.PoolReach(f.PoolRadius);
-                    if (along >= -NearField.FallJagM - 2 * NearStepM && along <= reach && side <= reach) return true;
+                    float dx = x - f.LipX, dz = z - f.LipZ, along = dx * f.DirX + dz * f.DirZ, side = Math.Abs(dz * f.DirX - dx * f.DirZ);
+                    float c = Hydrology.FallPoolCentre * f.PoolRadius, r = NearField.PoolReach(f.PoolRadius) - c + NearStepM;
+                    float lip = NearField.FallJagM + NearStepM, span = f.Width + NearField.PoolReach(f.PoolRadius) + f.Drop / NearField.FallOutletSlope;
+                    if (along <= lip && along >= -lip - Math.Max(0, side - 0.5f * f.Width) && side <= span) return true;
+                    if (wall && along >= -NearField.FallJagM - NearStepM && (along - c) * (along - c) + side * side < r * r) return true;
                 }
             return false;
         }
