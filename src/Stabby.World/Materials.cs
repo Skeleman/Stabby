@@ -165,6 +165,12 @@ namespace Stabby.World
         public float FlowSpeed, RapidsSlope, BedFieldM;
     }
 
+    public sealed class LibraryMaterial
+    {
+        public string Id, Name;
+        public uint Color;
+    }
+
     public sealed class MaterialLibrary
     {
         public const float RockTypePeriodM = 40f;
@@ -179,6 +185,14 @@ namespace Stabby.World
         public WaterDef Water = new WaterDef();
         public LookDef Look = new LookDef();
         public List<StratumDef> Strata = new List<StratumDef>();
+        public List<LibraryMaterial> Materials = new List<LibraryMaterial>();
+
+        public LibraryMaterial Find(string id)
+        {
+            foreach (var m in Materials)
+                if (m.Id == id) return m;
+            return null;
+        }
         public float OffsetAmplitudeM;
         public float OffsetWavelengthM;
         public float TiltPerKm;
@@ -259,6 +273,9 @@ namespace Stabby.World
                 if (!(s.ThicknessM >= 0.5f && s.ThicknessM <= 500f)) errors.Add($"strata {s.Id}: thicknessM {s.ThicknessM} outside 0.5..500");
                 if (!(s.Hardness >= 0 && s.Hardness <= 0.99f)) errors.Add($"strata {s.Id}: hardness {s.Hardness} outside 0..0.99");
             }
+            var names = new HashSet<string>();
+            foreach (var m in lib.Materials)
+                if (string.IsNullOrEmpty(m.Id) || !names.Add(m.Id)) errors.Add($"materials: id '{m.Id}' missing or repeated");
             if (!(lib.OffsetAmplitudeM >= 0)) errors.Add("offsetAmplitudeM must be >= 0");
             if (!(lib.OffsetWavelengthM > 0)) errors.Add("offsetWavelengthM must be > 0");
             if (!(lib.TiltPerKm >= 0)) errors.Add("tiltPerKm must be >= 0");

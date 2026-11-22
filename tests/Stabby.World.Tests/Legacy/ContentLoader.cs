@@ -19,6 +19,14 @@ public static class ContentLoader
         public WaterEntry? Water { get; set; }
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
+        public List<MaterialEntry> Materials { get; set; } = new();
+    }
+
+    sealed class MaterialEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Color { get; set; } = "";
     }
 
     sealed class LookEntry
@@ -185,6 +193,7 @@ public static class ContentLoader
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
                 Color = uint.Parse(s.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
             }).ToList(),
+            Materials = file.Materials.Select(m => new LibraryMaterial { Id = m.Id, Name = m.Name, Color = Hex(m.Color, path, "materials.color") }).ToList(),
         };
         lib.FillCoats();
         var errors = MaterialLibrary.Validate(lib);

@@ -286,6 +286,81 @@ namespace Stabby.Game.Editor
             System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, $"creature-bench-{path}.txt"), lines);
         }
 
+        static readonly string[] SpeciesLineup = { "boar", "boar", "deer", "hare", "boar", "hare" };
+
+        static System.Collections.IEnumerator SpeciesShot(Camera cam, string dir)
+        {
+            var view = ViewWorld();
+            if (view == null) { GameStatus.Lines["~species"] = "species shot: no view world"; yield break; }
+            var em = view.EntityManager;
+            var lib = Stabby.Viewer.ContentFiles.Creatures(Stabby.Viewer.ContentFiles.Biomes());
+            GameStatus.HoldCamera = true;
+            Ground ground = default;
+            foreach (var gw in Unity.Entities.World.All)
+            {
+                using var gq = gw.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (gq.CalculateEntityCount() == 1) { ground = gq.GetSingleton<Ground>(); break; }
+            }
+            var fwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+            var start = cam.transform.position;
+            float2 mid = new float2(start.x, start.z);
+            float best = float.MaxValue;
+            for (int ring = 0; ring <= 30; ring++)
+                for (int k = 0; k < math.max(1, ring * 6); k++)
+                {
+                    float a = k * 2f * math.PI / math.max(1, ring * 6), r = ring * 12f;
+                    float2 c = new float2(start.x, start.z) + r * new float2(math.cos(a), math.sin(a));
+                    float lo = float.MaxValue, hi = float.MinValue;
+                    bool dry = true;
+                    for (int gx = -3; gx <= 3; gx++)
+                        for (int gz = -3; gz <= 3; gz++)
+                        {
+                            float2 q = c + new float2(gx, gz) * 3f + new float2(fwd.x, fwd.z) * (gz < 0 ? 3f : 0f);
+                            float s = ground.Surface(q.x, q.y);
+                            dry &= s > 1.5f;
+                            lo = math.min(lo, s);
+                            hi = math.max(hi, s);
+                        }
+                    float score = (hi - lo) + r * 0.004f;
+                    if (dry && score < best) { best = score; mid = c; }
+                }
+            var side = new Vector3(fwd.z, 0, -fwd.x);
+            var eye = new Vector3(mid.x - fwd.x * 10f, 0, mid.y - fwd.z * 10f);
+            eye.y = math.max(GroundHeight(eye.x, eye.z), GroundHeight(mid.x, mid.y)) + 2.2f;
+            cam.fieldOfView = 40f;
+            var target = new Vector3(mid.x, GroundHeight(mid.x, mid.y) + 0.4f, mid.y);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+            FreezeCreatures(true);
+            CreatureView.Current = new CreatureView { Override = 1, Move = 0, Phase = 0 };
+            int baseCount = CreatureBuildSystem.Count, n = SpeciesLineup.Length;
+            var bench = em.CreateEntity(em.CreateArchetype(typeof(CreatureState)), n, Allocator.Persistent);
+            float yaw = math.atan2(fwd.x, fwd.z);
+            var names = new List<string>();
+            for (int i = 0; i < n; i++)
+            {
+                int body = lib.Bodies.FindIndex(b => b.Id == SpeciesLineup[i]);
+                uint h = math.hash(new uint2((uint)i, 0x5BEC1u));
+                float lateral = (i - (n - 1) * 0.5f) * 1.7f, depth = (i % 2) * 1.6f - 0.8f;
+                float2 p = mid + new float2(side.x, side.z) * lateral + new float2(fwd.x, fwd.z) * depth;
+                em.SetComponentData(bench[i], new CreatureState
+                {
+                    Id = -1 - i - 900000, Body = math.max(0, body), BodySeed = ((ulong)h << 32) | math.hash(new uint2(h, 5u)), Seed = h, WalkSpeed = 1f,
+                    Position = p, Heading = yaw + math.PI * (i % 2 == 0 ? 0.5f : -0.5f) + 0.25f * ((h & 0xFF) / 255f - 0.5f),
+                });
+                names.Add(body < 0 ? SpeciesLineup[i] + " missing" : SpeciesLineup[i]);
+            }
+            for (int f = 0; f < 1800 && CreatureBuildSystem.Count < baseCount + n; f++) yield return null;
+            var settle = Settle(150);
+            while (settle.MoveNext()) yield return null;
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "creature-species");
+            GameStatus.Lines["~species"] = $"species lineup {string.Join(", ", names)}: {CreatureBuildSystem.Count - baseCount} built";
+            em.DestroyEntity(bench);
+            bench.Dispose();
+            CreatureView.Current = default;
+            FreezeCreatures(false);
+        }
+
         static readonly List<string> brainLines = new List<string>();
 
         static bool FirstPlayer(EntityManager em, out float2 at)

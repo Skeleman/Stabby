@@ -14,6 +14,7 @@ namespace Stabby.Game.Editor
         const int DenseSites = 5;
         const float WakeFov = 15f;
         static readonly int[] FarHerdCounts = { 2000, 10000 };
+        static readonly bool FarDeerOnly = System.Environment.GetEnvironmentVariable("STABBY_FAR_MIX") == "deer";
 
         static BlobAssetReference<CreaturePlanData> PlanOf(EntityManager em)
         {
@@ -170,14 +171,19 @@ namespace Stabby.Game.Editor
         static BlobAssetReference<CreaturePlanData> SynthPlan(BlobAssetReference<CreaturePlanData> realRef, int herds, float2 dense, out int made, out int rowsMade, out int denseMade)
         {
             ref var real = ref realRef.Value;
-            var templates = new List<int2>();
+            var byBody = new List<List<int2>>();
             for (int i = 0; i < real.Spawns.Length;)
             {
-                int h = CreaturePlan.HerdOf(real.Spawns[i].Id), j = i;
+                int h = CreaturePlan.HerdOf(real.Spawns[i].Id), j = i, body = real.Spawns[i].Body;
                 while (j < real.Spawns.Length && CreaturePlan.HerdOf(real.Spawns[j].Id) == h) j++;
-                templates.Add(new int2(i, j - i));
+                while (byBody.Count <= body) byBody.Add(new List<int2>());
+                byBody[body].Add(new int2(i, j - i));
                 i = j;
             }
+            var kinds = new List<List<int2>>();
+            foreach (var l in byBody) if (l.Count > 0 && (!FarDeerOnly || kinds.Count == 0)) kinds.Add(l);
+            int target = 0;
+            for (int i = 0; i < herds; i++) target += byBody[0][i % byBody[0].Count].y;
             int sites = real.Across * real.Across;
             var perSite = new List<CreatureSpawnRow>[sites];
             var slots = new int[sites];
@@ -187,7 +193,7 @@ namespace Stabby.Game.Editor
             rowsMade = 0;
             denseMade = 0;
             int dx = (int)(dense.x / real.SiteMeters), dz = (int)(dense.y / real.SiteMeters);
-            for (int tries = 0; made < herds && tries < herds * 40; tries++)
+            for (int tries = 0; rowsMade < target && tries < herds * 40; tries++)
             {
                 bool packing = tries < DenseSites * DenseSites * CreaturePlan.MaxBodies * 4;
                 int site = packing
@@ -196,7 +202,8 @@ namespace Stabby.Game.Editor
                 if (slots[site] >= CreaturePlan.MaxBodies) continue;
                 float2 c = new float2(site % real.Across + rng.NextFloat(), site / real.Across + rng.NextFloat()) * real.SiteMeters;
                 if (ground.Blocked(c.x, c.y)) continue;
-                var t = templates[made % templates.Count];
+                var kind = kinds[made % kinds.Count];
+                var t = kind[made / kinds.Count % kind.Count];
                 float2 shift = c - new float2(real.Spawns[t.x].Route.X0, real.Spawns[t.x].Route.Z0);
                 if (perSite[site] == null) perSite[site] = new List<CreatureSpawnRow>();
                 for (int k = 0; k < t.y; k++)
@@ -746,7 +753,7 @@ namespace Stabby.Game.Editor
                 }
                 int live = BrainCount(sem, home, despawn, out int beyond, out int liveHerds);
                 var t = TimeBoth(server, systems);
-                lines.Add($"{made} plan herds ({rowCount} creatures, {denseMade} packed into {DenseSites}x{DenseSites} sites around {dense.x:F0},{dense.y:F0}): at spawn {live} live in {liveHerds} herds, {beyond} beyond despawn reach, host {t.Par:F3} ms parallel / {t.Single:F3} ms one thread");
+                lines.Add($"{(FarDeerOnly ? "deer only" : "mixed species")}: {made} plan herds ({rowCount} creatures, {denseMade} packed into {DenseSites}x{DenseSites} sites around {dense.x:F0},{dense.y:F0}): at spawn {live} live in {liveHerds} herds, {beyond} beyond despawn reach, host {t.Par:F3} ms parallel / {t.Single:F3} ms one thread");
 
                 PlaceServerPlayers(server, new Vector2(denseStage.x, denseStage.y));
                 var look = Quaternion.LookRotation(new Vector3(out2.x, -0.05f, out2.y));

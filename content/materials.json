@@ -48,6 +48,14 @@
       }
     }
   },
+  "materials": [
+    { "id": "fawn-hide",    "name": "Fawn hide",    "color": "#8c5e38" },
+    { "id": "pale-fur",     "name": "Pale fur",     "color": "#e6d8c4" },
+    { "id": "dark-horn",    "name": "Dark horn",    "color": "#2a221d" },
+    { "id": "agouti-fur",   "name": "Agouti fur",   "color": "#7d6a52" },
+    { "id": "bristle-hide", "name": "Bristle hide", "color": "#4e4339" },
+    { "id": "grizzled-fur", "name": "Grizzled fur", "color": "#7a7064" }
+  ],
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },
     { "id": "red-sandstone",  "name": "Red sandstone",   "color": "#8d7766", "thicknessM": 6, "hardness": 0.5 },
