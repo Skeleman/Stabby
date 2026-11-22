@@ -53,8 +53,8 @@ and converts once into native data.
   data-driven job; compare the per-part entity render path against Punchy's pattern (pose
   job into one buffer, one instanced draw per shape, no part entities) behind a flag, at
   10/100/500, worst arrival frame included; switching paths is Zach's call. The arrival
-  budget becomes the shared spawn budget objects use too (b/creatures-scale, after
-  b/creatures-5; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd).
+  budget becomes the shared spawn budget objects use too (b/creatures-scale, now;
+  b/creatures-5 done; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd).
   Then far herds (b/creatures-far): herds beyond the spawn reach drawn from plan data and
   the shared clock with no entities or ghosts, waking into live creatures through the
   crossfade (Punchy only does this for sky birds; Stabby's own design). (2) Full-world stress: 251k objects with terrain, grass, shadows,
@@ -250,7 +250,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   hierarchical parts (arm, leg, tail, head types) that share definitions and
   animations and vary per entity; animation from a few keyframes plus inverse
   kinematics; all rendering through the shared material library. Part
-  definitions live in `content/`, ported to ECS and Burst. Step 1 (b/creatures-1): part and body definitions in content, engine-free assembly, a code-built deer with idle and walk from keyframes plus leg IK. Step 1 done (b/creatures-1): deer wander with idle and stride, Burst animation, screen-size fade; b/creatures-2 done: shoulder hump, waist and haunch shaping with coat normal noise, and a low geometry tier by screen size through the shared crossfade. Zach: creatures are host-owned and synced; b/creatures-3 makes them Netcode for Entities ghosts, with spawn, wander and animation state decided on the host and clients only interpolating and animating. b/creatures-3 merged: host plans, spawns and wanders ghosts per-connection relevancy, clients agree within quantization; b/creatures-4 merged: herds go calm, alert, flee by reach-pixel thresholds with hysteresis, host-decided, client gap under 0.5 m while fleeing; b/creatures-5 next: fleeing herds avoid water and the map edge. | now
+  definitions live in `content/`, ported to ECS and Burst. Step 1 (b/creatures-1): part and body definitions in content, engine-free assembly, a code-built deer with idle and walk from keyframes plus leg IK. Step 1 done (b/creatures-1): deer wander with idle and stride, Burst animation, screen-size fade; b/creatures-2 done: shoulder hump, waist and haunch shaping with coat normal noise, and a low geometry tier by screen size through the shared crossfade. Zach: creatures are host-owned and synced; b/creatures-3 makes them Netcode for Entities ghosts, with spawn, wander and animation state decided on the host and clients only interpolating and animating. b/creatures-3 merged: host plans, spawns and wanders ghosts per-connection relevancy, clients agree within quantization; b/creatures-4 merged: herds go calm, alert, flee by reach-pixel thresholds with hysteresis, host-decided, client gap under 0.5 m while fleeing; b/creatures-5 merged: fleeing herds steer along shores and away from the map edge, alert when cornered; b/creatures-scale next. | now
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
