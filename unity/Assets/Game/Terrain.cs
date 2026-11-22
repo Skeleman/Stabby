@@ -630,6 +630,10 @@ namespace Stabby.Game
         }
 
         Task<Prepared> preparing;
+        Task<List<MeshParts>> steaming;
+        List<MeshParts> steam;
+        int steamApplied;
+        bool hasMist;
         IEnumerator<string> loading;
         public bool Loading => loading != null || look.IsCreated;
         Prepared prepared;
@@ -702,7 +706,7 @@ namespace Stabby.Game
                 double tu = frame.Elapsed.TotalMilliseconds;
                 Collect();
                 double tc = frame.Elapsed.TotalMilliseconds;
-                Roots(); Statics();
+                Roots(); Statics(); Steam();
                 double ts = frame.Elapsed.TotalMilliseconds;
                 lodRequests = lodDraw = lodNodes = lodEvictMs = lodShadowMs = 0;
                 lodEvicts = lodDeferred = lodShadows = 0;
@@ -747,7 +751,8 @@ namespace Stabby.Game
         {
             var view = DetailView.Refresh(cam);
             quads.MistWindow(view.Quality, out float mistFade, out float mistFull);
-            Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, 0, 0));
+            quads.SteamWindow(view.Quality, out float steamFade, out float steamFull);
+            Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, steamFade, steamFull));
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
 
@@ -886,6 +891,7 @@ namespace Stabby.Game
             waterMaterial = scene != null && scene.WaterMaterial != null ? graphics.RegisterMaterial(scene.WaterMaterial) : material;
             yield return "water material";
             bool mist = scene != null && scene.MistMaterial != null;
+            hasMist = mist;
             if (mist) mistMaterial = graphics.RegisterMaterial(scene.MistMaterial);
             else prepared.Mist.Clear();
             yield return "mist material";
@@ -1163,6 +1169,33 @@ namespace Stabby.Game
             prepared = null;
             ready = true;
             GameStatus.TerrainBuilt = true;
+        }
+
+        void Steam()
+        {
+            if (!ready || !hasMist || (steam != null && steamApplied >= steam.Count)) return;
+            if (steam == null)
+            {
+                if (steaming == null)
+                {
+                    var field = World.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+                    if (field == null) return;
+                    steaming = Task.Run(() => { var l = new List<MeshParts>(); WaterGeometry.Steam(field, l); return l; });
+                    return;
+                }
+                if (!steaming.IsCompleted) return;
+                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); hasMist = false; return; }
+                steam = steaming.Result;
+                steaming = null;
+            }
+            while (steamApplied < steam.Count)
+            {
+                var part = steam[steamApplied];
+                if (!Spend(part.Verts.Length)) return;
+                AddStatic(part, mistMaterial, WaterGeometry.MistPad);
+                steamApplied++;
+            }
+            GameStatus.Lines["terrain~steam"] = $"spring steam {steam.Count} pieces";
         }
 
         void AddStatic(MeshParts part, BatchMaterialID mat, float pad)

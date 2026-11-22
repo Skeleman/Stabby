@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby material library",
   "type": "object",
-  "required": ["schemaVersion", "offsetAmplitudeM", "offsetWavelengthM", "tiltPerKm", "look", "surface", "water", "strata"],
+  "required": ["schemaVersion", "offsetAmplitudeM", "offsetWavelengthM", "tiltPerKm", "look", "sinter", "surface", "water", "strata"],
   "additionalProperties": false,
   "$defs": {
     "amp": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -43,6 +43,20 @@
         "roughness": { "$ref": "#/$defs/amp" },
         "specular": { "$ref": "#/$defs/amp" },
         "roughnessVar": { "$ref": "#/$defs/amp" }
+      }
+    },
+    "sinter": {
+      "type": "object",
+      "required": ["white", "ochre", "orange", "water", "deep", "bandM", "roughness"],
+      "additionalProperties": false,
+      "properties": {
+        "white": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "ochre": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "orange": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "water": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "deep": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "bandM": { "type": "number", "minimum": 0.01, "maximum": 2 },
+        "roughness": { "$ref": "#/$defs/amp" }
       }
     },
     "water": {

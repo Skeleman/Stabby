@@ -49,6 +49,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbySpringWater, _StabbySpringDeep;
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -329,7 +330,44 @@ Shader "Stabby/Object"
                 float shade = 0;
                 bool cap = th.x > 3.5 && th.x < 7.5, side = th.x > 7.5;
                 float rf = saturate((th.x - 4) / 3), rm = 3 * th.y;
-                if (mat == 4)
+                [branch] if (mat == 9)
+                {
+                    float deep = smoothstep(6.6, 4.3, th.x + 0.5 * big.x + 0.25 * mid.x * fm);
+                    a = lerp(_StabbySpringWater.rgb, _StabbySpringDeep.rgb, deep);
+                    float lip = smoothstep(6.55, 6.95, th.x + 0.15 * mid.x * fm);
+                    a = lerp(a, _StabbySinterA.rgb * 0.85, 0.55 * lip);
+                    float3 vv = normalize(v);
+                    float4 rip = TmNoise3(float3(q.x * 2.1, _Time.y * 0.35, q.z * 2.1) + sd, int3(0, 0, 0));
+                    grad = 0.06 * float3(rip.y, 0, rip.w) * TmFade(2.1, fp);
+                    float fres = pow(1 - saturate(dot(vv, n)), 4);
+                    a = lerp(a, _StabbySky.rgb * 0.9 + 0.05, 0.6 * fres);
+                    tmRough = 0.06;
+                    grad -= n * dot(grad, n);
+                    n = normalize(n - grad);
+                    occ = 0;
+                    return a;
+                }
+                else if (mat == 8)
+                {
+                    float t = saturate((th.x - 7) / 4), wet = smoothstep(7.2, 6.4, th.x);
+                    float w1 = q.y * _StabbySinterA.w + 0.7 * big.x + 0.35 * mid.x * fm + 0.1 * fib.x * ff;
+                    float band = 0.5 + 0.5 * sin(w1 * 6.2831853);
+                    float run = saturate(str.x * 0.9 + 0.55 * big.x + 0.7 * t - 0.35 + 0.15 * mid.x * fm) * fs;
+                    float warm = smoothstep(0.15, 0.75, run) * (0.25 + 0.75 * t);
+                    float3 mineral = lerp(_StabbySinterB.rgb, _StabbySinterC.rgb, smoothstep(0.35, 0.9, run + 0.25 * t + 0.2 * fib.x * ff));
+                    float3 white = _StabbySinterA.rgb * (0.86 + 0.08 * big.x + 0.06 * mid.x * fm - 0.06 * (1 - band) * t);
+                    a = lerp(white, mineral, 0.85 * warm);
+                    a *= 0.93 + 0.05 * fib.x * ff;
+                    a = lerp(a, a * float3(0.82, 0.9, 0.9), 0.5 * wet);
+                    grad = 0.07 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - g * (0.06 * cos(w1 * 6.2831853) * fm * t);
+                    tmRough = lerp(_StabbySinterB.w, 0.2, wet);
+                    shade = 0.12 * (1 - band) * t;
+                    grad -= n * dot(grad, n);
+                    n = normalize(n - grad);
+                    occ = shade;
+                    return lerp(a, a * float3(0.5, 0.47, 0.43), occ);
+                }
+                else if (mat == 4)
                 {
                     float yf = th.x, L = th.y, fpa = th.z * _StabbySurface.x, sk = th.w * 977;
                     int ck = (int)(th.w * 65536);

@@ -42,6 +42,8 @@ namespace Stabby.Viewer
         public const float FallMinDrop = 0.3f;
         const float FallMargin = 0.3f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerPool = 0.5f, MistPerDrop = 0.25f, MistPhase = 0.618034f, MistSpread = 0.8f, SprayStep = 3f, SprayPerPool = 0.35f, SprayPerDrop = 0.12f, SpraySpread = 0.95f, SprayAhead = 0.2f, VeilWidth = 1.1f, VeilHeight = 0.4f, VeilAhead = 1f;
         public const float MistPad = 40f;
+        const float SteamRadius = 0.55f, SteamRise = 2.2f;
+        const int SteamPuffs = 2;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f;
@@ -366,6 +368,8 @@ namespace Stabby.Viewer
                 Puff(basePos + fwd * VeilAhead, fwd, flowQ, Mathf.Repeat(seed + 0.5f, 1f), new Vector2(0.5f * VeilWidth * f.RunWidth, VeilHeight * h), 2);
             }
 
+            public void Vent(Vector3 c, float phase, float radius, float rise) => Puff(c, Vector3.right, 0, phase, new Vector2(radius, rise), 3);
+
             static Vector3 At(FallCurtain f, Vector3 basePos, Vector3 fwd, Vector3 side, float mu)
             {
                 float at = f.Mid + mu;
@@ -395,6 +399,25 @@ namespace Stabby.Viewer
                 Verts.Clear(); Cols.Clear(); Size.Clear(); Corner.Clear(); Tris.Clear();
                 return m;
             }
+        }
+
+        public static void Steam(ObjectField field, List<MeshParts> mists)
+        {
+            var mist = new MistBuffers();
+            var pools = new List<float>();
+            foreach (var o in field.Discoveries())
+            {
+                if (!field.IsSpring(o)) continue;
+                field.SpringPoolsAt(o, pools);
+                for (int k = 0; k < pools.Count; k += 6)
+                {
+                    var c = new Vector3(pools[k], pools[k + 4], pools[k + 1]);
+                    float r = pools[k + 2], seed = Mathf.Repeat(c.x * 0.0137f + c.z * 0.0291f, 1f);
+                    for (int m = 0; m < SteamPuffs; m++) mist.Vent(c, Mathf.Repeat(seed + m * MistPhase, 1f), SteamRadius * r, SteamRise * r);
+                }
+                if (mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
+            }
+            if (mist.Verts.Count > 0) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
         }
 
         public static List<MeshParts> Rivers(GeneratedWorld world, TerrainDetail detail, List<MeshParts> mists)

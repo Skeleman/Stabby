@@ -118,6 +118,32 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void HotSpringsSitNearRelief()
+    {
+        int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;
+        var pools = new System.Collections.Generic.List<float>();
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var springs = field.Discoveries().Where(o => o.Def == spring).ToArray();
+            output.WriteLine($"seed {seed}: {springs.Length} springs " + string.Join(" ", springs.Select(c => $"{c.X:F0},{c.Z:F0}:{field.SpringDraw(c.X, c.Z):F2}")));
+            foreach (var c in springs)
+            {
+                Assert.True(field.SpringDraw(c.X, c.Z) > 0);
+                Assert.True(field.RiverGap(c.X, c.Z) >= ObjectField.SpringRiverM);
+                Assert.Null(field.PoolFault(c));
+                field.SpringPoolsAt(c, pools);
+                Assert.InRange(pools.Count / 6, 3, 5);
+            }
+            total += springs.Length;
+            if (springs.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 2, $"hot springs in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void LoadedWorldPlacesTheSameDiscoveries()
     {
         var materials = ContentLoader.LoadMaterials(Root);
