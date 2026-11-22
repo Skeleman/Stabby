@@ -11,6 +11,7 @@
     "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a",
     "water": "#5fc8c4", "deep": "#1f6f86", "bandM": 0.3, "roughness": 0.55
   },
+  "mud": { "surface": "#6c675d", "deep": "#3f3b34", "clay": "#a49a84", "grey": "#8c897f", "roughness": 0.3 },
   "water": {
     "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8",
     "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,

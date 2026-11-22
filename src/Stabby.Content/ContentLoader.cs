@@ -122,6 +122,13 @@ namespace Stabby.Content
                 Deep = Hex(sinter.String("deep", ""), source, "sinter.deep"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
             };
             sinter?.End();
+            var mud = root.Object("mud");
+            lib.Mud = mud == null ? null : new MudDef
+            {
+                Surface = Hex(mud.String("surface", ""), source, "mud.surface"), Deep = Hex(mud.String("deep", ""), source, "mud.deep"),
+                Clay = Hex(mud.String("clay", ""), source, "mud.clay"), Grey = Hex(mud.String("grey", ""), source, "mud.grey"), Roughness = mud.Float("roughness", 0),
+            };
+            mud?.End();
             var strata = new List<StratumDef>();
             foreach (var s in root.Objects("strata"))
             {
@@ -233,6 +240,7 @@ namespace Stabby.Content
                     ContactTexelPixels = terrain.Float("contactTexelPixels", t0.ContactTexelPixels),
                     MistFadePixels = terrain.Float("mistFadePixels", t0.MistFadePixels), MistFullPixels = terrain.Float("mistFullPixels", t0.MistFullPixels),
                     SteamFadePixels = terrain.Float("steamFadePixels", t0.SteamFadePixels), SteamFullPixels = terrain.Float("steamFullPixels", t0.SteamFullPixels),
+                    ColumnFadePixels = terrain.Float("columnFadePixels", t0.ColumnFadePixels), ColumnFullPixels = terrain.Float("columnFullPixels", t0.ColumnFullPixels),
                 };
                 terrain.End();
             }
