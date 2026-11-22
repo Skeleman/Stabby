@@ -370,6 +370,22 @@ public class ObjectTests
     }
 
     [Fact]
+    public void ButtesAndBasaltStandAsSolidAdds()
+    {
+        int buttes = 0, columns = 0, fallen = 0;
+        foreach (ulong seed in new ulong[] { 4, 7 })
+        {
+            var w = Gen(seed);
+            foreach (var e in Features.Place(w, new TerrainDetail(w)))
+            {
+                if (e.Shape == FeatureEdit.Butte) { Assert.Equal(FeatureEdit.Add, e.Kind); buttes++; }
+                if (e.Shape == FeatureEdit.Basalt) { Assert.Equal(FeatureEdit.Add, e.Kind); if (e.W > 0f) columns++; else fallen++; }
+            }
+        }
+        Assert.True(buttes > 0 && columns > 0 && fallen > 0, $"{buttes} butte edits, {columns} column clusters, {fallen} fallen columns");
+    }
+
+    [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
         var w = Gen(4);

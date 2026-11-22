@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Shapes = 8;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Butte = 8, Basalt = 9, Shapes = 10;
 
         public const float Blend = 0.5f;
 
@@ -35,6 +35,7 @@ namespace Stabby.World
         public float D, F, N, S;
 
         public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f;
+        public const float ColumnGap = 0.07f, ColumnRound = 0.1f, ColumnBroken = 0.16f, ColumnTilt = 0.22f, Wobble = 0.55f;
 
         public float Thick => R + Math.Min(W, H);
 
@@ -58,6 +59,8 @@ namespace Stabby.World
             dist = R;
             if (!Contains(x, y, z)) return false;
             if (Shape == Spring) return Basin(x, y, z, out dist);
+            if (Shape == Butte) return Mesa(x, y, z, out dist);
+            if (Shape == Basalt) return W > 0f ? Columns(x, y, z, out dist) : Fallen(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
@@ -149,6 +152,83 @@ namespace Stabby.World
             float a = Math.Max((float)Math.Sqrt(dx * dx + dz * dz) - W - wob, 0f);
             float c = Math.Max(Math.Abs(y - Ay) - H, 0f);
             dist = (float)Math.Sqrt(a * a + c * c);
+            if (N > 0f) dist += N * Lump(x, y, z);
+            return dist < R;
+        }
+
+        bool Mesa(float x, float y, float z, out float dist)
+        {
+            float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+            float ux = len > 0 ? ex / len : 1f, uz = len > 0 ? ez / len : 0f;
+            float px = x - 0.5f * (Ax + Bx), pz = z - 0.5f * (Az + Bz);
+            float a = Math.Max(Math.Abs(px * ux + pz * uz) - 0.5f * len, 0f), b = pz * ux - px * uz;
+            float kf = 1f / (Wobble * W), dy = y - Ay;
+            float o = (float)Math.Sqrt(a * a + b * b) + F * W * Value(Seed ^ 0x2C1B3C6Du, x * kf, z * kf, 0.37f);
+            float s = Math.Max((o - W + (dy + H) / P) * P / (float)Math.Sqrt(1f + P * P), Math.Abs(dy) - H);
+            if (N > 0f) s += N * Lump(x, y, z);
+            dist = R + s;
+            return dist < R;
+        }
+
+        bool Columns(float x, float y, float z, out float dist)
+        {
+            float tt = 1f + T * T, ca = (1f - T * T) / tt, sa = 2f * T / tt, mx = 0.5f * (Ax + Bx), mz = 0.5f * (Az + Bz);
+            float px = x - mx, pz = z - mz, u = px * ca + pz * sa, v = pz * ca - px * sa;
+            float fq = (0.57735027f * u - 0.33333333f * v) / P, fr = 0.66666667f * v / P, fs = -fq - fr;
+            float rq = (float)Math.Floor(fq + 0.5f), rr = (float)Math.Floor(fr + 0.5f), rs = (float)Math.Floor(fs + 0.5f);
+            float dq = Math.Abs(rq - fq), dr = Math.Abs(rr - fr), ds = Math.Abs(rs - fs);
+            if (dq > dr && dq > ds) rq = -rr - rs;
+            else if (dr > ds) rr = -rq - rs;
+            int q0 = (int)rq, r0 = (int)rr;
+            float best = float.MaxValue;
+            for (int k = 0; k < 7; k++)
+            {
+                int oq = k == 1 || k == 5 ? 1 : k == 2 || k == 6 ? -1 : 0, or = k == 3 || k == 6 ? 1 : k == 4 || k == 5 ? -1 : 0;
+                best = Math.Min(best, Column(q0 + oq, r0 + or, u, v, y, ca, sa, mx, mz));
+            }
+            dist = R;
+            if (best == float.MaxValue) return false;
+            if (N > 0f) best += N * Lump(x, y, z);
+            dist = R + best;
+            return dist < R;
+        }
+
+        float Column(int q, int r, float u, float v, float y, float ca, float sa, float mx, float mz)
+        {
+            float cu = P * 1.7320508f * (q + 0.5f * r), cv = P * 1.5f * r;
+            float wx = mx + cu * ca - cv * sa, wz = mz + cu * sa + cv * ca;
+            float ex = Bx - Ax, ez = Bz - Az, ll = ex * ex + ez * ez, qx = wx - Ax, qz = wz - Az;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (qx * ex + qz * ez) / ll)) : 0f;
+            qx -= t * ex; qz -= t * ez;
+            uint seed = Seed;
+            float kf = 1f / (Wobble * W), limit = 1f - F * Value(seed ^ 0x2C1B3C6Du, wx * kf, wz * kf, 0.37f);
+            float rel = (float)Math.Sqrt(qx * qx + qz * qz) / W;
+            if (rel > limit) return float.MaxValue;
+            float e = rel / limit, hf = (1f - D * e * e) * (0.62f + 0.38f * Unit(Hash(seed, q, r, 3)));
+            if (Unit(Hash(seed, q, r, 5)) < ColumnBroken) hf *= 0.35f + 0.25f * Unit(Hash(seed, q, r, 6));
+            float lu = u - cu, lv = v - cv, round = ColumnRound * P, bottom = Ay - H;
+            float top = bottom + 2f * H * hf + ColumnTilt * ((Unit(Hash(seed, q, r, 7)) - 0.5f) * lu + (Unit(Hash(seed, q, r, 8)) - 0.5f) * lv);
+            return Prism(lu, lv, Math.Max(y - (top - round), bottom - y), round);
+        }
+
+        float Prism(float a, float b, float cap, float round)
+        {
+            float au = Math.Abs(a), av = Math.Abs(b);
+            float hex = Math.Max(au, 0.5f * au + 0.8660254f * av) - (0.8660254f - ColumnGap) * P + round;
+            float ho = Math.Max(hex, 0f), co = Math.Max(cap, 0f);
+            return (float)Math.Sqrt(ho * ho + co * co) + Math.Min(Math.Max(hex, cap), 0f) - round;
+        }
+
+        bool Fallen(float x, float y, float z, out float dist)
+        {
+            float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ey * ey + ez * ez);
+            float ux = len > 0 ? ex / len : 1f, uy = len > 0 ? ey / len : 0f, uz = len > 0 ? ez / len : 0f, flat = (float)Math.Sqrt(ux * ux + uz * uz);
+            float sx = flat > 0 ? uz / flat : 0f, sz = flat > 0 ? -ux / flat : 1f;
+            float px = x - 0.5f * (Ax + Bx), py = y - 0.5f * (Ay + By), pz = z - 0.5f * (Az + Bz);
+            float along = px * ux + py * uy + pz * uz, across = px * sx + pz * sz;
+            float up = py * flat - (px * ux + pz * uz) * uy / (flat > 0 ? flat : 1f);
+            float tt = 1f + T * T, ca = (1f - T * T) / tt, sa = 2f * T / tt, round = ColumnRound * P;
+            dist = R + Prism(across * ca + up * sa, up * ca - across * sa, Math.Abs(along) - 0.5f * len + round, round);
             if (N > 0f) dist += N * Lump(x, y, z);
             return dist < R;
         }
@@ -313,6 +393,9 @@ namespace Stabby.World
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
+            ulong rb = Rng.Stream(w.Config.Seed, "buttes").NextU64(), rv = Rng.Stream(w.Config.Seed, "basalt").NextU64();
+            var buttes = Landforms.BiomeMask(w, Landforms.ButteBiomes);
+            var basalt = Landforms.BasaltMask(w);
             int from = 0;
             var tile = new List<FeatureEdit>();
             for (int ty = 0; ty < tiles; ty++)
@@ -342,6 +425,14 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(rh + t));
                     tile.Clear();
                     Landforms.Hoodoo(w, detail, strata, hoodoos, tx, ty, ref r, tile);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rb + t));
+                    tile.Clear();
+                    Landforms.Butte(w, detail, strata, buttes, tx, ty, ref r, tile);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rv + t));
+                    tile.Clear();
+                    Landforms.Basalt(w, detail, strata, basalt, tx, ty, ref r, tile);
                     if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
                     from = list.Count;
                 }
