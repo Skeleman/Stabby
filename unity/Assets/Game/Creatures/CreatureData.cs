@@ -88,14 +88,22 @@ namespace Stabby.Game
         public BlobArray<byte> Wet;
     }
 
-    public struct CreatureGround : IHerdGround
+    public struct CreatureGround : IHerdGround, IWetCells
     {
         public BlobAssetReference<CreaturePlanData> Plan;
+
+        public bool WetCell(int cell) => Plan.Value.Wet[cell] != 0;
 
         public bool Blocked(float x, float z)
         {
             ref var p = ref Plan.Value;
             return HerdMind.OffMap(p.Size, p.CellMeters, x, z, out int c) || p.Wet[c] != 0;
+        }
+
+        public bool Crosses(float x0, float z0, float x1, float z1)
+        {
+            ref var p = ref Plan.Value;
+            return HerdMind.CrossesWet(ref this, p.Size, p.CellMeters, x0, z0, x1, z1);
         }
     }
 
