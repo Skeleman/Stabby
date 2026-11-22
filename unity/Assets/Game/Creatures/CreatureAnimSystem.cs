@@ -116,6 +116,8 @@ namespace Stabby.Game
         NativeArray<float3> scratchPos, scratchEnd;
         NativeArray<quaternion> scratchRot, scratchEndRot;
         NativeArray<float> scratchFloor;
+        float carry;
+        int skipped;
         const int SegCap = 64, PartCap = 32;
 
         public void OnCreate(ref SystemState state)
@@ -179,7 +181,7 @@ namespace Stabby.Game
             bool gpu = SystemAPI.TryGetSingleton<CreatureTally>(out var tally) && tally.Instanced;
             if (gpu)
             {
-                if (Pending) { Reused++; return; }
+                if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
                 Instances.Clear();
                 if (Instances.Capacity < tally.Links) Instances.Capacity = tally.Links + tally.Links / 2;
@@ -191,11 +193,13 @@ namespace Stabby.Game
             }
             state.Dependency = new AnimJob
             {
-                Ground = SystemAPI.GetSingleton<Ground>(), View = view, Hold = hold, Present = present, Dt = math.min(SystemAPI.Time.DeltaTime, 0.1f),
+                Ground = SystemAPI.GetSingleton<Ground>(), View = view, Hold = hold, Present = present, Dt = math.min(SystemAPI.Time.DeltaTime + carry, 0.1f * (1 + skipped)),
                 World = world, Fade = fade, Mmi = mmi, States = states,
                 Pos = scratchPos, Rot = scratchRot, Floor = scratchFloor, End = scratchEnd, EndRot = scratchEndRot,
                 Gpu = gpu, Furs = furs, Out = Instances.AsParallelWriter(), FurOut = Fur, Frustum = Frustum,
             }.ScheduleParallel(JobHandle.CombineDependencies(state.Dependency, Gpu));
+            carry = 0;
+            skipped = 0;
             if (!gpu) return;
             state.Dependency = new Compact { Instances = Instances, Sorted = Sorted, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
             Gpu = state.Dependency;
@@ -381,9 +385,10 @@ namespace Stabby.Game
                     float lift = math.mul(unrot, foot - rootPos).y + rig.Stand;
                     float g = Ground.HeightAt(foot.x, foot.z);
                     drop = math.max(drop, foot.y + oldSink - lift - g);
-                    for (int j = 0; j < part.Count; j++) floor[part.First + j] = g;
                     float shift = math.clamp(g + lift - foot.y, -0.45f * part.Reach, 0.45f * part.Reach) * ik;
                     if (math.abs(shift) > 1e-4f) CreaturePose.Reach(ref part, rootRot, foot + new float3(0, shift, 0), pos, rot, foot);
+                    for (int j = 0; j < part.Count - 1; j++) floor[part.First + j] = Ground.HeightAt(pos[part.First + j].x, pos[part.First + j].z);
+                    floor[part.First + part.Count - 1] = g;
                 }
                 return math.clamp(drop * ik, 0, 0.3f * rig.Stand);
             }
