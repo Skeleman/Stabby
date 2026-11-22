@@ -44,7 +44,7 @@ namespace Stabby.Viewer
         public const float MistPad = 40f;
         const float SteamRadius = 0.55f, SteamRise = 2.2f, SpringOverlap = 0.3f, ColumnRadius = 0.9f;
         public const float ColumnPerRadius = 14f;
-        const int SteamPuffs = 2, SpringSides = 32, JetPuffs = 9, ColumnSteamPuffs = 4;
+        const int SteamPuffs = 2, SpringSides = 32, JetPuffs = 14, ColumnSteamPuffs = 5;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f;
@@ -424,6 +424,7 @@ namespace Stabby.Viewer
             var verts = new List<Vector3>();
             var tris = new List<int>();
             var tags = new List<float>();
+            var rims = new List<float>();
             foreach (var o in field.Discoveries())
             {
                 if (!field.IsVent(o)) continue;
@@ -445,7 +446,7 @@ namespace Stabby.Viewer
                     }
                     int b = verts.Count;
                     float tag = kind == ObjectField.MudPot ? -1 : 1;
-                    for (int s = 0; s <= SpringSides; s++) tags.Add(tag);
+                    for (int s = 0; s <= SpringSides; s++) { tags.Add(tag); rims.Add(s > 0 && tag < 0 ? 1 : 0); }
                     verts.Add(c);
                     float edge = r + SpringOverlap * u;
                     for (int s = 0; s < SpringSides; s++)
@@ -463,7 +464,7 @@ namespace Stabby.Viewer
             pool.Uvs = new Vector2[verts.Count];
             pool.Uv1 = new Vector4[verts.Count];
             pool.Uv2 = new Vector4[verts.Count];
-            for (int k = 0; k < verts.Count; k++) pool.Uv1[k] = new Vector4(0, 0, 0, tags[k]);
+            for (int k = 0; k < verts.Count; k++) pool.Uv1[k] = new Vector4(rims[k], 0, 0, tags[k]);
             water.Add(pool);
         }
 

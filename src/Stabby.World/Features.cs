@@ -34,7 +34,7 @@ namespace Stabby.World
         public float W, H, P, T;
         public float D, F, N, S;
 
-        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f;
+        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, Riser = 0.55f;
 
         public float Thick => R + Math.Min(W, H);
 
@@ -151,12 +151,16 @@ namespace Stabby.World
             if (D > 0f)
             {
                 float j = 0.6f * Value(Seed ^ 0x3C6EF372u, x / 3f, 0f, z / 3f), s = h / D + j, i = (float)Math.Floor(s), f = s - i;
-                f *= f;
-                h = Math.Max(0f, D * (i + f * f - j));
+                float f2 = f * f;
+                h = Math.Max(0f, D * (i + Lerp(f, f2 * f2, Riser) - j));
             }
             float rad = T != 0f ? W - T * h : W;
             float wob = P > 0f ? P * rad * Value(Seed, x / 1.5f, 0f, z / 1.5f) : 0f;
-            if (D < 0f) wob += D * W * (1f - Value(Seed ^ 0xA54FF53Au, x / (0.8f * W), 0f, z / (0.8f * W)));
+            if (P < 0f)
+            {
+                float l = Math.Max(W, LobeM);
+                wob += P * W * (1f - Value(Seed ^ 0xA54FF53Au, x / l, 0f, z / l));
+            }
             float a = (float)Math.Sqrt(dx * dx + dz * dz) - rad - wob;
             if (T != 0f) a /= (float)Math.Sqrt(1f + T * T);
             a = Math.Max(a, 0f);

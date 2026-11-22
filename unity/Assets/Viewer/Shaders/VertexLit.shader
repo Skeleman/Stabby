@@ -119,10 +119,10 @@ Shader "Stabby/VertexLit"
                     float warm = smoothstep(0.15, 0.75, run) * (0.25 + 0.75 * t);
                     float3 mineral = lerp(_StabbySinterB.rgb, _StabbySinterC.rgb, smoothstep(0.35, 0.9, run + 0.25 * t + 0.2 * fib.x * ff));
                     float3 white = _StabbySinterA.rgb * (0.86 + 0.08 * big.x + 0.06 * mid.x * fm - 0.06 * (1 - band) * t);
-                    white = lerp(white, _StabbyMudGrey.rgb * (0.95 + 0.1 * fib.x * ff), 0.65 * saturate(0.35 + 0.5 * mid.x * fm - 0.35 * big.x + 0.3 * t));
+                    white = lerp(white, _StabbyMudGrey.rgb * (0.95 + 0.1 * fib.x * ff), 0.85 * saturate(0.6 + 0.5 * mid.x * fm - 0.45 * big.x + 0.3 * t));
                     float3 a = lerp(white, mineral, 0.85 * warm) * (0.93 + 0.05 * fib.x * ff);
                     a = lerp(a, a * float3(0.5, 0.47, 0.43), 0.12 * (1 - band) * t);
-                    float3 grad = 0.07 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - float3(0, 1, 0) * (0.06 * cos(w1 * 6.2831853) * fm * t);
+                    float3 grad = 0.12 * big.yzw + 0.09 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - float3(0, 1, 0) * (0.06 * cos(w1 * 6.2831853) * fm * t);
                     grad -= n * dot(grad, n);
                     m.albedo = lerp(m.albedo, a, cover);
                     tmRough = lerp(tmRough, _StabbySinterB.w, cover);

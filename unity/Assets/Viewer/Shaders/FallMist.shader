@@ -80,17 +80,17 @@ Shader "Stabby/FallMist"
                     {
                         t = frac(tm / (JetPeriod * (0.85 + 0.3 * frac(ph * 7.31))) + ph);
                         float top = h * (0.35 + 0.65 * burst);
-                        wp += float3(rad * 0.25 * dr.y * t, top * (1 - (1 - t) * (1 - t)), rad * 0.25 * dr.z * t) + float3(wind.x, 0, wind.y) * (top * 0.15 * t * t);
-                        size = rad * (0.45 + 0.75 * t);
+                        wp += float3(rad * 0.25 * dr.y * t, top * t * (1.5 - 0.5 * t), rad * 0.25 * dr.z * t) + float3(wind.x, 0, wind.y) * (top * 0.15 * t * t);
+                        size = rad * (0.65 + 0.55 * t);
                         stretch = 1 + JetStretch * (1 - t);
-                        env = burst * smoothstep(0, 0.08, t) * (1 - smoothstep(0.6, 1, t));
+                        env = burst * smoothstep(0, 0.03, t) * (1 - smoothstep(0.75, 1, t));
                     }
                     else
                     {
                         t = frac(tm / (ColumnSteamPeriod * (0.8 + 0.4 * frac(ph * 7.31))) + ph);
-                        wp += float3(rad * 1.2 * dr.y, h * (0.25 + 1.0 * t), rad * 1.2 * dr.z) + float3(wind.x, 0, wind.y) * (h * WindDrift * 0.5 * t * t);
+                        wp += float3(rad * 1.2 * dr.y, h * (0.15 + 1.0 * t), rad * 1.2 * dr.z) + float3(wind.x, 0, wind.y) * (h * WindDrift * 0.5 * t * t);
                         size = rad * (1.6 + 2.8 * t);
-                        env = cloud * smoothstep(0, 0.2, t) * (1 - smoothstep(0.4, 1, t));
+                        env = cloud * smoothstep(0, 0.12, t) * (1 - smoothstep(0.4, 1, t));
                     }
                     float camD = length(_WorldSpaceCameraPos - wp), px = ScreenPx(h, camD);
                     env *= smoothstep(_StabbyColumnPx.x, _StabbyColumnPx.y, px);

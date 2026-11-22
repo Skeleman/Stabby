@@ -32,6 +32,7 @@ Shader "Stabby/Water"
             static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
             static const float SlopeRange = 0.1;
+            static const float MudFeather = 4;
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
             static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05;
 
@@ -411,7 +412,7 @@ Shader "Stabby/Water"
                     c = lerp(c, lit, mud);
                 }
 
-                float alpha = lerp(saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * 25), mud);
+                float alpha = lerp(saturate(max(saturate(depth * _StabbyWaterShallow.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * 4) * saturate((1 - i.chan.z) * MudFeather), mud);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - mud);
                 return half4(lerp(MixFog(c, i.fog), c, clear), alpha);
             }
