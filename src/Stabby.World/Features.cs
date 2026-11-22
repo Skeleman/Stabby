@@ -165,6 +165,7 @@ namespace Stabby.World
             float kf = 1f / (Wobble * W), dy = y - Ay;
             float o = (float)Math.Sqrt(a * a + b * b) + F * W * Value(Seed ^ 0x2C1B3C6Du, x * kf, z * kf, 0.37f);
             float s = Math.Max((o - W + (dy + H) / P) * P / (float)Math.Sqrt(1f + P * P), Math.Abs(dy) - H);
+            if (T > 0f) s = Math.Min(s, Math.Max(o - W + 2f * H / P - D, Math.Max(dy - H, H - T - dy)));
             if (N > 0f) s += N * Lump(x, y, z);
             dist = R + s;
             return dist < R;
@@ -394,7 +395,7 @@ namespace Stabby.World
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
             ulong rb = Rng.Stream(w.Config.Seed, "buttes").NextU64(), rv = Rng.Stream(w.Config.Seed, "basalt").NextU64();
-            var buttes = Landforms.BiomeMask(w, Landforms.ButteBiomes);
+            var buttes = Landforms.ButteMask(w);
             var basalt = Landforms.BasaltMask(w);
             int from = 0;
             var tile = new List<FeatureEdit>();

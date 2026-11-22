@@ -1234,16 +1234,18 @@ namespace Stabby.Game.Editor
         static System.Collections.Generic.List<(string name, Vector3 eye, Vector3 target)> LandformShots(Ground ground)
         {
             var shots = new System.Collections.Generic.List<(string name, Vector3 eye, Vector3 target)>();
-            int[] shapes = { FeatureEdit.Tor, FeatureEdit.Hoodoo, FeatureEdit.Butte, FeatureEdit.Basalt };
-            string[] kinds = { "tor", "hoodoo", "butte", "basalt" }, names = { "landform-tor", "landform-hoodoos", "landform-butte", "landform-basalt" };
-            float[] backs = { 55f, 80f, 170f, 42f }, fars = { 420f, 420f, 700f, 420f };
+            int[] shapes = { FeatureEdit.Tor, FeatureEdit.Hoodoo, FeatureEdit.Butte, FeatureEdit.Butte, FeatureEdit.Basalt };
+            string[] kinds = { "tor", "hoodoo", "mesa", "butte", "basalt" }, names = { "landform-tor", "landform-hoodoos", "landform-mesa", "landform-butte", "landform-basalt" };
+            float[] backs = { 55f, 80f, 260f, 140f, 42f }, fars = { 420f, 420f, 900f, 650f, 420f };
             for (int s = 0; s < shapes.Length; s++)
             {
                 int shape = shapes[s], count = 0, best = -1, bestNear = 0;
+                string kind = kinds[s];
                 ref var g = ref ground.Blob.Value;
                 for (int k = 0; k < g.Edits.Length; k++)
                 {
                     if (g.Edits[k].Shape != shape) continue;
+                    if (shape == FeatureEdit.Butte && (g.Edits[k].T <= 0f || Mesa(g.Edits[k]) != (kind == "mesa"))) continue;
                     count++;
                     int near = 0;
                     for (int j = 0; j < g.Edits.Length; j++)
@@ -1251,7 +1253,6 @@ namespace Stabby.Game.Editor
                     if (shape == FeatureEdit.Butte || shape == FeatureEdit.Basalt) near = g.Edits[k].W > 0f ? (int)(g.Edits[k].H * g.Edits[k].W) : 0;
                     if (near > bestNear) { bestNear = near; best = k; }
                 }
-                string kind = kinds[s];
                 GameStatus.Lines["~landforms " + kind] = $"{count} {kind} edits, densest group {bestNear} at edit {best}";
                 if (best < 0) continue;
                 Vector3 c = Vector3.zero, top = Vector3.zero;
@@ -1265,6 +1266,7 @@ namespace Stabby.Game.Editor
                     n++;
                 }
                 c /= n;
+                float self = Mathf.Max(60f, 0.5f * Mathf.Max(g.Edits[best].MaxX - g.Edits[best].MinX, g.Edits[best].MaxZ - g.Edits[best].MinZ) + 10f);
                 var dirOut = Vector3.zero;
                 float low = float.MaxValue;
                 for (int a = 0; a < 8; a++)
@@ -1284,7 +1286,7 @@ namespace Stabby.Game.Editor
                 {
                     var p = c + Quaternion.Euler(0, a * 45f, 0) * Vector3.forward * fars[s];
                     p.y = Clear(ground, target, p, Mathf.Max(ground.HeightAt(p.x, p.z) + 40f, target.y + 30f), 0.05f);
-                    if (Blocked(ref g, c, p, target)) p.y += 10000f;
+                    if (Blocked(ref g, c, p, target, self) || Blocked(ref g, c, p, new Vector3(c.x, ground.HeightAt(c.x, c.z) + 2f, c.z), self)) p.y += 10000f;
                     if (p.y < far.y) far = p;
                 }
                 if (far.y > 5000f) far.y -= 10000f;
@@ -1293,7 +1295,13 @@ namespace Stabby.Game.Editor
             return shots;
         }
 
-        static bool Blocked(ref GroundData g, Vector3 c, Vector3 eye, Vector3 target)
+        static bool Mesa(FeatureEdit e)
+        {
+            float dx = e.Bx - e.Ax, dz = e.Bz - e.Az;
+            return 2f * (e.W - 2f * e.H / e.P) + Mathf.Sqrt(dx * dx + dz * dz) > 2f * e.H - Landforms.ButteSink;
+        }
+
+        static bool Blocked(ref GroundData g, Vector3 c, Vector3 eye, Vector3 target, float self)
         {
             for (float t = 0.1f; t < 0.95f; t += 0.05f)
             {
@@ -1302,7 +1310,7 @@ namespace Stabby.Game.Editor
                 {
                     var e = g.Edits[k];
                     if (e.Kind != FeatureEdit.Add || p.y > e.MaxY || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
-                    if (Mathf.Abs(e.Ax - c.x) < 60f && Mathf.Abs(e.Az - c.z) < 60f) continue;
+                    if (Mathf.Abs(e.Ax - c.x) < self && Mathf.Abs(e.Az - c.z) < self) continue;
                     return true;
                 }
             }
