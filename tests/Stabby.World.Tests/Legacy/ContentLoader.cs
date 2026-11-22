@@ -17,6 +17,7 @@ public static class ContentLoader
         public float TiltPerKm { get; set; }
         public SurfaceEntry? Surface { get; set; }
         public WaterEntry? Water { get; set; }
+        public SinterEntry? Sinter { get; set; }
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
     }
@@ -30,6 +31,17 @@ public static class ContentLoader
         public float Roughness { get; set; }
         public float Specular { get; set; }
         public float RoughnessVar { get; set; }
+    }
+
+    sealed class SinterEntry
+    {
+        public string White { get; set; } = "";
+        public string Ochre { get; set; } = "";
+        public string Orange { get; set; } = "";
+        public string Water { get; set; } = "";
+        public string Deep { get; set; } = "";
+        public float BandM { get; set; }
+        public float Roughness { get; set; }
     }
 
     sealed class WaterEntry
@@ -175,6 +187,11 @@ public static class ContentLoader
             OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
             Surface = file.Surface == null ? null! : Surface(file.Surface),
             Water = file.Water == null ? null! : Water(file.Water, path),
+            Sinter = file.Sinter == null ? null! : new SinterDef
+            {
+                White = Hex(file.Sinter.White, path, "sinter.white"), Ochre = Hex(file.Sinter.Ochre, path, "sinter.ochre"), Orange = Hex(file.Sinter.Orange, path, "sinter.orange"),
+                Water = Hex(file.Sinter.Water, path, "sinter.water"), Deep = Hex(file.Sinter.Deep, path, "sinter.deep"), BandM = file.Sinter.BandM, Roughness = file.Sinter.Roughness,
+            },
             Look = file.Look == null ? null! : new LookDef
             {
                 NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM,
@@ -255,6 +272,8 @@ public static class ContentLoader
         public float ContactTexelPixels { get; set; } = new TerrainViewDef().ContactTexelPixels;
         public float MistFadePixels { get; set; } = new TerrainViewDef().MistFadePixels;
         public float MistFullPixels { get; set; } = new TerrainViewDef().MistFullPixels;
+        public float SteamFadePixels { get; set; } = new TerrainViewDef().SteamFadePixels;
+        public float SteamFullPixels { get; set; } = new TerrainViewDef().SteamFullPixels;
     }
 
     sealed class FoliageEntry
@@ -430,7 +449,7 @@ public static class ContentLoader
             };
             lib.Objects.Add(def);
         }
-        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels };
+        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels };
         if (file.Foliage != null)
         {
             var g = file.Foliage.Grass;

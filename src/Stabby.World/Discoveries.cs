@@ -5,9 +5,10 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7;
+        public const float SpringRiverM = 40f, SpringReliefM = 8f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
@@ -18,9 +19,10 @@ namespace Stabby.World
         ObjectInstance[][] builtSites;
         float[] treeCover;
         List<LandmarkSketch> towns;
+        WorldSketch sketch;
         float[] routes;
 
-        public List<LandmarkSketch> Towns => towns ?? (towns = (w.Sketch ?? WorldSketch.Generate(w.Config)).Landmarks);
+        public List<LandmarkSketch> Towns => towns ?? (towns = (w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)))).Landmarks);
 
         public static float DiscoveryStep(float worldM, float spacingM) => worldM / Math.Max(1, (int)Math.Floor(worldM / spacingM));
 
@@ -64,6 +66,7 @@ namespace Stabby.World
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
                         if (!roll) continue;
                         if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
+                        if (pl.Discovery == Spring) FaceDownhill(px, pz, ref qa, ref qb);
                         any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
                     }
                     if (any) list.Add(pick);
@@ -108,12 +111,12 @@ namespace Stabby.World
             float fit = Fitness(lib.Objects[d].Placement.Discovery, px, pz);
             if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
             int kind = lib.Objects[d].Placement.Discovery;
-            bool shrine = kind == Shrine;
-            int tries = shrine || kind == Ruin ? lib.Objects[d].Variants : 1, k = 0;
+            bool shrine = kind == Shrine, spring = kind == Spring;
+            int tries = shrine || spring || kind == Ruin ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o))) break;
+                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || PoolFault(o) == null)) break;
             }
             if (k == tries) return false;
             best = fit; pick = o;
@@ -309,6 +312,137 @@ namespace Stabby.World
             return best;
         }
 
+        public float RiverGap(float x, float z)
+        {
+            int gx = Cell(x), gz = Cell(z);
+            float best = float.MaxValue;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = gx + dx, az = gz + dz;
+                    if (ax < 0 || az < 0 || ax >= n || az >= n) continue;
+                    int i = az * n + ax;
+                    for (int k = blockStart[i]; k < blockStart[i + 1]; k++)
+                    {
+                        int item = blockItems[k];
+                        if (item < 0) continue;
+                        best = Math.Min(best, Distance(item, x, z) - phw[item]);
+                    }
+                }
+            return best;
+        }
+
+        public float SpringDraw(float x, float z)
+        {
+            var sk = w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)));
+            float px = x / cm, pz = z / cm, best = 0;
+            foreach (var g in sk.Ranges)
+                if (g.Width > 0) best = Math.Max(best, 1 - WorldSketch.DistanceToPolyline(g.X, g.Y, px, pz) / (3 * g.Width));
+            foreach (var h in sk.Highlands)
+            {
+                if (h.Plateau || h.Radius <= 0) continue;
+                float dx = h.X - px, dz = h.Y - pz;
+                best = Math.Max(best, 1 - (float)Math.Sqrt(dx * dx + dz * dz) / (1.5f * h.Radius));
+            }
+            return best;
+        }
+
+        void FaceDownhill(float x, float z, ref float qa, ref float qb)
+        {
+            float s = SlopeStepM;
+            float gx = (GroundAt(detail, cm, x + s, z) - GroundAt(detail, cm, x - s, z)) / (2 * s);
+            float gz = (GroundAt(detail, cm, x, z + s) - GroundAt(detail, cm, x, z - s)) / (2 * s);
+            float len = (float)Math.Sqrt(gx * gx + gz * gz);
+            if (len < 1e-4f) return;
+            float vx = -gx / len, vz = -gz / len;
+            qa = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + vz)));
+            qb = (vx < 0 ? -1 : 1) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - vz)));
+        }
+
+        public bool IsSpring(ObjectInstance o) => lib.Objects[o.Def].Placement.Discovery == Spring;
+
+        public const int SpringStride = 9;
+        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f;
+
+        public void SpringPoolsAt(ObjectInstance o, List<float> world)
+        {
+            world.Clear();
+            var local = new List<float>();
+            Structures.SpringPools(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), local);
+            float u = Structures.SpringU * o.Size, last = float.MaxValue;
+            for (int k = 0; k < local.Count; k += Structures.PoolStride)
+            {
+                Rotate(o, local[k] * u, 0, local[k + 1] * u, out float rx, out _, out float rz);
+                float x = o.X + rx, z = o.Z + rz, r = local[k + 2] * u, rout = local[k + 3] * u;
+                float sum = 0, low = float.MaxValue, high = GroundAt(detail, cm, x, z);
+                for (int p = 0; p < 8; p++)
+                {
+                    FanDir(p, 0.70710678f, out float ux, out float uz);
+                    float g = GroundAt(detail, cm, x + ux * r, z + uz * r);
+                    sum += g; high = Math.Max(high, g);
+                    low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
+                }
+                float level = Math.Min(sum / 8, last - SpringStepU * u), crest = level + Structures.SpringCrest * u, floor = level - Structures.SpringDepth * u;
+                last = level;
+                world.Add(x); world.Add(z); world.Add(r); world.Add(rout); world.Add(level); world.Add(crest); world.Add(floor);
+                world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(Math.Max(high, crest) + SpringTopU * u);
+            }
+        }
+
+        public string PoolFault(ObjectInstance o)
+        {
+            var pools = new List<float>();
+            SpringPoolsAt(o, pools);
+            for (int k = 0; k < pools.Count; k += SpringStride)
+            {
+                float x = pools[k], z = pools[k + 1], rout = pools[k + 3];
+                for (int p = 0; p < 9; p++)
+                {
+                    float ux = 0, uz = 0;
+                    if (p > 0) FanDir(p - 1, 0.70710678f, out ux, out uz);
+                    float px = x + ux * rout, pz = z + uz * rout;
+                    if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return "pool reaches past the world edge";
+                    int i = Cell(pz) * n + Cell(px);
+                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || RiverGap(px, pz) <= 0) return "pool stands in water";
+                }
+                foreach (var f in edits)
+                    if (f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring && x + rout >= f.MinX && x - rout <= f.MaxX && z + rout >= f.MinZ && z - rout <= f.MaxZ) return "pool overlaps a terrain feature";
+            }
+            return null;
+        }
+
+        public FeatureEdit[] SpringEdits()
+        {
+            var list = new List<FeatureEdit>();
+            var carves = new List<FeatureEdit>();
+            var pools = new List<float>();
+            foreach (var o in Discoveries())
+            {
+                if (!IsSpring(o)) continue;
+                SpringPoolsAt(o, pools);
+                float u = Structures.SpringU * o.Size;
+                for (int k = 0; k < pools.Count; k += SpringStride)
+                {
+                    float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], crest = pools[k + 5], floor = pools[k + 6], bottom = pools[k + 7], top = pools[k + 8];
+                    float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
+                    list.Add(new FeatureEdit
+                    {
+                        Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
+                        Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (crest + bottom), By = 0.5f * (crest + bottom),
+                        W = rout - ra, H = Math.Max(0f, 0.5f * (crest - bottom) - ra), P = 0.15f, N = 0.1f * u, S = seed,
+                    });
+                    carves.Add(new FeatureEdit
+                    {
+                        Kind = FeatureEdit.Carve, Shape = FeatureEdit.Spring, R = rc,
+                        Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (top + floor), By = 0.5f * (top + floor),
+                        W = r - hole, H = Math.Max(0f, 0.5f * (top - floor) - hole), N = 0.08f * u, S = seed,
+                    });
+                }
+            }
+            list.AddRange(carves);
+            return list.ToArray();
+        }
+
         bool ClearOfBuilt(ObjectInstance o)
         {
             float r = SiteRadius(o), span = WorldChunks.Size * cm;
@@ -380,6 +514,12 @@ namespace Stabby.World
                 float d = RoadSide(x, z, out _, out _);
                 if (relief > ShrineReliefM) return float.MinValue;
                 return d >= ShrineRoadMinM && d <= ShrineRoadM ? -Math.Abs(d - ShrineRoadAimM) / ShrineRoadM - 0.1f * relief : float.MinValue;
+            }
+            if (kind == Spring)
+            {
+                float draw = SpringDraw(x, z);
+                if (!(draw > 0) || relief > SpringReliefM || RiverGap(x, z) < SpringRiverM) return float.MinValue;
+                return draw - 0.05f * relief;
             }
             if (kind == Ruin) return relief <= RuinReliefM ? rise - 0.2f * relief : float.MinValue;
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;

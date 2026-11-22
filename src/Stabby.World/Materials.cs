@@ -32,6 +32,12 @@ namespace Stabby.World
         public float Parallax, AlbedoVar, Roughness = float.NaN;
     }
 
+    public sealed class SinterDef
+    {
+        public uint White = 0xe8e4d8, Ochre = 0xc99a4a, Orange = 0xc4642a, Water = 0x5fc8c4, Deep = 0x1f6f86;
+        public float BandM = 0.3f, Roughness = 0.55f;
+    }
+
     public sealed class LookDef
     {
         public float NoiseContrast = 0.12f, AlbedoVar = 0.08f, DetailWavelengthM = 0.05f;
@@ -178,6 +184,7 @@ namespace Stabby.World
         public SurfaceDetail Surface = new SurfaceDetail();
         public WaterDef Water = new WaterDef();
         public LookDef Look = new LookDef();
+        public SinterDef Sinter = new SinterDef();
         public List<StratumDef> Strata = new List<StratumDef>();
         public float OffsetAmplitudeM;
         public float OffsetWavelengthM;
@@ -250,6 +257,12 @@ namespace Stabby.World
                 Amp(errors, "look.roughness", look.Roughness);
                 Amp(errors, "look.specular", look.Specular);
                 Amp(errors, "look.roughnessVar", look.RoughnessVar);
+            }
+            if (lib.Sinter == null) errors.Add("sinter: required");
+            else
+            {
+                if (!(lib.Sinter.BandM >= 0.01f && lib.Sinter.BandM <= 2)) errors.Add($"sinter.bandM {lib.Sinter.BandM} outside 0.01..2");
+                Amp(errors, "sinter.roughness", lib.Sinter.Roughness);
             }
             if (lib.Strata.Count == 0) errors.Add("strata: at least one stratum required");
             var ids = new HashSet<string>();

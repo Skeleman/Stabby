@@ -415,7 +415,7 @@ namespace Stabby.World
             if (slope < pl.SlopeMin || slope > pl.SlopeMax) return false;
             float hard = strata.Hardness(i, y) / contrast;
             if (hard < pl.HardnessMin || hard > pl.HardnessMax) return false;
-            if (!Clear(i, gx, gz, x, y, z, r, bank)) return false;
+            if (!Clear(i, gx, gz, x, y, z, r, bank, pl.Discovery > 0)) return false;
             float nx = -gxs * pl.AlignToSlope, nz = -gzs * pl.AlignToSlope, nl = (float)Math.Sqrt(nx * nx + 1 + nz * nz);
             nx /= nl; nz /= nl;
             float ny = 1f / nl;
@@ -460,7 +460,7 @@ namespace Stabby.World
             }
         }
 
-        bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank)
+        bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank, bool site = false)
         {
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
@@ -478,6 +478,7 @@ namespace Stabby.World
                 if (item < 0)
                 {
                     var f = edits[~item];
+                    if (site && f.Shape == FeatureEdit.Spring) continue;
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;
                     continue;
                 }

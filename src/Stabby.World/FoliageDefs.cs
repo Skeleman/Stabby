@@ -38,7 +38,7 @@ namespace Stabby.World
     {
         public const float ContactSizeM = 1f, ContactMaxTexelM = 1f;
         public float QuadPixels = 10.8f, ContactPixels = 7.3f, ContactTexelPixels = 1.8f;
-        public float MistFadePixels = 4f, MistFullPixels = 16f;
+        public float MistFadePixels = 4f, MistFullPixels = 16f, SteamFadePixels = 3f, SteamFullPixels = 12f;
 
         public float Allowed(float pixelsPerMetre, float quality) => QuadPixels / (pixelsPerMetre * Math.Max(quality, 0.1f));
 
@@ -56,12 +56,20 @@ namespace Stabby.World
             fullPixels = MistFullPixels / q;
         }
 
+        public void SteamWindow(float quality, out float fadePixels, out float fullPixels)
+        {
+            float q = Math.Max(quality, 0.1f);
+            fadePixels = SteamFadePixels / q;
+            fullPixels = SteamFullPixels / q;
+        }
+
         public void Validate(List<string> errors)
         {
             if (QuadPixels < 1 || QuadPixels > 100) errors.Add("terrain: quadPixels must be 1-100");
             if (ContactPixels < 1 || ContactPixels > 100) errors.Add("terrain: contactPixels must be 1-100");
             if (ContactTexelPixels < 0.1f || ContactTexelPixels > 20) errors.Add("terrain: contactTexelPixels must be 0.1-20");
             if (MistFadePixels <= 0 || MistFullPixels <= MistFadePixels || MistFullPixels > 200) errors.Add("terrain: mistFullPixels must exceed mistFadePixels > 0, at most 200");
+            if (SteamFadePixels <= 0 || SteamFullPixels <= SteamFadePixels || SteamFullPixels > 200) errors.Add("terrain: steamFullPixels must exceed steamFadePixels > 0, at most 200");
         }
     }
 

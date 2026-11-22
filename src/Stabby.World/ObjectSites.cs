@@ -47,6 +47,17 @@ namespace Stabby.World
                         }
                     }
                     if (x0 > x1) { x0 = z0 = -footprint[d]; x1 = z1 = footprint[d]; }
+                    if (def.Placement.Discovery == Spring)
+                    {
+                        var pools = new List<float>();
+                        Structures.SpringPools(ObjectMeshes.Key(def.Id, 0, v), pools);
+                        for (int k = 0; k < pools.Count; k += Structures.PoolStride)
+                        {
+                            float px = pools[k] * Structures.SpringU, pz = pools[k + 1] * Structures.SpringU, pr = pools[k + 3] * Structures.SpringU;
+                            x0 = Math.Min(x0, px - pr); x1 = Math.Max(x1, px + pr);
+                            z0 = Math.Min(z0, pz - pr); z1 = Math.Max(z1, pz + pr);
+                        }
+                    }
                     box[v * 4] = x0; box[v * 4 + 1] = x1; box[v * 4 + 2] = z0; box[v * 4 + 3] = z1;
                     float ex = Math.Max(-x0, x1), ez = Math.Max(-z0, z1);
                     siteReach = Math.Max(siteReach, (float)Math.Sqrt(ex * ex + ez * ez) * def.Placement.SizeMaxM);

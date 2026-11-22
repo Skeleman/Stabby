@@ -22,6 +22,7 @@ Shader "Stabby/Water"
 
             float4 _StabbySky, _StabbyFieldUV;
             float4 _StabbyWaterDeep, _StabbyWaterShallow, _StabbyWaterWave, _StabbyWaterSwell, _StabbyWaterFlow;
+            float4 _StabbySpringWater, _StabbySpringDeep;
             TEXTURE2D(_StabbySlope);
             SAMPLER(sampler_StabbySlope);
             TEXTURE2D(_StabbyBed);
@@ -83,7 +84,7 @@ Shader "Stabby/Water"
             }
 
             struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; };
 
             float ScreenPx(float size, float dist) { return size / max(dist, 0.01) * abs(UNITY_MATRIX_P[1][1]) * 540; }
 
@@ -178,6 +179,7 @@ Shader "Stabby/Water"
                 o.screen = ComputeScreenPos(cs);
                 o.chan = float4(i.chan, i.reach.xy);
                 o.along = i.reach.z;
+                o.warm = i.reach.w;
                 o.fall = i.fall;
                 return o;
             }
@@ -299,14 +301,15 @@ Shader "Stabby/Water"
                 UNITY_FLATTEN if (rscene < surface) { ruv = uv; rscene = scene; }
                 float3 under = SampleSceneColor(ruv);
                 float path = lerp(max(0, dist * (rscene / max(surface, 0.001) - 1)), field / max(v.y, 0.05), far);
-                float3 trans = exp(log(max(_StabbyWaterShallow.rgb, 0.01)) * (path * _StabbyWaterDeep.w));
+                float3 shallowC = lerp(_StabbyWaterShallow.rgb, _StabbySpringWater.rgb, i.warm), deepC = lerp(_StabbyWaterDeep.rgb, _StabbySpringDeep.rgb, i.warm);
+                float3 trans = exp(log(max(shallowC, 0.01)) * (path * _StabbyWaterDeep.w));
 
                 Light l = GetMainLight();
                 float3 sky = _StabbySky.rgb;
                 float dk = 1 - exp(-path * _StabbyWaterDeep.w * 0.3);
-                float3 silt = float3(0.5, 0.44, 0.3) * dot(_StabbyWaterShallow.rgb, 1.0 / 3);
-                float3 teal = _StabbyWaterShallow.rgb * float3(0.26, 0.4, 0.42);
-                float3 tint = lerp(lerp(silt, teal, saturate(dk * 2.2)), _StabbyWaterDeep.rgb, smoothstep(0.25, 1, dk));
+                float3 silt = float3(0.5, 0.44, 0.3) * dot(shallowC, 1.0 / 3);
+                float3 teal = shallowC * lerp(float3(0.26, 0.4, 0.42), 0.7, i.warm);
+                float3 tint = lerp(lerp(silt, teal, saturate(dk * 2.2 + i.warm)), deepC, smoothstep(0.25, 1, dk));
                 float3 scatter = LookColor(tint, 1.3) * (l.color * saturate(l.direction.y + 0.2) * 0.6 + sky * 0.5);
                 under *= lerp(float3(1.04, 0.99, 0.86), 1, saturate(dk * 3));
                 float3 c = under * trans + scatter * (1 - trans);

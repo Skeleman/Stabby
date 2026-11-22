@@ -7,6 +7,10 @@
     "noiseContrast": 0.12, "albedoVar": 0.08, "detailWavelengthM": 0.05,
     "saturation": 0.65, "roughness": 0.85, "specular": 0.04, "roughnessVar": 0.12
   },
+  "sinter": {
+    "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a",
+    "water": "#5fc8c4", "deep": "#1f6f86", "bandM": 0.3, "roughness": 0.55
+  },
   "water": {
     "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8",
     "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,
