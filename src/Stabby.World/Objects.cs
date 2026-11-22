@@ -184,7 +184,7 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false)
+        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false, bool builtOnly = false)
         {
             float span = WorldChunks.Size * cm;
             float x0 = cx * span, z0 = cz * span;
@@ -201,6 +201,11 @@ namespace Stabby.World
                 if (bankSite[d] >= 0)
                 {
                     if (boulders == null && (!solidOnly || AnySolid(d))) PlaceBank(d, chunk, chunkKey, x0, z0, sx, sz, near, list);
+                    continue;
+                }
+                if (pl.Discovery > 0)
+                {
+                    if (!builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitDiscoveries(d, chunk, x0, z0, sx, sz, list);
                     continue;
                 }
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;

@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -171,7 +171,23 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (only == "inn" && phase >= 160 + InnShots.Length)
+            while (phase >= 180 && phase < 180 + RingShots.Length)
+            {
+                string name = RingShots[phase - 180];
+                if (wait == 0)
+                {
+                    if (!AimRing(cam, phase - 180)) { GameStatus.Lines["~" + name] = "no stone ring placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 181) GameStatus.Lines["~bench ring"] = Bench(cam, "stone ring mid");
+                wait = 0;
+                phase++;
+            }
+            if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1023,6 +1039,39 @@ namespace Stabby.Game.Editor
                 }
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim " + InnShots[mode]] = $"inn variant {pick.Variant} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, door {door.x:F1},{door.z:F1}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
+                return true;
+            }
+            return false;
+        }
+
+        static readonly string[] RingShots = { "ring-close", "ring-mid" };
+
+        static bool AimRing(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                foreach (var o in field.Discoveries())
+                {
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                    if (score < best) { best = score; pick = o; }
+                }
+                if (best == float.MaxValue) return false;
+                var q = new Quaternion(pick.Qx, pick.Qy, pick.Qz, pick.Qw);
+                var centre = new Vector3(pick.X, pick.Y, pick.Z);
+                float r = Structures.RingRadius * pick.Size;
+                var across = q * Vector3.forward;
+                var along = q * Vector3.right;
+                Vector3 eye, target;
+                if (mode == 0) { target = centre + along * 0.6f * r + Vector3.up * 1.2f; eye = centre - across * 0.35f * r - along * 0.5f * r + Vector3.up * 1.7f; }
+                else { target = centre + Vector3.up * 1.0f; eye = centre + (across * 0.8f + along * 0.6f).normalized * 4.2f * r + Vector3.up * 0.9f * r; }
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + RingShots[mode]] = $"stone ring variant {pick.Variant} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
                 return true;
             }
             return false;
