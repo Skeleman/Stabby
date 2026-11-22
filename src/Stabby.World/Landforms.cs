@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class Landforms
     {
         public const float TorChance = 0.45f, HoodooChance = 0.55f;
-        public const float TorMinR = 14f, TorMaxR = 18f, TorRound = 0.22f, TorWide = 0.62f, TorCore = 0.1f, TorShrink = 0.16f, TorShift = 0.18f, TorTurn = 0.25f, TorFuse = 0.35f, TorSink = 0.3f, TorJoint = 0.12f;
+        public const float TorMinR = 14f, TorMaxR = 18f, TorRound = 0.09f, TorWide = 0.62f, TorCore = 0.17f, TorShrink = 0.16f, TorShift = 0.26f, TorTurn = 0.3f, TorFuse = 0.3f, TorSink = 0.3f, TorJoint = 0.18f;
         public const float HoodooMinR = 6f, HoodooMaxR = 7.5f, HoodooMinRise = 8f, HoodooMaxRise = 14f, HoodooMinPinch = 0.2f, HoodooMaxPinch = 0.38f, HoodooCap = 1.15f, HoodooSpread = 5f, HoodooGap = 2.8f;
         public const int TorLayers = 5, HoodooCount = 6;
         public const float MaxRiseM = 110f;
@@ -109,12 +109,19 @@ namespace Stabby.World
             int n = w.Config.Size, layers = 3 + (int)(layerRoll * (TorLayers - 2));
             float cm = w.Config.CellMeters, cx = site % n, cz = site / n;
             Unit(ref dx, ref dz);
-            float foot = Foot(detail, cx, cz, r0, cm), px = cx * cm, pz = cz * cm, y = foot, last = 0f;
+            float foot = Foot(detail, cx, cz, r0, cm), crest = detail.HeightAt(cx, cz), px = cx * cm, pz = cz * cm, y = foot, last = 0f;
             for (int k = 0; k < layers; k++)
             {
                 float size = r0 * (1f - TorShrink * k) * (1f + 0.08f * shift[k * 4 + 3]);
                 float round = TorRound * size, len = size - round, wide = TorWide * size - round, core = TorCore * size, half = round + core;
-                y = k == 0 ? foot + half - TorSink * 2f * half : y + last + half - TorFuse * round;
+                if (k == 0)
+                {
+                    float top = crest + 2f * half * (1f - TorSink), bottom = foot - round;
+                    core = Math.Max(core, 0.5f * (top - bottom) - round);
+                    half = round + core;
+                    y = 0.5f * (top + bottom);
+                }
+                else y = y + last + half - TorFuse * round;
                 if (k > 0) { px += shift[k * 4] * TorShift * size; pz += shift[k * 4 + 1] * TorShift * size; }
                 float ux = dx - dz * TorTurn * shift[k * 4 + 2], uz = dz + dx * TorTurn * shift[k * 4 + 2];
                 Unit(ref ux, ref uz);

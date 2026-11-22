@@ -1208,13 +1208,29 @@ namespace Stabby.Game.Editor
                 var target = new Vector3(c.x, (c.y + top.y) * 0.5f, c.z);
                 float back = s == 0 ? 55f : 80f;
                 var eye = c + dirOut * back;
-                eye.y = Mathf.Max(ground.HeightAt(eye.x, eye.z) + 3f, target.y - 4f);
+                eye.y = Clear(ground, target, eye, Mathf.Max(ground.HeightAt(eye.x, eye.z) + 3f, target.y - 4f), 0.3f);
                 shots.Add((s == 0 ? "landform-tor" : "landform-hoodoos", eye, target));
-                var far = c + dirOut * 420f;
-                far.y = Mathf.Max(ground.HeightAt(far.x, far.z) + 40f, target.y + 30f);
+                var far = Vector3.zero;
+                far.y = float.MaxValue;
+                for (int a = 0; a < 8; a++)
+                {
+                    var p = c + Quaternion.Euler(0, a * 45f, 0) * Vector3.forward * 420f;
+                    p.y = Clear(ground, target, p, Mathf.Max(ground.HeightAt(p.x, p.z) + 40f, target.y + 30f), 0.05f);
+                    if (p.y < far.y) far = p;
+                }
                 shots.Add((s == 0 ? "landform-tor-far" : "landform-hoodoos-far", far, target));
             }
             return shots;
+        }
+
+        static float Clear(Ground ground, Vector3 target, Vector3 eye, float y, float from)
+        {
+            for (float t = from; t <= 1f; t += 0.05f)
+            {
+                float h = ground.HeightAt(target.x + (eye.x - target.x) * t, target.z + (eye.z - target.z) * t) + 5f;
+                y = Mathf.Max(y, target.y + (h - target.y) / t);
+            }
+            return y;
         }
 
         static bool Aim(Camera cam, int shape, bool inside, bool undercut)
