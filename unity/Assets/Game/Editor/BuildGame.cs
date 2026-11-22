@@ -31,7 +31,7 @@ namespace Stabby.Game.Editor
             var options = new BuildPlayerOptions
             {
                 scenes = new[] { "Assets/Scenes/Game.unity" },
-                locationPathName = "../play/Stabby.exe",
+                locationPathName = "../play/game/Stabby.exe",
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.None
             };

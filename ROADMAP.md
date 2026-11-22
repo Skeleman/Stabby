@@ -77,13 +77,17 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | World objects contract (approved by Zach; rule 11 text awaiting his review): one object definition in `content/objects.json`; four kinds (static with collision, interactive and removable, animated, structures of pieces with one LOD) set LOD, shadow, wind and animation policy; per-part traits override; placement is an engine-free stage after biomes; objects are built in code | next |
 | Structure kit (rule 11): standalone elements such as awnings, tables, crates and posts are objects of their own that stalls and camps reuse; buildings assemble reusable modules (walls, corners, floors, roofs, door and window frames) that join seamlessly and merge to one LOD element at distance; the dry-stone wall and cairn become kit pieces; blueprints nest (kit piece -> building blueprint -> site blueprint with surrounding decorative and functional elements -> town placing sites), each level a content definition expanded from its own stream Prove it on one complete inn first (modules, doors and windows, furniture, yard, merged far mesh, collision), then one site placing it beside other elements; towns only after that. Inn merged (b/inn, GV 57): shell from kit modules, site blueprint with yard, stall, well and fences, natural objects cleared around sites and walls (CheckSites), straw thatch with ragged hem and muted dyed stall cloth. b/thatch-mass reverted (Zach): the rework made the roof badly aliased and the courses blended into one mass; the original roof only needed its one unfrilled seam fixed. b/thatch-seam merged: the hem frill fades by its own scale, so slanted courses keep a ragged edge. Zach: the second-to-last course still has a straight edge, likely a separate plane mapped differently; fixing that row only (b/thatch-row2); towns | in progress (thatch eave course frilled at the drip edge: b/thatch-row2 done; Zach approved the thatch roofs; Zach: the step from parallax wall courses to real stones is too contrasty, so wall heads (stone columns, or solid borders such as render, concrete-like caps or dressed stone edging, whichever hides the seam best) go at run ends and joints to hide the seams, with an A/B bench of parallax against geometry walls (b/wall-slope)) |
 | Landforms (b/landforms-2, paused, single lane): mesas and buttes move into the heightfield (caprock, cap cliff, talus apron, 150-600 m lobed mesas, library strata), with solid-field edits only for the overhanging lip. Zach: basalt columns and crystals are objects with their own mesh in the basalt (or crystal) material, not terrain edits. They are instanced hex-prism clusters from objects.json, with contact skirts per rule 11. This should also remove the 65 ms 2160p basalt cost | next (after contact-audit; resume one lane at a time) |
-| **Zach 11-22:** one liquid system. Every liquid uses the shared water path (surface, geometry, shader, hydrology bodies), parameterized per liquid from a library in `content/`: colour and depth tint, opacity, viscosity (wave speed and amplitude, flow), surface crust or bubbles, emission. Liquids: water, mud (fill mud pots with an opaque mud layer), peat bog pools in wetlands, quicksand patches, lava (with volcano landforms). Falls and flows share it too: the waterfall path (fall geometry, FallMist spray) reads the same liquid entry, so lava flows and falls (slow, crusted, emissive, heat shimmer instead of mist), sandfalls (granular sheet, dust instead of spray) and mud seeps (thick, slow, short runs) are parameters, not new systems. Zach 11-22: realistic liquids first; fantasy fluids wait, but the library stays open for them. Gameplay effects (sinking, slowing, burning) wait for the movement work. Card b/liquids-1: liquid library + mud pots filled + bog pools; lava and quicksand follow. | next |
+| **Zach 11-22:** one liquid system. Every liquid uses the shared water path (surface, geometry, shader, hydrology bodies), parameterized per liquid from a library in `content/`: colour and depth tint, opacity, viscosity (wave speed and amplitude, flow), surface crust or bubbles, emission. Liquids: water, mud (fill mud pots with an opaque mud layer), peat bog pools in wetlands, quicksand patches, lava (with volcano landforms). Falls and flows share it too: the waterfall path (fall geometry, FallMist spray) reads the same liquid entry, so lava flows and falls (slow, crusted, emissive, heat shimmer instead of mist), sandfalls (granular sheet, dust instead of spray) and mud seeps (thick, slow, short runs) are parameters, not new systems. Zach 11-22: realistic liquids first; fantasy fluids wait, but the library stays open for them. Gameplay effects (sinking, slowing, burning) wait for the movement work. Card b/liquids-1: liquid library + mud pots filled + bog pools; lava and quicksand follow. | liquids-1 merged (GV 84: library, mud pots, peat bogs); next liquids-2: soft bog edges, all objects avoid bogs, then falls and flows per liquid |
 
 ## Next
 
 - Real streaming when gameplay needs a bigger world: residency around players,
   eviction, priority, memory budget. The server then packs chunks on demand
   instead of keeping every packed chunk (about 2 MB at 512, fine for now).
+- CI (11-22, done): runs hit the 20-min timeout, then Actions stopped on billing.
+  Repo is public now (free minutes). Fast job on push/PR, 15 min: lint, filtered
+  tests, 256 sweep.
+  The local full suite at merge stays the real gate.
 - Unity batch CI job (game capture on a runner) if a license setup allows it.
 - Generator features resume after the audit: caves, cliffs and river overhaul
   carried over from Punchy, more biomes.
@@ -106,12 +110,33 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   animations and vary per entity; animation from a few keyframes plus inverse
   kinematics; all rendering through the shared material library. Part
   definitions live in `content/`, ported to ECS and Burst. Step 1 (b/creatures-1): part and body definitions in content, engine-free assembly, a code-built deer with idle and walk from keyframes plus leg IK. Step 1 done (b/creatures-1): deer wander with idle and stride, Burst animation, screen-size fade; b/creatures-2 done: shoulder hump, waist and haunch shaping with coat normal noise, and a low geometry tier by screen size through the shared crossfade. Zach: creatures are host-owned and synced; b/creatures-3 makes them Netcode for Entities ghosts, with spawn, wander and animation state decided on the host and clients only interpolating and animating. b/creatures-3 merged: host plans, spawns and wanders ghosts per-connection relevancy, clients agree within quantization; b/creatures-4 merged: herds go calm, alert, flee by reach-pixel thresholds with hysteresis, host-decided, client gap under 0.5 m while fleeing; b/creatures-5 merged: fleeing herds steer along shores and away from the map edge, alert when cornered; b/creatures-scale next. b/creature-footing merged (GV 78). b/creatures-species merged (GV 80): hare (darts, flees early) and boar as data only, coats named from new library materials, per-species biome and slope checks; mixed bench within about 10% of deer-only, client build cost lower. Follow-up: the boar reads as a tapir (tube body, long snout); b/creatures-boar merged: high humped shoulders, wedge head with tusks, dark spine crest, shorter legs; new rigid part role (no sway) and dusky-fur library entry. Next: b/creatures-desires, step 1 of the shared desire system for animals (graze, drink, rest drives as species data in the one brain job). | now
+- Player control (Zach 11-22, for playtest builds; card b/controls-1, next after landforms-2):
+  mouse or right stick orbits the view and movement follows the camera;
+  L3 toggles sprint, which ends on a second press or when movement stops;
+  triangle or space jumps. The camera stops short of terrain between it and
+  the player instead of clipping through mountains. Gamepad support likely via the Input System
+  package; sprint and jump travel in PlayerInput and run on the host.
+- Playtest bugs (Zach 11-22; card b/terrain-fix-1, after controls-1): hill shadows shift
+  as the player approaches (shadow distance is 60 m with one cascade, terrain
+  casters exist only inside that range and geomorph with camera distance); the
+  island blinks out for a frame while moving, leaving objects behind (suspect
+  terrain LOD swaps or culling bounds on pooled chunk entities; capture first); a strongly
+  stretched layer at LOD seams (stitch or skirt geometry). Skirts are drawn
+  double-sided (about 12% extra terrain triangles); make them one-sided, outward.
+- Rock beds (Zach 11-22; card b/rockbeds-1, after terrain-fix-1): cliff walls show
+  evenly spaced, straight bed grooves (bedSpacingM 0.8, bedDepthM 0.1, TmRockRelief)
+  that read as raked. Make them much shallower and irregular: varied bed
+  thickness, broken and fading runs, no continuous stripes; remove if that
+  still reads as stripes.
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
 
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
 - Map editing on top of `sketch.json`.
+- Material viewer (Zach 11-22, long-term): every library material on test shapes
+  with an orbit camera and a name list, so Zach can audit surfaces and point at
+  entries by name.
 - Dungeons about 4x the size of caves, built on the same carve edits (idea).
 - Cave system expansion well beyond the current fundamentals (idea).
 
