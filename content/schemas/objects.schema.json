@@ -13,7 +13,9 @@
       "properties": {
         "quadPixels": { "type": "number", "minimum": 1, "maximum": 100 },
         "contactPixels": { "type": "number", "minimum": 1, "maximum": 100 },
-        "contactTexelPixels": { "type": "number", "minimum": 0.1, "maximum": 20 }
+        "contactTexelPixels": { "type": "number", "minimum": 0.1, "maximum": 20 },
+        "mistFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "mistFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 }
       }
     },
     "foliage": {
