@@ -316,11 +316,13 @@ namespace Stabby.Game
                 float anim = Detail.Crossfade(px, rig.AnimPx / q, 1.5f * rig.AnimPx / q);
                 float ik = Detail.Crossfade(px, rig.IkPx / q, 1.5f * rig.IkPx / q);
 
-                float3 fwd3 = new float3(math.sin(c.Heading), 0, math.cos(c.Heading));
-                float3 halfLen = fwd3 * (0.5f * rig.Length);
-                float front = Ground.HeightAt(c.Position.x + halfLen.x, c.Position.z + halfLen.z);
-                float rear = Ground.HeightAt(c.Position.x - halfLen.x, c.Position.z - halfLen.z);
-                float pitch = math.clamp(math.atan2(front - rear, rig.Length), -0.5f, 0.5f);
+                float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * rig.Track;
+                float2 at = c.Position.xz, fore = at + fw * rig.Fore, hind = at + fw * rig.Hind;
+                float fy = 0.5f * (Ground.HeightAt(fore.x + side.x, fore.y + side.y) + Ground.HeightAt(fore.x - side.x, fore.y - side.y));
+                float hy = 0.5f * (Ground.HeightAt(hind.x + side.x, hind.y + side.y) + Ground.HeightAt(hind.x - side.x, hind.y - side.y));
+                float span = math.max(rig.Fore - rig.Hind, 0.1f);
+                gy = hy + (fy - hy) * (-rig.Hind / span);
+                float pitch = math.clamp(math.atan2(fy - hy, span), -0.5f, 0.5f);
                 c.Pitch = Hold.Override != 0 ? pitch : math.lerp(c.Pitch, pitch, math.min(1, 4 * Dt));
 
                 float run = CreaturePose.Run(ref rig, c.Move) * anim;

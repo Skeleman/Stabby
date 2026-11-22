@@ -23,7 +23,7 @@ namespace Stabby.Game
 
     public struct CreatureRig
     {
-        public float Length, Rear, Stand, Stride, RunStride, RunRatio;
+        public float Length, Rear, Stand, Stride, RunStride, RunRatio, Fore, Hind, Track;
         public float FadePx, ShadowPx, AnimPx, IkPx, LowPx;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
@@ -86,7 +86,7 @@ namespace Stabby.Game
         public BlobArray<int> SiteStart;
         public BlobArray<CreatureSpawnRow> Spawns;
         public BlobArray<float2> Reach;
-        public BlobArray<float> Think, Length;
+        public BlobArray<float> Think, Length, Grade;
         public BlobArray<CreatureWary> Wary;
         public int Size;
         public float CellMeters;
@@ -96,6 +96,8 @@ namespace Stabby.Game
     public struct CreatureGround : IHerdGround, IWetCells
     {
         public BlobAssetReference<CreaturePlanData> Plan;
+        public Ground.NearCells Cells;
+        public float Grade;
 
         public bool WetCell(int cell) => Plan.Value.Wet[cell] != 0;
 
@@ -108,7 +110,7 @@ namespace Stabby.Game
         public bool Crosses(float x0, float z0, float x1, float z1)
         {
             ref var p = ref Plan.Value;
-            return HerdMind.CrossesWet(ref this, p.Size, p.CellMeters, x0, z0, x1, z1);
+            return HerdMind.CrossesWet(ref this, p.Size, p.CellMeters, x0, z0, x1, z1) || Footing.SteepStep(Cells, x0, z0, x1, z1, Grade);
         }
     }
 

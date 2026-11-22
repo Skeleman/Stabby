@@ -276,7 +276,7 @@ namespace Stabby.Content
                     Id = id, Name = b.String("name", ""), Biomes = b.Strings("biomes", new List<string>()),
                     Length = b.Float("length", 0), Radius = b.Float("radius", 0), Taper = b.Float("taper", 1), Flatten = b.Float("flatten", 1),
                     Haunch = b.Float("haunch", 0), Waist = b.Float("waist", 0), Hump = b.Float("hump", 0),
-                    WalkSpeed = b.Float("walkSpeed", 0), Jitter = b.Float("jitter", 0),
+                    WalkSpeed = b.Float("walkSpeed", 0), MaxSlope = b.Float("maxSlope", 0), Jitter = b.Float("jitter", 0),
                 };
                 var colors = b.Object("colors");
                 if (colors == null) errors.Add(id + ": colors missing");
