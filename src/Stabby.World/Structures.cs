@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct StructurePiece
     {
         public ulong Key;
-        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A;
+        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A, Calm;
         public int Lo, Hi, M, G;
         public bool Coursed;
     }
@@ -67,7 +67,7 @@ namespace Stabby.World
                 used.Add(p);
                 starts.Add(b.P.Count / 3);
                 var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
-                float tv = tr.Range(-1f, 1f), th = tr.Range(-1f, 1f), tl = tr.NextFloat();
+                float tv = tr.Range(-1f, 1f) * (1 - p.Calm), th = tr.Range(-1f, 1f) * (1 - p.Calm), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
                 bool cut = p.Q >= Faceted && p.M == 0 && !p.Coursed;
                 float[] u;
@@ -110,7 +110,7 @@ namespace Stabby.World
                     foreach (int i in idx) b.I.Add(first + i);
                 }
                 if (p.M > 0) Grain(p, out tv, out th);
-                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : tl); }
+                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : p.Calm > 0 ? 1 + 0.5f * tl : tl); }
             }
             starts.Add(b.P.Count / 3);
             var mesh = b.Finish();
@@ -416,6 +416,7 @@ namespace Stabby.World
             }
         }
 
+        const float CopeCalm = 0.67f;
         const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f, FaceTilt = 0.025f, FaceYaw = 0.012f, Proud = 0.003f;
         const float QuoinLong = 0.05f, QuoinShort = 0.62f, QuoinProud = 0.004f, QuoinSquare = 0.99f;
         const float CourseRow = 0.038f, CourseShrink = 0.055f, CourseDecay = 0.9464851f;
@@ -458,13 +459,23 @@ namespace Stabby.World
                 float sz = w * rng.Range(0.9f, 1.05f), xc = t + 0.5f * th;
                 Yaw(ref rng, 0.04f, out float c, out float s);
                 if (xc < gapA - 0.5f * th || xc > gapB + 0.5f * th)
+                {
                     Add(l, key, xc, h - 0.004f, rng.Range(-0.002f, 0.002f), th, sy, sz, c, s, 0, 1, SlabSquare, lean);
+                    Calm(l);
+                }
                 t += th * rng.Range(0.97f, 1.03f);
             }
             float ea = gapA < gapB ? Math.Min(e, gapA) : e;
-            if (ea - a > 0.012f) Add(l, key, 0.5f * (a + ea), h - 0.004f, 0, ea - a, 0.97f * tall, w, 1, 0, 2, 2, StoneSquare);
+            if (ea - a > 0.012f) { Add(l, key, 0.5f * (a + ea), h - 0.004f, 0, ea - a, 0.97f * tall, w, 1, 0, 2, 2, StoneSquare); Calm(l); }
             float eb = Math.Max(a, gapB);
-            if (gapA < gapB && e - eb > 0.012f) Add(l, key, 0.5f * (eb + e), h - 0.004f, 0, e - eb, 0.97f * tall, w, 1, 0, 2, 2, StoneSquare);
+            if (gapA < gapB && e - eb > 0.012f) { Add(l, key, 0.5f * (eb + e), h - 0.004f, 0, e - eb, 0.97f * tall, w, 1, 0, 2, 2, StoneSquare); Calm(l); }
+        }
+
+        static void Calm(StructureLayout l)
+        {
+            var p = l.Pieces[l.Pieces.Count - 1];
+            p.Calm = CopeCalm;
+            l.Pieces[l.Pieces.Count - 1] = p;
         }
 
         static void Cairn(ulong key, StructureLayout l)
