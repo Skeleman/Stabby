@@ -124,16 +124,15 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   that read as raked. Make them much shallower and irregular: varied bed
   thickness, broken and fading runs, no continuous stripes; remove if that
   still reads as stripes.
-- Material viewer (Zach 11-22; card b/material-viewer): a scene or build mode that
-  shows every library material (content/materials.json, terrain coats and rock)
-  on test shapes with an orbit camera and a name list, so Zach can audit
-  surfaces himself and point at entries by name.
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
 
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
 - Map editing on top of `sketch.json`.
+- Material viewer (Zach 11-22, long-term): every library material on test shapes
+  with an orbit camera and a name list, so Zach can audit surfaces and point at
+  entries by name.
 - Dungeons about 4x the size of caves, built on the same carve edits (idea).
 - Cave system expansion well beyond the current fundamentals (idea).
 
