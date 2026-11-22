@@ -54,6 +54,9 @@
           "radius": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
           "taper": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
           "flatten": { "type": "number", "exclusiveMinimum": 0, "maximum": 3 },
+          "haunch": { "type": "number", "minimum": 0, "maximum": 0.5 },
+          "waist": { "type": "number", "minimum": 0, "maximum": 0.5 },
+          "hump": { "type": "number", "minimum": 0, "maximum": 0.5 },
           "colors": {
             "type": "object",
             "required": ["base", "accent", "dark"],
@@ -70,13 +73,14 @@
           "jitter": { "type": "number", "minimum": 0, "maximum": 0.25 },
           "detail": {
             "type": "object",
-            "required": ["fadePixels", "shadowPixels", "animPixels", "ikPixels"],
+            "required": ["fadePixels", "shadowPixels", "animPixels", "ikPixels", "lowPixels"],
             "additionalProperties": false,
             "properties": {
               "fadePixels": { "type": "number", "exclusiveMinimum": 0 },
               "shadowPixels": { "type": "number", "exclusiveMinimum": 0 },
               "animPixels": { "type": "number", "exclusiveMinimum": 0 },
-              "ikPixels": { "type": "number", "exclusiveMinimum": 0 }
+              "ikPixels": { "type": "number", "exclusiveMinimum": 0 },
+              "lowPixels": { "type": "number", "exclusiveMinimum": 0 }
             }
           },
           "slots": {

@@ -201,11 +201,11 @@ namespace Stabby.Game.Editor
                     if (CreatureSpawnSystem.Count == 0 && --chaseWait > -1800) return;
                     bool stride = name.EndsWith("stride");
                     CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : 0 };
-                    if (!AimCreature(cam, name.Contains("close") ? 4f : 15f)) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
+                    if (!AimCreature(cam, CreatureRange(name))) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
                     wait = 120;
                     return;
                 }
-                AimCreature(cam, name.Contains("close") ? 4f : 15f);
+                AimCreature(cam, CreatureRange(name));
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
@@ -833,7 +833,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride" };
+        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride", "creature-far-idle", "creature-far-stride" };
+
+        static float CreatureRange(string name) => name.Contains("close") ? 4f : name.Contains("far") ? 40f : 15f;
 
         static bool AimCreature(Camera cam, float range)
         {
@@ -844,15 +846,31 @@ namespace Stabby.Game.Editor
                 using var roots = q.ToComponentDataArray<CreatureRoot>(Unity.Collections.Allocator.Temp);
                 if (roots.Length == 0) return false;
                 var c = roots[0];
-                var fwd = new Vector3(Mathf.Sin(c.Heading), 0, Mathf.Cos(c.Heading));
-                var side = new Vector3(fwd.z, 0, -fwd.x);
                 var target = new Vector3(c.Position.x, GroundHeight(c.Position.x, c.Position.z) + 0.75f, c.Position.z);
-                var eye = target + side * range + fwd * (range * 0.1f);
-                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 0.6f, target.y + 0.1f + range * 0.08f);
+                Vector3 eye = target;
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = c.Heading + (k % 2 == 0 ? 1 : -1) * 0.4f * ((k + 1) / 2);
+                    var fwd = new Vector3(Mathf.Sin(a), 0, Mathf.Cos(a));
+                    var side = new Vector3(fwd.z, 0, -fwd.x);
+                    eye = target + side * range + fwd * (range * 0.1f);
+                    eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 0.6f, target.y + 0.1f + range * 0.08f);
+                    if (Clear(eye, target)) break;
+                }
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 return true;
             }
             return false;
+        }
+
+        static bool Clear(Vector3 eye, Vector3 target)
+        {
+            for (int i = 1; i < 24; i++)
+            {
+                var p = Vector3.Lerp(eye, target, i / 24f);
+                if (GroundHeight(p.x, p.z) > p.y - 0.25f) return false;
+            }
+            return true;
         }
 
         static float GroundHeight(float x, float z)

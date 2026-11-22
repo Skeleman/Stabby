@@ -37,10 +37,11 @@ namespace Stabby.World
         public string Id, Name;
         public List<string> Biomes = new List<string>();
         public float Length = 1, Radius = 0.2f, Taper = 1, Flatten = 1;
+        public float Haunch, Waist, Hump;
         public uint Base, Accent, Dark;
         public float SizeMin = 1, SizeMax = 1, WalkSpeed = 1, Jitter;
         public int HerdMin = 1, HerdMax = 1;
-        public float FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f;
+        public float FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f;
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
     }
 
@@ -49,6 +50,7 @@ namespace Stabby.World
         public float Length, RadiusStart, RadiusEnd, Flatten = 1;
         public int Tone;
         public float Belly, Rump, Tip;
+        public float Haunch, Waist, Hump;
         public bool Sphere => Length <= 0;
     }
 
@@ -105,6 +107,8 @@ namespace Stabby.World
                 if (b.Jitter < 0 || b.Jitter > 0.25f) errors.Add(b.Id + ": jitter out of 0..0.25");
                 if (!(b.FadePixels > 0 && b.AnimPixels > b.FadePixels && b.ShadowPixels > b.FadePixels && b.IkPixels > b.AnimPixels))
                     errors.Add(b.Id + ": detail pixels must rise fade < anim < ik and fade < shadow");
+                if (!(b.LowPixels >= 2 * b.FadePixels)) errors.Add(b.Id + ": lowPixels must be at least twice fadePixels");
+                if (b.Haunch < 0 || b.Haunch > 0.5f || b.Waist < 0 || b.Waist > 0.5f || b.Hump < 0 || b.Hump > 0.5f) errors.Add(b.Id + ": haunch, waist and hump out of 0..0.5");
                 var seen = new List<string>();
                 foreach (var s in b.Slots)
                 {
@@ -157,7 +161,7 @@ namespace Stabby.World
             float rear = def.Radius * def.Taper, front = def.Radius;
             var shapes = new List<CreatureShape>
             {
-                new CreatureShape { Length = Math.Max(0, def.Length - rear - front), RadiusStart = rear, RadiusEnd = front, Flatten = def.Flatten, Belly = 1, Rump = 1 },
+                new CreatureShape { Length = Math.Max(0, def.Length - rear - front), RadiusStart = rear, RadiusEnd = front, Flatten = def.Flatten, Belly = 1, Rump = 1, Haunch = def.Haunch, Waist = def.Waist, Hump = def.Hump },
             };
             foreach (var id in UsedParts(def))
                 foreach (var s in lib.Part(id).Segments)
