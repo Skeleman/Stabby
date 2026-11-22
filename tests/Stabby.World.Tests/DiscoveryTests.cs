@@ -89,6 +89,35 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void ShrinesAppearBesideRoads()
+    {
+        int shrine = Objects.Objects.FindIndex(o => o.Id == "wayside-shrine"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var all = field.Discoveries();
+            var shrines = all.Where(o => o.Def == shrine).ToArray();
+            output.WriteLine($"seed {seed}: {field.Routes.Length / 4} routes, {shrines.Length} shrines " + string.Join(" ", shrines.Select(c => $"{c.X:F0},{c.Z:F0}:{field.RoadSide(c.X, c.Z, out _, out _):F1}")));
+            foreach (var c in shrines)
+            {
+                float d = field.RoadSide(c.X, c.Z, out float rx, out float rz);
+                Assert.InRange(d, ObjectField.ShrineRoadMinM, ObjectField.ShrineRoadM);
+                float yx = 2 * c.Qw * c.Qy, yz = 1 - 2 * c.Qy * c.Qy;
+                Assert.True(yx * (rx - c.X) + yz * (rz - c.Z) > 0.5f * d, $"shrine at {c.X:F0},{c.Z:F0} faces away from the road");
+                foreach (var o in all.Where(o => o.Def != shrine))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+                int cx = (int)(c.X / field.ChunkMeters), cz = (int)(c.Z / field.ChunkMeters);
+                Assert.Contains(field.Chunk(cx, cz), o => o.Def == shrine && o.X == c.X && o.Z == c.Z);
+            }
+            total += shrines.Length;
+            if (shrines.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 2, $"shrines in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void LoadedWorldPlacesTheSameDiscoveries()
     {
         var materials = ContentLoader.LoadMaterials(Root);

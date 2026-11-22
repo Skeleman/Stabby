@@ -5,18 +5,20 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f;
-        public const int DiscoveryTries = 16, ClimbSteps = 12;
+        public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f;
+        public const int DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
         ObjectInstance[] discoveries;
         ObjectInstance[][] builtSites;
         float[] treeCover;
         List<LandmarkSketch> towns;
+        float[] routes;
 
         public List<LandmarkSketch> Towns => towns ?? (towns = (w.Sketch ?? WorldSketch.Generate(w.Config)).Landmarks);
 
@@ -45,6 +47,7 @@ namespace Stabby.World
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
+            if (pl.Discovery == Shrine) { PlaceShrines(d, root, list); return; }
             float step = DiscoveryStep(worldM, pl.SpacingM), inset = DiscoveryInset * step;
             int cells = (int)Math.Round(worldM / step);
             for (int gz = 0; gz < cells; gz++)
@@ -61,14 +64,64 @@ namespace Stabby.World
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
                         if (!roll) continue;
                         if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
-                        float fit = Fitness(pl.Discovery, px, pz);
-                        if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) continue;
-                        o.Variant = variant;
-                        if (!ClearOfBuilt(o)) continue;
-                        best = fit; pick = o; any = true;
+                        any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
                     }
                     if (any) list.Add(pick);
                 }
+        }
+
+        void PlaceShrines(int d, ulong root, List<ObjectInstance> list)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var r = Routes;
+            for (int k = 0; k + 3 < r.Length; k += 4)
+            {
+                float ax = r[k], az = r[k + 1], dx = r[k + 2] - ax, dz = r[k + 3] - az, len = (float)Math.Sqrt(dx * dx + dz * dz);
+                int stations = (int)(len / pl.SpacingM);
+                if (stations < 1) continue;
+                float ux = dx / len, uz = dz / len, step = len / stations;
+                for (int st = 0; st < stations; st++)
+                {
+                    var rng = new Rng(Rng.Mix(root ^ key[d] ^ ((ulong)((k / 4) * 65536 + st + 1) * 0x9E3779B97F4A7C15UL)));
+                    if (rng.NextFloat() >= pl.Chance) continue;
+                    bool any = false;
+                    float best = float.MinValue;
+                    ObjectInstance pick = default;
+                    for (int t = 0; t < DiscoveryTries; t++)
+                    {
+                        float along = (st + DiscoveryInset + rng.NextFloat() * (1 - 2 * DiscoveryInset)) * step, off = (rng.NextFloat() < 0.5f ? -1 : 1) * rng.Range(ShrineRoadMinM, ShrineRoadM);
+                        float px = ax + ux * along - uz * off, pz = az + uz * along + ux * off;
+                        float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = 1f, qb = 0f;
+                        int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                        if (!ApartFromKin(d, px, pz, 0.5f * pl.SpacingM, list)) continue;
+                        FaceRoad(px, pz, ref qa, ref qb);
+                        any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
+                    }
+                    if (any) list.Add(pick);
+                }
+            }
+        }
+
+        bool TrySite(int d, int variant, float px, float pz, float size, float qa, float qb, List<ObjectInstance> list, ref float best, ref ObjectInstance pick)
+        {
+            float fit = Fitness(lib.Objects[d].Placement.Discovery, px, pz);
+            if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
+            o.Variant = variant;
+            if (!ClearOfBuilt(o)) return false;
+            best = fit; pick = o;
+            return true;
+        }
+
+        static bool ApartFromKin(int d, float x, float z, float gapM, List<ObjectInstance> list)
+        {
+            foreach (var o in list)
+            {
+                if (o.Def != d) continue;
+                float dx = o.X - x, dz = o.Z - z;
+                if (dx * dx + dz * dz < gapM * gapM) return false;
+            }
+            return true;
         }
 
         bool Open(int d, int variant, float size, float x, float z)
@@ -100,6 +153,84 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < DiscoveryGapM * DiscoveryGapM) return false;
             }
             return true;
+        }
+
+        public float[] Routes
+        {
+            get
+            {
+                if (routes != null) return routes;
+                var t = Towns;
+                var seg = new List<float>();
+                var linked = new HashSet<int>();
+                var order = new List<int>();
+                for (int a = 0; a < t.Count; a++)
+                {
+                    float ax = t[a].X * cm, az = t[a].Y * cm;
+                    order.Clear();
+                    for (int b = 0; b < t.Count; b++) if (b != a) order.Add(b);
+                    order.Sort((p, q) =>
+                    {
+                        float dp = Far(t[p], ax, az), dq = Far(t[q], ax, az);
+                        return dp != dq ? dp.CompareTo(dq) : p.CompareTo(q);
+                    });
+                    int links = 0;
+                    foreach (int b in order)
+                    {
+                        if (links >= RouteLinks) break;
+                        float bx = t[b].X * cm, bz = t[b].Y * cm;
+                        if (!DryLine(ax, az, bx, bz)) continue;
+                        links++;
+                        if (!linked.Add(Math.Min(a, b) * t.Count + Math.Max(a, b))) continue;
+                        seg.Add(ax); seg.Add(az); seg.Add(bx); seg.Add(bz);
+                    }
+                }
+                return routes = seg.ToArray();
+            }
+        }
+
+        float Far(LandmarkSketch l, float x, float z)
+        {
+            float dx = l.X * cm - x, dz = l.Y * cm - z;
+            return dx * dx + dz * dz;
+        }
+
+        bool DryLine(float x0, float z0, float x1, float z1)
+        {
+            float dx = x1 - x0, dz = z1 - z0;
+            int steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(dx * dx + dz * dz) / RouteStepM));
+            for (int k = 0; k <= steps; k++)
+            {
+                float u = k / (float)steps, px = x0 + u * dx, pz = z0 + u * dz;
+                if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return false;
+                int i = Cell(pz) * n + Cell(px);
+                if (w.Sea[i] || w.Water.LakeId[i] >= 0) return false;
+            }
+            return true;
+        }
+
+        public float RoadSide(float x, float z, out float rx, out float rz)
+        {
+            var r = Routes;
+            float best = float.MaxValue;
+            rx = x; rz = z;
+            for (int k = 0; k + 3 < r.Length; k += 4)
+            {
+                float dx = r[k + 2] - r[k], dz = r[k + 3] - r[k + 1], len2 = dx * dx + dz * dz;
+                float u = len2 > 0 ? Math.Max(0, Math.Min(1, ((x - r[k]) * dx + (z - r[k + 1]) * dz) / len2)) : 0;
+                float px = r[k] + u * dx, pz = r[k + 1] + u * dz, d2 = (px - x) * (px - x) + (pz - z) * (pz - z);
+                if (d2 < best) { best = d2; rx = px; rz = pz; }
+            }
+            return best == float.MaxValue ? best : (float)Math.Sqrt(best);
+        }
+
+        void FaceRoad(float x, float z, ref float qa, ref float qb)
+        {
+            float d = RoadSide(x, z, out float rx, out float rz);
+            if (d == float.MaxValue || d < 1e-3f) return;
+            float vx = (rx - x) / d, vz = (rz - z) / d;
+            qa = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + vz)));
+            qb = (vx < 0 ? -1 : 1) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - vz)));
         }
 
         public float CampDraw(float x, float z) => ForestEdge(x, z) + Riverside(x, z);
@@ -200,7 +331,7 @@ namespace Stabby.World
 
         float Fitness(int kind, float x, float z)
         {
-            float y = GroundAt(detail, cm, x, z), r = DiscoveryProbeM, rise = 0, relief = 0;
+            float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : DiscoveryProbeM, rise = 0, relief = 0;
             for (int k = 0; k < 8; k++)
             {
                 FanDir(k, 0.70710678f, out float ux, out float uz);
@@ -222,6 +353,12 @@ namespace Stabby.World
                 if (relief > CampReliefM) return float.MinValue;
                 float woods = Woods(x, z);
                 return woods >= HermitWoods ? woods - 0.1f * relief : float.MinValue;
+            }
+            if (kind == Shrine)
+            {
+                float d = RoadSide(x, z, out _, out _);
+                if (relief > ShrineReliefM) return float.MinValue;
+                return d >= ShrineRoadMinM && d <= ShrineRoadM ? -Math.Abs(d - ShrineRoadAimM) / ShrineRoadM - 0.1f * relief : float.MinValue;
             }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;

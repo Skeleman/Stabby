@@ -250,6 +250,16 @@
       "id": "hermitage", "name": "Hermit's hut", "kind": "structure", "color": "#8a857c", "variants": 6,
       "parts": [ { "id": "site", "shape": "hermitage" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tropical-forest"], "perHectare": 0, "discovery": "hermit", "spacingM": 900, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
+    },
+    {
+      "id": "road-shrine", "name": "Road shrine", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "shrine", "shape": "road-shrine" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 2.6, "sizeMaxM": 2.6 }
+    },
+    {
+      "id": "wayside-shrine", "name": "Wayside shrine", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "parts": [ { "id": "site", "shape": "wayside" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "shrine", "spacingM": 400, "chance": 0.8, "slopeMax": 0.5, "sizeMinM": 7, "sizeMaxM": 7.5, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8 },
