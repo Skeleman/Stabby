@@ -60,10 +60,16 @@
     deterministically from its own stream. Assets are
     built in code. Material surfaces are shaders (procedural normals, cheap
     parallax) so files stay small, surfaces scale and materials share
-    features. Textures hold only heightfield data, shared noise, and
+    features. Every part names a material from the one library
+    (`content/materials.json`). Use an existing material when it fits the
+    role well. Otherwise add a new library entry that later objects can reuse,
+    never an inline one-off colour. Textures hold only heightfield data, shared noise, and
     code-generated atlases for repeated, distinct patterns such as leaves and
     lettering. Where an object meets the ground, both the object and the
     ground darken toward one contact colour derived from the terrain colour.
+    Each ground part extends a buried skirt below its base, darkened to that
+    colour, so no placement looks loose. A check fails any ground part
+    that leaves no contact stamp.
     Structures also darken downward faces, gaps between pieces and inner
     seams. Normal and relief terms always carry organic noise, never clean
     lines.

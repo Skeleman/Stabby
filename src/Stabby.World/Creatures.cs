@@ -40,7 +40,7 @@ namespace Stabby.World
         public float Length = 1, Radius = 0.2f, Taper = 1, Flatten = 1;
         public float Haunch, Waist, Hump;
         public uint Base, Accent, Dark;
-        public float SizeMin = 1, SizeMax = 1, WalkSpeed = 1, Jitter;
+        public float SizeMin = 1, SizeMax = 1, WalkSpeed = 1, Jitter, MaxSlope = 30;
         public int HerdMin = 1, HerdMax = 1;
         public float HerdChance;
         public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f;
@@ -112,6 +112,7 @@ namespace Stabby.World
                 if (b.HerdChance < 0 || b.HerdChance > 1) errors.Add(b.Id + ": herdChance out of 0..1");
                 if (!(b.SpawnPixels > 0 && b.SpawnPixels < b.FadePixels)) errors.Add(b.Id + ": spawnPixels must be positive and below fadePixels");
                 if (b.WalkSpeed <= 0) errors.Add(b.Id + ": walkSpeed must be positive");
+                if (!(b.MaxSlope >= 5 && b.MaxSlope <= 60)) errors.Add(b.Id + ": maxSlope out of 5..60 degrees");
                 if (!(b.RunSpeed > b.WalkSpeed)) errors.Add(b.Id + ": runSpeed must be above walkSpeed");
                 if (!(b.RunStride > 0)) errors.Add(b.Id + ": runStride must be positive");
                 if (!(b.AlertPixels > 0 && b.FleePixels > b.AlertPixels)) errors.Add(b.Id + ": fleePixels must be above alertPixels");
@@ -368,16 +369,18 @@ namespace Stabby.World
 
         public static ulong Root(GeneratedWorld w) => Rng.Stream(w.Config.Seed, "creatures").NextU64();
 
-        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib)
+        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib) => Build(w, new TerrainDetail(w).Cells, lib);
+
+        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib)
         {
             var list = new List<CreatureSpawn>();
             ulong root = Root(w);
             int across = SitesAcross(w.Config.Size);
-            for (int s = 0; s < across * across; s++) Site(w, lib, root, s, list);
+            for (int s = 0; s < across * across; s++) Site(w, cells, lib, root, s, list);
             return list;
         }
 
-        public static void Site(GeneratedWorld w, CreatureLibrary lib, ulong root, int site, List<CreatureSpawn> list)
+        public static void Site(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, ulong root, int site, List<CreatureSpawn> list)
         {
             int n = w.Config.Size, across = SitesAcross(n);
             int sx = site % across * SiteCells, sz = site / across * SiteCells;
@@ -391,21 +394,25 @@ namespace Stabby.World
                 for (int t = 0; t < Tries && cell < 0; t++)
                 {
                     int x = sx + rng.Range(0, SiteCells), z = sz + rng.Range(0, SiteCells);
-                    if (x < n && z < n && Habitable(w, def, x, z)) cell = z * n + x;
+                    if (x < n && z < n && Habitable(w, cells, def, x, z)) cell = z * n + x;
                 }
                 if (cell < 0) continue;
                 float cx = (cell % n + 0.5f) * cm, cz = (cell / n + 0.5f) * cm;
                 int count = rng.Range(def.HerdMin, def.HerdMax + 1);
                 ulong herdSeed = HerdSeed(root, HerdOf(site << 8 | b << 4));
                 float heading = rng.Range(0f, 6.2831853f);
-                var route = Route(w, def, herdSeed, cell, cx, cz);
+                var route = Route(w, cells, def, herdSeed, cell, cx, cz);
+                float grade = Footing.Grade(def.MaxSlope);
                 for (int k = 0; k < count; k++)
                 {
                     ulong seed = rng.NextU64();
+                    float ox = rng.Range(-HerdSpread, HerdSpread), oz = rng.Range(-HerdSpread, HerdSpread);
+                    for (int t = 0; t < 4 && Footing.SteepAt(cells, cx + ox, cz + oz, grade); t++) { ox *= 0.5f; oz *= 0.5f; }
+                    if (Footing.SteepAt(cells, cx + ox, cz + oz, grade)) ox = oz = 0;
                     list.Add(new CreatureSpawn
                     {
                         Id = site << 8 | b << 4 | k, Body = b,
-                        X = cx + rng.Range(-HerdSpread, HerdSpread), Z = cz + rng.Range(-HerdSpread, HerdSpread),
+                        X = cx + ox, Z = cz + oz,
                         Heading = heading + rng.Range(-0.7f, 0.7f), BodySeed = seed, Seed = rng.NextU32() | 1u, HerdSeed = herdSeed,
                         WalkSpeed = CreatureBody.WalkSpeedFor(def, seed), Route = route,
                     });
@@ -413,7 +420,7 @@ namespace Stabby.World
             }
         }
 
-        public static HerdRoute Route(GeneratedWorld w, CreatureDef def, ulong herdSeed, int cell, float cx, float cz)
+        public static HerdRoute Route(GeneratedWorld w, NearArrays cells, CreatureDef def, ulong herdSeed, int cell, float cx, float cz)
         {
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
@@ -430,7 +437,7 @@ namespace Stabby.World
                 {
                     int x = hx + rng.Range(-HerdRoute.Cells, HerdRoute.Cells + 1), z = hz + rng.Range(-HerdRoute.Cells, HerdRoute.Cells + 1);
                     float wx = (x + 0.5f) * cm, wz = (z + 0.5f) * cm;
-                    if (wx == px && wz == pz || !Habitable(w, def, x, z)) continue;
+                    if (wx == px && wz == pz || !Habitable(w, cells, def, x, z)) continue;
                     if (HerdMind.CrossesWet(ref wet, n, cm, px, pz, wx, wz)) continue;
                     if (k == HerdRoute.Points - 1 && HerdMind.CrossesWet(ref wet, n, cm, wx, wz, cx, cz)) continue;
                     route.Set(k, wx, wz);
@@ -453,7 +460,7 @@ namespace Stabby.World
             z += s.Z - s.Route.Z0;
         }
 
-        public static bool Habitable(GeneratedWorld w, CreatureDef def, int x, int z)
+        public static bool Habitable(GeneratedWorld w, NearArrays cells, CreatureDef def, int x, int z)
         {
             int n = w.Config.Size;
             if (x <= 0 || z <= 0 || x >= n - 1 || z >= n - 1) return false;
@@ -461,8 +468,9 @@ namespace Stabby.World
             if (Wet(w, i)) return false;
             if (w.Biome == null || !def.Biomes.Contains(w.BiomeIds[w.Biome[i]])) return false;
             float cm = w.Config.CellMeters;
+            float grade = Footing.Grade(def.MaxSlope);
             float gx = w.Height[i + 1] - w.Height[i - 1], gz = w.Height[i + n] - w.Height[i - n];
-            return gx * gx + gz * gz <= 0.64f * cm * cm;
+            return gx * gx + gz * gz <= 4 * grade * grade * cm * cm && !Footing.SteepAt(cells, (x + 0.5f) * cm, (z + 0.5f) * cm, grade);
         }
     }
 }

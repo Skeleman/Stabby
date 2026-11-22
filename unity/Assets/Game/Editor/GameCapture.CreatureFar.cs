@@ -226,6 +226,8 @@ namespace Stabby.Game.Editor
             var think = b.Allocate(ref root.Think, real.Think.Length);
             var length = b.Allocate(ref root.Length, real.Length.Length);
             var wary = b.Allocate(ref root.Wary, real.Wary.Length);
+            var grade = b.Allocate(ref root.Grade, real.Grade.Length);
+            for (int i = 0; i < grade.Length; i++) grade[i] = real.Grade[i];
             for (int i = 0; i < reach.Length; i++) reach[i] = real.Reach[i];
             for (int i = 0; i < think.Length; i++) think[i] = real.Think[i];
             for (int i = 0; i < length.Length; i++) length[i] = real.Length[i];
@@ -417,6 +419,142 @@ namespace Stabby.Game.Editor
             return blocked;
         }
 
+        static readonly bool SlopeOnly = System.Environment.GetEnvironmentVariable("STABBY_FAR_SLOPE_ONLY") == "1";
+
+        static float GradeAt(float2 p, float r, out float2 down)
+        {
+            float gx = GroundHeight(p.x + r, p.y) - GroundHeight(p.x - r, p.y), gz = GroundHeight(p.x, p.y + r) - GroundHeight(p.x, p.y - r);
+            down = -math.normalizesafe(new float2(gx, gz), new float2(0, 1));
+            return math.length(new float2(gx, gz)) / (2 * r);
+        }
+
+        static float FootGap(CreatureRoot c, out float worstCentre)
+        {
+            ref var rig = ref c.Rig.Value;
+            int n = rig.Segments.Length, parts = rig.Parts.Length;
+            using var pos = new NativeArray<float3>(n, Allocator.Temp);
+            using var rot = new NativeArray<quaternion>(n, Allocator.Temp);
+            using var end = new NativeArray<float3>(parts, Allocator.Temp);
+            using var endRot = new NativeArray<quaternion>(parts, Allocator.Temp);
+            float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * rig.Track;
+            float2 at = c.Position.xz, fore = at + fw * rig.Fore, hind = at + fw * rig.Hind;
+            float fy = 0.5f * (GroundHeight(fore.x + side.x, fore.y + side.y) + GroundHeight(fore.x - side.x, fore.y - side.y));
+            float hy = 0.5f * (GroundHeight(hind.x + side.x, hind.y + side.y) + GroundHeight(hind.x - side.x, hind.y - side.y));
+            float span = math.max(rig.Fore - rig.Hind, 0.1f);
+            float gy = hy + (fy - hy) * (-rig.Hind / span), centre = GroundHeight(at.x, at.y);
+            float run = CreaturePose.Run(ref rig, c.Move), move = math.min(c.Move, 1);
+            float bob = rig.Stand * (move * 0.02f * math.cos(4 * math.PI * c.Phase) + run * 0.07f * math.sin(2 * math.PI * c.Phase));
+            float rock = run * 0.12f * math.cos(2 * math.PI * c.Phase);
+            float worst = 0;
+            worstCentre = 0;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                float baseY = pass == 0 ? gy : centre, pitch = pass == 0 ? c.Pitch : 0, sink = pass == 0 ? c.Sink : 0;
+                var rootPos = new float3(at.x, baseY + rig.Stand - sink + bob, at.y);
+                var rootRot = math.mul(quaternion.RotateY(c.Heading), quaternion.RotateX(-pitch + rock));
+                CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert, c.Clock, 1, pos, rot, end, endRot);
+                var unrot = math.inverse(rootRot);
+                for (int i = 0; i < parts; i++)
+                {
+                    ref var part = ref rig.Parts[i];
+                    if (part.Role != CreaturePartDef.Leg || part.Count < 2) continue;
+                    float3 foot = end[i];
+                    float lift = math.mul(unrot, foot - rootPos).y + rig.Stand;
+                    float need = GroundHeight(foot.x, foot.z) + lift - foot.y;
+                    float miss = math.max(math.abs(need) - 0.45f * part.Reach, 0);
+                    if (pass == 0) worst = math.max(worst, miss); else worstCentre = math.max(worstCentre, math.abs(need));
+                }
+            }
+            return worst;
+        }
+
+        static System.Collections.IEnumerator SlopeShot(Camera cam, string dir, List<string> lines, BlobAssetReference<CreaturePlanData> planRef, float2 home)
+        {
+            var server = ServerWorld();
+            var view = ViewWorld();
+            double now = server.Time.ElapsedTime;
+            int herd = -1, last = int.MinValue, body = 0, members = 0, rows = planRef.Value.Spawns.Length;
+            float best = float.MaxValue, planGrade = 0;
+            float2 at = home;
+            for (int i = 0; i < rows; i++)
+            {
+                int h = CreaturePlan.HerdOf(planRef.Value.Spawns[i].Id);
+                if (h == last) continue;
+                last = h;
+                if (!PlanHerd(planRef, h, now, out var p, out int n, out int b) || n < 2) continue;
+                float grade = GradeAt(p, 6f, out _), d = math.distance(p, home);
+                if (grade < 0.2f || grade > 0.45f || d >= best) continue;
+                best = d;
+                planGrade = grade;
+                herd = h;
+                at = p;
+                body = b;
+                members = n;
+            }
+            if (herd < 0) { lines.Add("slope shot: no herd on a moderate slope"); yield break; }
+            var wary = planRef.Value.Wary[body];
+            float2 toHome = math.normalizesafe(home - at, new float2(0, 1));
+            float2 stand = at + toHome * math.min(0.8f * CreaturePlanSystem.SpawnReach, 1.5f * math.max(wary.Calm, wary.Alert));
+            PlaceServerPlayers(server, new Vector2(stand.x, stand.y));
+            cam.fieldOfView = HerdFov;
+            int awake = 0;
+            for (int k = 0; k < 3600 && awake < 240; k++)
+            {
+                PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
+                cam.transform.SetPositionAndRotation(new Vector3(p.x + 20f, GroundHeight(p.x + 20f, p.y) + 8f, p.y), Quaternion.LookRotation(new Vector3(-20f, -8f, 0)));
+                yield return null;
+                var w = WakeOf(view, herd);
+                awake = w.Count == members && w.Min >= 1 && !Settling() ? awake + 1 : 0;
+            }
+            FreezeCreatures(true);
+            for (int k = 0; k < 10; k++) yield return null;
+            var em = view.EntityManager;
+            em.CompleteAllTrackedJobs();
+            float3 pos = 0;
+            float heading = 0, steep = -1, stand3 = 1, length = 1;
+            using (var q = em.CreateEntityQuery(typeof(CreatureRoot)))
+            using (var roots = q.ToComponentDataArray<CreatureRoot>(Allocator.Temp))
+                foreach (var c in roots)
+                {
+                    if (!c.Visible || !em.HasComponent<CreatureState>(c.Ghost) || CreaturePlan.HerdOf(em.GetComponentData<CreatureState>(c.Ghost).Id) != herd) continue;
+                    float g = GradeAt(c.Position.xz, 1.5f, out _);
+                    if (g > 0.6f || g <= steep) continue;
+                    steep = g;
+                    pos = c.Position;
+                    heading = c.Heading;
+                    stand3 = c.Rig.Value.Stand;
+                    length = c.Rig.Value.Length;
+                }
+            if (steep < 0) { lines.Add($"slope shot: herd {herd} woke but no visible member"); FreezeCreatures(false); yield break; }
+            float gapWorst = 0, gapCentre = 0;
+            int gapCount = 0;
+            using (var q = em.CreateEntityQuery(typeof(CreatureRoot)))
+            using (var roots = q.ToComponentDataArray<CreatureRoot>(Allocator.Temp))
+                foreach (var c in roots)
+                {
+                    if (!c.Visible || !em.HasComponent<CreatureState>(c.Ghost) || CreaturePlan.HerdOf(em.GetComponentData<CreatureState>(c.Ghost).Id) != herd) continue;
+                    gapWorst = math.max(gapWorst, FootGap(c, out float centreGap));
+                    gapCentre = math.max(gapCentre, centreGap);
+                    gapCount++;
+                }
+            lines.Add($"slope feet: {gapCount} visible members, worst hoof left off or in the ground after leg IK {100 * gapWorst:F1} cm (single centre sample with no pitch would need {100 * gapCentre:F1} cm of leg correction)");
+            GradeAt(pos.xz, 1.5f, out float2 down);
+            float2 side = math.normalizesafe(new float2(down.y, -down.x), new float2(math.cos(heading), -math.sin(heading)));
+            float2 eyeXZ = pos.xz + side * (3f * length);
+            float gy = GroundHeight(pos.x, pos.z);
+            var target = new Vector3(pos.x, gy + 0.4f * stand3, pos.z);
+            var eye = new Vector3(eyeXZ.x, math.max(GroundHeight(eyeXZ.x, eyeXZ.y), gy) + 0.3f * stand3, eyeXZ.y);
+            for (int k = 0; k < 60 || (Settling() && k < 1800); k++)
+            {
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                yield return null;
+            }
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "creature-slope");
+            lines.Add($"slope shot: herd {herd} ({members} members) {math.distance(at, home):F0} m from spawn, plan ground grade {math.degrees(math.atan(planGrade)):F0} deg; framed member on {math.degrees(math.atan(steep)):F0} deg local slope, camera {math.distance(eyeXZ, pos.xz):F1} m along the contour at hoof height");
+            FreezeCreatures(false);
+        }
+
         static bool Settling() => GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0;
 
         static System.Collections.IEnumerator FarTour(Camera cam, string dir)
@@ -429,6 +567,16 @@ namespace Stabby.Game.Editor
             var planRef = PlanOf(sem);
             for (int k = 0; k < 1800 && !planRef.IsCreated; k++) { yield return null; planRef = PlanOf(sem); }
             if (!planRef.IsCreated || !FirstPlayer(sem, out float2 home)) { GameStatus.Lines["~far"] = "far: no plan or player"; yield break; }
+            if (SlopeOnly)
+            {
+                GameStatus.HoldCamera = true;
+                CreatureView.Current = default;
+                FreezeCreatures(false);
+                var only = SlopeShot(cam, dir, lines, planRef, home);
+                while (only.MoveNext()) yield return only.Current;
+                System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, "creature-slope.txt"), lines);
+                yield break;
+            }
             var host = server.GetExistingSystem<CreatureHostSystem>();
             GameStatus.HoldCamera = true;
             CreatureView.Current = default;
@@ -641,6 +789,8 @@ namespace Stabby.Game.Editor
                 for (int k = 0; k < 60; k++) yield return null;
             }
 
+            var slope = SlopeShot(cam, dir, lines, planRef, home);
+            while (slope.MoveNext()) yield return slope.Current;
             for (int i = 0; i < lines.Count; i++) GameStatus.Lines[$"~far {i:D2}"] = lines[i];
             System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, "creature-far.txt"), lines);
         }

@@ -454,15 +454,22 @@ namespace Stabby.Game
                 rig.RestRot[i] = rot[i];
             }
             CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 1, pos, rot, end, endRot);
-            float footY = 0, travel = 0;
-            int legs = 0;
+            float footY = 0, travel = 0, fore = 0, hind = 0, track = 0;
+            int legs = 0, fores = 0;
             for (int i = 0; i < parts; i++)
             {
                 if (rig.Parts[i].Role != CreaturePartDef.Leg) continue;
                 rig.Parts[i].Foot = end[i];
                 footY += end[i].y;
+                track += math.abs(end[i].x);
+                if (end[i].z > 0) { fore += end[i].z; fores++; }
+                else hind += end[i].z;
                 legs++;
             }
+            bool paired = fores > 0 && fores < legs;
+            rig.Fore = paired ? fore / fores : 0.5f * rig.Length;
+            rig.Hind = paired ? hind / (legs - fores) : -0.5f * rig.Length;
+            rig.Track = legs > 0 ? track / legs : 0;
             for (int i = 0; i < parts; i++)
             {
                 ref var part = ref rig.Parts[i];

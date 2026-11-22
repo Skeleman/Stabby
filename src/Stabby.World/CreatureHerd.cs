@@ -37,6 +37,26 @@ namespace Stabby.World
         public bool Crosses(float x0, float z0, float x1, float z1) => HerdMind.CrossesWet(ref this, Size, CellMeters, x0, z0, x1, z1);
     }
 
+    public static class Footing
+    {
+        public const float FeelM = 1.5f;
+
+        public static float Grade(float maxSlopeDegrees) => (float)Math.Tan(maxSlopeDegrees * Math.PI / 180);
+
+        public static bool SteepAt<T>(T cells, float x, float z, float grade) where T : struct, INearCells
+        {
+            float gx = NearField.Sample(cells, x + FeelM, z) - NearField.Sample(cells, x - FeelM, z);
+            float gz = NearField.Sample(cells, x, z + FeelM) - NearField.Sample(cells, x, z - FeelM);
+            return gx * gx + gz * gz > 4 * FeelM * FeelM * grade * grade;
+        }
+
+        public static bool SteepStep<T>(T cells, float x0, float z0, float x1, float z1, float grade) where T : struct, INearCells
+        {
+            float dx = x1 - x0, dz = z1 - z0, dh = NearField.Sample(cells, x1, z1) - NearField.Sample(cells, x0, z0);
+            return dh * dh > grade * grade * (dx * dx + dz * dz);
+        }
+    }
+
     public struct HerdMind
     {
         public const float AlertHold = 3f, FleeMin = 2f, FleeMax = 25f, Rethink = 4f, Spread = 0.6f, LookSeconds = 4f;

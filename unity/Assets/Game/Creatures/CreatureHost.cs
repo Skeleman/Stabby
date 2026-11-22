@@ -104,8 +104,10 @@ namespace Stabby.Game
             root.RouteReach = route;
             var think = b.Allocate(ref root.Think, p.Lib.Bodies.Count);
             var length = b.Allocate(ref root.Length, p.Lib.Bodies.Count);
+            var grade = b.Allocate(ref root.Grade, p.Lib.Bodies.Count);
             for (int i = 0; i < think.Length; i++)
             {
+                grade[i] = Footing.Grade(p.Lib.Bodies[i].MaxSlope);
                 think[i] = Detail.SimulationReach(p.Lib.Bodies[i].Length, p.Lib.Bodies[i].AnimPixels);
                 length[i] = p.Lib.Bodies[i].Length;
             }
@@ -165,6 +167,7 @@ namespace Stabby.Game
         {
             state.RequireForUpdate<CreaturePlanBlob>();
             state.RequireForUpdate<CreaturePrefab>();
+            state.RequireForUpdate<Ground>();
             state.RequireForUpdate<GhostRelevancy>();
             state.RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
             Herds = new NativeHashMap<int, CreatureHerd>(64, Allocator.Persistent);
@@ -186,6 +189,7 @@ namespace Stabby.Game
         {
             var planRef = SystemAPI.GetSingleton<CreaturePlanBlob>().Value;
             var prefab = SystemAPI.GetSingleton<CreaturePrefab>().Value;
+            var cells = SystemAPI.GetSingleton<Ground>().Cells;
             var ecbs = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>();
             float dt = SystemAPI.Time.DeltaTime;
             double now = SystemAPI.Time.ElapsedTime;
@@ -214,9 +218,9 @@ namespace Stabby.Game
                 Players = players.AsArray(), Plan = planRef, Ecb = ecbs.CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
                 Live = live.AsParallelWriter(), Threats = threats.AsParallelWriter(), Grid = grid.AsParallelWriter(),
             }.ScheduleParallel(dep);
-            dep = new StepHerds { Herds = Herds, Threats = threats, Plan = planRef, Hold = hold, Dt = dt, Now = now }.Schedule(dep);
+            dep = new StepHerds { Herds = Herds, Threats = threats, Plan = planRef, Cells = cells, Hold = hold, Dt = dt, Now = now }.Schedule(dep);
             if (!hold)
-                dep = new Think { Players = players.AsArray(), Herds = Herds, Grid = grid, Plan = planRef, Step = dt, Now = now, Frame = frame }.ScheduleParallel(dep);
+                dep = new Think { Players = players.AsArray(), Herds = Herds, Grid = grid, Plan = planRef, Cells = cells, Step = dt, Now = now, Frame = frame }.ScheduleParallel(dep);
             dep = new Spawn
             {
                 Players = players.AsArray(), Plan = planRef, Live = live, Herds = Herds, Prefab = prefab, Now = now,
@@ -268,7 +272,7 @@ namespace Stabby.Game
             {
                 case HerdMode.Calm:
                     s.Alert = math.max(0, s.Alert - 0.8f * dt);
-                    Wander(ref s, ref b, dt);
+                    Wander(ref s, ref b, ref ground, dt);
                     return;
                 case HerdMode.Alert:
                     s.Alert = math.min(1, s.Alert + 3 * dt);
@@ -281,13 +285,14 @@ namespace Stabby.Game
                     s.Heading = HerdMind.Toward(s.Heading, h.Mind.Heading + HerdMind.MemberOffset(s.Seed), 3 * dt);
                     s.Move = math.lerp(s.Move, w.RunRatio, math.min(1, 2.5f * dt));
                     float2 next = s.Position + new float2(math.sin(s.Heading), math.cos(s.Heading)) * (s.Move * s.WalkSpeed * dt);
-                    if (ground.Blocked(next.x, next.y)) s.Move = 0;
+                    float2 feel = s.Position + new float2(math.sin(s.Heading), math.cos(s.Heading)) * Footing.FeelM;
+                    if (ground.Blocked(next.x, next.y) || ground.Crosses(s.Position.x, s.Position.y, feel.x, feel.y)) s.Move = 0;
                     break;
             }
             s.Position += new float2(math.sin(s.Heading), math.cos(s.Heading)) * (s.Move * s.WalkSpeed * dt);
         }
 
-        static void Wander(ref CreatureState s, ref CreatureBrain b, float dt)
+        static void Wander(ref CreatureState s, ref CreatureBrain b, ref CreatureGround ground, float dt)
         {
             b.Timer -= dt;
             if (b.Timer <= 0)
@@ -305,6 +310,12 @@ namespace Stabby.Game
             float2 fwd = new float2(math.sin(s.Heading), math.cos(s.Heading));
             float steer = math.clamp(0.02f * (fwd.y * toHome.x - fwd.x * toHome.y), -0.8f, 0.8f);
             s.Move = math.lerp(s.Move, b.Walking ? 1 : 0, math.min(1, 1.2f * dt));
+            if (s.Move > 0.05f && ground.Crosses(s.Position.x, s.Position.y, s.Position.x + fwd.x * Footing.FeelM, s.Position.y + fwd.y * Footing.FeelM))
+            {
+                s.Move *= 0.5f;
+                s.Heading += b.Turn >= 0 ? 1.2f : -1.2f;
+                return;
+            }
             s.Heading += (b.Turn * 0.4f + steer) * dt * s.Move;
             s.Position += fwd * (s.Move * s.WalkSpeed * dt);
         }
@@ -359,6 +370,7 @@ namespace Stabby.Game
         public NativeHashMap<int, CreatureHerd> Herds;
         [ReadOnly] public NativeParallelMultiHashMap<int, HerdThreat> Threats;
         public BlobAssetReference<CreaturePlanData> Plan;
+        public Ground.NearCells Cells;
         public bool Hold;
         public float Dt;
         public double Now;
@@ -366,7 +378,7 @@ namespace Stabby.Game
         public void Execute()
         {
             ref var plan = ref Plan.Value;
-            var ground = new CreatureGround { Plan = Plan };
+            var ground = new CreatureGround { Plan = Plan, Cells = Cells };
             var keys = Herds.GetKeyArray(Allocator.Temp);
             for (int i = 0; i < keys.Length; i++)
             {
@@ -382,6 +394,7 @@ namespace Stabby.Game
                 }
                 var h = Herds[keys[i]];
                 h.Rehome = false;
+                ground.Grade = plan.Grade[h.Body];
                 if (!Hold) h.Rehome = h.Mind.Step(plan.Wary[h.Body], best.Distance, best.Away.x, best.Away.y, best.At.x, best.At.y, ref ground, Dt);
                 h.Route.At(Now, out float rx, out float rz, out _);
                 float2 route = new float2(rx, rz);
@@ -401,6 +414,7 @@ namespace Stabby.Game
         [ReadOnly] public NativeHashMap<int, CreatureHerd> Herds;
         [ReadOnly] public NativeParallelMultiHashMap<int, CreatureNeighbour> Grid;
         public BlobAssetReference<CreaturePlanData> Plan;
+        public Ground.NearCells Cells;
         public float Step;
         public double Now;
         public uint Frame;
@@ -409,7 +423,7 @@ namespace Stabby.Game
         {
             if (!Herds.TryGetValue(b.Herd, out var h)) return;
             ref var plan = ref Plan.Value;
-            var ground = new CreatureGround { Plan = Plan };
+            var ground = new CreatureGround { Plan = Plan, Cells = Cells, Grade = plan.Grade[s.Body] };
             float2 away = CreatureHostSystem.Nearest(Players, s.Position);
             uint mix = CreatureHostSystem.Mix((uint)s.Id);
             float think = plan.Think[s.Body];
