@@ -150,6 +150,29 @@ namespace Stabby.Game.Editor
             if (host != SystemHandle.Null) server.Unmanaged.GetUnsafeSystemRef<CreatureHostSystem>(host).Herds.Clear();
         }
 
+        static float2 DenseSpot(BlobAssetReference<CreaturePlanData> planRef, float2 home, float2 dir, float despawn, float siteMeters, float extent)
+        {
+            var ground = new CreatureGround { Plan = planRef };
+            float2 best = math.clamp(home + dir * 8 * despawn, 3 * siteMeters, extent - 3 * siteMeters);
+            int bestOpen = -1;
+            for (int a = 0; a < 8; a++)
+            {
+                float ang = a * math.PI / 4;
+                float2 d = new float2(dir.x * math.cos(ang) - dir.y * math.sin(ang), dir.x * math.sin(ang) + dir.y * math.cos(ang));
+                for (int f = 8; f >= 4; f--)
+                {
+                    float2 c = math.clamp(home + d * f * despawn, 3 * siteMeters, extent - 3 * siteMeters);
+                    int open = 0;
+                    for (int z = -DenseSites / 2; z <= DenseSites / 2; z++)
+                        for (int x = -DenseSites / 2; x <= DenseSites / 2; x++)
+                            for (int q = 0; q < 4; q++)
+                                if (!ground.Blocked(c.x + (x + 0.25f + 0.5f * (q & 1)) * siteMeters, c.y + (z + 0.25f + 0.5f * (q >> 1)) * siteMeters)) open++;
+                    if (open > bestOpen) { bestOpen = open; best = c; }
+                }
+            }
+            return best;
+        }
+
         static BlobAssetReference<CreaturePlanData> SynthPlan(BlobAssetReference<CreaturePlanData> realRef, int herds, float2 dense, out int made, out int rowsMade, out int denseMade)
         {
             ref var real = ref realRef.Value;
@@ -482,7 +505,7 @@ namespace Stabby.Game.Editor
             float extent = across * siteMeters;
             float2 mid = new float2(extent * 0.5f);
             float2 out2 = math.normalizesafe(mid - home, new float2(1, 0));
-            float2 dense = math.clamp(home + out2 * 8 * despawn, 3 * siteMeters, extent - 3 * siteMeters);
+            float2 dense = DenseSpot(planRef, home, out2, despawn, siteMeters, extent);
             out2 = math.normalizesafe(dense - home, out2);
             float2 denseStage = dense - out2 * (despawn + routeReach + (DenseSites / 2 + 1) * siteMeters);
             foreach (int n in FarHerdCounts)
