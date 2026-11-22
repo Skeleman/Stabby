@@ -138,6 +138,14 @@ namespace Stabby.World
 
         public const float SeatFootM = 0.45f;
 
+        public static bool WaysideNiche(ulong key)
+        {
+            var rng = Rng.Stream(key, "wayside");
+            Yaw(ref rng, 0.06f, out _, out _);
+            rng.Range(-0.2f, 0.2f);
+            return Rng.Stream(rng.NextU64(), "road-shrine").NextFloat() >= 0.5f;
+        }
+
         public static void WaysideSeat(ulong key, out float x, out float z, out float c, out float s)
         {
             var rng = Rng.Stream(key, "wayside-seat");
@@ -168,8 +176,9 @@ namespace Stabby.World
             for (int i = 0; i < steps; i++, pz += rng.Range(0.5f, 0.6f))
             {
                 float sz = rng.Range(0.32f, 0.46f);
-                int d = rng.Range(0, 16);
+                int d = rng.Range(0, 16), before = l.Pieces.Count;
                 Rock(l, rng.NextU64(), f, ox + rng.Range(-0.12f, 0.12f), -0.02f, pz, sz * rng.Range(1.0f, 1.3f), 0.18f, sz, Cos16(d), Sin16(d), 0, 1);
+                Flat(l, before);
             }
 
             int stacks = rng.Range(1, 4);

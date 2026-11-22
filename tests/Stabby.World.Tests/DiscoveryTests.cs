@@ -118,6 +118,32 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void RuinsAppearOnSteadyGround()
+    {
+        int ruin = Objects.Objects.FindIndex(o => o.Id == "ruin"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var all = field.Discoveries();
+            var ruins = all.Where(o => o.Def == ruin).ToArray();
+            output.WriteLine($"seed {seed}: {ruins.Length} ruins " + string.Join(" ", ruins.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+            foreach (var c in ruins)
+            {
+                Assert.True(field.Fitness(ObjectField.Ruin, c.X, c.Z) > float.MinValue);
+                foreach (var o in all.Where(o => o.Def != ruin))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+                int cx = (int)(c.X / field.ChunkMeters), cz = (int)(c.Z / field.ChunkMeters);
+                Assert.Contains(field.Chunk(cx, cz), o => o.Def == ruin && o.X == c.X && o.Z == c.Z);
+            }
+            total += ruins.Length;
+            if (ruins.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 2, $"ruins in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void LoadedWorldPlacesTheSameDiscoveries()
     {
         var materials = ContentLoader.LoadMaterials(Root);
