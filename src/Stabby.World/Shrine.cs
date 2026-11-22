@@ -141,10 +141,10 @@ namespace Stabby.World
         public static void WaysideSeat(ulong key, out float x, out float z, out float c, out float s)
         {
             var rng = Rng.Stream(key, "wayside-seat");
-            float sd = rng.NextFloat() < 0.5f ? -1 : 1;
-            x = sd * rng.Range(1.5f, 1.75f);
+            x = rng.Range(1.5f, 1.75f);
             z = rng.Range(-0.8f, -0.4f);
             Yaw(ref rng, 0.1f, out c, out s);
+            if (rng.NextFloat() < 0.5f) x = -x;
         }
 
         static void Wayside(StructureLayout l, ulong key, in Frame f)
@@ -157,19 +157,19 @@ namespace Stabby.World
             WaysideSeat(key, out float wx, out float wz, out c, out s);
             float sd = wx < 0 ? -1 : 1;
             var seat = f.Child(wx, 0, wz, c, s);
-            if (rng.NextFloat() < 0.5f) Bench(l, rng.NextU64(), seat);
+            if (rng.NextFloat() < 0.5f) Bench(l, rng.NextU64(), f.Child(wx, -0.1f, wz, c, s));
             else StoneSeat(l, key, ref rng, seat);
 
             if (rng.NextFloat() < 0.6f)
                 Lantern(l, rng.NextU64(), f.Child(-sd * rng.Range(0.95f, 1.15f), 0, rng.Range(-0.9f, -0.6f), sd, 0));
 
             float pz = -0.35f;
-            int steps = rng.Range(3, 6);
-            for (int i = 0; i < steps; i++, pz += rng.Range(0.55f, 0.7f))
+            int steps = rng.Range(3, 5);
+            for (int i = 0; i < steps; i++, pz += rng.Range(0.5f, 0.6f))
             {
                 float sz = rng.Range(0.32f, 0.46f);
                 int d = rng.Range(0, 16);
-                Rock(l, rng.NextU64(), f, ox + rng.Range(-0.12f, 0.12f), -0.02f, pz, sz * rng.Range(1.0f, 1.3f), 0.12f, sz, Cos16(d), Sin16(d), 0, 1);
+                Rock(l, rng.NextU64(), f, ox + rng.Range(-0.12f, 0.12f), -0.02f, pz, sz * rng.Range(1.0f, 1.3f), 0.18f, sz, Cos16(d), Sin16(d), 0, 1);
             }
 
             int stacks = rng.Range(1, 4);
