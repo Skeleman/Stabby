@@ -39,6 +39,7 @@ public class CreatureTests
             Matches(body, b);
             Matches(bp.GetProperty("colors"), b.GetProperty("colors"));
             Matches(bp.GetProperty("detail"), b.GetProperty("detail"));
+            Matches(bp.GetProperty("wary"), b.GetProperty("wary"));
             foreach (var s in b.GetProperty("slots").EnumerateArray()) Matches(bp.GetProperty("slots").GetProperty("items"), s);
         }
     }
@@ -71,10 +72,11 @@ public class CreatureTests
             "colors": { "base": "#000000", "accent": "#ffffff", "dark": "#101010" },
             "size": [1, 0.5], "walkSpeed": 1, "herd": [1, 20], "herdChance": 1.5,
             "detail": { "spawnPixels": 12, "fadePixels": 10, "shadowPixels": 20, "animPixels": 5, "ikPixels": 30, "lowPixels": 15 },
+            "wary": { "alertPixels": 20, "fleePixels": 15, "calmPixels": 10, "runSpeed": 0.5, "runStride": 1 },
             "slots": [ { "part": "tail", "socket": [0, 0, 0] }, { "part": "leg", "parent": "head", "socket": [0, 0] } ] } ] }
         """;
         var ex = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json, BiomeIds, "test"));
-        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be" })
+        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above" })
             Assert.Contains(bit, ex.Message);
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json.Replace("\"name\"", "\"nmae\""), BiomeIds, "test"));
     }
@@ -143,5 +145,59 @@ public class CreatureTests
         var a = CreaturePlan.Build(PlanWorld, Lib);
         var b = CreaturePlan.Build(other, Lib);
         Assert.False(a.Count == b.Count && a.Zip(b).All(p => p.First.X == p.Second.X && p.First.BodySeed == p.Second.BodySeed));
+    }
+
+    [Fact]
+    public void HerdsShareOneSeedFromTheirOwnStream()
+    {
+        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var herds = plan.GroupBy(s => CreaturePlan.HerdOf(s.Id)).ToList();
+        Assert.Contains(herds, h => h.Count() > 1);
+        foreach (var h in herds) Assert.Single(h.Select(s => s.HerdSeed).Distinct());
+        Assert.Equal(herds.Count, herds.Select(h => h.First().HerdSeed).Distinct().Count());
+        ulong root = CreaturePlan.Root(PlanWorld);
+        Assert.All(herds, h => Assert.Equal(CreaturePlan.HerdSeed(root, h.Key), h.First().HerdSeed));
+    }
+
+    [Fact]
+    public void WaryRadiiComeFromReachPixels()
+    {
+        var deer = Lib.Body("deer")!;
+        var w = CreaturePlan.Wary(deer);
+        Assert.True(w.Flee < w.Alert && w.Alert < w.Calm && w.Calm < CreaturePlan.SpawnReach(deer));
+        Assert.Equal(Detail.SimulationReach(deer.Length, deer.AlertPixels), w.Alert);
+        Assert.InRange(w.Alert, 30f, 60f);
+        Assert.True(w.RunRatio > 3);
+        var leg = CreatureBody.Assemble(deer, Lib, 7).Parts.Where(p => p.Role == CreaturePartDef.Leg).ToList();
+        Assert.Equal(0.1f, Math.Abs(leg[0].RunPhase - leg[1].RunPhase), 5);
+    }
+
+    [Fact]
+    public void HerdNoticesFreezesBoltsAndSettles()
+    {
+        var w = CreaturePlan.Wary(Lib.Body("deer")!);
+        var mind = HerdMind.Start(CreaturePlan.HerdSeed(1, 2));
+        var twin = mind;
+        const float dt = 0.05f;
+        float player = -90, herd = 0;
+        var seen = new List<HerdMode>();
+        bool rehomed = false;
+        for (int i = 0; i < 2400 && !rehomed; i++)
+        {
+            if (mind.Mode != HerdMode.Flee) player += 4 * dt;
+            if (mind.Mode == HerdMode.Flee) herd += 6.5f * dt * (float)Math.Cos(mind.Heading - Math.PI / 2);
+            float threat = herd - player;
+            rehomed = mind.Step(w, threat, threat, 0, dt);
+            twin.Step(w, threat, threat, 0, dt);
+            if (seen.Count == 0 || seen[^1] != mind.Mode) seen.Add(mind.Mode);
+            if (mind.Mode == HerdMode.Alert && seen.Count == 2) Assert.InRange(threat, w.Flee, w.Alert);
+        }
+        Assert.True(rehomed);
+        Assert.Equal(new[] { HerdMode.Calm, HerdMode.Alert, HerdMode.Flee, HerdMode.Alert }, seen);
+        Assert.InRange(mind.Heading, Math.PI / 2 - HerdMind.Spread, Math.PI / 2 + HerdMind.Spread);
+        Assert.Equal(mind.Heading, twin.Heading);
+        Assert.True(herd - player > w.Calm);
+        for (int i = 0; i < 200; i++) mind.Step(w, w.Calm * 2, 1, 0, dt);
+        Assert.Equal(HerdMode.Calm, mind.Mode);
     }
 }

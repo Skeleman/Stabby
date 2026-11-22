@@ -33,7 +33,11 @@
                 "idle": { "$ref": "#/$defs/angles" },
                 "reach": { "$ref": "#/$defs/angles" },
                 "push": { "$ref": "#/$defs/angles" },
-                "lift": { "$ref": "#/$defs/angles" }
+                "lift": { "$ref": "#/$defs/angles" },
+                "runReach": { "$ref": "#/$defs/angles" },
+                "runPush": { "$ref": "#/$defs/angles" },
+                "runLift": { "$ref": "#/$defs/angles" },
+                "alert": { "$ref": "#/$defs/angles" }
               }
             }
           }
@@ -44,7 +48,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "biomes", "length", "radius", "colors", "size", "walkSpeed", "herd", "herdChance", "detail", "slots"],
+        "required": ["id", "name", "biomes", "length", "radius", "colors", "size", "walkSpeed", "herd", "herdChance", "detail", "wary", "slots"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "minLength": 1 },
@@ -85,6 +89,18 @@
               "lowPixels": { "type": "number", "exclusiveMinimum": 0 }
             }
           },
+          "wary": {
+            "type": "object",
+            "required": ["alertPixels", "fleePixels", "calmPixels", "runSpeed", "runStride"],
+            "additionalProperties": false,
+            "properties": {
+              "alertPixels": { "type": "number", "exclusiveMinimum": 0 },
+              "fleePixels": { "type": "number", "exclusiveMinimum": 0 },
+              "calmPixels": { "type": "number", "exclusiveMinimum": 0 },
+              "runSpeed": { "type": "number", "exclusiveMinimum": 0, "maximum": 40 },
+              "runStride": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 }
+            }
+          },
           "slots": {
             "type": "array",
             "items": {
@@ -99,6 +115,8 @@
                 "mirror": { "type": "boolean" },
                 "phase": { "type": "number", "minimum": 0, "maximum": 1 },
                 "mirrorPhase": { "type": "number", "minimum": 0, "maximum": 1 },
+                "runPhase": { "type": "number", "minimum": 0, "maximum": 1 },
+                "runMirrorPhase": { "type": "number", "minimum": 0, "maximum": 1 },
                 "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 }
               }
             }

@@ -250,12 +250,17 @@ namespace Stabby.Content
                     if (radius == null || radius.Length != 2) { errors.Add(part.Id + ": radius needs 2 numbers"); radius = new float[] { 0, 0 }; }
                     string tone = s.String("tone", "base");
                     var idle = s.Floats("idle", zero);
+                    var reach = s.Floats("reach", idle);
+                    var push = s.Floats("push", idle);
+                    var lift = s.Floats("lift", idle);
                     part.Segments.Add(new CreatureSegmentDef
                     {
                         Length = s.Float("length", 0), RadiusStart = radius[0], RadiusEnd = radius[1], Flatten = s.Float("flatten", 1),
                         Tone = Array.IndexOf(CreatureSegmentDef.ToneNames, tone),
                         Belly = s.Float("belly", 0), Rump = s.Float("rump", 0), Tip = s.Float("tip", 0),
-                        Idle = idle, Reach = s.Floats("reach", idle), Push = s.Floats("push", idle), Lift = s.Floats("lift", idle),
+                        Idle = idle, Reach = reach, Push = push, Lift = lift,
+                        RunReach = s.Floats("runReach", reach), RunPush = s.Floats("runPush", push), RunLift = s.Floats("runLift", lift),
+                        Alert = s.Floats("alert", idle),
                     });
                     s.End();
                 }
@@ -301,13 +306,26 @@ namespace Stabby.Content
                     def.LowPixels = detail.Float("lowPixels", def.LowPixels);
                     detail.End();
                 }
+                var wary = b.Object("wary");
+                if (wary == null) errors.Add(id + ": wary missing");
+                else
+                {
+                    def.AlertPixels = wary.Float("alertPixels", def.AlertPixels);
+                    def.FleePixels = wary.Float("fleePixels", def.FleePixels);
+                    def.CalmPixels = wary.Float("calmPixels", def.CalmPixels);
+                    def.RunSpeed = wary.Float("runSpeed", def.RunSpeed);
+                    def.RunStride = wary.Float("runStride", def.RunStride);
+                    wary.End();
+                }
                 foreach (var s in b.Objects("slots", true))
                 {
+                    float phase = s.Float("phase", 0), mirrorPhase = s.Float("mirrorPhase", 0);
                     def.Slots.Add(new CreatureSlot
                     {
                         Part = s.String("part", ""), Parent = s.String("parent", null),
                         Socket = s.Floats("socket", Array.Empty<float>()), Direction = s.Floats("direction", zero),
-                        Mirror = s.Bool("mirror", false), Phase = s.Float("phase", 0), MirrorPhase = s.Float("mirrorPhase", 0), Scale = s.Float("scale", 1),
+                        Mirror = s.Bool("mirror", false), Phase = phase, MirrorPhase = mirrorPhase,
+                        RunPhase = s.Float("runPhase", phase), RunMirrorPhase = s.Float("runMirrorPhase", mirrorPhase), Scale = s.Float("scale", 1),
                     });
                     s.End();
                 }

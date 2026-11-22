@@ -1,3 +1,4 @@
+using Stabby.World;
 using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -11,18 +12,18 @@ namespace Stabby.Game
         public int Parent, Role, First, Count;
         public float3 Socket, Foot;
         public quaternion Rest;
-        public float Phase, Side, Reach;
+        public float Phase, RunPhase, Side, Reach;
     }
 
     public struct CreatureSegmentRig
     {
         public float Length;
-        public float3 Idle, Forward, Back, Lift;
+        public float3 Idle, Forward, Back, Lift, RunForward, RunBack, RunLift, Alert;
     }
 
     public struct CreatureRig
     {
-        public float Length, Rear, Stand, Stride;
+        public float Length, Rear, Stand, Stride, RunStride, RunRatio;
         public float FadePx, ShadowPx, AnimPx, IkPx, LowPx;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
@@ -33,7 +34,7 @@ namespace Stabby.Game
         public BlobAssetReference<CreatureRig> Rig;
         public Entity Ghost;
         public float3 Position;
-        public float Heading, Pitch, Move, WalkSpeed, Phase, Clock, Sink;
+        public float Heading, Pitch, Move, Alert, WalkSpeed, Phase, Clock, Sink;
         public bool Visible, Shadow, High, HighOn, LowOn;
         public float4 Fade;
     }
@@ -48,12 +49,14 @@ namespace Stabby.Game
         [GhostField(Quantization = 100, Smoothing = SmoothingAction.Interpolate)] public float2 Position;
         [GhostField(Quantization = 1000, Smoothing = SmoothingAction.Interpolate)] public float Heading;
         [GhostField(Quantization = 1000, Smoothing = SmoothingAction.Interpolate)] public float Move;
+        [GhostField(Quantization = 100, Smoothing = SmoothingAction.Interpolate)] public float Alert;
     }
 
     public struct CreatureBrain : IComponentData
     {
         public float2 Home;
         public float Timer, Turn;
+        public int Herd;
         public Random Random;
         public bool Walking;
     }
@@ -68,7 +71,7 @@ namespace Stabby.Game
         public int Id, Body;
         public float2 At;
         public float Heading, WalkSpeed;
-        public ulong BodySeed;
+        public ulong BodySeed, HerdSeed;
         public uint Seed;
     }
 
@@ -79,7 +82,17 @@ namespace Stabby.Game
         public BlobArray<int> SiteStart;
         public BlobArray<CreatureSpawnRow> Spawns;
         public BlobArray<float2> Reach;
+        public BlobArray<CreatureWary> Wary;
     }
+
+    public struct CreatureHerd
+    {
+        public HerdMind Mind;
+        public int Body;
+        public bool Seen, Rehome;
+    }
+
+    public struct CreatureFreeze : IComponentData { }
 
     public struct CreaturePlanBlob : IComponentData
     {
@@ -109,7 +122,7 @@ namespace Stabby.Game
     public struct CreatureView
     {
         public int Override, Show;
-        public float Move, Phase;
+        public float Move, Phase, Run, Alert;
 
         sealed class Key { }
         static readonly SharedStatic<CreatureView> Shared = SharedStatic<CreatureView>.GetOrCreate<CreatureView, Key>();

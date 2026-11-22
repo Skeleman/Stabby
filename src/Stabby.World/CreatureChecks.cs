@@ -17,9 +17,18 @@ namespace Stabby.World
 
             var ids = new HashSet<int>();
             var bySite = new Dictionary<int, List<CreatureSpawn>>();
+            var herdSeeds = new Dictionary<int, ulong>();
+            var seedOwner = new Dictionary<ulong, int>();
             foreach (var s in a)
             {
                 if (!ids.Add(s.Id)) e.Add("duplicate creature id " + s.Id);
+                int herd = CreaturePlan.HerdOf(s.Id);
+                if (herdSeeds.TryGetValue(herd, out ulong hs)) { if (hs != s.HerdSeed) e.Add("creature herd " + herd + " members disagree on herd seed"); }
+                else
+                {
+                    herdSeeds[herd] = s.HerdSeed;
+                    if (!seedOwner.TryAdd(s.HerdSeed, herd)) e.Add("creature herds " + seedOwner[s.HerdSeed] + " and " + herd + " share a herd seed");
+                }
                 int site = CreaturePlan.SiteOf(s.Id);
                 if (!bySite.TryGetValue(site, out var l)) bySite[site] = l = new List<CreatureSpawn>();
                 l.Add(s);
@@ -57,6 +66,6 @@ namespace Stabby.World
 
         static bool Same(CreatureSpawn a, CreatureSpawn b) =>
             a.Id == b.Id && a.Body == b.Body && a.X == b.X && a.Z == b.Z && a.Heading == b.Heading
-            && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed;
+            && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed && a.HerdSeed == b.HerdSeed;
     }
 }
