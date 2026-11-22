@@ -156,7 +156,7 @@ namespace Stabby.World
             }
         }
 
-        public static void Relink(WorldConfig c, bool[] sea, Hydrology hy)
+        public static void Relink(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
         {
             int n = c.Size;
             hy.Lakes.Clear();
@@ -172,6 +172,7 @@ namespace Stabby.World
                 if (hy.LakeId[hy.Receiver[i]] != id) lake.Outlet = i;
             }
             BuildSegments(c, sea, hy);
+            Shelves(c, h, sea, hy);
         }
 
         static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy)

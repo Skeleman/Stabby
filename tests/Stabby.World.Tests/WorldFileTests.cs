@@ -8,10 +8,12 @@ public class WorldFileTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
-    [Fact]
-    public void BakedWorldLoadsBackIdentical()
+    [Theory]
+    [InlineData(42UL)]
+    [InlineData(70UL)]
+    public void BakedWorldLoadsBackIdentical(ulong seed)
     {
-        var host = WorldGenerator.Generate(new WorldConfig { Seed = 42, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, Materials);
+        var host = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, Materials);
         var bytes = WorldFile.Write(host);
         var loaded = WorldFile.Read(bytes, Materials);
 
