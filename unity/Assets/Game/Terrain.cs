@@ -772,7 +772,7 @@ namespace Stabby.Game
             for (int cy = 0; cy < n; cy += LakeCells)
                 for (int cx = 0; cx < n; cx += LakeCells)
                     if (HasLand(world, cx, cy)) p.Lakes.Add(WaterGeometry.Lakes(world, cx, cy, LakeCells));
-            p.Rivers = WaterGeometry.Rivers(world);
+            p.Rivers = WaterGeometry.Rivers(world, detail);
             p.Sea = WaterGeometry.Sea(n, cm);
             var colors = TerrainLook.BaseColors(world, defs);
             p.Look = new BlobBuilder(Allocator.Persistent);

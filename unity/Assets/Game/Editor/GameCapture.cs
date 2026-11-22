@@ -217,11 +217,11 @@ namespace Stabby.Game.Editor
                     if (CreatureSpawnSystem.Count == 0 && --chaseWait > -1800) return;
                     bool stride = name.EndsWith("stride");
                     CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : 0 };
-                    if (!AimCreature(cam, name.Contains("close") ? 4f : 15f)) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
+                    if (!AimCreature(cam, CreatureRange(name))) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
                     wait = 120;
                     return;
                 }
-                AimCreature(cam, name.Contains("close") ? 4f : 15f);
+                AimCreature(cam, CreatureRange(name));
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
@@ -849,7 +849,9 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride" };
+        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride", "creature-far-idle", "creature-far-stride" };
+
+        static float CreatureRange(string name) => name.Contains("close") ? 4f : name.Contains("far") ? 40f : 15f;
 
         static bool AimCreature(Camera cam, float range)
         {
@@ -860,15 +862,31 @@ namespace Stabby.Game.Editor
                 using var roots = q.ToComponentDataArray<CreatureRoot>(Unity.Collections.Allocator.Temp);
                 if (roots.Length == 0) return false;
                 var c = roots[0];
-                var fwd = new Vector3(Mathf.Sin(c.Heading), 0, Mathf.Cos(c.Heading));
-                var side = new Vector3(fwd.z, 0, -fwd.x);
                 var target = new Vector3(c.Position.x, GroundHeight(c.Position.x, c.Position.z) + 0.75f, c.Position.z);
-                var eye = target + side * range + fwd * (range * 0.1f);
-                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 0.6f, target.y + 0.1f + range * 0.08f);
+                Vector3 eye = target;
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = c.Heading + (k % 2 == 0 ? 1 : -1) * 0.4f * ((k + 1) / 2);
+                    var fwd = new Vector3(Mathf.Sin(a), 0, Mathf.Cos(a));
+                    var side = new Vector3(fwd.z, 0, -fwd.x);
+                    eye = target + side * range + fwd * (range * 0.1f);
+                    eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 0.6f, target.y + 0.1f + range * 0.08f);
+                    if (Clear(eye, target)) break;
+                }
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 return true;
             }
             return false;
+        }
+
+        static bool Clear(Vector3 eye, Vector3 target)
+        {
+            for (int i = 1; i < 24; i++)
+            {
+                var p = Vector3.Lerp(eye, target, i / 24f);
+                if (GroundHeight(p.x, p.z) > p.y - 0.25f) return false;
+            }
+            return true;
         }
 
         static float GroundHeight(float x, float z)
@@ -1927,13 +1945,36 @@ namespace Stabby.Game.Editor
         {
             var best = default(Stabby.Viewer.FallCurtain);
             bool found = false;
-            int falls = 0, rows = 0;
+            int falls = 0, verts = 0, tris = 0, hugged = 0, buried = 0, buriedFree = 0, tucked = 0, nearFoot = 0;
+            float depth = 0, depthMax = 0, depthFree = 0;
+            var detail = new TerrainDetail(map);
+            var sw = new System.Diagnostics.Stopwatch();
             foreach (var l in NearField.Lines(map))
                 for (int k = 1; k < l.X.Length; k++)
                     if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _))
                     {
                         falls++;
-                        rows += Stabby.Viewer.WaterGeometry.CurtainRowsOf(f.Drop + 0.5f);
+                        float fh = f.Drop + 0.5f, fhalf = 0.5f * f.Width;
+                        int fr = Stabby.Viewer.WaterGeometry.CurtainRowsOf(fh), fc = Stabby.Viewer.WaterGeometry.CurtainColsOf(f.Width);
+                        verts += fr * fc;
+                        tris += 4 * (fr - 1) * (fc - 1);
+                        sw.Start();
+                        var off = Stabby.Viewer.WaterGeometry.CurtainOffsets(f, detail);
+                        sw.Stop();
+                        for (int j = 1; j < fr; j++)
+                        {
+                            float u = j / (fr - 1f), y = u * u * fh, vy = f.LipY - y, free = Stabby.Viewer.WaterGeometry.FallThrowAt(y);
+                            for (int c = 0; c < fc; c++)
+                            {
+                                float sc = (2f * c / (fc - 1) - 1) * fhalf, o = off[j * fc + c], x = f.LipX + f.DirZ * sc, z = f.LipZ - f.DirX * sc;
+                                if (o > free + 0.01f) hugged++;
+                                if (vy < f.BaseY) continue;
+                                float g = detail.Sample(x + f.DirX * o, z + f.DirZ * o), gf = detail.Sample(x + f.DirX * free, z + f.DirZ * free);
+                                if (g > vy && g > f.LipY + 0.3f) tucked++;
+                                else if (g > vy) { buried++; depth += g - vy; depthMax = Mathf.Max(depthMax, g - vy); if (vy < f.BaseY + 1) nearFoot++; }
+                                if (gf > vy && gf <= f.LipY + 0.3f) { buriedFree++; depthFree += gf - vy; }
+                            }
+                        }
                         if (!found || f.Drop > best.Drop) { best = f; found = true; }
                     }
             if (!found) { GameStatus.Lines["~falls"] = "no falls found"; yield break; }
@@ -1942,7 +1983,7 @@ namespace Stabby.Game.Editor
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, w = best.Width;
-            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)}; {falls} falls, curtain rows {rows}, verts {2 * rows}, tris {4 * (rows - falls)}";
+            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)} x cols {Stabby.Viewer.WaterGeometry.CurtainColsOf(w)}; {falls} falls, curtain verts {verts}, tris {tris}, hugged {hugged}, above-water verts in face rock {buried} (free arc {buriedFree}), mean depth {depth / Mathf.Max(buried, 1):F2} m (free arc {depthFree / Mathf.Max(buriedFree, 1):F2} m), max {depthMax:F2} m, within 1 m of the pool {nearFoot}, edge verts tucked into banks above the lip {tucked}, offsets {sw.ElapsedMilliseconds} ms";
             var eyes = new[]
             {
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),

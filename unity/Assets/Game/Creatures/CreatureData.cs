@@ -22,7 +22,7 @@ namespace Stabby.Game
     public struct CreatureRig
     {
         public float Length, Rear, Stand, Stride;
-        public float FadePx, ShadowPx, AnimPx, IkPx;
+        public float FadePx, ShadowPx, AnimPx, IkPx, LowPx;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
     }
@@ -34,7 +34,7 @@ namespace Stabby.Game
         public float2 Home;
         public float Heading, Pitch, Move, Speed, WalkSpeed, Phase, Clock, Timer, Turn, Sink, Ik;
         public Random Random;
-        public bool Walking, Visible, Shadow;
+        public bool Walking, Visible, Shadow, High, HighOn, LowOn;
         public float4 Fade;
     }
 
