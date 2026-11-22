@@ -20,7 +20,7 @@ namespace Stabby.Viewer
         public float CellM;
         public Vector4 Surface, Wobble, RockA, RockB, RockC, Look, CoatRough;
         public Vector4[] CoatA, CoatB;
-        public Vector4[] Water;
+        public Vector4[] Liquids;
         public Vector4[] Sinter;
     }
 
@@ -103,16 +103,13 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyCoatRough", s.CoatRough);
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
-            Shader.SetGlobalVector("_StabbyWaterDeep", s.Water[0]);
-            Shader.SetGlobalVector("_StabbyWaterShallow", s.Water[1]);
-            Shader.SetGlobalVector("_StabbyWaterWave", s.Water[2]);
-            Shader.SetGlobalVector("_StabbyWaterSwell", s.Water[3]);
-            Shader.SetGlobalVector("_StabbyWaterFlow", s.Water[4]);
+            Shader.SetGlobalVectorArray("_StabbyLiquid", s.Liquids);
             Shader.SetGlobalVector("_StabbySinterA", s.Sinter[0]);
             Shader.SetGlobalVector("_StabbySinterB", s.Sinter[1]);
             Shader.SetGlobalVector("_StabbySinterC", s.Sinter[2]);
-            Shader.SetGlobalVector("_StabbySpringWater", s.Sinter[3]);
-            Shader.SetGlobalVector("_StabbySpringDeep", s.Sinter[4]);
+            Shader.SetGlobalVector("_StabbyMudSurface", s.Sinter[3]);
+            Shader.SetGlobalVector("_StabbyMudClay", s.Sinter[4]);
+            Shader.SetGlobalVector("_StabbyMudGrey", s.Sinter[5]);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -318,8 +315,8 @@ namespace Stabby.Viewer
                 Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, lib.Look.RoughnessVar),
                 CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,
-                Water = WaterLook(lib.Water),
-                Sinter = SinterLook(lib.Sinter),
+                Liquids = LiquidLook(lib),
+                Sinter = SinterLook(lib.Sinter, lib.Mud),
             };
         }
 
@@ -344,23 +341,33 @@ namespace Stabby.Viewer
             return level;
         }
 
-        static Vector4[] SinterLook(SinterDef d)
+        static Vector4[] SinterLook(SinterDef d, MudDef m)
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
-            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(d.Water, 0), C(d.Deep, 0) };
+            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0) };
         }
 
-        static Vector4[] WaterLook(WaterDef w)
+        public const int LiquidRows = 9;
+
+        static Vector4[] LiquidLook(MaterialLibrary lib)
         {
-            float3 deep = ToLinear(Unpack(w.DeepColor)), shallow = ToLinear(Unpack(w.ShallowColor));
-            return new[]
+            var v = new Vector4[LiquidDef.Max * LiquidRows];
+            for (int i = 0; i < lib.Liquids.Count && i < LiquidDef.Max; i++)
             {
-                new Vector4(deep.x, deep.y, deep.z, 1f / w.ClarityM),
-                new Vector4(shallow.x, shallow.y, shallow.z, 1f / w.ShoreM),
-                new Vector4(1f / w.WaveScaleM, w.WaveSpeed, w.WaveStrength, w.FoamWidthM),
-                new Vector4(1f / w.SwellScaleM, w.SwellStrength, 1f / w.BedFieldM, 0),
-                new Vector4(w.FlowSpeed, 1f / w.RapidsSlope, w.LakeSwell, 0),
-            };
+                var w = lib.Liquids[i];
+                float3 deep = ToLinear(Unpack(w.DeepColor)), shallow = ToLinear(Unpack(w.ShallowColor)), film = ToLinear(Unpack(w.FilmColor)), glow = ToLinear(Unpack(w.EmissionColor)) * w.Emission;
+                int b = i * LiquidRows;
+                v[b] = new Vector4(deep.x, deep.y, deep.z, 1f / w.ClarityM);
+                v[b + 1] = new Vector4(shallow.x, shallow.y, shallow.z, 1f / w.ShoreM);
+                v[b + 2] = new Vector4(1f / w.WaveScaleM, w.WaveSpeed, w.WaveStrength, w.FoamWidthM);
+                v[b + 3] = new Vector4(1f / w.SwellScaleM, w.SwellStrength, 1f / w.BedFieldM, 0);
+                v[b + 4] = new Vector4(w.FlowSpeed, 1f / w.RapidsSlope, w.LakeSwell, 0);
+                v[b + 5] = new Vector4(w.Opacity, w.Viscosity, w.Bubbles, w.Film);
+                v[b + 6] = new Vector4(film.x, film.y, film.z, w.Silt);
+                v[b + 7] = new Vector4(w.FallSpeed, w.SheetOpacity, w.Spray, w.Roughness);
+                v[b + 8] = new Vector4(glow.x, glow.y, glow.z, 0);
+            }
+            return v;
         }
     }
 }

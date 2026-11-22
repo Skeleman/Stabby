@@ -8,7 +8,7 @@ public class InnTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing };
+    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot };
 
     [Fact]
     public void BuiltMeshesAreDeterministicFallPerTierAndStayInBounds()
@@ -27,7 +27,7 @@ public class InnTests
                     for (int p = 0; p < m.Positions.Length; p += 3)
                     {
                         Assert.InRange(m.Positions[p], -0.56f, 0.56f);
-                        Assert.InRange(m.Positions[p + 1], -0.05f, 1.05f);
+                        Assert.InRange(m.Positions[p + 1], -0.05f - 0.5f * Structures.SkirtShare, 1.05f);
                         Assert.InRange(m.Positions[p + 2], -0.56f, 0.56f);
                     }
                     prev = m.TriangleCount;

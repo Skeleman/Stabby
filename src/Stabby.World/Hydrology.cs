@@ -8,6 +8,7 @@ namespace Stabby.World
     public sealed class Lake
     {
         public int Id;
+        public int Liquid;
         public float Level;
         public List<int> Cells = new List<int>();
         public int Outlet = -1;
@@ -16,6 +17,7 @@ namespace Stabby.World
     public sealed class RiverSegment
     {
         public int Id;
+        public int Liquid;
         public List<int> Cells = new List<int>();
         public List<float> Surface = new List<float>();
         public List<float> Discharge = new List<float>();

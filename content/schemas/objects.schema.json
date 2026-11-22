@@ -5,7 +5,7 @@
   "required": ["schemaVersion", "kinds", "objects", "terrain", "foliage"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 4 },
     "terrain": {
       "type": "object",
       "required": ["quadPixels"],
@@ -17,7 +17,9 @@
         "mistFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "mistFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
         "steamFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
-        "steamFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 }
+        "steamFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
+        "columnFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "columnFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 }
       }
     },
     "foliage": {
@@ -91,13 +93,13 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "kind", "color", "parts", "placement"],
+        "required": ["id", "name", "kind", "material", "parts", "placement"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
           "name": { "type": "string" },
           "kind": { "enum": ["static", "interactive", "animated", "structure"] },
-          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "material": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
           "variants": { "type": "integer", "minimum": 1, "maximum": 16 },
           "interact": {
             "type": "object",
@@ -117,13 +119,13 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
                 "shadows": { "enum": ["", "on", "off"] },
-                "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-                "leafColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+                "material": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+                "leafMaterial": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
                 "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped", "worn"] }
               }
             }
@@ -155,7 +157,8 @@
               "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
-              "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring"] },
+              "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot"] },
+              "liquid": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "spacingM": { "type": "number", "minimum": 200, "maximum": 5000 },
               "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
               "biomeDensity": {

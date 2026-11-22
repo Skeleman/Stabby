@@ -7,7 +7,7 @@ namespace Stabby.World.Tests.Legacy;
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
-    public const int MaterialSchemaVersion = 2;
+    public const int MaterialSchemaVersion = 3;
 
     sealed class MaterialFile
     {
@@ -16,8 +16,9 @@ public static class ContentLoader
         public float OffsetWavelengthM { get; set; }
         public float TiltPerKm { get; set; }
         public SurfaceEntry? Surface { get; set; }
-        public WaterEntry? Water { get; set; }
+        public List<LiquidEntry> Liquids { get; set; } = new();
         public SinterEntry? Sinter { get; set; }
+        public MudEntry? Mud { get; set; }
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
         public List<MaterialEntry> Materials { get; set; } = new();
@@ -41,21 +42,45 @@ public static class ContentLoader
         public float RoughnessVar { get; set; }
     }
 
+    sealed class MudEntry
+    {
+        public string Surface { get; set; } = "";
+        public string Clay { get; set; } = "";
+        public string Grey { get; set; } = "";
+        public float Roughness { get; set; }
+    }
+
     sealed class SinterEntry
     {
         public string White { get; set; } = "";
         public string Ochre { get; set; } = "";
         public string Orange { get; set; } = "";
-        public string Water { get; set; } = "";
-        public string Deep { get; set; } = "";
         public float BandM { get; set; }
         public float Roughness { get; set; }
     }
 
-    sealed class WaterEntry
+    sealed class FallEntry
     {
+        public string Spray { get; set; } = "";
+        public float Speed { get; set; }
+        public float SheetOpacity { get; set; }
+    }
+
+    sealed class LiquidEntry
+    {
+        public string Id { get; set; } = "";
         public string DeepColor { get; set; } = "";
         public string ShallowColor { get; set; } = "";
+        public string FilmColor { get; set; } = "";
+        public string EmissionColor { get; set; } = "";
+        public float Silt { get; set; }
+        public float Opacity { get; set; }
+        public float Viscosity { get; set; }
+        public float Bubbles { get; set; }
+        public float Film { get; set; }
+        public float Emission { get; set; }
+        public float Roughness { get; set; }
+        public FallEntry? Fall { get; set; }
         public float ClarityM { get; set; }
         public float ShoreM { get; set; }
         public float FoamWidthM { get; set; }
@@ -194,11 +219,16 @@ public static class ContentLoader
         {
             OffsetAmplitudeM = file.OffsetAmplitudeM, OffsetWavelengthM = file.OffsetWavelengthM, TiltPerKm = file.TiltPerKm,
             Surface = file.Surface == null ? null! : Surface(file.Surface),
-            Water = file.Water == null ? null! : Water(file.Water, path),
+            Liquids = file.Liquids.Select(l => Liquid(l, path)).ToList(),
             Sinter = file.Sinter == null ? null! : new SinterDef
             {
                 White = Hex(file.Sinter.White, path, "sinter.white"), Ochre = Hex(file.Sinter.Ochre, path, "sinter.ochre"), Orange = Hex(file.Sinter.Orange, path, "sinter.orange"),
-                Water = Hex(file.Sinter.Water, path, "sinter.water"), Deep = Hex(file.Sinter.Deep, path, "sinter.deep"), BandM = file.Sinter.BandM, Roughness = file.Sinter.Roughness,
+                BandM = file.Sinter.BandM, Roughness = file.Sinter.Roughness,
+            },
+            Mud = file.Mud == null ? null! : new MudDef
+            {
+                Surface = Hex(file.Mud.Surface, path, "mud.surface"),
+                Clay = Hex(file.Mud.Clay, path, "mud.clay"), Grey = Hex(file.Mud.Grey, path, "mud.grey"), Roughness = file.Mud.Roughness,
             },
             Look = file.Look == null ? null! : new LookDef
             {
@@ -218,9 +248,14 @@ public static class ContentLoader
         return lib;
     }
 
-    static WaterDef Water(WaterEntry e, string path) => new WaterDef
+    static LiquidDef Liquid(LiquidEntry e, string path) => new LiquidDef
     {
-        DeepColor = Hex(e.DeepColor, path, "water.deepColor"), ShallowColor = Hex(e.ShallowColor, path, "water.shallowColor"),
+        Id = e.Id,
+        DeepColor = Hex(e.DeepColor, path, e.Id + ".deepColor"), ShallowColor = Hex(e.ShallowColor, path, e.Id + ".shallowColor"),
+        FilmColor = Hex(e.FilmColor, path, e.Id + ".filmColor"), EmissionColor = Hex(e.EmissionColor, path, e.Id + ".emissionColor"),
+        Silt = e.Silt, Opacity = e.Opacity, Viscosity = e.Viscosity, Bubbles = e.Bubbles, Film = e.Film, Emission = e.Emission, Roughness = e.Roughness,
+        Spray = e.Fall == null ? -1 : Array.IndexOf(LiquidDef.SprayNames, e.Fall.Spray),
+        FallSpeed = e.Fall?.Speed ?? 0, SheetOpacity = e.Fall?.SheetOpacity ?? 0,
         ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
@@ -263,7 +298,7 @@ public static class ContentLoader
         return d;
     }
 
-    public const int ObjectSchemaVersion = 2;
+    public const int ObjectSchemaVersion = 4;
 
     sealed class ObjectFile
     {
@@ -283,6 +318,8 @@ public static class ContentLoader
         public float MistFullPixels { get; set; } = new TerrainViewDef().MistFullPixels;
         public float SteamFadePixels { get; set; } = new TerrainViewDef().SteamFadePixels;
         public float SteamFullPixels { get; set; } = new TerrainViewDef().SteamFullPixels;
+        public float ColumnFadePixels { get; set; } = new TerrainViewDef().ColumnFadePixels;
+        public float ColumnFullPixels { get; set; } = new TerrainViewDef().ColumnFullPixels;
     }
 
     sealed class FoliageEntry
@@ -345,7 +382,7 @@ public static class ContentLoader
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Kind { get; set; } = "";
-        public string Color { get; set; } = "#ff00ff";
+        public string Material { get; set; } = "";
         public int Variants { get; set; } = 1;
         public InteractEntry? Interact { get; set; }
         public List<PartEntry> Parts { get; set; } = new();
@@ -366,8 +403,8 @@ public static class ContentLoader
         public float[]? Scale { get; set; }
         public string Solid { get; set; } = "";
         public string Shadows { get; set; } = "";
-        public string? Color { get; set; }
-        public string? LeafColor { get; set; }
+        public string? Material { get; set; }
+        public string? LeafMaterial { get; set; }
         public string Ends { get; set; } = "auto";
     }
 
@@ -396,6 +433,7 @@ public static class ContentLoader
         public string? Bank { get; set; }
         public float PerHundredM { get; set; }
         public string? Discovery { get; set; }
+        public string? Liquid { get; set; }
         public float SpacingM { get; set; }
         public float Chance { get; set; } = 1f;
         public List<BiomeDensityEntry> BiomeDensity { get; set; } = new();
@@ -418,6 +456,8 @@ public static class ContentLoader
             throw new InvalidDataException($"{path}: schemaVersion {file.SchemaVersion}, expected {ObjectSchemaVersion}");
         var errors = new List<string>();
         var lib = new ObjectLibrary();
+        var materials = LoadMaterials(contentRoot);
+        uint Mat(string id) => materials.Find(id)?.Color ?? 0;
         foreach (var k in file.Kinds)
             lib.Kinds.Add(new ObjectKind
             {
@@ -426,7 +466,7 @@ public static class ContentLoader
             });
         foreach (var o in file.Objects)
         {
-            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Hex(o.Color), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
             foreach (var p in o.Parts)
             {
                 if ((p.Offset != null && p.Offset.Length != 3) || (p.Scale != null && p.Scale.Length != 3))
@@ -435,8 +475,8 @@ public static class ContentLoader
                 {
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
-                    HasColor = p.Color != null, Color = p.Color != null ? Hex(p.Color) : def.Color,
-                    HasLeafColor = p.LeafColor != null, LeafColor = p.LeafColor != null ? Hex(p.LeafColor) : 0,
+                    HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color,
+                    HasLeafColor = p.LeafMaterial != null, LeafColor = p.LeafMaterial != null ? Mat(p.LeafMaterial) : 0,
                 };
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, p.Ends);
                 if (part.Ends < 0) errors.Add(o.Id + ": part " + p.Id + " has unknown ends \"" + p.Ends + "\"");
@@ -453,12 +493,12 @@ public static class ContentLoader
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
                 FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
                 ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
-                Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), SpacingM = pl.SpacingM, Chance = pl.Chance,
+                Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), Liquid = pl.Liquid, SpacingM = pl.SpacingM, Chance = pl.Chance,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);
         }
-        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels };
+        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels, ColumnFadePixels = file.Terrain.ColumnFadePixels, ColumnFullPixels = file.Terrain.ColumnFullPixels };
         if (file.Foliage != null)
         {
             var g = file.Foliage.Grass;

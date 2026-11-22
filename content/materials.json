@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "offsetAmplitudeM": 18,
   "offsetWavelengthM": 2400,
   "tiltPerKm": 6,
@@ -8,16 +8,47 @@
     "saturation": 0.65, "roughness": 0.85, "specular": 0.04, "roughnessVar": 0.12
   },
   "sinter": {
-    "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a",
-    "water": "#5fc8c4", "deep": "#1f6f86", "bandM": 0.3, "roughness": 0.55
+    "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a", "bandM": 0.3, "roughness": 0.55
   },
-  "water": {
-    "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8",
-    "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,
-    "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
-    "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
-    "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120
-  },
+  "mud": { "surface": "#6e6152", "clay": "#9c8c74", "grey": "#8c897f", "roughness": 0.3 },
+  "liquids": [
+    {
+      "id": "water", "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8", "filmColor": "#000000", "emissionColor": "#000000",
+      "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,
+      "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
+      "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
+      "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 1, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1 }
+    },
+    {
+      "id": "spring", "deepColor": "#1f6f86", "shallowColor": "#5fc8c4", "filmColor": "#000000", "emissionColor": "#000000",
+      "clarityM": 3, "shoreM": 0.4, "foamWidthM": 6,
+      "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
+      "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
+      "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1 }
+    },
+    {
+      "id": "mud", "deepColor": "#43392f", "shallowColor": "#6e6152", "filmColor": "#7d705e", "emissionColor": "#000000",
+      "clarityM": 0.2, "shoreM": 0.05, "foamWidthM": 0,
+      "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
+      "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
+      "flowSpeed": 0.2, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 1, "opacity": 1, "viscosity": 0.9, "bubbles": 1, "film": 0.3, "emission": 0, "roughness": 0.3,
+      "fall": { "spray": "none", "speed": 0.4, "sheetOpacity": 1 }
+    },
+    {
+      "id": "peat", "deepColor": "#120d08", "shallowColor": "#3a2a17", "filmColor": "#6b6a4a", "emissionColor": "#000000",
+      "clarityM": 0.6, "shoreM": 0.1, "foamWidthM": 0,
+      "waveScaleM": 18, "waveSpeed": 0.3, "waveStrength": 0.05,
+      "swellScaleM": 140, "swellStrength": 0.05, "lakeSwell": 0.1,
+      "flowSpeed": 0.3, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 1, "opacity": 0.85, "viscosity": 0.4, "bubbles": 0.1, "film": 0.7, "emission": 0, "roughness": 0.1,
+      "fall": { "spray": "mist", "speed": 0.8, "sheetOpacity": 1 }
+    }
+  ],
   "surface": {
     "fadePixels": 2.5, "parallaxFootprintM": 0.012, "windDeg": 60,
     "strataWobbleM": 2.5, "strataWobbleWavelengthM": 30,
@@ -59,7 +90,44 @@
     { "id": "agouti-fur",   "name": "Agouti fur",   "color": "#7d6a52" },
     { "id": "bristle-hide", "name": "Bristle hide", "color": "#4e4339" },
     { "id": "grizzled-fur", "name": "Grizzled fur", "color": "#7a7064" },
-    { "id": "dusky-fur",    "name": "Dusky fur",    "color": "#635749" }
+    { "id": "dusky-fur",    "name": "Dusky fur",    "color": "#635749" },
+    { "id": "fieldstone-grey",  "name": "Fieldstone grey",  "color": "#8a857c" },
+    { "id": "scree-grey",       "name": "Scree grey",       "color": "#7d7a74" },
+    { "id": "talus-grey",       "name": "Talus grey",       "color": "#7f7b74" },
+    { "id": "cliff-scree-grey", "name": "Cliff scree grey", "color": "#7a7771" },
+    { "id": "weathered-grey",   "name": "Weathered grey",   "color": "#8e897f" },
+    { "id": "boulder-grey",     "name": "Boulder grey",     "color": "#8c877e" },
+    { "id": "lichen-grey",      "name": "Lichen grey",      "color": "#837f77" },
+    { "id": "pale-stone",       "name": "Pale stone",       "color": "#958f84" },
+    { "id": "wet-gravel",       "name": "Wet gravel",       "color": "#6e685e" },
+    { "id": "river-cobble",     "name": "River cobble",     "color": "#76716a" },
+    { "id": "mossy-stone",      "name": "Mossy stone",      "color": "#6c7363" },
+    { "id": "ruin-stone",       "name": "Ruin stone",       "color": "#7d786e" },
+    { "id": "sinter-crust",     "name": "Sinter crust",     "color": "#d8d0bc" },
+    { "id": "vent-mud",         "name": "Vent mud",         "color": "#74685a" },
+    { "id": "dark-bark",        "name": "Dark bark",        "color": "#574a3d" },
+    { "id": "grey-bark",        "name": "Grey bark",        "color": "#5f5246" },
+    { "id": "snag-bark",        "name": "Snag bark",        "color": "#5a4c3f" },
+    { "id": "oak-bark",         "name": "Oak bark",         "color": "#5f5446" },
+    { "id": "pale-bark",        "name": "Pale bark",        "color": "#6d6352" },
+    { "id": "spruce-bark",      "name": "Spruce bark",      "color": "#4b3d33" },
+    { "id": "twig-brown",       "name": "Twig brown",       "color": "#4c3f33" },
+    { "id": "sage-wood",        "name": "Sage wood",        "color": "#6b5e50" },
+    { "id": "willow-wood",      "name": "Willow wood",      "color": "#5a4a3c" },
+    { "id": "dry-wood",         "name": "Dry wood",         "color": "#6b553d" },
+    { "id": "split-wood",       "name": "Split wood",       "color": "#7a6247" },
+    { "id": "bleached-wood",    "name": "Bleached wood",    "color": "#a69e90" },
+    { "id": "weathered-root",   "name": "Weathered root",   "color": "#8a7f70" },
+    { "id": "reed-brown",       "name": "Reed brown",       "color": "#5a3b24" },
+    { "id": "bush-leaf",        "name": "Bush leaf",        "color": "#5a6c3e" },
+    { "id": "sage-leaf",        "name": "Sage leaf",        "color": "#8b977c" },
+    { "id": "willow-leaf",      "name": "Willow leaf",      "color": "#6a7444" },
+    { "id": "oak-leaf",         "name": "Oak leaf",         "color": "#5d7242" },
+    { "id": "rainforest-leaf",  "name": "Rainforest leaf",  "color": "#486434" },
+    { "id": "spruce-needle",    "name": "Spruce needle",    "color": "#33503f" },
+    { "id": "reed-leaf",        "name": "Reed leaf",        "color": "#5d6847" },
+    { "id": "mushroom-cap",     "name": "Mushroom cap",     "color": "#b8a58a" },
+    { "id": "lush-turf",        "name": "Lush turf",        "color": "#4f6b35" }
   ],
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },

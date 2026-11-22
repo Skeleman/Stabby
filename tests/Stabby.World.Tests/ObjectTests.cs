@@ -62,6 +62,23 @@ public class ObjectTests
     }
 
     [Fact]
+    public void ObjectColorsComeFromTheMaterialLibrary()
+    {
+        var path = Path.Combine(Root, "objects.json");
+        var json = File.ReadAllText(path);
+        var ids = Biomes.Select(b => b.Id).ToList();
+        Assert.DoesNotContain("\"color\"", json);
+        Assert.DoesNotContain("leafColor", json);
+        var oak = Objects.Objects.First(o => o.Id == "oak");
+        Assert.Equal(Materials.Find("oak-bark")!.Color, oak.Color);
+        Assert.Equal(Materials.Find("oak-leaf")!.Color, oak.Parts[0].LeafColor);
+        var inline = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseObjects(json.Replace("\"material\": \"oak-bark\"", "\"color\": \"#5f5446\""), ids, path, Materials));
+        Assert.Contains("oak: inline \"color\"", inline.Message);
+        var unknown = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseObjects(json.Replace("\"leafMaterial\": \"oak-leaf\"", "\"leafMaterial\": \"no-such\""), ids, path, Materials));
+        Assert.Contains("unknown material \"no-such\"", unknown.Message);
+    }
+
+    [Fact]
     public void ObjectContentLoadsWithKindPolicyAndPartOverrides()
     {
         Assert.Equal(4, Objects.Kinds.Count);

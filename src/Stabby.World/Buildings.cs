@@ -13,7 +13,7 @@ namespace Stabby.World
         static readonly float[] WaysideSeats = { 0, 0, 0.24f, -0.09f, -0.24f, -0.09f, 0, -0.16f, 0.1f, -0.16f, -0.1f, -0.16f, 0, 0.15f, 0, 0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -40,6 +40,8 @@ namespace Stabby.World
                 case ObjectPart.HotSpring: HotSpring(l, key, Frame.Root(SpringU)); break;
                 case ObjectPart.Mushroom: Mushroom(l, key, Frame.Root(MushroomU), key); break;
                 case ObjectPart.FairyRing: FairyRing(l, key, Frame.Root(FairyU)); break;
+                case ObjectPart.Geyser: Geyser(l, key, Frame.Root(SpringU)); break;
+                case ObjectPart.MudPot: MudPot(l, key, Frame.Root(SpringU)); break;
             }
         }
 

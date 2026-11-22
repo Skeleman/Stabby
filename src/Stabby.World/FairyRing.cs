@@ -28,6 +28,7 @@ namespace Stabby.World
                 int k = rng.Range(0, 16);
                 float rd = i == 0 ? 0 : rng.Range(0.05f, 0.1f), x = Cos16(k) * rd, z = Sin16(k) * rd;
                 Round(l, rng.NextU64(), f, x, -0.01f, z, d, h + 0.01f, d, Fungus, GV, RoundStem, 0, 1);
+                Touch(l, f, x, -0.01f, z, 0.6f * d);
                 Round(l, rng.NextU64(), f, x, h - 0.22f * ch, z, cd, ch, cd, Fungus, GV, RoundDome, 0, 2);
                 tall = Math.Max(tall, h + 0.78f * ch);
             }
@@ -47,21 +48,7 @@ namespace Stabby.World
             float r = rng.Range(2.2f, 3.2f), t0 = rng.NextFloat();
             ulong dye = Rng.Mix(key ^ 0x3C6EF372FE94F82BUL);
 
-            int patches = (int)(6.2831853f * r / 0.5f);
-            for (int i = 0; i < patches; i++)
-            {
-                Arc(t0 + (i + rng.Range(-0.3f, 0.3f)) / patches, out float c, out float s);
-                float rr = r + rng.Range(-0.12f, 0.12f), d = rng.Range(0.6f, 0.9f);
-                Round(l, rng.NextU64(), f, c * rr, -0.03f, s * rr, d, 0.035f, d * rng.Range(0.8f, 1f), Turf, GV, RoundDisc, 0, 2, c, s);
-            }
-            int tufts = rng.Range(110, 150);
-            for (int i = 0; i < tufts; i++)
-            {
-                Arc(t0 + rng.NextFloat(), out float c, out float s);
-                float rr = r + rng.Range(-0.3f, 0.3f), sz = rng.Range(0.06f, 0.11f);
-                int d = rng.Range(0, 16);
-                Box(l, key, f, c * rr, -0.02f, s * rr, sz, sz * rng.Range(4.5f, 7f), sz, Turf, GV, 0, 1, Cos16(d), Sin16(d), rng.Range(-0.2f, 0.2f), rng.Range(-0.2f, 0.2f), 0.3f);
-            }
+            Band(l, f, 0, 0, r, rng.Range(0.75f, 1f));
 
             int clumps = rng.Range(14, 25), skip = rng.Range(0, clumps);
             float gap = rng.Range(1.5f, 3.5f);
@@ -86,11 +73,14 @@ namespace Stabby.World
             {
                 float px = wc * sr - ws * drift * i * i, pz = ws * sr + wc * drift * i * i;
                 int d = rng.Range(0, 16);
-                Hewn(l, rng.NextU64(), f, px + rng.Range(-0.05f, 0.05f), -0.03f, pz + rng.Range(-0.05f, 0.05f), rng.Range(0.36f, 0.5f), rng.Range(0.16f, 0.2f), rng.Range(0.28f, 0.4f), Cos16(d), Sin16(d), 0, 1, rng.Range(0.7f, 0.85f), rng.Range(-0.04f, 0.04f));
+                float hx = px + rng.Range(-0.05f, 0.05f), hz = pz + rng.Range(-0.05f, 0.05f);
+                Hewn(l, rng.NextU64(), f, hx, -0.06f, hz, rng.Range(0.36f, 0.5f), rng.Range(0.22f, 0.26f), rng.Range(0.28f, 0.4f), Cos16(d), Sin16(d), 0, 1, rng.Range(0.7f, 0.85f), rng.Range(-0.04f, 0.04f));
+                Touch(l, f, hx, -0.06f, hz, 0.22f);
                 sr += rng.Range(0.5f, 0.66f);
             }
             Flat(l, before);
             Mossy(l, before);
+            Drape(l, before);
         }
     }
 }

@@ -89,7 +89,7 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
-                [branch] if (_StabbyFieldUV.x > 0 && floor(i.tone.x * 0.5) >= 7 && floor(i.tone.x * 0.5) <= 9)
+                [branch] if (_StabbyFieldUV.x > 0 && ((floor(i.tone.x * 0.5) >= 7 && floor(i.tone.x * 0.5) <= 9) || i.tone.w > 63.5))
                 {
                     float3 org = UNITY_MATRIX_M._m03_m13_m23;
                     p.positionWS.y += _Fade.z - org.y + ContactBed(p.positionWS.xz) - ContactBed(org.xz);
@@ -524,6 +524,7 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
                 clip(fade.x - Bayer(i.positionCS.xy));
+                i.tone.w -= i.tone.w > 63.5 ? 64 : 0;
                 bool mossy = i.tone.w > 31.5;
                 i.tone.w -= mossy ? 32 : 0;
                 bool flat = i.tone.w > 15.5;

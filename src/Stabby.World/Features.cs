@@ -34,17 +34,19 @@ namespace Stabby.World
         public float W, H, P, T;
         public float D, F, N, S;
 
-        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f;
+        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f;
         public const float ColumnGap = 0.07f, ColumnRound = 0.1f, ColumnBroken = 0.16f, ColumnTilt = 0.22f, Wobble = 0.55f;
 
         public float Thick => R + Math.Min(W, H);
 
-        public float MinX => Math.Min(Ax, Bx) - R - W;
-        public float MaxX => Math.Max(Ax, Bx) + R + W;
+        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
+
+        public float MinX => Math.Min(Ax, Bx) - R - Spread;
+        public float MaxX => Math.Max(Ax, Bx) + R + Spread;
         public float MinY => Math.Min(Ay, By) - R - H;
         public float MaxY => Math.Max(Ay, By) + R + H;
-        public float MinZ => Math.Min(Az, Bz) - R - W;
-        public float MaxZ => Math.Max(Az, Bz) + R + W;
+        public float MinZ => Math.Min(Az, Bz) - R - Spread;
+        public float MaxZ => Math.Max(Az, Bz) + R + Spread;
 
         public bool Contains(float x, float y, float z) => x >= MinX && x <= MaxX && y >= MinY && y <= MaxY && z >= MinZ && z <= MaxZ;
 
@@ -148,11 +150,30 @@ namespace Stabby.World
         bool Basin(float x, float y, float z, out float dist)
         {
             float dx = x - Ax, dz = z - Az;
-            float wob = P > 0f ? P * W * Value(Seed, x / 1.5f, 0f, z / 1.5f) : 0f;
-            float a = Math.Max((float)Math.Sqrt(dx * dx + dz * dz) - W - wob, 0f);
+            float h = Math.Max(y - Ay + H, 0f);
+            if (D > 0f)
+            {
+                float j = 0.6f * Value(Seed ^ 0x3C6EF372u, x / 3f, 0f, z / 3f), s = h / D + j, i = (float)Math.Floor(s), f = s - i;
+                float f2 = f * f;
+                h = Math.Max(0f, D * (i + Lerp(f, f2 * f2, Riser) - j));
+            }
+            float rad = T != 0f ? W - T * h : W;
+            float wob = P > 0f ? P * rad * Value(Seed, x / 1.5f, 0f, z / 1.5f) : 0f;
+            if (P < 0f)
+            {
+                float l = Math.Max(W, LobeM);
+                wob += P * W * (1f - Value(Seed ^ 0xA54FF53Au, x / l, 0f, z / l));
+            }
+            float a = (float)Math.Sqrt(dx * dx + dz * dz) - rad - wob;
+            if (T != 0f) a /= (float)Math.Sqrt(1f + T * T);
+            a = Math.Max(a, 0f);
             float c = Math.Max(Math.Abs(y - Ay) - H, 0f);
             dist = (float)Math.Sqrt(a * a + c * c);
-            if (N > 0f) dist += N * Lump(x, y, z);
+            if (N > 0f)
+            {
+                float sc = Math.Max(1f, LumpM / (Wave * R));
+                dist += N * Lump(x / sc, y / sc, z / sc);
+            }
             return dist < R;
         }
 
@@ -238,7 +259,7 @@ namespace Stabby.World
         {
             if (Shape == Spring)
             {
-                float sx = x - Ax, sz = z - Az, rr = W + R;
+                float sx = x - Ax, sz = z - Az, rr = Spread + R;
                 return sx * sx + sz * sz <= rr * rr;
             }
             if (W > 0f)
@@ -374,11 +395,13 @@ namespace Stabby.World
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
-            if (boulders.Length + springs.Length == 0) return terrain;
-            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length];
+            var bogs = field.BogEdits();
+            if (boulders.Length + springs.Length + bogs.Length == 0) return terrain;
+            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
             springs.CopyTo(all, terrain.Length + boulders.Length);
+            bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             return all;
         }
 

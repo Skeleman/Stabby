@@ -142,6 +142,9 @@ namespace Stabby.World
         public float Footprint(int def) => footprint[def];
         public float ChunkMeters => WorldChunks.Size * cm;
         public void ColumnsOf(ObjectInstance o, List<ObjectColumn> list) => AddColumns(lib, shapes, o, list);
+        public void ContactsOf(ObjectInstance o, List<ObjectColumn> list) => AddContacts(lib, shapes, o, list);
+        public void LushOf(ObjectInstance o, List<ObjectColumn> list) => AddLush(lib, shapes, o, list);
+        public void PartContactsOf(ObjectInstance o, int part, List<ObjectColumn> list) => AddPart(lib, shapes, o, part, list, true);
 
         public ObjectInstance[] Chunk(int cx, int cz)
         {
@@ -322,7 +325,7 @@ namespace Stabby.World
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
             var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
             var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
-            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b)) return;
+            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b)) return;
             boulders.Add(a);
             boulders.Add(b);
         }
@@ -510,19 +513,49 @@ namespace Stabby.World
         {
             var def = lib.Objects[o.Def];
             for (int pi = 0; pi < def.Parts.Count; pi++)
+                if (lib.PartSolid(def, def.Parts[pi])) AddPart(lib, shapes, o, pi, list, false);
+        }
+
+        public static void AddContacts(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
+        {
+            var def = lib.Objects[o.Def];
+            for (int pi = 0; pi < def.Parts.Count; pi++) AddPart(lib, shapes, o, pi, list, true);
+        }
+
+        public const float ContactReach = 0.35f, ContactReachPerM = 0.1f;
+
+        public static bool Stamps(ObjectLibrary lib, ObjectInstance o, ObjectColumn c) => c.Bottom <= o.Y + (lib.Objects[o.Def].Placement.Sink + ContactReachPerM) * o.Size + ContactReach;
+
+        public static void AddLush(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
+        {
+            var def = lib.Objects[o.Def];
+            for (int pi = 0; pi < def.Parts.Count; pi++)
+            {
+                var bands = shapes.Lush[o.Def][pi];
+                if (bands == null || bands[o.Variant] == null) continue;
+                var p = def.Parts[pi];
+                float rs = Math.Min(p.ScaleX, p.ScaleZ) * o.Size;
+                foreach (var c in bands[o.Variant])
+                {
+                    Rotate(o, (p.OffsetX + c.X * p.ScaleX) * o.Size, 0, (p.OffsetZ + c.Z * p.ScaleZ) * o.Size, out float cx, out _, out float cz);
+                    list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = c.R * rs, Bottom = c.Bottom * rs, Top = o.Y });
+                }
+            }
+        }
+
+        public static void AddPart(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, int pi, List<ObjectColumn> list, bool contact)
+        {
+            var def = lib.Objects[o.Def];
             {
                 var p = def.Parts[pi];
-                if (!lib.PartSolid(def, p)) continue;
                 float tall = p.ScaleY * o.Size * shapes.Heights[o.Def][pi][o.Variant];
                 var local = shapes.Columns[o.Def][pi];
                 if (local != null)
                 {
                     float rs = Math.Min(p.ScaleX, p.ScaleZ) * o.Size;
-                    foreach (var c in local[o.Variant])
-                    {
-                        Rotate(o, (p.OffsetX + c.X * p.ScaleX) * o.Size, (p.OffsetY + c.Bottom * p.ScaleY) * o.Size, (p.OffsetZ + c.Z * p.ScaleZ) * o.Size, out float cx, out float cy, out float cz);
-                        list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = c.R * rs, Bottom = cy + o.Y, Top = cy + o.Y + (c.Top - c.Bottom) * p.ScaleY * o.Size });
-                    }
+                    foreach (var c in local[o.Variant]) AddLocal(o, p, c, rs, list);
+                    if (contact)
+                        foreach (var c in shapes.Contacts[o.Def][pi][o.Variant]) AddLocal(o, p, c, rs, list);
                 }
                 else if (p.Shape == ObjectPart.Log)
                 {
@@ -559,6 +592,12 @@ namespace Stabby.World
             }
         }
 
+        static void AddLocal(ObjectInstance o, ObjectPart p, ObjectColumn c, float rs, List<ObjectColumn> list)
+        {
+            Rotate(o, (p.OffsetX + c.X * p.ScaleX) * o.Size, (p.OffsetY + c.Bottom * p.ScaleY) * o.Size, (p.OffsetZ + c.Z * p.ScaleZ) * o.Size, out float cx, out float cy, out float cz);
+            list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = c.R * rs, Bottom = cy + o.Y, Top = cy + o.Y + (c.Top - c.Bottom) * p.ScaleY * o.Size });
+        }
+
         public static void Rotate(ObjectInstance q, float vx, float vy, float vz, out float rx, out float ry, out float rz)
         {
             float tx = 2 * (q.Qy * vz - q.Qz * vy), ty = 2 * (q.Qz * vx - q.Qx * vz), tz = 2 * (q.Qx * vy - q.Qy * vx);
@@ -571,26 +610,40 @@ namespace Stabby.World
     public sealed class PartShapes
     {
         public float[][][] Heights;
-        public ObjectColumn[][][][] Columns;
+        public ObjectColumn[][][][] Columns, Contacts, Lush;
 
         public static PartShapes Of(ObjectLibrary lib)
         {
-            var s = new PartShapes { Heights = new float[lib.Objects.Count][][], Columns = new ObjectColumn[lib.Objects.Count][][][] };
-            for (int d = 0; d < lib.Objects.Count; d++)
+            int n = lib.Objects.Count;
+            var s = new PartShapes { Heights = new float[n][][], Columns = new ObjectColumn[n][][][], Contacts = new ObjectColumn[n][][][], Lush = new ObjectColumn[n][][][] };
+            for (int d = 0; d < n; d++)
             {
                 var def = lib.Objects[d];
                 s.Heights[d] = new float[def.Parts.Count][];
                 s.Columns[d] = new ObjectColumn[def.Parts.Count][][];
+                s.Contacts[d] = new ObjectColumn[def.Parts.Count][][];
+                s.Lush[d] = new ObjectColumn[def.Parts.Count][][];
                 for (int p = 0; p < def.Parts.Count; p++)
                 {
                     int shape = def.Parts[p].Shape;
                     s.Heights[d][p] = new float[def.Variants];
-                    if (ObjectPart.IsStructure(shape)) s.Columns[d][p] = new ObjectColumn[def.Variants][];
+                    bool built = ObjectPart.IsStructure(shape);
+                    if (built)
+                    {
+                        s.Columns[d][p] = new ObjectColumn[def.Variants][];
+                        s.Contacts[d][p] = new ObjectColumn[def.Variants][];
+                    }
                     for (int v = 0; v < def.Variants; v++)
                     {
                         ulong k = ObjectMeshes.Key(def.Id, p, v);
                         s.Heights[d][p][v] = shape == ObjectPart.Rock ? ObjectMeshes.RockHeight(k) : 1f;
-                        if (s.Columns[d][p] != null) s.Columns[d][p][v] = Structures.Layout(shape, k).Columns.ToArray();
+                        if (!built) continue;
+                        var l = Structures.Layout(shape, k);
+                        s.Columns[d][p][v] = l.Columns.ToArray();
+                        s.Contacts[d][p][v] = l.Contacts.ToArray();
+                        if (l.Lush.Count == 0) continue;
+                        if (s.Lush[d][p] == null) s.Lush[d][p] = new ObjectColumn[def.Variants][];
+                        s.Lush[d][p][v] = l.Lush.ToArray();
                     }
                 }
             }

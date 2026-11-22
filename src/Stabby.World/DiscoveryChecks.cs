@@ -5,9 +5,34 @@ namespace Stabby.World
 {
     public static partial class WorldChecks
     {
+        static void CheckBogs(GeneratedWorld w, ObjectField field, List<string> e)
+        {
+            var bogs = field.BogPools();
+            foreach (var b in field.BogEdits())
+                if (!b.MeshedIn(NearStepM, b.MinX, b.MinZ, b.MaxX, b.MaxZ)) { e.Add($"bog pool at {b.Ax:F0},{b.Az:F0} is too thin to mesh near the player"); return; }
+            int n = w.Config.Size, wet = Array.IndexOf(w.BiomeIds, "wetland");
+            float cm = w.Config.CellMeters, worldM = n * cm;
+            for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+            {
+                float x = bogs[k], z = bogs[k + 1], r = bogs[k + 2];
+                string at = $"bog pool at {x:F0},{z:F0}";
+                if (w.Biome[Math.Min(n - 1, (int)(z / cm + 0.5f)) * n + Math.Min(n - 1, (int)(x / cm + 0.5f))] != wet) { e.Add(at + " lies outside wetland"); return; }
+                if (!(bogs[k + 4] < bogs[k + 3] && bogs[k + 3] < bogs[k + 5])) { e.Add(at + " has its floor, surface and bank out of order"); return; }
+                for (int p = 0; p < 9; p++)
+                {
+                    float ux = p == 0 ? 0 : (float)Math.Cos(p * Math.PI / 4), uz = p == 0 ? 0 : (float)Math.Sin(p * Math.PI / 4);
+                    float px = x + ux * (r + ObjectField.BogLipM), pz = z + uz * (r + ObjectField.BogLipM);
+                    if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) { e.Add(at + " reaches past the world edge"); return; }
+                    int i = Math.Min(n - 1, (int)(pz / cm + 0.5f)) * n + Math.Min(n - 1, (int)(px / cm + 0.5f));
+                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || field.RiverGap(px, pz) <= 0) { e.Add(at + " stands in open water"); return; }
+                }
+            }
+        }
+
         static void CheckDiscoveries(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
             var field = new ObjectField(w, detail, grid.Edits, w.Objects);
+            CheckBogs(w, field, e);
             var found = field.Discoveries();
             int n = w.Config.Size, across = field.ChunksAcross;
             float cm = w.Config.CellMeters, worldM = n * cm, span = field.ChunkMeters;
@@ -35,7 +60,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Ruin && field.Fitness(ObjectField.Ruin, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too broken for a ruin"); return; }
                 if (def.Placement.Discovery == ObjectField.FairyRing && field.Fitness(ObjectField.FairyRing, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too uneven for a fairy ring"); return; }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
-                if (def.Placement.Discovery == ObjectField.Spring) { if (!(field.SpringDraw(s.X, s.Z) > 0)) { e.Add(at + " is not near a range or volcanic relief"); return; } var fault = field.PoolFault(s); if (fault != null) { e.Add(at + " " + fault); return; } }
+                if (ObjectField.Pooled(def.Placement.Discovery)) { if (!(field.SpringDraw(s.X, s.Z) > 0)) { e.Add(at + " is not near a range or volcanic relief"); return; } var fault = field.VentFault(s); if (fault != null) { e.Add(at + " " + fault); return; } }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);
                 for (int b = a + 1; b < found.Length; b++)
                 {

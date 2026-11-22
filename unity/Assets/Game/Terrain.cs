@@ -326,15 +326,17 @@ namespace Stabby.Game
 
         static float Sinter(NativeEdits edits, float3 p)
         {
-            float w = 0;
+            float w = 0, clay = 0;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
                 if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Add || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
                 float d = math.length(new float2(p.x - e.Ax, p.z - e.Az)) - e.W - e.R;
-                w = math.max(w, 1 - math.smoothstep(-SinterFadeM, 0, d));
+                float s = 1 - math.smoothstep(-SinterFadeM, 0, d);
+                if (e.F > 0.5f) clay = math.max(clay, s);
+                else w = math.max(w, s);
             }
-            return w;
+            return w >= clay ? w : -clay;
         }
 
         public void Execute()
@@ -711,7 +713,7 @@ namespace Stabby.Game
                 double tu = frame.Elapsed.TotalMilliseconds;
                 Collect();
                 double tc = frame.Elapsed.TotalMilliseconds;
-                Roots(); Statics(); Steam();
+                Roots(); Statics(); Steam(); Clock();
                 double ts = frame.Elapsed.TotalMilliseconds;
                 lodRequests = lodDraw = lodNodes = lodEvictMs = lodShadowMs = 0;
                 lodEvicts = lodDeferred = lodShadows = 0;
@@ -750,7 +752,20 @@ namespace Stabby.Game
 
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
 
-        static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx");
+        static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx"), ColumnPxId = Shader.PropertyToID("_StabbyColumnPx"), ClockId = Shader.PropertyToID("_StabbyClock");
+        const double ClockWrap = 86400, FallbackTickRate = 60;
+        public static double? ClockOverride;
+
+        void Clock()
+        {
+            double clock = UnityEngine.Time.timeAsDouble;
+            if (SystemAPI.TryGetSingleton(out NetworkTime time) && time.ServerTick.IsValid)
+            {
+                double rate = SystemAPI.TryGetSingleton(out ClientServerTickRate tr) && tr.SimulationTickRate > 0 ? tr.SimulationTickRate : FallbackTickRate;
+                clock = (time.ServerTick.TickIndexForValidTick + (double)time.ServerTickFraction) / rate;
+            }
+            Shader.SetGlobalFloat(ClockId, (float)((ClockOverride ?? clock) % ClockWrap));
+        }
 
         float Allowed(Camera cam)
         {
@@ -758,6 +773,8 @@ namespace Stabby.Game
             quads.MistWindow(view.Quality, out float mistFade, out float mistFull);
             quads.SteamWindow(view.Quality, out float steamFade, out float steamFull);
             Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, steamFade, steamFull));
+            quads.ColumnWindow(view.Quality, out float columnFade, out float columnFull);
+            Shader.SetGlobalVector(ColumnPxId, new Vector4(columnFade, columnFull, 0, 0));
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
 

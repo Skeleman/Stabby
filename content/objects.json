@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 4,
   "kinds": [
     { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
     { "id": "interactive", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 6.48, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
@@ -8,48 +8,48 @@
   ],
   "objects": [
     {
-      "id": "small-rock", "name": "Small rock", "kind": "static", "color": "#8a857c", "variants": 6,
+      "id": "small-rock", "name": "Small rock", "kind": "static", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.8, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 14, "slopeMax": 1.2, "sizeMinM": 0.25, "sizeMaxM": 0.7, "sink": 0.2, "alignToSlope": 0.8,
         "biomeDensity": [ { "biome": "desert", "scale": 0.15 }, { "biome": "cold-desert", "scale": 0.3 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
-      "id": "scree", "name": "Scree", "kind": "static", "color": "#7d7a74", "variants": 6,
+      "id": "scree", "name": "Scree", "kind": "static", "material": "scree-grey", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 240, "slopeMax": 0.8, "hardnessMin": 0.3, "sizeMinM": 0.3, "sizeMaxM": 1.2, "clusterCount": 14, "clusterRadiusM": 6, "sink": 0.25, "alignToSlope": 0.9, "footRiseM": 6, "footReachM": 12, "fanM": 14,
         "biomeDensity": [ { "biome": "desert", "scale": 0.4 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
-      "id": "talus", "name": "Talus", "kind": "static", "color": "#7f7b74", "variants": 8,
+      "id": "talus", "name": "Talus", "kind": "static", "material": "talus-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1] } ],
       "placement": { "perHectare": 360, "slopeMax": 1.1, "sizeMinM": 0.3, "sizeMaxM": 1.4, "clusterCount": 24, "clusterRadiusM": 10, "sink": 0.25, "alignToSlope": 0.7, "footRiseM": 5, "footReachM": 10,
         "biomeDensity": [ { "biome": "desert", "scale": 0.4 }, { "biome": "wetland", "scale": 0.15 }, { "biome": "mangrove", "scale": 0.15 } ] }
     },
     {
-      "id": "cliff-scree", "name": "Cliff scree", "kind": "static", "color": "#7a7771", "variants": 8,
+      "id": "cliff-scree", "name": "Cliff scree", "kind": "static", "material": "cliff-scree-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.55, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 220, "slopeMax": 0.9, "sizeMinM": 0.15, "sizeMaxM": 0.5, "clusterCount": 16, "clusterRadiusM": 5, "sink": 0.3, "alignToSlope": 0.9, "footRiseM": 8, "footReachM": 14, "fanM": 10,
         "biomeDensity": [ { "biome": "desert", "scale": 0.5 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
-      "id": "field-stone", "name": "Field stone", "kind": "static", "color": "#8e897f", "variants": 6,
+      "id": "field-stone", "name": "Field stone", "kind": "static", "material": "weathered-grey", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.55, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "biomes": ["steppe", "savanna", "shrubland", "tundra", "temperate-forest", "boreal", "alpine"], "perHectare": 40, "slopeMax": 0.9, "sizeMinM": 0.12, "sizeMaxM": 0.4, "clusterCount": 4, "clusterRadiusM": 3, "sink": 0.25, "alignToSlope": 0.9 }
     },
     {
-      "id": "boulder", "name": "Boulder", "kind": "static", "color": "#8c877e", "variants": 8,
+      "id": "boulder", "name": "Boulder", "kind": "static", "material": "boulder-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock" } ],
       "placement": { "perHectare": 1.2, "slopeMax": 1.4, "hardnessMin": 0.2, "sizeMinM": 1.4, "sizeMaxM": 3.6, "sink": 0.15, "alignToSlope": 0.3,
         "biomeDensity": [ { "biome": "desert", "scale": 0.5 }, { "biome": "wetland", "scale": 0.15 }, { "biome": "mangrove", "scale": 0.15 } ] }
     },
     {
-      "id": "large-boulder", "name": "Large boulder", "kind": "static", "color": "#8a857c", "variants": 8,
+      "id": "large-boulder", "name": "Large boulder", "kind": "static", "material": "fieldstone-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock" } ],
       "placement": { "perHectare": 0.12, "slopeMax": 0.7, "hardnessMin": 0.2, "sizeMinM": 3, "sizeMaxM": 8, "editMinSizeM": 3.6, "sink": 0.1, "alignToSlope": 0.3,
         "biomeDensity": [ { "biome": "desert", "scale": 0.6 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
-      "id": "boulder-cluster", "name": "Boulder cluster", "kind": "static", "color": "#837f77", "variants": 4,
+      "id": "boulder-cluster", "name": "Boulder cluster", "kind": "static", "material": "lichen-grey", "variants": 4,
       "parts": [
         { "id": "big", "shape": "rock", "scale": [1, 0.9, 1] },
         { "id": "mid", "shape": "rock", "offset": [0.75, 0, 0.35], "scale": [0.6, 0.55, 0.6] },
@@ -59,25 +59,25 @@
         "biomeDensity": [ { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
-      "id": "fallen-log", "name": "Fallen log", "kind": "static", "color": "#574a3d", "variants": 6,
+      "id": "fallen-log", "name": "Fallen log", "kind": "static", "material": "dark-bark", "variants": 6,
       "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.11, 0.11] } ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "wetland", "savanna", "alpine"], "perHectare": 10, "slopeMax": 0.6, "sizeMinM": 3, "sizeMaxM": 8, "clusterCount": 2, "clusterRadiusM": 6, "sink": 0.02, "alignToSlope": 1,
         "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.8 }, { "biome": "wetland", "scale": 0.3 }, { "biome": "savanna", "scale": 0.08 }, { "biome": "alpine", "scale": 0.1 } ] }
     },
     {
-      "id": "stump", "name": "Stump", "kind": "static", "color": "#5f5246", "variants": 6,
+      "id": "stump", "name": "Stump", "kind": "static", "material": "grey-bark", "variants": 6,
       "parts": [ { "id": "stump", "shape": "stump", "scale": [1, 0.9, 1] } ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "wetland", "savanna"], "perHectare": 7, "slopeMax": 0.8, "sizeMinM": 0.4, "sizeMaxM": 1.1, "sink": 0.05, "alignToSlope": 0.5,
         "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.8 }, { "biome": "wetland", "scale": 0.3 }, { "biome": "savanna", "scale": 0.1 } ] }
     },
     {
-      "id": "windthrow", "name": "Windthrown tree", "kind": "static", "color": "#574a3d", "variants": 6,
+      "id": "windthrow", "name": "Windthrown tree", "kind": "static", "material": "dark-bark", "variants": 6,
       "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.12, 0.12], "ends": "rooted" } ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest"], "perHectare": 2, "slopeMax": 0.5, "sizeMinM": 5, "sizeMaxM": 10, "sink": 0.02, "alignToSlope": 1,
         "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.6 } ] }
     },
     {
-      "id": "snapped-tree", "name": "Snapped tree", "kind": "static", "color": "#5a4c3f", "variants": 6,
+      "id": "snapped-tree", "name": "Snapped tree", "kind": "static", "material": "snag-bark", "variants": 6,
       "parts": [
         { "id": "stump", "shape": "stump", "scale": [0.16, 0.32, 0.16], "ends": "snapped" },
         { "id": "trunk", "shape": "log", "offset": [0.56, 0, 0.1], "scale": [1, 0.11, 0.11] }
@@ -86,203 +86,213 @@
         "biomeDensity": [ { "biome": "tropical-forest", "scale": 0.6 } ] }
     },
     {
-      "id": "bush", "name": "Bush", "kind": "animated", "color": "#4c3f33", "variants": 6,
-      "parts": [ { "id": "body", "shape": "shrub", "leafColor": "#5a6c3e" } ],
+      "id": "bush", "name": "Bush", "kind": "animated", "material": "twig-brown", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "leafMaterial": "bush-leaf" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "shrubland", "savanna", "tropical-forest", "boreal", "wetland"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 0.7, "sizeMaxM": 2.2, "clusterCount": 3, "clusterRadiusM": 3, "sink": 0.04, "alignToSlope": 0.2,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.5 }, { "biome": "temperate-rain", "scale": 0.5 }, { "biome": "tropical-forest", "scale": 0.5 }, { "biome": "boreal", "scale": 0.2 }, { "biome": "savanna", "scale": 0.25 }, { "biome": "wetland", "scale": 0.25 } ] }
     },
     {
-      "id": "sagebrush", "name": "Sagebrush", "kind": "animated", "color": "#6b5e50", "variants": 6,
-      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.3, 1, 1.3], "leafColor": "#8b977c" } ],
+      "id": "sagebrush", "name": "Sagebrush", "kind": "animated", "material": "sage-wood", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.3, 1, 1.3], "leafMaterial": "sage-leaf" } ],
       "placement": { "biomes": ["steppe", "cold-desert", "desert", "shrubland"], "perHectare": 50, "slopeMax": 0.7, "sizeMinM": 0.4, "sizeMaxM": 1.2, "clusterCount": 4, "clusterRadiusM": 5, "sink": 0.05, "alignToSlope": 0.3,
         "biomeDensity": [ { "biome": "desert", "scale": 0.3 }, { "biome": "shrubland", "scale": 0.6 } ] }
     },
     {
-      "id": "dwarf-willow", "name": "Dwarf willow", "kind": "animated", "color": "#5a4a3c", "variants": 6,
-      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.5, 1, 1.5], "leafColor": "#6a7444" } ],
-      "placement": { "biomes": ["tundra", "alpine", "boreal"], "perHectare": 45, "slopeMax": 0.9, "sizeMinM": 0.25, "sizeMaxM": 0.7, "clusterCount": 6, "clusterRadiusM": 4, "sink": 0.05, "alignToSlope": 0.5,
+      "id": "dwarf-willow", "name": "Dwarf willow", "kind": "animated", "material": "willow-wood", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "scale": [1.5, 1, 1.5], "leafMaterial": "willow-leaf" } ],
+      "placement": { "biomes": ["tundra", "alpine", "boreal"], "perHectare": 45, "slopeMax": 0.9, "sizeMinM": 0.25, "sizeMaxM": 0.7, "clusterCount": 6, "clusterRadiusM": 4, "sink": 0.09, "alignToSlope": 0.5,
         "biomeDensity": [ { "biome": "boreal", "scale": 0.3 } ] }
     },
     {
-      "id": "loose-stone", "name": "Loose stone", "kind": "interactive", "color": "#958f84", "variants": 6,
+      "id": "loose-stone", "name": "Loose stone", "kind": "interactive", "material": "pale-stone", "variants": 6,
       "interact": { "verb": "take", "reachM": 2.5 },
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1], "solid": "off" } ],
       "placement": { "biomes": ["steppe", "savanna", "shrubland", "tundra", "temperate-forest", "boreal", "alpine", "desert"], "perHectare": 3, "slopeMax": 0.8, "sizeMinM": 0.25, "sizeMaxM": 0.4, "sink": 0.15, "alignToSlope": 0.9 }
     },
     {
-      "id": "brushwood", "name": "Brushwood", "kind": "interactive", "color": "#6b553d", "variants": 4,
+      "id": "brushwood", "name": "Brushwood", "kind": "interactive", "material": "dry-wood", "variants": 4,
       "interact": { "verb": "cut", "reachM": 3 },
       "parts": [
         { "id": "a", "shape": "log", "offset": [0, 0, 0], "scale": [1, 0.08, 0.08] },
         { "id": "b", "shape": "log", "offset": [0.05, 0.06, 0.12], "scale": [0.8, 0.06, 0.06], "solid": "off" },
-        { "id": "c", "shape": "log", "offset": [-0.1, 0.05, -0.1], "scale": [0.7, 0.05, 0.05], "solid": "off", "color": "#7a6247" }
+        { "id": "c", "shape": "log", "offset": [-0.1, 0.05, -0.1], "scale": [0.7, 0.05, 0.05], "solid": "off", "material": "split-wood" }
       ],
       "placement": { "biomes": ["boreal", "temperate-forest", "temperate-rain", "tropical-forest", "shrubland"], "perHectare": 2, "slopeMax": 0.7, "sizeMinM": 1.4, "sizeMaxM": 2.2, "sink": 0.02, "alignToSlope": 1 }
     },
     {
-      "id": "oak", "name": "Oak", "kind": "animated", "color": "#5f5446", "variants": 8,
-      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "leafColor": "#5d7242" } ],
+      "id": "oak", "name": "Oak", "kind": "animated", "material": "oak-bark", "variants": 8,
+      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "leafMaterial": "oak-leaf" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "wetland", "savanna"], "perHectare": 60, "slopeMax": 0.6, "sizeMinM": 7, "sizeMaxM": 16, "clusterCount": 4, "clusterRadiusM": 10, "sink": 0.02,
         "biomeDensity": [ { "biome": "temperate-rain", "scale": 0.4 }, { "biome": "wetland", "scale": 0.25 }, { "biome": "savanna", "scale": 0.08 } ] }
     },
     {
-      "id": "rainforest-tree", "name": "Rainforest tree", "kind": "animated", "color": "#6d6352", "variants": 8,
-      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "scale": [1.15, 1, 1.15], "leafColor": "#486434" } ],
+      "id": "rainforest-tree", "name": "Rainforest tree", "kind": "animated", "material": "pale-bark", "variants": 8,
+      "parts": [ { "id": "body", "shape": "broadleaf", "solid": "on", "scale": [1.15, 1, 1.15], "leafMaterial": "rainforest-leaf" } ],
       "placement": { "biomes": ["tropical-forest", "mangrove"], "perHectare": 70, "slopeMax": 0.7, "sizeMinM": 10, "sizeMaxM": 20, "clusterCount": 3, "clusterRadiusM": 10, "sink": 0.02,
         "biomeDensity": [ { "biome": "mangrove", "scale": 0.3 } ] }
     },
     {
-      "id": "spruce", "name": "Spruce", "kind": "animated", "color": "#4b3d33", "variants": 8,
-      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafColor": "#33503f" } ],
+      "id": "spruce", "name": "Spruce", "kind": "animated", "material": "spruce-bark", "variants": 8,
+      "parts": [ { "id": "body", "shape": "conifer", "solid": "on", "leafMaterial": "spruce-needle" } ],
       "placement": { "biomes": ["boreal", "temperate-rain", "temperate-forest", "alpine"], "perHectare": 80, "slopeMax": 0.8, "sizeMinM": 6, "sizeMaxM": 19, "clusterCount": 5, "clusterRadiusM": 8, "sink": 0.02,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.2 }, { "biome": "temperate-rain", "scale": 0.7 }, { "biome": "alpine", "scale": 0.08 } ] }
     },
     {
-      "id": "dry-stone-wall", "name": "Dry-stone wall", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "id": "dry-stone-wall", "name": "Dry-stone wall", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "wall", "shape": "dry-stone-wall" } ],
       "placement": { "biomes": ["steppe", "shrubland", "tundra", "temperate-forest", "alpine", "boreal", "cold-desert"], "perHectare": 0.1, "slopeMax": 0.25, "hardnessMin": 0.1, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005,
         "chainMin": 3, "chainMax": 10, "chainCorner": 0.14, "chainGate": 0.07,
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.4 }, { "biome": "boreal", "scale": 0.3 }, { "biome": "cold-desert", "scale": 0.5 } ] }
     },
     {
-      "id": "cairn", "name": "Cairn", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "id": "cairn", "name": "Cairn", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "cairn", "shape": "cairn" } ],
       "placement": { "biomes": ["alpine", "tundra", "cold-desert", "steppe"], "perHectare": 0.25, "slopeMax": 0.45, "hardnessMin": 0.1, "sizeMinM": 1.4, "sizeMaxM": 2.4, "sink": 0.01,
         "biomeDensity": [ { "biome": "steppe", "scale": 0.3 } ] }
     },
     {
-      "id": "inn", "name": "Inn", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "inn", "name": "Inn", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "inn", "shape": "inn", "offset": [0, 0, -0.12], "scale": [0.63, 0.63, 0.63] }, { "id": "yard", "shape": "inn-yard" } ],
       "placement": { "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "perHectare": 0.02, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
     },
     {
-      "id": "table", "name": "Table", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "table", "name": "Table", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "table", "shape": "table" } ],
       "placement": { "perHectare": 0, "sizeMinM": 1.6, "sizeMaxM": 1.6 }
     },
     {
-      "id": "bench", "name": "Bench", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "bench", "name": "Bench", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "bench", "shape": "bench" } ],
       "placement": { "perHectare": 0, "sizeMinM": 1.4, "sizeMaxM": 1.4 }
     },
     {
-      "id": "barrel", "name": "Barrel", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "barrel", "name": "Barrel", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "barrel", "shape": "barrel" } ],
       "placement": { "perHectare": 0, "sizeMinM": 0.85, "sizeMaxM": 0.85 }
     },
     {
-      "id": "crate", "name": "Crate", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "crate", "name": "Crate", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "crate", "shape": "crate" } ],
       "placement": { "perHectare": 0, "sizeMinM": 0.7, "sizeMaxM": 0.7 }
     },
     {
-      "id": "market-stall", "name": "Market stall", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "market-stall", "name": "Market stall", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "stall", "shape": "market-stall" } ],
       "placement": { "perHectare": 0, "sizeMinM": 3, "sizeMaxM": 3 }
     },
     {
-      "id": "well", "name": "Well", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "well", "name": "Well", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "well", "shape": "well" } ],
       "placement": { "perHectare": 0, "sizeMinM": 2.6, "sizeMaxM": 2.6 }
     },
     {
-      "id": "stone-ring", "name": "Standing stones", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "id": "stone-ring", "name": "Standing stones", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "ring", "shape": "stone-ring" } ],
       "placement": { "biomes": ["steppe", "temperate-forest", "temperate-rain", "shrubland", "boreal", "tundra", "alpine", "savanna"], "perHectare": 0, "discovery": "hilltop", "spacingM": 900, "chance": 0.7, "slopeMax": 0.5, "sizeMinM": 14, "sizeMaxM": 18, "sink": 0.004 }
     },
     {
-      "id": "reeds", "name": "Reeds and cattails", "kind": "animated", "color": "#5a3b24", "variants": 8,
-      "parts": [ { "id": "body", "shape": "reed", "leafColor": "#5d6847" } ],
+      "id": "reeds", "name": "Reeds and cattails", "kind": "animated", "material": "reed-brown", "variants": 8,
+      "parts": [ { "id": "body", "shape": "reed", "leafMaterial": "reed-leaf" } ],
       "placement": { "perHectare": 0, "bank": "reed", "perHundredM": 220, "slopeMax": 1.3, "sizeMinM": 1.1, "sizeMaxM": 2.2, "clusterCount": 12, "clusterRadiusM": 2.2, "sink": 0.04,
         "biomeDensity": [ { "biome": "tundra", "scale": 0 }, { "biome": "desert", "scale": 0 }, { "biome": "cold-desert", "scale": 0 }, { "biome": "alpine", "scale": 0 }, { "biome": "steppe", "scale": 0.4 }, { "biome": "shrubland", "scale": 0.5 } ] }
     },
     {
-      "id": "driftwood", "name": "Driftwood", "kind": "static", "color": "#a69e90", "variants": 6,
+      "id": "driftwood", "name": "Driftwood", "kind": "static", "material": "bleached-wood", "variants": 6,
       "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.09, 0.09], "ends": "worn" } ],
       "placement": { "perHectare": 0, "bank": "drift", "perHundredM": 7, "slopeMax": 1.2, "sizeMinM": 1.2, "sizeMaxM": 4.5, "clusterCount": 2, "clusterRadiusM": 2.5, "sink": 0.05, "alignToSlope": 1 }
     },
     {
-      "id": "drift-root", "name": "Snagged root", "kind": "static", "color": "#8a7f70", "variants": 6,
+      "id": "drift-root", "name": "Snagged root", "kind": "static", "material": "weathered-root", "variants": 6,
       "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.11, 0.11], "ends": "rooted" } ],
       "placement": { "perHectare": 0, "bank": "drift", "perHundredM": 1.2, "slopeMax": 1.2, "sizeMinM": 3, "sizeMaxM": 6.5, "sink": 0.08, "alignToSlope": 1 }
     },
     {
-      "id": "river-gravel", "name": "River gravel", "kind": "static", "color": "#6e685e", "variants": 6,
+      "id": "river-gravel", "name": "River gravel", "kind": "static", "material": "wet-gravel", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 640, "slopeMax": 1.4, "sizeMinM": 0.08, "sizeMaxM": 0.26, "clusterCount": 20, "clusterRadiusM": 3, "sink": 0.08, "alignToSlope": 0.95 }
     },
     {
-      "id": "river-cobble", "name": "River cobble", "kind": "static", "color": "#76716a", "variants": 6,
+      "id": "river-cobble", "name": "River cobble", "kind": "static", "material": "river-cobble", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.55, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 140, "slopeMax": 1.4, "sizeMinM": 0.2, "sizeMaxM": 0.5, "clusterCount": 7, "clusterRadiusM": 2.5, "sink": 0.12, "alignToSlope": 0.9 }
     },
     {
-      "id": "wet-stone", "name": "Mossy wet stone", "kind": "static", "color": "#6c7363", "variants": 8,
+      "id": "wet-stone", "name": "Mossy wet stone", "kind": "static", "material": "mossy-stone", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1] } ],
       "placement": { "perHectare": 0, "bank": "rapid", "perHundredM": 60, "slopeMax": 1.5, "sizeMinM": 0.35, "sizeMaxM": 1.3, "clusterCount": 5, "clusterRadiusM": 2, "sink": 0.2, "alignToSlope": 0.6 }
     },
     {
-      "id": "tent", "name": "Tent", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "tent", "name": "Tent", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "tent", "shape": "tent" } ],
       "placement": { "perHectare": 0, "sizeMinM": 4.4, "sizeMaxM": 4.4 }
     },
     {
-      "id": "fire-pit", "name": "Fire pit", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "fire-pit", "name": "Fire pit", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "pit", "shape": "fire-pit" } ],
       "placement": { "perHectare": 0, "sizeMinM": 1.8, "sizeMaxM": 1.8 }
     },
     {
-      "id": "log-seat", "name": "Log seat", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "log-seat", "name": "Log seat", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "seat", "shape": "log-seat" } ],
       "placement": { "perHectare": 0, "sizeMinM": 1.6, "sizeMaxM": 1.6 }
     },
     {
-      "id": "campsite", "name": "Campsite", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "id": "campsite", "name": "Campsite", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "camp", "shape": "campsite" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest"], "perHectare": 0, "discovery": "camp", "spacingM": 750, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 10, "sizeMaxM": 11, "sink": 0.002 }
     },
     {
-      "id": "hermit-hut", "name": "Hermit hut", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "hermit-hut", "name": "Hermit hut", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "hut", "shape": "hermit-hut" } ],
       "placement": { "perHectare": 0, "sizeMinM": 6.75, "sizeMaxM": 6.75 }
     },
     {
-      "id": "hermitage", "name": "Hermit's hut", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "id": "hermitage", "name": "Hermit's hut", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "site", "shape": "hermitage" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tropical-forest"], "perHectare": 0, "discovery": "hermit", "spacingM": 900, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
     },
     {
-      "id": "road-shrine", "name": "Road shrine", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "id": "road-shrine", "name": "Road shrine", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "shrine", "shape": "road-shrine" } ],
       "placement": { "perHectare": 0, "sizeMinM": 2.6, "sizeMaxM": 2.6 }
     },
     {
-      "id": "wayside-shrine", "name": "Wayside shrine", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "id": "wayside-shrine", "name": "Wayside shrine", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "site", "shape": "wayside" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "shrine", "spacingM": 400, "chance": 0.8, "slopeMax": 0.5, "sizeMinM": 7, "sizeMaxM": 7.5, "sink": 0.002 }
     },
     {
-      "id": "ruin", "name": "Ruin", "kind": "structure", "color": "#7d786e", "variants": 6,
+      "id": "ruin", "name": "Ruin", "kind": "structure", "material": "ruin-stone", "variants": 6,
       "parts": [ { "id": "site", "shape": "ruin" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "ruin", "spacingM": 900, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
     },
     {
-      "id": "hot-spring", "name": "Hot spring", "kind": "structure", "color": "#d8d0bc", "variants": 8,
+      "id": "hot-spring", "name": "Hot spring", "kind": "structure", "material": "sinter-crust", "variants": 8,
       "parts": [ { "id": "site", "shape": "hot-spring" } ],
-      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "spring", "spacingM": 3000, "chance": 0.7, "slopeMin": 0.04, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.15 }
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "spring", "liquid": "spring", "spacingM": 3000, "chance": 0.7, "slopeMin": 0.04, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.15 }
     },
     {
-      "id": "mushroom", "name": "Mushroom", "kind": "structure", "color": "#b8a58a", "variants": 6,
+      "id": "mushroom", "name": "Mushroom", "kind": "structure", "material": "mushroom-cap", "variants": 6,
       "parts": [ { "id": "clump", "shape": "mushroom" } ],
       "placement": { "perHectare": 0, "sizeMinM": 0.3, "sizeMaxM": 0.3 }
     },
     {
-      "id": "fairy-ring", "name": "Fairy ring", "kind": "structure", "color": "#4f6b35", "variants": 6,
+      "id": "fairy-ring", "name": "Fairy ring", "kind": "structure", "material": "lush-turf", "variants": 6,
       "parts": [ { "id": "site", "shape": "fairy-ring" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest"], "perHectare": 0, "discovery": "fairy-ring", "spacingM": 700, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 14, "sizeMaxM": 14.5, "sink": 0.002 }
+    },
+    {
+      "id": "geyser", "name": "Geyser", "kind": "structure", "material": "sinter-crust", "variants": 8,
+      "parts": [ { "id": "site", "shape": "geyser" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "geyser", "liquid": "spring", "spacingM": 3500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.02 }
+    },
+    {
+      "id": "mud-pot", "name": "Mud pot", "kind": "structure", "material": "vent-mud", "variants": 8,
+      "parts": [ { "id": "site", "shape": "mud-pot" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "mud-pot", "liquid": "mud", "spacingM": 2500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 14, "sizeMaxM": 18, "sink": 0.02 }
     }
   ],
-  "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12 },
+  "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8 },
   "foliage": {
     "wind": { "directionDeg": 60, "strength": 0.35, "gustStrength": 0.5, "gustScaleM": 24, "gustSpeed": 6, "swayHz": 0.9 },
     "grass": { "perM2": 160, "nearPixels": 112.24, "reachPixels": 7.015, "thinPow": 1.2, "widen": 0.9, "widthMaxM": 0.25, "lod1Pixels": 56.12, "lod2Pixels": 22.45, "heightMinM": 0.25, "heightMaxM": 0.6, "widthM": 0.035, "bend": 0.35, "tipLight": 0.45, "translucency": 0.35, "coatMin": 0.35, "slopeMax": 0.7, "maxBlades": 131072 }

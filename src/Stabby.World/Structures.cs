@@ -8,13 +8,15 @@ namespace Stabby.World
         public ulong Key;
         public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A, Calm;
         public int Lo, Hi, M, G, R;
-        public bool Coursed, Flat, Mossy;
+        public bool Coursed, Flat, Mossy, Drape;
     }
 
     public sealed class StructureLayout
     {
         public readonly List<StructurePiece> Pieces = new List<StructurePiece>();
         public readonly List<ObjectColumn> Columns = new List<ObjectColumn>();
+        public readonly List<ObjectColumn> Contacts = new List<ObjectColumn>();
+        public readonly List<ObjectColumn> Lush = new List<ObjectColumn>();
         public float DoorX, DoorZ;
     }
 
@@ -24,6 +26,7 @@ namespace Stabby.World
         public const float SeatM = 0.5f;
         public const float WallHeight = 0.2f, WallBase = 0.12f, WallBatter = 0.3f, WallColumnStep = 0.05f, Squareness = 0.45f;
         public const float WallSpan = 0.96f, WallOverlap = 0.012f, GateSpan = 0.55f, FootReach = 0.12f;
+        public const float SkirtShare = 0.3f, SkirtBand = 0.15f, GroundY = 0.01f;
         static readonly int[] TierRock = { 1, 0, 0 };
         static readonly float[] Dir =
         {
@@ -37,6 +40,8 @@ namespace Stabby.World
         static float Sin16(int k) => Dir[(k + 12) & 15];
 
         public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : KitSeat(shape);
+
+        public static float Skirt(in StructurePiece p) => p.Y <= GroundY ? SkirtShare * Math.Min(p.Sy, 0.5f * (p.Sx + p.Sz)) : 0;
 
         public static StructureLayout Layout(int shape, ulong key)
         {
@@ -98,10 +103,12 @@ namespace Stabby.World
                 }
                 if (p.M == 0) u = Bounds(u);
                 var w = new float[u.Length];
+                float skirt = Skirt(p), band = SkirtBand * p.Sy, y0 = float.MaxValue;
+                for (int v = 1; v < u.Length; v += 3) y0 = Math.Min(y0, 0.5f * (u[v] + 1) * p.Sy);
                 for (int v = 0; v < u.Length; v += 3)
                 {
                     float y = 0.5f * (u[v + 1] + 1) * p.Sy, dy = y - 0.5f * p.Sy, x = 0.5f * u[v] * p.Sx + p.L * dy, z = 0.5f * u[v + 2] * (p.Sz - 2 * p.T * dy) + p.B * dy;
-                    w[v] = p.X + p.C * x - p.S * z; w[v + 1] = p.Y + y; w[v + 2] = p.Z + p.S * x + p.C * z;
+                    w[v] = p.X + p.C * x - p.S * z; w[v + 1] = p.Y + y - (y - y0 < band ? skirt * (1 - (y - y0) / band) : 0); w[v + 2] = p.Z + p.S * x + p.C * z;
                 }
                 if (cut)
                     foreach (int i in idx) b.I.Add(b.Add(w[i * 3], w[i * 3 + 1], w[i * 3 + 2]));
@@ -112,7 +119,7 @@ namespace Stabby.World
                     foreach (int i in idx) b.I.Add(first + i);
                 }
                 if (p.M > 0) Grain(p, out tv, out th);
-                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add((p.Mossy ? 32 : 0) + (p.Flat ? 16 : 0) + (lift != null ? tl + lift[v - before] : p.M == Thatch || p.M == Turf ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : p.Calm > 0 ? 1 + 0.5f * tl : tl)); }
+                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add((p.Drape ? 64 : 0) + (p.Mossy ? 32 : 0) + (p.Flat ? 16 : 0) + (lift != null ? tl + lift[v - before] : p.M == Thatch || p.M == Turf ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : p.Calm > 0 ? 1 + 0.5f * tl : tl)); }
             }
             starts.Add(b.P.Count / 3);
             var mesh = b.Finish();
@@ -542,6 +549,16 @@ namespace Stabby.World
             {
                 var p = l.Pieces[k];
                 p.Mossy = true;
+                l.Pieces[k] = p;
+            }
+        }
+
+        static void Drape(StructureLayout l, int before)
+        {
+            for (int k = before; k < l.Pieces.Count; k++)
+            {
+                var p = l.Pieces[k];
+                p.Drape = true;
                 l.Pieces[k] = p;
             }
         }
