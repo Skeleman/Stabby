@@ -59,6 +59,13 @@ namespace Stabby.Game.Editor
             var game = new GameObject("Game").AddComponent<GameScene>();
             game.TerrainMaterial = mat;
             game.WaterMaterial = water;
+            var mist = AssetDatabase.LoadAssetAtPath<Material>("Assets/Viewer/Mist.mat");
+            if (mist == null)
+            {
+                mist = new Material(Shader.Find("Stabby/FallMist"));
+                AssetDatabase.CreateAsset(mist, "Assets/Viewer/Mist.mat");
+            }
+            game.MistMaterial = mist;
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
@@ -153,7 +160,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "creaturefar" ? 260 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "creaturefar" ? 280 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -219,7 +226,23 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length))
+            while (phase >= 240 && phase < 240 + ShrineShots.Length)
+            {
+                string name = ShrineShots[phase - 240];
+                if (wait == 0)
+                {
+                    if (!AimSite(cam, phase - 240, ObjectPart.Wayside, Structures.WaysideU, ShrineShots, "wayside shrine", new Vector3(0.92f, 0.4f, 4.6f), -1f)) { GameStatus.Lines["~" + name] = "no wayside shrine placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 241) GameStatus.Lines["~bench shrine"] = Bench(cam, "wayside mid");
+                wait = 0;
+                phase++;
+            }
+            if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -258,7 +281,7 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
-            if (phase == 260) { if (job == null) job = FarTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 280) { if (job == null) job = FarTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 250) { if (job == null) job = CreatureBench(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 50)
             {
@@ -1401,6 +1424,7 @@ namespace Stabby.Game.Editor
 
         static readonly string[] CampShots = { "camp-close", "camp-mid" };
         static readonly string[] HermitShots = { "hermit-close", "hermit-mid" };
+        static readonly string[] ShrineShots = { "shrine-close", "shrine-mid" };
 
         static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite", new Vector3(0.7f, -0.7f, 4.5f), 0);
 
@@ -2256,6 +2280,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, names[v]);
                 if (v == 0) GameStatus.Lines["~bench falls"] = Bench(cam, "falls close");
+                if (v == 0) GameStatus.Lines["~bench falls mist"] = BenchMist(cam, "falls close");
             }
         }
 
@@ -2360,6 +2385,23 @@ namespace Stabby.Game.Editor
                 sb.Append($" {h}p {b:F2}/{f:F2}");
             }
             if (GameStatus.Line("terrain", out var t)) sb.Append("; ").Append(t);
+            return sb.ToString();
+        }
+
+        static string BenchMist(Camera cam, string label)
+        {
+            var sb = new System.Text.StringBuilder($"bench {label} mist (ms, off/on):");
+            foreach (var (w, h) in new[] { (1920, 1080), (3840, 2160) })
+            {
+                var ms = new double[2];
+                for (int k = 0; k < 4; k++)
+                {
+                    Shader.SetGlobalFloat("_StabbyMistOff", (k & 1) == 0 ? 1 : 0);
+                    ms[k & 1] += BenchAt(cam, w, h) / 2;
+                }
+                Shader.SetGlobalFloat("_StabbyMistOff", 0);
+                sb.Append($" {h}p {ms[0]:F2}/{ms[1]:F2}");
+            }
             return sb.ToString();
         }
 

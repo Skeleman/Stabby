@@ -604,7 +604,7 @@ namespace Stabby.Game
         sealed class Prepared
         {
             public BlobBuilder Look;
-            public List<MeshParts> Lakes, Rivers;
+            public List<MeshParts> Lakes, Rivers, Mist;
             public MeshParts Sea;
             public StrataLook Strata;
             public FieldLook Field;
@@ -668,7 +668,7 @@ namespace Stabby.Game
         readonly int[] shownLevels = new int[TerrainTree.Levels];
         readonly Stopwatch frame = new Stopwatch(), since = new Stopwatch();
         EntitiesGraphicsSystem graphics;
-        BatchMaterialID material, waterMaterial;
+        BatchMaterialID material, waterMaterial, mistMaterial;
         Ground ground;
         int waterApplied, frameVertices, built, evicted, generation, poolMisses, oddBuilt;
         bool ready, rootsReady, builtSmooth;
@@ -741,9 +741,13 @@ namespace Stabby.Game
 
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
 
+        static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx");
+
         float Allowed(Camera cam)
         {
             var view = DetailView.Refresh(cam);
+            quads.MistWindow(view.Quality, out float mistFade, out float mistFull);
+            Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, 0, 0));
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
 
@@ -767,12 +771,12 @@ namespace Stabby.Game
         {
             int n = world.Config.Size;
             float cm = world.Config.CellMeters;
-            var p = new Prepared { Lakes = new List<MeshParts>() };
+            var p = new Prepared { Lakes = new List<MeshParts>(), Mist = new List<MeshParts>() };
             Pyramid(world, detail, edits, p);
             for (int cy = 0; cy < n; cy += LakeCells)
                 for (int cx = 0; cx < n; cx += LakeCells)
                     if (HasLand(world, cx, cy)) p.Lakes.Add(WaterGeometry.Lakes(world, cx, cy, LakeCells));
-            p.Rivers = WaterGeometry.Rivers(world, detail);
+            p.Rivers = WaterGeometry.Rivers(world, detail, p.Mist);
             p.Sea = WaterGeometry.Sea(n, cm);
             var colors = TerrainLook.BaseColors(world, defs);
             p.Look = new BlobBuilder(Allocator.Persistent);
@@ -881,6 +885,10 @@ namespace Stabby.Game
             yield return "material";
             waterMaterial = scene != null && scene.WaterMaterial != null ? graphics.RegisterMaterial(scene.WaterMaterial) : material;
             yield return "water material";
+            bool mist = scene != null && scene.MistMaterial != null;
+            if (mist) mistMaterial = graphics.RegisterMaterial(scene.MistMaterial);
+            else prepared.Mist.Clear();
+            yield return "mist material";
             tree = new TerrainTree
             {
                 Offset = new NativeArray<int>(prepared.Offset, Allocator.Persistent),
@@ -1141,28 +1149,29 @@ namespace Stabby.Game
         {
             if (ready || !rootsReady) return;
             var lakes = prepared.Lakes;
-            int total = lakes.Count + prepared.Rivers.Count;
+            int water = lakes.Count + prepared.Rivers.Count, total = water + prepared.Mist.Count;
             while (waterApplied < total)
             {
-                var part = waterApplied < lakes.Count ? lakes[waterApplied] : prepared.Rivers[waterApplied - lakes.Count];
+                var part = waterApplied < lakes.Count ? lakes[waterApplied] : waterApplied < water ? prepared.Rivers[waterApplied - lakes.Count] : prepared.Mist[waterApplied - water];
                 if (part != null && !Spend(part.Verts.Length)) return;
-                if (part != null) AddStatic(part);
+                if (part != null && waterApplied < water) AddStatic(part, waterMaterial, 0);
+                else if (part != null) AddStatic(part, mistMaterial, WaterGeometry.MistPad);
                 waterApplied++;
             }
-            AddStatic(prepared.Sea);
+            AddStatic(prepared.Sea, waterMaterial, 0);
             GameStatus.Lines["terrain~ready"] = $"terrain ready at {since.ElapsedMilliseconds} ms";
             prepared = null;
             ready = true;
             GameStatus.TerrainBuilt = true;
         }
 
-        void AddStatic(MeshParts part)
+        void AddStatic(MeshParts part, BatchMaterialID mat, float pad)
         {
             var mesh = WaterGeometry.ToMesh(part);
             var id = graphics.RegisterMesh(mesh);
             statics.Add(mesh);
             var b = mesh.bounds;
-            Spawn(id, new AABB { Center = b.center, Extents = b.extents }, waterMaterial);
+            Spawn(id, new AABB { Center = b.center, Extents = (float3)b.extents + pad }, mat);
         }
 
         bool Coverable(int key)
