@@ -23,6 +23,8 @@ namespace Stabby.Game
             public List<CreatureShape> Shapes = new List<CreatureShape>();
             public List<float[]> Verts = new List<float[]>();
             public List<ushort[]> Index = new List<ushort[]>();
+            public List<float[]> LowVerts = new List<float[]>();
+            public List<ushort[]> LowIndex = new List<ushort[]>();
             public List<(CreatureDef Def, CreatureBody Body, int First, float2 At, float Heading, uint Seed)> Herd = new List<(CreatureDef, CreatureBody, int, float2, float, uint)>();
         }
 
@@ -126,10 +128,13 @@ namespace Stabby.Game
                     var index = new List<ushort>();
                     for (int s = 0; s < shapes.Count; s++)
                     {
-                        CreatureMesh.Build(shapes[s], s == 0, verts, index);
+                        CreatureMesh.Build(shapes[s], s == 0, false, verts, index);
                         result.Shapes.Add(shapes[s]);
                         result.Verts.Add(verts.ToArray());
                         result.Index.Add(index.ToArray());
+                        CreatureMesh.Build(shapes[s], s == 0, true, verts, index);
+                        result.LowVerts.Add(verts.ToArray());
+                        result.LowIndex.Add(index.ToArray());
                     }
                 }
                 int count = rng.Range(def.HerdMin, def.HerdMax + 1);
@@ -185,6 +190,7 @@ namespace Stabby.Game
             rig.ShadowPx = def.ShadowPixels;
             rig.AnimPx = def.AnimPixels;
             rig.IkPx = def.IkPixels;
+            rig.LowPx = def.LowPixels;
             var parts = b.Allocate(ref rig.Parts, body.Parts.Count);
             for (int i = 0; i < body.Parts.Count; i++)
             {
@@ -247,26 +253,29 @@ namespace Stabby.Game
         void Apply(Plan p)
         {
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            var meshIds = new BatchMeshID[p.Shapes.Count];
-            for (int s = 0; s < p.Shapes.Count; s++)
+            int shapeCount = p.Shapes.Count;
+            var meshIds = new BatchMeshID[2 * shapeCount];
+            for (int s = 0; s < 2 * shapeCount; s++)
             {
+                var vs = s < shapeCount ? p.Verts[s] : p.LowVerts[s - shapeCount];
+                var ix = s < shapeCount ? p.Index[s] : p.LowIndex[s - shapeCount];
                 var data = Mesh.AllocateWritableMeshData(1);
                 var d = data[0];
-                int vc = p.Verts[s].Length / CreatureMesh.Stride;
+                int vc = vs.Length / CreatureMesh.Stride;
                 d.SetVertexBufferParams(vc, Layout);
-                d.GetVertexData<float>().CopyFrom(p.Verts[s]);
-                d.SetIndexBufferParams(p.Index[s].Length, IndexFormat.UInt16);
-                d.GetIndexData<ushort>().CopyFrom(p.Index[s]);
+                d.GetVertexData<float>().CopyFrom(vs);
+                d.SetIndexBufferParams(ix.Length, IndexFormat.UInt16);
+                d.GetIndexData<ushort>().CopyFrom(ix);
                 d.subMeshCount = 1;
-                d.SetSubMesh(0, new SubMeshDescriptor(0, p.Index[s].Length));
+                d.SetSubMesh(0, new SubMeshDescriptor(0, ix.Length));
                 var mesh = new Mesh { name = "Creature " + s };
                 Mesh.ApplyAndDisposeWritableMeshData(data, mesh);
                 mesh.bounds = mesh.GetSubMesh(0).bounds;
                 meshes.Add(mesh);
                 meshIds[s] = graphics.RegisterMesh(mesh);
             }
-            var prefabs = new Entity[p.Shapes.Count];
-            for (int s = 0; s < p.Shapes.Count; s++)
+            var prefabs = new Entity[2 * shapeCount];
+            for (int s = 0; s < 2 * shapeCount; s++)
             {
                 var e = EntityManager.CreateEntity();
                 RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(ShadowCastingMode.On, true, MotionVectorGenerationMode.ForceNoMotion, 0), new MaterialMeshInfo(materialId, meshIds[s]));
@@ -287,20 +296,26 @@ namespace Stabby.Game
                 {
                     Rig = rig, Position = new float3(h.At.x, 0, h.At.y), Home = h.At, Heading = h.Heading, WalkSpeed = h.Body.WalkSpeed,
                     Random = new Unity.Mathematics.Random(h.Seed), Timer = 0.5f + (h.Seed % 997) / 997f * 3, Visible = true, Shadow = true,
+                    High = true, HighOn = true, LowOn = true,
                     Phase = (h.Seed % 389) / 389f, Clock = (h.Seed % 211) / 7f,
                 });
                 var links = EntityManager.AddBuffer<CreatureLink>(root);
                 var fur = (b: Linear(h.Body.Base), a: Linear(h.Body.Accent), d: Linear(h.Body.Dark));
                 var trunkShape = p.Shapes[first];
-                links.Add(Link(prefabs[first], new float3(h.Body.Trunk.Radius, h.Body.Trunk.Radius, h.Body.Trunk.Length / math.max(trunkShape.Length, 1e-3f)), fur, h.Body.Length));
-                links = EntityManager.GetBuffer<CreatureLink>(root);
-                foreach (var seg in h.Body.Segments)
+                for (int tier = 0; tier < 2; tier++)
                 {
-                    var shape = p.Shapes[first + seg.Shape];
-                    float3 scale = shape.Sphere ? new float3(seg.Radius) : new float3(seg.Radius, seg.Radius, seg.Length / math.max(shape.Length, 1e-3f));
-                    var link = Link(prefabs[first + seg.Shape], scale, fur, h.Body.Length);
+                    int at = first + tier * shapeCount;
+                    var link = Link(prefabs[at], new float3(h.Body.Trunk.Radius, h.Body.Trunk.Radius, h.Body.Trunk.Length / math.max(trunkShape.Length, 1e-3f)), fur, h.Body.Length);
                     links = EntityManager.GetBuffer<CreatureLink>(root);
                     links.Add(link);
+                    foreach (var seg in h.Body.Segments)
+                    {
+                        var shape = p.Shapes[first + seg.Shape];
+                        float3 scale = shape.Sphere ? new float3(seg.Radius) : new float3(seg.Radius, seg.Radius, seg.Length / math.max(shape.Length, 1e-3f));
+                        link = Link(prefabs[at + seg.Shape], scale, fur, h.Body.Length);
+                        links = EntityManager.GetBuffer<CreatureLink>(root);
+                        links.Add(link);
+                    }
                 }
                 Count++;
             }
