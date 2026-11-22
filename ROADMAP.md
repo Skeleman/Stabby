@@ -84,6 +84,10 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 - Real streaming when gameplay needs a bigger world: residency around players,
   eviction, priority, memory budget. The server then packs chunks on demand
   instead of keeping every packed chunk (about 2 MB at 512, fine for now).
+- CI fix (11-22): every run hit the 20-min timeout (full suite plus sweeps), then
+  Actions stopped on billing/spending limit. Needs Zach's call: trim to a fast job
+  (lint, filtered tests, 256 sweep) or manual-only; the local full suite at merge
+  stays the real gate.
 - Unity batch CI job (game capture on a runner) if a license setup allows it.
 - Generator features resume after the audit: caves, cliffs and river overhaul
   carried over from Punchy, more biomes.
