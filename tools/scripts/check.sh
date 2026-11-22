@@ -13,7 +13,8 @@ say "tests: $(grep -E "Passed!|Failed!" out/check/test.log | sed -E 's/ - Stabby
 grep -E "^\s+Failed " out/check/test.log | head -5
 for spec in "100 256" "20 512"; do set -- $spec
   dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 > out/check/sweep$2.log 2>&1 || fail=1
-  say "sweep $2: $(grep -i -E "violation|median|max" out/check/sweep$2.log | tail -2 | tr '\n' ' ')"
+  line=$(grep -E "seeds at" out/check/sweep$2.log | tail -1); say "sweep $2: $line"
+  [[ "$line" == *" 0 violations"* ]] || fail=1
 done
 if [[ "$args" != *" --no-unity "* ]]; then
   "$UNITY_EXE" -batchmode -quit -projectPath unity -logFile out/check/unity.log > /dev/null 2>&1
