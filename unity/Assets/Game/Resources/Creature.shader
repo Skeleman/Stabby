@@ -34,6 +34,25 @@ Shader "Stabby/Creature"
         #define _FurDark UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_DEFAULT(float4, _FurDark)
         #endif
 
+        #ifdef STABBY_CREATURE_BUFFER
+        struct CreatureInstance { float4 r0, r1, r2, fade; uint fur, group, pad0, pad1; };
+        StructuredBuffer<CreatureInstance> _Creatures;
+        StructuredBuffer<float4> _CreatureFur;
+        int _CreatureStart;
+        CreatureInstance CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
+        float4x4 CreatureMatrix(CreatureInstance c) { return float4x4(c.r0, c.r1, c.r2, float4(0, 0, 0, 1)); }
+        float3 CreatureNormal(float4x4 m, float3 n)
+        {
+            float3 s2 = float3(dot(m._m00_m10_m20, m._m00_m10_m20), dot(m._m01_m11_m21, m._m01_m11_m21), dot(m._m02_m12_m22, m._m02_m12_m22));
+            return normalize(mul((float3x3)m, n / max(s2, 1e-8)));
+        }
+        #define CREATURE_INPUT uint creatureId : SV_InstanceID;
+        #define CREATURE_VARY(n) nointerpolation uint creatureId : TEXCOORD##n;
+        #else
+        #define CREATURE_INPUT UNITY_VERTEX_INPUT_INSTANCE_ID
+        #define CREATURE_VARY(n) UNITY_VERTEX_INPUT_INSTANCE_ID
+        #endif
+
         float Bayer(float2 p)
         {
             uint2 q = (uint2)p & 3u;
@@ -57,6 +76,8 @@ Shader "Stabby/Creature"
             #pragma fragment frag
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
+            #pragma multi_compile_local _ STABBY_CREATURE_BUFFER
+            #pragma target 4.5 STABBY_CREATURE_BUFFER
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
@@ -79,7 +100,7 @@ Shader "Stabby/Creature"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; CREATURE_INPUT };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
@@ -88,12 +109,19 @@ Shader "Stabby/Creature"
                 float4 local : TEXCOORD2;
                 float4 tone : TEXCOORD3;
                 float3 origin : TEXCOORD4;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
+                CREATURE_VARY(5)
             };
 
             Varyings vert(Attributes i)
             {
                 Varyings o;
+                #ifdef STABBY_CREATURE_BUFFER
+                o.creatureId = i.creatureId;
+                float4x4 m = CreatureMatrix(CreatureAt(i.creatureId));
+                o.positionWS = mul(m, float4(i.positionOS.xyz, 1)).xyz;
+                o.positionCS = TransformWorldToHClip(o.positionWS);
+                o.normalWS = CreatureNormal(m, i.normalOS);
+                #else
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
@@ -101,8 +129,9 @@ Shader "Stabby/Creature"
                 o.positionWS = p.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(i.normalOS);
                 float4x4 m = UNITY_MATRIX_M;
+                #endif
                 float3 scale = float3(length(m._m00_m10_m20), length(m._m01_m11_m21), length(m._m02_m12_m22));
-                o.local = float4(i.positionOS.xyz * scale, ComputeFogFactor(p.positionCS.z));
+                o.local = float4(i.positionOS.xyz * scale, ComputeFogFactor(o.positionCS.z));
                 o.tone = i.tone;
                 o.origin = m._m03_m13_m23;
                 return o;
@@ -110,19 +139,26 @@ Shader "Stabby/Creature"
 
             half4 frag(Varyings i) : SV_Target
             {
+                #ifdef STABBY_CREATURE_BUFFER
+                CreatureInstance ci = CreatureAt(i.creatureId);
+                float4 fade = ci.fade;
+                float4x4 mm = CreatureMatrix(ci);
+                float3 baseC = _CreatureFur[3 * ci.fur].rgb, accentC = _CreatureFur[3 * ci.fur + 1].rgb, darkC = _CreatureFur[3 * ci.fur + 2].rgb;
+                #else
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
+                float4x4 mm = UNITY_MATRIX_M;
+                float3 baseC = _FurBase.rgb, accentC = _FurAccent.rgb, darkC = _FurDark.rgb;
+                #endif
                 clip(Dither(fade.x, i.positionCS.xy));
                 float3 wp = i.positionWS;
                 float la = length(ddx(wp)), lb = length(ddy(wp));
                 float fp = max(max(sqrt(la * lb), 0.4 * max(la, lb)), 1e-4);
                 float3 n = normalize(i.normalWS);
-                float4x4 mm = UNITY_MATRIX_M;
                 float3 ax = normalize(mm._m00_m10_m20), ay = normalize(mm._m01_m11_m21), az = normalize(mm._m02_m12_m22);
                 float3 lp = i.local.xyz;
                 bool eye = i.tone.w > 0.5 && i.tone.x > 1.5;
 
-                float3 baseC = _FurBase.rgb, accentC = _FurAccent.rgb, darkC = _FurDark.rgb;
                 float4 big = TmNoise3(wp * 1.7 + 13.1, int3(0, 0, 0));
                 float4 mid = TmNoise3(lp * float3(9, 9, 4) + 3.3, int3(0, 0, 0));
                 float edge = saturate(i.tone.y + 0.18 * mid.x + 0.08 * big.x);
@@ -188,21 +224,30 @@ Shader "Stabby/Creature"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing
+            #pragma multi_compile_local _ STABBY_CREATURE_BUFFER
+            #pragma target 4.5 STABBY_CREATURE_BUFFER
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             float3 _LightDirection;
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; CREATURE_INPUT };
+            struct Varyings { float4 positionCS : SV_POSITION; CREATURE_VARY(0) };
 
             Varyings vert(Attributes i)
             {
                 Varyings o;
+                #ifdef STABBY_CREATURE_BUFFER
+                o.creatureId = i.creatureId;
+                float4x4 m = CreatureMatrix(CreatureAt(i.creatureId));
+                float3 wp = mul(m, float4(i.positionOS.xyz, 1)).xyz;
+                float3 wn = CreatureNormal(m, i.normalOS);
+                #else
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 float3 wp = TransformObjectToWorld(i.positionOS.xyz);
                 float3 wn = TransformObjectToWorldNormal(i.normalOS);
+                #endif
                 float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, wn, _LightDirection));
                 #if UNITY_REVERSED_Z
                 cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);
@@ -215,8 +260,12 @@ Shader "Stabby/Creature"
 
             half4 frag(Varyings i) : SV_Target
             {
+                #ifdef STABBY_CREATURE_BUFFER
+                float4 fade = CreatureAt(i.creatureId).fade;
+                #else
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
+                #endif
                 clip(min(fade.y - 0.5, Dither(fade.x, i.positionCS.xy)));
                 return 0;
             }

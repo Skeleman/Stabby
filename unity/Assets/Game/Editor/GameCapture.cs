@@ -13,7 +13,7 @@ using Stabby.World;
 namespace Stabby.Game.Editor
 {
     [InitializeOnLoad]
-    public static class GameCapture
+    public static partial class GameCapture
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 480;
@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "creatures" ? 200 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -258,6 +258,7 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
+            if (phase == 250) { if (job == null) job = CreatureBench(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 50)
             {
                 if (job == null) job = CliffTour(cam, dir);
@@ -974,6 +975,7 @@ namespace Stabby.Game.Editor
             mind = default;
             var handle = w.GetExistingSystem<CreatureHostSystem>();
             if (handle == SystemHandle.Null) return false;
+            w.EntityManager.CompleteAllTrackedJobs();
             ref var sys = ref w.Unmanaged.GetUnsafeSystemRef<CreatureHostSystem>(handle);
             if (!sys.Herds.IsCreated || !sys.Herds.TryGetValue(herd, out var h)) return false;
             mind = h.Mind;
