@@ -223,6 +223,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 | Objects step 4: structures from hierarchical pieces, merged LOD (dry-stone walls and cairns, seated level on terrain, shared walk columns) | done |
 | Wall polish: upright slab cope, face tilt planes through the lowest corner so faces no longer crease (GeneratorVersion 43). Next: flush faces, warmer stone tone | done (b/objects-loader) |
 | Stabby.Content as a Unity package (netstandard2.1, engine-free JSON reader, parity tests against System.Text.Json); Unity reads content only through `ContentFiles` -> `ContentLoader`. `MaterialFile` is a forwarding shim until Terrain.cs switches | done (b/content-unity) |
+| Runtime parity (rule 5): Unity's Mono evaluated float maths in double, so a 1-ULP sketch drift grew to 263 m after erosion and Unity built a different world from the CLI. An Editor-side ILPostProcessor (`unity/Assets/CodeGen`) rounds every float op in Stabby.World and Stabby.Content; `RuntimeParityTests` compares stage fingerprints between Unity's Mono and CoreCLR. Seeds 3 and 4 at 2048 now match at every stage | done (b/world-parity) |
 
 ## Next
 
