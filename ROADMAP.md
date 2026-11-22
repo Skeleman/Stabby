@@ -54,7 +54,10 @@ and converts once into native data.
   job into one buffer, one instanced draw per shape, no part entities) behind a flag, at
   10/100/500, worst arrival frame included; switching paths is Zach's call. The arrival
   budget becomes the shared spawn budget objects use too (b/creatures-scale, after
-  b/creatures-5; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd). (2) Full-world stress: 251k objects with terrain, grass, shadows,
+  b/creatures-5; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd).
+  Then far herds (b/creatures-far): herds beyond the spawn reach drawn from plan data and
+  the shared clock with no entities or ghosts, waking into live creatures through the
+  crossfade (Punchy only does this for sky birds; Stabby's own design). (2) Full-world stress: 251k objects with terrain, grass, shadows,
   water and objects all on (b/stress-full, warm-up lane after the parallax bench).
   (3) Loading: ~450 MB allocated after terrain build, mid-load heap growth, a 76 ms collect.
   (4) Light budgets below come before fires and torches. Towns wait until the site
