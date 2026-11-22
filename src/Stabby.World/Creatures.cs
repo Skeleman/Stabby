@@ -41,7 +41,8 @@ namespace Stabby.World
         public uint Base, Accent, Dark;
         public float SizeMin = 1, SizeMax = 1, WalkSpeed = 1, Jitter;
         public int HerdMin = 1, HerdMax = 1;
-        public float FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f;
+        public float HerdChance;
+        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f;
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
     }
 
@@ -94,6 +95,7 @@ namespace Stabby.World
                 }
             }
             var bodyIds = new HashSet<string>();
+            if (lib.Bodies.Count > CreaturePlan.MaxBodies) errors.Add("more than " + CreaturePlan.MaxBodies + " creature bodies");
             foreach (var b in lib.Bodies)
             {
                 if (string.IsNullOrEmpty(b.Id) || !bodyIds.Add(b.Id)) errors.Add("body id \"" + b.Id + "\" is empty or repeated");
@@ -103,6 +105,9 @@ namespace Stabby.World
                 if (b.Length < 2 * b.Radius * Math.Max(1, b.Taper)) errors.Add(b.Id + ": body shorter than its ends");
                 if (b.SizeMin <= 0 || b.SizeMax < b.SizeMin) errors.Add(b.Id + ": size range is empty");
                 if (b.HerdMin < 1 || b.HerdMax < b.HerdMin) errors.Add(b.Id + ": herd range is empty");
+                if (b.HerdMax > CreaturePlan.MaxHerd) errors.Add(b.Id + ": herd above " + CreaturePlan.MaxHerd);
+                if (b.HerdChance < 0 || b.HerdChance > 1) errors.Add(b.Id + ": herdChance out of 0..1");
+                if (!(b.SpawnPixels > 0 && b.SpawnPixels < b.FadePixels)) errors.Add(b.Id + ": spawnPixels must be positive and below fadePixels");
                 if (b.WalkSpeed <= 0) errors.Add(b.Id + ": walkSpeed must be positive");
                 if (b.Jitter < 0 || b.Jitter > 0.25f) errors.Add(b.Id + ": jitter out of 0..0.25");
                 if (!(b.FadePixels > 0 && b.AnimPixels > b.FadePixels && b.ShadowPixels > b.FadePixels && b.IkPixels > b.AnimPixels))
@@ -176,6 +181,20 @@ namespace Stabby.World
             return used;
         }
 
+        static void Gait(CreatureDef def, ref Rng rng, out float size, out float thick, out float walk)
+        {
+            size = rng.Range(def.SizeMin, def.SizeMax);
+            thick = 1 + rng.Range(-def.Jitter, def.Jitter);
+            walk = def.WalkSpeed * (1 + rng.Range(-def.Jitter, def.Jitter));
+        }
+
+        public static float WalkSpeedFor(CreatureDef def, ulong seed)
+        {
+            var rng = Rng.Stream(seed, "creature-body");
+            Gait(def, ref rng, out _, out _, out float walk);
+            return walk;
+        }
+
         public static CreatureBody Assemble(CreatureDef def, CreatureLibrary lib, ulong seed)
         {
             var rng = Rng.Stream(seed, "creature-body");
@@ -183,12 +202,11 @@ namespace Stabby.World
             var firstShape = new int[used.Count];
             for (int i = 0, k = 1; i < used.Count; i++) { firstShape[i] = k; k += lib.Part(used[i]).Segments.Count; }
 
-            float size = rng.Range(def.SizeMin, def.SizeMax);
-            float thick = 1 + rng.Range(-def.Jitter, def.Jitter);
+            Gait(def, ref rng, out float size, out float thick, out float walk);
             var body = new CreatureBody
             {
                 Size = size, Length = def.Length * size, RearRadius = def.Radius * def.Taper * size * thick, FrontRadius = def.Radius * size * thick,
-                Flatten = def.Flatten, WalkSpeed = def.WalkSpeed * (1 + rng.Range(-def.Jitter, def.Jitter)),
+                Flatten = def.Flatten, WalkSpeed = walk,
             };
             float shade = 1 + rng.Range(-0.12f, 0.12f), warm = rng.Range(-0.05f, 0.05f);
             Tint(def.Base, shade, warm, body.Base);
@@ -285,5 +303,83 @@ namespace Stabby.World
         static float Lerp(float a, float b, float t) => a + (b - a) * t;
         static float Frac(float x) => x - (float)Math.Floor(x);
         static float Clamp01(float x) => x < 0 ? 0 : x > 1 ? 1 : x;
+    }
+    public struct CreatureSpawn
+    {
+        public int Id, Body;
+        public float X, Z, Heading, WalkSpeed;
+        public ulong BodySeed;
+        public uint Seed;
+    }
+
+    public static class CreaturePlan
+    {
+        public const int SiteCells = 16, Tries = 16, MaxHerd = 16, MaxBodies = 16;
+        public const float HerdSpread = 4f;
+
+        public static float SpawnReach(CreatureDef def) => Detail.SimulationReach(def.Length, def.SpawnPixels);
+
+        public static float DespawnReach(CreatureDef def) => SpawnReach(def) / (1f - Detail.Hysteresis);
+
+        public static int SitesAcross(int size) => (size + SiteCells - 1) / SiteCells;
+
+        public static int SiteOf(int id) => id >> 8;
+
+        public static ulong Root(GeneratedWorld w) => Rng.Stream(w.Config.Seed, "creatures").NextU64();
+
+        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib)
+        {
+            var list = new List<CreatureSpawn>();
+            ulong root = Root(w);
+            int across = SitesAcross(w.Config.Size);
+            for (int s = 0; s < across * across; s++) Site(w, lib, root, s, list);
+            return list;
+        }
+
+        public static void Site(GeneratedWorld w, CreatureLibrary lib, ulong root, int site, List<CreatureSpawn> list)
+        {
+            int n = w.Config.Size, across = SitesAcross(n);
+            int sx = site % across * SiteCells, sz = site / across * SiteCells;
+            float cm = w.Config.CellMeters;
+            for (int b = 0; b < lib.Bodies.Count; b++)
+            {
+                var def = lib.Bodies[b];
+                var rng = new Rng(Rng.Mix(root ^ (ulong)site * 0x9E3779B97F4A7C15UL ^ (ulong)(b + 1) * 0xC2B2AE3D27D4EB4FUL));
+                if (rng.NextFloat() >= def.HerdChance) continue;
+                int cell = -1;
+                for (int t = 0; t < Tries && cell < 0; t++)
+                {
+                    int x = sx + rng.Range(0, SiteCells), z = sz + rng.Range(0, SiteCells);
+                    if (x < n && z < n && Habitable(w, def, x, z)) cell = z * n + x;
+                }
+                if (cell < 0) continue;
+                float cx = (cell % n + 0.5f) * cm, cz = (cell / n + 0.5f) * cm;
+                int count = rng.Range(def.HerdMin, def.HerdMax + 1);
+                float heading = rng.Range(0f, 6.2831853f);
+                for (int k = 0; k < count; k++)
+                {
+                    ulong seed = rng.NextU64();
+                    list.Add(new CreatureSpawn
+                    {
+                        Id = site << 8 | b << 4 | k, Body = b,
+                        X = cx + rng.Range(-HerdSpread, HerdSpread), Z = cz + rng.Range(-HerdSpread, HerdSpread),
+                        Heading = heading + rng.Range(-0.7f, 0.7f), BodySeed = seed, Seed = rng.NextU32() | 1u,
+                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed),
+                    });
+                }
+            }
+        }
+
+        public static bool Habitable(GeneratedWorld w, CreatureDef def, int x, int z)
+        {
+            int n = w.Config.Size;
+            if (x <= 0 || z <= 0 || x >= n - 1 || z >= n - 1) return false;
+            int i = z * n + x;
+            if (w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i]) return false;
+            if (w.Biome == null || !def.Biomes.Contains(w.BiomeIds[w.Biome[i]])) return false;
+            float cm = w.Config.CellMeters;
+            float gx = w.Height[i + 1] - w.Height[i - 1], gz = w.Height[i + n] - w.Height[i - n];
+            return gx * gx + gz * gz <= 0.64f * cm * cm;
+        }
     }
 }
