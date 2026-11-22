@@ -117,7 +117,8 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   casters exist only inside that range and geomorph with camera distance); the
   island blinks out for a frame while moving, leaving objects behind (suspect
   terrain LOD swaps or culling bounds on pooled chunk entities; capture first); a strongly
-  stretched layer at LOD seams (stitch or skirt geometry).
+  stretched layer at LOD seams (stitch or skirt geometry). Skirts are drawn
+  double-sided (about 12% extra terrain triangles); make them one-sided, outward.
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
