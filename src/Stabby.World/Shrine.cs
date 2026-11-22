@@ -37,7 +37,7 @@ namespace Stabby.World
                 float jh = rng.Range(0.52f, 0.62f);
                 shelf = 0.3f; width = 0.44f;
                 Yaw(ref rng, 0.08f, out float c, out float s);
-                Hewn(l, rng.NextU64(), f, 0, -0.2f, 0.02f, rng.Range(0.94f, 1.02f), 0.5f, 0.72f, c, s, 0, 1, 0.72f, 0, 0, 0.06f);
+                Hewn(l, rng.NextU64(), f, 0, -0.12f, 0.02f, rng.Range(0.94f, 1.02f), 0.42f, 0.72f, c, s, 0, 1, 0.72f, 0, 0, 0.06f);
                 for (int sd = -1; sd <= 1; sd += 2)
                 {
                     Yaw(ref rng, 0.1f, out c, out s);
@@ -48,8 +48,8 @@ namespace Stabby.World
                 Hewn(l, rng.NextU64(), f, rng.Range(-0.03f, 0.03f), shelf + jh - 0.02f, -0.04f, rng.Range(1.02f, 1.1f), rng.Range(0.22f, 0.26f), 0.64f, c, s, 0, 1, 0.74f, rng.Range(-0.03f, 0.03f), 0, 0.05f);
                 Yaw(ref rng, 0.2f, out c, out s);
                 Hewn(l, rng.NextU64(), f, rng.Range(-0.05f, 0.05f), shelf + jh + 0.2f, -0.05f, rng.Range(0.56f, 0.66f), rng.Range(0.18f, 0.22f), 0.44f, c, s, 0, 1, 0.58f, 0, 0, 0.12f);
-                Hewn(l, rng.NextU64(), f, 0, -0.2f, -0.02f, 1.0f, shelf + jh + 0.6f, 0.66f, 1, 0, 2, 2, 0.7f, 0, 0, 0.1f);
-                Col(l, f, 0, 0, 0.5f, -0.2f, shelf + jh + 0.4f);
+                Hewn(l, rng.NextU64(), f, 0, -0.12f, -0.02f, 1.0f, shelf + jh + 0.52f, 0.66f, 1, 0, 2, 2, 0.7f, 0, 0, 0.1f);
+                Col(l, f, 0, 0, 0.5f, -0.12f, shelf + jh + 0.4f);
             }
             Offerings(l, key, ref rng, f, shelf - 0.01f, width);
         }
