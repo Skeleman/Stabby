@@ -40,6 +40,12 @@ Shader "Stabby/Creature"
             static const float m[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
             return (m[(q.x << 2) | q.y] + 0.5) / 16.0;
         }
+
+        float Dither(float f, float2 p)
+        {
+            float d = Bayer(p);
+            return f < 0 ? d - (1 + f) : f - d;
+        }
         ENDHLSL
 
         Pass
@@ -106,7 +112,7 @@ Shader "Stabby/Creature"
             {
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
-                clip(fade.x - Bayer(i.positionCS.xy));
+                clip(Dither(fade.x, i.positionCS.xy));
                 float3 wp = i.positionWS;
                 float la = length(ddx(wp)), lb = length(ddy(wp));
                 float fp = max(max(sqrt(la * lb), 0.4 * max(la, lb)), 1e-4);
@@ -132,7 +138,11 @@ Shader "Stabby/Creature"
                 float4 tuft = TmNoise3(lp * float3(34, 34, 6) + 7.7, int3(0, 0, 0));
                 float fs = TmFade(110, fp) * (eye ? 0 : 1), ft = TmFade(34, fp) * (eye ? 0 : 1);
                 albedo *= 1 + 0.16 * strand.x * fs + 0.1 * tuft.x * ft;
-                float3 g = (strand.yzw * freq) * (0.0016 * fs) + (tuft.yzw * float3(34, 34, 6)) * (0.003 * ft);
+                float4 knot = TmNoise3(lp * float3(5, 5, 2.5) + 21.7, int3(0, 0, 0));
+                float4 ripple = TmNoise3(lp * float3(13, 13, 6) + 5.1, int3(0, 0, 0));
+                float fk = TmFade(5, fp) * (eye ? 0 : 1), fr = TmFade(13, fp) * (eye ? 0 : 1);
+                float3 g = (strand.yzw * freq) * (0.0016 * fs) + (tuft.yzw * float3(34, 34, 6)) * (0.003 * ft)
+                         + (knot.yzw * float3(5, 5, 2.5)) * (0.03 * fk) + (ripple.yzw * float3(13, 13, 6)) * (0.008 * fr);
                 float3 gw = g.x * ax + g.y * ay + g.z * az;
                 n = normalize(n - (gw - n * dot(gw, n)));
                 tmRough = eye ? 0.12 : 0.9;
@@ -207,7 +217,7 @@ Shader "Stabby/Creature"
             {
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
-                clip(min(fade.y - 0.5, fade.x - Bayer(i.positionCS.xy)));
+                clip(min(fade.y - 0.5, Dither(fade.x, i.positionCS.xy)));
                 return 0;
             }
             ENDHLSL

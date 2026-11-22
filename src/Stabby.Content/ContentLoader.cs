@@ -269,6 +269,7 @@ namespace Stabby.Content
                 {
                     Id = id, Name = b.String("name", ""), Biomes = b.Strings("biomes", new List<string>()),
                     Length = b.Float("length", 0), Radius = b.Float("radius", 0), Taper = b.Float("taper", 1), Flatten = b.Float("flatten", 1),
+                    Haunch = b.Float("haunch", 0), Waist = b.Float("waist", 0), Hump = b.Float("hump", 0),
                     WalkSpeed = b.Float("walkSpeed", 0), Jitter = b.Float("jitter", 0),
                 };
                 var colors = b.Object("colors");
@@ -287,14 +288,17 @@ namespace Stabby.Content
                 var herd = b.Floats("herd", null);
                 if (herd == null || herd.Length != 2) errors.Add(id + ": herd needs 2 numbers");
                 else { def.HerdMin = (int)herd[0]; def.HerdMax = (int)herd[1]; }
+                def.HerdChance = b.Float("herdChance", -1);
                 var detail = b.Object("detail");
                 if (detail == null) errors.Add(id + ": detail missing");
                 else
                 {
+                    def.SpawnPixels = detail.Float("spawnPixels", def.SpawnPixels);
                     def.FadePixels = detail.Float("fadePixels", def.FadePixels);
                     def.ShadowPixels = detail.Float("shadowPixels", def.ShadowPixels);
                     def.AnimPixels = detail.Float("animPixels", def.AnimPixels);
                     def.IkPixels = detail.Float("ikPixels", def.IkPixels);
+                    def.LowPixels = detail.Float("lowPixels", def.LowPixels);
                     detail.End();
                 }
                 foreach (var s in b.Objects("slots", true))

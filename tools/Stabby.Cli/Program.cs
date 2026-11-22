@@ -9,6 +9,7 @@ var opts = ParseArgs(args.Skip(1).ToArray());
 var biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 var materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 var objects = ContentLoader.LoadObjects(ContentLoader.FindContentRoot(AppContext.BaseDirectory), biomes.Select(b => b.Id).ToList());
+var creatures = ContentLoader.LoadCreatures(ContentLoader.FindContentRoot(AppContext.BaseDirectory), biomes.Select(b => b.Id).ToList());
 var json = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
 switch (args.FirstOrDefault())
@@ -167,6 +168,7 @@ int Sweep()
         times.Add((sw.ElapsedMilliseconds, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
         foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
+        foreach (var v in WorldChecks.Creatures(w, creatures)) failures.Add($"seed {c.Seed}: {v}");
         Mark("checks");
     });
     var t = times.OrderBy(x => x.Item1).ToArray();

@@ -94,6 +94,7 @@ namespace Stabby.Game
         ComponentLookup<LocalToWorld> world;
         ComponentLookup<ObjectFade> fade;
         ComponentLookup<MaterialMeshInfo> mmi;
+        ComponentLookup<CreatureState> states;
 
         public void OnCreate(ref SystemState state)
         {
@@ -102,6 +103,7 @@ namespace Stabby.Game
             world = state.GetComponentLookup<LocalToWorld>();
             fade = state.GetComponentLookup<ObjectFade>();
             mmi = state.GetComponentLookup<MaterialMeshInfo>();
+            states = state.GetComponentLookup<CreatureState>(true);
         }
 
         [BurstCompile]
@@ -112,10 +114,13 @@ namespace Stabby.Game
             world.Update(ref state);
             fade.Update(ref state);
             mmi.Update(ref state);
+            states.Update(ref state);
+            var hold = CreatureView.Current;
+            bool present = !SystemAPI.TryGetSingleton<CreaturePresenter>(out var presenter) || presenter.Index == hold.Show;
             state.Dependency = new AnimJob
             {
-                Ground = SystemAPI.GetSingleton<Ground>(), View = view, Hold = CreatureView.Current, Dt = math.min(SystemAPI.Time.DeltaTime, 0.1f),
-                World = world, Fade = fade, Mmi = mmi,
+                Ground = SystemAPI.GetSingleton<Ground>(), View = view, Hold = hold, Present = present, Dt = math.min(SystemAPI.Time.DeltaTime, 0.1f),
+                World = world, Fade = fade, Mmi = mmi, States = states,
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -126,57 +131,58 @@ namespace Stabby.Game
             public DetailView View;
             public CreatureView Hold;
             public float Dt;
+            public bool Present;
+            [ReadOnly] public ComponentLookup<CreatureState> States;
             [NativeDisableParallelForRestriction] public ComponentLookup<LocalToWorld> World;
             [NativeDisableParallelForRestriction] public ComponentLookup<ObjectFade> Fade;
             [NativeDisableParallelForRestriction] public ComponentLookup<MaterialMeshInfo> Mmi;
 
-            void Wander(ref CreatureRoot c, ref CreatureRig rig)
+            void Follow(ref CreatureRoot c, ref CreatureRig rig, in CreatureState s)
             {
+                c.Position.x = s.Position.x;
+                c.Position.z = s.Position.y;
+                c.Heading = s.Heading;
+                c.WalkSpeed = s.WalkSpeed;
                 if (Hold.Override != 0)
                 {
                     c.Move = Hold.Move;
                     c.Phase = Hold.Phase;
-                    c.Speed = 0;
                     c.Clock = 0;
                     return;
                 }
-                c.Timer -= Dt;
-                if (c.Timer <= 0)
-                {
-                    c.Walking = c.Random.NextFloat() < 0.6f;
-                    c.Timer = c.Random.NextFloat(3, 9);
-                    c.Turn = c.Random.NextFloat(-0.6f, 0.6f);
-                }
-                float2 fwd = new float2(math.sin(c.Heading), math.cos(c.Heading));
-                float2 toHome = c.Home - c.Position.xz;
-                float steer = math.clamp(0.02f * (fwd.y * toHome.x - fwd.x * toHome.y), -0.8f, 0.8f);
-                c.Move = math.lerp(c.Move, c.Walking ? 1 : 0, math.min(1, 1.2f * Dt));
-                c.Heading += (c.Turn * 0.4f + steer) * Dt * c.Move;
-                c.Speed = c.Move * c.WalkSpeed;
-                c.Position.xz += fwd * (c.Speed * Dt);
-                c.Phase = math.frac(c.Phase + c.Speed / rig.Stride * Dt);
+                c.Move = s.Move;
+                c.Phase = math.frac(c.Phase + c.Move * c.WalkSpeed / rig.Stride * Dt);
                 c.Clock += Dt;
             }
 
-            void Show(DynamicBuffer<CreatureLink> links, bool on)
+            void Show(DynamicBuffer<CreatureLink> links, int from, int count, bool on)
             {
-                for (int i = 0; i < links.Length; i++) Mmi.SetComponentEnabled(links[i].Value, on);
+                for (int i = from; i < from + count; i++) Mmi.SetComponentEnabled(links[i].Value, on);
             }
 
             void Execute(ref CreatureRoot c, in DynamicBuffer<CreatureLink> links)
             {
                 ref var rig = ref c.Rig.Value;
-                Wander(ref c, ref rig);
+                bool present = Present && States.HasComponent(c.Ghost);
+                if (present) Follow(ref c, ref rig, States[c.Ghost]);
                 float gy = Ground.HeightAt(c.Position.x, c.Position.z);
                 float3 centre = new float3(c.Position.x, gy + rig.Stand, c.Position.z);
                 float q = math.max(View.Quality, 0.1f);
                 float px = View.ScreenSize(rig.Length, centre);
                 float far = rig.FadePx / q;
-                bool visible = px >= far;
-                if (visible != c.Visible) { c.Visible = visible; Show(links, visible); }
+                bool visible = present && px >= far;
+                c.Visible = visible;
+                int half = links.Length / 2;
+                float low = rig.LowPx / q;
+                c.High = Detail.Holds(px, low, c.High);
+                float blend = c.High ? 1 - math.round(Detail.Crossfade(px, low, 1.5f * low) * 16f) / 16f : 1;
+                bool highOn = visible && blend < 1, lowOn = visible && blend > 0;
+                if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
+                if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
                 if (!visible) return;
                 c.Shadow = Detail.Holds(px, rig.ShadowPx / q, c.Shadow);
                 float fadeX = math.round(Detail.Crossfade(px, far, 1.5f * far) * 16f) / 16f;
+                float highX = 1 - blend, lowX = blend >= 1 ? fadeX : -blend;
                 float anim = Detail.Crossfade(px, rig.AnimPx / q, 1.5f * rig.AnimPx / q);
                 float ik = Detail.Crossfade(px, rig.IkPx / q, 1.5f * rig.IkPx / q);
 
@@ -220,9 +226,16 @@ namespace Stabby.Game
 
                 float contact = 0.5f * rig.Stand;
                 var trunkAt = rootPos + math.mul(rootRot, new float3(0, 0, -0.5f * rig.Length + rig.Rear));
-                Write(links[0], float4x4.TRS(trunkAt, rootRot, links[0].Scale), new float4(fadeX, c.Shadow ? 1 : 0, gy, contact));
-                for (int s = 0; s < n && s + 1 < links.Length; s++)
-                    Write(links[s + 1], float4x4.TRS(pos[s], rot[s], links[s + 1].Scale), new float4(fadeX, c.Shadow ? 1 : 0, floor[s], contact));
+                float shadow = c.Shadow ? 1 : 0;
+                for (int tier = 0; tier < 2; tier++)
+                {
+                    if (tier == 0 ? !highOn : !lowOn) continue;
+                    int b = tier * half;
+                    float x = tier == 0 ? highX : lowX;
+                    Write(links[b], float4x4.TRS(trunkAt, rootRot, links[b].Scale), new float4(x, shadow, gy, contact));
+                    for (int s = 0; s < n && s + 1 < half; s++)
+                        Write(links[b + s + 1], float4x4.TRS(pos[s], rot[s], links[b + s + 1].Scale), new float4(x, shadow, floor[s], contact));
+                }
             }
 
             void Write(CreatureLink link, float4x4 m, float4 f)

@@ -54,10 +54,10 @@
   "bodies": [
     {
       "id": "deer", "name": "Deer", "biomes": ["temperate-forest", "temperate-rain"],
-      "length": 1.1, "radius": 0.2, "taper": 0.92, "flatten": 1.18,
+      "length": 1.1, "radius": 0.2, "taper": 0.92, "flatten": 1.18, "haunch": 0.14, "waist": 0.12, "hump": 0.18,
       "colors": { "base": "#8c5e38", "accent": "#e6d8c4", "dark": "#2a221d" },
-      "size": [0.9, 1.1], "walkSpeed": 1.3, "herd": [2, 5], "jitter": 0.04,
-      "detail": { "fadePixels": 6.48, "shadowPixels": 32.4, "animPixels": 10.8, "ikPixels": 64.8 },
+      "size": [0.9, 1.1], "walkSpeed": 1.3, "herd": [2, 5], "herdChance": 0.6, "jitter": 0.04,
+      "detail": { "spawnPixels": 4.32, "fadePixels": 6.48, "shadowPixels": 32.4, "animPixels": 10.8, "ikPixels": 64.8, "lowPixels": 32.4 },
       "slots": [
         { "part": "hoof-hindleg", "socket": [0.5, 0.05, -0.72], "direction": [90, 0, 0], "mirror": true, "mirrorPhase": 0.5 },
         { "part": "hoof-foreleg", "socket": [0.5, -0.1, 0.7], "direction": [90, 0, 0], "mirror": true, "phase": 0.25, "mirrorPhase": 0.5 },
