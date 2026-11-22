@@ -270,6 +270,16 @@
       "id": "hot-spring", "name": "Hot spring", "kind": "structure", "color": "#d8d0bc", "variants": 8,
       "parts": [ { "id": "site", "shape": "hot-spring" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "spring", "spacingM": 3000, "chance": 0.7, "slopeMin": 0.04, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.15 }
+    },
+    {
+      "id": "mushroom", "name": "Mushroom", "kind": "structure", "color": "#b8a58a", "variants": 6,
+      "parts": [ { "id": "clump", "shape": "mushroom" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 0.3, "sizeMaxM": 0.3 }
+    },
+    {
+      "id": "fairy-ring", "name": "Fairy ring", "kind": "structure", "color": "#4f6b35", "variants": 6,
+      "parts": [ { "id": "site", "shape": "fairy-ring" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest"], "perHectare": 0, "discovery": "fairy-ring", "spacingM": 700, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 14, "sizeMaxM": 14.5, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12 },
