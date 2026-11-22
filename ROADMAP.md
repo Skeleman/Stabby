@@ -53,7 +53,7 @@ and converts once into native data.
   data-driven job; compare the per-part entity render path against Punchy's pattern (pose
   job into one buffer, one instanced draw per shape, no part entities) behind a flag, at
   10/100/500, worst arrival frame included; switching paths is Zach's call. The arrival
-  budget becomes the shared spawn budget objects use too (b/creatures-scale, now;
+  budget becomes the shared spawn budget objects use too (b/creatures-scale merged: arrival queue on a shared FrameBudget, one parallel Burst brain, opt-in instanced path STABBY_CREATURE_PATH=instanced at ~2 entities per creature, N500 worst arrival frame 158 -> ~9 ms; instanced stays opt-in until Zach playtests;
   b/creatures-5 done; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd).
   Then far herds (b/creatures-far): herds beyond the spawn reach drawn from plan data and
   the shared clock with no entities or ghosts, waking into live creatures through the
