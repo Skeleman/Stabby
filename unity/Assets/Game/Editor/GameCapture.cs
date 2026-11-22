@@ -1894,13 +1894,36 @@ namespace Stabby.Game.Editor
         {
             var best = default(Stabby.Viewer.FallCurtain);
             bool found = false;
-            int falls = 0, rows = 0;
+            int falls = 0, verts = 0, tris = 0, hugged = 0, buried = 0, buriedFree = 0, tucked = 0, nearFoot = 0;
+            float depth = 0, depthMax = 0, depthFree = 0;
+            var detail = new TerrainDetail(map);
+            var sw = new System.Diagnostics.Stopwatch();
             foreach (var l in NearField.Lines(map))
                 for (int k = 1; k < l.X.Length; k++)
                     if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _))
                     {
                         falls++;
-                        rows += Stabby.Viewer.WaterGeometry.CurtainRowsOf(f.Drop + 0.5f);
+                        float fh = f.Drop + 0.5f, fhalf = 0.5f * f.Width;
+                        int fr = Stabby.Viewer.WaterGeometry.CurtainRowsOf(fh), fc = Stabby.Viewer.WaterGeometry.CurtainColsOf(f.Width);
+                        verts += fr * fc;
+                        tris += 4 * (fr - 1) * (fc - 1);
+                        sw.Start();
+                        var off = Stabby.Viewer.WaterGeometry.CurtainOffsets(f, detail);
+                        sw.Stop();
+                        for (int j = 1; j < fr; j++)
+                        {
+                            float u = j / (fr - 1f), y = u * u * fh, vy = f.LipY - y, free = Stabby.Viewer.WaterGeometry.FallThrowAt(y);
+                            for (int c = 0; c < fc; c++)
+                            {
+                                float sc = (2f * c / (fc - 1) - 1) * fhalf, o = off[j * fc + c], x = f.LipX + f.DirZ * sc, z = f.LipZ - f.DirX * sc;
+                                if (o > free + 0.01f) hugged++;
+                                if (vy < f.BaseY) continue;
+                                float g = detail.Sample(x + f.DirX * o, z + f.DirZ * o), gf = detail.Sample(x + f.DirX * free, z + f.DirZ * free);
+                                if (g > vy && g > f.LipY + 0.3f) tucked++;
+                                else if (g > vy) { buried++; depth += g - vy; depthMax = Mathf.Max(depthMax, g - vy); if (vy < f.BaseY + 1) nearFoot++; }
+                                if (gf > vy && gf <= f.LipY + 0.3f) { buriedFree++; depthFree += gf - vy; }
+                            }
+                        }
                         if (!found || f.Drop > best.Drop) { best = f; found = true; }
                     }
             if (!found) { GameStatus.Lines["~falls"] = "no falls found"; yield break; }
@@ -1909,7 +1932,7 @@ namespace Stabby.Game.Editor
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, w = best.Width;
-            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)}; {falls} falls, curtain rows {rows}, verts {2 * rows}, tris {4 * (rows - falls)}";
+            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)} x cols {Stabby.Viewer.WaterGeometry.CurtainColsOf(w)}; {falls} falls, curtain verts {verts}, tris {tris}, hugged {hugged}, above-water verts in face rock {buried} (free arc {buriedFree}), mean depth {depth / Mathf.Max(buried, 1):F2} m (free arc {depthFree / Mathf.Max(buriedFree, 1):F2} m), max {depthMax:F2} m, within 1 m of the pool {nearFoot}, edge verts tucked into banks above the lip {tucked}, offsets {sw.ElapsedMilliseconds} ms";
             var eyes = new[]
             {
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
