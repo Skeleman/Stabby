@@ -346,7 +346,17 @@ namespace Stabby.World
             {
                 Alert = Detail.SimulationReach(def.Length, def.AlertPixels), Flee = Detail.SimulationReach(def.Length, def.FleePixels),
                 Calm = Detail.SimulationReach(def.Length, def.CalmPixels), RunRatio = def.RunSpeed / def.WalkSpeed,
+                Look = def.RunSpeed * HerdMind.LookSeconds,
             };
+
+        public static bool Wet(GeneratedWorld w, int i) => w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i];
+
+        public static WaterGround Ground(GeneratedWorld w)
+        {
+            var wet = new byte[w.Sea.Length];
+            for (int i = 0; i < wet.Length; i++) wet[i] = Wet(w, i) ? (byte)1 : (byte)0;
+            return new WaterGround { Wet = wet, Size = w.Config.Size, CellMeters = w.Config.CellMeters };
+        }
 
         public static ulong Root(GeneratedWorld w) => Rng.Stream(w.Config.Seed, "creatures").NextU64();
 
@@ -399,7 +409,7 @@ namespace Stabby.World
             int n = w.Config.Size;
             if (x <= 0 || z <= 0 || x >= n - 1 || z >= n - 1) return false;
             int i = z * n + x;
-            if (w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i]) return false;
+            if (Wet(w, i)) return false;
             if (w.Biome == null || !def.Biomes.Contains(w.BiomeIds[w.Biome[i]])) return false;
             float cm = w.Config.CellMeters;
             float gx = w.Height[i + 1] - w.Height[i - 1], gz = w.Height[i + n] - w.Height[i - n];

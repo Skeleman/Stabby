@@ -83,6 +83,20 @@ namespace Stabby.Game
         public BlobArray<CreatureSpawnRow> Spawns;
         public BlobArray<float2> Reach;
         public BlobArray<CreatureWary> Wary;
+        public int Size;
+        public float CellMeters;
+        public BlobArray<byte> Wet;
+    }
+
+    public struct CreatureGround : IHerdGround
+    {
+        public BlobAssetReference<CreaturePlanData> Plan;
+
+        public bool Blocked(float x, float z)
+        {
+            ref var p = ref Plan.Value;
+            return HerdMind.OffMap(p.Size, p.CellMeters, x, z, out int c) || p.Wet[c] != 0;
+        }
     }
 
     public struct CreatureHerd

@@ -135,6 +135,7 @@ namespace Stabby.World
         int Cell(float m) => Math.Min(n - 1, (int)(m / cm + 0.5f));
 
         public static float GroundAt(TerrainDetail d, float cellMeters, float x, float z) => d.HeightAt(x / cellMeters, z / cellMeters);
+        public float GroundAt(float x, float z) => GroundAt(detail, cm, x, z);
 
         public int ChunksAcross => across;
         public ObjectLibrary Library => lib;

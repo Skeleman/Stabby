@@ -89,6 +89,12 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
+                [branch] if (_StabbyFieldUV.x > 0 && floor(i.tone.x * 0.5) == 7)
+                {
+                    float3 org = UNITY_MATRIX_M._m03_m13_m23;
+                    p.positionWS.y += _Fade.z - org.y + ContactBed(p.positionWS.xz) - ContactBed(org.xz);
+                    p.positionCS = TransformWorldToHClip(p.positionWS);
+                }
                 o.positionCS = p.positionCS;
                 o.positionWS = p.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(i.normalOS);
@@ -310,7 +316,7 @@ Shader "Stabby/Object"
                 return occ;
             }
 
-            float3 Built(float4 tone, float3 g, float3 q, inout float3 n, float fp, float4 th, float3 v, out float occ)
+            float3 Built(float4 tone, float3 g, float3 q, inout float3 n, float fp, float4 th, float3 v, float3 wp, out float occ)
             {
                 int mat = (int)floor(tone.x * 0.5);
                 float open = saturate((tone.x - 2 * mat) * 2 - 1);
@@ -321,6 +327,8 @@ Shader "Stabby/Object"
                 float fm = TmFade(4.3, fp), fs = TmFade(9, fp), ff = TmFade(31, fp);
                 float3 a, grad;
                 float shade = 0;
+                bool cap = th.x > 3.5 && th.x < 7.5, side = th.x > 7.5;
+                float rf = saturate((th.x - 4) / 3), rm = 3 * th.y;
                 if (mat == 4)
                 {
                     float yf = th.x, L = th.y, fpa = th.z * _StabbySurface.x, sk = th.w * 977;
@@ -388,6 +396,59 @@ Shader "Stabby/Object"
                     a = ToLinear(lerp(dye, float3(0.70, 0.65, 0.55), 0.12 + 0.1 * saturate(big.x))) * (0.86 + 0.08 * str.x * fs + 0.05 * wv.x * fw);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.2);
                     grad = 0.12 * fib.yzw * ff + 0.04 * wv.yzw * fw;
+                    if (cap)
+                    {
+                        float roll = frac(rf * rm / 0.028 + 0.15 * mid.x * fm);
+                        a *= 1 - 0.45 * smoothstep(0.7, 0.95, roll) * fs - 0.2 * smoothstep(0.85, 1, rf);
+                    }
+                }
+                else if (mat == 7)
+                {
+                    float dust = smoothstep(0.35, 0.95, 0.15 + 0.45 * n.y + 0.5 * big.x + 0.35 * mid.x * fm + 0.15 * fib.x * ff);
+                    a = lerp(ToLinear(float3(0.045, 0.042, 0.04)), ToLinear(float3(0.34, 0.33, 0.31)), dust) * (0.85 + 0.15 * fib.x * ff);
+                    float crack = smoothstep(0.9, 0.98, 1 - abs(str.x + 0.2 * mid.x)) * fs * (1 - dust);
+                    a = lerp(a, ToLinear(float3(0.32, 0.12, 0.05)), 0.6 * crack);
+                    grad = 0.08 * mid.yzw * fm + 0.1 * fib.yzw * ff + 0.05 * str.yzw * fs * (1 - dust);
+                    [branch] if (cap && abs(g.y) > 0.9)
+                    {
+                        float e = rf + 0.2 * big.x + 0.12 * mid.x * fm + 0.04 * fib.x * ff;
+                        clip(0.97 - e);
+                        a = lerp(ToLinear(float3(0.03, 0.028, 0.026)), a, smoothstep(0.15, 0.75, rf + 0.25 * big.x + 0.2 * mid.x * fm));
+                        a = lerp(a, ContactColor(wp.xz, wp.y), 0.85 * smoothstep(0.45, 0.95, e));
+                        grad *= 1 - smoothstep(0.5, 0.95, e);
+                    }
+                    else if (cap)
+                    {
+                        float rr = rf * rm / 0.012 + 0.6 * mid.x * fm;
+                        a = lerp(a, ToLinear(float3(0.05, 0.045, 0.04)), 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * TmFade(83, fp));
+                    }
+                }
+                else if (side && mat == 1)
+                {
+                    float al = dot(q, g);
+                    float3 sp = (q - g * al) * 15 + g * (al * 1.6) + sd, sp2 = sp * 2.3 + 5.1;
+                    float4 bn = TmNoise3(sp, int3(0, 0, 0)), bm = TmNoise3(sp2, int3(0, 0, 0));
+                    float fb = TmFade(15, fp), fb2 = TmFade(34, fp);
+                    float rid = lerp(0.6, 1 - abs(bn.x), fb) * 0.65 + lerp(0.6, 1 - abs(bm.x), fb2) * 0.35;
+                    a = ToLinear(float3(0.34, 0.29, 0.23)) * (0.35 + 0.8 * smoothstep(0.15, 0.85, rid)) * (0.85 + 0.25 * big.x);
+                    float lic = smoothstep(0.55, 0.85, 0.6 * big.x + 0.5 * mid.x * fm + 0.2 * rid) * saturate(0.4 + n.y);
+                    a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)) * float3(0.92, 1.02, 0.8) * 1.7, 0.45 * lic);
+                    float3 d1 = bn.yzw - g * dot(bn.yzw, g), d2 = bm.yzw - g * dot(bm.yzw, g);
+                    grad = -(sign(bn.x) * 0.16 * fb) * d1 - (sign(bm.x) * 0.07 * fb2) * d2 + 0.04 * mid.yzw * fm;
+                    shade = 0.35 * (1 - smoothstep(0.2, 0.6, rid)) * fb;
+                }
+                else if (cap && mat == 1)
+                {
+                    float rr = (rf + 0.05 * mid.x * fm + 0.015 * fib.x * ff) * rm / 0.024;
+                    float ring = 0.5 + 0.5 * cos(rr * 6.2831853), keep = TmFade(71, fp);
+                    a = lerp(ToLinear(float3(0.47, 0.33, 0.21)), ToLinear(float3(0.64, 0.52, 0.36)), smoothstep(0.35, 0.75, rf + 0.1 * big.x));
+                    a *= (1 - 0.22 * ring * keep) * (0.9 + 0.1 * fib.x * ff);
+                    a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)) * float3(0.95, 0.95, 0.93), 0.35 + 0.25 * big.x);
+                    float bark = smoothstep(0.9, 0.97, rf + 0.03 * fib.x * ff);
+                    a = lerp(a, ToLinear(float3(0.16, 0.13, 0.1)), bark);
+                    float chk = smoothstep(0.9, 0.98, 1 - abs(str.x + 0.3 * mid.x)) * fs * smoothstep(0.15, 0.5, rf) * (1 - bark);
+                    a *= 1 - 0.5 * chk;
+                    grad = 0.03 * fib.yzw * ff + 0.03 * mid.yzw * fm;
                 }
                 else
                 {
@@ -426,8 +487,8 @@ Shader "Stabby/Object"
                 float3 qa = ddx(qo), qb = ddy(qo);
                 float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
                 float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
-                float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.05, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
-                [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), occ);
+                float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.01, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
+                [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
                 else if (base.a < 0.5)
                 {
                     float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).a;
