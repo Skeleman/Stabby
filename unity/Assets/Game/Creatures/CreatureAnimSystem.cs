@@ -30,7 +30,9 @@ namespace Stabby.Game
             return 0;
         }
 
-        public static void Solve(ref CreatureRig rig, float3 rootPos, quaternion rootRot, float phase, float move, float clock,
+        public static float Run(ref CreatureRig rig, float move) => math.saturate((move - 1) / math.max(rig.RunRatio - 1, 1e-3f));
+
+        public static void Solve(ref CreatureRig rig, float3 rootPos, quaternion rootRot, float phase, float move, float run, float alert, float clock,
             NativeArray<float3> pos, NativeArray<quaternion> rot, NativeArray<float3> end, NativeArray<quaternion> endRot)
         {
             for (int i = 0; i < rig.Parts.Length; i++)
@@ -40,12 +42,15 @@ namespace Stabby.Game
                 quaternion r;
                 if (part.Parent < 0) { start = rootPos + math.mul(rootRot, part.Socket); r = math.mul(rootRot, part.Rest); }
                 else { start = end[part.Parent] + math.mul(endRot[part.Parent], part.Socket); r = math.mul(endRot[part.Parent], part.Rest); }
-                float p = math.frac(phase + part.Phase);
-                float3 sway = Sway(part.Role, part.Side, clock);
+                float p = math.frac(phase + math.lerp(part.Phase, part.RunPhase, run));
+                float3 sway = Sway(part.Role, part.Side, clock) * (1 - 0.8f * alert);
+                float gait = math.min(move, 1);
                 for (int j = 0; j < part.Count; j++)
                 {
                     ref var seg = ref rig.Segments[part.First + j];
-                    float3 a = math.lerp(seg.Idle, Cycle(seg.Forward, seg.Back, seg.Lift, p), move) + sway;
+                    float3 stand = math.lerp(seg.Idle, seg.Alert, alert);
+                    float3 cycle = math.lerp(Cycle(seg.Forward, seg.Back, seg.Lift, p), Cycle(seg.RunForward, seg.RunBack, seg.RunLift, p), run);
+                    float3 a = math.lerp(stand, cycle, gait) + sway;
                     r = math.mul(r, quaternion.EulerZXY(a));
                     pos[part.First + j] = start;
                     rot[part.First + j] = r;
@@ -145,13 +150,16 @@ namespace Stabby.Game
                 c.WalkSpeed = s.WalkSpeed;
                 if (Hold.Override != 0)
                 {
-                    c.Move = Hold.Move;
+                    c.Move = Hold.Run > 0 ? 1 + Hold.Run * (rig.RunRatio - 1) : Hold.Move;
+                    c.Alert = Hold.Alert;
                     c.Phase = Hold.Phase;
                     c.Clock = 0;
                     return;
                 }
                 c.Move = s.Move;
-                c.Phase = math.frac(c.Phase + c.Move * c.WalkSpeed / rig.Stride * Dt);
+                c.Alert = s.Alert;
+                float stride = math.lerp(rig.Stride, rig.RunStride, CreaturePose.Run(ref rig, c.Move));
+                c.Phase = math.frac(c.Phase + c.Move * c.WalkSpeed / stride * Dt);
                 c.Clock += Dt;
             }
 
@@ -193,10 +201,12 @@ namespace Stabby.Game
                 float pitch = math.clamp(math.atan2(front - rear, rig.Length), -0.5f, 0.5f);
                 c.Pitch = Hold.Override != 0 ? pitch : math.lerp(c.Pitch, pitch, math.min(1, 4 * Dt));
 
-                float move = c.Move * anim;
-                float bob = move * 0.02f * rig.Stand * math.cos(4 * math.PI * c.Phase);
+                float run = CreaturePose.Run(ref rig, c.Move) * anim;
+                float move = math.min(c.Move, 1) * anim;
+                float bob = rig.Stand * (move * 0.02f * math.cos(4 * math.PI * c.Phase) + run * 0.07f * math.sin(2 * math.PI * c.Phase));
+                float rock = run * 0.12f * math.cos(2 * math.PI * c.Phase);
                 float3 rootPos = new float3(c.Position.x, gy + rig.Stand - c.Sink + bob, c.Position.z);
-                quaternion rootRot = math.mul(quaternion.RotateY(c.Heading), quaternion.RotateX(-c.Pitch));
+                quaternion rootRot = math.mul(quaternion.RotateY(c.Heading), quaternion.RotateX(-c.Pitch + rock));
 
                 int n = rig.Segments.Length, parts = rig.Parts.Length;
                 var pos = new NativeArray<float3>(n, Allocator.Temp);
@@ -204,7 +214,7 @@ namespace Stabby.Game
                 var end = new NativeArray<float3>(parts, Allocator.Temp);
                 var endRot = new NativeArray<quaternion>(parts, Allocator.Temp);
                 var floor = new NativeArray<float>(n, Allocator.Temp);
-                CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, c.Clock, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert * anim, c.Clock, pos, rot, end, endRot);
 
                 var unrot = math.inverse(rootRot);
                 float drop = 0;

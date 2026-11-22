@@ -204,6 +204,8 @@ namespace Stabby.Game
             rig.Rear = body.RearRadius;
             rig.Stand = 0;
             rig.Stride = 1;
+            rig.RunStride = def.RunStride * body.Size;
+            rig.RunRatio = def.RunSpeed / def.WalkSpeed;
             rig.FadePx = def.FadePixels;
             rig.ShadowPx = def.ShadowPixels;
             rig.AnimPx = def.AnimPixels;
@@ -219,14 +221,18 @@ namespace Stabby.Game
                 {
                     Parent = p.Parent, Role = p.Role, First = p.FirstSegment, Count = p.SegmentCount,
                     Socket = new float3(p.SocketX, p.SocketY, p.SocketZ), Rest = quaternion.EulerZXY(p.RestX, p.RestY, p.RestZ),
-                    Phase = p.Phase, Side = p.Side, Reach = reach,
+                    Phase = p.Phase, RunPhase = p.RunPhase, Side = p.Side, Reach = reach,
                 };
             }
             var segs = b.Allocate(ref rig.Segments, body.Segments.Count);
             for (int i = 0; i < body.Segments.Count; i++)
             {
                 var s = body.Segments[i];
-                segs[i] = new CreatureSegmentRig { Length = s.Length, Idle = V(s.Idle), Forward = V(s.Reach), Back = V(s.Push), Lift = V(s.Lift) };
+                segs[i] = new CreatureSegmentRig
+                {
+                    Length = s.Length, Idle = V(s.Idle), Forward = V(s.Reach), Back = V(s.Push), Lift = V(s.Lift),
+                    RunForward = V(s.RunReach), RunBack = V(s.RunPush), RunLift = V(s.RunLift), Alert = V(s.Alert),
+                };
             }
             var blob = b.CreateBlobAssetReference<CreatureRig>(Allocator.Persistent);
             b.Dispose();
@@ -241,7 +247,7 @@ namespace Stabby.Game
             var rot = new NativeArray<quaternion>(n, Allocator.Temp);
             var end = new NativeArray<float3>(parts, Allocator.Temp);
             var endRot = new NativeArray<quaternion>(parts, Allocator.Temp);
-            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, pos, rot, end, endRot);
+            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, pos, rot, end, endRot);
             float footY = 0, travel = 0;
             int legs = 0;
             for (int i = 0; i < parts; i++)
@@ -255,9 +261,9 @@ namespace Stabby.Game
             {
                 ref var part = ref rig.Parts[i];
                 if (part.Role != CreaturePartDef.Leg) continue;
-                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(-part.Phase), 1, 0, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(-part.Phase), 1, 0, 0, 0, pos, rot, end, endRot);
                 float front = end[i].z;
-                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(0.5f - part.Phase), 1, 0, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(0.5f - part.Phase), 1, 0, 0, 0, pos, rot, end, endRot);
                 travel += front - end[i].z;
             }
             if (legs > 0)

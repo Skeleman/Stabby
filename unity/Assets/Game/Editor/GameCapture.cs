@@ -216,8 +216,9 @@ namespace Stabby.Game.Editor
                 if (wait == 0)
                 {
                     if (CreatureBuildSystem.Count == 0 && --chaseWait > -1800) return;
-                    bool stride = name.EndsWith("stride");
-                    CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : 0, Show = name == "creature-client" ? 1 : 0 };
+                    bool stride = name.EndsWith("stride"), run = name.EndsWith("run");
+                    FreezeCreatures(true);
+                    CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : run ? 0.15f : 0, Run = run ? 1 : 0, Alert = name.EndsWith("alert") ? 1 : 0, Show = name == "creature-client" ? 1 : 0 };
                     if (name != "creature-client" && !AimCreature(cam, CreatureRange(name))) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
                     wait = pair ? 240 : 120;
                     return;
@@ -233,7 +234,8 @@ namespace Stabby.Game.Editor
             }
             if (only == "creatures" && phase >= 200 + CreatureShots.Length)
             {
-                CreatureView.Current = default;
+                if (job == null) { CreatureView.Current = default; FreezeCreatures(false); job = ApproachTour(cam, dir); }
+                if (job.MoveNext()) return;
                 GameStatus.Lines["~creatures"] = CreatureBuildSystem.Count.ToString();
                 GameStatus.Lines["~creature plan"] = $"{CreaturePlanSystem.Planned} planned, spawn reach {CreaturePlanSystem.SpawnReach:F2} m, despawn reach {CreaturePlanSystem.DespawnReach:F2} m";
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
@@ -854,7 +856,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride", "creature-far-idle", "creature-far-stride", "creature-host", "creature-client" };
+        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride", "creature-far-idle", "creature-far-stride", "creature-close-run", "creature-close-alert", "creature-host", "creature-client" };
 
         static float CreatureRange(string name) => name.Contains("close") ? 4f : name.Contains("far") ? 40f : 15f;
 
@@ -928,6 +930,158 @@ namespace Stabby.Game.Editor
                 }
             }
             return missing > 0 || shared == 0 ? float.MaxValue : max;
+        }
+
+        static Unity.Entities.World ServerWorld()
+        {
+            foreach (var w in Unity.Entities.World.All) if (w.IsServer()) return w;
+            return null;
+        }
+
+        static Unity.Entities.World ViewWorld()
+        {
+            foreach (var w in Unity.Entities.World.All) if (w.Name == GameSettings.ViewClient) return w;
+            return null;
+        }
+
+        static void FreezeCreatures(bool on)
+        {
+            var w = ServerWorld();
+            if (w == null) return;
+            using var q = w.EntityManager.CreateEntityQuery(typeof(CreatureFreeze));
+            if (on && q.IsEmpty) w.EntityManager.CreateEntity(typeof(CreatureFreeze));
+            else if (!on && !q.IsEmpty) w.EntityManager.DestroyEntity(q);
+        }
+
+        static bool HerdMindOf(Unity.Entities.World w, int herd, out HerdMind mind)
+        {
+            mind = default;
+            var handle = w.GetExistingSystem<CreatureHostSystem>();
+            if (handle == SystemHandle.Null) return false;
+            ref var sys = ref w.Unmanaged.GetUnsafeSystemRef<CreatureHostSystem>(handle);
+            if (!sys.Herds.IsCreated || !sys.Herds.TryGetValue(herd, out var h)) return false;
+            mind = h.Mind;
+            return true;
+        }
+
+        static Vector2 HerdCentre(Unity.Entities.World w, int herd, out int count, out float move)
+        {
+            using var q = w.EntityManager.CreateEntityQuery(typeof(CreatureState));
+            using var states = q.ToComponentDataArray<CreatureState>(Unity.Collections.Allocator.Temp);
+            Vector2 sum = default;
+            count = 0;
+            move = 0;
+            foreach (var s in states)
+                if (CreaturePlan.HerdOf(s.Id) == herd) { sum += new Vector2(s.Position.x, s.Position.y); move += s.Move; count++; }
+            if (count > 0) { sum /= count; move /= count; }
+            return sum;
+        }
+
+        static void PlaceServerPlayers(Unity.Entities.World w, Vector2 at)
+        {
+            using var q = w.EntityManager.CreateEntityQuery(typeof(Player), typeof(LocalTransform));
+            using var es = q.ToEntityArray(Unity.Collections.Allocator.Temp);
+            foreach (var e in es)
+            {
+                var t = w.EntityManager.GetComponentData<LocalTransform>(e);
+                t.Position = new Unity.Mathematics.float3(at.x, GroundHeight(at.x, at.y), at.y);
+                w.EntityManager.SetComponentData(e, t);
+            }
+        }
+
+        static void AimHerd(Camera cam, Vector2 centre, Vector2 side)
+        {
+            var target = new Vector3(centre.x, GroundHeight(centre.x, centre.y) + 0.9f, centre.y);
+            var eye = target + new Vector3(side.x, 0, side.y) * 32f;
+            eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 1.7f, target.y + 4f);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+        }
+
+        static System.Collections.IEnumerator ApproachTour(Camera cam, string dir)
+        {
+            var server = ServerWorld();
+            var view = ViewWorld();
+            int herd = int.MaxValue;
+            using (var q = server.EntityManager.CreateEntityQuery(typeof(CreatureState)))
+            using (var states = q.ToComponentDataArray<CreatureState>(Unity.Collections.Allocator.Temp))
+                foreach (var s in states) herd = Mathf.Min(herd, CreaturePlan.HerdOf(s.Id));
+            if (herd == int.MaxValue || view == null) { GameStatus.Lines["~approach"] = "approach: no herd on the server"; yield break; }
+            Vector2 start = HerdCentre(server, herd, out int members, out _);
+            Vector2 d = new Vector2(0, 1), side = new Vector2(1, 0);
+            for (int k = 0; k < 8; k++)
+            {
+                float a = k * Mathf.PI / 4;
+                d = new Vector2(Mathf.Sin(a), Mathf.Cos(a));
+                side = new Vector2(d.y, -d.x);
+                var t = new Vector3(start.x, GroundHeight(start.x, start.y) + 0.9f, start.y);
+                var e = t + new Vector3(side.x, 0, side.y) * 32f;
+                e.y = Mathf.Max(GroundHeight(e.x, e.z) + 1.7f, t.y + 4f);
+                if (Clear(e, t)) break;
+            }
+            const float startM = 90f, stopM = 12f, walk = 4f;
+            float along = startM, clock = 0, modeClock = 0, lag = 0, peak = 0;
+            var log = new System.Collections.Generic.List<string>();
+            HerdMode last = HerdMode.Calm;
+            bool calmShot = false, alertShot = false, fleeShot = false, fled = false;
+            Vector2 aim = HerdCentre(view, herd, out int seen0, out _);
+            if (seen0 == 0) aim = start;
+            while (clock < 120f)
+            {
+                float dt = Mathf.Min(Time.deltaTime, 0.1f);
+                bool walking = clock >= 4f && calmShot;
+                if (walking) along = Mathf.Max(stopM, along - walk * dt);
+                Vector2 player = start + d * along;
+                PlaceServerPlayers(server, player);
+                Vector2 viewCentre = HerdCentre(view, herd, out int seen, out _);
+                if (seen > 0) aim = Vector2.Lerp(aim, viewCentre, Mathf.Min(1, 3 * dt));
+                AimHerd(cam, aim, side);
+                Vector2 serverCentre = HerdCentre(server, herd, out _, out float move);
+                if (!HerdMindOf(server, herd, out var mind)) { log.Add($"herd {herd} gone at {clock:F1} s"); break; }
+                float threat = Vector2.Distance(player, serverCentre);
+                if (mind.Mode != last)
+                {
+                    log.Add($"{clock:F1} s {last}->{mind.Mode} with the player {threat:F1} m from the herd centre");
+                    last = mind.Mode;
+                    modeClock = 0;
+                    if (mind.Mode == HerdMode.Flee) fled = true;
+                }
+                if (mind.Mode == HerdMode.Flee)
+                {
+                    peak = Mathf.Max(peak, move);
+                    float c = CreatureCompare(false);
+                    if (c < float.MaxValue) lag = Mathf.Max(lag, c);
+                }
+                string name = !calmShot && clock >= 4f ? "creature-approach-calm"
+                    : walking && !alertShot && !fled && mind.Mode == HerdMode.Alert && modeClock > 1.5f ? "creature-approach-alert"
+                    : !fleeShot && mind.Mode == HerdMode.Flee && modeClock > 1.2f ? "creature-approach-flee" : null;
+                if (name != null)
+                {
+                    if (!calmShot && mind.Mode != HerdMode.Calm) log.Add($"herd not calm at the calm shot ({mind.Mode})");
+                    calmShot = true;
+                    if (name.EndsWith("alert")) alertShot = true;
+                    if (name.EndsWith("flee")) fleeShot = true;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, name);
+                }
+                if (fled && mind.Mode == HerdMode.Calm && modeClock > 2f) break;
+                clock += dt;
+                modeClock += dt;
+                yield return null;
+            }
+            for (float rest = 0; rest < 15f && CreatureCompare(false) > 0.02f; rest += Time.deltaTime)
+            {
+                PlaceServerPlayers(server, start + d * along);
+                aim = Vector2.Lerp(aim, HerdCentre(view, herd, out _, out _), 0.05f);
+                AimHerd(cam, aim, side);
+                yield return null;
+            }
+            Vector2 end = HerdCentre(server, herd, out _, out _);
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "creature-approach-settled");
+            CreatureCompare(true);
+            GameStatus.Lines["~approach"] = $"approach: herd {herd} of {members} at {start.x:F0},{start.y:F0}, player walked {startM:F0}->{stopM:F0} m at {walk} m/s along {d.x:F2},{d.y:F2}; " + string.Join("; ", log);
+            GameStatus.Lines["~approach result"] = $"approach result: herd moved {Vector2.Distance(start, end):F1} m and settled {Vector2.Distance(start + d * along, end):F1} m from the player; peak mean move {peak:F2} x walk; max server-client position delta while fleeing {lag:F3} m";
+            if (!alertShot || !fleeShot) GameStatus.Lines["~approach missing"] = $"approach missing shots: alert {alertShot}, flee {fleeShot}";
         }
 
         static bool Clear(Vector3 eye, Vector3 target)

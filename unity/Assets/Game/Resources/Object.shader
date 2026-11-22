@@ -514,6 +514,7 @@ Shader "Stabby/Object"
                         [branch] if (i.tone.x > 0.25)
                         {
                             bool course = i.tone.w > 1.5;
+                            float calm = !course && i.tone.w >= 1 ? 0.67 : 0;
                             float4 tone = float4(i.tone.xyz, course ? i.tone.w - 2 : i.tone.w);
                             float3 cg = 0, cid = 0;
                             float dark = 1, cf = 0;
@@ -527,7 +528,7 @@ Shader "Stabby/Object"
                             }
                             int3 sk = int3(floor(tone.yzw * 977 + cid * 13));
                             float hj = TmHash(sk), hk = TmHash(sk + int3(3, 1, 7));
-                            float us = (i.origin.y + off) / period + (hj - 0.5) * 0.25;
+                            float us = (i.origin.y + off) / period + (hj - 0.5) * 0.25 * (1 - calm);
                             float3 sb = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us, 0.5), 0).rgb, sm = sb;
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
                             TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, lerp(sb, sm * 0.1667, 0.5), tone, fp);

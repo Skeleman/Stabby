@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct RiverPiece
     {
         public float Ax, Az, Bx, Bz, Sa, Sb, Wa, Wb, Da, Db, Ka, Kb, Pa, Pb, Ra, Rb;
-        public float Lx, Lz, Ux, Uz, Fy, Fr, Fd;
+        public float Lx, Lz, Ux, Uz, Fy, Fr, Fd, Fc, Ft, Fh;
     }
 
     public sealed class RiverLine
@@ -93,7 +93,7 @@ namespace Stabby.World
         }
 
         public const float FallDepthFrac = 0.5f, FallDepthBaseM = 0.8f, FallDepthPerDrop = 0.15f;
-        public static float PoolReach(float r) => Hydrology.FallPoolCentre * r + (1 + FallRimFrac) * r + Math.Max(FallRingMinM, FallRingFrac * r) + 1f;
+        public static float PoolReach(float c, float r) => c + (1 + FallRimFrac) * r + Math.Max(FallRingMinM, FallRingFrac * r) + 1f;
         public const float FallRadiusNoise = 0.25f, FallBowlNoise = 0.2f, FallBowlWaveM = 1.7f, FallRimWaveFrac = 0.7f, FallRimWaveM = 3f, FallRimHeight = 0.35f, FallRimCap = 0.15f, FallTalusWaveM = 2.5f, FallLowFrac = 1.3f;
         public const float FallTrimM = 0.1f, FallJagM = 0.6f, FallJagWaveM = 2.5f, FallRimFrac = 0.35f, FallRingMinM = 3f, FallRingFrac = 0.5f, FallLiftRise = 4f, FallBlendM = 1f, FallTalusFrac = 0.35f, FallSlumpFrac = 0.4f, FallClearM = 15f, FallOutletSlope = 1.2f, FallOutletFrac = 0.3f, FallOutletRise = 0.1f, FallFloorM = 0.02f;
 
@@ -228,10 +228,10 @@ namespace Stabby.World
                     {
                         int lip = l.Lip[f];
                         var fall = l.Falls[f];
-                        bool pool = k + 1 == lip, clip = k >= lip && along[k] - along[lip] <= Reach(Math.Max(q.Wa, q.Wb), cm) + PoolReach(fall.PoolRadius);
+                        bool pool = k + 1 == lip, clip = k >= lip && along[k] - along[lip] <= Reach(Math.Max(q.Wa, q.Wb), cm) + PoolReach(fall.PoolCentre, fall.PoolRadius);
                         if (!pool && !clip) continue;
                         q.Lx = fall.LipX; q.Lz = fall.LipZ; q.Ux = fall.DirX; q.Uz = fall.DirZ;
-                        if (pool) { q.Fy = fall.BaseY; q.Fr = fall.PoolRadius; q.Fd = Math.Min(FallDepthFrac * fall.PoolRadius, FallDepthBaseM + FallDepthPerDrop * fall.Drop); break; }
+                        if (pool) { q.Fy = fall.BaseY; q.Fr = fall.PoolRadius; q.Fc = fall.PoolCentre; q.Fd = Math.Min(FallDepthFrac * fall.PoolRadius, FallDepthBaseM + FallDepthPerDrop * fall.Drop); q.Ft = Hydrology.FallThrow(fall.Drop); q.Fh = 0.5f * Hydrology.SheetWidth(fall.Width); break; }
                     }
                     list.Add(q);
                 }
@@ -272,7 +272,7 @@ namespace Stabby.World
             for (int p = 0; p < pieces.Count; p++)
             {
                 var q = pieces[p];
-                float r = Reach(Math.Max(q.Wa, q.Wb), cm) + half + (q.Fr > 0 ? PoolReach(q.Fr) : 0);
+                float r = Reach(Math.Max(q.Wa, q.Wb), cm) + half + (q.Fr > 0 ? PoolReach(q.Fc, q.Fr) : 0);
                 int x0 = Clamp((int)Math.Floor((Math.Min(q.Ax, q.Bx) - r) / cm), n), x1 = Clamp((int)Math.Ceiling((Math.Max(q.Ax, q.Bx) + r) / cm), n);
                 int z0 = Clamp((int)Math.Floor((Math.Min(q.Az, q.Bz) - r) / cm), n), z1 = Clamp((int)Math.Ceiling((Math.Max(q.Az, q.Bz) + r) / cm), n);
                 var l = new List<int>();
@@ -508,43 +508,44 @@ namespace Stabby.World
 
         public static bool PoolNear(RiverPiece q, float x, float z)
         {
-            float dx = x - q.Lx - q.Ux * Hydrology.FallPoolCentre * q.Fr, dz = z - q.Lz - q.Uz * Hydrology.FallPoolCentre * q.Fr, r = PoolReach(q.Fr) - Hydrology.FallPoolCentre * q.Fr;
+            float dx = x - q.Lx - q.Ux * q.Fc, dz = z - q.Lz - q.Uz * q.Fc, r = PoolReach(q.Fc, q.Fr) - q.Fc;
             return dx * dx + dz * dz < r * r;
         }
 
         public static bool PoolZone(RiverPiece q, float x, float z, float f)
         {
             float along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz, side = Math.Abs((x - q.Lx) * q.Uz - (z - q.Lz) * q.Ux);
-            return PoolNear(q, x, z) || (along > FallJagM && along < PoolReach(q.Fr) + f && side < q.Wb + OutletRing(q.Fr) + FallBlendM);
+            return PoolNear(q, x, z) || (along > FallJagM && along < PoolReach(q.Fc, q.Fr) + f && side < q.Wb + OutletRing(q.Fr) + FallBlendM);
         }
 
         static float PoolMargin(RiverPiece q, float x, float z, float f)
         {
             float along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz, side = Math.Abs((x - q.Lx) * q.Uz - (z - q.Lz) * q.Ux);
-            float dx = x - q.Lx - q.Ux * Hydrology.FallPoolCentre * q.Fr, dz = z - q.Lz - q.Uz * Hydrology.FallPoolCentre * q.Fr;
-            float circle = PoolReach(q.Fr) - Hydrology.FallPoolCentre * q.Fr - (float)Math.Sqrt(dx * dx + dz * dz);
-            return Math.Max(circle, Math.Min(Math.Min(along - FallJagM, PoolReach(q.Fr) + f - along), q.Wb + OutletRing(q.Fr) + FallBlendM - side));
+            float dx = x - q.Lx - q.Ux * q.Fc, dz = z - q.Lz - q.Uz * q.Fc;
+            float circle = PoolReach(q.Fc, q.Fr) - q.Fc - (float)Math.Sqrt(dx * dx + dz * dz);
+            return Math.Max(circle, Math.Min(Math.Min(along - FallJagM, PoolReach(q.Fc, q.Fr) + f - along), q.Wb + OutletRing(q.Fr) + FallBlendM - side));
         }
 
         static float OutletRing(float r) => Math.Max(FallRingMinM, FallRingFrac * r);
 
         public static bool InPoolWater(RiverPiece q, float x, float z)
         {
-            float dx = x - q.Lx - q.Ux * Hydrology.FallPoolCentre * q.Fr, dz = z - q.Lz - q.Uz * Hydrology.FallPoolCentre * q.Fr, r = q.Fr * (1 + FallRadiusNoise);
+            float dx = x - q.Lx - q.Ux * q.Fc, dz = z - q.Lz - q.Uz * q.Fc, r = q.Fr * (1 + FallRadiusNoise);
             return q.Fr > 0 && dx * dx + dz * dz < r * r;
         }
 
         static float Pool<T>(T c, RiverPiece q, float x, float z, float top) where T : struct, INearCells
         {
             float along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz;
-            float f = Fade(c.CellMeters), reach = PoolReach(q.Fr);
+            float f = Fade(c.CellMeters), reach = PoolReach(q.Fc, q.Fr);
             if (along < Jag(c, x, z) || !PoolZone(q, x, z, f)) return float.MaxValue;
-            float dx = x - q.Lx - q.Ux * Hydrology.FallPoolCentre * q.Fr, dz = z - q.Lz - q.Uz * Hydrology.FallPoolCentre * q.Fr, dist = (float)Math.Sqrt(dx * dx + dz * dz);
+            float dx = x - q.Lx - q.Ux * q.Fc, dz = z - q.Lz - q.Uz * q.Fc, dist = (float)Math.Sqrt(dx * dx + dz * dz);
             float wave = 1f + 0.6f * q.Fr;
             float rn = q.Fr * (1 + FallRadiusNoise * Math.Max(-0.6f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 4u, x / wave + 17.3f, z / wave - 5.1f))));
             float u = dist / rn, v;
             float slump = Grid.Smoothstep(0.55f, 1f, u) * (1 - Grid.Smoothstep(1f, 1f + FallSlumpFrac, u)) + (1 - Grid.Smoothstep(0, FallSlumpFrac * q.Fr, along)) * Grid.Smoothstep(0.3f, 0.7f, u) * (1 - Grid.Smoothstep(1f, 1f + FallSlumpFrac, u));
-            float talus = FallTalusFrac * q.Fd * Math.Min(1f, slump) * (0.5f + 0.5f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 5u, x / FallTalusWaveM + 3.3f, z / FallTalusWaveM - 12.1f))));
+            float side = Math.Abs((x - q.Lx) * q.Uz - (z - q.Lz) * q.Ux), sheet = 1 - (1 - Grid.Smoothstep(q.Fh, q.Fh + FallBlendM, side)) * (1 - Grid.Smoothstep(q.Ft, q.Ft + FallBlendM, along));
+            float talus = FallTalusFrac * q.Fd * sheet * Math.Min(1f, slump) * (0.5f + 0.5f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 5u, x / FallTalusWaveM + 3.3f, z / FallTalusWaveM - 12.1f))));
             if (u < 1)
                 v = q.Fy - q.Fd * (1 - u * u) * (1 + FallBowlNoise * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 4u, x / FallBowlWaveM - 31.7f, z / FallBowlWaveM + 8.9f))));
             else
@@ -555,9 +556,9 @@ namespace Stabby.World
                 float rim = q.Fy + lift * (0.2f + 0.8f * broken) * Grid.Smoothstep(1f, 1f + FallRimFrac, u);
                 v = rim + Math.Max(0, top - rim) * Grid.Smoothstep(rn, rn + ring, dist) + FallLiftRise * Sq(Math.Max(0, dist - rn - ring));
             }
-            float side = Math.Abs((x - q.Lx) * q.Uz - (z - q.Lz) * q.Ux), deep = 1 - Grid.Smoothstep(0.5f * q.Wb, q.Wb, side);
+            float deep = 1 - Grid.Smoothstep(0.5f * q.Wb, q.Wb, side);
             float mouth = OutletRing(q.Fr), open = side - q.Wb - Math.Max(0, Math.Min(along - FallJagM, mouth)), late = along - reach - 0.5f * f;
-            float floor = q.Fy + 0.25f * FallBlendM - (FallOutletFrac * q.Fd + 0.25f * FallBlendM) * deep + FallOutletRise * Math.Max(0, along - reach);
+            float floor = q.Fy + 0.5f * FallBlendM - (FallOutletFrac * q.Fd + 0.5f * FallBlendM) * deep * (1 - Grid.Smoothstep(reach, reach + 0.5f * f, along)) + FallOutletRise * Math.Max(0, along - reach);
             float notch = floor + FallOutletSlope * (Math.Max(0, side - q.Wb) + Math.Max(0, FallJagM + FallBlendM - along) + Math.Max(0, late)) + FallLiftRise * (Sq(Math.Max(0, open)) + Sq(Math.Max(0, late)));
             float cut = along <= FallJagM ? 0 : v - PolyMin(v, notch, FallBlendM), keep = 1 - Grid.Smoothstep(0, FallBlendM, cut);
             v = v - cut + talus * keep * (1 - Grid.Smoothstep(q.Fy - FallBlendM, q.Fy + FallTalusFrac * q.Fd + FallBlendM, v));
