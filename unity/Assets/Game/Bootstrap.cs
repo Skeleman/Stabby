@@ -55,7 +55,7 @@ namespace Stabby.Game
         public const int PieceBytes = 1024;
         public const int PiecesPerTick = 256, BacklogBytes = 96 * 1024;
         public const int ReliableWindow = 128;
-        public const float WalkSpeed = 6f;
+        public const float WalkSpeed = 6f, SprintSpeed = WalkSpeed * 1.8f, JumpSpeed = 7f, Gravity = 20f;
         public static float GraphicsQuality = 1f;
         public static readonly string[] Clients = { "Client1", "Client2" };
         public const string FullStreamClient = "Client2";
