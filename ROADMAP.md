@@ -42,6 +42,16 @@ and converts once into native data.
 
 ## Next: unified world geometry
 
+- Scale proofs before more content (external audit 11-22, shared by Zach): each new system
+  gets a measured envelope. (1) Creatures: bench 10/50/100/250/500 visible deer (anim CPU,
+  entities and memory per creature, temp allocations, cost below the animation threshold);
+  hoist the five per-creature temp arrays in CreatureAnimSystem, skip pose/IK solving once
+  animation has faded, budget CreatureBuildSystem arrivals per frame (b/creatures-scale,
+  after b/creatures-5). (2) Full-world stress: 251k objects with terrain, grass, shadows,
+  water and objects all on (b/stress-full, warm-up lane after the parallax bench).
+  (3) Loading: ~450 MB allocated after terrain build, mid-load heap growth, a 76 ms collect.
+  (4) Light budgets below come before fires and torches. Towns wait until the site
+  hierarchy's streaming and collision are measured.
 - Light budgets (from Punchy `LightPolicy`, `LightBudget`, `FarLightPolicy`): caps on real and
   shadowed lights, then glow, far emissive and emissive-only fallbacks by screen
   size and importance. Before fires, torches or night effects.
