@@ -228,7 +228,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   hierarchical parts (arm, leg, tail, head types) that share definitions and
   animations and vary per entity; animation from a few keyframes plus inverse
   kinematics; all rendering through the shared material library. Part
-  definitions live in `content/`, ported to ECS and Burst. Step 1 (b/creatures-1): part and body definitions in content, engine-free assembly, a code-built deer with idle and walk from keyframes plus leg IK. | now
+  definitions live in `content/`, ported to ECS and Burst. Step 1 (b/creatures-1): part and body definitions in content, engine-free assembly, a code-built deer with idle and walk from keyframes plus leg IK. Step 1 done (b/creatures-1): deer wander with idle and stride, Burst animation, screen-size fade; trunk shaping, a geometry LOD tier and host-owned deer are next. | now
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
