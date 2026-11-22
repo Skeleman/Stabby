@@ -10,9 +10,10 @@ namespace Stabby.World
 
         static readonly float[] InnSeat = { 0, 0, 0.4f, 0.25f, -0.4f, 0.25f, 0.4f, -0.25f, -0.4f, -0.25f };
         static readonly float[] YardSeat = { 0, 0, 0.35f, 0.35f, -0.35f, 0.35f, 0.35f, -0.35f, -0.35f, -0.35f };
+        static readonly float[] WaysideSeats = { 0, 0, 0.24f, -0.09f, -0.24f, -0.09f, 0, -0.16f, 0.1f, -0.16f, -0.1f, -0.16f, 0, 0.15f, 0, 0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage ? YardSeat : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -33,6 +34,8 @@ namespace Stabby.World
                 case ObjectPart.Campsite: Campsite(l, key, Frame.Root(CampU)); break;
                 case ObjectPart.HermitHut: HermitHut(l, key, Frame.Root(HutU), out _, out _); break;
                 case ObjectPart.Hermitage: Hermitage(l, key, Frame.Root(HermitU)); break;
+                case ObjectPart.RoadShrine: RoadShrine(l, key, Frame.Root(ShrineU)); break;
+                case ObjectPart.Wayside: Wayside(l, key, Frame.Root(WaysideU)); break;
             }
         }
 

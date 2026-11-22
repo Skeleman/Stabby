@@ -218,6 +218,7 @@ namespace Stabby.Content
                 {
                     QuadPixels = terrain.Float("quadPixels", t0.QuadPixels), ContactPixels = terrain.Float("contactPixels", t0.ContactPixels),
                     ContactTexelPixels = terrain.Float("contactTexelPixels", t0.ContactTexelPixels),
+                    MistFadePixels = terrain.Float("mistFadePixels", t0.MistFadePixels), MistFullPixels = terrain.Float("mistFullPixels", t0.MistFullPixels),
                 };
                 terrain.End();
             }

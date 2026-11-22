@@ -744,9 +744,13 @@ namespace Stabby.Game
 
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
 
+        static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx");
+
         float Allowed(Camera cam)
         {
             var view = DetailView.Refresh(cam);
+            quads.MistWindow(view.Quality, out float mistFade, out float mistFull);
+            Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, 0, 0));
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
 
