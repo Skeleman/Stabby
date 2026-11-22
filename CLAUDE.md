@@ -78,3 +78,10 @@
     fixed reference FOV so every machine agrees. Grass reach, object
     spawn/stream ranges and terrain rings derive from it (`Reach` is the
     inverse); none is a fixed distance in metres.
+13. Creatures scale as populations, not individuals. All species share one
+    data-driven brain job (parallel Burst, a per-frame spatial grid,
+    staggered think phases scaled by screen size) and one presentation path.
+    Adding a species is data in `content/`, never a new system. Herds beyond
+    spawn reach exist only as plan data drawn from the shared clock, and they
+    wake through the crossfade. No creature work may spike a single frame:
+    spawning and building run within the shared per-frame budget.
