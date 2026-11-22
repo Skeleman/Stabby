@@ -280,7 +280,7 @@ Shader "Stabby/Object"
             {
                 float3 an = abs(no);
                 bool top = no.y > 0.75;
-                float3 ta = top || (an.x > 0.8 && abs(po.x) > 0.4) ? float3(0, 0, 1) : float3(1, 0, 0);
+                float3 ta = top || an.x > 0.8 ? float3(0, 0, 1) : float3(1, 0, 0);
                 float3 tb = top ? float3(1, 0, 0) : float3(0, 1, 0);
                 float3 nf = cross(ta, tb);
                 nf *= dot(nf, no) < 0 ? -1 : 1;
