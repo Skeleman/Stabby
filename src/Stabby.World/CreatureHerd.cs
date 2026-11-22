@@ -12,20 +12,29 @@ namespace Stabby.World
     public interface IHerdGround
     {
         bool Blocked(float x, float z);
+        bool Crosses(float x0, float z0, float x1, float z1);
+    }
+
+    public interface IWetCells
+    {
+        bool WetCell(int cell);
     }
 
     public struct OpenGround : IHerdGround
     {
         public bool Blocked(float x, float z) => false;
+        public bool Crosses(float x0, float z0, float x1, float z1) => false;
     }
 
-    public struct WaterGround : IHerdGround
+    public struct WaterGround : IHerdGround, IWetCells
     {
         public byte[] Wet;
         public int Size;
         public float CellMeters;
 
+        public bool WetCell(int cell) => Wet[cell] != 0;
         public bool Blocked(float x, float z) => HerdMind.OffMap(Size, CellMeters, x, z, out int c) || Wet[c] != 0;
+        public bool Crosses(float x0, float z0, float x1, float z1) => HerdMind.CrossesWet(ref this, Size, CellMeters, x0, z0, x1, z1);
     }
 
     public struct HerdMind
@@ -52,6 +61,25 @@ namespace Stabby.World
             if (!(x >= cellMeters && z >= cellMeters && x < edge && z < edge)) return true;
             cell = (int)(z / cellMeters) * size + (int)(x / cellMeters);
             return false;
+        }
+
+        public static bool CrossesWet<T>(ref T cells, int size, float cellMeters, float x0, float z0, float x1, float z1) where T : struct, IWetCells
+        {
+            if (OffMap(size, cellMeters, x0, z0, out _) || OffMap(size, cellMeters, x1, z1, out _)) return true;
+            int cx = (int)(x0 / cellMeters), cz = (int)(z0 / cellMeters), ex = (int)(x1 / cellMeters), ez = (int)(z1 / cellMeters);
+            float dx = x1 - x0, dz = z1 - z0;
+            int sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+            float stepX = dx != 0 ? cellMeters / Math.Abs(dx) : float.MaxValue, stepZ = dz != 0 ? cellMeters / Math.Abs(dz) : float.MaxValue;
+            float tx = dx != 0 ? (sx > 0 ? (cx + 1) * cellMeters - x0 : x0 - cx * cellMeters) / Math.Abs(dx) : float.MaxValue;
+            float tz = dz != 0 ? (sz > 0 ? (cz + 1) * cellMeters - z0 : z0 - cz * cellMeters) / Math.Abs(dz) : float.MaxValue;
+            for (int guard = Math.Abs(ex - cx) + Math.Abs(ez - cz) + 2; guard > 0; guard--)
+            {
+                if (cx < 1 || cz < 1 || cx > size - 2 || cz > size - 2 || cells.WetCell(cz * size + cx)) return true;
+                if (cx == ex && cz == ez) return false;
+                if (tx < tz) { tx += stepX; cx += sx; }
+                else { tz += stepZ; cz += sz; }
+            }
+            return true;
         }
 
         public bool Step<T>(in CreatureWary w, float threat, float awayX, float awayZ, float x, float z, ref T ground, float dt) where T : struct, IHerdGround
@@ -101,7 +129,7 @@ namespace Stabby.World
         {
             float dx = (float)Math.Sin(heading) * look / Probes, dz = (float)Math.Cos(heading) * look / Probes;
             for (int p = 1; p <= Probes; p++)
-                if (ground.Blocked(x + dx * p, z + dz * p)) return p - 1;
+                if (ground.Crosses(x + dx * (p - 1), z + dz * (p - 1), x + dx * p, z + dz * p)) return p - 1;
             return Probes;
         }
 

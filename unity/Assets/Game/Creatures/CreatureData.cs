@@ -27,6 +27,8 @@ namespace Stabby.Game
         public float FadePx, ShadowPx, AnimPx, IkPx, LowPx;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
+        public BlobArray<float3> RestPos;
+        public BlobArray<quaternion> RestRot;
     }
 
     public struct CreatureRoot : IComponentData
@@ -55,7 +57,8 @@ namespace Stabby.Game
     public struct CreatureBrain : IComponentData
     {
         public float2 Home;
-        public float Timer, Turn;
+        public float2 Push;
+        public float Timer, Turn, Debt;
         public int Herd;
         public Random Random;
         public bool Walking;
@@ -82,20 +85,29 @@ namespace Stabby.Game
         public BlobArray<int> SiteStart;
         public BlobArray<CreatureSpawnRow> Spawns;
         public BlobArray<float2> Reach;
+        public BlobArray<float> Think, Length;
         public BlobArray<CreatureWary> Wary;
         public int Size;
         public float CellMeters;
         public BlobArray<byte> Wet;
     }
 
-    public struct CreatureGround : IHerdGround
+    public struct CreatureGround : IHerdGround, IWetCells
     {
         public BlobAssetReference<CreaturePlanData> Plan;
+
+        public bool WetCell(int cell) => Plan.Value.Wet[cell] != 0;
 
         public bool Blocked(float x, float z)
         {
             ref var p = ref Plan.Value;
             return HerdMind.OffMap(p.Size, p.CellMeters, x, z, out int c) || p.Wet[c] != 0;
+        }
+
+        public bool Crosses(float x0, float z0, float x1, float z1)
+        {
+            ref var p = ref Plan.Value;
+            return HerdMind.CrossesWet(ref this, p.Size, p.CellMeters, x0, z0, x1, z1);
         }
     }
 
@@ -103,7 +115,7 @@ namespace Stabby.Game
     {
         public HerdMind Mind;
         public int Body;
-        public bool Seen, Rehome;
+        public bool Rehome;
     }
 
     public struct CreatureFreeze : IComponentData { }
@@ -122,6 +134,39 @@ namespace Stabby.Game
     {
         public Entity Value;
         public float3 Scale;
+        public int Mesh;
+    }
+
+    public struct CreatureFur : IComponentData
+    {
+        public float4 Base, Accent, Dark;
+    }
+
+    public struct CreatureTally : IComponentData
+    {
+        public int Links, Groups;
+        public bool Instanced;
+    }
+
+    public struct CreatureGpu
+    {
+        public float4 R0, R1, R2, Fade;
+        public int Fur, Group, Pad0, Pad1;
+    }
+
+    public struct CreatureFrustum
+    {
+        public float4 P0, P1, P2, P3, P4, P5;
+        public bool On;
+
+        public bool Outside(float3 p, float r) =>
+            On && (math.dot(P0.xyz, p) + P0.w < -r || math.dot(P1.xyz, p) + P1.w < -r || math.dot(P2.xyz, p) + P2.w < -r ||
+                   math.dot(P3.xyz, p) + P3.w < -r || math.dot(P4.xyz, p) + P4.w < -r || math.dot(P5.xyz, p) + P5.w < -r);
+    }
+
+    public static class CreaturePath
+    {
+        public static readonly bool Instanced = System.Environment.GetEnvironmentVariable("STABBY_CREATURE_PATH") == "instanced";
     }
 
     [MaterialProperty("_FurBase")]

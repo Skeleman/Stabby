@@ -203,6 +203,7 @@ public class CreatureTests
     struct Shore : IHerdGround
     {
         public bool Blocked(float x, float z) => z > 30 || x < -200 || x > 200;
+        public bool Crosses(float x0, float z0, float x1, float z1) => Blocked(x0, z0) || Blocked(x1, z1);
     }
 
     [Fact]
@@ -227,5 +228,24 @@ public class CreatureTests
         Assert.True(run > 40);
         Assert.True(maxZ > 5);
         Assert.True(Math.Abs(x) > 20);
+    }
+
+    [Fact]
+    public void ClearHeadingsNeverCutAWetCorner()
+    {
+        const int n = 16;
+        const float cm = 11.25f, look = 26f;
+        var ground = new WaterGround { Wet = new byte[n * n], Size = n, CellMeters = cm };
+        for (int z = 8; z < n; z++)
+            for (int x = 8; x < n; x++) ground.Wet[z * n + x] = 1;
+        float hx = 7.9f * cm, hz = 8.2f * cm;
+        for (int k = 0; k < 720; k++)
+        {
+            float h = k * (float)Math.PI / 360f;
+            int clear = HerdMind.ClearRun(h, hx, hz, look, ref ground);
+            float reach = clear * look / HerdMind.Probes;
+            for (float d = 0.05f; d <= reach; d += 0.05f)
+                Assert.False(ground.Blocked(hx + (float)Math.Sin(h) * d, hz + (float)Math.Cos(h) * d), "heading " + h + " clear " + clear + " but wet at " + d + " m");
+        }
     }
 }

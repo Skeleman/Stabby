@@ -13,7 +13,7 @@ using Stabby.World;
 namespace Stabby.Game.Editor
 {
     [InitializeOnLoad]
-    public static class GameCapture
+    public static partial class GameCapture
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
         const double TimeoutSeconds = 480;
@@ -59,6 +59,13 @@ namespace Stabby.Game.Editor
             var game = new GameObject("Game").AddComponent<GameScene>();
             game.TerrainMaterial = mat;
             game.WaterMaterial = water;
+            var mist = AssetDatabase.LoadAssetAtPath<Material>("Assets/Viewer/Mist.mat");
+            if (mist == null)
+            {
+                mist = new Material(Shader.Find("Stabby/FallMist"));
+                AssetDatabase.CreateAsset(mist, "Assets/Viewer/Mist.mat");
+            }
+            game.MistMaterial = mist;
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
@@ -153,7 +160,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -274,6 +281,7 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
+            if (phase == 250) { if (job == null) job = CreatureBench(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 50)
             {
                 if (job == null) job = CliffTour(cam, dir);
@@ -990,6 +998,7 @@ namespace Stabby.Game.Editor
             mind = default;
             var handle = w.GetExistingSystem<CreatureHostSystem>();
             if (handle == SystemHandle.Null) return false;
+            w.EntityManager.CompleteAllTrackedJobs();
             ref var sys = ref w.Unmanaged.GetUnsafeSystemRef<CreatureHostSystem>(handle);
             if (!sys.Herds.IsCreated || !sys.Herds.TryGetValue(herd, out var h)) return false;
             mind = h.Mind;
@@ -2213,25 +2222,28 @@ namespace Stabby.Game.Editor
                     if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _))
                     {
                         falls++;
-                        float fh = f.Drop + 0.5f, fhalf = 0.5f * f.Width;
-                        int fr = Stabby.Viewer.WaterGeometry.CurtainRowsOf(fh), fc = Stabby.Viewer.WaterGeometry.CurtainColsOf(f.Width);
-                        verts += fr * fc;
-                        tris += 4 * (fr - 1) * (fc - 1);
-                        sw.Start();
-                        var off = Stabby.Viewer.WaterGeometry.CurtainOffsets(f, detail);
-                        sw.Stop();
-                        for (int j = 1; j < fr; j++)
+                        foreach (var part in Stabby.Viewer.WaterGeometry.Split(f))
                         {
-                            float u = j / (fr - 1f), y = u * u * fh, vy = f.LipY - y, free = Stabby.Viewer.WaterGeometry.FallThrowAt(y);
-                            for (int c = 0; c < fc; c++)
+                            float fh = part.Drop + 0.5f, fhalf = 0.5f * part.Width;
+                            int fr = Stabby.Viewer.WaterGeometry.CurtainRowsOf(fh), fc = Stabby.Viewer.WaterGeometry.CurtainColsOf(part.RunWidth);
+                            verts += fr * fc;
+                            tris += 4 * (fr - 1) * (fc - 1);
+                            sw.Start();
+                            var off = Stabby.Viewer.WaterGeometry.CurtainOffsets(part, detail);
+                            sw.Stop();
+                            for (int j = 1; j < fr; j++)
                             {
-                                float uc = 2f * c / (fc - 1) - 1, sc = uc * fhalf, ba = f.Bow * uc * uc, o = off[j * fc + c], x = f.LipX + f.DirZ * sc + f.DirX * ba, z = f.LipZ - f.DirX * sc + f.DirZ * ba;
-                                if (o > free + 0.01f) hugged++;
-                                if (vy < f.BaseY) continue;
-                                float g = detail.Sample(x + f.DirX * o, z + f.DirZ * o), gf = detail.Sample(x + f.DirX * free, z + f.DirZ * free);
-                                if (g > vy && g > f.LipY + 0.3f) tucked++;
-                                else if (g > vy) { buried++; depth += g - vy; depthMax = Mathf.Max(depthMax, g - vy); if (vy < f.BaseY + 1) nearFoot++; }
-                                if (gf > vy && gf <= f.LipY + 0.3f) { buriedFree++; depthFree += gf - vy; }
+                                float u = j / (fr - 1f), y = u * u * fh, vy = part.LipY - y, free = Stabby.Viewer.WaterGeometry.FallThrowAt(y);
+                                for (int c = 0; c < fc; c++)
+                                {
+                                    float uc = part.SideAt(c, fc), sc = uc * fhalf, ba = part.Bow * uc * uc, o = off[j * fc + c], x = part.LipX + part.DirZ * sc + part.DirX * ba, z = part.LipZ - part.DirX * sc + part.DirZ * ba;
+                                    if (o > free + 0.01f) hugged++;
+                                    if (vy < part.BaseY) continue;
+                                    float g = detail.Sample(x + part.DirX * o, z + part.DirZ * o), gf = detail.Sample(x + part.DirX * free, z + part.DirZ * free);
+                                    if (g > vy && g > part.LipY + 0.3f) tucked++;
+                                    else if (g > vy) { buried++; depth += g - vy; depthMax = Mathf.Max(depthMax, g - vy); if (vy < part.BaseY + 1) nearFoot++; }
+                                    if (gf > vy && gf <= part.LipY + 0.3f) { buriedFree++; depthFree += gf - vy; }
+                                }
                             }
                         }
                         bool better = near.x >= 0
@@ -2245,7 +2257,7 @@ namespace Stabby.Game.Editor
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, w = best.Width;
-            GameStatus.Lines["~falls"] = $"{(best.Bow > 0 ? "shelf" : "tallest")} fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)} x cols {Stabby.Viewer.WaterGeometry.CurtainColsOf(w)}; {falls} falls, curtain verts {verts}, tris {tris}, hugged {hugged}, above-water verts in face rock {buried} (free arc {buriedFree}), mean depth {depth / Mathf.Max(buried, 1):F2} m (free arc {depthFree / Mathf.Max(buriedFree, 1):F2} m), max {depthMax:F2} m, within 1 m of the pool {nearFoot}, edge verts tucked into banks above the lip {tucked}, offsets {sw.ElapsedMilliseconds} ms";
+            GameStatus.Lines["~falls"] = $"{(best.Bow > 0 ? "shelf" : "tallest")} fall of {(best.Runs == null ? 1 : best.Runs.Length / 2)} curtains at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)} x cols {Stabby.Viewer.WaterGeometry.CurtainColsOf(w)}; {falls} falls, curtain verts {verts}, tris {tris}, hugged {hugged}, above-water verts in face rock {buried} (free arc {buriedFree}), mean depth {depth / Mathf.Max(buried, 1):F2} m (free arc {depthFree / Mathf.Max(buriedFree, 1):F2} m), max {depthMax:F2} m, within 1 m of the pool {nearFoot}, edge verts tucked into banks above the lip {tucked}, offsets {sw.ElapsedMilliseconds} ms";
             var eyes = new[]
             {
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
@@ -2267,6 +2279,7 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, names[v]);
                 if (v == 0) GameStatus.Lines["~bench falls"] = Bench(cam, "falls close");
+                if (v == 0) GameStatus.Lines["~bench falls mist"] = BenchMist(cam, "falls close");
             }
         }
 
@@ -2371,6 +2384,23 @@ namespace Stabby.Game.Editor
                 sb.Append($" {h}p {b:F2}/{f:F2}");
             }
             if (GameStatus.Line("terrain", out var t)) sb.Append("; ").Append(t);
+            return sb.ToString();
+        }
+
+        static string BenchMist(Camera cam, string label)
+        {
+            var sb = new System.Text.StringBuilder($"bench {label} mist (ms, off/on):");
+            foreach (var (w, h) in new[] { (1920, 1080), (3840, 2160) })
+            {
+                var ms = new double[2];
+                for (int k = 0; k < 4; k++)
+                {
+                    Shader.SetGlobalFloat("_StabbyMistOff", (k & 1) == 0 ? 1 : 0);
+                    ms[k & 1] += BenchAt(cam, w, h) / 2;
+                }
+                Shader.SetGlobalFloat("_StabbyMistOff", 0);
+                sb.Append($" {h}p {ms[0]:F2}/{ms[1]:F2}");
+            }
             return sb.ToString();
         }
 

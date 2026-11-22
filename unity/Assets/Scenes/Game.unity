@@ -150,6 +150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Stabby.Game::Stabby.Game.GameScene
   TerrainMaterial: {fileID: 2100000, guid: eaf8394618144d0449d2b770e63b83f5, type: 2}
   WaterMaterial: {fileID: 2100000, guid: f02f0550e4c90d84cad9da6b669f840b, type: 2}
+  MistMaterial: {fileID: 2100000, guid: 3d68fdb43e415e7499175593000a0b59, type: 2}
 --- !u!4 &223439197
 Transform:
   m_ObjectHideFlags: 0
