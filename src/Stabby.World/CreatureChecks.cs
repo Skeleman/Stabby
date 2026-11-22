@@ -62,7 +62,49 @@ namespace Stabby.World
                 }
             }
             FleeStaysAshore(w, lib, a, e);
+            RoutesStayAshore(w, lib, a, e);
             return e;
+        }
+
+        public const float RouteStepSeconds = 2f;
+
+        static void RoutesStayAshore(GeneratedWorld w, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        {
+            var wet = new WorldWet { World = w };
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, reach = (HerdRoute.Cells + 1) * cm * 1.5f;
+            var done = new HashSet<int>();
+            int moving = 0;
+            foreach (var s in plan)
+            {
+                int herd = CreaturePlan.HerdOf(s.Id);
+                if (!done.Add(herd)) continue;
+                var r = s.Route;
+                if (r.Extent > 0) moving++;
+                var def = lib.Bodies[s.Body];
+                if (!(r.Speed > 0 && r.Speed <= def.WalkSpeed && r.Dwell >= HerdRoute.DwellMin && r.Dwell <= HerdRoute.DwellMax && r.Phase >= 0 && r.Phase < 1))
+                { e.Add("creature herd " + herd + " route speed, dwell or phase out of range"); continue; }
+                if (r.Extent > reach) e.Add("creature herd " + herd + " route reaches " + (int)r.Extent + " m from home");
+                for (int i = 0; i < HerdRoute.Points; i++)
+                {
+                    int j = (i + 1) % HerdRoute.Points;
+                    if (!CreaturePlan.Habitable(w, def, (int)(r.X(i) / cm), (int)(r.Z(i) / cm))) e.Add("creature herd " + herd + " route point " + i + " is not habitable");
+                    if ((r.X(i) != r.X(j) || r.Z(i) != r.Z(j)) && HerdMind.CrossesWet(ref wet, n, cm, r.X(i), r.Z(i), r.X(j), r.Z(j))) e.Add("creature herd " + herd + " route leg " + i + " crosses water");
+                }
+                float period = r.Period, limit = r.Speed * HerdRoute.PeakRatio * RouteStepSeconds * 1.01f + 1e-3f;
+                r.At(0, out float px, out float pz, out _);
+                for (double t = RouteStepSeconds; t <= 2 * period + RouteStepSeconds; t += RouteStepSeconds)
+                {
+                    r.At(t, out float x, out float z, out _);
+                    float dx = x - px, dz = z - pz;
+                    if (dx * dx + dz * dz > limit * limit) { e.Add("creature herd " + herd + " route jumps " + (float)Math.Sqrt(dx * dx + dz * dz) + " m at " + t + " s"); break; }
+                    px = x; pz = z;
+                }
+                r.At(1e6, out float ax, out float az, out _);
+                r.At(1e6 + period, out float bx, out float bz, out _);
+                if (Math.Abs(ax - bx) > 0.01f || Math.Abs(az - bz) > 0.01f) e.Add("creature herd " + herd + " route does not loop");
+            }
+            if (done.Count >= 4 && moving * 2 < done.Count) e.Add("only " + moving + " of " + done.Count + " creature herds have a grazing route");
         }
 
         public const int FleeDirections = 8;
@@ -100,6 +142,9 @@ namespace Stabby.World
 
         static bool Same(CreatureSpawn a, CreatureSpawn b) =>
             a.Id == b.Id && a.Body == b.Body && a.X == b.X && a.Z == b.Z && a.Heading == b.Heading
-            && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed && a.HerdSeed == b.HerdSeed;
+            && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed && a.HerdSeed == b.HerdSeed
+            && a.Route.X0 == b.Route.X0 && a.Route.Z0 == b.Route.Z0 && a.Route.X1 == b.Route.X1 && a.Route.Z1 == b.Route.Z1
+            && a.Route.X2 == b.Route.X2 && a.Route.Z2 == b.Route.Z2 && a.Route.X3 == b.Route.X3 && a.Route.Z3 == b.Route.Z3
+            && a.Route.Speed == b.Route.Speed && a.Route.Dwell == b.Route.Dwell && a.Route.Phase == b.Route.Phase;
     }
 }

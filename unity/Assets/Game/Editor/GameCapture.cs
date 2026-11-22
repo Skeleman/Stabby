@@ -19,6 +19,7 @@ namespace Stabby.Game.Editor
         const double TimeoutSeconds = 480;
         static int settle = -1, phase, wait, smooth, chaseWait, impStep;
         static readonly string only = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY");
+        static readonly string variantOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_VARIANT");
         static bool bank, lake;
         const float UndercutMaxR = 25f;
         static double playAt = -1;
@@ -111,7 +112,7 @@ namespace Stabby.Game.Editor
 
         static void PollBody()
         {
-            if (EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) > TimeoutSeconds)
+            if (EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) > (only == "creaturefar" ? 2 * TimeoutSeconds : TimeoutSeconds))
             {
                 Debug.LogError("GameCapture: timed out\n" + Status());
                 Finish(2);
@@ -160,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "spring" ? 270 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -242,6 +243,22 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            while (phase >= 260 && phase < 260 + RuinShots.Length)
+            {
+                string name = RuinShots[phase - 260];
+                if (wait == 0)
+                {
+                    if (!AimSite(cam, phase - 260, ObjectPart.Ruin, Structures.RuinU, RuinShots, "ruin", new Vector3(0.95f, 0.35f, 8f), 0f)) { GameStatus.Lines["~" + name] = "no ruin placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 261) GameStatus.Lines["~bench ruin"] = Bench(cam, "ruin mid");
+                wait = 0;
+                phase++;
+            }
             if (phase == 270)
             {
                 if (wait == 0)
@@ -260,7 +277,7 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "spring" && phase > 270) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length))
+            if ((only == "spring" && phase > 270) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -299,6 +316,7 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
+            if (phase == 280) { if (job == null) job = FarTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 250) { if (job == null) job = CreatureBench(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 50)
             {
@@ -308,6 +326,7 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
+            if (phase == 290) { if (job == null) job = FastWalkTour(cam); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 220)
             {
                 if (job == null) job = LandformTour(cam, dir);
@@ -1540,6 +1559,7 @@ namespace Stabby.Game.Editor
         static readonly string[] CampShots = { "camp-close", "camp-mid" };
         static readonly string[] HermitShots = { "hermit-close", "hermit-mid" };
         static readonly string[] ShrineShots = { "shrine-close", "shrine-mid" };
+        static readonly string[] RuinShots = { "ruin-close", "ruin-mid" };
         static readonly string[] SpringShots = { "spring-close", "spring" };
 
         static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite", new Vector3(0.7f, -0.7f, 4.5f), 0);
@@ -1554,7 +1574,7 @@ namespace Stabby.Game.Editor
                 float best = float.MaxValue;
                 foreach (var o in field.Discoveries())
                 {
-                    if (field.Library.Objects[o.Def].Parts[0].Shape != shape) continue;
+                    if (field.Library.Objects[o.Def].Parts[0].Shape != shape || (variantOnly == "niche" && !Structures.WaysideNiche(ObjectMeshes.Key(field.Library.Objects[o.Def].Id, 0, o.Variant))) || (variantOnly != null && variantOnly != "niche" && o.Variant.ToString() != variantOnly)) continue;
                     float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
                     if (score < best) { best = score; pick = o; }
                 }
@@ -1570,7 +1590,7 @@ namespace Stabby.Game.Editor
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~aim " + shots[mode]] = $"{label} variant {pick.Variant} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
+                GameStatus.Lines["~aim " + shots[mode]] = $"{label} variant {pick.Variant}{(shape == ObjectPart.Wayside && Structures.WaysideNiche(ObjectMeshes.Key(field.Library.Objects[pick.Def].Id, 0, pick.Variant)) ? " niche" : "")} size {pick.Size:F1} m at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}";
                 return true;
             }
             return false;

@@ -262,6 +262,11 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "shrine", "spacingM": 400, "chance": 0.8, "slopeMax": 0.5, "sizeMinM": 7, "sizeMaxM": 7.5, "sink": 0.002 }
     },
     {
+      "id": "ruin", "name": "Ruin", "kind": "structure", "color": "#7d786e", "variants": 6,
+      "parts": [ { "id": "site", "shape": "ruin" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "ruin", "spacingM": 900, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
+    },
+    {
       "id": "hot-spring", "name": "Hot spring", "kind": "structure", "color": "#d8d0bc", "variants": 8,
       "parts": [ { "id": "site", "shape": "hot-spring" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "spring", "spacingM": 3000, "chance": 0.7, "slopeMin": 0.04, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.15 }

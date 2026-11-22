@@ -142,4 +142,74 @@ namespace Stabby.World
             return heading + Math.Max(-maxStep, Math.Min(maxStep, d));
         }
     }
+
+    public struct HerdRoute
+    {
+        public const int Points = 4, Cells = 2;
+        public const float GrazeRatio = 0.25f, DwellMin = 20f, DwellMax = 60f, PeakRatio = 1.5f;
+
+        public float X0, Z0, X1, Z1, X2, Z2, X3, Z3, Speed, Dwell, Phase;
+
+        public float X(int i) => i == 0 ? X0 : i == 1 ? X1 : i == 2 ? X2 : X3;
+        public float Z(int i) => i == 0 ? Z0 : i == 1 ? Z1 : i == 2 ? Z2 : Z3;
+
+        public void Set(int i, float x, float z)
+        {
+            if (i == 0) { X0 = x; Z0 = z; }
+            else if (i == 1) { X1 = x; Z1 = z; }
+            else if (i == 2) { X2 = x; Z2 = z; }
+            else { X3 = x; Z3 = z; }
+        }
+
+        public float Leg(int i)
+        {
+            int j = (i + 1) % Points;
+            float dx = X(j) - X(i), dz = Z(j) - Z(i);
+            return (float)Math.Sqrt(dx * dx + dz * dz) / Speed;
+        }
+
+        public float Period => Leg(0) + Leg(1) + Leg(2) + Leg(3) + Points * Dwell;
+
+        public float Extent
+        {
+            get
+            {
+                float e = 0;
+                for (int i = 1; i < Points; i++) e = Math.Max(e, (float)Math.Sqrt((X(i) - X0) * (X(i) - X0) + (Z(i) - Z0) * (Z(i) - Z0)));
+                return e;
+            }
+        }
+
+        public void At(double t, out float x, out float z, out float heading)
+        {
+            if (!(Speed > 0)) { x = X0; z = Z0; heading = 0; return; }
+            double period = Period;
+            double u = (t + Phase * period) % period;
+            if (u < 0) u += period;
+            float r = (float)u;
+            for (int i = 0; i < Points; i++)
+            {
+                int j = (i + 1) % Points, back = (i + Points - 1) % Points;
+                if (r < Dwell)
+                {
+                    x = X(i); z = Z(i);
+                    heading = (float)Math.Atan2(X(i) - X(back), Z(i) - Z(back));
+                    return;
+                }
+                r -= Dwell;
+                float leg = Leg(i);
+                if (r < leg)
+                {
+                    float s = r / leg;
+                    s = s * s * (3 - 2 * s);
+                    x = X(i) + (X(j) - X(i)) * s; z = Z(i) + (Z(j) - Z(i)) * s;
+                    heading = (float)Math.Atan2(X(j) - X(i), Z(j) - Z(i));
+                    return;
+                }
+                r -= leg;
+            }
+            x = X0; z = Z0;
+            heading = (float)Math.Atan2(X0 - X3, Z0 - Z3);
+        }
+    }
 }

@@ -36,7 +36,7 @@ namespace Stabby.Game
         public BlobAssetReference<CreatureRig> Rig;
         public Entity Ghost;
         public float3 Position;
-        public float Heading, Pitch, Move, Alert, WalkSpeed, Phase, Clock, Sink;
+        public float Heading, Pitch, Move, Alert, WalkSpeed, Phase, Clock, Sink, Wake;
         public bool Visible, Shadow, High, HighOn, LowOn;
         public float4 Fade;
     }
@@ -56,7 +56,7 @@ namespace Stabby.Game
 
     public struct CreatureBrain : IComponentData
     {
-        public float2 Home;
+        public float2 Home, Offset;
         public float2 Push;
         public float Timer, Turn, Debt;
         public int Herd;
@@ -76,12 +76,13 @@ namespace Stabby.Game
         public float Heading, WalkSpeed;
         public ulong BodySeed, HerdSeed;
         public uint Seed;
+        public HerdRoute Route;
     }
 
     public struct CreaturePlanData
     {
         public int Across;
-        public float SiteMeters, Spread, MaxReach;
+        public float SiteMeters, Spread, MaxReach, RouteReach;
         public BlobArray<int> SiteStart;
         public BlobArray<CreatureSpawnRow> Spawns;
         public BlobArray<float2> Reach;
@@ -114,6 +115,8 @@ namespace Stabby.Game
     public struct CreatureHerd
     {
         public HerdMind Mind;
+        public HerdRoute Route;
+        public float2 Shift, Centre;
         public int Body;
         public bool Rehome;
     }
