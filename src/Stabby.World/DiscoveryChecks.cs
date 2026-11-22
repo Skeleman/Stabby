@@ -30,11 +30,12 @@ namespace Stabby.World
                     float dx = l.X * cm - s.X, dz = l.Y * cm - s.Z;
                     if (dx * dx + dz * dz < ObjectField.TownClearM * ObjectField.TownClearM) { e.Add(at + $" lies within {ObjectField.TownClearM:F0} m of a {l.Kind}"); return; }
                 }
+                if (def.Placement.Discovery == ObjectField.Camp && !(field.CampDraw(s.X, s.Z) > 0)) { e.Add(at + " is neither by a forest edge nor by a river"); return; }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);
                 for (int b = a + 1; b < found.Length; b++)
                 {
-                    float dx = found[b].X - s.X, dz = found[b].Z - s.Z;
-                    if (dx * dx + dz * dz < gap * gap) { e.Add(at + $" is closer than {gap:F0} m to another discovery"); return; }
+                    float dx = found[b].X - s.X, dz = found[b].Z - s.Z, g = found[b].Def == s.Def ? gap : ObjectField.DiscoveryGapM;
+                    if (dx * dx + dz * dz < g * g) { e.Add(at + $" is closer than {g:F0} m to {w.Objects.Objects[found[b].Def].Id} at {found[b].X:F0},{found[b].Z:F0}"); return; }
                 }
                 int cx = (int)(s.X / span), cz = (int)(s.Z / span), hits = 0;
                 for (int z = Math.Max(0, cz - 1); z <= Math.Min(across - 1, cz + 1); z++)

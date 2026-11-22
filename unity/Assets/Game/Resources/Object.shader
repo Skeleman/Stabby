@@ -389,6 +389,14 @@ Shader "Stabby/Object"
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.2);
                     grad = 0.12 * fib.yzw * ff + 0.04 * wv.yzw * fw;
                 }
+                else if (mat == 7)
+                {
+                    float dust = smoothstep(0.35, 0.95, 0.15 + 0.45 * n.y + 0.5 * big.x + 0.35 * mid.x * fm + 0.15 * fib.x * ff);
+                    a = lerp(ToLinear(float3(0.045, 0.042, 0.04)), ToLinear(float3(0.34, 0.33, 0.31)), dust) * (0.85 + 0.15 * fib.x * ff);
+                    float crack = smoothstep(0.9, 0.98, 1 - abs(str.x + 0.2 * mid.x)) * fs * (1 - dust);
+                    a = lerp(a, ToLinear(float3(0.32, 0.12, 0.05)), 0.6 * crack);
+                    grad = 0.08 * mid.yzw * fm + 0.1 * fib.yzw * ff + 0.05 * str.yzw * fs * (1 - dust);
+                }
                 else
                 {
                     float3 c0 = mat == 2 ? float3(0.45, 0.37, 0.27) : float3(0.33, 0.24, 0.16);
