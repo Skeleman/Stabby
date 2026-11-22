@@ -17,8 +17,8 @@ namespace Stabby.World
 
     public sealed class CreaturePartDef
     {
-        public const int Leg = 0, Neck = 1, Head = 2, Tail = 3, Ear = 4, Eye = 5;
-        public static readonly string[] RoleNames = { "leg", "neck", "head", "tail", "ear", "eye" };
+        public const int Leg = 0, Neck = 1, Head = 2, Tail = 3, Ear = 4, Eye = 5, Rigid = 6;
+        public static readonly string[] RoleNames = { "leg", "neck", "head", "tail", "ear", "eye", "rigid" };
 
         public string Id;
         public int Role;

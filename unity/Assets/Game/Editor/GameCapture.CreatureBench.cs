@@ -354,6 +354,12 @@ namespace Stabby.Game.Editor
             while (settle.MoveNext()) yield return null;
             Shot(cam, null, "warmup");
             Shot(cam, dir, "creature-species");
+            var boar = em.GetComponentData<CreatureState>(bench[0]).Position;
+            var close = new Vector3(boar.x - fwd.x * 3.2f, 0, boar.y - fwd.z * 3.2f);
+            close.y = math.max(GroundHeight(boar.x, boar.y), GroundHeight(close.x, close.z)) + 0.6f;
+            cam.transform.SetPositionAndRotation(close, Quaternion.LookRotation(new Vector3(boar.x, GroundHeight(boar.x, boar.y) + 0.4f, boar.y) - close));
+            yield return null;
+            Shot(cam, dir, "creature-boar-side");
             GameStatus.Lines["~species"] = $"species lineup {string.Join(", ", names)}: {CreatureBuildSystem.Count - baseCount} built";
             em.DestroyEntity(bench);
             bench.Dispose();
