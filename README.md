@@ -132,3 +132,6 @@ Batch run: `Unity -batchmode -projectPath unity -executeMethod
 Stabby.Game.Editor.GameCapture.Run [-stabbySpikes [ms]]` writes
 `out/unity/game/` (`stats.txt`, chase and overhead shots); `-stabbySpikes`
 lists the top profiler markers for every frame over `ms` (default 33).
+Playable build: `Unity -batchmode -projectPath unity -executeMethod
+Stabby.Game.Editor.BuildGame.Windows` writes `play/Stabby.exe` beside the repo,
+so it reads `content/` and `out/maps/` like the editor does.

@@ -13,3 +13,7 @@ unity/obj/
 unity/*.csproj
 unity/*.sln
 unity/*.slnx
+play/
+unity/Assets/Resources/BuildShaders/
+unity/Assets/Resources/BuildShaders.meta
+unity/Assets/Resources.meta
