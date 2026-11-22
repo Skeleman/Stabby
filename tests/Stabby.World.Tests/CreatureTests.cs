@@ -37,7 +37,7 @@ public class CreatureTests
         foreach (var b in data.RootElement.GetProperty("bodies").EnumerateArray())
         {
             Matches(body, b);
-            Matches(bp.GetProperty("colors"), b.GetProperty("colors"));
+            Matches(bp.GetProperty("materials"), b.GetProperty("materials"));
             Matches(bp.GetProperty("detail"), b.GetProperty("detail"));
             Matches(bp.GetProperty("wary"), b.GetProperty("wary"));
             foreach (var s in b.GetProperty("slots").EnumerateArray()) Matches(bp.GetProperty("slots").GetProperty("items"), s);
@@ -51,6 +51,7 @@ public class CreatureTests
         Assert.NotNull(deer);
         Assert.Contains("temperate-forest", deer!.Biomes);
         Assert.Equal(0x8c5e38u, deer.Base);
+        Assert.Equal(ContentLoader.LoadMaterials(Root).Find("fawn-hide")!.Color, deer.Base);
         Assert.Equal(2, deer.HerdMin);
         Assert.Equal(5, deer.HerdMax);
         Assert.Equal(CreaturePartDef.Leg, Lib.Part("hoof-hindleg")!.Role);
@@ -66,19 +67,20 @@ public class CreatureTests
     public void ValidateRejectsBrokenDefinitions()
     {
         const string json = """
-        { "schemaVersion": 1,
+        { "schemaVersion": 2,
           "parts": [ { "id": "leg", "role": "leg", "segments": [ { "length": 0.3, "radius": [0.05, 0.04] } ] } ],
           "bodies": [ { "id": "x", "name": "X", "biomes": ["nowhere"], "length": 0.1, "radius": 0.2, "hump": 0.7,
-            "colors": { "base": "#000000", "accent": "#ffffff", "dark": "#101010" },
+            "materials": { "base": "fawn-hide", "accent": "pale-fur", "dark": "no-such-fur" },
             "size": [1, 0.5], "walkSpeed": 1, "herd": [1, 20], "herdChance": 1.5,
             "detail": { "spawnPixels": 12, "fadePixels": 10, "shadowPixels": 20, "animPixels": 5, "ikPixels": 30, "lowPixels": 15 },
-            "wary": { "alertPixels": 20, "fleePixels": 15, "calmPixels": 10, "runSpeed": 0.5, "runStride": 1 },
+            "wary": { "alertPixels": 20, "fleePixels": 15, "calmPixels": 10, "runSpeed": 0.5, "runStride": 1, "dart": 90 },
             "slots": [ { "part": "tail", "socket": [0, 0, 0] }, { "part": "leg", "parent": "head", "socket": [0, 0] } ] } ] }
         """;
-        var ex = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json, BiomeIds, "test"));
-        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above", "maxSlope out of" })
+        var materials = ContentLoader.LoadMaterials(Root);
+        var ex = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json, BiomeIds, "test", materials));
+        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above", "maxSlope out of", "unknown material \"no-such-fur\"", "dart out of" })
             Assert.Contains(bit, ex.Message);
-        Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json.Replace("\"name\"", "\"nmae\""), BiomeIds, "test"));
+        Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json.Replace("\"name\"", "\"nmae\""), BiomeIds, "test", materials));
     }
 
     [Fact]
@@ -131,9 +133,45 @@ public class CreatureTests
         var plan = CreaturePlan.Build(PlanWorld, Lib);
         Assert.NotEmpty(plan);
         var deer = Lib.Body("deer")!;
-        foreach (var s in plan) Assert.Equal(CreatureBody.Assemble(deer, Lib, s.BodySeed).WalkSpeed, s.WalkSpeed);
+        foreach (var s in plan) Assert.Equal(CreatureBody.Assemble(Lib.Bodies[s.Body], Lib, s.BodySeed).WalkSpeed, s.WalkSpeed);
         Assert.True(CreaturePlan.DespawnReach(deer) > CreaturePlan.SpawnReach(deer));
         Assert.InRange(CreaturePlan.SpawnReach(deer), 150f, 400f);
+    }
+
+    [Theory]
+    [InlineData("deer")]
+    [InlineData("hare")]
+    [InlineData("boar")]
+    public void EachSpeciesLivesInItsBiomesBelowItsMaxSlope(string id)
+    {
+        var cells = new TerrainDetail(PlanWorld).Cells;
+        var plan = CreaturePlan.Build(PlanWorld, cells, Lib);
+        int body = Lib.Bodies.FindIndex(b => b.Id == id);
+        var def = Lib.Bodies[body];
+        var mine = plan.Where(s => s.Body == body).ToList();
+        Assert.NotEmpty(mine);
+        float cm = PlanWorld.Config.CellMeters, grade = Footing.Grade(def.MaxSlope);
+        foreach (var s in mine)
+        {
+            Assert.False(Footing.SteepAt(cells, s.X, s.Z, grade), id + " " + s.Id + " wakes on a slope");
+            Assert.True(CreaturePlan.Habitable(PlanWorld, cells, def, (int)(s.Route.X0 / cm), (int)(s.Route.Z0 / cm)), id + " " + s.Id + " home");
+        }
+        var herds = mine.GroupBy(s => CreaturePlan.HerdOf(s.Id)).Select(h => h.Count()).ToList();
+        Assert.All(herds, c => Assert.InRange(c, def.HerdMin, def.HerdMax));
+        Assert.Empty(CreatureLibrary.Validate(Lib, BiomeIds));
+    }
+
+    [Fact]
+    public void HareDartsAndFleesEarlyBoarStandsLonger()
+    {
+        var deer = CreaturePlan.Wary(Lib.Body("deer")!);
+        var hare = CreaturePlan.Wary(Lib.Body("hare")!);
+        var boar = CreaturePlan.Wary(Lib.Body("boar")!);
+        Assert.True(hare.Flee > deer.Flee && boar.Flee < deer.Flee);
+        Assert.True(hare.Dart > 0 && deer.Dart == 0 && boar.Dart == 0);
+        Assert.True(Lib.Body("hare")!.RunSpeed > Lib.Body("deer")!.RunSpeed);
+        Assert.True(Lib.Body("boar")!.HerdMax > Lib.Body("deer")!.HerdMax && Lib.Body("hare")!.HerdMax <= 2);
+        foreach (var b in Lib.Bodies) Assert.True(CreatureBody.Assemble(b, Lib, 3).Segments.Count <= CreatureBody.Assemble(Lib.Body("deer")!, Lib, 3).Segments.Count, b.Id);
     }
 
     [Fact]
@@ -148,7 +186,8 @@ public class CreatureTests
         Assert.NotEmpty(tight);
         Assert.True(tight.Count < loose.Count, tight.Count + " herd members at 8 degrees, " + loose.Count + " at the content limit");
         float grade = Footing.Grade(deer.MaxSlope), cm = PlanWorld.Config.CellMeters;
-        foreach (var s in tight)
+        int deerIndex = strict.Bodies.IndexOf(deer);
+        foreach (var s in tight.Where(s => s.Body == deerIndex))
         {
             Assert.False(Footing.SteepAt(cells, s.X, s.Z, grade), "creature " + s.Id + " wakes on a slope");
             for (int i = 0; i < HerdRoute.Points; i++)

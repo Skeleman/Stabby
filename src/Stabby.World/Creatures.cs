@@ -43,7 +43,7 @@ namespace Stabby.World
         public float SizeMin = 1, SizeMax = 1, WalkSpeed = 1, Jitter, MaxSlope = 30;
         public int HerdMin = 1, HerdMax = 1;
         public float HerdChance;
-        public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f;
+        public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f, Dart;
         public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f;
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
     }
@@ -115,6 +115,7 @@ namespace Stabby.World
                 if (!(b.MaxSlope >= 5 && b.MaxSlope <= 60)) errors.Add(b.Id + ": maxSlope out of 5..60 degrees");
                 if (!(b.RunSpeed > b.WalkSpeed)) errors.Add(b.Id + ": runSpeed must be above walkSpeed");
                 if (!(b.RunStride > 0)) errors.Add(b.Id + ": runStride must be positive");
+                if (!(b.Dart >= 0 && b.Dart <= 60)) errors.Add(b.Id + ": dart out of 0..60 degrees");
                 if (!(b.AlertPixels > 0 && b.FleePixels > b.AlertPixels)) errors.Add(b.Id + ": fleePixels must be above alertPixels");
                 if (!(b.CalmPixels <= b.AlertPixels * (1f - Detail.Hysteresis))) errors.Add(b.Id + ": calmPixels must clear alertPixels by the hysteresis");
                 if (!(b.CalmPixels > b.SpawnPixels)) errors.Add(b.Id + ": calmPixels must stay above spawnPixels");
@@ -355,7 +356,7 @@ namespace Stabby.World
             {
                 Alert = Detail.SimulationReach(def.Length, def.AlertPixels), Flee = Detail.SimulationReach(def.Length, def.FleePixels),
                 Calm = Detail.SimulationReach(def.Length, def.CalmPixels), RunRatio = def.RunSpeed / def.WalkSpeed,
-                Look = def.RunSpeed * HerdMind.LookSeconds,
+                Look = def.RunSpeed * HerdMind.LookSeconds, Dart = def.Dart * (float)(Math.PI / 180),
             };
 
         public static bool Wet(GeneratedWorld w, int i) => w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i];

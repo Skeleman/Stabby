@@ -5,7 +5,7 @@
   "required": ["schemaVersion", "parts", "bodies"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "parts": {
       "type": "array",
       "items": {
@@ -48,7 +48,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "biomes", "length", "radius", "colors", "size", "walkSpeed", "maxSlope", "herd", "herdChance", "detail", "wary", "slots"],
+        "required": ["id", "name", "biomes", "length", "radius", "materials", "size", "walkSpeed", "maxSlope", "herd", "herdChance", "detail", "wary", "slots"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "minLength": 1 },
@@ -61,14 +61,14 @@
           "haunch": { "type": "number", "minimum": 0, "maximum": 0.5 },
           "waist": { "type": "number", "minimum": 0, "maximum": 0.5 },
           "hump": { "type": "number", "minimum": 0, "maximum": 0.5 },
-          "colors": {
+          "materials": {
             "type": "object",
             "required": ["base", "accent", "dark"],
             "additionalProperties": false,
             "properties": {
-              "base": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-              "dark": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+              "base": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+              "accent": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+              "dark": { "type": "string", "pattern": "^[a-z][a-z-]*$" }
             }
           },
           "size": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 2, "maxItems": 2 },
@@ -99,7 +99,8 @@
               "fleePixels": { "type": "number", "exclusiveMinimum": 0 },
               "calmPixels": { "type": "number", "exclusiveMinimum": 0 },
               "runSpeed": { "type": "number", "exclusiveMinimum": 0, "maximum": 40 },
-              "runStride": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 }
+              "runStride": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+              "dart": { "type": "number", "minimum": 0, "maximum": 60 }
             }
           },
           "slots": {

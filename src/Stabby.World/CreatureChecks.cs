@@ -23,7 +23,11 @@ namespace Stabby.World
             foreach (var s in a)
             {
                 if (!ids.Add(s.Id)) e.Add("duplicate creature id " + s.Id);
-                if (Footing.SteepAt(cells, s.X, s.Z, Footing.Grade(lib.Bodies[s.Body].MaxSlope))) e.Add("creature " + s.Id + " wakes on ground steeper than its maxSlope");
+                var body = lib.Bodies[s.Body];
+                if (Footing.SteepAt(cells, s.X, s.Z, Footing.Grade(body.MaxSlope))) e.Add(body.Id + " " + s.Id + " wakes on ground steeper than its maxSlope");
+                int hx = (int)(s.Route.X0 / w.Config.CellMeters), hz = (int)(s.Route.Z0 / w.Config.CellMeters);
+                int home = Math.Max(0, Math.Min(w.Config.Size - 1, hz)) * w.Config.Size + Math.Max(0, Math.Min(w.Config.Size - 1, hx));
+                if (w.Biome == null || !body.Biomes.Contains(w.BiomeIds[w.Biome[home]])) e.Add(body.Id + " " + s.Id + " has its herd home outside its biomes");
                 int herd = CreaturePlan.HerdOf(s.Id);
                 if (herdSeeds.TryGetValue(herd, out ulong hs)) { if (hs != s.HerdSeed) e.Add("creature herd " + herd + " members disagree on herd seed"); }
                 else
