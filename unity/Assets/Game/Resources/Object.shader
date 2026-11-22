@@ -280,7 +280,7 @@ Shader "Stabby/Object"
             {
                 float3 an = abs(no);
                 bool top = no.y > 0.75;
-                float3 ta = top || (an.x > 0.8 && abs(po.x) > 0.4) ? float3(0, 0, 1) : float3(1, 0, 0);
+                float3 ta = top || an.x > 0.8 ? float3(0, 0, 1) : float3(1, 0, 0);
                 float3 tb = top ? float3(1, 0, 0) : float3(0, 1, 0);
                 float3 nf = cross(ta, tb);
                 nf *= dot(nf, no) < 0 ? -1 : 1;
@@ -343,8 +343,8 @@ Shader "Stabby/Object"
                     n1 = TmNoise2(float2(s1 * 55, sv * 2.75) + h1 * 17);
                     float3 n2 = TmNoise2(float2(s1 * 110, sv * 6.1) + h3 * 23 + 5.3);
                     float str2 = 0.6 * n1.x * fa + 0.4 * n2.x * fb;
-                    float hem = (0.025 + 0.05 * h3 + 0.02 * n2.x) * face;
-                    clip(d - hem * fa * (0.6 + 0.4 * n1.x) + 0.001);
+                    float hem = (0.025 + 0.05 * h3 + 0.02 * n2.x * fb) * face;
+                    clip(d - hem * fc * (0.6 + 0.4 * n1.x * fa) + 0.001);
                     float lip = smoothstep(L * 0.84 - 0.14, L * 0.84, d + 0.03 * n1.x + 0.02 * h1) * face;
                     float pn = TmNoise2(float2(su * 0.45, sv * 0.35) + 11.3).x;
                     float patch = smoothstep(0.45, 0.65, 0.55 * pn + 0.5 * h1 + 0.05) * (1 - 0.5 * ridge);
@@ -421,9 +421,12 @@ Shader "Stabby/Object"
                 tmRough = LookRough();
                 float3 gn = normalize(i.grain), qo = wp - i.origin, acr = cross(gn, n);
                 acr *= rsqrt(max(dot(acr, acr), 1e-8));
-                float yf = i.tone.w - i.seed, svq = dot(qo, gn), suq = dot(qo, acr);
-                float2 dyf = float2(ddx(yf), ddy(yf)), dsv = float2(ddx(svq), ddy(svq));
-                float4 th = float4(yf, clamp(dot(dsv, dyf) / max(dot(dyf, dyf), 1e-10), 0.05, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
+                float yf = i.tone.w - i.seed, suq = dot(qo, acr);
+                float2 dyf = float2(ddx(yf), ddy(yf));
+                float3 qa = ddx(qo), qb = ddy(qo);
+                float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
+                float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
+                float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.05, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
                 [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), occ);
                 else if (base.a < 0.5)
                 {
