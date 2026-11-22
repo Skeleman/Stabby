@@ -95,7 +95,7 @@ namespace Stabby.World
         public const float FallDepthFrac = 0.5f, FallDepthBaseM = 0.8f, FallDepthPerDrop = 0.15f;
         public static float PoolReach(float c, float r) => c + (1 + FallRimFrac) * r + Math.Max(FallRingMinM, FallRingFrac * r) + 1f;
         public const float FallRadiusNoise = 0.25f, FallBowlNoise = 0.2f, FallBowlWaveM = 1.7f, FallRimWaveFrac = 0.7f, FallRimWaveM = 3f, FallRimHeight = 0.35f, FallRimCap = 0.15f, FallTalusWaveM = 2.5f, FallLowFrac = 1.3f;
-        public const float FallTrimM = 0.1f, FallJagM = 0.6f, FallJagWaveM = 2.5f, FallRimFrac = 0.35f, FallRingMinM = 3f, FallRingFrac = 0.5f, FallLiftRise = 4f, FallBlendM = 1f, FallTalusFrac = 0.35f, FallSlumpFrac = 0.4f, FallClearM = 15f, FallOutletSlope = 1.2f, FallOutletFrac = 0.3f, FallOutletRise = 0.1f, FallFloorM = 0.02f;
+        public const float FallTrimM = 0.1f, FallJagM = 0.6f, FallJagWaveM = 2.5f, FallRimFrac = 0.35f, FallRingMinM = 3f, FallRingFrac = 0.5f, FallLiftRise = 4f, FallBlendM = 1f, FallTalusFrac = 0.35f, FallSlumpFrac = 0.4f, FallClearM = 15f, FallOutletSlope = 1.2f, FallOutletFrac = 0.3f, FallOutletRise = 0.1f, FallFloorM = 0.02f, ShelfPadM = 2f;
 
         static float AlongLip(RiverFall f, float x, float z) => (x - f.LipX) * f.DirX + (z - f.LipZ) * f.DirZ;
 
@@ -119,7 +119,7 @@ namespace Stabby.World
             int cut = hi - lo - 1;
             px.RemoveRange(lo + 1, cut); pz.RemoveRange(lo + 1, cut); ps.RemoveRange(lo + 1, cut); pw.RemoveRange(lo + 1, cut); pd.RemoveRange(lo + 1, cut);
             px.InsertRange(lo + 1, new[] { f.LipX, f.BaseX }); pz.InsertRange(lo + 1, new[] { f.LipZ, f.BaseZ });
-            ps.InsertRange(lo + 1, new[] { f.LipY, f.BaseY }); pw.InsertRange(lo + 1, new[] { Math.Max(w, f.ShelfHalf), w }); pd.InsertRange(lo + 1, new[] { depth, depth });
+            ps.InsertRange(lo + 1, new[] { f.LipY, f.BaseY }); pw.InsertRange(lo + 1, new[] { f.LipPts == null ? w : Math.Max(w, f.ShelfHalf + ShelfPadM), w }); pd.InsertRange(lo + 1, new[] { depth, depth });
             return lo + 1;
         }
 
