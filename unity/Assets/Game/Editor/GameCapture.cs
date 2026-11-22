@@ -224,7 +224,7 @@ namespace Stabby.Game.Editor
                 string name = ShrineShots[phase - 240];
                 if (wait == 0)
                 {
-                    if (!AimSite(cam, phase - 240, ObjectPart.Wayside, Structures.WaysideU, ShrineShots, "wayside shrine", new Vector3(0.95f, 0.3f, 4.5f), -1f)) { GameStatus.Lines["~" + name] = "no wayside shrine placed"; phase++; continue; }
+                    if (!AimSite(cam, phase - 240, ObjectPart.Wayside, Structures.WaysideU, ShrineShots, "wayside shrine", new Vector3(0.92f, 0.4f, 4.6f), -1f)) { GameStatus.Lines["~" + name] = "no wayside shrine placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }

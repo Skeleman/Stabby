@@ -34,57 +34,62 @@ namespace Stabby.World
             }
             else
             {
-                float jh = rng.Range(0.5f, 0.6f), lean = rng.Range(-0.02f, 0.02f);
-                shelf = 0.3f; width = 0.4f;
-                Box(l, key, f, 0, -0.1f, 0, 0.8f + rng.Range(-0.04f, 0.04f), 0.4f, 0.6f, Stone, GX, 0, 2);
+                float jh = rng.Range(0.52f, 0.62f);
+                shelf = 0.3f; width = 0.44f;
+                Yaw(ref rng, 0.08f, out float c, out float s);
+                Hewn(l, rng.NextU64(), f, 0, -0.2f, 0.02f, rng.Range(0.94f, 1.02f), 0.5f, 0.72f, c, s, 0, 1, 0.72f, 0, 0, 0.06f);
                 for (int sd = -1; sd <= 1; sd += 2)
-                    Box(l, key, f, sd * 0.3f, shelf, -0.05f, 0.18f, jh, 0.42f, Stone, GX, 0, 1, 1, 0, lean);
-                Box(l, key, f, 0, shelf, -0.21f, 0.44f, jh, 0.12f, Stone, GX, 0, 1);
-                Box(l, key, f, 0, shelf + jh, -0.05f, 0.86f, 0.14f, 0.5f, Stone, GX, 0, 1);
-                Box(l, key, f, 0, shelf + jh + 0.14f, -0.05f, 0.68f, 0.11f, 0.4f, Stone, GX, 0, 1);
-                Box(l, key, f, 0, shelf + jh + 0.25f, -0.05f, 0.4f, 0.1f, 0.26f, Stone, GX, 0, 1);
-                Box(l, key, f, 0, shelf, -0.05f, 0.8f, jh + 0.35f, 0.5f, Stone, GX, 2, 2);
-                Col(l, f, 0, 0, 0.45f, -0.1f, shelf + jh + 0.35f);
+                {
+                    Yaw(ref rng, 0.1f, out c, out s);
+                    Hewn(l, rng.NextU64(), f, sd * rng.Range(0.35f, 0.37f), shelf - 0.06f, -0.06f, rng.Range(0.24f, 0.28f), jh + 0.08f, rng.Range(0.46f, 0.5f), c, s, 0, 1, rng.Range(0.62f, 0.72f), rng.Range(-0.04f, 0.04f), 0, rng.Range(0.06f, 0.12f));
+                }
+                Hewn(l, rng.NextU64(), f, 0, shelf - 0.04f, -0.24f, 0.5f, jh + 0.04f, 0.2f, 1, 0, 0, 1, 0.7f);
+                Yaw(ref rng, 0.06f, out c, out s);
+                Hewn(l, rng.NextU64(), f, rng.Range(-0.03f, 0.03f), shelf + jh - 0.02f, -0.04f, rng.Range(1.02f, 1.1f), rng.Range(0.22f, 0.26f), 0.64f, c, s, 0, 1, 0.74f, rng.Range(-0.03f, 0.03f), 0, 0.05f);
+                Yaw(ref rng, 0.2f, out c, out s);
+                Hewn(l, rng.NextU64(), f, rng.Range(-0.05f, 0.05f), shelf + jh + 0.2f, -0.05f, rng.Range(0.56f, 0.66f), rng.Range(0.18f, 0.22f), 0.44f, c, s, 0, 1, 0.58f, 0, 0, 0.12f);
+                Hewn(l, rng.NextU64(), f, 0, -0.2f, -0.02f, 1.0f, shelf + jh + 0.6f, 0.66f, 1, 0, 2, 2, 0.7f, 0, 0, 0.1f);
+                Col(l, f, 0, 0, 0.5f, -0.2f, shelf + jh + 0.4f);
             }
-            Offerings(l, key, ref rng, f, shelf, width);
+            Offerings(l, key, ref rng, f, shelf - 0.01f, width);
         }
 
         static void Offerings(StructureLayout l, ulong key, ref Rng rng, in Frame f, float y, float width)
         {
-            float x = -0.5f * width + 0.04f, end = 0.5f * width - 0.04f;
+            float x = -0.5f * width + 0.02f, end = 0.5f * width - 0.02f;
             int first = -1, last = -1;
             while (true)
             {
                 int kind = rng.Range(0, 4);
                 Yaw(ref rng, 0.6f, out float c, out float s);
                 float z = rng.Range(-0.04f, 0.06f);
-                if (x + (kind == 0 ? 0.04f : kind == 1 ? 0.12f : 0.1f) > end) break;
+                if (x + (kind == 0 ? 0.12f : kind == 1 ? 0.17f : kind == 2 ? 0.15f : 0.12f) > end) break;
                 if (kind == 0)
                 {
-                    float h = rng.Range(0.07f, 0.13f);
-                    Box(l, key, f, x + 0.02f, y, z, 0.035f, h, 0.035f, Plaster, GV, 0, 0);
-                    x += 0.07f;
+                    Box(l, key, f, x + 0.03f, y, z, 0.055f, rng.Range(0.16f, 0.22f), 0.055f, Plaster, GV, 0, 1);
+                    Box(l, key, f, x + 0.09f, y, z + rng.Range(-0.03f, 0.03f), 0.05f, rng.Range(0.09f, 0.14f), 0.05f, Plaster, GV, 0, 1);
+                    x += 0.12f;
                 }
                 else if (kind == 1)
                 {
-                    Round(l, key, f, x + 0.06f, y, z, 0.12f, 0.04f, 0.12f, Plaster, GV, RoundDisc, 0, 0, c, s);
-                    x += 0.15f;
+                    Round(l, key, f, x + 0.085f, y, z, 0.17f, 0.06f, 0.17f, Plaster, GV, RoundDisc, 0, 1, c, s);
+                    x += 0.17f;
                 }
                 else if (kind == 2)
                 {
                     first = first < 0 ? l.Pieces.Count : first;
-                    Box(l, key, f, x + 0.05f, y, z, 0.1f, 0.06f, 0.08f, Cloth, GX, 0, 0, c, s);
+                    Box(l, key, f, x + 0.075f, y, z, 0.15f, 0.1f, 0.12f, Cloth, GX, 0, 1, c, s);
                     last = l.Pieces.Count;
-                    x += 0.13f;
+                    x += 0.15f;
                 }
                 else
                 {
-                    float sz = rng.Range(0.05f, 0.07f);
+                    float sz = rng.Range(0.09f, 0.11f);
                     for (int i = 0; i < 3; i++, sz *= 0.75f)
-                        Rock(l, rng.NextU64(), f, x + 0.04f, y + 0.035f * i * 1.4f, z, sz * 1.2f, 0.035f * (1 - 0.2f * i), sz, c, s, 0, 0);
-                    x += 0.1f;
+                        Rock(l, rng.NextU64(), f, x + 0.06f, y + 0.045f * i, z, sz * 1.2f, 0.055f * (1 - 0.2f * i), sz, c, s, 0, i == 0 ? 1 : 0);
+                    x += 0.12f;
                 }
-                x += rng.Range(0.01f, 0.04f);
+                x += rng.Range(0.01f, 0.03f);
             }
             ulong dye = Rng.Mix(key ^ 0x51ED270B2F7A4C3DUL);
             for (int i = first; i >= 0 && i < last; i++)
@@ -118,21 +123,40 @@ namespace Stabby.World
             for (int sd = -1; sd <= 1; sd += 2)
             {
                 Yaw(ref rng, 0.15f, out float c, out float s);
-                Box(l, key, f, sd * rng.Range(0.42f, 0.48f), -0.08f, 0, rng.Range(0.24f, 0.3f), 0.42f, rng.Range(0.3f, 0.36f), Stone, GX, 0, 2, c, s);
+                Hewn(l, rng.NextU64(), f, sd * rng.Range(0.42f, 0.48f), -0.3f, 0, rng.Range(0.26f, 0.32f), 0.66f, rng.Range(0.32f, 0.38f), c, s, 0, 2, rng.Range(0.58f, 0.68f), 0, 0, 0.1f);
             }
-            Box(l, key, f, rng.Range(-0.03f, 0.03f), 0.34f, 0, rng.Range(1.25f, 1.4f), 0.1f, rng.Range(0.38f, 0.44f), Stone, GX, 0, 2, 1, 0);
-            for (int sd = -1; sd <= 1; sd += 2) Col(l, f, sd * 0.4f, 0, 0.3f, 0, 0.44f);
+            Hewn(l, rng.NextU64(), f, rng.Range(-0.03f, 0.03f), 0.33f, 0, rng.Range(1.3f, 1.42f), 0.13f, rng.Range(0.4f, 0.46f), 1, 0, 0, 2, 0.82f, 0, 0, 0.04f);
+            for (int sd = -1; sd <= 1; sd += 2) Col(l, f, sd * 0.4f, 0, 0.3f, 0, 0.46f);
+        }
+
+        static void Hewn(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi, float q, float lean = 0, float batter = 0, float taper = 0)
+        {
+            int a = Math.Max(f.Lo, lo), b = Math.Min(f.Hi, hi);
+            if (a > b) return;
+            Add(l, key, f.X + f.U * (f.C * x - f.S * z), f.Y + f.U * y, f.Z + f.U * (f.S * x + f.C * z), f.U * sx, f.U * sy, f.U * sz, f.C * c - f.S * s, f.S * c + f.C * s, a, b, q, lean, batter, taper);
+        }
+
+        public const float SeatFootM = 0.45f;
+
+        public static void WaysideSeat(ulong key, out float x, out float z, out float c, out float s)
+        {
+            var rng = Rng.Stream(key, "wayside-seat");
+            float sd = rng.NextFloat() < 0.5f ? -1 : 1;
+            x = sd * rng.Range(1.5f, 1.75f);
+            z = rng.Range(-0.8f, -0.4f);
+            Yaw(ref rng, 0.1f, out c, out s);
         }
 
         static void Wayside(StructureLayout l, ulong key, in Frame f)
         {
             var rng = Rng.Stream(key, "wayside");
             Yaw(ref rng, 0.06f, out float c, out float s);
-            float ox = rng.Range(-0.2f, 0.2f), sd = rng.NextFloat() < 0.5f ? -1 : 1;
+            float ox = rng.Range(-0.2f, 0.2f);
             RoadShrine(l, rng.NextU64(), f.Child(ox, 0, -1.0f, c, s));
 
-            Yaw(ref rng, 0.1f, out c, out s);
-            var seat = f.Child(sd * rng.Range(1.5f, 1.75f), 0, rng.Range(-0.8f, -0.4f), c, s);
+            WaysideSeat(key, out float wx, out float wz, out c, out s);
+            float sd = wx < 0 ? -1 : 1;
+            var seat = f.Child(wx, 0, wz, c, s);
             if (rng.NextFloat() < 0.5f) Bench(l, rng.NextU64(), seat);
             else StoneSeat(l, key, ref rng, seat);
 
@@ -145,7 +169,7 @@ namespace Stabby.World
             {
                 float sz = rng.Range(0.32f, 0.46f);
                 int d = rng.Range(0, 16);
-                Rock(l, rng.NextU64(), f, ox + rng.Range(-0.12f, 0.12f), -0.08f, pz, sz * rng.Range(1.0f, 1.3f), 0.12f, sz, Cos16(d), Sin16(d), 0, 1);
+                Rock(l, rng.NextU64(), f, ox + rng.Range(-0.12f, 0.12f), -0.02f, pz, sz * rng.Range(1.0f, 1.3f), 0.12f, sz, Cos16(d), Sin16(d), 0, 1);
             }
 
             int stacks = rng.Range(1, 4);

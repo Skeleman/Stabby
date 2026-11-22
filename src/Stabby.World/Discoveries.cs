@@ -10,7 +10,7 @@ namespace Stabby.World
         public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f;
-        public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f;
+        public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatM = 0.1f;
         public const int DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
@@ -108,8 +108,22 @@ namespace Stabby.World
             float fit = Fitness(lib.Objects[d].Placement.Discovery, px, pz);
             if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
             o.Variant = variant;
-            if (!ClearOfBuilt(o)) return false;
+            if (!ClearOfBuilt(o) || lib.Objects[d].Placement.Discovery == Shrine && !SeatGrounded(o)) return false;
             best = fit; pick = o;
+            return true;
+        }
+
+        public bool SeatGrounded(ObjectInstance o)
+        {
+            var def = lib.Objects[o.Def];
+            Structures.WaysideSeat(ObjectMeshes.Key(def.Id, 0, o.Variant), out float x, out float z, out float c, out float s);
+            float u = Structures.WaysideU * o.Size, foot = o.Y + def.Placement.Sink * o.Size;
+            for (int e = -1; e <= 1; e++)
+            {
+                Rotate(o, (x + e * Structures.SeatFootM * c) * u, 0, (z + e * Structures.SeatFootM * s) * u, out float rx, out _, out float rz);
+                float g = GroundAt(detail, cm, o.X + rx, o.Z + rz) - foot;
+                if (g > ShrineSeatM || g < -0.4f * ShrineSeatM) return false;
+            }
             return true;
         }
 
