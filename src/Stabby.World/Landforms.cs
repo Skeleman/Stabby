@@ -6,9 +6,9 @@ namespace Stabby.World
     public static class Landforms
     {
         public const float TorChance = 0.45f, HoodooChance = 0.55f;
-        public const float TorMinR = 18.5f, TorMaxR = 22f, TorShrink = 0.1f, TorStack = 0.7f, TorSink = 0.25f, TorSideGap = 1.5f;
-        public const float HoodooMinR = 14.5f, HoodooMaxR = 17f, HoodooMinRise = 3f, HoodooMaxRise = 4.5f, HoodooCap = 1.35f, HoodooSpread = 3.5f, HoodooGap = 2.4f;
-        public const int TorBlocks = 3, HoodooCount = 5;
+        public const float TorMinR = 14f, TorMaxR = 18f, TorRound = 0.22f, TorWide = 0.62f, TorCore = 0.1f, TorShrink = 0.16f, TorShift = 0.18f, TorTurn = 0.25f, TorFuse = 0.35f, TorSink = 0.3f, TorJoint = 0.12f;
+        public const float HoodooMinR = 6f, HoodooMaxR = 7.5f, HoodooMinRise = 8f, HoodooMaxRise = 14f, HoodooMinPinch = 0.2f, HoodooMaxPinch = 0.38f, HoodooCap = 1.15f, HoodooSpread = 5f, HoodooGap = 2.8f;
+        public const int TorLayers = 5, HoodooCount = 6;
         public const float MaxRiseM = 110f;
         public static readonly string[] TorBiomes = { "tundra", "boreal", "shrubland", "alpine" };
         public static readonly string[] HoodooBiomes = { "desert", "steppe" };
@@ -51,7 +51,7 @@ namespace Stabby.World
 
         public static int TorSite(GeneratedWorld w, StrataField strata, bool[] biomes, int tx, int ty)
         {
-            int n = w.Config.Size, pad = Pad(w, (1 + TorSideGap) * TorMaxR), best = -1, t = Features.TileCells;
+            int n = w.Config.Size, pad = Pad(w, (1.5f + TorJoint) * TorMaxR), best = -1, t = Features.TileCells;
             float score = float.MinValue;
             for (int y = ty * t + pad; y < (ty + 1) * t - pad; y++)
                 for (int x = tx * t + pad; x < (tx + 1) * t - pad; x++)
@@ -69,7 +69,7 @@ namespace Stabby.World
 
         public static int HoodooSite(GeneratedWorld w, StrataField strata, bool[] biomes, int tx, int ty)
         {
-            int n = w.Config.Size, pad = Pad(w, HoodooSpread * HoodooMaxR + HoodooCap * HoodooMaxR), best = -1, t = Features.TileCells;
+            int n = w.Config.Size, pad = Pad(w, (HoodooSpread + 1.5f * HoodooCap) * HoodooMaxR), best = -1, t = Features.TileCells;
             float score = float.MinValue, rise = 0.5f * (HoodooMinRise + HoodooMaxRise) * HoodooMaxR;
             int reach = Math.Max(1, (int)Math.Ceiling(HoodooSpread * HoodooMaxR / w.Config.CellMeters));
             for (int y = ty * t + pad; y < (ty + 1) * t - pad; y++)
@@ -100,43 +100,44 @@ namespace Stabby.World
 
         public static void Tor(GeneratedWorld w, TerrainDetail detail, StrataField strata, bool[] biomes, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
-            float roll = r.NextFloat(), r0 = r.Range(TorMinR, TorMaxR), sideRoll = r.NextFloat(), sx = r.Range(-1f, 1f), sz = r.Range(-1f, 1f);
-            var ax = new float[TorBlocks + 2];
-            var az = new float[TorBlocks + 2];
-            var ox = new float[TorBlocks + 2];
-            var oz = new float[TorBlocks + 2];
-            for (int k = 0; k < ax.Length; k++) { ax[k] = r.Range(-1f, 1f); az[k] = r.Range(-1f, 1f); ox[k] = r.Range(-0.2f, 0.2f); oz[k] = r.Range(-0.2f, 0.2f); }
+            float roll = r.NextFloat(), r0 = r.Range(TorMinR, TorMaxR), layerRoll = r.NextFloat(), splitRoll = r.NextFloat(), dx = r.Range(-1f, 1f), dz = r.Range(-1f, 1f);
+            var shift = new float[TorLayers * 4];
+            for (int k = 0; k < shift.Length; k++) shift[k] = r.Range(-1f, 1f);
             if (roll >= TorChance) return;
             int site = TorSite(w, strata, biomes, tx, ty);
             if (site < 0) return;
-            int n = w.Config.Size;
-            float cm = w.Config.CellMeters;
-            Unit(ref sx, ref sz);
-            int blocks = 2 + (sideRoll < 0.6f ? 1 : 0);
-            Stack(detail, cm, site % n, site / n, r0, blocks, ax, az, ox, oz, 0, output);
-            if (sideRoll < 0.5f) Stack(detail, cm, site % n + sx * TorSideGap * r0 / cm, site / n + sz * TorSideGap * r0 / cm, r0 * 0.85f, 2, ax, az, ox, oz, TorBlocks, output);
-        }
-
-        static void Stack(TerrainDetail detail, float cm, float cx, float cz, float r0, int blocks, float[] ax, float[] az, float[] ox, float[] oz, int at, List<FeatureEdit> output)
-        {
-            float foot = Foot(detail, cx, cz, r0, cm), y = foot + TorSink * r0, last = 0, px = cx * cm, pz = cz * cm;
-            for (int k = 0; k < blocks; k++)
+            int n = w.Config.Size, layers = 3 + (int)(layerRoll * (TorLayers - 2));
+            float cm = w.Config.CellMeters, cx = site % n, cz = site / n;
+            Unit(ref dx, ref dz);
+            float foot = Foot(detail, cx, cz, r0, cm), px = cx * cm, pz = cz * cm, y = foot, last = 0f;
+            for (int k = 0; k < layers; k++)
             {
-                float rk = r0 * (1 - TorShrink * k);
-                if (k > 0) { y += TorStack * (last + rk); px += ox[at + k] * rk; pz += oz[at + k] * rk; }
-                float dx = ax[at + k], dz = az[at + k];
-                Unit(ref dx, ref dz);
-                float half = 0.9f * rk;
-                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Tor, R = rk, Ax = px - dx * half, Ay = y, Az = pz - dz * half, Bx = px + dx * half, By = y, Bz = pz + dz * half });
-                last = rk;
+                float size = r0 * (1f - TorShrink * k) * (1f + 0.08f * shift[k * 4 + 3]);
+                float round = TorRound * size, len = size - round, wide = TorWide * size - round, core = TorCore * size, half = round + core;
+                y = k == 0 ? foot + half - TorSink * 2f * half : y + last + half - TorFuse * round;
+                if (k > 0) { px += shift[k * 4] * TorShift * size; pz += shift[k * 4 + 1] * TorShift * size; }
+                float ux = dx - dz * TorTurn * shift[k * 4 + 2], uz = dz + dx * TorTurn * shift[k * 4 + 2];
+                Unit(ref ux, ref uz);
+                bool split = k == 0 && splitRoll < 0.6f || k == 1 && splitRoll < 0.25f && layers < TorLayers;
+                if (split)
+                {
+                    float joint = TorJoint * size, piece = 0.5f * (len - joint), off = 0.5f * (len + joint) + 0.5f * round;
+                    Slab(output, round, wide, core, px - ux * off, y, pz - uz * off, ux, uz, piece);
+                    Slab(output, round, wide * (0.85f + 0.1f * shift[k * 4 + 3]), core, px + ux * off, y + 0.15f * core * shift[k * 4], pz + uz * off, ux, uz, piece);
+                }
+                else Slab(output, round, wide, core, px, y, pz, ux, uz, len);
+                last = half;
             }
         }
+
+        static void Slab(List<FeatureEdit> output, float round, float wide, float core, float x, float y, float z, float ux, float uz, float len)
+            => output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Tor, R = round, W = Math.Max(wide, 0.01f), H = core, Ax = x - ux * len, Ay = y, Az = z - uz * len, Bx = x + ux * len, By = y, Bz = z + uz * len });
 
         public static void Hoodoo(GeneratedWorld w, TerrainDetail detail, StrataField strata, bool[] biomes, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
             float roll = r.NextFloat();
             int count = 3 + (int)(r.NextFloat() * (HoodooCount - 2));
-            var pick = new float[HoodooCount * 6];
+            var pick = new float[HoodooCount * 8];
             for (int k = 0; k < pick.Length; k++) pick[k] = r.Range(-1f, 1f);
             if (roll >= HoodooChance) return;
             int site = HoodooSite(w, strata, biomes, tx, ty);
@@ -146,24 +147,27 @@ namespace Stabby.World
             int start = output.Count;
             for (int q = 0; q < Math.Min(count, HoodooCount); q++)
             {
-                float u = 0.5f + 0.5f * pick[q * 6 + 2], v = 0.5f + 0.5f * pick[q * 6 + 3];
-                float rad = HoodooMinR + (HoodooMaxR - HoodooMinR) * u, cap = HoodooCap * rad;
-                float rise = (HoodooMinRise + (HoodooMaxRise - HoodooMinRise) * v) * rad;
+                int o = q * 8;
+                float u = 0.5f + 0.5f * pick[o + 2], v = 0.5f + 0.5f * pick[o + 3], f = 0.5f + 0.5f * pick[o + 6];
+                float rad = HoodooMinR + (HoodooMaxR - HoodooMinR) * u;
+                float rise = Math.Min((HoodooMinRise + (HoodooMaxRise - HoodooMinRise) * v) * rad, MaxRiseM - rad);
                 float spread = q == 0 ? 0f : HoodooSpread * HoodooMaxR / cm;
-                float cx = bx + pick[q * 6] * spread, cz = bz + pick[q * 6 + 1] * spread;
+                float cx = bx + pick[o] * spread, cz = bz + pick[o + 1] * spread;
                 bool clear = true;
                 for (int p = start; p < output.Count && clear; p += 2)
                 {
-                    float gx = output[p].Ax - cx * cm, gz = output[p].Az - cz * cm, gap = HoodooGap * Math.Max(cap, output[p + 1].R);
+                    float gx = output[p].Ax - cx * cm, gz = output[p].Az - cz * cm, gap = HoodooGap * Math.Max(rad, output[p].R);
                     clear = gx * gx + gz * gz >= gap * gap;
                 }
                 if (!clear) continue;
-                float foot = Foot(detail, cx, cz, rad, cm), top = foot + rise;
-                float dx = pick[q * 6 + 4], dz = pick[q * 6 + 5];
+                float pinch = HoodooMinPinch + (HoodooMaxPinch - HoodooMinPinch) * f, neck = 0.72f + 0.12f * pick[o + 7];
+                float round = 0.35f * rad, core = 0.15f * rad, wide = HoodooCap * rad * (1f - pinch) + 0.15f * rad - round, len = wide + 0.1f * rad;
+                float foot = Foot(detail, cx, cz, rad, cm), top = foot + rise, mid = top - round - core;
+                float dx = pick[o + 4], dz = pick[o + 5];
                 Unit(ref dx, ref dz);
-                float x = cx * cm, z = cz * cm, half = 0.5f * cap;
-                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Hoodoo, R = rad, Ax = x, Ay = foot - 0.5f * rad, Az = z, Bx = x, By = top - 0.6f * cap, Bz = z });
-                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Hoodoo, R = cap, Ax = x - dx * half, Ay = top - 0.4f * cap, Az = z - dz * half, Bx = x + dx * half, By = top - 0.4f * cap, Bz = z + dz * half });
+                float x = cx * cm, z = cz * cm;
+                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Hoodoo, R = rad, P = pinch, T = neck, Ax = x, Ay = foot - 0.5f * rad, Az = z, Bx = x, By = mid - 0.6f * rad, Bz = z });
+                output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Hoodoo, R = round, W = wide, H = core, Ax = x - dx * len, Ay = mid, Az = z - dz * len, Bx = x + dx * len, By = mid, Bz = z + dz * len });
             }
         }
     }

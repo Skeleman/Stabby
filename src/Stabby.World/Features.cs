@@ -15,7 +15,7 @@ namespace Stabby.World
         public bool MeshedIn(float stepM, float x0, float z0, float x1, float z1)
         {
             var e = AtStep(stepM);
-            return e.R >= MinMeshSteps * stepM && e.MaxX > x0 && e.MinX < x1 && e.MaxZ > z0 && e.MinZ < z1;
+            return e.Thick >= MinMeshSteps * stepM && e.MaxX > x0 && e.MinX < x1 && e.MaxZ > z0 && e.MinZ < z1;
         }
 
         public FeatureEdit AtStep(float stepM)
@@ -31,13 +31,16 @@ namespace Stabby.World
 
         public int Kind, Shape;
         public float Ax, Ay, Az, Bx, By, Bz, R;
+        public float W, H, P, T;
 
-        public float MinX => Math.Min(Ax, Bx) - R;
-        public float MaxX => Math.Max(Ax, Bx) + R;
-        public float MinY => Math.Min(Ay, By) - R;
-        public float MaxY => Math.Max(Ay, By) + R;
-        public float MinZ => Math.Min(Az, Bz) - R;
-        public float MaxZ => Math.Max(Az, Bz) + R;
+        public float Thick => R + Math.Min(W, H);
+
+        public float MinX => Math.Min(Ax, Bx) - R - W;
+        public float MaxX => Math.Max(Ax, Bx) + R + W;
+        public float MinY => Math.Min(Ay, By) - R - H;
+        public float MaxY => Math.Max(Ay, By) + R + H;
+        public float MinZ => Math.Min(Az, Bz) - R - W;
+        public float MaxZ => Math.Max(Az, Bz) + R + W;
 
         public bool Contains(float x, float y, float z) => x >= MinX && x <= MaxX && y >= MinY && y <= MaxY && z >= MinZ && z <= MaxZ;
 
@@ -51,12 +54,48 @@ namespace Stabby.World
         {
             dist = R;
             if (!Contains(x, y, z)) return false;
+            if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
             dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+            if (P > 0f) dist += R * P * Pinch(t);
             return dist < R;
+        }
+
+        float Pinch(float t)
+        {
+            float span = Math.Max(T, 1f - T), u = (t - T) / span;
+            return Math.Max(0f, 1f - u * u);
+        }
+
+        bool Slab(float x, float y, float z, out float dist)
+        {
+            float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+            float ux = len > 0 ? ex / len : 1f, uz = len > 0 ? ez / len : 0f;
+            float px = x - 0.5f * (Ax + Bx), pz = z - 0.5f * (Az + Bz);
+            float a = Math.Max(Math.Abs(px * ux + pz * uz) - 0.5f * len, 0f);
+            float b = Math.Max(Math.Abs(pz * ux - px * uz) - W, 0f);
+            float c = Math.Max(Math.Abs(y - 0.5f * (Ay + By)) - H, 0f);
+            dist = (float)Math.Sqrt(a * a + b * b + c * c);
+            return dist < R;
+        }
+
+        public bool Under(float x, float z)
+        {
+            if (W > 0f)
+            {
+                float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                float ux = len > 0 ? ex / len : 1f, uz = len > 0 ? ez / len : 0f;
+                float px = x - 0.5f * (Ax + Bx), pz = z - 0.5f * (Az + Bz);
+                float a = Math.Max(Math.Abs(px * ux + pz * uz) - 0.5f * len, 0f), b = Math.Max(Math.Abs(pz * ux - px * uz) - W, 0f);
+                return a * a + b * b <= R * R;
+            }
+            float fx = Bx - Ax, fz = Bz - Az, ll = fx * fx + fz * fz, qx0 = x - Ax, qz0 = z - Az;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (qx0 * fx + qz0 * fz) / ll)) : 0f;
+            float qx = qx0 - t * fx, qz = qz0 - t * fz;
+            return qx * qx + qz * qz <= R * R;
         }
 
         public float Hole(float dist) => dist - (R - 1.25f * R * Blend);

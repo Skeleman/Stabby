@@ -583,15 +583,9 @@ namespace Stabby.World
                 if (k > Landforms.TileBudget) { e.Add($"{at} pushes its tile past {Landforms.TileBudget} landform edits"); return; }
                 int i0 = Math.Max(0, (int)Math.Floor(x.MinX / cm)), i1 = Math.Min(n - 1, (int)Math.Ceiling(x.MaxX / cm));
                 int j0 = Math.Max(0, (int)Math.Floor(x.MinZ / cm)), j1 = Math.Min(n - 1, (int)Math.Ceiling(x.MaxZ / cm));
-                float ex = x.Bx - x.Ax, ez = x.Bz - x.Az, ll = ex * ex + ez * ez;
                 for (int j = j0; j <= j1; j++)
                     for (int i = i0; i <= i1; i++)
-                    {
-                        float px = i * cm - x.Ax, pz = j * cm - x.Az;
-                        float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + pz * ez) / ll)) : 0f;
-                        float qx = px - t * ex, qz = pz - t * ez;
-                        if (qx * qx + qz * qz <= x.R * x.R && !Features.Dry(w, j * n + i)) { e.Add(at + " stands in water"); return; }
-                    }
+                        if (x.Under(i * cm, j * cm) && !Features.Dry(w, j * n + i)) { e.Add(at + " stands in water"); return; }
                 foreach (var y in edits)
                     if (!Landforms.Of(y.Shape) && y.Shape != FeatureEdit.Boulder && Features.TileOf(y, cm) == tile
                         && x.MinX < y.MaxX && x.MaxX > y.MinX && x.MinY < y.MaxY && x.MaxY > y.MinY && x.MinZ < y.MaxZ && x.MaxZ > y.MinZ) { e.Add(at + " overlaps a terrain feature"); return; }

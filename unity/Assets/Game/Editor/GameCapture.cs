@@ -1193,7 +1193,7 @@ namespace Stabby.Game.Editor
                     var e = g.Edits[j];
                     if (e.Shape != shape || Mathf.Abs(e.Ax - g.Edits[best].Ax) >= 60 || Mathf.Abs(e.Az - g.Edits[best].Az) >= 60) continue;
                     c += new Vector3((e.Ax + e.Bx) * 0.5f, (e.Ay + e.By) * 0.5f, (e.Az + e.Bz) * 0.5f);
-                    if (Mathf.Max(e.Ay, e.By) + e.R > top.y) top = new Vector3(e.Ax, Mathf.Max(e.Ay, e.By) + e.R, e.Az);
+                    if (e.MaxY > top.y) top = new Vector3(e.Ax, e.MaxY, e.Az);
                     n++;
                 }
                 c /= n;
