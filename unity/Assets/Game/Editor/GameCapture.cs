@@ -1227,15 +1227,19 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 GameStatus.Lines["~" + name] = $"{name} from {eye.x:F0},{eye.y:F0},{eye.z:F0} at {target.x:F0},{target.y:F0},{target.z:F0}";
+                if (name == "landform-basalt") GameStatus.Lines["~bench basalt"] = Bench(cam, "basalt near");
             }
         }
 
         static System.Collections.Generic.List<(string name, Vector3 eye, Vector3 target)> LandformShots(Ground ground)
         {
             var shots = new System.Collections.Generic.List<(string name, Vector3 eye, Vector3 target)>();
-            for (int s = 0; s < 2; s++)
+            int[] shapes = { FeatureEdit.Tor, FeatureEdit.Hoodoo, FeatureEdit.Butte, FeatureEdit.Basalt };
+            string[] kinds = { "tor", "hoodoo", "butte", "basalt" }, names = { "landform-tor", "landform-hoodoos", "landform-butte", "landform-basalt" };
+            float[] backs = { 55f, 80f, 170f, 42f }, fars = { 420f, 420f, 700f, 420f };
+            for (int s = 0; s < shapes.Length; s++)
             {
-                int shape = s == 0 ? FeatureEdit.Tor : FeatureEdit.Hoodoo, count = 0, best = -1, bestNear = 0;
+                int shape = shapes[s], count = 0, best = -1, bestNear = 0;
                 ref var g = ref ground.Blob.Value;
                 for (int k = 0; k < g.Edits.Length; k++)
                 {
@@ -1244,9 +1248,10 @@ namespace Stabby.Game.Editor
                     int near = 0;
                     for (int j = 0; j < g.Edits.Length; j++)
                         if (g.Edits[j].Shape == shape && Mathf.Abs(g.Edits[j].Ax - g.Edits[k].Ax) < 60 && Mathf.Abs(g.Edits[j].Az - g.Edits[k].Az) < 60) near++;
+                    if (shape == FeatureEdit.Butte || shape == FeatureEdit.Basalt) near = g.Edits[k].W > 0f ? (int)(g.Edits[k].H * g.Edits[k].W) : 0;
                     if (near > bestNear) { bestNear = near; best = k; }
                 }
-                string kind = s == 0 ? "tor" : "hoodoo";
+                string kind = kinds[s];
                 GameStatus.Lines["~landforms " + kind] = $"{count} {kind} edits, densest group {bestNear} at edit {best}";
                 if (best < 0) continue;
                 Vector3 c = Vector3.zero, top = Vector3.zero;
@@ -1265,25 +1270,43 @@ namespace Stabby.Game.Editor
                 for (int a = 0; a < 8; a++)
                 {
                     var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
-                    float h = ground.HeightAt(c.x + d.x * 70, c.z + d.z * 70);
+                    float h = ground.HeightAt(c.x + d.x * backs[s], c.z + d.z * backs[s]);
                     if (h < low) { low = h; dirOut = d; }
                 }
                 var target = new Vector3(c.x, (c.y + top.y) * 0.5f, c.z);
-                float back = s == 0 ? 55f : 80f;
+                float back = backs[s];
                 var eye = c + dirOut * back;
                 eye.y = Clear(ground, target, eye, Mathf.Max(ground.HeightAt(eye.x, eye.z) + 3f, target.y - 4f), 0.3f);
-                shots.Add((s == 0 ? "landform-tor" : "landform-hoodoos", eye, target));
+                shots.Add((names[s], eye, target));
                 var far = Vector3.zero;
                 far.y = float.MaxValue;
                 for (int a = 0; a < 8; a++)
                 {
-                    var p = c + Quaternion.Euler(0, a * 45f, 0) * Vector3.forward * 420f;
+                    var p = c + Quaternion.Euler(0, a * 45f, 0) * Vector3.forward * fars[s];
                     p.y = Clear(ground, target, p, Mathf.Max(ground.HeightAt(p.x, p.z) + 40f, target.y + 30f), 0.05f);
+                    if (Blocked(ref g, c, p, target)) p.y += 10000f;
                     if (p.y < far.y) far = p;
                 }
-                shots.Add((s == 0 ? "landform-tor-far" : "landform-hoodoos-far", far, target));
+                if (far.y > 5000f) far.y -= 10000f;
+                shots.Add((names[s] + "-far", far, target));
             }
             return shots;
+        }
+
+        static bool Blocked(ref GroundData g, Vector3 c, Vector3 eye, Vector3 target)
+        {
+            for (float t = 0.1f; t < 0.95f; t += 0.05f)
+            {
+                var p = Vector3.Lerp(eye, target, t);
+                for (int k = 0; k < g.Edits.Length; k++)
+                {
+                    var e = g.Edits[k];
+                    if (e.Kind != FeatureEdit.Add || p.y > e.MaxY || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
+                    if (Mathf.Abs(e.Ax - c.x) < 60f && Mathf.Abs(e.Az - c.z) < 60f) continue;
+                    return true;
+                }
+            }
+            return false;
         }
 
         static float Clear(Ground ground, Vector3 target, Vector3 eye, float y, float from)
