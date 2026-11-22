@@ -11,7 +11,7 @@ namespace Stabby.Content
         public const int BiomeSchemaVersion = 1;
         public const int MaterialSchemaVersion = 2;
         public const int ObjectSchemaVersion = 2;
-        public const int CreatureSchemaVersion = 1;
+        public const int CreatureSchemaVersion = 2;
 
         public static string FindContentRoot(string start)
         {
@@ -42,7 +42,7 @@ namespace Stabby.Content
         public static CreatureLibrary LoadCreatures(string contentRoot, IReadOnlyList<string> biomeIds = null)
         {
             var path = Path.Combine(contentRoot, "creatures.json");
-            return ParseCreatures(File.ReadAllText(path), biomeIds, path);
+            return ParseCreatures(File.ReadAllText(path), biomeIds, path, LoadMaterials(contentRoot));
         }
 
         public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
@@ -134,6 +134,11 @@ namespace Stabby.Content
                 s.End();
             }
             lib.Strata = strata;
+            foreach (var m in root.Objects("materials"))
+            {
+                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")) });
+                m.End();
+            }
             root.End();
             lib.FillCoats();
             Check(MaterialLibrary.Validate(lib), source);
@@ -243,7 +248,7 @@ namespace Stabby.Content
             return lib;
         }
 
-        public static CreatureLibrary ParseCreatures(string json, IReadOnlyList<string> biomeIds, string source)
+        public static CreatureLibrary ParseCreatures(string json, IReadOnlyList<string> biomeIds, string source, MaterialLibrary materials)
         {
             var root = Root(json, source, CreatureSchemaVersion);
             var errors = new List<string>();
@@ -287,15 +292,14 @@ namespace Stabby.Content
                     Haunch = b.Float("haunch", 0), Waist = b.Float("waist", 0), Hump = b.Float("hump", 0),
                     WalkSpeed = b.Float("walkSpeed", 0), MaxSlope = b.Float("maxSlope", 0), Jitter = b.Float("jitter", 0),
                 };
-                var colors = b.Object("colors");
-                if (colors == null) errors.Add(id + ": colors missing");
+                var coat = b.Object("materials");
+                if (coat == null) errors.Add(id + ": materials missing");
                 else
                 {
-                    string path = id + ".colors";
-                    def.Base = Hex(colors.String("base", ""), path, "base");
-                    def.Accent = Hex(colors.String("accent", ""), path, "accent");
-                    def.Dark = Hex(colors.String("dark", ""), path, "dark");
-                    colors.End();
+                    def.Base = Coat(coat, "base", id, materials, errors);
+                    def.Accent = Coat(coat, "accent", id, materials, errors);
+                    def.Dark = Coat(coat, "dark", id, materials, errors);
+                    coat.End();
                 }
                 var size = b.Floats("size", null);
                 if (size == null || size.Length != 2) errors.Add(id + ": size needs 2 numbers");
@@ -325,6 +329,7 @@ namespace Stabby.Content
                     def.CalmPixels = wary.Float("calmPixels", def.CalmPixels);
                     def.RunSpeed = wary.Float("runSpeed", def.RunSpeed);
                     def.RunStride = wary.Float("runStride", def.RunStride);
+                    def.Dart = wary.Float("dart", def.Dart);
                     wary.End();
                 }
                 foreach (var s in b.Objects("slots", true))
@@ -346,6 +351,14 @@ namespace Stabby.Content
             errors.AddRange(CreatureLibrary.Validate(lib, biomeIds));
             Check(errors, source);
             return lib;
+        }
+
+        static uint Coat(Json coat, string tone, string id, MaterialLibrary materials, List<string> errors)
+        {
+            string name = coat.String(tone, "");
+            var m = materials?.Find(name);
+            if (m == null) { errors.Add(id + ".materials." + tone + ": unknown material \"" + name + "\""); return 0; }
+            return m.Color;
         }
 
         static ObjectDef Object(Json o, List<string> errors)

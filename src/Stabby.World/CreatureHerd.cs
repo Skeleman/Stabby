@@ -6,7 +6,7 @@ namespace Stabby.World
 
     public struct CreatureWary
     {
-        public float Alert, Flee, Calm, RunRatio, Look;
+        public float Alert, Flee, Calm, RunRatio, Look, Dart;
     }
 
     public interface IHerdGround

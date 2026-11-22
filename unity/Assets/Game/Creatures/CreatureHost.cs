@@ -132,7 +132,9 @@ namespace Stabby.Game
             b.Dispose();
             EntityManager.CreateSingleton(new CreaturePlanBlob { Value = blob });
             Planned = p.Spawns.Count;
-            if (reach.Length > 0) { SpawnReach = CreaturePlan.SpawnReach(p.Lib.Bodies[0]); DespawnReach = CreaturePlan.DespawnReach(p.Lib.Bodies[0]); }
+            SpawnReach = 0;
+            DespawnReach = 0;
+            for (int i = 0; i < reach.Length; i++) { SpawnReach = math.max(SpawnReach, reach[i].x); DespawnReach = math.max(DespawnReach, reach[i].y); }
         }
     }
 
@@ -282,7 +284,18 @@ namespace Stabby.Game
                     break;
                 default:
                     s.Alert = math.lerp(s.Alert, 0.3f, math.min(1, 3 * dt));
-                    s.Heading = HerdMind.Toward(s.Heading, h.Mind.Heading + HerdMind.MemberOffset(s.Seed), 3 * dt);
+                    float dart = 0;
+                    if (w.Dart > 0)
+                    {
+                        b.Timer -= dt;
+                        if (b.Timer <= 0)
+                        {
+                            b.Turn = b.Turn > 0 ? -w.Dart : w.Dart;
+                            b.Timer = b.Random.NextFloat(0.4f, 0.9f);
+                        }
+                        dart = b.Turn;
+                    }
+                    s.Heading = HerdMind.Toward(s.Heading, h.Mind.Heading + HerdMind.MemberOffset(s.Seed) + dart, 3 * dt);
                     s.Move = math.lerp(s.Move, w.RunRatio, math.min(1, 2.5f * dt));
                     float2 next = s.Position + new float2(math.sin(s.Heading), math.cos(s.Heading)) * (s.Move * s.WalkSpeed * dt);
                     float2 feel = s.Position + new float2(math.sin(s.Heading), math.cos(s.Heading)) * Footing.FeelM;

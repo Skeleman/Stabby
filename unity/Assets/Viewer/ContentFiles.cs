@@ -33,7 +33,7 @@ namespace Stabby.Viewer
         {
             var ids = new List<string>(defs.Count);
             foreach (var d in defs) ids.Add(d.Id);
-            return ContentLoader.ParseCreatures(File.ReadAllText(CreaturesPath), ids, CreaturesPath);
+            return ContentLoader.ParseCreatures(File.ReadAllText(CreaturesPath), ids, CreaturesPath, Materials(MaterialsPath));
         }
 
         public static readonly float ObjectDensity = float.TryParse(System.Environment.GetEnvironmentVariable("STABBY_OBJECT_DENSITY"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var k) && k > 0 ? k : 1f;
