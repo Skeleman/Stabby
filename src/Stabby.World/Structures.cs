@@ -395,10 +395,10 @@ namespace Stabby.World
                     float half = bw * (1 + 0.8f * (j - bBase));
                     ga = bx - half;
                     gb = bx + half;
-                    Run(l, key, ref rng, j, a, Math.Min(e, ga), yb, ch, w, slope);
-                    Run(l, key, ref rng, j, Math.Max(a, gb), e, yb, ch, w, slope);
+                    Run(l, key, ref rng, j, a, Math.Min(e, ga), yb, ch, w, slope, true, e <= ga);
+                    Run(l, key, ref rng, j, Math.Max(a, gb), e, yb, ch, w, slope, a >= gb, true);
                 }
-                else Run(l, key, ref rng, j, a, e, yb, ch, w, slope);
+                else Run(l, key, ref rng, j, a, e, yb, ch, w, slope, true, true);
                 if (j == count - 1) Cope(l, key, ref rng, ga, gb, a, e, h, WallBase * (1 - WallBatter));
             }
             int tumble = rng.Range(2, 7) + (breach ? 4 : 0);
@@ -419,9 +419,10 @@ namespace Stabby.World
         }
 
         const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f, FaceTilt = 0.025f, FaceYaw = 0.012f, Proud = 0.003f;
+        const float QuoinLong = 0.05f, QuoinShort = 0.62f, QuoinProud = 0.004f, QuoinSquare = 0.99f;
         const float CourseRow = 0.038f, CourseShrink = 0.055f, CourseDecay = 0.9464851f;
 
-        static void Run(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w, float slope)
+        static void Run(StructureLayout l, ulong key, ref Rng rng, int j, float a, float e, float yb, float ch, float w, float slope, bool endA, bool endB)
         {
             float span = e - a;
             if (span < 0.004f) return;
@@ -432,6 +433,13 @@ namespace Stabby.World
             for (int side = -1; side <= 1; side += 2)
             {
                 float len = ch * rng.Range(1.1f, 2.4f) * ((j & 1) == 1 ? 0.7f : 1f);
+                if (side < 0 ? endA : endB)
+                {
+                    float edge = side < 0 ? -0.48f - Proud : 0.48f + Proud;
+                    float ql = Math.Min(QuoinLong * (((j + (side + 1) / 2) & 1) == 0 ? 1f : QuoinShort), 0.45f * (e - a)) + (side < 0 ? a + 0.48f : 0.48f - e);
+                    Add(l, key, edge - side * 0.5f * ql, yb, 0, ql, ch, w + 2 * QuoinProud, 1, 0, 0, 1, QuoinSquare, 0, 0, slope);
+                    continue;
+                }
                 if (span < 2.4f * ch) { if (side > 0) break; len = span; }
                 else len = Math.Min(len, 0.45f * span);
                 float xc = side < 0 ? a - Proud + 0.5f * len : e + Proud - 0.5f * len;

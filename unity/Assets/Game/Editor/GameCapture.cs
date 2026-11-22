@@ -212,25 +212,30 @@ namespace Stabby.Game.Editor
             while (phase >= 200 && phase < 200 + CreatureShots.Length)
             {
                 string name = CreatureShots[phase - 200];
+                bool pair = name == "creature-host" || name == "creature-client";
                 if (wait == 0)
                 {
-                    if (CreatureSpawnSystem.Count == 0 && --chaseWait > -1800) return;
+                    if (CreatureBuildSystem.Count == 0 && --chaseWait > -1800) return;
                     bool stride = name.EndsWith("stride");
-                    CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : 0 };
-                    if (!AimCreature(cam, CreatureRange(name))) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
-                    wait = 120;
+                    CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : 0, Show = name == "creature-client" ? 1 : 0 };
+                    if (name != "creature-client" && !AimCreature(cam, CreatureRange(name))) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
+                    wait = pair ? 240 : 120;
                     return;
                 }
-                AimCreature(cam, CreatureRange(name));
+                if (name != "creature-client") AimCreature(cam, CreatureRange(name));
+                if (pair && CreatureCompare(false) > 0.02f && wait > -1800) { wait--; return; }
                 if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
+                if (name == "creature-client") CreatureCompare(true);
                 wait = 0;
                 phase++;
             }
             if (only == "creatures" && phase >= 200 + CreatureShots.Length)
             {
-                GameStatus.Lines["~creatures"] = CreatureSpawnSystem.Count.ToString();
+                CreatureView.Current = default;
+                GameStatus.Lines["~creatures"] = CreatureBuildSystem.Count.ToString();
+                GameStatus.Lines["~creature plan"] = $"{CreaturePlanSystem.Planned} planned, spawn reach {CreaturePlanSystem.SpawnReach:F2} m, despawn reach {CreaturePlanSystem.DespawnReach:F2} m";
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
                 return;
@@ -849,7 +854,7 @@ namespace Stabby.Game.Editor
             return false;
         }
 
-        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride", "creature-far-idle", "creature-far-stride" };
+        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride", "creature-far-idle", "creature-far-stride", "creature-host", "creature-client" };
 
         static float CreatureRange(string name) => name.Contains("close") ? 4f : name.Contains("far") ? 40f : 15f;
 
@@ -862,6 +867,13 @@ namespace Stabby.Game.Editor
                 using var roots = q.ToComponentDataArray<CreatureRoot>(Unity.Collections.Allocator.Temp);
                 if (roots.Length == 0) return false;
                 var c = roots[0];
+                int best = int.MaxValue;
+                foreach (var r in roots)
+                {
+                    if (!w.EntityManager.HasComponent<CreatureState>(r.Ghost)) continue;
+                    int id = w.EntityManager.GetComponentData<CreatureState>(r.Ghost).Id;
+                    if (id < best) { best = id; c = r; }
+                }
                 var target = new Vector3(c.Position.x, GroundHeight(c.Position.x, c.Position.z) + 0.75f, c.Position.z);
                 Vector3 eye = target;
                 for (int k = 0; k < 16; k++)
@@ -877,6 +889,45 @@ namespace Stabby.Game.Editor
                 return true;
             }
             return false;
+        }
+
+        static float CreatureCompare(bool log)
+        {
+            var sets = new System.Collections.Generic.List<(string Name, System.Collections.Generic.Dictionary<int, Unity.Mathematics.float3> States)>();
+            foreach (var w in Unity.Entities.World.All)
+            {
+                bool server = w.IsServer();
+                if (!server && System.Array.IndexOf(GameSettings.Clients, w.Name) < 0) continue;
+                using var q = w.EntityManager.CreateEntityQuery(typeof(CreatureState));
+                using var states = q.ToComponentDataArray<CreatureState>(Unity.Collections.Allocator.Temp);
+                var d = new System.Collections.Generic.Dictionary<int, Unity.Mathematics.float3>();
+                foreach (var s in states) d[s.Id] = new Unity.Mathematics.float3(s.Position, s.Heading);
+                sets.Add((server ? "server" : w.Name, d));
+            }
+            sets.Sort((a, b) => a.Name == "server" ? -1 : b.Name == "server" ? 1 : string.CompareOrdinal(a.Name, b.Name));
+            if (sets.Count < 2) return float.MaxValue;
+            float max = 0, maxHeading = 0;
+            int shared = 0, missing = 0;
+            var host = sets[0].States;
+            for (int k = 1; k < sets.Count; k++)
+                foreach (var kv in sets[k].States)
+                {
+                    if (!host.TryGetValue(kv.Key, out var h)) { missing++; continue; }
+                    shared++;
+                    max = Mathf.Max(max, Unity.Mathematics.math.distance(h.xy, kv.Value.xy));
+                    maxHeading = Mathf.Max(maxHeading, Mathf.Abs(h.z - kv.Value.z));
+                }
+            if (log)
+            {
+                GameStatus.Lines["~creature worlds"] = string.Join(", ", sets.Select(x => $"{x.Name} {x.States.Count}"));
+                GameStatus.Lines["~creature agreement"] = $"{shared} client copies match a server creature, {missing} without one; max position delta {max:F4} m, max heading delta {maxHeading:F5} rad";
+                if (host.Count > 0)
+                {
+                    int first = host.Keys.Min();
+                    GameStatus.Lines["~creature first"] = string.Join("; ", sets.Select(x => x.States.TryGetValue(first, out var v) ? $"{x.Name} id {first} at {v.x:F3},{v.y:F3} heading {v.z:F4}" : $"{x.Name} id {first} absent"));
+                }
+            }
+            return missing > 0 || shared == 0 ? float.MaxValue : max;
         }
 
         static bool Clear(Vector3 eye, Vector3 target)

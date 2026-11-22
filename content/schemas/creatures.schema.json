@@ -44,7 +44,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "biomes", "length", "radius", "colors", "size", "walkSpeed", "herd", "detail", "slots"],
+        "required": ["id", "name", "biomes", "length", "radius", "colors", "size", "walkSpeed", "herd", "herdChance", "detail", "slots"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "minLength": 1 },
@@ -70,12 +70,14 @@
           "size": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 2, "maxItems": 2 },
           "walkSpeed": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
           "herd": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 },
+          "herdChance": { "type": "number", "minimum": 0, "maximum": 1 },
           "jitter": { "type": "number", "minimum": 0, "maximum": 0.25 },
           "detail": {
             "type": "object",
-            "required": ["fadePixels", "shadowPixels", "animPixels", "ikPixels", "lowPixels"],
+            "required": ["spawnPixels", "fadePixels", "shadowPixels", "animPixels", "ikPixels", "lowPixels"],
             "additionalProperties": false,
             "properties": {
+              "spawnPixels": { "type": "number", "exclusiveMinimum": 0 },
               "fadePixels": { "type": "number", "exclusiveMinimum": 0 },
               "shadowPixels": { "type": "number", "exclusiveMinimum": 0 },
               "animPixels": { "type": "number", "exclusiveMinimum": 0 },
