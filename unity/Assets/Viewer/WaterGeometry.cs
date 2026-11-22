@@ -20,7 +20,7 @@ namespace Stabby.Viewer
         public int K;
         public float LipX, LipZ, LipY;
         public float BaseX, BaseZ, BaseY;
-        public float Width;
+        public float Width, Bow;
         public float DirX, DirZ;
         public float PoolRadius;
         public float Discharge;
@@ -68,7 +68,7 @@ namespace Stabby.Viewer
                 {
                     K = k - 1, LipX = rf.LipX, LipZ = rf.LipZ, LipY = rf.LipY + RiverLift,
                     BaseX = rf.LipX + rf.DirX * FallThrowAt(rf.Drop), BaseZ = rf.LipZ + rf.DirZ * FallThrowAt(rf.Drop), BaseY = rf.BaseY + RiverLift,
-                    Width = Hydrology.SheetWidth(rf.Width), DirX = rf.DirX, DirZ = rf.DirZ,
+                    Width = 2 * rf.SheetHalf, Bow = rf.ShelfBow, DirX = rf.DirX, DirZ = rf.DirZ,
                     PoolRadius = rf.PoolRadius, Discharge = rf.Discharge,
                 };
                 return true;
@@ -114,8 +114,8 @@ namespace Stabby.Viewer
                 float u = j / (rows - 1f), y = u * u * h;
                 for (int c = 0; c < cols; c++)
                 {
-                    float sc = (2f * c / (cols - 1) - 1) * half, from = j > 0 ? off[(j - 1) * cols + c] : 0;
-                    off[j * cols + c] = HugAt(detail, f, f.LipX + f.DirZ * sc, f.LipZ - f.DirX * sc, y, from);
+                    float u2 = 2f * c / (cols - 1) - 1, sc = u2 * half, a = f.Bow * u2 * u2, from = j > 0 ? off[(j - 1) * cols + c] : 0;
+                    off[j * cols + c] = HugAt(detail, f, f.LipX + f.DirZ * sc + f.DirX * a, f.LipZ - f.DirX * sc + f.DirZ * a, y, from);
                 }
             }
             var tmp = new float[rows * cols];
@@ -237,6 +237,33 @@ namespace Stabby.Viewer
                 Tris.Add(v - 1); Tris.Add(v); Tris.Add(v + 1);
             }
 
+            public void Shelf(FallCurtain f, float slope, Vector4 reach, Vector4 fall)
+            {
+                float half = 0.5f * f.Width;
+                var fwd = new Vector3(f.DirX, 0, f.DirZ);
+                var side = new Vector3(f.DirZ, 0, -f.DirX) * half;
+                var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
+                var flow = new Color(f.DirX * 0.5f + 0.5f, f.DirZ * 0.5f + 0.5f, slope, 0);
+                int b = Verts.Count, cols = CurtainColsOf(f.Width);
+                for (int c = 0; c < cols; c++)
+                {
+                    float u = 2f * c / (cols - 1) - 1;
+                    Verts.Add(lip + side * u);
+                    Verts.Add(lip + side * u + fwd * (f.Bow * u * u));
+                    for (int e = 0; e < 2; e++)
+                    {
+                        Cols.Add(flow);
+                        Chan.Add(new Vector2(u, half));
+                        Reach.Add(reach);
+                        Fall.Add(fall);
+                    }
+                    if (c == 0) continue;
+                    int v = b + 2 * c;
+                    Tris.Add(v - 2); Tris.Add(v - 1); Tris.Add(v);
+                    Tris.Add(v); Tris.Add(v - 1); Tris.Add(v + 1);
+                }
+            }
+
             public float Curtain(FallCurtain f, float along, TerrainDetail detail)
             {
                 float h = f.Drop + FallSink, half = 0.5f * f.Width;
@@ -254,7 +281,7 @@ namespace Stabby.Viewer
                     for (int c = 0; c < cols; c++)
                     {
                         float sc = 2f * c / (cols - 1) - 1;
-                        Verts.Add(lip + side * sc + fwd * off[j * cols + c] - Vector3.up * y);
+                        Verts.Add(lip + side * sc + fwd * (f.Bow * sc * sc + off[j * cols + c]) - Vector3.up * y);
                         Cols.Add(flow);
                         Chan.Add(new Vector2(sc, half));
                         Reach.Add(reach);
@@ -276,7 +303,8 @@ namespace Stabby.Viewer
                 var foot = new Vector3(f.BaseX, f.BaseY, f.BaseZ) + push + fwd * (0.3f * radius);
                 for (int m = 0; m < mists; m++)
                 {
-                    var c = foot + side * ((m + 0.5f) / mists * 2 - 1) * 0.7f;
+                    float mu = ((m + 0.5f) / mists * 2 - 1) * 0.7f;
+                    var c = foot + side * mu + fwd * (f.Bow * mu * mu);
                     float phase = Mathf.Repeat(m * MistPhase + along * 0.0137f, 1f);
                     Sheet(c, Vector3.zero, Vector3.zero, flow, new Vector2(phase, f.Drop), reach, radius, 2);
                 }
@@ -369,6 +397,7 @@ namespace Stabby.Viewer
                         float sl = s - seg * (1 - lt), th = FallThrowAt(f.Drop), ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
                         var lipRow = new Vector3(f.LipX, f.LipY, f.LipZ);
                         buf.Row(lipRow, fd, 0.5f * f.Width, slopes[k - 1], new Vector4(rv.x, rv.y, sl, 0), pool, true);
+                        if (f.Bow > 0) buf.Shelf(f, slopes[k - 1], new Vector4(rv.x, rv.y, sl, 0), pool);
                         th += buf.Curtain(f, sl, detail);
                         ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
                         pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);

@@ -22,7 +22,7 @@ public class DiscoveryTests
             var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
             var detail = new TerrainDetail(w);
             var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
-            var rings = field.Discoveries();
+            var rings = field.Discoveries().Where(o => o.Def == d).ToArray();
             output.WriteLine($"seed {seed}: {rings.Length} rings " + string.Join(" ", rings.Select(r => $"{r.X:F0},{r.Z:F0}")));
             foreach (var r in rings)
             {
@@ -34,6 +34,58 @@ public class DiscoveryTests
             if (rings.Length > 0) worlds++;
         }
         Assert.True(worlds >= 2, $"stone rings in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
+    public void CampsitesAppearByForestsAndRiversAwayFromRings()
+    {
+        int camp = Objects.Objects.FindIndex(o => o.Id == "campsite"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var all = field.Discoveries();
+            var camps = all.Where(o => o.Def == camp).ToArray();
+            output.WriteLine($"seed {seed}: {camps.Length} camps " + string.Join(" ", camps.Select(c => $"{c.X:F0},{c.Z:F0}:{field.CampDraw(c.X, c.Z):F2}")));
+            foreach (var c in camps)
+            {
+                Assert.True(field.CampDraw(c.X, c.Z) > 0);
+                foreach (var o in all.Where(o => o.Def != camp))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+                int cx = (int)(c.X / field.ChunkMeters), cz = (int)(c.Z / field.ChunkMeters);
+                Assert.Contains(field.Chunk(cx, cz), o => o.Def == camp && o.X == c.X && o.Z == c.Z);
+            }
+            total += camps.Length;
+            if (camps.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 3, $"campsites in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
+    public void HermitagesAppearDeepInTheWoods()
+    {
+        int hermit = Objects.Objects.FindIndex(o => o.Id == "hermitage"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var all = field.Discoveries();
+            var huts = all.Where(o => o.Def == hermit).ToArray();
+            output.WriteLine($"seed {seed}: {huts.Length} hermitages " + string.Join(" ", huts.Select(c => $"{c.X:F0},{c.Z:F0}:{field.Woods(c.X, c.Z):F2}")));
+            foreach (var c in huts)
+            {
+                Assert.True(field.Woods(c.X, c.Z) >= ObjectField.HermitWoods);
+                foreach (var o in all.Where(o => o.Def != hermit))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+                int cx = (int)(c.X / field.ChunkMeters), cz = (int)(c.Z / field.ChunkMeters);
+                Assert.Contains(field.Chunk(cx, cz), o => o.Def == hermit && o.X == c.X && o.Z == c.Z);
+            }
+            total += huts.Length;
+            if (huts.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 3, $"hermitages in only {worlds} of 4 worlds ({total} total)");
     }
 
     [Fact]

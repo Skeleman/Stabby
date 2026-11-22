@@ -18,8 +18,8 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Shapes = 18;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, Shapes = 24;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
         public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape < Shapes);
         public static bool IsStone(int shape) => shape == Rock || IsStructure(shape);

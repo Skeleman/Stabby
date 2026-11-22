@@ -220,6 +220,36 @@
       "id": "wet-stone", "name": "Mossy wet stone", "kind": "static", "color": "#6c7363", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1] } ],
       "placement": { "perHectare": 0, "bank": "rapid", "perHundredM": 60, "slopeMax": 1.5, "sizeMinM": 0.35, "sizeMaxM": 1.3, "clusterCount": 5, "clusterRadiusM": 2, "sink": 0.2, "alignToSlope": 0.6 }
+    },
+    {
+      "id": "tent", "name": "Tent", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "tent", "shape": "tent" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4.4, "sizeMaxM": 4.4 }
+    },
+    {
+      "id": "fire-pit", "name": "Fire pit", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "pit", "shape": "fire-pit" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 1.8, "sizeMaxM": 1.8 }
+    },
+    {
+      "id": "log-seat", "name": "Log seat", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "seat", "shape": "log-seat" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 1.6, "sizeMaxM": 1.6 }
+    },
+    {
+      "id": "campsite", "name": "Campsite", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "parts": [ { "id": "camp", "shape": "campsite" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest"], "perHectare": 0, "discovery": "camp", "spacingM": 750, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 10, "sizeMaxM": 11, "sink": 0.002 }
+    },
+    {
+      "id": "hermit-hut", "name": "Hermit hut", "kind": "structure", "color": "#8a857c", "variants": 3,
+      "parts": [ { "id": "hut", "shape": "hermit-hut" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 6.75, "sizeMaxM": 6.75 }
+    },
+    {
+      "id": "hermitage", "name": "Hermit's hut", "kind": "structure", "color": "#8a857c", "variants": 6,
+      "parts": [ { "id": "site", "shape": "hermitage" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tropical-forest"], "perHectare": 0, "discovery": "hermit", "spacingM": 900, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8 },

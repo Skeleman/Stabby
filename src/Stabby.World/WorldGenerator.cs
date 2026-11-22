@@ -56,6 +56,12 @@ namespace Stabby.World
             {
                 f.Mix((ulong)r.Cells.Count);
                 for (int k = 0; k < r.Cells.Count; k++) { f.Mix((ulong)r.Cells[k]); f.F(r.Surface[k]); f.F(r.Width[k]); f.F(r.Depth[k]); f.F(r.X[k]); f.F(r.Y[k]); }
+                f.Mix((ulong)r.Falls.Count);
+                foreach (var fl in r.Falls)
+                {
+                    f.Mix((ulong)fl.K); f.F(fl.LipY); f.F(fl.BaseY); f.F(fl.PoolRadius); f.F(fl.PoolCentre);
+                    if (fl.LipPts == null) f.Mix(0); else f.Fs(fl.LipPts);
+                }
             }
             f.Is(Biome);
             if (BiomeIds == null) f.Mix(0);

@@ -5,14 +5,17 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing" };
-        public const int Hilltop = 1, Clearing = 2;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f;
         public const int DiscoveryTries = 16, ClimbSteps = 12;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
         ObjectInstance[] discoveries;
         ObjectInstance[][] builtSites;
+        float[] treeCover;
         List<LandmarkSketch> towns;
 
         public List<LandmarkSketch> Towns => towns ?? (towns = (w.Sketch ?? WorldSketch.Generate(w.Config)).Landmarks);
@@ -28,9 +31,11 @@ namespace Stabby.World
                 if (discoveries != null) return discoveries;
                 builtSites = new ObjectInstance[across * across][];
                 var list = new List<ObjectInstance>();
-                ulong root = Rng.Stream(w.Config.Seed, "discoveries").NextU64();
                 for (int d = 0; d < lib.Objects.Count; d++)
-                    if (lib.Objects[d].Placement.Discovery > 0) PlaceDiscoveries(d, root, list);
+                {
+                    int kind = lib.Objects[d].Placement.Discovery;
+                    if (kind > 0) PlaceDiscoveries(d, Rng.Stream(w.Config.Seed, DiscoveryStreams[kind]).NextU64(), list);
+                }
                 builtSites = null;
                 return discoveries = list.ToArray();
             }
@@ -57,7 +62,7 @@ namespace Stabby.World
                         if (!roll) continue;
                         if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
                         float fit = Fitness(pl.Discovery, px, pz);
-                        if (fit <= best || !Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out var o)) continue;
+                        if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) continue;
                         o.Variant = variant;
                         if (!ClearOfBuilt(o)) continue;
                         best = fit; pick = o; any = true;
@@ -84,6 +89,72 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < TownClearM * TownClearM) return false;
             }
             return true;
+        }
+
+        static bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list)
+        {
+            foreach (var o in list)
+            {
+                if (o.Def == d) continue;
+                float dx = o.X - x, dz = o.Z - z;
+                if (dx * dx + dz * dz < DiscoveryGapM * DiscoveryGapM) return false;
+            }
+            return true;
+        }
+
+        public float CampDraw(float x, float z) => ForestEdge(x, z) + Riverside(x, z);
+
+        float ForestEdge(float x, float z) => 1 - Math.Abs(2 * Woods(x, z) - 1);
+
+        public float Woods(float x, float z)
+        {
+            if (treeCover == null)
+            {
+                int biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
+                var cover = new float[biomes];
+                for (int d = 0; d < lib.Objects.Count; d++)
+                {
+                    var def = lib.Objects[d];
+                    bool tree = false;
+                    foreach (var p in def.Parts) tree |= p.Shape == ObjectPart.Broadleaf || p.Shape == ObjectPart.Conifer;
+                    if (!tree) continue;
+                    for (int b = 0; b < biomes; b++) cover[b] += def.Placement.PerHectare * density[d][b];
+                }
+                treeCover = cover;
+            }
+            int forested = 0, probes = 0;
+            for (int ring = 1; ring <= 2; ring++)
+                for (int k = 0; k < 8; k++)
+                {
+                    FanDir(k, 0.70710678f, out float ux, out float uz);
+                    float px = x + ux * ring * DiscoveryProbeM, pz = z + uz * ring * DiscoveryProbeM;
+                    probes++;
+                    if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) continue;
+                    int b = w.Biome[Cell(pz) * n + Cell(px)];
+                    if (b >= 0 && treeCover[b] >= ForestPerHectare) forested++;
+                }
+            return forested / (float)probes;
+        }
+
+        float Riverside(float x, float z)
+        {
+            int gx = Cell(x), gz = Cell(z);
+            float best = 0;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = gx + dx, az = gz + dz;
+                    if (ax < 0 || az < 0 || ax >= n || az >= n) continue;
+                    int i = az * n + ax;
+                    for (int k = blockStart[i]; k < blockStart[i + 1]; k++)
+                    {
+                        int item = blockItems[k];
+                        if (item < 0) continue;
+                        float near = 1 - (Distance(item, x, z) - phw[item]) / CampRiverM;
+                        best = Math.Max(best, Math.Min(1, near));
+                    }
+                }
+            return best;
         }
 
         bool ClearOfBuilt(ObjectInstance o)
@@ -140,6 +211,18 @@ namespace Stabby.World
                 relief = Math.Max(relief, Math.Abs(dy));
             }
             rise *= 0.125f;
+            if (kind == Camp)
+            {
+                if (relief > CampReliefM) return float.MinValue;
+                float draw = CampDraw(x, z);
+                return draw > 0 ? draw - 0.1f * relief : float.MinValue;
+            }
+            if (kind == Hermit)
+            {
+                if (relief > CampReliefM) return float.MinValue;
+                float woods = Woods(x, z);
+                return woods >= HermitWoods ? woods - 0.1f * relief : float.MinValue;
+            }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;
         }

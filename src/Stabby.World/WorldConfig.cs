@@ -4,7 +4,7 @@ namespace Stabby.World
 
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 68;
+        public const int GeneratorVersion = 71;
 
         public ulong Seed = 1;
         public const float MapMeters = 23040f;

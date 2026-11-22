@@ -6,6 +6,7 @@ namespace Stabby.World
     {
         public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6;
         const int GX = 0, GV = 1, GZ = 2;
+        const int RoundLog = 1, RoundDisc = 2;
 
         static readonly float[] UnitBox = MakeUnitBox();
         static readonly int[] UnitBoxIdx = MakeUnitBoxIdx();
@@ -25,6 +26,109 @@ namespace Stabby.World
                 }
             }
             return u;
+        }
+
+        static void RoundDir(int i, int n, out float c, out float s)
+        {
+            int k = i * 32 / n, h = k >> 1;
+            c = Cos16(h); s = Sin16(h);
+            if ((k & 1) == 0) return;
+            c += Cos16(h + 1); s += Sin16(h + 1);
+            float inv = 1 / (float)Math.Sqrt(c * c + s * s);
+            c *= inv; s *= inv;
+        }
+
+        static float[] RoundNoise(ref Rng rng, int n, float lo, float hi)
+        {
+            var r = new float[n];
+            var t = new float[n];
+            for (int i = 0; i < n; i++) r[i] = rng.NextFloat();
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < n; i++) t[i] = 0.25f * r[(i + n - 1) % n] + 0.5f * r[i] + 0.25f * r[(i + 1) % n];
+                Array.Copy(t, r, n);
+            }
+            float mn = 1, mx = 0;
+            for (int i = 0; i < n; i++) { mn = Math.Min(mn, r[i]); mx = Math.Max(mx, r[i]); }
+            float k = mx > mn ? 1 / (mx - mn) : 0;
+            for (int i = 0; i < n; i++) r[i] = lo + (hi - lo) * (r[i] - mn) * k;
+            return r;
+        }
+
+        static float[] RoundMesh(ulong key, int shape, int tier, out int[] idx, out float[] lift)
+        {
+            var rng = Rng.Stream(key, "round");
+            int sides = shape == RoundDisc ? 32 : tier < 2 ? 16 : 8;
+            var dc = new float[sides];
+            var ds = new float[sides];
+            for (int i = 0; i < sides; i++) RoundDir(i, sides, out dc[i], out ds[i]);
+            if (shape == RoundDisc)
+            {
+                var r = RoundNoise(ref rng, sides, 0.66f, 1f);
+                var u = new float[3 * (sides + 1)];
+                lift = new float[sides + 1];
+                idx = new int[3 * sides];
+                u[1] = 1; lift[0] = 4;
+                for (int i = 0; i < sides; i++)
+                {
+                    u[3 + 3 * i] = r[i] * dc[i]; u[4 + 3 * i] = 1; u[5 + 3 * i] = r[i] * ds[i];
+                    lift[1 + i] = 7;
+                    idx[3 * i] = 0; idx[3 * i + 1] = 1 + (i + 1) % sides; idx[3 * i + 2] = 1 + i;
+                }
+                return u;
+            }
+            int rings = tier < 2 ? 5 : 2, side = rings * sides, cap = sides + 1;
+            var rad = new float[side];
+            var cy = new float[rings];
+            var cz = new float[rings];
+            float bend = rng.Range(-0.03f, 0.03f), sway = rng.Range(-0.03f, 0.03f);
+            for (int j = 0; j < rings; j++)
+            {
+                float t = rings > 1 ? 2f * j / (rings - 1) - 1 : 0, taper = 1 - 0.03f * t * t;
+                var ring = RoundNoise(ref rng, sides, 0.86f, 0.97f);
+                for (int i = 0; i < sides; i++) rad[j * sides + i] = ring[i] * taper;
+                cy[j] = bend * (1 - t * t); cz[j] = sway * (1 - t * t);
+            }
+            var w = new float[3 * (side + 2 * cap)];
+            lift = new float[side + 2 * cap];
+            var id = new System.Collections.Generic.List<int>();
+            for (int j = 0; j < rings; j++)
+            {
+                float x = rings > 1 ? 2f * j / (rings - 1) - 1 : 0;
+                for (int i = 0; i < sides; i++)
+                {
+                    int v = j * sides + i;
+                    float r = rad[v];
+                    w[3 * v] = x; w[3 * v + 1] = cy[j] + r * dc[i]; w[3 * v + 2] = cz[j] + r * ds[i];
+                    lift[v] = 8;
+                }
+            }
+            for (int j = 0; j + 1 < rings; j++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int a = j * sides + i, b = j * sides + (i + 1) % sides, c = b + sides, d = a + sides;
+                    id.Add(a); id.Add(b); id.Add(c);
+                    id.Add(a); id.Add(c); id.Add(d);
+                }
+            for (int e = 0; e < 2; e++)
+            {
+                int j = e == 0 ? 0 : rings - 1, o = side + e * cap;
+                float x = e == 0 ? -1 : 1;
+                w[3 * o] = x; w[3 * o + 1] = cy[j]; w[3 * o + 2] = cz[j];
+                lift[o] = 4;
+                for (int i = 0; i < sides; i++)
+                {
+                    int v = o + 1 + i, src = j * sides + i;
+                    w[3 * v] = x; w[3 * v + 1] = w[3 * src + 1]; w[3 * v + 2] = w[3 * src + 2];
+                    lift[v] = 7;
+                    int n1 = o + 1 + (i + 1) % sides;
+                    id.Add(o);
+                    if (e == 0) { id.Add(n1); id.Add(v); }
+                    else { id.Add(v); id.Add(n1); }
+                }
+            }
+            idx = id.ToArray();
+            return w;
         }
 
         static int[] MakeUnitBoxIdx()

@@ -200,4 +200,32 @@ public class CreatureTests
         for (int i = 0; i < 200; i++) mind.Step(w, w.Calm * 2, 1, 0, dt);
         Assert.Equal(HerdMode.Calm, mind.Mode);
     }
+    struct Shore : IHerdGround
+    {
+        public bool Blocked(float x, float z) => z > 30 || x < -200 || x > 200;
+    }
+
+    [Fact]
+    public void FleeingHerdTurnsAlongTheShore()
+    {
+        var w = CreaturePlan.Wary(Lib.Body("deer")!);
+        var ground = new Shore();
+        const float dt = 0.05f;
+        float x = 0, z = 0, maxZ = 0, run = 0;
+        var mind = HerdMind.Start(CreaturePlan.HerdSeed(1, 3));
+        for (int i = 0; i < 1200; i++)
+        {
+            float ax = x, az = z + w.Flee * 0.5f;
+            mind.Step(w, (float)Math.Sqrt(ax * ax + az * az), ax, az, x, z, ref ground, dt);
+            if (mind.Mode != HerdMode.Flee) continue;
+            x += (float)Math.Sin(mind.Heading) * 6.5f * dt;
+            z += (float)Math.Cos(mind.Heading) * 6.5f * dt;
+            run += 6.5f * dt;
+            maxZ = Math.Max(maxZ, z);
+            Assert.False(ground.Blocked(x, z));
+        }
+        Assert.True(run > 40);
+        Assert.True(maxZ > 5);
+        Assert.True(Math.Abs(x) > 20);
+    }
 }
