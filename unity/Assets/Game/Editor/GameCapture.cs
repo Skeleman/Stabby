@@ -153,7 +153,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "creatures" ? 200 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -189,6 +189,32 @@ namespace Stabby.Game.Editor
             }
             if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length))
             {
+                File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
+                Finish(0);
+                return;
+            }
+            while (phase >= 200 && phase < 200 + CreatureShots.Length)
+            {
+                string name = CreatureShots[phase - 200];
+                if (wait == 0)
+                {
+                    if (CreatureSpawnSystem.Count == 0 && --chaseWait > -1800) return;
+                    bool stride = name.EndsWith("stride");
+                    CreatureView.Current = new CreatureView { Override = 1, Move = stride ? 1 : 0, Phase = stride ? 0.3f : 0 };
+                    if (!AimCreature(cam, name.Contains("close") ? 4f : 15f)) { GameStatus.Lines["~" + name] = "no creature spawned"; phase++; continue; }
+                    wait = 120;
+                    return;
+                }
+                AimCreature(cam, name.Contains("close") ? 4f : 15f);
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
+            if (only == "creatures" && phase >= 200 + CreatureShots.Length)
+            {
+                GameStatus.Lines["~creatures"] = CreatureSpawnSystem.Count.ToString();
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
                 return;
@@ -802,6 +828,28 @@ namespace Stabby.Game.Editor
                 target.y = Mathf.Max(GroundHeight(target.x, target.z), target.y);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim riverbank"] = $"grass riverbank at {target.x:F0},{target.y:F0},{target.z:F0} from {eye.x:F0},{eye.y:F0},{eye.z:F0}, {Mathf.Sqrt(bestD):F0} m from the player";
+                return true;
+            }
+            return false;
+        }
+
+        static readonly string[] CreatureShots = { "creature-close-idle", "creature-close-stride", "creature-mid-idle", "creature-mid-stride" };
+
+        static bool AimCreature(Camera cam, float range)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                if (w.Name != GameSettings.ViewClient) continue;
+                using var q = w.EntityManager.CreateEntityQuery(typeof(CreatureRoot));
+                using var roots = q.ToComponentDataArray<CreatureRoot>(Unity.Collections.Allocator.Temp);
+                if (roots.Length == 0) return false;
+                var c = roots[0];
+                var fwd = new Vector3(Mathf.Sin(c.Heading), 0, Mathf.Cos(c.Heading));
+                var side = new Vector3(fwd.z, 0, -fwd.x);
+                var target = new Vector3(c.Position.x, GroundHeight(c.Position.x, c.Position.z) + 0.75f, c.Position.z);
+                var eye = target + side * range + fwd * (range * 0.1f);
+                eye.y = Mathf.Max(GroundHeight(eye.x, eye.z) + 0.6f, target.y + 0.1f + range * 0.08f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 return true;
             }
             return false;
