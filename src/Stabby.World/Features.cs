@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Shapes = 5;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Shapes = 7;
 
         public const float Blend = 0.5f;
 
@@ -192,6 +192,9 @@ namespace Stabby.World
             int tiles = w.Config.Size / TileCells;
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "caves").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
+            ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
+            var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
+            var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
             int from = 0;
             var tile = new List<FeatureEdit>();
             for (int ty = 0; ty < tiles; ty++)
@@ -214,6 +217,14 @@ namespace Stabby.World
                     tile.Clear();
                     Undercut(w, detail, strata, tx, ty, ref r, tile);
                     if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rt + t));
+                    tile.Clear();
+                    Landforms.Tor(w, detail, strata, tors, tx, ty, ref r, tile);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rh + t));
+                    tile.Clear();
+                    Landforms.Hoodoo(w, detail, strata, hoodoos, tx, ty, ref r, tile);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
                     from = list.Count;
                 }
             return list.ToArray();
@@ -225,7 +236,7 @@ namespace Stabby.World
             list.AddRange(tile);
         }
 
-        static bool Overlaps(FeatureEdit e, List<FeatureEdit> list, int from)
+        internal static bool Overlaps(FeatureEdit e, List<FeatureEdit> list, int from)
         {
             for (int q = from; q < list.Count; q++)
             {
@@ -235,7 +246,7 @@ namespace Stabby.World
             return false;
         }
 
-        static bool Dry(GeneratedWorld w, int i) => !w.Sea[i] && w.Water.LakeId[i] < 0 && !w.Water.IsRiver[i] && w.Height[i] > 0;
+        internal static bool Dry(GeneratedWorld w, int i) => !w.Sea[i] && w.Water.LakeId[i] < 0 && !w.Water.IsRiver[i] && w.Height[i] > 0;
 
         static void Overhang(GeneratedWorld w, TerrainDetail detail, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
