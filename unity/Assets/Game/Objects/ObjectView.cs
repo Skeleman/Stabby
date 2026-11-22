@@ -294,7 +294,6 @@ namespace Stabby.Game
                         int uvs = m.Uvs != null ? 2 : m.Tones != null ? 1 : 0;
                         bool flip = m.Uvs == null && outward < 0;
                         if (flip) for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
-                        float course = parts[k].Shape == ObjectPart.Wall && l == Lods - 1 ? 2 : 0;
                         int f = Floats(uvs), start = set.Vertices.Length;
                         set.Vertices.ResizeUninitialized(start + vc * f);
                         var dst = set.Vertices.AsArray();
@@ -312,8 +311,7 @@ namespace Stabby.Game
                             }
                             else if (uvs == 1)
                             {
-                                for (int c = 0; c < 3; c++) dst[o + 6 + c] = m.Tones[4 * v + c];
-                                dst[o + 9] = m.Tones[4 * v + 3] + course;
+                                for (int c = 0; c < 4; c++) dst[o + 6 + c] = m.Tones[4 * v + c];
                             }
                         }
                         Begin(set, at, start, vc, uvs);

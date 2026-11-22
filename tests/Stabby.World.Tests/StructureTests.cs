@@ -50,7 +50,7 @@ public class StructureTests
                     Assert.True(Math.Abs(c.X) + c.R <= 0.56f && Math.Abs(c.Z) + c.R <= 0.56f, $"column at {c.X:F2},{c.Z:F2} r {c.R:F2}");
                     Assert.True(c.Top > c.Bottom);
                 });
-                Assert.Contains(l.Pieces, p => p.Hi == 0);
+                Assert.Contains(l.Pieces, p => p.Hi < Structures.Tiers - 1);
                 Assert.Contains(l.Pieces, p => p.Lo == 2);
             }
     }

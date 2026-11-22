@@ -371,6 +371,7 @@ namespace Stabby.Content
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
                     ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
                     Bank = pl.String("bank", null), PerHundredM = pl.Float("perHundredM", 0),
+                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
                 };
                 foreach (var b in pl.Objects("biomeDensity"))
                 {
