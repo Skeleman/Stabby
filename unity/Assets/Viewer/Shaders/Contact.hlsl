@@ -47,7 +47,9 @@ float3 ContactObject(float3 albedo, float3 wp, float ground, float size, float t
     float n = TmNoise2(wp.xz * 2.3 + wp.y * 1.7).x + 0.5 * TmNoise2(float2(wp.x - wp.z, wp.y) * 7.1 + 5.3).x;
     float band = ContactBand(size, thick) * (1 + 0.4 * n);
     float k = 1 - smoothstep(-0.04, band, above);
-    return lerp(albedo, ContactColor(wp.xz, ground), 0.8 * k * k);
+    float3 c = ContactColor(wp.xz, ground), lw = float3(0.2126, 0.7152, 0.0722);
+    c *= min(1, 0.45 * dot(albedo, lw) / max(dot(c, lw), 1e-4));
+    return lerp(albedo, c, 0.8 * k * k);
 }
 
 float3 ContactObject(float3 albedo, float3 wp, float ground, float size)

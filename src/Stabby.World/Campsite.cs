@@ -14,14 +14,18 @@ namespace Stabby.World
             Add(l, key, f.X + f.U * (f.C * x - f.S * z), f.Y + f.U * y, f.Z + f.U * (f.S * x + f.C * z), f.U * sx, f.U * sy, f.U * sz, f.C * c - f.S * s, f.S * c + f.C * s, a, b, Squareness, lean);
         }
 
-        static void LogBar(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float len, float d, float c, float s, int m, int lo, int hi)
+        static void Round(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float sx, float sy, float sz, int m, int g, int shape, int lo, int hi, float c = 1, float s = 0)
         {
-            float a = 0.293f * d, w = 0.414f * d;
-            int top = Math.Min(hi, 1);
-            Box(l, key, f, x, y, z, len, a, 0.707f * d, m, GX, lo, top, c, s, 0, 0, -1);
-            Box(l, key, f, x, y + a, z, len, w, d, m, GX, lo, hi, c, s);
-            Box(l, key, f, x, y + a + w, z, len, a, 0.707f * d, m, GX, lo, top, c, s, 0, 0, 1);
+            int before = l.Pieces.Count;
+            Box(l, key, f, x, y, z, sx, sy, sz, m, g, lo, hi, c, s);
+            if (l.Pieces.Count == before) return;
+            var p = l.Pieces[before];
+            p.R = shape;
+            l.Pieces[before] = p;
         }
+
+        static void Log(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float len, float d, float c, float s, int m, int lo, int hi) =>
+            Round(l, key, f, x, y, z, len, d, d, m, GX, RoundLog, lo, hi, c, s);
 
         static void Tent(StructureLayout l, ulong key, in Frame f)
         {
@@ -70,14 +74,14 @@ namespace Stabby.World
                 float c = -dz - tw * dx, s = dx - tw * dz, n = 1 / (float)Math.Sqrt(c * c + s * s);
                 Rock(l, rng.NextU64(), f, dx * rr, -0.12f * sy, dz * rr, sx, sy, sz, c * n, s * n, 0, 2, rng.Range(-0.1f, 0.1f));
             }
-            Box(l, key, f, 0, -0.08f, 0, 2 * sq, 0.19f, 2 * sq * 0.98f, Ash, GX, 0, 2);
-            Box(l, key, f, 0, -0.08f, 0, 2 * sq * 0.96f, 0.17f, 2 * sq, Ash, GX, 0, 0, Cos16(2), Sin16(2));
+            Round(l, key, f, 0, -0.004f, 0, 2.05f * r, 0.016f, 2.05f * r, Ash, GV, RoundDisc, 0, 2, Cos16(off), Sin16(off));
+            Round(l, key, f, rng.Range(-0.06f, 0.06f), 0, rng.Range(-0.06f, 0.06f), 1.3f * r, 0.026f, 1.3f * r, Ash, GV, RoundDisc, 0, 1, Cos16(off + 5), Sin16(off + 5));
             int logs = rng.Range(2, 5), lk = rng.Range(0, 16);
             for (int i = 0; i < logs; i++)
             {
                 int k = lk + i * 16 / logs + rng.Range(0, 2);
-                float dx = Cos16(k), dz = Sin16(k), len = rng.Range(0.35f, 0.55f), at = rng.Range(0.05f, 0.25f) + 0.5f * len;
-                LogBar(l, key, f, dx * at, 0.12f, dz * at, len, rng.Range(0.07f, 0.11f), dx, dz, Ash, 0, 1);
+                float dx = Cos16(k), dz = Sin16(k), len = rng.Range(0.35f, 0.55f), at = rng.Range(0.05f, 0.25f) + 0.5f * len, d = rng.Range(0.07f, 0.11f);
+                Log(l, key, f, dx * at, 0.05f * d, dz * at, len, d, dx, dz, Ash, 0, 1);
             }
             if (rng.NextFloat() < 0.5f)
             {
@@ -101,14 +105,14 @@ namespace Stabby.World
         {
             var rng = Rng.Stream(key, "log-seat");
             float len = rng.Range(1.3f, 1.65f), d = rng.Range(0.32f, 0.4f);
-            LogBar(l, key, f, 0, -0.01f, 0, len, d, 1, 0, Timber, 0, 2);
-            if (rng.NextFloat() < 0.5f)
+            Log(l, key, f, 0, -0.04f * d, 0, len, d, 1, 0, Timber, 0, 2);
+            int stubs = rng.Range(1, 3);
+            for (int i = 0; i < stubs; i++)
             {
-                float e = rng.NextFloat() < 0.5f ? -1 : 1, bl = rng.Range(0.18f, 0.3f);
-                Box(l, key, f, e * rng.Range(0.1f, 0.4f) * len, d * 0.55f, 0, 0.06f, bl, 0.06f, Timber, GV, 0, 0, 1, 0, e * 0.6f, rng.Range(-0.3f, 0.3f));
+                float e = rng.NextFloat() < 0.5f ? -1 : 1, sl = rng.Range(0.07f, 0.13f), sd = rng.Range(0.06f, 0.09f);
+                Yaw(ref rng, 0.35f, out float c, out float s);
+                Log(l, key, f, rng.Range(-0.38f, 0.38f) * len, rng.Range(0.35f, 0.55f) * d, e * (0.45f * d + 0.5f * sl), sl, sd, -s * e, c * e, Timber, 0, 0);
             }
-            else
-                Box(l, key, f, rng.Range(-0.35f, 0.35f) * len, 0.25f * d, 0.45f * d, 0.09f, 0.08f, 0.06f, Timber, GX, 0, 0);
             for (int e = -1; e <= 1; e += 2) Col(l, f, e * 0.25f * len, 0, 0.6f * d, 0, d);
         }
 
@@ -138,12 +142,24 @@ namespace Stabby.World
             if (rng.NextFloat() < 0.85f)
             {
                 var pile = tent.Child(-side * rng.Range(1.6f, 1.8f), 0, rng.Range(-0.4f, 0.4f), 0, 1);
-                int n = rng.Range(4, 8);
-                for (int i = 0; i < n; i++)
+                float d = rng.Range(0.11f, 0.14f), gap = 0.96f * d;
+                int bottom = rng.Range(3, 5), rows = rng.Range(2, 4);
+                for (int row = 0; row < rows; row++)
                 {
-                    int row = i < 4 ? 0 : 1;
-                    float z = (row == 0 ? -0.18f + 0.12f * i : -0.12f + 0.12f * (i - 4)) + rng.Range(-0.01f, 0.01f);
-                    LogBar(l, rng.NextU64(), pile, rng.Range(-0.05f, 0.05f), row * 0.1f, z, rng.Range(0.6f, 0.75f), rng.Range(0.1f, 0.13f), 1, 0, Timber, 0, 1);
+                    int cnt = bottom - row;
+                    if (cnt <= 0) break;
+                    for (int i = 0; i < cnt; i++)
+                    {
+                        float ld = d * rng.Range(0.82f, 1.12f);
+                        Yaw(ref rng, 0.14f, out float c, out float s);
+                        float z = (i - 0.5f * (cnt - 1)) * gap + rng.Range(-0.015f, 0.015f), y = row * 0.84f * d - 0.04f * ld + rng.Range(0, 0.01f);
+                        Log(l, rng.NextU64(), pile, rng.Range(-0.08f, 0.08f), y, z, rng.Range(0.48f, 0.8f), ld, c, s, Timber, 0, row < 2 ? 1 : 0);
+                    }
+                }
+                if (rng.NextFloat() < 0.6f)
+                {
+                    Yaw(ref rng, 0.5f, out float c, out float s);
+                    Log(l, rng.NextU64(), pile, rng.Range(0.1f, 0.25f), -0.04f * d, (0.5f * bottom + 0.6f) * gap * (rng.NextFloat() < 0.5f ? -1 : 1), rng.Range(0.45f, 0.65f), d, s, c, Timber, 0, 0);
                 }
                 Col(l, pile, 0, 0, 0.4f, 0, 0.25f);
             }
@@ -151,7 +167,11 @@ namespace Stabby.World
             {
                 int k = k0 + (rng.NextFloat() < 0.5f ? 3 : -3);
                 float bx = Cos16(k) * 2.2f, bz = Sin16(k) * 2.2f;
-                LogBar(l, rng.NextU64(), f, bx, 0, bz, rng.Range(0.6f, 0.75f), 0.2f, -Sin16(k), Cos16(k), Cloth, 0, 1);
+                float bc = -Sin16(k), bs = Cos16(k), len = rng.Range(0.62f, 0.76f), bd = rng.Range(0.19f, 0.23f);
+                var roll = f.Child(bx, 0, bz, bc, bs);
+                Round(l, rng.NextU64(), roll, 0, -0.04f * bd, 0, len, 0.86f * bd, bd, Cloth, GX, RoundLog, 0, 1);
+                for (int e = -1; e <= 1; e += 2)
+                    Round(l, rng.NextU64(), roll, e * 0.3f * len, -0.045f * bd, 0, 0.035f, 0.9f * bd, 1.04f * bd, Timber, GX, RoundLog, 0, 0);
             }
         }
     }

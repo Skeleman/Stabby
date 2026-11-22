@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public ulong Key;
         public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A;
-        public int Lo, Hi, M, G;
+        public int Lo, Hi, M, G, R;
         public bool Coursed;
     }
 
@@ -70,9 +70,11 @@ namespace Stabby.World
                 float tv = tr.Range(-1f, 1f), th = tr.Range(-1f, 1f), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
                 bool cut = p.Q >= Faceted && p.M == 0 && !p.Coursed;
-                float[] u;
+                float[] u, lift = null;
                 int[] idx;
-                if (p.M > 0 || p.Coursed)
+                if (p.R > 0)
+                    u = RoundMesh(p.Key, p.R, tier, out idx, out lift);
+                else if (p.M > 0 || p.Coursed)
                 {
                     u = UnitBox;
                     idx = UnitBoxIdx;
@@ -110,7 +112,7 @@ namespace Stabby.World
                     foreach (int i in idx) b.I.Add(first + i);
                 }
                 if (p.M > 0) Grain(p, out tv, out th);
-                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : tl); }
+                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add(lift != null ? tl + lift[v - before] : p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : tl); }
             }
             starts.Add(b.P.Count / 3);
             var mesh = b.Finish();
