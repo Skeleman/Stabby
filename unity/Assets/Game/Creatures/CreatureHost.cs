@@ -99,6 +99,9 @@ namespace Stabby.Game
                 max = math.max(max, reach[i].y);
             }
             root.MaxReach = max;
+            float route = 0;
+            foreach (var sp in p.Spawns) route = math.max(route, sp.Route.Extent);
+            root.RouteReach = route;
             var think = b.Allocate(ref root.Think, p.Lib.Bodies.Count);
             var length = b.Allocate(ref root.Length, p.Lib.Bodies.Count);
             for (int i = 0; i < think.Length; i++)
@@ -120,7 +123,7 @@ namespace Stabby.Game
                 var s = p.Spawns[i];
                 int of = CreaturePlan.SiteOf(s.Id);
                 while (site <= of) start[site++] = i;
-                rows[i] = new CreatureSpawnRow { Id = s.Id, Body = s.Body, At = new float2(s.X, s.Z), Heading = s.Heading, WalkSpeed = s.WalkSpeed, BodySeed = s.BodySeed, HerdSeed = s.HerdSeed, Seed = s.Seed };
+                rows[i] = new CreatureSpawnRow { Id = s.Id, Body = s.Body, At = new float2(s.X, s.Z), Heading = s.Heading, WalkSpeed = s.WalkSpeed, BodySeed = s.BodySeed, HerdSeed = s.HerdSeed, Seed = s.Seed, Route = s.Route };
             }
             while (site < start.Length) start[site++] = p.Spawns.Count;
             blob = b.CreateBlobAssetReference<CreaturePlanData>(Allocator.Persistent);
@@ -149,7 +152,7 @@ namespace Stabby.Game
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     public partial struct CreatureHostSystem : ISystem
     {
-        public const float GridMeters = 16f, SearchPeriod = 0.25f, MaxThinkStep = 0.3f, MaxPush = 1f;
+        public const float GridMeters = 16f, SearchPeriod = 0.25f, MaxThinkStep = 0.3f, MaxPush = 1f, ShiftSeconds = 300f, Follow = 2 * CreaturePlan.HerdSpread;
         public const int LodFrames = 8, SpawnBudget = 64;
 
         public NativeHashMap<int, CreatureHerd> Herds;
@@ -211,12 +214,12 @@ namespace Stabby.Game
                 Players = players.AsArray(), Plan = planRef, Ecb = ecbs.CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
                 Live = live.AsParallelWriter(), Threats = threats.AsParallelWriter(), Grid = grid.AsParallelWriter(),
             }.ScheduleParallel(dep);
-            dep = new StepHerds { Herds = Herds, Threats = threats, Plan = planRef, Hold = hold, Dt = dt }.Schedule(dep);
+            dep = new StepHerds { Herds = Herds, Threats = threats, Plan = planRef, Hold = hold, Dt = dt, Now = now }.Schedule(dep);
             if (!hold)
                 dep = new Think { Players = players.AsArray(), Herds = Herds, Grid = grid, Plan = planRef, Step = dt, Now = now, Frame = frame }.ScheduleParallel(dep);
             dep = new Spawn
             {
-                Players = players.AsArray(), Plan = planRef, Live = live, Herds = Herds, Prefab = prefab,
+                Players = players.AsArray(), Plan = planRef, Live = live, Herds = Herds, Prefab = prefab, Now = now,
                 Ecb = ecbs.CreateCommandBuffer(state.WorldUnmanaged),
             }.Schedule(dep);
 
@@ -293,8 +296,13 @@ namespace Stabby.Game
                 b.Timer = b.Random.NextFloat(3, 9);
                 b.Turn = b.Random.NextFloat(-0.6f, 0.6f);
             }
-            float2 fwd = new float2(math.sin(s.Heading), math.cos(s.Heading));
             float2 toHome = b.Home - s.Position;
+            if (math.lengthsq(toHome) > Follow * Follow)
+            {
+                b.Walking = true;
+                s.Heading = HerdMind.Toward(s.Heading, math.atan2(toHome.x, toHome.y), 1.2f * dt);
+            }
+            float2 fwd = new float2(math.sin(s.Heading), math.cos(s.Heading));
             float steer = math.clamp(0.02f * (fwd.y * toHome.x - fwd.x * toHome.y), -0.8f, 0.8f);
             s.Move = math.lerp(s.Move, b.Walking ? 1 : 0, math.min(1, 1.2f * dt));
             s.Heading += (b.Turn * 0.4f + steer) * dt * s.Move;
@@ -353,6 +361,7 @@ namespace Stabby.Game
         public BlobAssetReference<CreaturePlanData> Plan;
         public bool Hold;
         public float Dt;
+        public double Now;
 
         public void Execute()
         {
@@ -363,11 +372,22 @@ namespace Stabby.Game
             {
                 if (!Threats.TryGetFirstValue(keys[i], out var t, out var it)) { Herds.Remove(keys[i]); continue; }
                 var best = t;
+                float2 sum = t.At;
+                int members = 1;
                 while (Threats.TryGetNextValue(out t, ref it))
+                {
                     if (t.Distance < best.Distance || t.Distance == best.Distance && (t.At.x < best.At.x || t.At.x == best.At.x && t.At.y < best.At.y)) best = t;
+                    sum += t.At;
+                    members++;
+                }
                 var h = Herds[keys[i]];
                 h.Rehome = false;
                 if (!Hold) h.Rehome = h.Mind.Step(plan.Wary[h.Body], best.Distance, best.Away.x, best.Away.y, best.At.x, best.At.y, ref ground, Dt);
+                h.Route.At(Now, out float rx, out float rz, out _);
+                float2 route = new float2(rx, rz);
+                if (h.Rehome) h.Shift = sum / members - route;
+                else if (!Hold && h.Mind.Mode == HerdMode.Calm) h.Shift *= math.exp(-Dt / CreatureHostSystem.ShiftSeconds);
+                h.Centre = route + h.Shift;
                 Herds[keys[i]] = h;
             }
             keys.Dispose();
@@ -407,6 +427,7 @@ namespace Stabby.Game
                 dt = math.min(Step + b.Debt, CreatureHostSystem.MaxThinkStep);
                 b.Debt = 0;
             }
+            if (h.Mind.Mode == HerdMode.Calm && !h.Rehome) b.Home = h.Centre + b.Offset;
             if (far) b.Push = 0;
             else if (CreatureHostSystem.SearchDue(Now, Step, CreatureHostSystem.SearchPeriod, mix)) b.Push = Separate(s.Id, s.Position, 0.5f * plan.Length[s.Body]);
             CreatureHostSystem.Behave(ref s, ref b, h, plan.Wary[s.Body], away, ref ground, dt);
@@ -449,12 +470,13 @@ namespace Stabby.Game
         public NativeHashMap<int, CreatureHerd> Herds;
         public Entity Prefab;
         public EntityCommandBuffer Ecb;
+        public double Now;
 
         public void Execute()
         {
             ref var plan = ref Plan.Value;
             var wanted = new NativeList<float2>(64, Allocator.Temp);
-            float pad = plan.MaxReach + plan.Spread;
+            float pad = plan.MaxReach + plan.Spread + plan.RouteReach;
             for (int p = 0; p < Players.Length; p++)
             {
                 float2 at = Players[p];
@@ -467,7 +489,7 @@ namespace Stabby.Game
                         for (int i = plan.SiteStart[site]; i < plan.SiteStart[site + 1]; i++)
                         {
                             ref var row = ref plan.Spawns[i];
-                            float spawn = plan.Reach[row.Body].x, d = math.distancesq(at, row.At);
+                            float spawn = plan.Reach[row.Body].x, d = math.distancesq(at, Wake(ref row, out _));
                             if (d > spawn * spawn || Live.Contains(row.Id)) continue;
                             wanted.Add(new float2(d, i));
                         }
@@ -483,11 +505,20 @@ namespace Stabby.Game
                 if (!budget.Take(1)) break;
                 Live.Add(row.Id);
                 var e = Ecb.Instantiate(Prefab);
-                Ecb.SetComponent(e, new CreatureState { Id = row.Id, Body = row.Body, BodySeed = row.BodySeed, Seed = row.Seed, WalkSpeed = row.WalkSpeed, Position = row.At, Heading = row.Heading });
                 int herd = CreaturePlan.HerdOf(row.Id);
-                Ecb.AddComponent(e, new CreatureBrain { Home = row.At, Herd = herd, Random = new Unity.Mathematics.Random(row.Seed), Timer = 0.5f + (row.Seed % 997) / 997f * 3 });
-                if (!Herds.ContainsKey(herd)) Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(row.HerdSeed), Body = row.Body });
+                float2 offset = row.At - new float2(row.Route.X0, row.Route.Z0);
+                float2 at = Wake(ref row, out float heading);
+                if (Herds.TryGetValue(herd, out var known)) at += known.Shift;
+                else Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(row.HerdSeed), Route = row.Route, Body = row.Body, Centre = at - offset });
+                Ecb.SetComponent(e, new CreatureState { Id = row.Id, Body = row.Body, BodySeed = row.BodySeed, Seed = row.Seed, WalkSpeed = row.WalkSpeed, Position = at, Heading = heading + 2 * HerdMind.MemberOffset(row.Seed) });
+                Ecb.AddComponent(e, new CreatureBrain { Home = at, Offset = offset, Herd = herd, Random = new Unity.Mathematics.Random(row.Seed), Timer = 0.5f + (row.Seed % 997) / 997f * 3 });
             }
+        }
+
+        float2 Wake(ref CreatureSpawnRow row, out float heading)
+        {
+            row.Route.At(Now, out float x, out float z, out heading);
+            return new float2(x, z) + row.At - new float2(row.Route.X0, row.Route.Z0);
         }
 
         struct Closer : IComparer<float2>

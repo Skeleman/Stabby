@@ -322,6 +322,14 @@ namespace Stabby.World
         public float X, Z, Heading, WalkSpeed;
         public ulong BodySeed, HerdSeed;
         public uint Seed;
+        public HerdRoute Route;
+    }
+
+    public struct WorldWet : IWetCells
+    {
+        public GeneratedWorld World;
+
+        public bool WetCell(int cell) => CreaturePlan.Wet(World, cell);
     }
 
     public static class CreaturePlan
@@ -390,6 +398,7 @@ namespace Stabby.World
                 int count = rng.Range(def.HerdMin, def.HerdMax + 1);
                 ulong herdSeed = HerdSeed(root, HerdOf(site << 8 | b << 4));
                 float heading = rng.Range(0f, 6.2831853f);
+                var route = Route(w, def, herdSeed, cell, cx, cz);
                 for (int k = 0; k < count; k++)
                 {
                     ulong seed = rng.NextU64();
@@ -398,10 +407,50 @@ namespace Stabby.World
                         Id = site << 8 | b << 4 | k, Body = b,
                         X = cx + rng.Range(-HerdSpread, HerdSpread), Z = cz + rng.Range(-HerdSpread, HerdSpread),
                         Heading = heading + rng.Range(-0.7f, 0.7f), BodySeed = seed, Seed = rng.NextU32() | 1u, HerdSeed = herdSeed,
-                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed),
+                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed), Route = route,
                     });
                 }
             }
+        }
+
+        public static HerdRoute Route(GeneratedWorld w, CreatureDef def, ulong herdSeed, int cell, float cx, float cz)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var rng = new Rng(Rng.Mix(herdSeed ^ 0x5851F42D4C957F2DUL));
+            var route = new HerdRoute { Speed = def.WalkSpeed * HerdRoute.GrazeRatio, Dwell = rng.Range(HerdRoute.DwellMin, HerdRoute.DwellMax), Phase = rng.NextFloat() };
+            route.Set(0, cx, cz);
+            var wet = new WorldWet { World = w };
+            int hx = cell % n, hz = cell / n;
+            for (int k = 1; k < HerdRoute.Points; k++)
+            {
+                float px = route.X(k - 1), pz = route.Z(k - 1);
+                route.Set(k, px, pz);
+                for (int t = 0; t < Tries; t++)
+                {
+                    int x = hx + rng.Range(-HerdRoute.Cells, HerdRoute.Cells + 1), z = hz + rng.Range(-HerdRoute.Cells, HerdRoute.Cells + 1);
+                    float wx = (x + 0.5f) * cm, wz = (z + 0.5f) * cm;
+                    if (wx == px && wz == pz || !Habitable(w, def, x, z)) continue;
+                    if (HerdMind.CrossesWet(ref wet, n, cm, px, pz, wx, wz)) continue;
+                    if (k == HerdRoute.Points - 1 && HerdMind.CrossesWet(ref wet, n, cm, wx, wz, cx, cz)) continue;
+                    route.Set(k, wx, wz);
+                    break;
+                }
+            }
+            int last = HerdRoute.Points - 1;
+            if (HerdMind.CrossesWet(ref wet, n, cm, route.X(last), route.Z(last), cx, cz))
+            {
+                bool back = !HerdMind.CrossesWet(ref wet, n, cm, route.X1, route.Z1, cx, cz);
+                for (int k = 1; k <= last; k++) route.Set(k, back ? route.X1 : cx, back ? route.Z1 : cz);
+            }
+            return route;
+        }
+
+        public static void MemberAt(in CreatureSpawn s, double t, out float x, out float z, out float heading)
+        {
+            s.Route.At(t, out x, out z, out heading);
+            x += s.X - s.Route.X0;
+            z += s.Z - s.Route.Z0;
         }
 
         public static bool Habitable(GeneratedWorld w, CreatureDef def, int x, int z)

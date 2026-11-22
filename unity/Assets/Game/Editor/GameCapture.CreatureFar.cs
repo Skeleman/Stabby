@@ -1,0 +1,551 @@
+using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Profiling;
+using UnityEngine;
+using Stabby.World;
+
+namespace Stabby.Game.Editor
+{
+    public static partial class GameCapture
+    {
+        const float FarSimSeconds = 25f, FarAwaySeconds = 25f, WalkSpeed = 30f;
+        const int DenseSites = 5;
+        const float WakeFov = 15f;
+        static readonly int[] FarHerdCounts = { 2000, 10000 };
+
+        static BlobAssetReference<CreaturePlanData> PlanOf(EntityManager em)
+        {
+            using var q = em.CreateEntityQuery(typeof(CreaturePlanBlob));
+            return q.CalculateEntityCount() == 1 ? q.GetSingleton<CreaturePlanBlob>().Value : default;
+        }
+
+        static void SetPlan(Unity.Entities.World server, BlobAssetReference<CreaturePlanData> plan)
+        {
+            var em = server.EntityManager;
+            em.CompleteAllTrackedJobs();
+            using var q = em.CreateEntityQuery(typeof(CreaturePlanBlob));
+            q.SetSingleton(new CreaturePlanBlob { Value = plan });
+        }
+
+        static bool PlanHerd(BlobAssetReference<CreaturePlanData> planRef, int herd, double t, out float2 centre, out int members, out int body)
+        {
+            ref var plan = ref planRef.Value;
+            centre = 0;
+            members = 0;
+            body = 0;
+            int site = herd >> 4;
+            if (site < 0 || site + 1 >= plan.SiteStart.Length) return false;
+            float2 offset = 0;
+            HerdRoute route = default;
+            for (int i = plan.SiteStart[site]; i < plan.SiteStart[site + 1]; i++)
+            {
+                ref var row = ref plan.Spawns[i];
+                if (CreaturePlan.HerdOf(row.Id) != herd) continue;
+                offset += row.At - new float2(row.Route.X0, row.Route.Z0);
+                route = row.Route;
+                body = row.Body;
+                members++;
+            }
+            if (members == 0) return false;
+            route.At(t, out float x, out float z, out _);
+            centre = new float2(x, z) + offset / members;
+            return true;
+        }
+
+        static bool PickFarHerd(BlobAssetReference<CreaturePlanData> planRef, float2 player, double now, float despawn, out int herd, out Vector3 eye, out int members)
+        {
+            ref var plan = ref planRef.Value;
+            var ground = new CreatureGround { Plan = planRef };
+            herd = -1;
+            eye = default;
+            members = 0;
+            float best = 0;
+            int last = int.MinValue;
+            for (int i = 0; i < plan.Spawns.Length; i++)
+            {
+                int h = CreaturePlan.HerdOf(plan.Spawns[i].Id);
+                if (h == last) continue;
+                last = h;
+                if (!PlanHerd(planRef, h, now, out var p, out int n, out int body) || n < 2) continue;
+                float d = math.distance(p, player);
+                if (d < 1.5f * despawn || d > 6f * despawn) continue;
+                PlanHerd(planRef, h, now + FarSimSeconds, out var p1, out _, out _);
+                PlanHerd(planRef, h, now + 2 * FarSimSeconds + FarAwaySeconds, out var p2, out _, out _);
+                float score = math.distance(p, p1) + math.distance(p1, p2) - d / (6f * despawn);
+                if (score <= best) continue;
+                float stand = plan.Wary[body].Alert * 1.4f;
+                var target = new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y);
+                for (int k = 0; k < 8; k++)
+                {
+                    float a = k * math.PI / 4;
+                    float2 at = p + new float2(math.sin(a), math.cos(a)) * stand;
+                    if (ground.Blocked(at.x, at.y)) continue;
+                    var e = new Vector3(at.x, 0, at.y);
+                    e.y = Mathf.Max(GroundHeight(at.x, at.y) + 3f, target.y + 4f);
+                    if (!Clear(e, target)) continue;
+                    best = score;
+                    herd = h;
+                    eye = e;
+                    members = n;
+                    break;
+                }
+            }
+            return herd >= 0;
+        }
+
+        static void AimAt(Camera cam, Vector3 eye, float2 at)
+        {
+            var target = new Vector3(at.x, GroundHeight(at.x, at.y) + 0.9f, at.y);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+        }
+
+        static (int Count, float Mean, float Min, float Max, float Length, float LowPx, float FadePx) WakeOf(Unity.Entities.World view, int herd)
+        {
+            var em = view.EntityManager;
+            em.CompleteAllTrackedJobs();
+            using var q = em.CreateEntityQuery(typeof(CreatureRoot));
+            using var roots = q.ToComponentDataArray<CreatureRoot>(Allocator.Temp);
+            int n = 0;
+            float sum = 0, lo = 1, hi = 0, length = 0, low = 0, fade = 0;
+            foreach (var c in roots)
+            {
+                if (!em.HasComponent<CreatureState>(c.Ghost) || CreaturePlan.HerdOf(em.GetComponentData<CreatureState>(c.Ghost).Id) != herd) continue;
+                n++;
+                sum += c.Wake;
+                lo = math.min(lo, c.Wake);
+                hi = math.max(hi, c.Wake);
+                ref var rig = ref c.Rig.Value;
+                length = rig.Length;
+                low = rig.LowPx;
+                fade = rig.FadePx;
+            }
+            return (n, n > 0 ? sum / n : 0, lo, hi, length, low, fade);
+        }
+
+        static int BrainCount(EntityManager em, float2 player, float despawn, out int beyond, out int herds)
+        {
+            em.CompleteAllTrackedJobs();
+            using var q = em.CreateEntityQuery(typeof(CreatureState), typeof(CreatureBrain));
+            using var brains = q.ToComponentDataArray<CreatureBrain>(Allocator.Temp);
+            var seen = new HashSet<int>();
+            beyond = 0;
+            foreach (var b in brains)
+            {
+                seen.Add(b.Herd);
+                if (math.distance(b.Home, player) > despawn) beyond++;
+            }
+            herds = seen.Count;
+            return brains.Length;
+        }
+
+        static void ClearCreatures(Unity.Entities.World server)
+        {
+            var em = server.EntityManager;
+            em.CompleteAllTrackedJobs();
+            using var q = em.CreateEntityQuery(typeof(CreatureState), typeof(CreatureBrain));
+            em.DestroyEntity(q);
+            var host = server.GetExistingSystem<CreatureHostSystem>();
+            if (host != SystemHandle.Null) server.Unmanaged.GetUnsafeSystemRef<CreatureHostSystem>(host).Herds.Clear();
+        }
+
+        static BlobAssetReference<CreaturePlanData> SynthPlan(BlobAssetReference<CreaturePlanData> realRef, int herds, float2 dense, out int made, out int rowsMade, out int denseMade)
+        {
+            ref var real = ref realRef.Value;
+            var templates = new List<int2>();
+            for (int i = 0; i < real.Spawns.Length;)
+            {
+                int h = CreaturePlan.HerdOf(real.Spawns[i].Id), j = i;
+                while (j < real.Spawns.Length && CreaturePlan.HerdOf(real.Spawns[j].Id) == h) j++;
+                templates.Add(new int2(i, j - i));
+                i = j;
+            }
+            int sites = real.Across * real.Across;
+            var perSite = new List<CreatureSpawnRow>[sites];
+            var slots = new int[sites];
+            var rng = new Unity.Mathematics.Random(0x9E3779B9u);
+            var ground = new CreatureGround { Plan = realRef };
+            made = 0;
+            rowsMade = 0;
+            denseMade = 0;
+            int dx = (int)(dense.x / real.SiteMeters), dz = (int)(dense.y / real.SiteMeters);
+            for (int tries = 0; made < herds && tries < herds * 40; tries++)
+            {
+                bool packing = tries < DenseSites * DenseSites * CreaturePlan.MaxBodies * 4;
+                int site = packing
+                    ? math.clamp(dz + rng.NextInt(-DenseSites / 2, DenseSites / 2 + 1), 0, real.Across - 1) * real.Across + math.clamp(dx + rng.NextInt(-DenseSites / 2, DenseSites / 2 + 1), 0, real.Across - 1)
+                    : rng.NextInt(sites);
+                if (slots[site] >= CreaturePlan.MaxBodies) continue;
+                float2 c = new float2(site % real.Across + rng.NextFloat(), site / real.Across + rng.NextFloat()) * real.SiteMeters;
+                if (ground.Blocked(c.x, c.y)) continue;
+                var t = templates[made % templates.Count];
+                float2 shift = c - new float2(real.Spawns[t.x].Route.X0, real.Spawns[t.x].Route.Z0);
+                if (perSite[site] == null) perSite[site] = new List<CreatureSpawnRow>();
+                for (int k = 0; k < t.y; k++)
+                {
+                    var row = real.Spawns[t.x + k];
+                    row.Id = site << 8 | slots[site] << 4 | k;
+                    row.At += shift;
+                    for (int w = 0; w < HerdRoute.Points; w++) row.Route.Set(w, row.Route.X(w) + shift.x, row.Route.Z(w) + shift.y);
+                    perSite[site].Add(row);
+                    rowsMade++;
+                }
+                if (packing) denseMade++;
+                slots[site]++;
+                made++;
+            }
+
+            var b = new BlobBuilder(Allocator.Temp);
+            ref var root = ref b.ConstructRoot<CreaturePlanData>();
+            root.Across = real.Across;
+            root.SiteMeters = real.SiteMeters;
+            root.Spread = real.Spread;
+            root.MaxReach = real.MaxReach;
+            root.RouteReach = real.RouteReach;
+            root.Size = real.Size;
+            root.CellMeters = real.CellMeters;
+            var reach = b.Allocate(ref root.Reach, real.Reach.Length);
+            var think = b.Allocate(ref root.Think, real.Think.Length);
+            var length = b.Allocate(ref root.Length, real.Length.Length);
+            var wary = b.Allocate(ref root.Wary, real.Wary.Length);
+            for (int i = 0; i < reach.Length; i++) reach[i] = real.Reach[i];
+            for (int i = 0; i < think.Length; i++) think[i] = real.Think[i];
+            for (int i = 0; i < length.Length; i++) length[i] = real.Length[i];
+            for (int i = 0; i < wary.Length; i++) wary[i] = real.Wary[i];
+            var wet = b.Allocate(ref root.Wet, real.Wet.Length);
+            for (int i = 0; i < wet.Length; i++) wet[i] = real.Wet[i];
+            var start = b.Allocate(ref root.SiteStart, sites + 1);
+            var rows = b.Allocate(ref root.Spawns, rowsMade);
+            int at = 0;
+            for (int s = 0; s < sites; s++)
+            {
+                start[s] = at;
+                if (perSite[s] == null) continue;
+                foreach (var row in perSite[s]) rows[at++] = row;
+            }
+            start[sites] = at;
+            var blob = b.CreateBlobAssetReference<CreaturePlanData>(Allocator.Persistent);
+            b.Dispose();
+            return blob;
+        }
+
+
+        sealed class FarFrames
+        {
+            public double Host, Build, Main, Dt, WakeDt, QuietDt;
+            public int Peak, Spawned, Frames, Slow, SlowBuild, Roots, BuildIn, BuildOut, PeakIn, PeakOut;
+            readonly HashSet<int> seen = new HashSet<int>();
+
+            public void Reset(EntityManager em, EntityManager view)
+            {
+                Host = Build = Main = Dt = WakeDt = QuietDt = 0;
+                Peak = Spawned = Frames = Slow = SlowBuild = BuildIn = BuildOut = PeakIn = PeakOut = 0;
+                Ids(em, seen, out _);
+                Roots = RootCount(view);
+            }
+
+            public void Add(EntityManager em, EntityManager view, ProfilerRecorder host, ProfilerRecorder build, ProfilerRecorder main)
+            {
+                Host = math.max(Host, host.LastValue / 1e6);
+                double b = build.LastValue / 1e6;
+                int roots = RootCount(view), delta = roots - Roots;
+                Roots = roots;
+                int rin = math.max(delta, 0), rout = math.max(-delta, 0);
+                PeakIn = math.max(PeakIn, rin);
+                PeakOut = math.max(PeakOut, rout);
+                if (b > Build) { Build = b; BuildIn = rin; BuildOut = rout; }
+                if (b > 4) SlowBuild++;
+                Main = math.max(Main, main.LastValue / 1e6);
+                double dt = Time.unscaledDeltaTime * 1000.0;
+                Dt = math.max(Dt, dt);
+                if (dt > 33) Slow++;
+                Frames++;
+                Ids(em, seen, out int fresh);
+                Peak = math.max(Peak, fresh);
+                Spawned += fresh;
+                if (fresh > 0 || delta != 0) WakeDt = math.max(WakeDt, dt);
+                else QuietDt = math.max(QuietDt, dt);
+            }
+
+            public string Text => $"peak {Peak} server spawns in one frame (budget {CreatureHostSystem.SpawnBudget}), {Spawned} spawned over {Frames} frames, client roots peak +{PeakIn}/-{PeakOut} per frame; {Slow} frames over 33 ms, worst dt {WakeDt:F1} ms on frames with creature arrivals or departures vs {QuietDt:F1} ms on frames without; worst host {Host:F3} ms; worst client build {Build:F3} ms (that frame +{BuildIn}/-{BuildOut} roots), {SlowBuild} build frames over 4 ms; worst main thread {Main:F2} ms";
+        }
+
+        static void Ids(EntityManager em, HashSet<int> seen, out int fresh)
+        {
+            em.CompleteAllTrackedJobs();
+            using var q = em.CreateEntityQuery(typeof(CreatureState), typeof(CreatureBrain));
+            using var states = q.ToComponentDataArray<CreatureState>(Allocator.Temp);
+            fresh = 0;
+            var now = new HashSet<int>();
+            foreach (var s in states)
+            {
+                now.Add(s.Id);
+                if (!seen.Contains(s.Id)) fresh++;
+            }
+            seen.Clear();
+            seen.UnionWith(now);
+        }
+
+        static int RootCount(EntityManager view)
+        {
+            using var q = view.CreateEntityQuery(typeof(CreatureRoot));
+            return q.CalculateEntityCount();
+        }
+
+        static bool EyeFor(BlobAssetReference<CreaturePlanData> planRef, float2 p, float dist, float2 prefer, out Vector3 eye)
+        {
+            var ground = new CreatureGround { Plan = planRef };
+            var target = new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y);
+            for (int k = 0; k < 16; k++)
+            {
+                float a = (k >> 1) * math.PI / 8 * ((k & 1) == 0 ? 1 : -1);
+                float2 d = new float2(prefer.x * math.cos(a) - prefer.y * math.sin(a), prefer.x * math.sin(a) + prefer.y * math.cos(a));
+                float2 at = p + d * dist;
+                if (ground.Blocked(at.x, at.y)) continue;
+                eye = new Vector3(at.x, 0, at.y);
+                eye.y = Mathf.Max(GroundHeight(at.x, at.y) + 3f, target.y + 4f);
+                if (Clear(eye, target)) return true;
+            }
+            eye = default;
+            return false;
+        }
+
+        static bool Settling() => GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0;
+
+        static System.Collections.IEnumerator FarTour(Camera cam, string dir)
+        {
+            var lines = new List<string>();
+            var server = ServerWorld();
+            var view = ViewWorld();
+            if (server == null || view == null) { GameStatus.Lines["~far"] = "far: no worlds"; yield break; }
+            var sem = server.EntityManager;
+            var planRef = PlanOf(sem);
+            for (int k = 0; k < 1800 && !planRef.IsCreated; k++) { yield return null; planRef = PlanOf(sem); }
+            if (!planRef.IsCreated || !FirstPlayer(sem, out float2 home)) { GameStatus.Lines["~far"] = "far: no plan or player"; yield break; }
+            var host = server.GetExistingSystem<CreatureHostSystem>();
+            GameStatus.HoldCamera = true;
+            CreatureView.Current = default;
+            FreezeCreatures(false);
+            float despawn = CreaturePlanSystem.DespawnReach, spawn = CreaturePlanSystem.SpawnReach;
+            float routeReach = planRef.Value.RouteReach, siteMeters = planRef.Value.SiteMeters;
+            int across = planRef.Value.Across;
+
+            if (!PickFarHerd(planRef, home, server.Time.ElapsedTime, despawn, out int herd, out Vector3 eye, out int members))
+            {
+                GameStatus.Lines["~far"] = "far: no herd with a clear view";
+                yield break;
+            }
+            PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p0, out _, out int body);
+            var wary = planRef.Value.Wary[body];
+            var eyeFlat = new float2(eye.x, eye.z);
+            float2 toEye = math.normalizesafe(eyeFlat - p0, new float2(0, 1));
+            float standDist = math.min(0.8f * spawn, 1.5f * math.max(wary.Calm, wary.Alert));
+            float2 stand = p0 + toEye * standDist, stage = p0 + toEye * (despawn + routeReach + 20f);
+            PlaceServerPlayers(server, new Vector2(stage.x, stage.y));
+            cam.fieldOfView = WakeFov;
+            for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
+            {
+                PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
+                AimAt(cam, eye, p);
+                yield return null;
+            }
+            HerdCentre(server, herd, out int liveBefore, out _);
+            PlanHerd(planRef, herd, server.Time.ElapsedTime, out p0, out _, out _);
+            lines.Add($"far herd {herd}: {members} members, plan centre {p0.x:F1},{p0.y:F1}, {math.distance(p0, home):F0} m from spawn; spawn reach {spawn:F0} m, despawn reach {despawn:F0} m, route reach {routeReach:F0} m; live while the player waited {math.distance(stage, p0):F0} m out: {liveBefore}");
+            lines.Add($"camera {math.distance(p0, eyeFlat):F1} m from the herd; player walks in at {WalkSpeed:F0} m/s and stops {standDist:F0} m out (calm {wary.Calm:F0} m, alert {wary.Alert:F0} m)");
+
+            using var hostRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(server, typeof(CreatureHostSystem)), 4);
+            using var buildRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureBuildSystem)), 4);
+            using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
+            var fr = new FarFrames();
+            for (int k = 0; k < 4; k++) yield return null;
+            fr.Reset(sem, view.EntityManager);
+            bool shot = false;
+            float wakeErr = -1, eyeDist = math.distance(p0, eyeFlat);
+            int moves = 0;
+            float2 player = stage;
+            int settled = 0;
+            for (int f = 0; f < 1800 && settled < 120; f++)
+            {
+                float step = WalkSpeed * Time.deltaTime;
+                float2 left = stand - player;
+                player = math.length(left) <= step ? stand : player + math.normalize(left) * step;
+                PlaceServerPlayers(server, new Vector2(player.x, player.y));
+                yield return null;
+                fr.Add(sem, view.EntityManager, hostRec, buildRec, mainRec);
+                PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
+                if (f % 15 == 0 && !Clear(eye, new Vector3(p.x, GroundHeight(p.x, p.y) + 0.9f, p.y)) && EyeFor(planRef, p, eyeDist, math.normalizesafe(new float2(eye.x, eye.z) - p, toEye), out var e2)) { eye = e2; moves++; }
+                AimAt(cam, eye, p);
+                if (wakeErr < 0)
+                {
+                    var c = HerdCentre(server, herd, out int live, out _);
+                    if (live == members) wakeErr = math.distance(new float2(c.x, c.y), p);
+                }
+                var wake = WakeOf(view, herd);
+                if (!shot && wake.Count == members && wake.Mean >= 0.4f && wake.Mean <= 0.7f)
+                {
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "creature-far-wake");
+                    shot = true;
+                    lines.Add($"wake shot: camera {math.distance(new float2(eye.x, eye.z), p):F0} m from the herd at {WakeFov:F0} degree FOV (moved {moves} times to keep a clear sightline), player {math.distance(player, p):F0} m from the herd, {wake.Count} members on the client, wake mean {wake.Mean:F2} (min {wake.Min:F2}, max {wake.Max:F2})");
+                }
+                if (player.Equals(stand) && wakeErr >= 0 && wake.Count == members && wake.Min >= 1) settled++;
+            }
+            if (!shot) lines.Add("wake shot missed: no frame caught the crossfade between 0.4 and 0.7");
+            lines.Add($"real plan walk-in wake: {fr.Text}");
+            lines.Add($"agreement on wake: server centroid {wakeErr:F3} m from the plan");
+
+            double t0 = server.Time.ElapsedTime;
+            float simMax = 0, simEnd = 0;
+            var modes = new HashSet<string>();
+            while (server.Time.ElapsedTime - t0 < FarSimSeconds)
+            {
+                yield return null;
+                PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
+                AimAt(cam, eye, p);
+                var c = HerdCentre(server, herd, out int live, out _);
+                if (HerdMindOf(server, herd, out var m)) modes.Add(m.Mode.ToString());
+                if (live != members) continue;
+                simEnd = math.distance(new float2(c.x, c.y), p);
+                simMax = math.max(simMax, simEnd);
+            }
+            PlanHerd(planRef, herd, t0, out var ps0, out _, out _);
+            PlanHerd(planRef, herd, server.Time.ElapsedTime, out var ps1, out _, out _);
+            lines.Add($"agreement while simulated: over {FarSimSeconds:F0} s the plan moved {math.distance(ps0, ps1):F2} m; server centroid within {simMax:F2} m of the plan (end {simEnd:F2} m; members wander inside the {CreatureHostSystem.Follow:F0} m leash), herd modes {string.Join("/", modes)}");
+
+            cam.fieldOfView = HerdFov;
+            for (int k = 0; k < 4; k++) yield return null;
+            var wakeInfo = WakeOf(view, herd);
+            float q = math.max(DetailView.Current.Quality, 0.1f);
+            float px = 0.5f * (wakeInfo.LowPx + wakeInfo.FadePx) / q;
+            float range = Detail.Reach(math.max(wakeInfo.Length, 0.5f), math.max(px, 1f), DetailView.Current.PixelsPerMetre);
+            Vector3 rangeEye = default;
+            bool clear = false;
+            for (int k = 0; k < 16 && !clear; k++)
+            {
+                float a = (k >> 1) * math.PI / 4 * ((k & 1) == 0 ? 1 : -1);
+                float2 d = new float2(toEye.x * math.cos(a) - toEye.y * math.sin(a), toEye.x * math.sin(a) + toEye.y * math.cos(a));
+                float2 at = ps1 + d * range;
+                rangeEye = new Vector3(at.x, 0, at.y);
+                rangeEye.y = Mathf.Max(GroundHeight(at.x, at.y) + 4f, GroundHeight(ps1.x, ps1.y) + 6f);
+                clear = Clear(rangeEye, new Vector3(ps1.x, GroundHeight(ps1.x, ps1.y) + 0.9f, ps1.y));
+            }
+            for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
+            {
+                PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
+                AimAt(cam, rangeEye, p);
+                yield return null;
+            }
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "creature-far-range");
+            HerdCentre(server, herd, out int liveAtRange, out _);
+            lines.Add($"range shot: camera {range:F0} m from the herd ({px:F1} px target between low {wakeInfo.LowPx / q:F1} and fade {wakeInfo.FadePx / q:F1} px), clear view {clear}, {liveAtRange} live");
+
+            PlanHerd(planRef, herd, server.Time.ElapsedTime, out var pLeave, out _, out _);
+            float2 away = pLeave + toEye * (3 * despawn);
+            PlaceServerPlayers(server, new Vector2(away.x, away.y));
+            int goneFrames = 0;
+            for (; goneFrames < 900; goneFrames++)
+            {
+                yield return null;
+                HerdCentre(server, herd, out int live, out _);
+                if (live == 0 && !HerdMindOf(server, herd, out _)) break;
+            }
+            double tLeft = server.Time.ElapsedTime;
+            PlanHerd(planRef, herd, tLeft, out var pGone, out _, out _);
+            while (server.Time.ElapsedTime - tLeft < FarAwaySeconds) yield return null;
+            float2 back = away;
+            float backErr = -1;
+            for (int f = 0; f < 9000 && backErr < 0; f++)
+            {
+                float step = WalkSpeed * Time.deltaTime;
+                float2 left = stand - back;
+                back = math.length(left) <= step ? stand : back + math.normalize(left) * step;
+                PlaceServerPlayers(server, new Vector2(back.x, back.y));
+                yield return null;
+                var c = HerdCentre(server, herd, out int live, out _);
+                if (live != members) continue;
+                PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
+                backErr = math.distance(new float2(c.x, c.y), p);
+                lines.Add($"agreement after walking away: herd and mind gone {goneFrames + 1} frames after the player left, plan moved {math.distance(pGone, p):F2} m during {server.Time.ElapsedTime - tLeft:F1} s away, woken centroid {backErr:F3} m from the plan as the player walked back within {math.distance(back, p):F0} m");
+            }
+            if (backErr < 0) lines.Add("agreement after walking away: herd did not wake again");
+
+            PlaceServerPlayers(server, new Vector2(home.x, home.y));
+            for (int k = 0; k < 120; k++) yield return null;
+            var systems = new[] { host };
+            int realLive = BrainCount(sem, home, despawn, out int realBeyond, out int realHerds);
+            var realTime = TimeBoth(server, systems);
+            lines.Add($"real plan ({CreaturePlanSystem.Planned} creatures): at spawn {realLive} live in {realHerds} herds, {realBeyond} beyond despawn reach, host {realTime.Par:F3} ms parallel / {realTime.Single:F3} ms one thread");
+
+            float extent = across * siteMeters;
+            float2 mid = new float2(extent * 0.5f);
+            float2 out2 = math.normalizesafe(mid - home, new float2(1, 0));
+            float2 dense = math.clamp(home + out2 * 8 * despawn, 3 * siteMeters, extent - 3 * siteMeters);
+            out2 = math.normalizesafe(dense - home, out2);
+            float2 denseStage = dense - out2 * (despawn + routeReach + (DenseSites / 2 + 1) * siteMeters);
+            foreach (int n in FarHerdCounts)
+            {
+                var synth = SynthPlan(planRef, n, dense, out int made, out int rowCount, out int denseMade);
+                ClearCreatures(server);
+                SetPlan(server, synth);
+                PlaceServerPlayers(server, new Vector2(home.x, home.y));
+                int stable = 0, last = -1;
+                for (int k = 0; k < 900 && stable < 60; k++)
+                {
+                    yield return null;
+                    int c = BrainCount(sem, home, despawn, out _, out _);
+                    stable = c == last ? stable + 1 : 0;
+                    last = c;
+                }
+                int live = BrainCount(sem, home, despawn, out int beyond, out int liveHerds);
+                var t = TimeBoth(server, systems);
+                lines.Add($"{made} plan herds ({rowCount} creatures, {denseMade} packed into {DenseSites}x{DenseSites} sites around {dense.x:F0},{dense.y:F0}): at spawn {live} live in {liveHerds} herds, {beyond} beyond despawn reach, host {t.Par:F3} ms parallel / {t.Single:F3} ms one thread");
+
+                PlaceServerPlayers(server, new Vector2(denseStage.x, denseStage.y));
+                var look = Quaternion.LookRotation(new Vector3(out2.x, -0.05f, out2.y));
+                var camAt = new Vector3(denseStage.x, GroundHeight(denseStage.x, denseStage.y) + 3f, denseStage.y);
+                for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
+                {
+                    cam.transform.SetPositionAndRotation(camAt, look);
+                    yield return null;
+                }
+                int before = BrainCount(sem, denseStage, despawn, out _, out _);
+                fr.Reset(sem, view.EntityManager);
+                player = denseStage;
+                stable = 0;
+                last = -1;
+                for (int f = 0; f < 20000 && stable < 120; f++)
+                {
+                    float step = WalkSpeed * Time.deltaTime;
+                    float2 left = dense - player;
+                    player = math.length(left) <= step ? dense : player + math.normalize(left) * step;
+                    PlaceServerPlayers(server, new Vector2(player.x, player.y));
+                    camAt = new Vector3(player.x, GroundHeight(player.x, player.y) + 3f, player.y);
+                    cam.transform.SetPositionAndRotation(camAt, look);
+                    yield return null;
+                    fr.Add(sem, view.EntityManager, hostRec, buildRec, mainRec);
+                    int c = BrainCount(sem, player, despawn, out _, out _);
+                    stable = player.Equals(dense) && c == last ? stable + 1 : 0;
+                    last = c;
+                }
+                int woke = BrainCount(sem, player, despawn, out int denseBeyond, out int denseHerds);
+                var td = TimeBoth(server, systems);
+                lines.Add($"  walk-in mass wake over {math.distance(denseStage, dense):F0} m into the cluster (site {siteMeters:F0} m, {before} live before, player {math.distance(player, dense):F0} m short at the end): {woke} live in {denseHerds} herds, {denseBeyond} beyond despawn reach; {fr.Text}");
+                lines.Add($"  host with the cluster awake: {td.Par:F3} ms parallel / {td.Single:F3} ms one thread");
+
+                ClearCreatures(server);
+                SetPlan(server, planRef);
+                PlaceServerPlayers(server, new Vector2(home.x, home.y));
+                yield return null;
+                sem.CompleteAllTrackedJobs();
+                synth.Dispose();
+                for (int k = 0; k < 60; k++) yield return null;
+            }
+
+            for (int i = 0; i < lines.Count; i++) GameStatus.Lines[$"~far {i:D2}"] = lines[i];
+            System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, "creature-far.txt"), lines);
+        }
+    }
+}

@@ -164,6 +164,7 @@ namespace Stabby.World
         public const float ReferenceLines = 1080f;
         public const float ReferenceFov = 60f;
         public const float Hysteresis = 0.15f;
+        public const float CrossfadeSeconds = 0.75f;
         public const float MaxZoom = 1.5f;
         public const float ReferencePixelsPerMetre = 935.3074f;
 

@@ -100,8 +100,8 @@ namespace Stabby.Game.Editor
                 float2 centre = at + new float2(math.sin(ang), math.cos(ang)) * rad;
                 float2 p = centre + new float2((h & 0xFF) / 255f - 0.5f, (h >> 8 & 0xFF) / 255f - 0.5f) * 8f;
                 sem.SetComponentData(es[i], new CreatureState { Id = -1 - i - 100000 * (r + 1), Body = 0, Seed = h, WalkSpeed = 1.2f, Position = p, Heading = ang });
-                sem.SetComponentData(es[i], new CreatureBrain { Home = p, Herd = herd, Random = new Unity.Mathematics.Random(h | 1), Timer = 0.5f + (h % 997) / 997f * 3 });
-                if (!sys.Herds.ContainsKey(herd)) sys.Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(h), Body = 0 });
+                sem.SetComponentData(es[i], new CreatureBrain { Home = p, Offset = p - centre, Herd = herd, Random = new Unity.Mathematics.Random(h | 1), Timer = 0.5f + (h % 997) / 997f * 3 });
+                if (!sys.Herds.ContainsKey(herd)) sys.Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(h), Body = 0, Route = new HerdRoute { X0 = centre.x, Z0 = centre.y }, Centre = centre });
             }
         }
 
