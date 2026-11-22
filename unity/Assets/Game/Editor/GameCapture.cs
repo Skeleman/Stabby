@@ -160,7 +160,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "fastwalk" ? 260 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "fastwalk" ? 290 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -290,7 +290,7 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
-            if (phase == 260) { if (job == null) job = FastWalkTour(cam); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 290) { if (job == null) job = FastWalkTour(cam); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 220)
             {
                 if (job == null) job = LandformTour(cam, dir);
