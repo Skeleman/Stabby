@@ -5,11 +5,11 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
-        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f;
         public const int DiscoveryTries = 16, ClimbSteps = 12;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
@@ -104,7 +104,9 @@ namespace Stabby.World
 
         public float CampDraw(float x, float z) => ForestEdge(x, z) + Riverside(x, z);
 
-        float ForestEdge(float x, float z)
+        float ForestEdge(float x, float z) => 1 - Math.Abs(2 * Woods(x, z) - 1);
+
+        public float Woods(float x, float z)
         {
             if (treeCover == null)
             {
@@ -131,8 +133,7 @@ namespace Stabby.World
                     int b = w.Biome[Cell(pz) * n + Cell(px)];
                     if (b >= 0 && treeCover[b] >= ForestPerHectare) forested++;
                 }
-            float f = forested / (float)probes;
-            return 1 - Math.Abs(2 * f - 1);
+            return forested / (float)probes;
         }
 
         float Riverside(float x, float z)
@@ -215,6 +216,12 @@ namespace Stabby.World
                 if (relief > CampReliefM) return float.MinValue;
                 float draw = CampDraw(x, z);
                 return draw > 0 ? draw - 0.1f * relief : float.MinValue;
+            }
+            if (kind == Hermit)
+            {
+                if (relief > CampReliefM) return float.MinValue;
+                float woods = Woods(x, z);
+                return woods >= HermitWoods ? woods - 0.1f * relief : float.MinValue;
             }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;

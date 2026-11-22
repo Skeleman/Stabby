@@ -31,6 +31,7 @@ namespace Stabby.World
                     if (dx * dx + dz * dz < ObjectField.TownClearM * ObjectField.TownClearM) { e.Add(at + $" lies within {ObjectField.TownClearM:F0} m of a {l.Kind}"); return; }
                 }
                 if (def.Placement.Discovery == ObjectField.Camp && !(field.CampDraw(s.X, s.Z) > 0)) { e.Add(at + " is neither by a forest edge nor by a river"); return; }
+                if (def.Placement.Discovery == ObjectField.Hermit && !(field.Woods(s.X, s.Z) >= ObjectField.HermitWoods)) { e.Add(at + " is not deep in the woods"); return; }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);
                 for (int b = a + 1; b < found.Length; b++)
                 {
