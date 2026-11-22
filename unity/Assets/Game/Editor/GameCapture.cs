@@ -1602,7 +1602,7 @@ namespace Stabby.Game.Editor
         static readonly string[] RuinShots = { "ruin-close", "ruin-mid" };
         static readonly string[] SpringShots = { "spring-close", "spring" };
         static readonly string[] FairyShots = { "fairyring-close", "fairyring-mid" };
-        static readonly string[] VentShots = { "geyser-erupt", "geyser-rest", "mud-close" };
+        static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot" };
 
         static bool AimVent(Camera cam, int mode)
         {
@@ -1629,10 +1629,10 @@ namespace Stabby.Game.Editor
                 if (kind == ObjectField.Geyser)
                 {
                     Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
-                    TerrainViewSystem.ClockOverride = mode == 0 ? offset + 0.4 * duration : offset + duration + interval * 0.5;
+                    TerrainViewSystem.ClockOverride = offset + 0.4 * duration;
                     float h = Stabby.Viewer.WaterGeometry.ColumnPerRadius * r;
                     target = c + Vector3.up * 0.4f * h;
-                    eye = c + side * 1.4f * h + Vector3.up * 2f;
+                    eye = c + side * (mode == 0 ? 1.4f : 4.5f) * h + Vector3.up * (mode == 0 ? 2f : 0.6f * h);
                 }
                 else
                 {

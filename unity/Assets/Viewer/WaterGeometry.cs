@@ -44,7 +44,7 @@ namespace Stabby.Viewer
         public const float MistPad = 40f;
         const float SteamRadius = 0.55f, SteamRise = 2.2f, SpringOverlap = 0.3f, ColumnRadius = 0.9f;
         public const float ColumnPerRadius = 14f;
-        const int SteamPuffs = 2, SpringSides = 32, JetPuffs = 14, ColumnSteamPuffs = 5;
+        const int SteamPuffs = 2, SpringSides = 32, JetPuffs = 7, ColumnSteamPuffs = 3;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f;
@@ -442,7 +442,7 @@ namespace Stabby.Viewer
                         Structures.GeyserCycle(field.VentSeed(o), out float interval, out float duration, out float offset);
                         float duty = duration / interval, start = offset / interval, h = ColumnPerRadius * r;
                         for (int m = 0; m < JetPuffs + ColumnSteamPuffs; m++)
-                            mist.Column(c, duty, start, m < JetPuffs ? 0 : 1, Mathf.Repeat(seed + m * MistPhase, 1f), ColumnRadius * r, h, interval);
+                            mist.Column(c, duty, start, m < JetPuffs ? 0 : 1, Mathf.Repeat(seed + (m < JetPuffs ? (float)m / JetPuffs : m * MistPhase), 1f), ColumnRadius * r, h, interval);
                     }
                     int b = verts.Count;
                     float tag = kind == ObjectField.MudPot ? -1 : 1;

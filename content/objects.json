@@ -282,12 +282,12 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest"], "perHectare": 0, "discovery": "fairy-ring", "spacingM": 700, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 14, "sizeMaxM": 14.5, "sink": 0.002 }
     },
     {
-      "id": "geyser", "name": "Geyser", "kind": "structure", "color": "#e2ddd0", "variants": 8,
+      "id": "geyser", "name": "Geyser", "kind": "structure", "material": "sinter-crust", "variants": 8,
       "parts": [ { "id": "site", "shape": "geyser" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "geyser", "spacingM": 3500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.02 }
     },
     {
-      "id": "mud-pot", "name": "Mud pot", "kind": "structure", "color": "#8c7f6a", "variants": 8,
+      "id": "mud-pot", "name": "Mud pot", "kind": "structure", "material": "vent-mud", "variants": 8,
       "parts": [ { "id": "site", "shape": "mud-pot" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "mud-pot", "spacingM": 2500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 14, "sizeMaxM": 18, "sink": 0.02 }
     }

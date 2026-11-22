@@ -27,7 +27,7 @@ Shader "Stabby/FallMist"
             float _StabbyClock;
 
             static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
-            static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6, SteamPeriod = 6.5, SteamOpacity = 0.14, JetPeriod = 1.7, ColumnSteamPeriod = 5.5, JetRamp = 1.5, SteamLinger = 9, JetOpacity = 0.75, JetStretch = 3.2, ColumnSteamOpacity = 0.3, CoverCap = 0.22;
+            static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6, SteamPeriod = 6.5, SteamOpacity = 0.14, JetPeriod = 1.7, ColumnSteamPeriod = 5.5, JetRamp = 1.5, SteamLinger = 9, JetOpacity = 0.75, JetStretch = 3.2, ColumnSteamOpacity = 0.3, JetCover = 0.1, SteamCover = 0.12;
 
             float2 Grad(int2 p)
             {
@@ -78,7 +78,7 @@ Shader "Stabby/FallMist"
                     float t, size, env, stretch = 1;
                     if (jet)
                     {
-                        t = frac(tm / (JetPeriod * (0.85 + 0.3 * frac(ph * 7.31))) + ph);
+                        t = frac(tm / JetPeriod + ph);
                         float top = h * (0.35 + 0.65 * burst);
                         wp += float3(rad * 0.25 * dr.y * t, top * t * (1.5 - 0.5 * t), rad * 0.25 * dr.z * t) + float3(wind.x, 0, wind.y) * (top * 0.15 * t * t);
                         size = rad * (0.65 + 0.55 * t);
@@ -89,12 +89,12 @@ Shader "Stabby/FallMist"
                     {
                         t = frac(tm / (ColumnSteamPeriod * (0.8 + 0.4 * frac(ph * 7.31))) + ph);
                         wp += float3(rad * 1.2 * dr.y, h * (0.15 + 1.0 * t), rad * 1.2 * dr.z) + float3(wind.x, 0, wind.y) * (h * WindDrift * 0.5 * t * t);
-                        size = rad * (1.6 + 2.8 * t);
+                        size = rad * (1.3 + 2.2 * t);
                         env = cloud * smoothstep(0, 0.12, t) * (1 - smoothstep(0.4, 1, t));
                     }
                     float camD = length(_WorldSpaceCameraPos - wp), px = ScreenPx(h, camD);
                     env *= smoothstep(_StabbyColumnPx.x, _StabbyColumnPx.y, px);
-                    size = min(size, camD * CoverCap) * (env > 0.001 ? 1 : 0);
+                    size = min(size, camD * (jet ? JetCover : SteamCover)) * (env > 0.001 ? 1 : 0);
                     float3 right = UNITY_MATRIX_V[0].xyz, up = UNITY_MATRIX_V[1].xyz;
                     wp += (right * c.x + up * c.y * stretch) * size;
                     puff = float4(t, env, size, kind);

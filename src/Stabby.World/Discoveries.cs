@@ -374,7 +374,7 @@ namespace Stabby.World
         public ulong VentSeed(ObjectInstance o) => Rng.Mix(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant) ^ ((ulong)(uint)(int)(o.X * 16f) << 32 | (uint)(int)(o.Z * 16f)));
 
         public const int SpringStride = 9;
-        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f, GeyserLipU = 0.15f, GeyserVentU = 2.5f, GeyserTaper = 0.9f, GeyserFootU = 0.5f, MudSinkU = 0.15f, MudCrestU = 0.45f, MudDepthU = 0.5f, MudBankU = 0.3f, MudBank = 1.1f, MudShelf = 2.5f, MudShelfU = 0.08f, MudShelfTopU = 0.2f, MudRimU = 0.7f, MudRimSlope = 0.7f, MudLobe = 0.3f, GeyserLobe = 0.18f, GeyserLumpU = 0.08f, GeyserTerraceU = 0.7f;
+        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f, GeyserLipU = 0.15f, GeyserVentU = 2.5f, GeyserTaper = 0.9f, GeyserFootU = 0.5f, MudSinkU = 0.15f, MudCrestU = 0.45f, MudDepthU = 0.5f, MudBankU = 0.3f, MudBank = 1.1f, MudShelf = 2.5f, MudShelfU = 0.08f, MudShelfTopU = 0.2f, MudRimU = 0.7f, MudRimSlope = 0.7f, MudLobe = 0.3f, GeyserLobe = 0.18f, GeyserLumpU = 0.3f, GeyserTerraceU = 0.7f;
 
         public void SpringPoolsAt(ObjectInstance o, List<float> world)
         {
