@@ -13,11 +13,13 @@ namespace Stabby.World
         public const float MaxRiseM = 110f;
         public static readonly string[] TorBiomes = { "tundra", "boreal", "shrubland", "alpine" };
         public static readonly string[] HoodooBiomes = { "desert", "steppe" };
-        public const float ButteChance = 0.5f, ButteMesa = 0.45f, ButteSink = 4f, ButteFlat = 0.35f, ButteSlack = 1.15f;
+        public const float ButteChance = 0.5f, ButteMesa = 0.75f, ButteSink = 4f, ButteFlat = 0.8f, MesaFlat = 1.6f, ButteSlack = 1.15f;
         public const float ButteMinRise = 30f, ButteMaxRise = 55f, ButteMinTop = 7f, ButteMaxTop = 12f, ButteMaxLen = 5f;
-        public const float MesaMinRise = 24f, MesaMaxRise = 40f, MesaMinTop = 14f, MesaMaxTop = 22f, MesaMaxLen = 28f;
-        public const float ButteCliff = 4f, ButteTalus = 0.75f, ButteMinApron = 0.3f, ButteMaxApron = 0.42f, ButteRound = 3f, ButteLump = 1.4f, ButteWobble = 0.1f;
+        public const float MesaMinRise = 24f, MesaMaxRise = 40f, MesaMinTop = 28f, MesaMaxTop = 45f, MesaMaxLen = 50f;
+        public const float ButteCliff = 9f, ButteTalus = 0.75f, ButteMinApron = 0.2f, ButteMaxApron = 0.32f, ButteRound = 1.5f, ButteLump = 0.5f, ButteWobble = 0.1f;
+        public const float ButteMinCap = 2f, ButteMaxCap = 3.5f, ButteLip = 2.5f, MesaWide = 1f, ButteNarrow = 0.4f;
         public const float TalusRound = 2f, TalusLump = 1.1f, TalusWobble = 0.08f, BlockSlope = 3f, BlockRound = 1f, BlockLump = 0.5f;
+        public const float ButteCoastPadM = 100f, ButteMinWall = 6f;
         public const int ButteBlocks = 4;
         public static readonly string[] ButteBiomes = { "desert", "cold-desert", "steppe", "shrubland" };
         public const float BasaltChance = 0.4f, BasaltMinW = 8f, BasaltMaxW = 15f, BasaltMaxLen = 12f, BasaltMinRise = 8f, BasaltMaxRise = 18f, BasaltSink = 3f;
@@ -110,10 +112,25 @@ namespace Stabby.World
             return best;
         }
 
-        public static bool[] BasaltMask(GeneratedWorld w)
+        public static int ButteCoastCells(GeneratedWorld w) => (int)Math.Ceiling((w.Config.BeachMeters + ButteCoastPadM + 2f * MaxRiseM) / w.Config.CellMeters);
+
+        public static bool[] ButteMask(GeneratedWorld w)
         {
-            int n = w.Config.Size, reach = Math.Max(1, (int)Math.Ceiling(BasaltCoastM / w.Config.CellMeters));
-            var skip = BiomeMask(w, BasaltSkip);
+            int n = w.Config.Size;
+            var biomes = BiomeMask(w, ButteBiomes);
+            var dist = SeaDistance(w, ButteCoastCells(w));
+            var mask = new bool[n * n];
+            for (int i = 0; i < mask.Length; i++)
+            {
+                int b = w.Biome[i];
+                mask[i] = b >= 0 && biomes[b] && Features.Dry(w, i) && dist[i] * w.Config.CellMeters >= w.Config.BeachMeters + ButteCoastPadM;
+            }
+            return mask;
+        }
+
+        public static int[] SeaDistance(GeneratedWorld w, int reach)
+        {
+            int n = w.Config.Size;
             var dist = new int[n * n];
             var queue = new Queue<int>();
             for (int i = 0; i < dist.Length; i++)
@@ -133,6 +150,14 @@ namespace Stabby.World
                     queue.Enqueue(py * n + px);
                 }
             }
+            return dist;
+        }
+
+        public static bool[] BasaltMask(GeneratedWorld w)
+        {
+            int n = w.Config.Size, reach = Math.Max(1, (int)Math.Ceiling(BasaltCoastM / w.Config.CellMeters));
+            var skip = BiomeMask(w, BasaltSkip);
+            var dist = SeaDistance(w, reach);
             var mask = new bool[n * n];
             for (int i = 0; i < mask.Length; i++)
             {
@@ -142,7 +167,7 @@ namespace Stabby.World
             return mask;
         }
 
-        public static int ButteSite(GeneratedWorld w, StrataField strata, bool[] biomes, int tx, int ty, float reachM, float rise)
+        public static int ButteSite(GeneratedWorld w, StrataField strata, bool[] mask, int tx, int ty, float reachM, float rise, float flat)
         {
             int n = w.Config.Size, pad = Pad(w, reachM), best = -1, t = Features.TileCells;
             int reach = Math.Max(1, (int)Math.Ceiling(reachM / w.Config.CellMeters));
@@ -150,18 +175,19 @@ namespace Stabby.World
             for (int y = ty * t + pad; y < (ty + 1) * t - pad; y++)
                 for (int x = tx * t + pad; x < (tx + 1) * t - pad; x++)
                 {
-                    int i = y * n + x, b = w.Biome[i];
-                    if (b < 0 || !biomes[b] || !Features.Dry(w, i)) continue;
+                    int i = y * n + x;
+                    if (!mask[i]) continue;
                     float lo = float.MaxValue, hi = float.MinValue;
                     bool open = true;
                     for (int dy = -reach; dy <= reach && open; dy++)
                         for (int dx = -reach; dx <= reach && open; dx++)
                         {
-                            int j = (y + dy) * n + x + dx, c = w.Biome[j];
-                            open = c >= 0 && biomes[c] && Features.Dry(w, j);
+                            if (dx * dx + dy * dy > reach * reach) continue;
+                            int j = (y + dy) * n + x + dx;
+                            open = mask[j];
                             lo = Math.Min(lo, w.Height[j]); hi = Math.Max(hi, w.Height[j]);
                         }
-                    if (!open || hi - lo > ButteFlat * rise) continue;
+                    if (!open || hi - lo > flat * rise) continue;
                     float v = strata.Hardness(i, w.Height[i] + 0.85f * rise) - 0.5f * (hi - lo) / rise;
                     if (v > score) { score = v; best = i; }
                 }
@@ -308,11 +334,19 @@ namespace Stabby.World
             for (int k = 0; k < pick.Length; k++) pick[k] = r.Range(-1f, 1f);
             if (roll >= ButteChance) return;
             bool mesa = mesaRoll < ButteMesa;
-            float rise = mesa ? Mix(MesaMinRise, MesaMaxRise, riseU) : Mix(ButteMinRise, ButteMaxRise, riseU);
-            float top = mesa ? Mix(MesaMinTop, MesaMaxTop, topU) : Mix(ButteMinTop, ButteMaxTop, topU);
-            float half = (mesa ? MesaMaxLen : ButteMaxLen) * lenU, pc = ButteCliff * (0.85f + 0.3f * slopeU), ha = Mix(ButteMinApron, ButteMaxApron, apronU) * rise;
-            float plan = half + top + (rise + ButteSink) / pc + (ha + ButteSink) / ButteTalus + ButteRound;
-            int site = ButteSite(w, strata, biomes, tx, ty, ButteSlack * plan, rise);
+            float pc = ButteCliff * (0.85f + 0.3f * slopeU), rise, top, half, ha, plan;
+            int site;
+            do
+            {
+                rise = mesa ? Mix(MesaMinRise, MesaMaxRise, riseU) : Mix(ButteMinRise, ButteMaxRise, riseU);
+                top = mesa ? Math.Max(Mix(MesaMinTop, MesaMaxTop, topU), MesaWide * rise) : Math.Min(Mix(ButteMinTop, ButteMaxTop, topU), ButteNarrow * rise);
+                half = (mesa ? MesaMaxLen : ButteMaxLen) * lenU;
+                ha = Mix(ButteMinApron, ButteMaxApron, apronU) * rise;
+                plan = half + top + (rise + ButteSink) / pc + (ha + ButteSink) / ButteTalus + ButteRound;
+                site = ButteSite(w, strata, biomes, tx, ty, ButteSlack * plan, rise, mesa ? MesaFlat : ButteFlat);
+                if (site >= 0 || !mesa) break;
+                mesa = false;
+            } while (true);
             if (site < 0) return;
             int n = w.Config.Size;
             float cm = w.Config.CellMeters, cx = site % n, cz = site / n;
@@ -321,7 +355,8 @@ namespace Stabby.World
             float bottom = foot - ButteSink, peak = Math.Max(crest, foot) + rise, hc = 0.5f * (peak - bottom), wc = top + 2f * hc / pc;
             float aTop = foot + ha, wa = wc - (aTop - bottom) / pc - 0.5f, hA = 0.5f * (aTop - bottom), wA = wa + 2f * hA / ButteTalus;
             float x = cx * cm, z = cz * cm, ax = x - dx * half, az = z - dz * half, bx = x + dx * half, bz = z + dz * half;
-            output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Butte, R = ButteRound, W = wc, H = hc, P = pc, F = ButteWobble, N = ButteLump, S = seed, Ax = ax, Ay = bottom + hc, Az = az, Bx = bx, By = bottom + hc, Bz = bz });
+            float cap = Mix(ButteMinCap, ButteMaxCap, 1f - apronU), lip = Math.Min(ButteLip, 0.8f * 2f * hc / pc);
+            output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Butte, R = ButteRound, W = wc, H = hc, P = pc, T = cap, D = lip, F = ButteWobble, N = ButteLump, S = seed, Ax = ax, Ay = bottom + hc, Az = az, Bx = bx, By = bottom + hc, Bz = bz });
             output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Butte, R = TalusRound, W = wA, H = hA, P = ButteTalus, F = TalusWobble, N = TalusLump, S = 1f - seed, Ax = ax, Ay = bottom + hA, Az = az, Bx = bx, By = bottom + hA, Bz = bz });
             for (int q = 0; q < Math.Min(blocks, ButteBlocks); q++)
             {

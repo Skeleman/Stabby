@@ -595,6 +595,7 @@ namespace Stabby.World
             int n = w.Config.Size;
             var count = new Dictionary<int, int>();
             bool[] buttes = null, basalt = null;
+            int[] sea = null;
             foreach (var x in edits)
             {
                 if (!Landforms.Of(x.Shape)) continue;
@@ -613,6 +614,8 @@ namespace Stabby.World
                 int ci = Math.Min(n - 1, Math.Max(0, (int)Math.Round(0.5f * (x.Ax + x.Bx) / cm))), cj = Math.Min(n - 1, Math.Max(0, (int)Math.Round(0.5f * (x.Az + x.Bz) / cm)));
                 int cb = w.Biome == null ? -1 : w.Biome[cj * n + ci];
                 if (x.Shape == FeatureEdit.Butte && (cb < 0 || !(buttes ??= Landforms.BiomeMask(w, Landforms.ButteBiomes))[cb])) { e.Add(at + " stands outside dry open country"); return; }
+                if (x.Shape == FeatureEdit.Butte && (sea ??= Landforms.SeaDistance(w, Landforms.ButteCoastCells(w)))[cj * n + ci] * cm < w.Config.BeachMeters + x.R + x.W) { e.Add(at + " stands on the coast"); return; }
+                if (x.Shape == FeatureEdit.Butte && x.T > 0f && x.P < Landforms.ButteMinWall) { e.Add(at + " has slumped walls"); return; }
                 if (x.Shape == FeatureEdit.Basalt && x.W > 0f && !(basalt ??= Landforms.BasaltMask(w))[cj * n + ci]) { e.Add(at + " is neither highland nor coast"); return; }
                 if (x.Shape == FeatureEdit.Basalt && x.W > 0f && Landforms.Relief(w, ci, cj, Math.Max(1, (int)Math.Ceiling(x.W / cm))) > Landforms.BasaltFlat * (2f * x.H - Landforms.BasaltSink)) { e.Add(at + " is buried in a slope steeper than its rise"); return; }
                 foreach (var y in edits)
