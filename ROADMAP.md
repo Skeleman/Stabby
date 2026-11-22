@@ -111,6 +111,11 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   L3 toggles sprint, which ends on a second press or when movement stops;
   triangle or space jumps. Gamepad support likely via the Input System
   package; sprint and jump travel in PlayerInput and run on the host.
+- Playtest bugs (Zach 11-22; card b/terrain-fix-1, after controls-1): hill shadows shift
+  as the player approaches (shadow distance is 60 m with one cascade, terrain
+  casters exist only inside that range and geomorph with camera distance); the
+  island blinks out for a frame while moving, leaving objects behind (suspect
+  terrain LOD swaps or culling bounds on pooled chunk entities; capture first).
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
