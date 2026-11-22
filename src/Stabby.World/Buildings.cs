@@ -232,7 +232,8 @@ namespace Stabby.World
                         float x1 = Math.Min(x + (eave ? tr.Range(0.35f, 0.7f) : tr.Range(0.9f, 1.6f)), rw);
                         if (rw - x1 < (eave ? 0.2f : 0.4f)) x1 = rw;
                         float th = sz * tr.Range(1f, 1.2f) * (eave ? 1.3f : 1), ya = a + (eave ? tr.Range(-0.09f, 0.03f) : tr.Range(-0.035f, 0.025f)), yk = 0.5f * (ya + b);
-                        Box(l, key, f, 0.5f * (x + x1), ya, sg * (hz + 0.5f * th - (yk - Plate) / rr), x1 - x + 0.02f, b - ya, 1.05f * th, Thatch, GV, 0, 0, 1, 0, 0, bt, 0.2f * th / (b - ya));
+                        float tuck = eave ? 0.9f * sz - 0.925f * th : 0;
+                        Box(l, key, f, 0.5f * (x + x1), ya, sg * (hz + 0.5f * th + 0.5f * tuck - (yk - Plate) / rr), x1 - x + 0.02f, b - ya, 1.05f * th, Thatch, GV, 0, 0, 1, 0, 0, bt + sg * tuck / (b - ya), 0.2f * th / (b - ya));
                         x = x1;
                     }
                 }
