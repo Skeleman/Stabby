@@ -13,7 +13,7 @@ namespace Stabby.World
         static readonly float[] WaysideSeats = { 0, 0, 0.24f, -0.09f, -0.24f, -0.09f, 0, -0.16f, 0.1f, -0.16f, -0.1f, -0.16f, 0, 0.15f, 0, 0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -37,6 +37,8 @@ namespace Stabby.World
                 case ObjectPart.RoadShrine: RoadShrine(l, key, Frame.Root(ShrineU)); break;
                 case ObjectPart.Wayside: Wayside(l, key, Frame.Root(WaysideU)); break;
                 case ObjectPart.Ruin: Ruin(l, key, Frame.Root(RuinU)); break;
+                case ObjectPart.Mushroom: Mushroom(l, key, Frame.Root(MushroomU), key); break;
+                case ObjectPart.FairyRing: FairyRing(l, key, Frame.Root(FairyU)); break;
             }
         }
 

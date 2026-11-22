@@ -89,7 +89,7 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
-                [branch] if (_StabbyFieldUV.x > 0 && floor(i.tone.x * 0.5) == 7)
+                [branch] if (_StabbyFieldUV.x > 0 && floor(i.tone.x * 0.5) >= 7 && floor(i.tone.x * 0.5) <= 9)
                 {
                     float3 org = UNITY_MATRIX_M._m03_m13_m23;
                     p.positionWS.y += _Fade.z - org.y + ContactBed(p.positionWS.xz) - ContactBed(org.xz);
@@ -221,13 +221,14 @@ Shader "Stabby/Object"
                 float3 bed = normalize(float3(0.4 * tone.z, 1, 0.4 * tone.y));
                 float f1 = TmFade(2.2, fp), f2 = TmFade(5.3, fp), f3 = TmFade(11, fp), f4 = TmFade(29, fp), f5 = TmFade(73, fp), fl = TmFade(19, fp);
                 float4 lump = TmNoise3(p * 2.2 + 3.1, int3(0, 0, 0));
+                float4 dent = TmNoise3(p * 0.9 + 47.3, int3(0, 0, 0));
                 float4 mot = TmNoise3(p * 5.3 + 11.7, int3(0, 0, 0));
                 float4 grain = 0, fine = 0, xtal = 0;
                 [branch] if (f3 > 0) grain = TmNoise3(p * 11 + 23.3, int3(0, 0, 0));
                 [branch] if (f4 > 0) fine = TmNoise3(p * 29 + 41.9, int3(0, 0, 0));
                 [branch] if (f5 > 0) xtal = TmNoise3(p * 73 + 5.7, int3(0, 0, 0));
                 float4 lam = TmNoise3(float3(dot(p, bed) * 19 + 0.9 * mot.x, 0.37, 0.71), int3(0, 0, 0));
-                float3 g = 0.055 * f1 * lump.yzw + 0.032 * f2 * mot.yzw + 0.035 * f3 * grain.yzw + 0.03 * f4 * fine.yzw + 0.022 * f5 * xtal.yzw + 0.025 * fl * lam.y * bed;
+                float3 g = 0.07 * TmFade(0.9, fp) * dent.yzw + 0.065 * f1 * lump.yzw + 0.032 * f2 * mot.yzw + 0.035 * f3 * grain.yzw + 0.03 * f4 * fine.yzw + 0.022 * f5 * xtal.yzw + 0.025 * fl * lam.y * bed;
                 float fc = TmFade(33, fp), fg = TmFade(1.3, fp);
                 float4 cr = TmNoise3(p * 3.7 + 61.1, int3(0, 0, 0));
                 float gate = fg * fc * smoothstep(0.35, 0.7, TmNoise3(p * 1.3 + 77.7, int3(0, 0, 0)).x) * saturate(0.5 + 1.5 * mot.x);
@@ -421,6 +422,57 @@ Shader "Stabby/Object"
                     {
                         float rr = rf * rm / 0.012 + 0.6 * mid.x * fm;
                         a = lerp(a, ToLinear(float3(0.05, 0.045, 0.04)), 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * TmFade(83, fp));
+                    }
+                }
+                else if (mat == 8)
+                {
+                    float h = th.w;
+                    float3 hue = h < 0.4 ? float3(0.62, 0.12, 0.07) : h < 0.62 ? float3(0.40, 0.25, 0.14) : h < 0.84 ? float3(0.72, 0.58, 0.38) : float3(0.56, 0.36, 0.17);
+                    if (th.x > 8.5)
+                    {
+                        float t = saturate((th.x - 9) / 4);
+                        float4 sp = TmNoise3(q * 38 + sd, int3(0, 0, 0));
+                        float fsp = TmFade(38, fp);
+                        a = ToLinear(hue) * (0.82 + 0.16 * big.x + 0.08 * mid.x * fm + 0.05 * fib.x * ff);
+                        a = lerp(a, a * 0.55, smoothstep(0.55, 1, t + 0.15 * mid.x * fm));
+                        a = lerp(a, ToLinear(float3(0.84, 0.78, 0.64)), 0.3 * smoothstep(0.3, 0.0, t + 0.08 * big.x));
+                        float wart = h < 0.4 ? smoothstep(0.32, 0.5, sp.x + 0.1 * mid.x) * fsp * smoothstep(0.05, 0.35, t) : 0;
+                        a = lerp(a, ToLinear(float3(0.92, 0.89, 0.8)) * (0.9 + 0.1 * fib.x * ff), wart);
+                        grad = 0.07 * mid.yzw * fm + 0.04 * fib.yzw * ff + 0.12 * sp.yzw * fsp * (0.3 + wart);
+                    }
+                    else if (cap)
+                    {
+                        float ang = atan2(q.z, q.x) * 18 + 1.5 * mid.x * fm + 0.5 * fib.x * ff;
+                        float gill = 0.5 + 0.5 * cos(ang * 2), keep = TmFade(60, fp);
+                        a = ToLinear(lerp(float3(0.5, 0.42, 0.33), float3(0.78, 0.7, 0.58), 0.5 + 0.3 * big.x)) * (1 - 0.35 * gill * keep);
+                        a *= 0.5 + 0.5 * smoothstep(0.1, 0.9, rf);
+                        grad = 0.05 * fib.yzw * ff;
+                    }
+                    else
+                    {
+                        a = ToLinear(float3(0.82, 0.78, 0.68)) * (0.86 + 0.1 * str.x * fs + 0.06 * fib.x * ff + 0.06 * big.x);
+                        a = lerp(a, ToLinear(float3(0.5, 0.44, 0.34)), 0.35 * (1 - open));
+                        grad = 0.07 * str.yzw * fs + 0.04 * fib.yzw * ff;
+                    }
+                }
+                else if (mat == 9)
+                {
+                    a = ToLinear(float3(0.25, 0.4, 0.12)) * (0.8 + 0.22 * big.x + 0.16 * mid.x * fm + 0.12 * fib.x * ff);
+                    a = lerp(a, ToLinear(float3(0.4, 0.52, 0.16)), 0.35 * smoothstep(0.1, 0.8, mid.x + 0.3 * big.x));
+                    grad = 0.1 * mid.yzw * fm + 0.12 * fib.yzw * ff;
+                    [branch] if (cap)
+                    {
+                        float e = rf + 0.25 * big.x + 0.16 * mid.x * fm + 0.05 * fib.x * ff;
+                        clip(0.97 - e);
+                        a = lerp(a, lerp(a, ContactColor(wp.xz, wp.y), 0.6), smoothstep(0.45, 0.95, e));
+                        grad *= 1 - smoothstep(0.5, 0.95, e);
+                    }
+                    else
+                    {
+                        float yf = saturate(th.x);
+                        clip(0.45 + 0.5 * (0.5 + 0.5 * str.x) + 0.15 * fib.x - yf);
+                        a *= lerp(0.75, 1.25, yf);
+                        grad = 0.1 * str.yzw * fs + 0.08 * fib.yzw * ff;
                     }
                 }
                 else if (side && mat == 1)
