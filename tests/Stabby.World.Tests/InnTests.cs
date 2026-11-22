@@ -8,7 +8,7 @@ public class InnTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite };
+    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage };
 
     [Fact]
     public void BuiltMeshesAreDeterministicFallPerTierAndStayInBounds()

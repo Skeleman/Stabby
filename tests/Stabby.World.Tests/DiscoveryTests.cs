@@ -63,6 +63,32 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void HermitagesAppearDeepInTheWoods()
+    {
+        int hermit = Objects.Objects.FindIndex(o => o.Id == "hermitage"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var all = field.Discoveries();
+            var huts = all.Where(o => o.Def == hermit).ToArray();
+            output.WriteLine($"seed {seed}: {huts.Length} hermitages " + string.Join(" ", huts.Select(c => $"{c.X:F0},{c.Z:F0}:{field.Woods(c.X, c.Z):F2}")));
+            foreach (var c in huts)
+            {
+                Assert.True(field.Woods(c.X, c.Z) >= ObjectField.HermitWoods);
+                foreach (var o in all.Where(o => o.Def != hermit))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+                int cx = (int)(c.X / field.ChunkMeters), cz = (int)(c.Z / field.ChunkMeters);
+                Assert.Contains(field.Chunk(cx, cz), o => o.Def == hermit && o.X == c.X && o.Z == c.Z);
+            }
+            total += huts.Length;
+            if (huts.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 3, $"hermitages in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void LoadedWorldPlacesTheSameDiscoveries()
     {
         var materials = ContentLoader.LoadMaterials(Root);

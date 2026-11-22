@@ -150,7 +150,8 @@ namespace Stabby.World
         public const float SeamEpsilonM = 0.01f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f;
         public const int SeamStride = 3, NearCells = 24;
 
-        public const float FallPoolDepthM = 0.5f, FallEdgeM = 1f, FallEdgeShare = 0.5f;
+        public const float FallPoolDepthM = 0.5f, FallEdgeM = 1f, FallEdgeShare = 0.5f, IsleTolerance = 0.05f, IsleProbe = 0.25f, IsleAboveM = 0.5f;
+        public const int IsleRows = 4;
 
         static void CheckFalls(GeneratedWorld w, List<string> e)
         {
@@ -158,7 +159,7 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var hy = w.Water;
-            bool pool = false, edge = false, lake = false, sheet = false, shelf = false;
+            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false;
             foreach (var s in hy.Rivers)
                 foreach (var f in s.Falls)
                 {
@@ -182,14 +183,36 @@ namespace Stabby.World
                         pool = true;
                         e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has no plunge pool: ground {g:F1} at {cx:F0},{cz:F0}, water {f.BaseY:F1}");
                     }
-                    float th = Hydrology.FallThrow(f.Drop), half = f.SheetHalf;
-                    for (float a = -half; !sheet && a <= half; a += 0.5f * NearStepM)
+                    float th = Hydrology.FallThrow(f.Drop);
+                    var runs = Hydrology.LipRuns(f);
+                    for (int r = 0; r < runs.Count; r += 2)
+                        for (float a = runs[r]; a <= runs[r + 1]; a += 0.5f * NearStepM)
+                        {
+                            Hydrology.LipAt(f, a, out float lx, out float lz);
+                            float x = lx + f.DirX * th, z = lz + f.DirZ * th, h = d.Sample(x, z);
+                            if (!sheet && h > f.BaseY + BankTolerance)
+                            {
+                                sheet = true;
+                                e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has rock inside its sheet foot: ground {h:F1} at {x:F0},{z:F0}, {a:F1} m off centre, water {f.BaseY:F1}");
+                            }
+                            if (isle || runs.Count < 4) continue;
+                            for (int k = 1; k <= IsleRows; k++)
+                            {
+                                float y = f.Drop * k / IsleRows, t = Hydrology.FallThrow(y), ix = lx + f.DirX * t, iz = lz + f.DirZ * t, gi = d.Sample(ix, iz);
+                                if (gi <= f.LipY - y + IsleTolerance) continue;
+                                isle = true;
+                                e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has rock inside a curtain beside its islands: ground {gi:F1} at {ix:F0},{iz:F0}, {a:F1} m off centre, sheet {f.LipY - y:F1}");
+                                break;
+                            }
+                        }
+                    for (int r = 2; !bare && r < runs.Count; r += 2)
                     {
-                        Hydrology.LipAt(f, a, out float lx, out float lz);
-                        float x = lx + f.DirX * th, z = lz + f.DirZ * th, h = d.Sample(x, z);
-                        if (h <= f.BaseY + BankTolerance) continue;
-                        sheet = true;
-                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has rock inside its sheet foot: ground {h:F1} at {x:F0},{z:F0}, {a:F1} m off centre, water {f.BaseY:F1}");
+                        float mid = 0.5f * (runs[r - 1] + runs[r]), back = IsleProbe * (runs[r] - runs[r - 1]);
+                        Hydrology.LipAt(f, mid, out float lx, out float lz);
+                        float x = lx - f.DirX * back, z = lz - f.DirZ * back, h = d.Sample(x, z);
+                        if (h >= f.LipY + IsleAboveM) continue;
+                        bare = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has a lip gap with no island: ground {h:F1} at {x:F0},{z:F0}, water {f.LipY:F1}");
                     }
                     for (int k = 0; !shelf && f.LipPts != null && k < f.LipPts.Length; k += 2)
                     {
