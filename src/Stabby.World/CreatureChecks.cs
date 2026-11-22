@@ -8,8 +8,9 @@ namespace Stabby.World
         public static List<string> Creatures(GeneratedWorld w, CreatureLibrary lib)
         {
             var e = new List<string>();
-            var a = CreaturePlan.Build(w, lib);
-            var b = CreaturePlan.Build(w, lib);
+            var cells = new TerrainDetail(w).Cells;
+            var a = CreaturePlan.Build(w, cells, lib);
+            var b = CreaturePlan.Build(w, cells, lib);
             if (a.Count != b.Count) e.Add("creature plan count differs between runs");
             else
                 for (int i = 0; i < a.Count; i++)
@@ -22,6 +23,7 @@ namespace Stabby.World
             foreach (var s in a)
             {
                 if (!ids.Add(s.Id)) e.Add("duplicate creature id " + s.Id);
+                if (Footing.SteepAt(cells, s.X, s.Z, Footing.Grade(lib.Bodies[s.Body].MaxSlope))) e.Add("creature " + s.Id + " wakes on ground steeper than its maxSlope");
                 int herd = CreaturePlan.HerdOf(s.Id);
                 if (herdSeeds.TryGetValue(herd, out ulong hs)) { if (hs != s.HerdSeed) e.Add("creature herd " + herd + " members disagree on herd seed"); }
                 else
@@ -41,7 +43,7 @@ namespace Stabby.World
             foreach (var kv in bySite)
             {
                 slice.Clear();
-                CreaturePlan.Site(w, lib, root, kv.Key, slice);
+                CreaturePlan.Site(w, cells, lib, root, kv.Key, slice);
                 bool same = slice.Count == kv.Value.Count;
                 for (int i = 0; same && i < slice.Count; i++) same = Same(slice[i], kv.Value[i]);
                 if (!same) e.Add("creature site " + kv.Key + " does not rebuild on its own");
@@ -62,13 +64,13 @@ namespace Stabby.World
                 }
             }
             FleeStaysAshore(w, lib, a, e);
-            RoutesStayAshore(w, lib, a, e);
+            RoutesStayAshore(w, cells, lib, a, e);
             return e;
         }
 
         public const float RouteStepSeconds = 2f;
 
-        static void RoutesStayAshore(GeneratedWorld w, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        static void RoutesStayAshore(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
         {
             var wet = new WorldWet { World = w };
             int n = w.Config.Size;
@@ -88,7 +90,7 @@ namespace Stabby.World
                 for (int i = 0; i < HerdRoute.Points; i++)
                 {
                     int j = (i + 1) % HerdRoute.Points;
-                    if (!CreaturePlan.Habitable(w, def, (int)(r.X(i) / cm), (int)(r.Z(i) / cm))) e.Add("creature herd " + herd + " route point " + i + " is not habitable");
+                    if (!CreaturePlan.Habitable(w, cells, def, (int)(r.X(i) / cm), (int)(r.Z(i) / cm))) e.Add("creature herd " + herd + " route point " + i + " is not habitable");
                     if ((r.X(i) != r.X(j) || r.Z(i) != r.Z(j)) && HerdMind.CrossesWet(ref wet, n, cm, r.X(i), r.Z(i), r.X(j), r.Z(j))) e.Add("creature herd " + herd + " route leg " + i + " crosses water");
                 }
                 float period = r.Period, limit = r.Speed * HerdRoute.PeakRatio * RouteStepSeconds * 1.01f + 1e-3f;

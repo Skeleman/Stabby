@@ -76,7 +76,7 @@ public class CreatureTests
             "slots": [ { "part": "tail", "socket": [0, 0, 0] }, { "part": "leg", "parent": "head", "socket": [0, 0] } ] } ] }
         """;
         var ex = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json, BiomeIds, "test"));
-        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above" })
+        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above", "maxSlope out of" })
             Assert.Contains(bit, ex.Message);
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json.Replace("\"name\"", "\"nmae\""), BiomeIds, "test"));
     }
@@ -134,6 +134,27 @@ public class CreatureTests
         foreach (var s in plan) Assert.Equal(CreatureBody.Assemble(deer, Lib, s.BodySeed).WalkSpeed, s.WalkSpeed);
         Assert.True(CreaturePlan.DespawnReach(deer) > CreaturePlan.SpawnReach(deer));
         Assert.InRange(CreaturePlan.SpawnReach(deer), 150f, 400f);
+    }
+
+    [Fact]
+    public void HerdsWakeAndGrazeBelowTheirMaxSlope()
+    {
+        var cells = new TerrainDetail(PlanWorld).Cells;
+        var strict = ContentLoader.LoadCreatures(Root, BiomeIds);
+        var deer = strict.Body("deer")!;
+        deer.MaxSlope = 8;
+        var loose = CreaturePlan.Build(PlanWorld, cells, Lib);
+        var tight = CreaturePlan.Build(PlanWorld, cells, strict);
+        Assert.NotEmpty(tight);
+        Assert.True(tight.Count < loose.Count, tight.Count + " herd members at 8 degrees, " + loose.Count + " at the content limit");
+        float grade = Footing.Grade(deer.MaxSlope), cm = PlanWorld.Config.CellMeters;
+        foreach (var s in tight)
+        {
+            Assert.False(Footing.SteepAt(cells, s.X, s.Z, grade), "creature " + s.Id + " wakes on a slope");
+            for (int i = 0; i < HerdRoute.Points; i++)
+                Assert.True(CreaturePlan.Habitable(PlanWorld, cells, deer, (int)(s.Route.X(i) / cm), (int)(s.Route.Z(i) / cm)), "creature " + s.Id + " route point " + i);
+        }
+        Assert.Equal(1f, Footing.Grade(45), 4);
     }
 
     [Fact]
