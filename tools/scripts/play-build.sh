@@ -7,3 +7,4 @@ dotnet run --project tools/Stabby.Cli -c Release --no-build -- bake --seed 3 --s
 cp -r content play/content
 "$UNITY_EXE" -batchmode -projectPath unity -executeMethod Stabby.Game.Editor.BuildGame.Windows -logFile out/unity/build.log > /dev/null 2>&1
 grep "\[BuildGame\]" out/unity/build.log | tail -1
+printf '@echo off\r\nset STABBY_CREATURE_PATH=instanced\r\nstart "" "%%~dp0game\Stabby.exe"\r\n' > play/Stabby-instanced-creatures.bat
