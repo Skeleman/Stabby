@@ -61,9 +61,9 @@
     built in code. Material surfaces are shaders (procedural normals, cheap
     parallax) so files stay small, surfaces scale and materials share
     features. Every part names a material from the one library
-    (`content/materials.json`). Before adding a material, pick the closest
-    existing one. A new entry needs a reason in the commit; one-off colours and
-    tints are not allowed. Textures hold only heightfield data, shared noise, and
+    (`content/materials.json`). Use an existing material when it fits the
+    role well. Otherwise add a new library entry that later objects can reuse,
+    never an inline one-off colour. Textures hold only heightfield data, shared noise, and
     code-generated atlases for repeated, distinct patterns such as leaves and
     lettering. Where an object meets the ground, both the object and the
     ground darken toward one contact colour derived from the terrain colour.
