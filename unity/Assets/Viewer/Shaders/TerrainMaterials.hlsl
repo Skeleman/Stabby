@@ -837,6 +837,12 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         float4 lv = TmFleck(p, float2x2(1, 0.2, -0.2, 1), 2.3, fp, 121, 0.12, 0.3, 0.35);
         c = lerp(c, lerp(float3(0.17, 0.105, 0.05), float3(0.13, 0.11, 0.05), saturate(0.5 + lv.x)), 0.55 * lv.w * bd);
         float tuft = saturate(t1.w + t2.w) * (1 - 0.7 * sd) * TmFade(3, fp);
+        [branch] if (tuft > 0.01)
+        {
+            float fj = TmFade(1.7, fp), fk = TmFade(5.5, fp);
+            float er = fj * TmLN2(tw, 1.7, 139.3, fj).x + 0.55 * fk * TmLN2(tw, 5.5, 141.7, fk).x;
+            tuft *= smoothstep(-0.12, 0.32, er);
+        }
         float lb = dot(base, float3(0.2126, 0.7152, 0.0722)), lc = dot(c, float3(0.2126, 0.7152, 0.0722));
         float mid = (1 - TmFade(2.5, fp)) * (1 - smoothstep(0.55, 0.95, sd));
         c *= lerp(1, min((lb + 0.4 * (lc - lb)) / max(lc, 1e-4), 2.5), mid);
