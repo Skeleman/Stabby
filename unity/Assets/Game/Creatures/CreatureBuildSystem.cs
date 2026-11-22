@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stabby.Viewer;
@@ -5,27 +6,41 @@ using Stabby.World;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.NetCode;
 using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Object = UnityEngine.Object;
 
 namespace Stabby.Game
 {
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     [UpdateBefore(typeof(CreatureAnimSystem))]
-    public partial class CreatureSpawnSystem : SystemBase
+    public partial class CreatureBuildSystem : SystemBase
     {
-        sealed class Plan
+        sealed class Kit
         {
+            public CreatureLibrary Lib;
             public List<CreatureShape> Shapes = new List<CreatureShape>();
             public List<float[]> Verts = new List<float[]>();
             public List<ushort[]> Index = new List<ushort[]>();
             public List<float[]> LowVerts = new List<float[]>();
             public List<ushort[]> LowIndex = new List<ushort[]>();
-            public List<(CreatureDef Def, CreatureBody Body, int First, float2 At, float Heading, uint Seed)> Herd = new List<(CreatureDef, CreatureBody, int, float2, float, uint)>();
+            public int[] First;
+        }
+
+        struct Arrival
+        {
+            public Entity Ghost;
+            public CreatureState State;
+            public CreatureBody Body;
+        }
+
+        struct Shown
+        {
+            public Entity Root;
+            public BlobAssetReference<CreatureRig> Rig;
         }
 
         static readonly VertexAttributeDescriptor[] Layout =
@@ -37,28 +52,36 @@ namespace Stabby.Game
 
         public static int Count { get; private set; }
 
-        Task<Plan> plan;
+        Task<Kit> kitTask;
+        Kit kit;
+        Entity[] prefabs;
+        Task<List<Arrival>> arriving;
         Material material;
         BatchMaterialID materialId;
         readonly List<Mesh> meshes = new List<Mesh>();
-        readonly List<BlobAssetReference<CreatureRig>> rigs = new List<BlobAssetReference<CreatureRig>>();
-        bool done;
+        readonly Dictionary<Entity, Shown> shown = new Dictionary<Entity, Shown>();
+        readonly List<Entity> gone = new List<Entity>();
+        EntityQuery ghosts;
+        bool counts;
 
         protected override void OnCreate()
         {
-            if (World.Name != GameSettings.ViewClient) { Enabled = false; return; }
-            Count = 0;
+            counts = World.Name == GameSettings.ViewClient;
+            if (counts) Count = 0;
+            EntityManager.CreateSingleton(new CreaturePresenter { Index = Math.Max(0, Array.IndexOf(GameSettings.Clients, World.Name)) });
+            ghosts = SystemAPI.QueryBuilder().WithAll<CreatureState>().Build();
         }
 
         protected override void OnDestroy()
         {
-            Owned.Release(plan, _ => { });
-            foreach (var r in rigs) if (r.IsCreated) r.Dispose();
-            rigs.Clear();
+            Owned.Release(kitTask, _ => { });
+            Owned.Release(arriving, _ => { });
+            foreach (var s in shown.Values) if (s.Rig.IsCreated) s.Rig.Dispose();
+            shown.Clear();
             foreach (var m in meshes) if (m != null) Object.Destroy(m);
             meshes.Clear();
             if (material != null) Object.Destroy(material);
-            Count = 0;
+            if (counts) Count = 0;
         }
 
         bool Warm()
@@ -78,98 +101,93 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            if (done) return;
-            if (plan == null)
+            if (kit == null)
             {
-                var maps = World.GetExistingSystemManaged<ClientMapSystem>();
-                var map = maps?.Map;
-                if (map == null || !SystemAPI.HasSingleton<Ground>() || !SystemAPI.TryGetSingleton<NetworkId>(out var me)) return;
-                float3 at = default;
-                bool found = false;
-                foreach (var (t, owner) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
-                    if (owner.ValueRO.NetworkId == me.Value) { at = t.ValueRO.Position; found = true; break; }
-                if (!found) return;
-                var defs = maps.Defs;
-                plan = Task.Run(() => Make(map, defs, at.xz));
+                if (kitTask == null)
+                {
+                    var defs = World.GetExistingSystemManaged<ClientMapSystem>()?.Defs;
+                    if (defs == null) return;
+                    kitTask = Task.Run(() => MakeKit(defs));
+                    return;
+                }
+                if (!kitTask.IsCompleted || !Warm()) return;
+                if (kitTask.IsFaulted) { Debug.LogException(kitTask.Exception); Enabled = false; return; }
+                kit = kitTask.Result;
+                kitTask = null;
+                MakePrefabs();
                 return;
             }
-            if (!plan.IsCompleted) return;
-            if (!Warm()) return;
-            if (plan.IsFaulted) { Debug.LogException(plan.Exception); done = true; return; }
-            Apply(plan.Result);
-            plan = null;
-            done = true;
+
+            gone.Clear();
+            foreach (var kv in shown)
+                if (!EntityManager.Exists(kv.Key) || !EntityManager.HasComponent<CreatureState>(kv.Key)) gone.Add(kv.Key);
+            foreach (var g in gone)
+            {
+                var s = shown[g];
+                var links = EntityManager.GetBuffer<CreatureLink>(s.Root).ToNativeArray(Allocator.Temp);
+                foreach (var link in links) EntityManager.DestroyEntity(link.Value);
+                links.Dispose();
+                EntityManager.DestroyEntity(s.Root);
+                s.Rig.Dispose();
+                shown.Remove(g);
+            }
+
+            if (arriving != null)
+            {
+                if (!arriving.IsCompleted) { if (counts) Count = shown.Count; return; }
+                if (arriving.IsFaulted) { Debug.LogException(arriving.Exception); Enabled = false; return; }
+                foreach (var a in arriving.Result)
+                    if (a.Body != null && !shown.ContainsKey(a.Ghost) && EntityManager.Exists(a.Ghost) && EntityManager.HasComponent<CreatureState>(a.Ghost)) Build(a);
+                arriving = null;
+            }
+
+            if (counts) Count = shown.Count;
+            var es = ghosts.ToEntityArray(Allocator.Temp);
+            List<Arrival> fresh = null;
+            foreach (var e in es)
+            {
+                if (shown.ContainsKey(e)) continue;
+                fresh ??= new List<Arrival>();
+                fresh.Add(new Arrival { Ghost = e, State = EntityManager.GetComponentData<CreatureState>(e) });
+            }
+            es.Dispose();
+            if (fresh == null) return;
+            var lib = kit.Lib;
+            arriving = Task.Run(() =>
+            {
+                for (int i = 0; i < fresh.Count; i++)
+                {
+                    var a = fresh[i];
+                    if (a.State.Body < 0 || a.State.Body >= lib.Bodies.Count) continue;
+                    a.Body = CreatureBody.Assemble(lib.Bodies[a.State.Body], lib, a.State.BodySeed);
+                    fresh[i] = a;
+                }
+                return fresh;
+            });
         }
 
-        static Plan Make(GeneratedWorld map, List<BiomeDef> defs, float2 player)
+        static Kit MakeKit(List<BiomeDef> defs)
         {
-            var lib = ContentFiles.Creatures(defs);
-            var result = new Plan();
-            var shapeStart = new Dictionary<string, int>();
-            foreach (var def in lib.Bodies)
+            var k = new Kit { Lib = ContentFiles.Creatures(defs) };
+            k.First = new int[k.Lib.Bodies.Count];
+            var verts = new List<float>();
+            var index = new List<ushort>();
+            for (int b = 0; b < k.Lib.Bodies.Count; b++)
             {
-                int cell = Nearest(map, def, player);
-                if (cell < 0) continue;
-                int n = map.Config.Size;
-                float cm = map.Config.CellMeters;
-                var rng = Rng.Stream(map.Config.Seed, "creature-herd-" + def.Id);
-                float2 centre = new float2(cell % n + 0.5f, cell / n + 0.5f) * cm;
-                int playerCell = (int)(player.y / cm) * n + (int)(player.x / cm);
-                if (cell == playerCell)
+                k.First[b] = k.Shapes.Count;
+                var shapes = CreatureBody.Shapes(k.Lib.Bodies[b], k.Lib);
+                for (int s = 0; s < shapes.Count; s++)
                 {
-                    float a = rng.Range(0f, 6.2831853f);
-                    centre = player + new float2(math.sin(a), math.cos(a)) * 18;
-                }
-                if (!shapeStart.ContainsKey(def.Id))
-                {
-                    shapeStart[def.Id] = result.Shapes.Count;
-                    var shapes = CreatureBody.Shapes(def, lib);
-                    var verts = new List<float>();
-                    var index = new List<ushort>();
-                    for (int s = 0; s < shapes.Count; s++)
-                    {
-                        CreatureMesh.Build(shapes[s], s == 0, false, verts, index);
-                        result.Shapes.Add(shapes[s]);
-                        result.Verts.Add(verts.ToArray());
-                        result.Index.Add(index.ToArray());
-                        CreatureMesh.Build(shapes[s], s == 0, true, verts, index);
-                        result.LowVerts.Add(verts.ToArray());
-                        result.LowIndex.Add(index.ToArray());
-                    }
-                }
-                int count = rng.Range(def.HerdMin, def.HerdMax + 1);
-                float heading = rng.Range(0f, 6.2831853f);
-                for (int k = 0; k < count; k++)
-                {
-                    ulong seed = rng.NextU64();
-                    float2 at = centre + new float2(rng.Range(-4f, 4f), rng.Range(-4f, 4f));
-                    var body = CreatureBody.Assemble(def, lib, seed);
-                    result.Herd.Add((def, body, shapeStart[def.Id], at, heading + rng.Range(-0.7f, 0.7f), rng.NextU32() | 1u));
+                    CreatureMesh.Build(shapes[s], s == 0, false, verts, index);
+                    k.Shapes.Add(shapes[s]);
+                    k.Verts.Add(verts.ToArray());
+                    k.Index.Add(index.ToArray());
+                    CreatureMesh.Build(shapes[s], s == 0, true, verts, index);
+                    k.LowVerts.Add(verts.ToArray());
+                    k.LowIndex.Add(index.ToArray());
                 }
             }
-            return result;
-        }
-
-        static int Nearest(GeneratedWorld map, CreatureDef def, float2 player)
-        {
-            int n = map.Config.Size;
-            float cm = map.Config.CellMeters;
-            int px = math.clamp((int)(player.x / cm), 0, n - 1), pz = math.clamp((int)(player.y / cm), 0, n - 1);
-            int best = -1, bestScore = int.MaxValue;
-            const int Window = 48;
-            for (int z = math.max(0, pz - Window); z <= math.min(n - 1, pz + Window); z++)
-                for (int x = math.max(0, px - Window); x <= math.min(n - 1, px + Window); x++)
-                {
-                    int i = z * n + x;
-                    if (map.Sea[i] || map.Water.LakeId[i] >= 0 || map.Water.IsRiver[i]) continue;
-                    if (!def.Biomes.Contains(map.BiomeIds[map.Biome[i]])) continue;
-                    if (x == 0 || z == 0 || x == n - 1 || z == n - 1) continue;
-                    float gx = map.Height[i + 1] - map.Height[i - 1], gz = map.Height[i + n] - map.Height[i - n];
-                    if (gx * gx + gz * gz > 0.16f * 4 * cm * cm) continue;
-                    int score = (x - px) * (x - px) + (z - pz) * (z - pz);
-                    if (score < bestScore) { bestScore = score; best = i; }
-                }
-            return best;
+            return k;
         }
 
         static float Linear(float c) => c <= 0.04045f ? c / 12.92f : math.pow((c + 0.055f) / 1.055f, 2.4f);
@@ -250,15 +268,15 @@ namespace Stabby.Game
             pos.Dispose(); rot.Dispose(); end.Dispose(); endRot.Dispose();
         }
 
-        void Apply(Plan p)
+        void MakePrefabs()
         {
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            int shapeCount = p.Shapes.Count;
+            int shapeCount = kit.Shapes.Count;
             var meshIds = new BatchMeshID[2 * shapeCount];
             for (int s = 0; s < 2 * shapeCount; s++)
             {
-                var vs = s < shapeCount ? p.Verts[s] : p.LowVerts[s - shapeCount];
-                var ix = s < shapeCount ? p.Index[s] : p.LowIndex[s - shapeCount];
+                var vs = s < shapeCount ? kit.Verts[s] : kit.LowVerts[s - shapeCount];
+                var ix = s < shapeCount ? kit.Index[s] : kit.LowIndex[s - shapeCount];
                 var data = Mesh.AllocateWritableMeshData(1);
                 var d = data[0];
                 int vc = vs.Length / CreatureMesh.Stride;
@@ -274,7 +292,7 @@ namespace Stabby.Game
                 meshes.Add(mesh);
                 meshIds[s] = graphics.RegisterMesh(mesh);
             }
-            var prefabs = new Entity[2 * shapeCount];
+            prefabs = new Entity[2 * shapeCount];
             for (int s = 0; s < 2 * shapeCount; s++)
             {
                 var e = EntityManager.CreateEntity();
@@ -286,38 +304,38 @@ namespace Stabby.Game
                 EntityManager.AddComponent<Prefab>(e);
                 prefabs[s] = e;
             }
-            foreach (var h in p.Herd)
+        }
+
+        void Build(Arrival a)
+        {
+            var def = kit.Lib.Bodies[a.State.Body];
+            var body = a.Body;
+            int first = kit.First[a.State.Body], shapeCount = kit.Shapes.Count;
+            uint seed = a.State.Seed;
+            var rig = Rig(def, body);
+            var root = EntityManager.CreateEntity();
+            shown[a.Ghost] = new Shown { Root = root, Rig = rig };
+            EntityManager.AddComponentData(root, new CreatureRoot
             {
-                int first = h.First;
-                var rig = Rig(h.Def, h.Body);
-                rigs.Add(rig);
-                var root = EntityManager.CreateEntity();
-                EntityManager.AddComponentData(root, new CreatureRoot
+                Rig = rig, Ghost = a.Ghost, Position = new float3(a.State.Position.x, 0, a.State.Position.y), Heading = a.State.Heading, WalkSpeed = a.State.WalkSpeed,
+                Visible = true, Shadow = true, High = true, HighOn = true, LowOn = true,
+                Phase = (seed % 389) / 389f, Clock = (seed % 211) / 7f,
+            });
+            EntityManager.AddBuffer<CreatureLink>(root);
+            var fur = (b: Linear(body.Base), a: Linear(body.Accent), d: Linear(body.Dark));
+            var trunkShape = kit.Shapes[first];
+            for (int tier = 0; tier < 2; tier++)
+            {
+                int at = first + tier * shapeCount;
+                var link = Link(prefabs[at], new float3(body.Trunk.Radius, body.Trunk.Radius, body.Trunk.Length / math.max(trunkShape.Length, 1e-3f)), fur, body.Length);
+                EntityManager.GetBuffer<CreatureLink>(root).Add(link);
+                foreach (var seg in body.Segments)
                 {
-                    Rig = rig, Position = new float3(h.At.x, 0, h.At.y), Home = h.At, Heading = h.Heading, WalkSpeed = h.Body.WalkSpeed,
-                    Random = new Unity.Mathematics.Random(h.Seed), Timer = 0.5f + (h.Seed % 997) / 997f * 3, Visible = true, Shadow = true,
-                    High = true, HighOn = true, LowOn = true,
-                    Phase = (h.Seed % 389) / 389f, Clock = (h.Seed % 211) / 7f,
-                });
-                var links = EntityManager.AddBuffer<CreatureLink>(root);
-                var fur = (b: Linear(h.Body.Base), a: Linear(h.Body.Accent), d: Linear(h.Body.Dark));
-                var trunkShape = p.Shapes[first];
-                for (int tier = 0; tier < 2; tier++)
-                {
-                    int at = first + tier * shapeCount;
-                    var link = Link(prefabs[at], new float3(h.Body.Trunk.Radius, h.Body.Trunk.Radius, h.Body.Trunk.Length / math.max(trunkShape.Length, 1e-3f)), fur, h.Body.Length);
-                    links = EntityManager.GetBuffer<CreatureLink>(root);
-                    links.Add(link);
-                    foreach (var seg in h.Body.Segments)
-                    {
-                        var shape = p.Shapes[first + seg.Shape];
-                        float3 scale = shape.Sphere ? new float3(seg.Radius) : new float3(seg.Radius, seg.Radius, seg.Length / math.max(shape.Length, 1e-3f));
-                        link = Link(prefabs[at + seg.Shape], scale, fur, h.Body.Length);
-                        links = EntityManager.GetBuffer<CreatureLink>(root);
-                        links.Add(link);
-                    }
+                    var shape = kit.Shapes[first + seg.Shape];
+                    float3 scale = shape.Sphere ? new float3(seg.Radius) : new float3(seg.Radius, seg.Radius, seg.Length / math.max(shape.Length, 1e-3f));
+                    link = Link(prefabs[at + seg.Shape], scale, fur, body.Length);
+                    EntityManager.GetBuffer<CreatureLink>(root).Add(link);
                 }
-                Count++;
             }
         }
 

@@ -288,10 +288,12 @@ namespace Stabby.Content
                 var herd = b.Floats("herd", null);
                 if (herd == null || herd.Length != 2) errors.Add(id + ": herd needs 2 numbers");
                 else { def.HerdMin = (int)herd[0]; def.HerdMax = (int)herd[1]; }
+                def.HerdChance = b.Float("herdChance", -1);
                 var detail = b.Object("detail");
                 if (detail == null) errors.Add(id + ": detail missing");
                 else
                 {
+                    def.SpawnPixels = detail.Float("spawnPixels", def.SpawnPixels);
                     def.FadePixels = detail.Float("fadePixels", def.FadePixels);
                     def.ShadowPixels = detail.Float("shadowPixels", def.ShadowPixels);
                     def.AnimPixels = detail.Float("animPixels", def.AnimPixels);
