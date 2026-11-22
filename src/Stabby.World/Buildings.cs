@@ -12,7 +12,7 @@ namespace Stabby.World
         static readonly float[] YardSeat = { 0, 0, 0.35f, 0.35f, -0.35f, 0.35f, 0.35f, -0.35f, -0.35f, -0.35f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite ? YardSeat : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage ? YardSeat : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -31,6 +31,8 @@ namespace Stabby.World
                 case ObjectPart.FirePit: FirePit(l, key, Frame.Root(1 / 1.8f)); break;
                 case ObjectPart.LogSeat: LogSeat(l, key, Frame.Root(1 / 1.6f)); break;
                 case ObjectPart.Campsite: Campsite(l, key, Frame.Root(CampU)); break;
+                case ObjectPart.HermitHut: HermitHut(l, key, Frame.Root(HutU), out _, out _); break;
+                case ObjectPart.Hermitage: Hermitage(l, key, Frame.Root(HermitU)); break;
             }
         }
 
