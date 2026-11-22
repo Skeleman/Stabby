@@ -38,7 +38,11 @@ namespace Stabby.World
         public float DirX, DirZ;
         public float PoolRadius, PoolCentre;
         public float Discharge;
+        public float[] LipPts;
         public float Drop => LipY - BaseY;
+        public float ShelfHalf => LipPts == null ? 0 : (LipPts[LipPts.Length - 2] - LipX) * DirZ - (LipPts[LipPts.Length - 1] - LipZ) * DirX;
+        public float ShelfBow => LipPts == null ? 0 : (LipPts[LipPts.Length - 2] - LipX) * DirX + (LipPts[LipPts.Length - 1] - LipZ) * DirZ;
+        public float SheetHalf => LipPts == null ? 0.5f * Hydrology.SheetWidth(Width) : ShelfHalf;
     }
 
     public sealed class Hydrology
@@ -82,6 +86,7 @@ namespace Stabby.World
                 hy.IsRiver[i] = !sea[i] && hy.LakeId[i] < 0 && hy.DischargeM3s[i] >= c.RiverMinDischarge;
             BuildSegments(c, sea, hy);
             CarveBeds(c, h, sea, hy);
+            Shelves(c, h, sea, hy);
             return hy;
         }
 
@@ -290,9 +295,9 @@ namespace Stabby.World
         public static float FallThrow(float drop) => FallThrowK * (float)Math.Sqrt(2 * Math.Max(drop, 0) / 9.81f);
         const float FallSheetMarginM = 1f;
 
-        static void SheetPool(float width, float drop, ref float r, out float centre)
+        static void SheetPool(float half, float drop, ref float r, out float centre)
         {
-            float t = FallThrow(drop), h = 0.5f * SheetWidth(width) + FallSheetMarginM, low = 1 - 0.6f * NearField.FallRadiusNoise;
+            float t = FallThrow(drop), h = half + FallSheetMarginM, low = 1 - 0.6f * NearField.FallRadiusNoise;
             r = Math.Max(r, h / low);
             centre = Math.Min(FallPoolCentre * r, t + (float)Math.Sqrt(Math.Max(0, low * low * r * r - h * h)));
         }
@@ -331,7 +336,7 @@ namespace Stabby.World
                     drop = stage[k] - baseY;
                     float q = seg.Discharge[big], w = seg.Width[big];
                     float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
-                    SheetPool(w, drop, ref pool, out float centre);
+                    SheetPool(0.5f * SheetWidth(w), drop, ref pool, out float centre);
                     seg.Falls.Add(new RiverFall
                     {
                         K = big,
@@ -343,6 +348,100 @@ namespace Stabby.World
                 }
                 k = e - 1;
             }
+        }
+
+        public const float ShelfMinDrop = 12f, ShelfChance = 0.35f, ShelfHalfPerDrop = 0.3f, ShelfHalfMinM = 10f, ShelfHalfMaxM = 22f, ShelfBowMin = 0.15f, ShelfBowMax = 0.4f, ShelfStepM = 2f, ShelfFlare = 1.5f, ShelfSureDropM = 10f;
+
+        public static void LipAt(in RiverFall f, float s, out float x, out float z)
+        {
+            x = f.LipX + f.DirZ * s;
+            z = f.LipZ - f.DirX * s;
+            var p = f.LipPts;
+            if (p == null) return;
+            float prev = Side(f, p[0], p[1]);
+            for (int k = 2; k < p.Length; k += 2)
+            {
+                float next = Side(f, p[k], p[k + 1]);
+                if (s <= next || k + 2 == p.Length)
+                {
+                    float t = Math.Max(0, Math.Min(1, (s - prev) / (next - prev)));
+                    x = p[k - 2] + (p[k] - p[k - 2]) * t;
+                    z = p[k - 1] + (p[k + 1] - p[k - 1]) * t;
+                    return;
+                }
+                prev = next;
+            }
+        }
+
+        static float Side(in RiverFall f, float x, float z) => (x - f.LipX) * f.DirZ - (z - f.LipZ) * f.DirX;
+
+        static void Shelves(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
+        {
+            var rng = Rng.Stream(c.Seed, "fall-shelf");
+            foreach (var seg in hy.Rivers)
+                for (int i = 0; i < seg.Falls.Count; i++)
+                {
+                    var f = seg.Falls[i];
+                    if (f.Drop < ShelfMinDrop) continue;
+                    float roll = rng.NextFloat(), half = Math.Max(ShelfHalfMinM, Math.Min(ShelfHalfMaxM, ShelfHalfPerDrop * f.Drop)), bow = half * rng.Range(ShelfBowMin, ShelfBowMax);
+                    if (roll >= ShelfChance + (1 - ShelfChance) * Math.Min(1f, (f.Drop - ShelfMinDrop) / ShelfSureDropM)) continue;
+                    float r = f.PoolRadius;
+                    SheetPool(0, f.Drop, ref r, out float centre);
+                    float reach = NearField.PoolReach(centre, r);
+                    if (Crowded(c, hy, seg, i, half + reach) || Upstream(c, seg, i) < ShelfFlare * half + 2 * c.CellMeters) continue;
+                    int steps = (int)Math.Ceiling(half / ShelfStepM), count = 2 * steps + 1;
+                    var pts = new float[2 * count];
+                    bool ok = true;
+                    float t = FallThrow(f.Drop);
+                    for (int k = 0; k < count && ok; k++)
+                    {
+                        float s = half * (k - steps) / steps, a = bow * (s / half) * (s / half);
+                        float x = f.LipX + f.DirZ * s + f.DirX * a, z = f.LipZ - f.DirX * s + f.DirZ * a;
+                        pts[2 * k] = x;
+                        pts[2 * k + 1] = z;
+                        float fx = x + f.DirX * t, fz = z + f.DirZ * t, cx = x + f.DirX * centre, cz = z + f.DirZ * centre;
+                        ok = !Wet(c, sea, hy, x, z) && !Wet(c, sea, hy, fx, fz) && !Wet(c, sea, hy, cx, cz) && h[CellAt(c, cx, cz)] <= f.LipY - 0.5f * f.Drop;
+                    }
+                    if (!ok) continue;
+                    f.LipPts = pts;
+                    f.PoolRadius = r;
+                    f.PoolCentre = centre;
+                    seg.Falls[i] = f;
+                }
+        }
+
+        static float Upstream(WorldConfig c, RiverSegment seg, int fall)
+        {
+            int from = fall > 0 ? seg.Falls[fall - 1].K + 1 : 0;
+            float run = 0;
+            for (int k = from; k < seg.Falls[fall].K; k++)
+            {
+                float dx = seg.X[k + 1] - seg.X[k], dz = seg.Y[k + 1] - seg.Y[k];
+                run += (float)Math.Sqrt(dx * dx + dz * dz) * c.CellMeters;
+            }
+            return run;
+        }
+
+        static bool Crowded(WorldConfig c, Hydrology hy, RiverSegment own, int fall, float r)
+        {
+            var f = own.Falls[fall];
+            float cm = c.CellMeters, r2 = r * r;
+            foreach (var seg in hy.Rivers)
+            {
+                if (seg != own)
+                    for (int k = 0; k < seg.X.Count; k++)
+                    {
+                        float dx = seg.X[k] * cm - f.LipX, dz = seg.Y[k] * cm - f.LipZ;
+                        if (dx * dx + dz * dz < r2) return true;
+                    }
+            }
+            for (int j = 0; j < own.Falls.Count; j++)
+            {
+                if (j == fall) continue;
+                float dx = own.Falls[j].LipX - f.LipX, dz = own.Falls[j].LipZ - f.LipZ;
+                if (dx * dx + dz * dz < 4 * r2) return true;
+            }
+            return false;
         }
 
         static bool InJunction(WorldConfig c, RiverSegment seg, Hydrology hy, int e, float x, float z)

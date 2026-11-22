@@ -2103,6 +2103,9 @@ namespace Stabby.Game.Editor
             float depth = 0, depthMax = 0, depthFree = 0;
             var detail = new TerrainDetail(map);
             var sw = new System.Diagnostics.Stopwatch();
+            var near = new Vector2(-1, -1);
+            var at = System.Environment.GetEnvironmentVariable("STABBY_FALL_NEAR")?.Split(',');
+            if (at != null && at.Length == 2) near = new Vector2(float.Parse(at[0], System.Globalization.CultureInfo.InvariantCulture), float.Parse(at[1], System.Globalization.CultureInfo.InvariantCulture));
             foreach (var l in NearField.Lines(map))
                 for (int k = 1; k < l.X.Length; k++)
                     if (Stabby.Viewer.WaterGeometry.FallAt(l, k, out var f, out _))
@@ -2120,7 +2123,7 @@ namespace Stabby.Game.Editor
                             float u = j / (fr - 1f), y = u * u * fh, vy = f.LipY - y, free = Stabby.Viewer.WaterGeometry.FallThrowAt(y);
                             for (int c = 0; c < fc; c++)
                             {
-                                float sc = (2f * c / (fc - 1) - 1) * fhalf, o = off[j * fc + c], x = f.LipX + f.DirZ * sc, z = f.LipZ - f.DirX * sc;
+                                float uc = 2f * c / (fc - 1) - 1, sc = uc * fhalf, ba = f.Bow * uc * uc, o = off[j * fc + c], x = f.LipX + f.DirZ * sc + f.DirX * ba, z = f.LipZ - f.DirX * sc + f.DirZ * ba;
                                 if (o > free + 0.01f) hugged++;
                                 if (vy < f.BaseY) continue;
                                 float g = detail.Sample(x + f.DirX * o, z + f.DirZ * o), gf = detail.Sample(x + f.DirX * free, z + f.DirZ * free);
@@ -2129,7 +2132,10 @@ namespace Stabby.Game.Editor
                                 if (gf > vy && gf <= f.LipY + 0.3f) { buriedFree++; depthFree += gf - vy; }
                             }
                         }
-                        if (!found || f.Drop > best.Drop) { best = f; found = true; }
+                        bool better = near.x >= 0
+                            ? (new Vector2(f.LipX, f.LipZ) - near).sqrMagnitude < (new Vector2(best.LipX, best.LipZ) - near).sqrMagnitude
+                            : f.Bow > 0 != best.Bow > 0 ? f.Bow > 0 : f.Drop > best.Drop;
+                        if (!found || better) { best = f; found = true; }
                     }
             if (!found) { GameStatus.Lines["~falls"] = "no falls found"; yield break; }
             var fd = new Vector3(best.DirX, 0, best.DirZ);
@@ -2137,7 +2143,7 @@ namespace Stabby.Game.Editor
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, w = best.Width;
-            GameStatus.Lines["~falls"] = $"tallest fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)} x cols {Stabby.Viewer.WaterGeometry.CurtainColsOf(w)}; {falls} falls, curtain verts {verts}, tris {tris}, hugged {hugged}, above-water verts in face rock {buried} (free arc {buriedFree}), mean depth {depth / Mathf.Max(buried, 1):F2} m (free arc {depthFree / Mathf.Max(buriedFree, 1):F2} m), max {depthMax:F2} m, within 1 m of the pool {nearFoot}, edge verts tucked into banks above the lip {tucked}, offsets {sw.ElapsedMilliseconds} ms";
+            GameStatus.Lines["~falls"] = $"{(best.Bow > 0 ? "shelf" : "tallest")} fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {w:F0} m, pool {best.PoolRadius:F1} m, discharge {best.Discharge:F0}, rows {Stabby.Viewer.WaterGeometry.CurtainRowsOf(h + 0.5f)} x cols {Stabby.Viewer.WaterGeometry.CurtainColsOf(w)}; {falls} falls, curtain verts {verts}, tris {tris}, hugged {hugged}, above-water verts in face rock {buried} (free arc {buriedFree}), mean depth {depth / Mathf.Max(buried, 1):F2} m (free arc {depthFree / Mathf.Max(buriedFree, 1):F2} m), max {depthMax:F2} m, within 1 m of the pool {nearFoot}, edge verts tucked into banks above the lip {tucked}, offsets {sw.ElapsedMilliseconds} ms";
             var eyes = new[]
             {
                 foot + fd * (2.5f * h + 10f) + side * (0.25f * w) + Vector3.up * (0.6f * h + 1.5f),
