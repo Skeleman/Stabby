@@ -354,6 +354,22 @@ public class ObjectTests
     }
 
     [Fact]
+    public void TorsAndHoodoosStandAsSolidAdds()
+    {
+        int tors = 0, hoodoos = 0;
+        foreach (ulong seed in new ulong[] { 4, 19 })
+        {
+            var w = Gen(seed);
+            foreach (var e in Features.Place(w, new TerrainDetail(w)))
+            {
+                if (e.Shape == FeatureEdit.Tor) { Assert.Equal(FeatureEdit.Add, e.Kind); tors++; }
+                if (e.Shape == FeatureEdit.Hoodoo) { Assert.Equal(FeatureEdit.Add, e.Kind); hoodoos++; }
+            }
+        }
+        Assert.True(tors > 0 && hoodoos > 0, $"{tors} tor edits, {hoodoos} hoodoo edits");
+    }
+
+    [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
         var w = Gen(4);

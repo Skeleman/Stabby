@@ -539,6 +539,7 @@ namespace Stabby.World
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
             CheckCliffFoot(w, detail, edits, e);
+            CheckLandforms(w, edits, e);
             if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             foreach (var x in edits)
                 if (x.Shape != FeatureEdit.Boulder && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
@@ -574,7 +575,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -585,6 +586,32 @@ namespace Stabby.World
                     if (solid.Density(bi, bj, bk) >= 0) e.Add($"cave at {x.Ax:F0},{x.Az:F0} is not hollow at its first bend");
                     if (cols.Height(bi, bk) < x.By + x.R) e.Add($"cave at {x.Ax:F0},{x.Az:F0} has no roof at its first bend");
                 }
+            }
+        }
+
+        static void CheckLandforms(GeneratedWorld w, FeatureEdit[] edits, List<string> e)
+        {
+            float cm = w.Config.CellMeters, span = w.Config.Size * cm;
+            int n = w.Config.Size;
+            var count = new Dictionary<int, int>();
+            foreach (var x in edits)
+            {
+                if (!Landforms.Of(x.Shape)) continue;
+                string at = $"{Landforms.Name(x.Shape)} at {x.Ax:F0},{x.Az:F0}";
+                if (x.Kind != FeatureEdit.Add) { e.Add(at + " carves solid"); return; }
+                if (x.MinX < 0 || x.MinZ < 0 || x.MaxX > span || x.MaxZ > span) { e.Add(at + " leaves the map"); return; }
+                int tile = Features.TileOf(x, cm);
+                count.TryGetValue(tile, out int k);
+                count[tile] = ++k;
+                if (k > Landforms.TileBudget) { e.Add($"{at} pushes its tile past {Landforms.TileBudget} landform edits"); return; }
+                int i0 = Math.Max(0, (int)Math.Floor(x.MinX / cm)), i1 = Math.Min(n - 1, (int)Math.Ceiling(x.MaxX / cm));
+                int j0 = Math.Max(0, (int)Math.Floor(x.MinZ / cm)), j1 = Math.Min(n - 1, (int)Math.Ceiling(x.MaxZ / cm));
+                for (int j = j0; j <= j1; j++)
+                    for (int i = i0; i <= i1; i++)
+                        if (x.Under(i * cm, j * cm) && !Features.Dry(w, j * n + i)) { e.Add(at + " stands in water"); return; }
+                foreach (var y in edits)
+                    if (!Landforms.Of(y.Shape) && y.Shape != FeatureEdit.Boulder && Features.TileOf(y, cm) == tile
+                        && x.MinX < y.MaxX && x.MaxX > y.MinX && x.MinY < y.MaxY && x.MaxY > y.MinY && x.MinZ < y.MaxZ && x.MaxZ > y.MinZ) { e.Add(at + " overlaps a terrain feature"); return; }
             }
         }
 
