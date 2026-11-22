@@ -46,8 +46,11 @@ and converts once into native data.
   gets a measured envelope. (1) Creatures: bench 10/50/100/250/500 visible deer (anim CPU,
   entities and memory per creature, temp allocations, cost below the animation threshold);
   hoist the five per-creature temp arrays in CreatureAnimSystem, skip pose/IK solving once
-  animation has faded, budget CreatureBuildSystem arrivals per frame (b/creatures-scale,
-  after b/creatures-5). (2) Full-world stress: 251k objects with terrain, grass, shadows,
+  animation has faded, queue CreatureBuildSystem arrivals nearest-first under a per-frame
+  budget with batched instantiation, split herd minds from a parallel Burst behave job,
+  and measure one entity set per creature with a mesh swap instead of two tier sets; the
+  arrival budget becomes the shared spawn budget objects use too (b/creatures-scale,
+  after b/creatures-5; Zach asked 11-22). (2) Full-world stress: 251k objects with terrain, grass, shadows,
   water and objects all on (b/stress-full, warm-up lane after the parallax bench).
   (3) Loading: ~450 MB allocated after terrain build, mid-load heap growth, a 76 ms collect.
   (4) Light budgets below come before fires and torches. Towns wait until the site
