@@ -36,7 +36,7 @@ namespace Stabby.World
         public float BaseX, BaseZ, BaseY;
         public float Width;
         public float DirX, DirZ;
-        public float PoolRadius;
+        public float PoolRadius, PoolCentre;
         public float Discharge;
         public float Drop => LipY - BaseY;
     }
@@ -285,6 +285,17 @@ namespace Stabby.World
         }
 
         public const float FallMinDrop = 4f, FallPoolCentre = 0.8f, FallBaseOffsetM = 0.3f;
+        public const float FallSheetMinM = 12f, FallThrowK = 1.5f;
+        public static float SheetWidth(float width) => Math.Max(width, FallSheetMinM);
+        public static float FallThrow(float drop) => FallThrowK * (float)Math.Sqrt(2 * Math.Max(drop, 0) / 9.81f);
+        const float FallSheetMarginM = 1f;
+
+        static void SheetPool(float width, float drop, ref float r, out float centre)
+        {
+            float t = FallThrow(drop), h = 0.5f * SheetWidth(width) + FallSheetMarginM, low = 1 - 0.6f * NearField.FallRadiusNoise;
+            r = Math.Max(r, h / low);
+            centre = Math.Min(FallPoolCentre * r, t + (float)Math.Sqrt(Math.Max(0, low * low * r * r - h * h)));
+        }
         const float FallStepFraction = 0.5f, FallPoolBaseM = 1.5f, FallPoolScale = 0.9f, FallPoolWidths = 0.75f, FallPoolMaxM = 15f, FallLipT = 0.5f, FallLipStepT = 0.125f;
         const int FallSpanCells = 2;
 
@@ -320,13 +331,14 @@ namespace Stabby.World
                     drop = stage[k] - baseY;
                     float q = seg.Discharge[big], w = seg.Width[big];
                     float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
+                    SheetPool(w, drop, ref pool, out float centre);
                     seg.Falls.Add(new RiverFall
                     {
                         K = big,
                         LipX = lx, LipZ = lz, LipY = stage[k],
                         BaseX = bx, BaseZ = bz, BaseY = baseY,
                         Width = w, DirX = dx, DirZ = dz,
-                        PoolRadius = pool, Discharge = q,
+                        PoolRadius = pool, PoolCentre = centre, Discharge = q,
                     });
                 }
                 k = e - 1;

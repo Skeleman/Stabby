@@ -34,7 +34,7 @@ namespace Stabby.Viewer
         const float SlopeRange = 0.1f;
         const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
         public const float FallMinDrop = 0.3f;
-        const float FallMargin = 0.3f, FallThrow = 1.5f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerPool = 0.5f, MistPerDrop = 0.25f, MistPhase = 0.618034f, SprayWidth = 0.8f, SprayLength = 1.1f, SprayLift = 0.4f, SprayAhead = 0.6f, VeilWidth = 0.575f, VeilHeight = 0.34f, VeilAhead = 1f;
+        const float FallMargin = 0.3f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerPool = 0.5f, MistPerDrop = 0.25f, MistPhase = 0.618034f, SprayWidth = 0.8f, SprayLength = 1.1f, SprayLift = 0.4f, SprayAhead = 0.6f, VeilWidth = 0.575f, VeilHeight = 0.34f, VeilAhead = 1f;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f;
@@ -68,7 +68,7 @@ namespace Stabby.Viewer
                 {
                     K = k - 1, LipX = rf.LipX, LipZ = rf.LipZ, LipY = rf.LipY + RiverLift,
                     BaseX = rf.LipX + rf.DirX * FallThrowAt(rf.Drop), BaseZ = rf.LipZ + rf.DirZ * FallThrowAt(rf.Drop), BaseY = rf.BaseY + RiverLift,
-                    Width = 2 * Mathf.Max(0.5f * rf.Width, 6f), DirX = rf.DirX, DirZ = rf.DirZ,
+                    Width = Hydrology.SheetWidth(rf.Width), DirX = rf.DirX, DirZ = rf.DirZ,
                     PoolRadius = rf.PoolRadius, Discharge = rf.Discharge,
                 };
                 return true;
@@ -80,7 +80,7 @@ namespace Stabby.Viewer
             lipT = Mathf.Clamp((drop + FallMargin - r.D[k - 1] - r.P[k - 1]) / Mathf.Max(drop + r.P[k] - r.P[k - 1], 1e-3f), FallLipMin, FallLipMax);
             d.Normalize();
             float lx = Mathf.Lerp(r.X[k - 1], r.X[k], lipT), lz = Mathf.Lerp(r.Z[k - 1], r.Z[k], lipT), th = FallThrowAt(drop), w = Mathf.Lerp(r.W[k - 1], r.W[k], lipT);
-            float width = 2 * Mathf.Max(w, 6f), discharge = FallDischargePerArea * w * Mathf.Lerp(r.D[k - 1], r.D[k], lipT);
+            float width = Hydrology.SheetWidth(2 * w), discharge = FallDischargePerArea * w * Mathf.Lerp(r.D[k - 1], r.D[k], lipT);
             f = new FallCurtain
             {
                 K = k - 1, LipX = lx, LipZ = lz, LipY = r.S[k - 1] + RiverLift,
@@ -100,7 +100,7 @@ namespace Stabby.Viewer
 
         public static int CurtainRowsOf(float height) => Mathf.Clamp(Mathf.RoundToInt(height / CurtainRowStep), CurtainRowsMin, CurtainRowsMax);
 
-        public static float FallThrowAt(float height) => FallThrow * Mathf.Sqrt(2 * Mathf.Max(height, 0) / 9.81f);
+        public static float FallThrowAt(float height) => Hydrology.FallThrow(height);
 
         public static int CurtainColsOf(float width) => Mathf.Clamp(Mathf.RoundToInt(width / CurtainColStep) + 1, CurtainColsMin, CurtainColsMax);
 
