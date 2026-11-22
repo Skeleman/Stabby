@@ -37,6 +37,14 @@ namespace Stabby.Game
     public struct PlayerInput : IInputComponentData
     {
         public float2 Dir;
+        public bool Sprint;
+        public InputEvent Jump;
+    }
+
+    public struct PlayerMotion : IComponentData
+    {
+        [GhostField(Quantization = 1000)] public float VelY;
+        [GhostField] public bool Airborne;
     }
 
     public struct Player : IComponentData { }
