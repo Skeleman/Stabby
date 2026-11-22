@@ -5,11 +5,11 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
-        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
         public const int DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
@@ -107,8 +107,9 @@ namespace Stabby.World
         {
             float fit = Fitness(lib.Objects[d].Placement.Discovery, px, pz);
             if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
-            bool shrine = lib.Objects[d].Placement.Discovery == Shrine;
-            int tries = shrine ? lib.Objects[d].Variants : 1, k = 0;
+            int kind = lib.Objects[d].Placement.Discovery;
+            bool shrine = kind == Shrine;
+            int tries = shrine || kind == Ruin ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
@@ -349,7 +350,7 @@ namespace Stabby.World
                 }
         }
 
-        float Fitness(int kind, float x, float z)
+        public float Fitness(int kind, float x, float z)
         {
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : DiscoveryProbeM, rise = 0, relief = 0;
             for (int k = 0; k < 8; k++)
@@ -380,6 +381,7 @@ namespace Stabby.World
                 if (relief > ShrineReliefM) return float.MinValue;
                 return d >= ShrineRoadMinM && d <= ShrineRoadM ? -Math.Abs(d - ShrineRoadAimM) / ShrineRoadM - 0.1f * relief : float.MinValue;
             }
+            if (kind == Ruin) return relief <= RuinReliefM ? rise - 0.2f * relief : float.MinValue;
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;
         }

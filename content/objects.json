@@ -260,6 +260,11 @@
       "id": "wayside-shrine", "name": "Wayside shrine", "kind": "structure", "color": "#8a857c", "variants": 6,
       "parts": [ { "id": "site", "shape": "wayside" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "shrine", "spacingM": 400, "chance": 0.8, "slopeMax": 0.5, "sizeMinM": 7, "sizeMaxM": 7.5, "sink": 0.002 }
+    },
+    {
+      "id": "ruin", "name": "Ruin", "kind": "structure", "color": "#7d786e", "variants": 6,
+      "parts": [ { "id": "site", "shape": "ruin" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "ruin", "spacingM": 900, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16 },

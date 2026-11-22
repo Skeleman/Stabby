@@ -8,7 +8,7 @@ namespace Stabby.World
         public ulong Key;
         public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A, Calm;
         public int Lo, Hi, M, G, R;
-        public bool Coursed, Flat;
+        public bool Coursed, Flat, Mossy;
     }
 
     public sealed class StructureLayout
@@ -112,7 +112,7 @@ namespace Stabby.World
                     foreach (int i in idx) b.I.Add(first + i);
                 }
                 if (p.M > 0) Grain(p, out tv, out th);
-                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add((p.Flat ? 16 : 0) + (lift != null ? tl + lift[v - before] : p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : p.Calm > 0 ? 1 + 0.5f * tl : tl)); }
+                for (int v = before; v < b.P.Count / 3; v++) { tones.Add(1); tones.Add(tv); tones.Add(th); tones.Add((p.Mossy ? 32 : 0) + (p.Flat ? 16 : 0) + (lift != null ? tl + lift[v - before] : p.M == Thatch ? tl + 0.5f * (u[(v - before) * 3 + 1] + 1) : p.Coursed && ((v - before) >> 2 | 1) != 3 ? tl + 2 : p.Calm > 0 ? 1 + 0.5f * tl : tl)); }
             }
             starts.Add(b.P.Count / 3);
             var mesh = b.Finish();
@@ -486,6 +486,16 @@ namespace Stabby.World
             {
                 var p = l.Pieces[k];
                 p.Flat = true;
+                l.Pieces[k] = p;
+            }
+        }
+
+        static void Mossy(StructureLayout l, int before)
+        {
+            for (int k = before; k < l.Pieces.Count; k++)
+            {
+                var p = l.Pieces[k];
+                p.Mossy = true;
                 l.Pieces[k] = p;
             }
         }

@@ -472,6 +472,8 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 fade = _Fade;
                 clip(fade.x - Bayer(i.positionCS.xy));
+                bool mossy = i.tone.w > 31.5;
+                i.tone.w -= mossy ? 32 : 0;
                 bool flat = i.tone.w > 15.5;
                 i.tone.w -= flat ? 16 : 0;
                 float4 base = _BaseColor;
@@ -534,7 +536,7 @@ Shader "Stabby/Object"
                             float3 sb = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us, 0.5), 0).rgb, sm = sb;
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
                             TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, lerp(sb, sm * 0.1667, 0.5), tone, fp);
-                            TmStoneCover(m, wp - tmO, n, cwn, fp, 1, 1);
+                            TmStoneCover(m, wp - tmO, n, mossy ? float4(saturate(cwn.x + 0.55 * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
                             float3 g = m.grad + cg;
                             g -= n * dot(g, n);
                             n = normalize(n - g);
