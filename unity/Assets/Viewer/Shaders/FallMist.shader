@@ -22,9 +22,10 @@ Shader "Stabby/FallMist"
 
             float4 _StabbySky;
             float _StabbyMistOff;
+            float4 _StabbyMistPx;
 
             static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
-            static const float PxLo = 4, PxHi = 16, SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6;
+            static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6;
 
             float2 Grad(int2 p)
             {
@@ -76,7 +77,7 @@ Shader "Stabby/FallMist"
                     wp += float3(0, rise, 0) + f3 * ahead + s3 * (rad * 0.35 * dr.y) + float3(wind.x, 0, wind.y) * (rad * WindDrift * t);
                     float size = rad * (spray ? 0.45 + 0.6 * t : 0.6 + 0.7 * t);
                     float px = ScreenPx(rad, length(_WorldSpaceCameraPos - wp));
-                    size *= px < PxLo ? 0 : 1;
+                    size *= px < _StabbyMistPx.x ? 0 : 1;
                     float3 right = UNITY_MATRIX_V[0].xyz, up = UNITY_MATRIX_V[1].xyz;
                     wp += (right * c.x + up * c.y) * size;
                     puff = float4(t, smoothstep(0, 0.15, t) * (1 - smoothstep(0.45, 1, t)), rad, kind);
@@ -85,7 +86,7 @@ Shader "Stabby/FallMist"
                 {
                     float hw = i.size.x, tall = i.size.y, vy = c.y * 0.5 + 0.5;
                     float px = ScreenPx(tall, length(_WorldSpaceCameraPos - wp));
-                    wp += (s3 * (c.x * hw) + float3(0, vy * tall, 0) + float3(wind.x, 0, wind.y) * (vy * vy * tall * 0.4)) * (px < PxLo ? 0 : 1);
+                    wp += (s3 * (c.x * hw) + float3(0, vy * tall, 0) + float3(wind.x, 0, wind.y) * (vy * vy * tall * 0.4)) * (px < _StabbyMistPx.x ? 0 : 1);
                     puff = float4(hw / max(tall, 0.01), 1, tall, kind);
                 }
                 float4 cs = TransformWorldToHClip(wp);
@@ -137,7 +138,7 @@ Shader "Stabby/FallMist"
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float soft = saturate((scene - surface) / min(rad * 0.35, 2.5));
                 float near = saturate((surface - _ProjectionParams.y - 0.5) / min(rad, 6));
-                float px = smoothstep(PxLo, PxHi, ScreenPx(rad, dist));
+                float px = smoothstep(_StabbyMistPx.x, _StabbyMistPx.y, ScreenPx(rad, dist));
                 Light l = GetMainLight();
                 float sun = saturate(l.direction.y * 2 + 0.1);
                 float fwd = pow(saturate(dot(-v, l.direction)), 4);
