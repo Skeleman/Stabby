@@ -32,6 +32,9 @@ namespace Stabby.World
         public int Kind, Shape;
         public float Ax, Ay, Az, Bx, By, Bz, R;
         public float W, H, P, T;
+        public float D, F, N, S;
+
+        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f;
 
         public float Thick => R + Math.Min(W, H);
 
@@ -60,9 +63,56 @@ namespace Stabby.World
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
             dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
-            if (P > 0f) dist += R * P * Pinch(t);
+            if (P > 0f) dist += R * Profile(t);
+            if (N > 0f) dist += N * Lump(x, y, z);
             return dist < R;
         }
+
+        float Profile(float t)
+        {
+            float p = P * Pinch(t);
+            if (D <= 0f) return p;
+            uint seed = Seed;
+            float b = Math.Max(0f, 1f - t / FlareSpan), s = F * t + 0.45f * (Value(seed, 1.7f * F * t, 0f, 0f) - 0.5f);
+            float cell = (float)Math.Floor(s), f = s - cell;
+            float band = 16f * f * f * (1f - f) * (1f - f) * (0.35f + 0.65f * Unit(Hash(seed, (int)cell, 7, 11)));
+            return p + Flare * (1f - b * b) + D * band * (1f - b);
+        }
+
+        uint Seed => (uint)(S * 16777216f) * 0x9E3779B1u + 0x632BE5ABu;
+
+        float Lump(float x, float y, float z)
+        {
+            float k = 1f / (Wave * R);
+            uint seed = Seed;
+            return 0.65f * Value(seed, x * k, y * k, z * k) + 0.35f * Value(seed ^ 0x68E31DA4u, 2.1f * k * x, 2.1f * k * y, 2.1f * k * z);
+        }
+
+        static uint Hash(uint seed, int x, int y, int z)
+        {
+            uint h = seed ^ ((uint)x * 0x9E3779B1u) ^ ((uint)y * 0x85EBCA77u) ^ ((uint)z * 0xC2B2AE3Du);
+            h ^= h >> 16; h *= 0x7FEB352Du;
+            h ^= h >> 15; h *= 0x846CA68Bu;
+            h ^= h >> 16;
+            return h;
+        }
+
+        static float Unit(uint h) => (h >> 8) * (1f / 16777216f);
+
+        static float Value(uint seed, float x, float y, float z)
+        {
+            float fx0 = (float)Math.Floor(x), fy0 = (float)Math.Floor(y), fz0 = (float)Math.Floor(z);
+            int ix = (int)fx0, iy = (int)fy0, iz = (int)fz0;
+            float fx = x - fx0, fy = y - fy0, fz = z - fz0;
+            float u = fx * fx * (3f - 2f * fx), v = fy * fy * (3f - 2f * fy), w = fz * fz * (3f - 2f * fz);
+            float a = Lerp(Unit(Hash(seed, ix, iy, iz)), Unit(Hash(seed, ix + 1, iy, iz)), u);
+            float b = Lerp(Unit(Hash(seed, ix, iy + 1, iz)), Unit(Hash(seed, ix + 1, iy + 1, iz)), u);
+            float c = Lerp(Unit(Hash(seed, ix, iy, iz + 1)), Unit(Hash(seed, ix + 1, iy, iz + 1)), u);
+            float d = Lerp(Unit(Hash(seed, ix, iy + 1, iz + 1)), Unit(Hash(seed, ix + 1, iy + 1, iz + 1)), u);
+            return Lerp(Lerp(a, b, v), Lerp(c, d, v), w);
+        }
+
+        static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
         float Pinch(float t)
         {
@@ -74,11 +124,20 @@ namespace Stabby.World
         {
             float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
             float ux = len > 0 ? ex / len : 1f, uz = len > 0 ? ez / len : 0f;
-            float px = x - 0.5f * (Ax + Bx), pz = z - 0.5f * (Az + Bz);
-            float a = Math.Max(Math.Abs(px * ux + pz * uz) - 0.5f * len, 0f);
-            float b = Math.Max(Math.Abs(pz * ux - px * uz) - W, 0f);
-            float c = Math.Max(Math.Abs(y - 0.5f * (Ay + By)) - H, 0f);
+            float px = x - 0.5f * (Ax + Bx), pz = z - 0.5f * (Az + Bz), half = 0.5f * len;
+            float along = px * ux + pz * uz, across = pz * ux - px * uz, sn = Math.Max(-1f, Math.Min(1f, along / (half + W)));
+            float wide = W * (1f - Math.Abs(T) * (0.5f - 0.5f * (T > 0f ? sn : -sn)));
+            float a = Math.Max(Math.Abs(along) - half, 0f);
+            float b = Math.Max(Math.Abs(across) - wide, 0f);
+            float dy = y - 0.5f * (Ay + By), h = H;
+            if (dy > 0f && D > 0f)
+            {
+                float ea = along / (half + W + R), eb = across / (W + R);
+                h -= D * Math.Min(1f, ea * ea + eb * eb);
+            }
+            float c = Math.Max(Math.Abs(dy) - h, 0f);
             dist = (float)Math.Sqrt(a * a + b * b + c * c);
+            if (N > 0f) dist += N * Lump(x, y, z);
             return dist < R;
         }
 
