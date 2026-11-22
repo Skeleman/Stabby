@@ -96,6 +96,7 @@ namespace Stabby.World
                 float sz = rng.Range(0.5f, 1.0f), d = Math.Min(side + rng.Range(0.3f, 1.5f) + 0.6f * sz, 9.6f - 1.3f * sz);
                 int yaw = rng.Range(0, 16), a = rng.Range(0, 16);
                 Rock(l, rng.NextU64(), f, d * Cos16(a), VentLift - 0.35f * sz, d * Sin16(a), sz * 1.3f, sz * 0.8f, sz, Cos16(yaw), Sin16(yaw), 0, i == 0 ? 2 : 1);
+                Touch(l, f, d * Cos16(a), VentLift - 0.35f * sz, d * Sin16(a), 0.55f * sz);
             }
         }
 
