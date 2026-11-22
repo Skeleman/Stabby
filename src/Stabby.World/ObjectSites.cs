@@ -28,7 +28,7 @@ namespace Stabby.World
                     natural = Math.Max(natural, BoulderReach * footprint[d] * Math.Max(def.Placement.SizeMaxM, 0));
                     continue;
                 }
-                if (def.Placement.PerHectare <= 0) continue;
+                if (def.Placement.PerHectare <= 0 && def.Placement.Discovery <= 0) continue;
                 var box = new float[def.Variants * 4];
                 for (int v = 0; v < def.Variants; v++)
                 {
