@@ -364,6 +364,14 @@ namespace Stabby.World
         public static bool Pooled(int kind) => kind == Spring || kind == Geyser || kind == MudPot;
         public int VentKind(ObjectInstance o) => lib.Objects[o.Def].Placement.Discovery;
 
+        public MaterialLibrary Materials => w.Materials;
+
+        public int LiquidOf(ObjectInstance o)
+        {
+            string id = lib.Objects[o.Def].Placement.Liquid;
+            return id == null || w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid(id));
+        }
+
         public static void LocalPools(int kind, ulong key, List<float> local)
         {
             if (kind == Geyser) Structures.GeyserPools(key, local);
@@ -374,7 +382,7 @@ namespace Stabby.World
         public ulong VentSeed(ObjectInstance o) => Rng.Mix(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant) ^ ((ulong)(uint)(int)(o.X * 16f) << 32 | (uint)(int)(o.Z * 16f)));
 
         public const int SpringStride = 9;
-        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f, GeyserLipU = 0.15f, GeyserVentU = 2.5f, GeyserTaper = 0.9f, GeyserFootU = 0.5f, MudSinkU = 0.15f, MudCrestU = 0.45f, MudDepthU = 0.5f, MudBankU = 0.3f, MudBank = 1.1f, MudShelf = 2.5f, MudShelfU = 0.08f, MudShelfTopU = 0.2f, MudRimU = 0.7f, MudRimSlope = 0.7f, MudLobe = 0.3f, GeyserLobe = 0.18f, GeyserLumpU = 0.3f, GeyserTerraceU = 0.7f;
+        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f, GeyserLipU = 0.15f, GeyserVentU = 2.5f, GeyserTaper = 0.9f, GeyserFootU = 0.5f, MudSinkU = 0.15f, MudFillU = 0.3f, MudCrestU = 0.45f, MudDepthU = 0.5f, MudBankU = 0.3f, MudBank = 1.1f, MudShelf = 2.5f, MudShelfU = 0.08f, MudShelfTopU = 0.2f, MudRimU = 0.7f, MudRimSlope = 0.7f, MudLobe = 0.3f, GeyserLobe = 0.18f, GeyserLumpU = 0.3f, GeyserTerraceU = 0.7f;
 
         public void SpringPoolsAt(ObjectInstance o, List<float> world)
         {
@@ -407,7 +415,7 @@ namespace Stabby.World
                         high = Math.Max(high, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
                     }
                 }
-                else if (kind == MudPot) { level = sum / 8 - MudSinkU * u; crest = level + MudCrestU * u; floor = level - MudDepthU * u; }
+                else if (kind == MudPot) { level = sum / 8 + (MudFillU - MudSinkU) * u; crest = level + (MudCrestU - MudFillU) * u; floor = level - (MudDepthU + MudFillU) * u; }
                 last = level;
                 world.Add(x); world.Add(z); world.Add(r); world.Add(rout); world.Add(level); world.Add(crest); world.Add(floor);
                 world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(Math.Max(high, crest) + SpringTopU * u);
@@ -500,7 +508,7 @@ namespace Stabby.World
                     }
                     if (kind == MudPot)
                     {
-                        float level = pools[k + 4], bank = MudBankU * u;
+                        float level = pools[k + 4] - MudFillU * u, bank = MudBankU * u;
                         list.Add(Disc(FeatureEdit.Add, x, z, crest, bottom, r + MudRimU * u, ra, MudRimSlope, -MudLobe, 0.1f * u, seed, mud, 0));
                         carves.Add(Disc(FeatureEdit.Carve, x, z, top, floor, r + MudBank * (top - bank - level), bank, -MudBank, -MudLobe, 0.06f * u, seed, mud, 0));
                         float shelf = MudShelfU * u, lip = level + MudShelfTopU * u;

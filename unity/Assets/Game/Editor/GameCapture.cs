@@ -161,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -316,7 +316,24 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
+            if (phase >= 330 && phase < 330 + BogShots.Length)
+            {
+                string name = BogShots[phase - 330];
+                if (wait == 0)
+                {
+                    if (!AimBog(cam, phase - 330)) { GameStatus.Lines["~" + name] = "no bog pool placed"; phase++; }
+                    else { wait = 180; return; }
+                }
+                else
+                {
+                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, name);
+                    wait = 0;
+                    phase++;
+                }
+            }
+            if ((only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1644,6 +1661,36 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 GameStatus.Lines["~aim " + VentShots[mode]] = $"vent kind {kind} pool r {r:F2} m at {c.x:F0},{c.y:F0},{c.z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}, clock {TerrainViewSystem.ClockOverride:F1}";
+                return true;
+            }
+            return false;
+        }
+
+        static readonly string[] BogShots = { "bog", "bog-wide" };
+
+        static bool AimBog(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var bogs = field.BogPools();
+                int pick = -1;
+                float best = float.MaxValue;
+                for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+                {
+                    float score = new Vector2(bogs[k] - home.x, bogs[k + 1] - home.z).magnitude - 40f * bogs[k + 2];
+                    if (score < best) { best = score; pick = k; }
+                }
+                if (pick < 0) return false;
+                var c = new Vector3(bogs[pick], bogs[pick + 3], bogs[pick + 1]);
+                float r = bogs[pick + 2];
+                var side = new Vector3(0.8f, 0, 0.6f);
+                var eye = c + side * (mode == 0 ? 1.6f : 5f) * r + Vector3.up * (mode == 0 ? 1.7f : 0.9f * r);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(c - eye));
+                GameStatus.Lines["~aim " + BogShots[mode]] = $"bog pool r {r:F2} m depth {bogs[pick + 3] - bogs[pick + 4]:F2} m at {c.x:F0},{c.y:F1},{c.z:F0}, {bogs.Length / ObjectField.BogStride} pools";
                 return true;
             }
             return false;

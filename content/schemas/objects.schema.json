@@ -5,7 +5,7 @@
   "required": ["schemaVersion", "kinds", "objects", "terrain", "foliage"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 3 },
+    "schemaVersion": { "const": 4 },
     "terrain": {
       "type": "object",
       "required": ["quadPixels"],
@@ -158,6 +158,7 @@
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot"] },
+              "liquid": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "spacingM": { "type": "number", "minimum": 200, "maximum": 5000 },
               "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
               "biomeDensity": {

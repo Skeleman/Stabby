@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kinds": [
     { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
     { "id": "interactive", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 6.48, "shadows": true, "shadowPixels": 32.4, "wind": false, "animated": false, "solid": true },
@@ -269,7 +269,7 @@
     {
       "id": "hot-spring", "name": "Hot spring", "kind": "structure", "material": "sinter-crust", "variants": 8,
       "parts": [ { "id": "site", "shape": "hot-spring" } ],
-      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "spring", "spacingM": 3000, "chance": 0.7, "slopeMin": 0.04, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.15 }
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "spring", "liquid": "spring", "spacingM": 3000, "chance": 0.7, "slopeMin": 0.04, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.15 }
     },
     {
       "id": "mushroom", "name": "Mushroom", "kind": "structure", "material": "mushroom-cap", "variants": 6,
@@ -284,12 +284,12 @@
     {
       "id": "geyser", "name": "Geyser", "kind": "structure", "material": "sinter-crust", "variants": 8,
       "parts": [ { "id": "site", "shape": "geyser" } ],
-      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "geyser", "spacingM": 3500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.02 }
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "geyser", "liquid": "spring", "spacingM": 3500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 16, "sizeMaxM": 20, "sink": 0.02 }
     },
     {
       "id": "mud-pot", "name": "Mud pot", "kind": "structure", "material": "vent-mud", "variants": 8,
       "parts": [ { "id": "site", "shape": "mud-pot" } ],
-      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "mud-pot", "spacingM": 2500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 14, "sizeMaxM": 18, "sink": 0.02 }
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra", "cold-desert", "desert", "wetland", "alpine"], "perHectare": 0, "discovery": "mud-pot", "liquid": "mud", "spacingM": 2500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 14, "sizeMaxM": 18, "sink": 0.02 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8 },

@@ -314,11 +314,13 @@ namespace Stabby.World
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
-            if (boulders.Length + springs.Length == 0) return terrain;
-            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length];
+            var bogs = field.BogEdits();
+            if (boulders.Length + springs.Length + bogs.Length == 0) return terrain;
+            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
             springs.CopyTo(all, terrain.Length + boulders.Length);
+            bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             return all;
         }
 

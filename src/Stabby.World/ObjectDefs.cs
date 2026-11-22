@@ -57,6 +57,7 @@ namespace Stabby.World
         public string Bank;
         public float PerHundredM;
         public int Discovery;
+        public string Liquid;
         public float SpacingM, Chance = 1f;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
     }
@@ -178,6 +179,7 @@ namespace Stabby.World
                 if (pl.Bank == null && pl.PerHundredM != 0) errors.Add(d.Id + ": perHundredM belongs only to bank placement");
                 if (pl.Discovery < 0 || (pl.Discovery > 0 && (d.Kind != Structure || pl.PerHectare > 0 || pl.Bank != null || pl.SpacingM < 200 || pl.SpacingM > 5000 || pl.Chance <= 0 || pl.Chance > 1)))
                     errors.Add(d.Id + ": discovery placement needs a known discovery, a structure, no perHectare or bank, spacingM 200-5000 and chance above 0, at most 1");
+                if (pl.Liquid != null && !ObjectField.Pooled(pl.Discovery)) errors.Add(d.Id + ": liquid belongs only to spring, geyser and mud-pot discoveries");
                 foreach (var bd in pl.BiomeDensity)
                 {
                     if (bd.Scale < 0 || bd.Scale > 1) errors.Add(d.Id + ": biomeDensity scale must be 0-1");

@@ -210,11 +210,38 @@ public class DiscoveryTests
                 Assert.Null(field.VentFault(c));
                 field.SpringPoolsAt(c, pools);
                 if (c.Def == geyser) { geysers++; Assert.Equal(1, pools.Count / ObjectField.SpringStride); Assert.True(pools[5] > pools[4]); }
-                else { muds++; Assert.InRange(pools.Count / ObjectField.SpringStride, 1, 3); }
+                else { muds++; Assert.InRange(pools.Count / ObjectField.SpringStride, 1, 3); Assert.True(pools[5] - pools[4] < pools[4] - pools[6]); }
             }
         }
         output.WriteLine($"{geysers} geysers, {muds} mud pots");
         Assert.True(geysers > 0 && muds > 0, $"{geysers} geysers, {muds} mud pots in 4 worlds");
+    }
+
+    [Fact]
+    public void BogPoolsSitShallowInWetland()
+    {
+        int total = 0;
+        var materials = ContentLoader.LoadMaterials(Root);
+        Assert.True(materials.Liquid("peat") > 0);
+        foreach (var o in Objects.Objects)
+            if (o.Placement.Liquid != null) Assert.True(materials.Liquid(o.Placement.Liquid) >= 0, o.Id + " names an unknown liquid");
+        for (ulong seed = 1; seed <= 6; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, materials, null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var bogs = field.BogPools();
+            int wet = Array.IndexOf(w.BiomeIds, "wetland"), n = w.Config.Size;
+            for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+            {
+                total++;
+                int c = Math.Min(n - 1, (int)(bogs[k + 1] / w.Config.CellMeters + 0.5f)) * n + Math.Min(n - 1, (int)(bogs[k] / w.Config.CellMeters + 0.5f));
+                Assert.Equal(wet, w.Biome[c]);
+                Assert.InRange(bogs[k + 3] - bogs[k + 4], ObjectField.BogMinDepthM, ObjectField.BogMaxDepthM);
+            }
+        }
+        output.WriteLine($"{total} bog pools");
+        Assert.True(total > 0, "no bog pools in 6 worlds");
     }
 
     [Fact]

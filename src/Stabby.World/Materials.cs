@@ -34,13 +34,13 @@ namespace Stabby.World
 
     public sealed class SinterDef
     {
-        public uint White = 0xe8e4d8, Ochre = 0xc99a4a, Orange = 0xc4642a, Water = 0x5fc8c4, Deep = 0x1f6f86;
+        public uint White = 0xe8e4d8, Ochre = 0xc99a4a, Orange = 0xc4642a;
         public float BandM = 0.3f, Roughness = 0.55f;
     }
 
     public sealed class MudDef
     {
-        public uint Surface = 0x6c675d, Deep = 0x3f3b34, Clay = 0xa49a84, Grey = 0x8c897f;
+        public uint Surface = 0x6c675d, Clay = 0xa49a84, Grey = 0x8c897f;
         public float Roughness = 0.3f;
     }
 
@@ -168,13 +168,19 @@ namespace Stabby.World
         static float Saturate(float v) => v < 0 ? 0 : v > 1 ? 1 : v;
     }
 
-    public sealed class WaterDef
+    public sealed class LiquidDef
     {
-        public uint DeepColor, ShallowColor;
+        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 8;
+        public static readonly string[] SprayNames = { "none", "mist", "dust", "shimmer" };
+        public string Id;
+        public uint DeepColor, ShallowColor, FilmColor, EmissionColor;
         public float ClarityM, ShoreM, FoamWidthM;
         public float WaveScaleM, WaveSpeed, WaveStrength;
         public float SwellScaleM, SwellStrength, LakeSwell;
         public float FlowSpeed, RapidsSlope, BedFieldM;
+        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness;
+        public int Spray;
+        public float FallSpeed, SheetOpacity;
     }
 
     public sealed class LibraryMaterial
@@ -194,7 +200,14 @@ namespace Stabby.World
         }
 
         public SurfaceDetail Surface = new SurfaceDetail();
-        public WaterDef Water = new WaterDef();
+        public List<LiquidDef> Liquids = new List<LiquidDef>();
+        public LiquidDef Water => Liquids != null && Liquids.Count > 0 ? Liquids[0] : null;
+
+        public int Liquid(string id)
+        {
+            for (int i = 0; Liquids != null && i < Liquids.Count; i++) if (Liquids[i].Id == id) return i;
+            return -1;
+        }
         public LookDef Look = new LookDef();
         public SinterDef Sinter = new SinterDef();
         public MudDef Mud = new MudDef();
@@ -345,22 +358,40 @@ namespace Stabby.World
                     if (!(c.Parallax >= 0 && c.Parallax <= 2)) errors.Add($"{n}.parallax {c.Parallax} outside 0..2");
                 }
             }
-            var w = lib.Water;
-            if (w == null) errors.Add("water: required");
+            if (lib.Liquids == null || lib.Liquids.Count == 0) errors.Add("liquids: required");
             else
             {
-                if (!(w.ClarityM >= 0.1f && w.ClarityM <= 100)) errors.Add($"water.clarityM {w.ClarityM} outside 0.1..100");
-                if (!(w.ShoreM >= 0.01f && w.ShoreM <= 5)) errors.Add($"water.shoreM {w.ShoreM} outside 0.01..5");
-                if (!(w.FoamWidthM >= 0 && w.FoamWidthM <= 50)) errors.Add($"water.foamWidthM {w.FoamWidthM} outside 0..50");
-                Len(errors, "water.waveScaleM", w.WaveScaleM);
-                Len(errors, "water.swellScaleM", w.SwellScaleM);
-                if (!(w.WaveSpeed >= 0 && w.WaveSpeed <= 10)) errors.Add($"water.waveSpeed {w.WaveSpeed} outside 0..10");
-                if (!(w.FlowSpeed >= 0 && w.FlowSpeed <= 10)) errors.Add($"water.flowSpeed {w.FlowSpeed} outside 0..10");
-                Amp(errors, "water.waveStrength", w.WaveStrength);
-                Amp(errors, "water.swellStrength", w.SwellStrength);
-                Amp(errors, "water.lakeSwell", w.LakeSwell);
-                if (!(w.RapidsSlope > 0 && w.RapidsSlope <= 1)) errors.Add($"water.rapidsSlope {w.RapidsSlope} outside 0..1");
-                if (!(w.BedFieldM >= 1 && w.BedFieldM <= 5000)) errors.Add($"water.bedFieldM {w.BedFieldM} outside 1..5000");
+                if (lib.Liquids[0].Id != "water") errors.Add("liquids: first entry must be water");
+                if (lib.Liquids.Count > LiquidDef.Max) errors.Add($"liquids: {lib.Liquids.Count} entries, at most {LiquidDef.Max}");
+                for (int i = 0; i < lib.Liquids.Count; i++)
+                {
+                    var w = lib.Liquids[i];
+                    string n = w.Id ?? "";
+                    if (n.Length == 0) errors.Add($"liquids[{i}].id required");
+                    if (lib.Liquid(n) != i) errors.Add($"liquids: duplicate id {n}");
+                    if (!(w.ClarityM >= 0.1f && w.ClarityM <= 100)) errors.Add($"{n}.clarityM {w.ClarityM} outside 0.1..100");
+                    if (!(w.ShoreM >= 0.01f && w.ShoreM <= 5)) errors.Add($"{n}.shoreM {w.ShoreM} outside 0.01..5");
+                    if (!(w.FoamWidthM >= 0 && w.FoamWidthM <= 50)) errors.Add($"{n}.foamWidthM {w.FoamWidthM} outside 0..50");
+                    Len(errors, n + ".waveScaleM", w.WaveScaleM);
+                    Len(errors, n + ".swellScaleM", w.SwellScaleM);
+                    if (!(w.WaveSpeed >= 0 && w.WaveSpeed <= 10)) errors.Add($"{n}.waveSpeed {w.WaveSpeed} outside 0..10");
+                    if (!(w.FlowSpeed >= 0 && w.FlowSpeed <= 10)) errors.Add($"{n}.flowSpeed {w.FlowSpeed} outside 0..10");
+                    Amp(errors, n + ".waveStrength", w.WaveStrength);
+                    Amp(errors, n + ".swellStrength", w.SwellStrength);
+                    Amp(errors, n + ".lakeSwell", w.LakeSwell);
+                    if (!(w.RapidsSlope > 0 && w.RapidsSlope <= 1)) errors.Add($"{n}.rapidsSlope {w.RapidsSlope} outside 0..1");
+                    if (!(w.BedFieldM >= 1 && w.BedFieldM <= 5000)) errors.Add($"{n}.bedFieldM {w.BedFieldM} outside 1..5000");
+                    Amp(errors, n + ".silt", w.Silt);
+                    Amp(errors, n + ".opacity", w.Opacity);
+                    Amp(errors, n + ".viscosity", w.Viscosity);
+                    Amp(errors, n + ".bubbles", w.Bubbles);
+                    Amp(errors, n + ".film", w.Film);
+                    Amp(errors, n + ".emission", w.Emission);
+                    Amp(errors, n + ".roughness", w.Roughness);
+                    Amp(errors, n + ".fall.sheetOpacity", w.SheetOpacity);
+                    if (!(w.Spray >= 0 && w.Spray < LiquidDef.SprayNames.Length)) errors.Add($"{n}.fall.spray {w.Spray} unknown");
+                    if (!(w.FallSpeed >= 0.05f && w.FallSpeed <= 4)) errors.Add($"{n}.fall.speed {w.FallSpeed} outside 0.05..4");
+                }
             }
             return errors;
         }

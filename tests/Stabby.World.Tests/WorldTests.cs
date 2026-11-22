@@ -221,11 +221,16 @@ public class WorldTests
         Same(rock, surfaceData.GetProperty("rock"));
         Same(surface.GetProperty("properties").GetProperty("coats"), surfaceData.GetProperty("coats"));
         foreach (var c in surfaceData.GetProperty("coats").EnumerateObject()) Same(coat, c.Value);
-        Same(top.GetProperty("properties").GetProperty("water"), data.RootElement.GetProperty("water"));
+        var liquid = top.GetProperty("properties").GetProperty("liquids").GetProperty("items");
+        foreach (var l in data.RootElement.GetProperty("liquids").EnumerateArray())
+        {
+            Same(liquid, l);
+            Same(liquid.GetProperty("properties").GetProperty("fall"), l.GetProperty("fall"));
+        }
         var lib = ContentLoader.LoadMaterials(root);
         Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.Rock.BedSpacingM > 0);
         Assert.True(lib.Water.DeepColor != 0 && lib.Water.ShoreM > 0 && lib.Water.FoamWidthM > 0);
-        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Water = new WaterDef() }), e => e.Contains("water.shoreM"));
+        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Liquids = { new LiquidDef { Id = "water" } } }), e => e.Contains("water.shoreM"));
         foreach (var b in ContentLoader.LoadBiomes(root)) Assert.True(lib.Surface.CoatOf(b.Id) >= 0, b.Id + " has no coat");
         lib.Surface.Coats[1].GrainAmp = 2;
         lib.Surface.Coats[3].Biomes.Add(lib.Surface.Coats[0].Biomes[0]);
