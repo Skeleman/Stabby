@@ -8,7 +8,7 @@ namespace Stabby.World
         public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring" };
         static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring" };
         public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7;
-        public const float SpringRiverM = 40f, SpringReliefM = 8f, SpringWaterM = 0.05f;
+        public const float SpringRiverM = 40f, SpringReliefM = 8f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
@@ -361,17 +361,31 @@ namespace Stabby.World
 
         public bool IsSpring(ObjectInstance o) => lib.Objects[o.Def].Placement.Discovery == Spring;
 
+        public const int SpringStride = 9;
+        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f;
+
         public void SpringPoolsAt(ObjectInstance o, List<float> world)
         {
             world.Clear();
             var local = new List<float>();
             Structures.SpringPools(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), local);
-            float u = Structures.SpringU * o.Size;
+            float u = Structures.SpringU * o.Size, last = float.MaxValue;
             for (int k = 0; k < local.Count; k += Structures.PoolStride)
             {
-                Rotate(o, local[k] * u, local[k + 4] * u, local[k + 1] * u, out float rx, out float ry, out float rz);
-                world.Add(o.X + rx); world.Add(o.Z + rz); world.Add(local[k + 2] * u); world.Add(local[k + 3] * u);
-                world.Add(o.Y + ry); world.Add(o.Y + ry - Structures.SpringDepth * u);
+                Rotate(o, local[k] * u, 0, local[k + 1] * u, out float rx, out _, out float rz);
+                float x = o.X + rx, z = o.Z + rz, r = local[k + 2] * u, rout = local[k + 3] * u;
+                float sum = 0, low = float.MaxValue, high = GroundAt(detail, cm, x, z);
+                for (int p = 0; p < 8; p++)
+                {
+                    FanDir(p, 0.70710678f, out float ux, out float uz);
+                    float g = GroundAt(detail, cm, x + ux * r, z + uz * r);
+                    sum += g; high = Math.Max(high, g);
+                    low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
+                }
+                float level = Math.Min(sum / 8, last - SpringStepU * u), crest = level + Structures.SpringCrest * u, floor = level - Structures.SpringDepth * u;
+                last = level;
+                world.Add(x); world.Add(z); world.Add(r); world.Add(rout); world.Add(level); world.Add(crest); world.Add(floor);
+                world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(Math.Max(high, crest) + SpringTopU * u);
             }
         }
 
@@ -379,9 +393,9 @@ namespace Stabby.World
         {
             var pools = new List<float>();
             SpringPoolsAt(o, pools);
-            for (int k = 0; k < pools.Count; k += 6)
+            for (int k = 0; k < pools.Count; k += SpringStride)
             {
-                float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], level = pools[k + 4], bottom = pools[k + 5];
+                float x = pools[k], z = pools[k + 1], rout = pools[k + 3];
                 for (int p = 0; p < 9; p++)
                 {
                     float ux = 0, uz = 0;
@@ -390,12 +404,43 @@ namespace Stabby.World
                     if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return "pool reaches past the world edge";
                     int i = Cell(pz) * n + Cell(px);
                     if (w.Sea[i] || w.Water.LakeId[i] >= 0 || RiverGap(px, pz) <= 0) return "pool stands in water";
-                    float wet = GroundAt(detail, cm, x + ux * 0.85f * r, z + uz * 0.85f * r);
-                    if (wet >= level - SpringWaterM) return "pool rim does not hold water";
-                    if (p > 0 && GroundAt(detail, cm, px, pz) < bottom + SpringWaterM) return "pool rim does not hold water";
                 }
+                foreach (var f in edits)
+                    if (f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring && x + rout >= f.MinX && x - rout <= f.MaxX && z + rout >= f.MinZ && z - rout <= f.MaxZ) return "pool overlaps a terrain feature";
             }
             return null;
+        }
+
+        public FeatureEdit[] SpringEdits()
+        {
+            var list = new List<FeatureEdit>();
+            var carves = new List<FeatureEdit>();
+            var pools = new List<float>();
+            foreach (var o in Discoveries())
+            {
+                if (!IsSpring(o)) continue;
+                SpringPoolsAt(o, pools);
+                float u = Structures.SpringU * o.Size;
+                for (int k = 0; k < pools.Count; k += SpringStride)
+                {
+                    float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], crest = pools[k + 5], floor = pools[k + 6], bottom = pools[k + 7], top = pools[k + 8];
+                    float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
+                    list.Add(new FeatureEdit
+                    {
+                        Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
+                        Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (crest + bottom), By = 0.5f * (crest + bottom),
+                        W = rout - ra, H = Math.Max(0f, 0.5f * (crest - bottom) - ra), P = 0.15f, N = 0.1f * u, S = seed,
+                    });
+                    carves.Add(new FeatureEdit
+                    {
+                        Kind = FeatureEdit.Carve, Shape = FeatureEdit.Spring, R = rc,
+                        Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (top + floor), By = 0.5f * (top + floor),
+                        W = r - hole, H = Math.Max(0f, 0.5f * (top - floor) - hole), N = 0.08f * u, S = seed,
+                    });
+                }
+            }
+            list.AddRange(carves);
+            return list.ToArray();
         }
 
         bool ClearOfBuilt(ObjectInstance o)

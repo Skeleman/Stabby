@@ -21,6 +21,7 @@ Shader "Stabby/VertexLit"
             #include "TerrainStitch.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
+            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC;
             float _StabbyStrataPeriod, _StabbyCellMeters;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -39,7 +40,7 @@ Shader "Stabby/VertexLit"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; };
 
             Varyings vert(Attributes i)
             {
@@ -54,6 +55,7 @@ Shader "Stabby/VertexLit"
                 o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y, i.strata.z);
                 o.xz = p.positionWS.xz - TmOrigin(_WorldSpaceCameraPos);
                 o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
+                o.sinter = i.strata.w;
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 return o;
             }
@@ -101,6 +103,30 @@ Shader "Stabby/VertexLit"
                 }
                 TmOut m = TmEvaluate(float3(i.xz.x, h, i.xz.y), n, color, off, mix, stone);
                 n = m.grad;
+                [branch] if (i.sinter > 0.01)
+                {
+                    float3 q = float3(i.xz.x, h, i.xz.y), pg = float3(q.x, 0.1 * q.y, q.z);
+                    float3 dx = ddx(q), dy = ddy(q);
+                    float fp = max(max(length(dx), length(dy)) * 0.7, 1e-4);
+                    float4 big = TmNoise3(q * 1.1, int3(0, 0, 0)), mid = TmNoise3(q * 4.3 + 3.1, int3(0, 0, 0));
+                    float4 str = TmNoise3(pg * 9, int3(0, 0, 0)), fib = TmNoise3(pg * 31 + 7.7, int3(0, 0, 0));
+                    float fm = TmFade(4.3, fp), fs = TmFade(9, fp), ff = TmFade(31, fp);
+                    float cover = smoothstep(0.3, 0.7, i.sinter + 0.3 * big.x + 0.12 * mid.x * fm);
+                    float t = smoothstep(0.1, 0.6, 1 - n.y);
+                    float w1 = q.y * _StabbySinterA.w + 0.7 * big.x + 0.35 * mid.x * fm + 0.1 * fib.x * ff;
+                    float band = 0.5 + 0.5 * sin(w1 * 6.2831853);
+                    float run = saturate(str.x * 0.9 + 0.55 * big.x + 0.7 * t - 0.35 + 0.15 * mid.x * fm) * fs;
+                    float warm = smoothstep(0.15, 0.75, run) * (0.25 + 0.75 * t);
+                    float3 mineral = lerp(_StabbySinterB.rgb, _StabbySinterC.rgb, smoothstep(0.35, 0.9, run + 0.25 * t + 0.2 * fib.x * ff));
+                    float3 white = _StabbySinterA.rgb * (0.86 + 0.08 * big.x + 0.06 * mid.x * fm - 0.06 * (1 - band) * t);
+                    float3 a = lerp(white, mineral, 0.85 * warm) * (0.93 + 0.05 * fib.x * ff);
+                    a = lerp(a, a * float3(0.5, 0.47, 0.43), 0.12 * (1 - band) * t);
+                    float3 grad = 0.07 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - float3(0, 1, 0) * (0.06 * cos(w1 * 6.2831853) * fm * t);
+                    grad -= n * dot(grad, n);
+                    m.albedo = lerp(m.albedo, a, cover);
+                    tmRough = lerp(tmRough, _StabbySinterB.w, cover);
+                    n = normalize(n - grad * cover);
+                }
                 [branch] if (_StabbyGrassFar.x > 0 && tmGrass > 0.01)
                 {
                     float2 xa = i.xz + TmOrigin(_WorldSpaceCameraPos);

@@ -322,17 +322,19 @@ namespace Stabby.Game
             if (sx) pos.x = ax;
         }
 
-        static float Water(ref GroundData g, ref TerrainLookData look, float x, float z)
+        const float SinterFadeM = 0.9f;
+
+        static float Sinter(NativeEdits edits, float3 p)
         {
-            int c = NearField.CellOf(x, z, g.CellMeters, g.N);
-            float h = math.max(0, look.Lake[c]);
-            for (int k = g.PieceStart[c]; k < g.PieceStart[c + 1]; k++)
+            float w = 0;
+            for (int q = 0; q < edits.Count; q++)
             {
-                var q = g.Pieces[g.PieceItems[k]];
-                NearField.Project(q, x, z, out float d, out float t);
-                if (d < math.max(math.lerp(q.Wa, q.Wb, t), 6f)) h = math.max(h, math.lerp(q.Sa, q.Sb, t) + WaterGeometry.RiverLift);
+                var e = edits.Items[q];
+                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Add || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
+                float d = math.length(new float2(p.x - e.Ax, p.z - e.Az)) - e.W - e.R;
+                w = math.max(w, 1 - math.smoothstep(-SinterFadeM, 0, d));
             }
-            return h;
+            return w;
         }
 
         public void Execute()
@@ -449,7 +451,7 @@ namespace Stabby.Game
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
-                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, math.clamp(Water(ref g, ref look, p.Pos.x, p.Pos.z) - p.Pos.y, -4, 4));
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, p.Pos));
                 if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
@@ -633,8 +635,8 @@ namespace Stabby.Game
         }
 
         Task<Prepared> preparing;
-        Task<List<MeshParts>> steaming;
-        List<MeshParts> steam;
+        Task<(List<MeshParts>, List<MeshParts>)> steaming;
+        List<MeshParts> steam, pools;
         int steamApplied;
         bool hasMist;
         IEnumerator<string> loading;
@@ -1176,29 +1178,31 @@ namespace Stabby.Game
 
         void Steam()
         {
-            if (!ready || !hasMist || (steam != null && steamApplied >= steam.Count)) return;
+            if (!ready || (steam != null && steamApplied >= steam.Count + pools.Count)) return;
             if (steam == null)
             {
                 if (steaming == null)
                 {
                     var field = World.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
                     if (field == null) return;
-                    steaming = Task.Run(() => { var l = new List<MeshParts>(); WaterGeometry.Steam(field, l); return l; });
+                    steaming = Task.Run(() => { var l = new List<MeshParts>(); var w = new List<MeshParts>(); WaterGeometry.Springs(field, l, w); return (l, w); });
                     return;
                 }
                 if (!steaming.IsCompleted) return;
-                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); hasMist = false; return; }
-                steam = steaming.Result;
+                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); steam = pools = new List<MeshParts>(); return; }
+                (steam, pools) = steaming.Result;
+                if (!hasMist) steam.Clear();
                 steaming = null;
             }
-            while (steamApplied < steam.Count)
+            while (steamApplied < steam.Count + pools.Count)
             {
-                var part = steam[steamApplied];
+                bool water = steamApplied >= steam.Count;
+                var part = water ? pools[steamApplied - steam.Count] : steam[steamApplied];
                 if (!Spend(part.Verts.Length)) return;
-                AddStatic(part, mistMaterial, WaterGeometry.MistPad);
+                AddStatic(part, water ? waterMaterial : mistMaterial, water ? 0 : WaterGeometry.MistPad);
                 steamApplied++;
             }
-            GameStatus.Lines["terrain~steam"] = $"spring steam {steam.Count} pieces";
+            GameStatus.Lines["terrain~steam"] = $"spring steam {steam.Count} pieces, {pools.Count} pool pieces";
         }
 
         void AddStatic(MeshParts part, BatchMaterialID mat, float pad)

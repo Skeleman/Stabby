@@ -58,7 +58,6 @@ namespace Stabby.World
         static float[] RoundMesh(ulong key, int shape, int tier, out int[] idx, out float[] lift)
         {
             var rng = Rng.Stream(key, "round");
-            if (shape >= RoundTerrace) return SpringMesh(ref rng, shape, tier, out idx, out lift);
             int sides = shape == RoundDisc ? 32 : tier < 2 ? 16 : 8;
             var dc = new float[sides];
             var ds = new float[sides];

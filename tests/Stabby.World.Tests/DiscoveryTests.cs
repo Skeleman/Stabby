@@ -161,7 +161,7 @@ public class DiscoveryTests
                 Assert.True(field.RiverGap(c.X, c.Z) >= ObjectField.SpringRiverM);
                 Assert.Null(field.PoolFault(c));
                 field.SpringPoolsAt(c, pools);
-                Assert.InRange(pools.Count / 6, 3, 5);
+                Assert.InRange(pools.Count / ObjectField.SpringStride, 3, 4);
             }
             total += springs.Length;
             if (springs.Length > 0) worlds++;
