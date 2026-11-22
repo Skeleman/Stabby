@@ -184,7 +184,11 @@ namespace Stabby.World
             for (int i = 0; i < rows; i++)
             {
                 float x = -hw + 0.45f + (gw - 0.9f) * (i + 0.5f) / rows, z = -0.1f;
-                Box(l, key, f, x, -0.06f, z, bl, 0.16f, 0.42f, Ash, GX, 0, 1, 0, 1, 0, 0, 0.12f / 0.16f);
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    Box(l, key, f, x + s * 0.24f, -0.1f, z, 0.06f, 0.32f + rng.Range(-0.03f, 0.03f), bl, Plank, GZ, 0, 1);
+                    Box(l, key, f, x, -0.1f, z + s * 0.5f * (bl + 0.06f), 0.54f, 0.32f + rng.Range(-0.03f, 0.03f), 0.06f, Plank, GX, 0, 1);
+                }
                 bool poles = rng.NextFloat() < 0.35f;
                 if (poles)
                 {
@@ -198,7 +202,7 @@ namespace Stabby.World
                     {
                         float sz = rng.Range(0.12f, 0.2f);
                         int d = rng.Range(0, 16);
-                        Box(l, key, f, x + rng.Range(-0.05f, 0.05f), 0.08f, pz, sz, sz * rng.Range(0.6f, 0.9f), sz, Thatch, GV, 0, 0, Cos16(d), Sin16(d), 0, 0, 0.3f);
+                        Box(l, key, f, x + rng.Range(-0.05f, 0.05f), 0.01f, pz, sz, sz * rng.Range(0.6f, 0.9f), sz, Thatch, GV, 0, 0, Cos16(d), Sin16(d), 0, 0, 0.3f);
                     }
                 }
             }

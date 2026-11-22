@@ -208,7 +208,7 @@ namespace Stabby.Game.Editor
                 string name = HermitShots[phase - 230];
                 if (wait == 0)
                 {
-                    if (!AimSite(cam, phase - 230, ObjectPart.Hermitage, Structures.HermitU, HermitShots, "hermitage")) { GameStatus.Lines["~" + name] = "no hermitage placed"; phase++; continue; }
+                    if (!AimSite(cam, phase - 230, ObjectPart.Hermitage, Structures.HermitU, HermitShots, "hermitage", new Vector3(0.97f, -0.25f, 5f), Structures.HutZ)) { GameStatus.Lines["~" + name] = "no hermitage placed"; phase++; continue; }
                     wait = 180;
                     return;
                 }
@@ -1399,9 +1399,9 @@ namespace Stabby.Game.Editor
         static readonly string[] CampShots = { "camp-close", "camp-mid" };
         static readonly string[] HermitShots = { "hermit-close", "hermit-mid" };
 
-        static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite");
+        static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite", new Vector3(0.7f, -0.7f, 4.5f), 0);
 
-        static bool AimSite(Camera cam, int mode, int shape, float unit, string[] shots, string label)
+        static bool AimSite(Camera cam, int mode, int shape, float unit, string[] shots, string label, Vector3 close, float focusZ)
         {
             foreach (var w in Unity.Entities.World.All)
             {
@@ -1422,7 +1422,7 @@ namespace Stabby.Game.Editor
                 var across = q * Vector3.forward;
                 var along = q * Vector3.right;
                 Vector3 eye, target;
-                if (mode == 0) { target = centre + Vector3.up * 0.5f * u; eye = centre + (across * 0.7f - along * 0.7f) * 4.5f * u + Vector3.up * 1.7f; }
+                if (mode == 0) { target = centre + across * focusZ * u + Vector3.up * 0.5f * u; eye = centre + (across * close.x + along * close.y) * close.z * u + Vector3.up * 1.7f; }
                 else { target = centre + Vector3.up * 0.6f * u; eye = centre + (across * 0.8f + along * 0.6f).normalized * 16f * u + Vector3.up * 6f * u; }
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
