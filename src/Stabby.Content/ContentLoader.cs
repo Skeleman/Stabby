@@ -10,7 +10,7 @@ namespace Stabby.Content
     {
         public const int BiomeSchemaVersion = 1;
         public const int MaterialSchemaVersion = 2;
-        public const int ObjectSchemaVersion = 2;
+        public const int ObjectSchemaVersion = 3;
         public const int CreatureSchemaVersion = 2;
 
         public static string FindContentRoot(string start)
@@ -36,7 +36,7 @@ namespace Stabby.Content
         public static ObjectLibrary LoadObjects(string contentRoot, IReadOnlyList<string> biomeIds = null)
         {
             var path = Path.Combine(contentRoot, "objects.json");
-            return ParseObjects(File.ReadAllText(path), biomeIds, path);
+            return ParseObjects(File.ReadAllText(path), biomeIds, path, LoadMaterials(contentRoot));
         }
 
         public static CreatureLibrary LoadCreatures(string contentRoot, IReadOnlyList<string> biomeIds = null)
@@ -202,7 +202,7 @@ namespace Stabby.Content
             return d;
         }
 
-        public static ObjectLibrary ParseObjects(string json, IReadOnlyList<string> biomeIds, string source)
+        public static ObjectLibrary ParseObjects(string json, IReadOnlyList<string> biomeIds, string source, MaterialLibrary materials)
         {
             var root = Root(json, source, ObjectSchemaVersion);
             var errors = new List<string>();
@@ -220,7 +220,7 @@ namespace Stabby.Content
             }
             foreach (var o in root.Objects("objects"))
             {
-                lib.Objects.Add(Object(o, errors));
+                lib.Objects.Add(Object(o, errors, materials));
                 o.End();
             }
             var terrain = root.Object("terrain");
@@ -361,13 +361,27 @@ namespace Stabby.Content
             return m.Color;
         }
 
-        static ObjectDef Object(Json o, List<string> errors)
+        static uint Material(Json j, string field, string where, MaterialLibrary materials, List<string> errors)
+        {
+            string name = j.String(field, "");
+            var m = materials?.Find(name);
+            if (m == null) { errors.Add(where + "." + field + ": unknown material \"" + name + "\""); return 0; }
+            return m.Color;
+        }
+
+        static void InlineColor(Json j, string field, string where, List<string> errors)
+        {
+            if (j.String(field, null) != null) errors.Add(where + ": inline \"" + field + "\"; name a materials.json material instead");
+        }
+
+        static ObjectDef Object(Json o, List<string> errors, MaterialLibrary materials)
         {
             string id = o.String("id", "");
+            InlineColor(o, "color", id, errors);
             var def = new ObjectDef
             {
                 Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""),
-                Color = Hex(o.String("color", "#ff00ff")), Variants = o.Int("variants", 1),
+                Color = Material(o, "material", id, materials, errors), Variants = o.Int("variants", 1),
             };
             var interact = o.Object("interact");
             if (interact != null)
@@ -383,14 +397,15 @@ namespace Stabby.Content
                 var scale = p.Floats("scale", null);
                 if ((offset != null && offset.Length != 3) || (scale != null && scale.Length != 3))
                     errors.Add(id + ": part " + pid + " offset/scale need 3 numbers");
-                var color = p.String("color", null);
-                var leaf = p.String("leafColor", null);
+                InlineColor(p, "color", id + ": part " + pid, errors);
+                InlineColor(p, "leafColor", id + ": part " + pid, errors);
+                bool color = p.String("material", null) != null, leaf = p.String("leafMaterial", null) != null;
                 var part = new ObjectPart
                 {
                     Id = pid, Shape = ObjectLibrary.ShapeOf(p.String("shape", "")),
                     Solid = ObjectLibrary.Tri(p.String("solid", "")), Shadows = ObjectLibrary.Tri(p.String("shadows", "")),
-                    HasColor = color != null, Color = color != null ? Hex(color) : def.Color,
-                    HasLeafColor = leaf != null, LeafColor = leaf != null ? Hex(leaf) : 0,
+                    HasColor = color, Color = color ? Material(p, "material", id + ".parts." + pid, materials, errors) : def.Color,
+                    HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0,
                 };
                 string ends = p.String("ends", "auto");
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, ends);

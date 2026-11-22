@@ -27,7 +27,7 @@ public class InnTests
                     for (int p = 0; p < m.Positions.Length; p += 3)
                     {
                         Assert.InRange(m.Positions[p], -0.56f, 0.56f);
-                        Assert.InRange(m.Positions[p + 1], -0.05f, 1.05f);
+                        Assert.InRange(m.Positions[p + 1], -0.05f - 0.5f * Structures.SkirtShare, 1.05f);
                         Assert.InRange(m.Positions[p + 2], -0.56f, 0.56f);
                     }
                     prev = m.TriangleCount;

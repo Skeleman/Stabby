@@ -38,6 +38,44 @@ public class StructureTests
     }
 
     [Fact]
+    public void GroundPartsExtendABuriedSkirt()
+    {
+        foreach (var def in Objects.Objects)
+            for (int pi = 0; pi < def.Parts.Count; pi++)
+            {
+                var part = def.Parts[pi];
+                for (int v = 0; v < def.Variants; v++)
+                {
+                    ulong k = ObjectMeshes.Key(def.Id, pi, v);
+                    var m = ObjectMeshes.Build(part, k, 0);
+                    if (ObjectPart.IsStructure(part.Shape))
+                    {
+                        foreach (var p in Structures.Layout(part.Shape, k).Pieces)
+                        {
+                            float skirt = Structures.Skirt(p);
+                            if (p.Lo > 0 || skirt <= 0) continue;
+                            float reach = 0.5f * (p.Sx + p.Sz) + (Math.Abs(p.L) + Math.Abs(p.B) + Math.Abs(p.T)) * p.Sy + 0.02f;
+                            bool deep = false;
+                            for (int i = 0; i < m.Positions.Length && !deep; i += 3)
+                            {
+                                float dx = m.Positions[i] - p.X, dz = m.Positions[i + 2] - p.Z;
+                                deep = dx * dx + dz * dz <= reach * reach && m.Positions[i + 1] <= p.Y - 0.75f * skirt;
+                            }
+                            Assert.True(deep, $"{def.Id} part {part.Id} variant {v}: ground piece at {p.X:F2},{p.Y:F2},{p.Z:F2} has no skirt");
+                        }
+                        continue;
+                    }
+                    float lo = float.MaxValue, hi = float.MinValue;
+                    for (int i = 1; i < m.Positions.Length; i += 3) { lo = Math.Min(lo, m.Positions[i]); hi = Math.Max(hi, m.Positions[i]); }
+                    float size = def.Placement.SizeMinM, bottom = (part.OffsetY + lo * part.ScaleY) * size, tall = (hi - lo) * part.ScaleY * size;
+                    float buried = def.Placement.Sink * size - bottom;
+                    if (buried < -0.02f) continue;
+                    Assert.True(buried >= Math.Min(0.02f, 0.15f * tall) - 1e-4f, $"{def.Id} part {part.Id} variant {v} is buried {buried:F3} m of {tall:F3} m");
+                }
+            }
+    }
+
+    [Fact]
     public void StructureColumnsCoverThePiecesInsideTheFootprint()
     {
         foreach (int shape in Shapes)

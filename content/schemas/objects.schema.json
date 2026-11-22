@@ -5,7 +5,7 @@
   "required": ["schemaVersion", "kinds", "objects", "terrain", "foliage"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 3 },
     "terrain": {
       "type": "object",
       "required": ["quadPixels"],
@@ -91,13 +91,13 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "kind", "color", "parts", "placement"],
+        "required": ["id", "name", "kind", "material", "parts", "placement"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
           "name": { "type": "string" },
           "kind": { "enum": ["static", "interactive", "animated", "structure"] },
-          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "material": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
           "variants": { "type": "integer", "minimum": 1, "maximum": 16 },
           "interact": {
             "type": "object",
@@ -122,8 +122,8 @@
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
                 "shadows": { "enum": ["", "on", "off"] },
-                "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-                "leafColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+                "material": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+                "leafMaterial": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
                 "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped", "worn"] }
               }
             }

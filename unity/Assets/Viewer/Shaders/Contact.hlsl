@@ -23,15 +23,28 @@ float ContactBed(float2 xz)
     return SAMPLE_TEXTURE2D_LOD(_StabbyBed, sampler_StabbyBed, xz * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).r;
 }
 
-float3 ContactGround(float3 albedo, float2 xz, float h)
+float2 ContactAt(float2 xz)
 {
-    [branch] if (_StabbyContactUV.w <= 0) return albedo;
+    [branch] if (_StabbyContactUV.w <= 0) return 0;
     float2 uv = xz * _StabbyContactUV.x + _StabbyContactUV.yz;
     float edge = saturate(min(min(uv.x, uv.y), min(1 - uv.x, 1 - uv.y)) * 10);
-    float k = SAMPLE_TEXTURE2D_LOD(_StabbyContact, sampler_StabbyContact, uv, 0).r * edge;
-    [branch] if (k < 0.004) return albedo;
+    return SAMPLE_TEXTURE2D_LOD(_StabbyContact, sampler_StabbyContact, uv, 0).rg * edge;
+}
+
+float3 LushTint(float3 g)
+{
+    float l = dot(g, float3(0.2126, 0.7152, 0.0722));
+    return max(0, lerp(l.xxx, g, 1.25)) * float3(0.6, 0.76, 0.52);
+}
+
+float3 ContactGround(float3 albedo, float2 xz, float h)
+{
+    float2 kg = ContactAt(xz);
+    [branch] if (max(kg.x, kg.y) < 0.004) return albedo;
     float n = TmNoise2(xz * 1.9 + 3.7).x + 0.5 * TmNoise2(xz * 6.3 - 11.2).x;
-    k = saturate(k * (1.05 + 0.8 * n));
+    float g = saturate(kg.y * (0.8 + 0.5 * n));
+    albedo = lerp(albedo, LushTint(albedo), 0.8 * g * g * (3 - 2 * g));
+    float k = saturate(kg.x * (1.05 + 0.8 * n));
     return lerp(albedo, ContactTint(albedo), 0.75 * k * k * (3 - 2 * k));
 }
 
