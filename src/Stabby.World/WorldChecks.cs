@@ -490,6 +490,7 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, grid, e);
             if (w.Objects != null && w.Biome != null) CheckSites(w, detail, grid, e);
             if (w.Objects != null && w.Biome != null) CheckStructures(w, detail, grid, e);
+            if (w.Objects != null && w.Biome != null) CheckDiscoveries(w, detail, grid, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaveWalk(w, detail, edits, e);
             CheckCliffFoot(w, detail, edits, e);
