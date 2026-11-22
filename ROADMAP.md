@@ -85,7 +85,8 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   eviction, priority, memory budget. The server then packs chunks on demand
   instead of keeping every packed chunk (about 2 MB at 512, fine for now).
 - CI (11-22, done): runs hit the 20-min timeout, then Actions stopped on billing.
-  Now manual-only (workflow_dispatch), 15 min: lint, filtered tests, 256 sweep.
+  Repo is public now (free minutes). Fast job on push/PR, 15 min: lint, filtered
+  tests, 256 sweep.
   The local full suite at merge stays the real gate.
 - Unity batch CI job (game capture on a runner) if a license setup allows it.
 - Generator features resume after the audit: caves, cliffs and river overhaul
