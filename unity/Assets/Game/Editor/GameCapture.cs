@@ -160,7 +160,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -226,7 +226,23 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length))
+            while (phase >= 240 && phase < 240 + ShrineShots.Length)
+            {
+                string name = ShrineShots[phase - 240];
+                if (wait == 0)
+                {
+                    if (!AimSite(cam, phase - 240, ObjectPart.Wayside, Structures.WaysideU, ShrineShots, "wayside shrine", new Vector3(0.92f, 0.4f, 4.6f), -1f)) { GameStatus.Lines["~" + name] = "no wayside shrine placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 241) GameStatus.Lines["~bench shrine"] = Bench(cam, "wayside mid");
+                wait = 0;
+                phase++;
+            }
+            if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1407,6 +1423,7 @@ namespace Stabby.Game.Editor
 
         static readonly string[] CampShots = { "camp-close", "camp-mid" };
         static readonly string[] HermitShots = { "hermit-close", "hermit-mid" };
+        static readonly string[] ShrineShots = { "shrine-close", "shrine-mid" };
 
         static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite", new Vector3(0.7f, -0.7f, 4.5f), 0);
 
