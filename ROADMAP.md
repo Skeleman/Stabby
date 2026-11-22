@@ -48,9 +48,13 @@ and converts once into native data.
   hoist the five per-creature temp arrays in CreatureAnimSystem, skip pose/IK solving once
   animation has faded, queue CreatureBuildSystem arrivals nearest-first under a per-frame
   budget with batched instantiation, split herd minds from a parallel Burst behave job,
-  and measure one entity set per creature with a mesh swap instead of two tier sets; the
-  arrival budget becomes the shared spawn budget objects use too (b/creatures-scale,
-  after b/creatures-5; Zach asked 11-22). (2) Full-world stress: 251k objects with terrain, grass, shadows,
+  with Punchy's brain LOD (far creatures think every N frames on staggered phases, debt
+  caught up), staggered searches and a per-frame neighbour grid, all species in one
+  data-driven job; compare the per-part entity render path against Punchy's pattern (pose
+  job into one buffer, one instanced draw per shape, no part entities) behind a flag, at
+  10/100/500, worst arrival frame included; switching paths is Zach's call. The arrival
+  budget becomes the shared spawn budget objects use too (b/creatures-scale, after
+  b/creatures-5; Zach 11-22: diverse wildlife must run nearly as cheaply as one herd). (2) Full-world stress: 251k objects with terrain, grass, shadows,
   water and objects all on (b/stress-full, warm-up lane after the parallax bench).
   (3) Loading: ~450 MB allocated after terrain build, mid-load heap growth, a 76 ms collect.
   (4) Light budgets below come before fires and torches. Towns wait until the site
