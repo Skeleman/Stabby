@@ -16,3 +16,5 @@ ContactFieldSystem splats object footprints into the ground contact texture off 
 CreatureBuildSystem assembles bodies for arriving creature ghosts in a task and registers their meshes with Entities Graphics
 CreaturePrefabSystem GhostPrefabCreation is managed and runs once
 CreaturePlanSystem plans herds from the managed map in a task and converts the plan to a blob once
+CreatureDrawSystem uploads instance buffers and issues indirect draws on managed GraphicsBuffers
+CreatureDrawSystem.Complete only after IsCompleted, or at teardown
