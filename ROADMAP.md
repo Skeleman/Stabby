@@ -119,6 +119,15 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   terrain LOD swaps or culling bounds on pooled chunk entities; capture first); a strongly
   stretched layer at LOD seams (stitch or skirt geometry). Skirts are drawn
   double-sided (about 12% extra terrain triangles); make them one-sided, outward.
+- Rock beds (Zach 11-22; card b/rockbeds-1, after terrain-fix-1): cliff walls show
+  evenly spaced, straight bed grooves (bedSpacingM 0.8, bedDepthM 0.1, TmRockRelief)
+  that read as raked. Make them much shallower and irregular: varied bed
+  thickness, broken and fading runs, no continuous stripes; remove if that
+  still reads as stripes.
+- Material viewer (Zach 11-22; card b/material-viewer): a scene or build mode that
+  shows every library material (content/materials.json, terrain coats and rock)
+  on test shapes with an orbit camera and a name list, so Zach can audit
+  surfaces himself and point at entries by name.
 - Combat: not defined yet, waits until the other two take shape. | later
 
 ## Later
