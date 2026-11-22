@@ -225,7 +225,7 @@ public class WorldTests
         var lib = ContentLoader.LoadMaterials(root);
         Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.Rock.BedSpacingM > 0);
         Assert.True(lib.Water.DeepColor != 0 && lib.Water.ShoreM > 0 && lib.Water.FoamWidthM > 0);
-        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Water = new WaterDef() }), e => e.Contains("water.shoreM"));
+        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Liquids = { new LiquidDef { Id = "water" } } }), e => e.Contains("water.shoreM"));
         foreach (var b in ContentLoader.LoadBiomes(root)) Assert.True(lib.Surface.CoatOf(b.Id) >= 0, b.Id + " has no coat");
         lib.Surface.Coats[1].GrainAmp = 2;
         lib.Surface.Coats[3].Biomes.Add(lib.Surface.Coats[0].Biomes[0]);

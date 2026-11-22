@@ -210,7 +210,7 @@ public class DiscoveryTests
                 Assert.Null(field.VentFault(c));
                 field.SpringPoolsAt(c, pools);
                 if (c.Def == geyser) { geysers++; Assert.Equal(1, pools.Count / ObjectField.SpringStride); Assert.True(pools[5] > pools[4]); }
-                else { muds++; Assert.InRange(pools.Count / ObjectField.SpringStride, 1, 3); }
+                else { muds++; Assert.InRange(pools.Count / ObjectField.SpringStride, 1, 3); Assert.True(pools[5] - pools[4] < pools[4] - pools[6]); }
             }
         }
         output.WriteLine($"{geysers} geysers, {muds} mud pots");

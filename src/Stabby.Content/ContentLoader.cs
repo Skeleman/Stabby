@@ -9,8 +9,8 @@ namespace Stabby.Content
     public static class ContentLoader
     {
         public const int BiomeSchemaVersion = 1;
-        public const int MaterialSchemaVersion = 2;
-        public const int ObjectSchemaVersion = 3;
+        public const int MaterialSchemaVersion = 3;
+        public const int ObjectSchemaVersion = 4;
         public const int CreatureSchemaVersion = 2;
 
         public static string FindContentRoot(string start)
@@ -104,8 +104,7 @@ namespace Stabby.Content
             };
             var surface = root.Object("surface");
             lib.Surface = surface == null ? null : Surface(surface);
-            var water = root.Object("water");
-            lib.Water = water == null ? null : Water(water, source);
+            foreach (var l in root.Objects("liquids")) lib.Liquids.Add(Liquid(l, source));
             var look = root.Object("look");
             lib.Look = look == null ? null : new LookDef
             {
@@ -118,14 +117,13 @@ namespace Stabby.Content
             lib.Sinter = sinter == null ? null : new SinterDef
             {
                 White = Hex(sinter.String("white", ""), source, "sinter.white"), Ochre = Hex(sinter.String("ochre", ""), source, "sinter.ochre"),
-                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), Water = Hex(sinter.String("water", ""), source, "sinter.water"),
-                Deep = Hex(sinter.String("deep", ""), source, "sinter.deep"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
+                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
             };
             sinter?.End();
             var mud = root.Object("mud");
             lib.Mud = mud == null ? null : new MudDef
             {
-                Surface = Hex(mud.String("surface", ""), source, "mud.surface"), Deep = Hex(mud.String("deep", ""), source, "mud.deep"),
+                Surface = Hex(mud.String("surface", ""), source, "mud.surface"),
                 Clay = Hex(mud.String("clay", ""), source, "mud.clay"), Grey = Hex(mud.String("grey", ""), source, "mud.grey"), Roughness = mud.Float("roughness", 0),
             };
             mud?.End();
@@ -152,17 +150,32 @@ namespace Stabby.Content
             return lib;
         }
 
-        static WaterDef Water(Json e, string path)
+        static LiquidDef Liquid(Json e, string path)
         {
-            var w = new WaterDef
+            string id = e.String("id", "");
+            var w = new LiquidDef
             {
-                DeepColor = Hex(e.String("deepColor", ""), path, "water.deepColor"),
-                ShallowColor = Hex(e.String("shallowColor", ""), path, "water.shallowColor"),
+                Id = id,
+                DeepColor = Hex(e.String("deepColor", ""), path, id + ".deepColor"),
+                ShallowColor = Hex(e.String("shallowColor", ""), path, id + ".shallowColor"),
+                FilmColor = Hex(e.String("filmColor", ""), path, id + ".filmColor"),
+                EmissionColor = Hex(e.String("emissionColor", ""), path, id + ".emissionColor"),
                 ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0),
                 WaveScaleM = e.Float("waveScaleM", 0), WaveSpeed = e.Float("waveSpeed", 0), WaveStrength = e.Float("waveStrength", 0),
                 SwellScaleM = e.Float("swellScaleM", 0), SwellStrength = e.Float("swellStrength", 0), LakeSwell = e.Float("lakeSwell", 0),
                 FlowSpeed = e.Float("flowSpeed", 0), RapidsSlope = e.Float("rapidsSlope", 0), BedFieldM = e.Float("bedFieldM", 0),
+                Silt = e.Float("silt", 0), Opacity = e.Float("opacity", 0), Viscosity = e.Float("viscosity", 0), Bubbles = e.Float("bubbles", 0),
+                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0),
             };
+            var f = e.Object("fall");
+            if (f != null)
+            {
+                w.Spray = Array.IndexOf(LiquidDef.SprayNames, f.String("spray", ""));
+                w.FallSpeed = f.Float("speed", 0);
+                w.SheetOpacity = f.Float("sheetOpacity", 0);
+                f.End();
+            }
+            else w.Spray = -1;
             e.End();
             return w;
         }
@@ -439,7 +452,7 @@ namespace Stabby.Content
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
                     ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
                     Bank = pl.String("bank", null), PerHundredM = pl.Float("perHundredM", 0),
-                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
+                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), Liquid = pl.String("liquid", null), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
                 };
                 foreach (var b in pl.Objects("biomeDensity"))
                 {
