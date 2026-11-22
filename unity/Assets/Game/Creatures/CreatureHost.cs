@@ -97,6 +97,8 @@ namespace Stabby.Game
                 max = math.max(max, reach[i].y);
             }
             root.MaxReach = max;
+            var wary = b.Allocate(ref root.Wary, p.Lib.Bodies.Count);
+            for (int i = 0; i < wary.Length; i++) wary[i] = CreaturePlan.Wary(p.Lib.Bodies[i]);
             var start = b.Allocate(ref root.SiteStart, p.Across * p.Across + 1);
             var rows = b.Allocate(ref root.Spawns, p.Spawns.Count);
             int site = 0;
@@ -105,7 +107,7 @@ namespace Stabby.Game
                 var s = p.Spawns[i];
                 int of = CreaturePlan.SiteOf(s.Id);
                 while (site <= of) start[site++] = i;
-                rows[i] = new CreatureSpawnRow { Id = s.Id, Body = s.Body, At = new float2(s.X, s.Z), Heading = s.Heading, WalkSpeed = s.WalkSpeed, BodySeed = s.BodySeed, Seed = s.Seed };
+                rows[i] = new CreatureSpawnRow { Id = s.Id, Body = s.Body, At = new float2(s.X, s.Z), Heading = s.Heading, WalkSpeed = s.WalkSpeed, BodySeed = s.BodySeed, HerdSeed = s.HerdSeed, Seed = s.Seed };
             }
             while (site < start.Length) start[site++] = p.Spawns.Count;
             blob = b.CreateBlobAssetReference<CreaturePlanData>(Allocator.Persistent);
@@ -121,11 +123,19 @@ namespace Stabby.Game
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     public partial struct CreatureHostSystem : ISystem
     {
+        public NativeHashMap<int, CreatureHerd> Herds;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<CreaturePlanBlob>();
             state.RequireForUpdate<CreaturePrefab>();
             state.RequireForUpdate<GhostRelevancy>();
+            Herds = new NativeHashMap<int, CreatureHerd>(64, Allocator.Persistent);
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+            if (Herds.IsCreated) Herds.Dispose();
         }
 
         [BurstCompile]
@@ -134,7 +144,7 @@ namespace Stabby.Game
             ref var plan = ref SystemAPI.GetSingleton<CreaturePlanBlob>().Value.Value;
             var prefab = SystemAPI.GetSingleton<CreaturePrefab>().Value;
             float dt = SystemAPI.Time.DeltaTime;
-            bool hold = CreatureView.Current.Override != 0;
+            bool hold = SystemAPI.HasSingleton<CreatureFreeze>();
 
             var players = new NativeList<float2>(8, Allocator.Temp);
             var owners = new NativeList<int>(8, Allocator.Temp);
@@ -145,16 +155,43 @@ namespace Stabby.Game
             }
 
             var live = new NativeHashSet<int>(256, Allocator.Temp);
+            var threats = new NativeHashMap<int, float3>(64, Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (s, brain, e) in SystemAPI.Query<RefRW<CreatureState>, RefRW<CreatureBrain>>().WithEntityAccess())
+            foreach (var (s, brain, e) in SystemAPI.Query<RefRO<CreatureState>, RefRO<CreatureBrain>>().WithEntityAccess())
             {
                 float despawn = plan.Reach[s.ValueRO.Body].y;
                 bool near = false;
                 for (int p = 0; p < players.Length && !near; p++) near = math.distancesq(players[p], brain.ValueRO.Home) <= despawn * despawn;
                 if (!near) { ecb.DestroyEntity(e); continue; }
                 live.Add(s.ValueRO.Id);
-                if (!hold) Wander(ref s.ValueRW, ref brain.ValueRW, dt);
+                int herd = brain.ValueRO.Herd;
+                if (Herds.TryGetValue(herd, out var h) && !h.Seen) { h.Seen = true; Herds[herd] = h; }
+                float2 away = Nearest(players, s.ValueRO.Position);
+                float d = math.length(away);
+                if (!threats.TryGetValue(herd, out var t) || d < t.x) threats[herd] = new float3(d, away);
             }
+
+            var keys = Herds.GetKeyArray(Allocator.Temp);
+            for (int i = 0; i < keys.Length; i++)
+            {
+                var h = Herds[keys[i]];
+                if (!h.Seen) { Herds.Remove(keys[i]); continue; }
+                h.Seen = false;
+                h.Rehome = false;
+                if (!hold)
+                {
+                    float3 t = threats.TryGetValue(keys[i], out var v) ? v : new float3(float.MaxValue, 0, 1);
+                    h.Rehome = h.Mind.Step(plan.Wary[h.Body], t.x, t.y, t.z, dt);
+                }
+                Herds[keys[i]] = h;
+            }
+
+            if (!hold)
+                foreach (var (s, brain) in SystemAPI.Query<RefRW<CreatureState>, RefRW<CreatureBrain>>())
+                {
+                    if (!Herds.TryGetValue(brain.ValueRO.Herd, out var h)) continue;
+                    Behave(ref s.ValueRW, ref brain.ValueRW, h, plan.Wary[s.ValueRO.Body], Nearest(players, s.ValueRO.Position), dt);
+                }
 
             float pad = plan.MaxReach + plan.Spread;
             for (int p = 0; p < players.Length; p++)
@@ -173,7 +210,9 @@ namespace Stabby.Game
                             if (math.distancesq(at, row.At) > spawn * spawn || !live.Add(row.Id)) continue;
                             var e = ecb.Instantiate(prefab);
                             ecb.SetComponent(e, new CreatureState { Id = row.Id, Body = row.Body, BodySeed = row.BodySeed, Seed = row.Seed, WalkSpeed = row.WalkSpeed, Position = row.At, Heading = row.Heading });
-                            ecb.AddComponent(e, new CreatureBrain { Home = row.At, Random = new Unity.Mathematics.Random(row.Seed), Timer = 0.5f + (row.Seed % 997) / 997f * 3 });
+                            int herd = CreaturePlan.HerdOf(row.Id);
+                            ecb.AddComponent(e, new CreatureBrain { Home = row.At, Herd = herd, Random = new Unity.Mathematics.Random(row.Seed), Timer = 0.5f + (row.Seed % 997) / 997f * 3 });
+                            if (!Herds.ContainsKey(herd)) Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(row.HerdSeed), Body = row.Body });
                         }
                     }
             }
@@ -202,6 +241,41 @@ namespace Stabby.Game
                     set.TryAdd(new RelevantGhostForConnection(nid, ghosts[g]), 1);
                 }
             }
+        }
+
+        static float2 Nearest(NativeList<float2> players, float2 at)
+        {
+            float2 best = new float2(0, float.MaxValue);
+            for (int p = 0; p < players.Length; p++)
+            {
+                float2 v = at - players[p];
+                if (math.lengthsq(v) < math.lengthsq(best)) best = v;
+            }
+            return best;
+        }
+
+        static void Behave(ref CreatureState s, ref CreatureBrain b, in CreatureHerd h, in CreatureWary w, float2 away, float dt)
+        {
+            if (h.Rehome) { b.Home = s.Position; b.Walking = false; b.Timer = 1 + (s.Seed % 383) / 383f * 2; }
+            switch (h.Mind.Mode)
+            {
+                case HerdMode.Calm:
+                    s.Alert = math.max(0, s.Alert - 0.8f * dt);
+                    Wander(ref s, ref b, dt);
+                    return;
+                case HerdMode.Alert:
+                    s.Alert = math.min(1, s.Alert + 3 * dt);
+                    s.Move = math.lerp(s.Move, 0, math.min(1, 3 * dt));
+                    if (s.Move < 0.3f && math.lengthsq(away) < float.MaxValue)
+                        s.Heading = HerdMind.Toward(s.Heading, math.atan2(-away.x, -away.y), 0.6f * dt);
+                    break;
+                default:
+                    s.Alert = math.lerp(s.Alert, 0.3f, math.min(1, 3 * dt));
+                    s.Heading = HerdMind.Toward(s.Heading, h.Mind.Heading + HerdMind.MemberOffset(s.Seed), 3 * dt);
+                    s.Move = math.lerp(s.Move, w.RunRatio, math.min(1, 2.5f * dt));
+                    break;
+            }
+            s.Position += new float2(math.sin(s.Heading), math.cos(s.Heading)) * (s.Move * s.WalkSpeed * dt);
         }
 
         static void Wander(ref CreatureState s, ref CreatureBrain b, float dt)
