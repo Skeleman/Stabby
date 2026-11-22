@@ -161,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "fairyring" ? 300 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "fairyring" ? 300 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -259,6 +259,24 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            if (phase == 270)
+            {
+                if (wait == 0)
+                {
+                    if (!AimSite(cam, 1, ObjectPart.HotSpring, Structures.SpringU, SpringShots, "hot spring", Vector3.zero, 0)) { GameStatus.Lines["~spring"] = "no hot spring placed"; phase++; }
+                    else { wait = 180; return; }
+                }
+                else
+                {
+                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "spring");
+                    GameStatus.Lines["~bench spring"] = Bench(cam, "hot spring");
+                    GameStatus.Lines["~bench spring steam"] = BenchMist(cam, "hot spring");
+                    wait = 0;
+                    phase++;
+                }
+            }
             while (phase >= 300 && phase < 300 + FairyShots.Length)
             {
                 string name = FairyShots[phase - 300];
@@ -275,7 +293,7 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if ((only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
+            if ((only == "spring" && phase > 270) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1558,6 +1576,7 @@ namespace Stabby.Game.Editor
         static readonly string[] HermitShots = { "hermit-close", "hermit-mid" };
         static readonly string[] ShrineShots = { "shrine-close", "shrine-mid" };
         static readonly string[] RuinShots = { "ruin-close", "ruin-mid" };
+        static readonly string[] SpringShots = { "spring-close", "spring" };
         static readonly string[] FairyShots = { "fairyring-close", "fairyring-mid" };
 
         static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite", new Vector3(0.7f, -0.7f, 4.5f), 0);

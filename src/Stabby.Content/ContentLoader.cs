@@ -114,6 +114,14 @@ namespace Stabby.Content
                 Roughness = look.Float("roughness", 0), Specular = look.Float("specular", 0), RoughnessVar = look.Float("roughnessVar", 0),
             };
             look?.End();
+            var sinter = root.Object("sinter");
+            lib.Sinter = sinter == null ? null : new SinterDef
+            {
+                White = Hex(sinter.String("white", ""), source, "sinter.white"), Ochre = Hex(sinter.String("ochre", ""), source, "sinter.ochre"),
+                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), Water = Hex(sinter.String("water", ""), source, "sinter.water"),
+                Deep = Hex(sinter.String("deep", ""), source, "sinter.deep"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
+            };
+            sinter?.End();
             var strata = new List<StratumDef>();
             foreach (var s in root.Objects("strata"))
             {
@@ -219,6 +227,7 @@ namespace Stabby.Content
                     QuadPixels = terrain.Float("quadPixels", t0.QuadPixels), ContactPixels = terrain.Float("contactPixels", t0.ContactPixels),
                     ContactTexelPixels = terrain.Float("contactTexelPixels", t0.ContactTexelPixels),
                     MistFadePixels = terrain.Float("mistFadePixels", t0.MistFadePixels), MistFullPixels = terrain.Float("mistFullPixels", t0.MistFullPixels),
+                    SteamFadePixels = terrain.Float("steamFadePixels", t0.SteamFadePixels), SteamFullPixels = terrain.Float("steamFullPixels", t0.SteamFullPixels),
                 };
                 terrain.End();
             }

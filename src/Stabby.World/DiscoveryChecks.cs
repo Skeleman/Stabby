@@ -35,6 +35,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Ruin && field.Fitness(ObjectField.Ruin, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too broken for a ruin"); return; }
                 if (def.Placement.Discovery == ObjectField.FairyRing && field.Fitness(ObjectField.FairyRing, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too uneven for a fairy ring"); return; }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
+                if (def.Placement.Discovery == ObjectField.Spring) { if (!(field.SpringDraw(s.X, s.Z) > 0)) { e.Add(at + " is not near a range or volcanic relief"); return; } var fault = field.PoolFault(s); if (fault != null) { e.Add(at + " " + fault); return; } }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);
                 for (int b = a + 1; b < found.Length; b++)
                 {

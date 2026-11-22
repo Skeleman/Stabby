@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Shapes = 7;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Shapes = 8;
 
         public const float Blend = 0.5f;
 
@@ -57,6 +57,7 @@ namespace Stabby.World
         {
             dist = R;
             if (!Contains(x, y, z)) return false;
+            if (Shape == Spring) return Basin(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
@@ -141,8 +142,24 @@ namespace Stabby.World
             return dist < R;
         }
 
+        bool Basin(float x, float y, float z, out float dist)
+        {
+            float dx = x - Ax, dz = z - Az;
+            float wob = P > 0f ? P * W * Value(Seed, x / 1.5f, 0f, z / 1.5f) : 0f;
+            float a = Math.Max((float)Math.Sqrt(dx * dx + dz * dz) - W - wob, 0f);
+            float c = Math.Max(Math.Abs(y - Ay) - H, 0f);
+            dist = (float)Math.Sqrt(a * a + c * c);
+            if (N > 0f) dist += N * Lump(x, y, z);
+            return dist < R;
+        }
+
         public bool Under(float x, float z)
         {
+            if (Shape == Spring)
+            {
+                float sx = x - Ax, sz = z - Az, rr = W + R;
+                return sx * sx + sz * sz <= rr * rr;
+            }
             if (W > 0f)
             {
                 float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -273,11 +290,14 @@ namespace Stabby.World
         {
             var terrain = Terrain(w, detail);
             if (w.Objects == null || w.Biome == null) return terrain;
-            var boulders = new ObjectField(w, detail, terrain, w.Objects).Boulders();
-            if (boulders.Length == 0) return terrain;
-            var all = new FeatureEdit[terrain.Length + boulders.Length];
+            var field = new ObjectField(w, detail, terrain, w.Objects);
+            var boulders = field.Boulders();
+            var springs = field.SpringEdits();
+            if (boulders.Length + springs.Length == 0) return terrain;
+            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
+            springs.CopyTo(all, terrain.Length + boulders.Length);
             return all;
         }
 
