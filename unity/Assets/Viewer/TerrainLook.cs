@@ -113,6 +113,10 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbySinterC", s.Sinter[2]);
             Shader.SetGlobalVector("_StabbySpringWater", s.Sinter[3]);
             Shader.SetGlobalVector("_StabbySpringDeep", s.Sinter[4]);
+            Shader.SetGlobalVector("_StabbyMudSurface", s.Sinter[5]);
+            Shader.SetGlobalVector("_StabbyMudDeep", s.Sinter[6]);
+            Shader.SetGlobalVector("_StabbyMudClay", s.Sinter[7]);
+            Shader.SetGlobalVector("_StabbyMudGrey", s.Sinter[8]);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -319,7 +323,7 @@ namespace Stabby.Viewer
                 CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,
                 Water = WaterLook(lib.Water),
-                Sinter = SinterLook(lib.Sinter),
+                Sinter = SinterLook(lib.Sinter, lib.Mud),
             };
         }
 
@@ -344,10 +348,10 @@ namespace Stabby.Viewer
             return level;
         }
 
-        static Vector4[] SinterLook(SinterDef d)
+        static Vector4[] SinterLook(SinterDef d, MudDef m)
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
-            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(d.Water, 0), C(d.Deep, 0) };
+            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(d.Water, 0), C(d.Deep, 0), C(m.Surface, m.Roughness), C(m.Deep, 0), C(m.Clay, 0), C(m.Grey, 0) };
         }
 
         static Vector4[] WaterLook(WaterDef w)

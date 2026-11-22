@@ -38,6 +38,12 @@ namespace Stabby.World
         public float BandM = 0.3f, Roughness = 0.55f;
     }
 
+    public sealed class MudDef
+    {
+        public uint Surface = 0x6c675d, Deep = 0x3f3b34, Clay = 0xa49a84, Grey = 0x8c897f;
+        public float Roughness = 0.3f;
+    }
+
     public sealed class LookDef
     {
         public float NoiseContrast = 0.12f, AlbedoVar = 0.08f, DetailWavelengthM = 0.05f;
@@ -191,6 +197,7 @@ namespace Stabby.World
         public WaterDef Water = new WaterDef();
         public LookDef Look = new LookDef();
         public SinterDef Sinter = new SinterDef();
+        public MudDef Mud = new MudDef();
         public List<StratumDef> Strata = new List<StratumDef>();
         public List<LibraryMaterial> Materials = new List<LibraryMaterial>();
 
@@ -278,6 +285,8 @@ namespace Stabby.World
                 if (!(lib.Sinter.BandM >= 0.01f && lib.Sinter.BandM <= 2)) errors.Add($"sinter.bandM {lib.Sinter.BandM} outside 0.01..2");
                 Amp(errors, "sinter.roughness", lib.Sinter.Roughness);
             }
+            if (lib.Mud == null) errors.Add("mud: required");
+            else Amp(errors, "mud.roughness", lib.Mud.Roughness);
             if (lib.Strata.Count == 0) errors.Add("strata: at least one stratum required");
             var ids = new HashSet<string>();
             foreach (var s in lib.Strata)

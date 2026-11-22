@@ -17,7 +17,9 @@
         "mistFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "mistFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
         "steamFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
-        "steamFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 }
+        "steamFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
+        "columnFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "columnFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 }
       }
     },
     "foliage": {
@@ -117,7 +119,7 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
@@ -155,7 +157,7 @@
               "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
-              "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring"] },
+              "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot"] },
               "spacingM": { "type": "number", "minimum": 200, "maximum": 5000 },
               "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
               "biomeDensity": {

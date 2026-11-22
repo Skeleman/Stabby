@@ -161,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -293,7 +293,30 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if ((only == "spring" && phase > 270) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
+            if (phase >= 320 && phase < 320 + VentShots.Length)
+            {
+                string name = VentShots[phase - 320];
+                if (wait == 0)
+                {
+                    if (!AimVent(cam, phase - 320)) { GameStatus.Lines["~" + name] = "no vent placed"; phase++; }
+                    else { wait = 180; return; }
+                }
+                else
+                {
+                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, name);
+                    if (phase == 320)
+                    {
+                        GameStatus.Lines["~bench geyser"] = Bench(cam, "geyser erupting");
+                        GameStatus.Lines["~bench geyser column"] = BenchMist(cam, "geyser erupting");
+                    }
+                    TerrainViewSystem.ClockOverride = null;
+                    wait = 0;
+                    phase++;
+                }
+            }
+            if ((only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -1579,6 +1602,52 @@ namespace Stabby.Game.Editor
         static readonly string[] RuinShots = { "ruin-close", "ruin-mid" };
         static readonly string[] SpringShots = { "spring-close", "spring" };
         static readonly string[] FairyShots = { "fairyring-close", "fairyring-mid" };
+        static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot" };
+
+        static bool AimVent(Camera cam, int mode)
+        {
+            int kind = mode == 2 ? ObjectField.MudPot : ObjectField.Geyser;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                ObjectInstance pick = default;
+                float best = float.MaxValue;
+                foreach (var o in field.Discoveries())
+                {
+                    if (!field.IsVent(o) || field.VentKind(o) != kind) continue;
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                    if (score < best) { best = score; pick = o; }
+                }
+                if (best == float.MaxValue) return false;
+                var pools = new System.Collections.Generic.List<float>();
+                field.SpringPoolsAt(pick, pools);
+                var c = new Vector3(pools[0], pools[4], pools[1]);
+                float r = pools[2];
+                Vector3 eye, target;
+                var side = new Vector3(0.8f, 0, 0.6f);
+                if (kind == ObjectField.Geyser)
+                {
+                    Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
+                    TerrainViewSystem.ClockOverride = offset + 0.4 * duration;
+                    float h = Stabby.Viewer.WaterGeometry.ColumnPerRadius * r;
+                    target = c + Vector3.up * 0.4f * h;
+                    eye = c + side * (mode == 0 ? 1.4f : 4.5f) * h + Vector3.up * (mode == 0 ? 2f : 0.6f * h);
+                }
+                else
+                {
+                    TerrainViewSystem.ClockOverride = null;
+                    target = c;
+                    eye = c + side * 2.6f * r + Vector3.up * 1.7f;
+                }
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+                GameStatus.Lines["~aim " + VentShots[mode]] = $"vent kind {kind} pool r {r:F2} m at {c.x:F0},{c.y:F0},{c.z:F0}, eye {eye.x:F1},{eye.y:F1},{eye.z:F1}, clock {TerrainViewSystem.ClockOverride:F1}";
+                return true;
+            }
+            return false;
+        }
 
         static bool AimCamp(Camera cam, int mode) => AimSite(cam, mode, ObjectPart.Campsite, Structures.CampU, CampShots, "campsite", new Vector3(0.7f, -0.7f, 4.5f), 0);
 
