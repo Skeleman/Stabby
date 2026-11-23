@@ -6,7 +6,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float ClusterReachM = 400f;
+        const float ClusterReachM = 120f;
 
         static System.Collections.IEnumerator SitingTour(Camera cam, string dir)
         {
@@ -95,7 +95,7 @@ namespace Stabby.Game.Editor
                 float r = 0;
                 foreach (var o in group) r = Mathf.Max(r, new Vector2(o.X - c.x, o.Z - c.z).magnitude);
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
-                float back = 1.6f * r + 60f, low = float.MaxValue;
+                float back = r + 40f, low = float.MaxValue;
                 var outward = Vector3.forward;
                 for (int k = 0; k < 8; k++)
                 {
@@ -103,8 +103,8 @@ namespace Stabby.Game.Editor
                     float h = ground.HeightAt(c.x + d.x * back, c.z + d.z * back);
                     if (h < low) { low = h; outward = d; }
                 }
-                var eye = c + outward * back + Vector3.up * 0.45f * back;
-                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 20f);
+                var eye = c + outward * back + Vector3.up * 0.3f * back;
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 12f);
                 foreach (var o in group)
                     if (field.VentKind(o) == ObjectField.Geyser)
                     {
