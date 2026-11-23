@@ -487,8 +487,6 @@ namespace Stabby.Game
                 int a2 = first + r, b2 = first + (r + 1) % ringCount;
                 Tris.Add(a); Tris.Add(b); Tris.Add(a2);
                 Tris.Add(b); Tris.Add(b2); Tris.Add(a2);
-                Tris.Add(a); Tris.Add(a2); Tris.Add(b);
-                Tris.Add(b); Tris.Add(a2); Tris.Add(b2);
             }
             Bounds[0] = lo;
             Bounds[1] = hi;
@@ -641,6 +639,7 @@ namespace Stabby.Game
         List<MeshParts> steam, pools;
         int steamApplied;
         bool hasMist;
+        Light sun;
         IEnumerator<string> loading;
         public bool Loading => loading != null || look.IsCreated;
         Prepared prepared;
@@ -667,6 +666,7 @@ namespace Stabby.Game
         readonly Plane[] frustum = new Plane[6];
         JobHandle lodHandle;
         bool lodScheduled, selected;
+        int splitSeen;
         float3 lodEye;
         quaternion lodTurn;
         float lodFov = -1f;
@@ -1293,6 +1293,7 @@ namespace Stabby.Game
                 lodHandle.Complete();
                 lodScheduled = false;
                 selected = true;
+                splitSeen = split.Count;
             }
             double t0 = frame.Elapsed.TotalMilliseconds;
             int behind = selected ? 0 : 1;
@@ -1304,6 +1305,13 @@ namespace Stabby.Game
                 behind++;
                 if (nd.Pending == 0 && pending.Count < BuildBudget) Request(key);
             }
+            if (pending.Count < BuildBudget)
+                foreach (int key in split)
+                {
+                    if (pending.Count >= BuildBudget) break;
+                    var nd = Node(key);
+                    if (nd.Built == 0 && nd.Pending == 0) Request(key);
+                }
             double t1 = frame.Elapsed.TotalMilliseconds;
             drawn.Clear();
             for (int r = 0; r < roots.Length; r++) Draw(roots[r]);
@@ -1316,6 +1324,11 @@ namespace Stabby.Game
             float3 eye = cam.transform.position;
             float reach = Casting && UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.shadowDistance : 0;
             int vertices = 0, casting = 0, castVertices = 0, sunk = 0;
+            if (sun == null) sun = RenderSettings.sun != null ? RenderSettings.sun : Array.Find(UnityEngine.Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
+            float3 sunDir = sun != null ? (float3)sun.transform.forward : new float3(0, -1, 0);
+            float sunRun = math.length(sunDir.xz);
+            float2 upsun = sunRun > 1e-4f ? -sunDir.xz / sunRun : float2.zero;
+            float tanE = math.max(-sunDir.y / math.max(sunRun, 1e-4f), 0.2f);
             foreach (int key in builtKeys)
             {
                 var nd = nodes[key];
@@ -1351,7 +1364,7 @@ namespace Stabby.Game
                     nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
-                int cast = show && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
+                int cast = show && CastsNear(nb, eye, reach, upsun, tanE) ? 1 : 0;
                 if (cast != nd.Cast)
                 {
                     double tsh = frame.Elapsed.TotalMilliseconds;
@@ -1432,12 +1445,87 @@ namespace Stabby.Game
             return mask;
         }
 
+        static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float2 upsun, float tanE)
+        {
+            float run = math.min((nb.Max.y - nb.Min.y) / tanE, reach);
+            for (int k = 0; k <= 3; k++)
+            {
+                float2 o = -upsun * run * k / 3f;
+                float3 shift = new float3(o.x, 0, o.y);
+                if (math.length(math.max(0, math.max(nb.Min + shift - eye, eye - nb.Max - shift))) < reach) return true;
+            }
+            return false;
+        }
+
         public void NearMeshes(float3 eye, float reach, List<Mesh> into)
         {
             into.Clear();
             if (!ready || !drawn.IsCreated) return;
             foreach (int key in drawn)
                 if (tree.Level(key) == 0 && tree.Distance(key, eye) < reach && meshes.TryGetValue(key, out var m)) into.Add(m);
+        }
+
+        public int[] Audit()
+        {
+            var r = new int[12];
+            if (!ready || !drawn.IsCreated) return r;
+            var em = EntityManager;
+            em.CompleteAllTrackedJobs();
+            double area = 0, total = 0;
+            for (int k = 0; k < roots.Length; k++) total += TerrainTree.Size(TerrainTree.Root) * (double)TerrainTree.Size(TerrainTree.Root);
+            foreach (int key in drawn)
+            {
+                float s = TerrainTree.Size(tree.Level(key));
+                area += s * (double)s;
+                var nd = nodes[key];
+                if (nd.Drawn == 0) continue;
+                r[0]++;
+                var e = nd.Entity;
+                if (e == Entity.Null || !em.Exists(e) || !em.IsComponentEnabled<MaterialMeshInfo>(e)) { r[1]++; continue; }
+                if (em.GetComponentData<MaterialMeshInfo>(e).MeshID != nd.Mesh) r[2]++;
+                MinMaxAABB box = tree.Box(key);
+                AABB want = box;
+                var rb = em.GetComponentData<RenderBounds>(e).Value;
+                if (math.any(math.abs(rb.Center - want.Center) > 0.01f) || math.any(math.abs(rb.Extents - want.Extents) > 0.01f)) r[3]++;
+                if (em.HasComponent<WorldRenderBounds>(e))
+                {
+                    var wb = em.GetComponentData<WorldRenderBounds>(e).Value;
+                    if (math.any(math.abs(wb.Center - want.Center) > 0.01f) || math.any(math.abs(wb.Extents - want.Extents) > 0.01f)) r[4]++;
+                }
+            }
+            using var q = em.CreateEntityQuery(ComponentType.ReadOnly<TerrainStitch>(), ComponentType.ReadOnly<MaterialMeshInfo>());
+            r[5] = q.CalculateEntityCount() - r[0] - shownCasting;
+            r[6] = (int)math.max(0, total - area);
+            (r[7], r[8], r[9], r[10], r[11]) = (splitSeen, shownWanted, drawn.Count, lodScheduled ? 1 : 0, rootsReady ? 1 : 0);
+            return r;
+        }
+
+        public bool Seam(float3 eye, float near, float far, out float3 at, out float3 across)
+        {
+            at = across = default;
+            if (!ready || !drawn.IsCreated) return false;
+            float best = 0;
+            foreach (int key in drawn)
+            {
+                var nd = nodes[key];
+                int l = tree.Level(key);
+                if (nd.Drawn == 0 || l > 2 || (nd.Stitch & 15) == 0) continue;
+                MinMaxAABB box = tree.Box(key);
+                for (int e = 0; e < 4; e++)
+                {
+                    if ((nd.Stitch & (1 << e)) == 0) continue;
+                    float3 n = e == 0 ? new float3(-1, 0, 0) : e == 1 ? new float3(1, 0, 0) : e == 2 ? new float3(0, 0, -1) : new float3(0, 0, 1);
+                    float3 c = (box.Min + box.Max) * 0.5f;
+                    float3 p = new float3(c.x + n.x * (box.Max.x - box.Min.x) * 0.5f, 0, c.z + n.z * (box.Max.z - box.Min.z) * 0.5f);
+                    float d = math.distance(p.xz, eye.xz);
+                    float relief = box.Max.y - box.Min.y;
+                    if (d < near || d > far || relief <= best) continue;
+                    best = relief;
+                    at = p;
+                    across = n;
+                }
+            }
+            return best > 0;
         }
 
         void Show(Entity e, bool show) => Queue(new TerrainWrite { Entity = e, Kind = 0, Value = show ? 1 : 0 });
