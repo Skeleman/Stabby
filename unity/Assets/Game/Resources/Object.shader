@@ -49,6 +49,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbyKit[37], _StabbyKitSrgb[37];
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -357,16 +358,16 @@ Shader "Stabby/Object"
                     float lip = smoothstep(L * 0.84 - 0.14, L * 0.84, d + 0.03 * n1.x + 0.02 * h1) * face;
                     float pn = TmNoise2(float2(su * 0.45, sv * 0.35) + 11.3).x;
                     float patch = smoothstep(0.45, 0.65, 0.55 * pn + 0.5 * h1 + 0.05) * (1 - 0.5 * ridge);
-                    a = lerp(ToLinear(float3(0.42, 0.37, 0.30)), ToLinear(float3(0.62, 0.50, 0.30)), patch) * (0.88 + 0.22 * h4) * (1 + 0.5 * str2);
+                    a = lerp(_StabbyKit[10].rgb, _StabbyKit[11].rgb, patch) * (0.88 + 0.22 * h4) * (1 + 0.5 * str2);
                     float seam = smoothstep(0.06, 0.0, min(bf, 1 - bf) + 0.03 * n2.x) * fc;
                     a *= (1 - 0.3 * seam) * (1 - 0.45 * lip) * (1 - 0.2 * smoothstep(hem * 1.6 + 0.01, hem, d) * face);
                     Light ml = GetMainLight();
                     float4 mn = TmNoise3(q * 2.2 + 5.7, int3(0, 0, 0));
                     float moss = smoothstep(0.1, -0.2, dot(n, ml.direction)) * smoothstep(0.25, 0.75, 0.8 * mn.x + 0.35 * lip + 0.2 * (1 - open)) * fm;
-                    a = lerp(a, ToLinear(float3(0.27, 0.29, 0.17)) * (0.8 + 0.3 * n2.x * fb), 0.6 * moss);
+                    a = lerp(a, _StabbyKit[12].rgb * (0.8 + 0.3 * n2.x * fb), 0.6 * moss);
                     float4 st = TmNoise3(q * 180 + sk, int3(0, 0, 0));
                     float fe = TmFade(180, fp);
-                    float3 ab = ToLinear(float3(0.40, 0.34, 0.25)) * (0.75 + 0.45 * smoothstep(0.1, 0.5, st.x) * fe - 0.4 * smoothstep(-0.1, -0.5, st.x) * fe) * (0.9 + 0.2 * h4);
+                    float3 ab = _StabbyKit[13].rgb * (0.75 + 0.45 * smoothstep(0.1, 0.5, st.x) * fe - 0.4 * smoothstep(-0.1, -0.5, st.x) * fe) * (0.9 + 0.2 * h4);
                     a = lerp(a, ab, butt);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.15);
                     float gs = 0.6 * n1.y * 55 * fa + 0.4 * n2.y * 110 * fb;
@@ -376,25 +377,25 @@ Shader "Stabby/Object"
                 }
                 else if (mat == 3)
                 {
-                    a = ToLinear(float3(0.78, 0.74, 0.64)) * (0.92 + 0.06 * mid.x * fm + 0.04 * fib.x * ff);
+                    a = _StabbyKit[7].rgb * (0.92 + 0.06 * mid.x * fm + 0.04 * fib.x * ff);
                     float stain = smoothstep(0.2, 0.8, big.x + 0.5 * mid.x) * 0.45 + (1 - open) * 0.3;
-                    a = lerp(a, ToLinear(float3(0.58, 0.52, 0.4)), saturate(stain));
-                    a = lerp(a, ToLinear(float3(0.66, 0.6, 0.5)), smoothstep(0.35, 0.0, abs(q.y + 0.1 * big.x)) * 0.3);
+                    a = lerp(a, _StabbyKit[8].rgb, saturate(stain));
+                    a = lerp(a, _StabbyKit[9].rgb, smoothstep(0.35, 0.0, abs(q.y + 0.1 * big.x)) * 0.3);
                     grad = 0.09 * mid.yzw * fm + 0.09 * fib.yzw * ff;
                 }
                 else if (mat == 5)
                 {
-                    a = ToLinear(float3(0.12, 0.11, 0.1)) * (0.85 + 0.25 * mid.x);
-                    a = lerp(a, ToLinear(float3(0.33, 0.18, 0.09)), smoothstep(0.2, 0.7, big.x + 0.4 * fib.x * ff) * 0.6);
+                    a = _StabbyKit[14].rgb * (0.85 + 0.25 * mid.x);
+                    a = lerp(a, _StabbyKit[15].rgb, smoothstep(0.2, 0.7, big.x + 0.4 * fib.x * ff) * 0.6);
                     grad = 0.12 * fib.yzw * ff;
                 }
                 else if (mat == 6)
                 {
                     float h = th.w;
-                    float3 dye = h < 0.3 ? float3(0.55, 0.27, 0.22) : h < 0.55 ? float3(0.30, 0.38, 0.47) : h < 0.8 ? float3(0.66, 0.58, 0.33) : float3(0.70, 0.65, 0.55);
+                    float3 dye = h < 0.3 ? _StabbyKitSrgb[16].rgb : h < 0.55 ? _StabbyKitSrgb[17].rgb : h < 0.8 ? _StabbyKitSrgb[18].rgb : _StabbyKitSrgb[19].rgb;
                     float4 wv = TmNoise3(q * 90 + sd, int3(0, 0, 0));
                     float fw = TmFade(90, fp);
-                    a = ToLinear(lerp(dye, float3(0.70, 0.65, 0.55), 0.12 + 0.1 * saturate(big.x))) * (0.86 + 0.08 * str.x * fs + 0.05 * wv.x * fw);
+                    a = ToLinear(lerp(dye, _StabbyKitSrgb[19].rgb, 0.12 + 0.1 * saturate(big.x))) * (0.86 + 0.08 * str.x * fs + 0.05 * wv.x * fw);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.2);
                     grad = 0.12 * fib.yzw * ff + 0.04 * wv.yzw * fw;
                     if (cap)
@@ -406,59 +407,59 @@ Shader "Stabby/Object"
                 else if (mat == 7)
                 {
                     float dust = smoothstep(0.35, 0.95, 0.15 + 0.45 * n.y + 0.5 * big.x + 0.35 * mid.x * fm + 0.15 * fib.x * ff);
-                    a = lerp(ToLinear(float3(0.045, 0.042, 0.04)), ToLinear(float3(0.34, 0.33, 0.31)), dust) * (0.85 + 0.15 * fib.x * ff);
+                    a = lerp(_StabbyKit[20].rgb, _StabbyKit[21].rgb, dust) * (0.85 + 0.15 * fib.x * ff);
                     float crack = smoothstep(0.9, 0.98, 1 - abs(str.x + 0.2 * mid.x)) * fs * (1 - dust);
-                    a = lerp(a, ToLinear(float3(0.32, 0.12, 0.05)), 0.6 * crack);
+                    a = lerp(a, _StabbyKit[22].rgb, 0.6 * crack);
                     grad = 0.08 * mid.yzw * fm + 0.1 * fib.yzw * ff + 0.05 * str.yzw * fs * (1 - dust);
                     [branch] if (cap && abs(g.y) > 0.9)
                     {
                         float e = rf + 0.2 * big.x + 0.12 * mid.x * fm + 0.04 * fib.x * ff;
                         clip(0.97 - e);
-                        a = lerp(ToLinear(float3(0.03, 0.028, 0.026)), a, smoothstep(0.15, 0.75, rf + 0.25 * big.x + 0.2 * mid.x * fm));
+                        a = lerp(_StabbyKit[23].rgb, a, smoothstep(0.15, 0.75, rf + 0.25 * big.x + 0.2 * mid.x * fm));
                         a = lerp(a, ContactColor(wp.xz, wp.y), 0.85 * smoothstep(0.45, 0.95, e));
                         grad *= 1 - smoothstep(0.5, 0.95, e);
                     }
                     else if (cap)
                     {
                         float rr = rf * rm / 0.012 + 0.6 * mid.x * fm;
-                        a = lerp(a, ToLinear(float3(0.05, 0.045, 0.04)), 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * TmFade(83, fp));
+                        a = lerp(a, _StabbyKit[24].rgb, 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * TmFade(83, fp));
                     }
                 }
                 else if (mat == 8)
                 {
                     float h = th.w;
-                    float3 hue = h < 0.4 ? float3(0.62, 0.12, 0.07) : h < 0.62 ? float3(0.40, 0.25, 0.14) : h < 0.84 ? float3(0.72, 0.58, 0.38) : float3(0.56, 0.36, 0.17);
+                    float3 hue = h < 0.4 ? _StabbyKit[25].rgb : h < 0.62 ? _StabbyKit[26].rgb : h < 0.84 ? _StabbyKit[27].rgb : _StabbyKit[28].rgb;
                     if (th.x > 8.5)
                     {
                         float t = saturate((th.x - 9) / 4);
                         float4 sp = TmNoise3(q * 38 + sd, int3(0, 0, 0));
                         float fsp = TmFade(38, fp);
-                        a = ToLinear(hue) * (0.82 + 0.16 * big.x + 0.08 * mid.x * fm + 0.05 * fib.x * ff);
+                        a = hue * (0.82 + 0.16 * big.x + 0.08 * mid.x * fm + 0.05 * fib.x * ff);
                         a = lerp(a, a * 0.55, smoothstep(0.55, 1, t + 0.15 * mid.x * fm));
-                        a = lerp(a, ToLinear(float3(0.84, 0.78, 0.64)), 0.3 * smoothstep(0.3, 0.0, t + 0.08 * big.x));
+                        a = lerp(a, _StabbyKit[29].rgb, 0.3 * smoothstep(0.3, 0.0, t + 0.08 * big.x));
                         float wart = h < 0.4 ? smoothstep(0.32, 0.5, sp.x + 0.1 * mid.x) * fsp * smoothstep(0.05, 0.35, t) : 0;
-                        a = lerp(a, ToLinear(float3(0.92, 0.89, 0.8)) * (0.9 + 0.1 * fib.x * ff), wart);
+                        a = lerp(a, _StabbyKit[30].rgb * (0.9 + 0.1 * fib.x * ff), wart);
                         grad = 0.07 * mid.yzw * fm + 0.04 * fib.yzw * ff + 0.12 * sp.yzw * fsp * (0.3 + wart);
                     }
                     else if (cap)
                     {
                         float ang = atan2(q.z, q.x) * 18 + 1.5 * mid.x * fm + 0.5 * fib.x * ff;
                         float gill = 0.5 + 0.5 * cos(ang * 2), keep = TmFade(60, fp);
-                        a = ToLinear(lerp(float3(0.5, 0.42, 0.33), float3(0.78, 0.7, 0.58), 0.5 + 0.3 * big.x)) * (1 - 0.35 * gill * keep);
+                        a = ToLinear(lerp(_StabbyKitSrgb[31].rgb, _StabbyKitSrgb[32].rgb, 0.5 + 0.3 * big.x)) * (1 - 0.35 * gill * keep);
                         a *= 0.5 + 0.5 * smoothstep(0.1, 0.9, rf);
                         grad = 0.05 * fib.yzw * ff;
                     }
                     else
                     {
-                        a = ToLinear(float3(0.82, 0.78, 0.68)) * (0.86 + 0.1 * str.x * fs + 0.06 * fib.x * ff + 0.06 * big.x);
-                        a = lerp(a, ToLinear(float3(0.5, 0.44, 0.34)), 0.35 * (1 - open));
+                        a = _StabbyKit[33].rgb * (0.86 + 0.1 * str.x * fs + 0.06 * fib.x * ff + 0.06 * big.x);
+                        a = lerp(a, _StabbyKit[34].rgb, 0.35 * (1 - open));
                         grad = 0.07 * str.yzw * fs + 0.04 * fib.yzw * ff;
                     }
                 }
                 else if (mat == 9)
                 {
-                    a = ToLinear(float3(0.25, 0.4, 0.12)) * (0.8 + 0.22 * big.x + 0.16 * mid.x * fm + 0.12 * fib.x * ff);
-                    a = lerp(a, ToLinear(float3(0.4, 0.52, 0.16)), 0.35 * smoothstep(0.1, 0.8, mid.x + 0.3 * big.x));
+                    a = _StabbyKit[35].rgb * (0.8 + 0.22 * big.x + 0.16 * mid.x * fm + 0.12 * fib.x * ff);
+                    a = lerp(a, _StabbyKit[36].rgb, 0.35 * smoothstep(0.1, 0.8, mid.x + 0.3 * big.x));
                     grad = 0.1 * mid.yzw * fm + 0.12 * fib.yzw * ff;
                     [branch] if (cap)
                     {
@@ -482,7 +483,7 @@ Shader "Stabby/Object"
                     float4 bn = TmNoise3(sp, int3(0, 0, 0)), bm = TmNoise3(sp2, int3(0, 0, 0));
                     float fb = TmFade(15, fp), fb2 = TmFade(34, fp);
                     float rid = lerp(0.6, 1 - abs(bn.x), fb) * 0.65 + lerp(0.6, 1 - abs(bm.x), fb2) * 0.35;
-                    a = ToLinear(float3(0.34, 0.29, 0.23)) * (0.35 + 0.8 * smoothstep(0.15, 0.85, rid)) * (0.85 + 0.25 * big.x);
+                    a = _StabbyKit[0].rgb * (0.35 + 0.8 * smoothstep(0.15, 0.85, rid)) * (0.85 + 0.25 * big.x);
                     float lic = smoothstep(0.55, 0.85, 0.6 * big.x + 0.5 * mid.x * fm + 0.2 * rid) * saturate(0.4 + n.y);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)) * float3(0.92, 1.02, 0.8) * 1.7, 0.45 * lic);
                     float3 d1 = bn.yzw - g * dot(bn.yzw, g), d2 = bm.yzw - g * dot(bm.yzw, g);
@@ -493,22 +494,22 @@ Shader "Stabby/Object"
                 {
                     float rr = (rf + 0.05 * mid.x * fm + 0.015 * fib.x * ff) * rm / 0.024;
                     float ring = 0.5 + 0.5 * cos(rr * 6.2831853), keep = TmFade(71, fp);
-                    a = lerp(ToLinear(float3(0.47, 0.33, 0.21)), ToLinear(float3(0.64, 0.52, 0.36)), smoothstep(0.35, 0.75, rf + 0.1 * big.x));
+                    a = lerp(_StabbyKit[1].rgb, _StabbyKit[2].rgb, smoothstep(0.35, 0.75, rf + 0.1 * big.x));
                     a *= (1 - 0.22 * ring * keep) * (0.9 + 0.1 * fib.x * ff);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)) * float3(0.95, 0.95, 0.93), 0.35 + 0.25 * big.x);
                     float bark = smoothstep(0.9, 0.97, rf + 0.03 * fib.x * ff);
-                    a = lerp(a, ToLinear(float3(0.16, 0.13, 0.1)), bark);
+                    a = lerp(a, _StabbyKit[3].rgb, bark);
                     float chk = smoothstep(0.9, 0.98, 1 - abs(str.x + 0.3 * mid.x)) * fs * smoothstep(0.15, 0.5, rf) * (1 - bark);
                     a *= 1 - 0.5 * chk;
                     grad = 0.03 * fib.yzw * ff + 0.03 * mid.yzw * fm;
                 }
                 else
                 {
-                    float3 c0 = mat == 2 ? float3(0.45, 0.37, 0.27) : float3(0.33, 0.24, 0.16);
+                    float3 c0 = mat == 2 ? _StabbyKit[6].rgb : _StabbyKit[4].rgb;
                     float ring = sin((str.x * 3 + mid.x) * 6.283) * 0.5 + 0.5;
-                    a = ToLinear(c0) * (0.8 + 0.18 * ring * fs + 0.12 * fib.x * ff + 0.12 * big.x);
+                    a = c0 * (0.8 + 0.18 * ring * fs + 0.12 * fib.x * ff + 0.12 * big.x);
                     float wet = smoothstep(0.3, 0.9, big.x + 0.4 * mid.x) * 0.3 + (1 - open) * 0.25;
-                    a = lerp(a, ToLinear(float3(0.2, 0.17, 0.14)), saturate(wet));
+                    a = lerp(a, _StabbyKit[5].rgb, saturate(wet));
                     a = lerp(a, a * float3(0.95, 1.05, 0.9) + 0.03, 0.4 * saturate(n.y) * fm);
                     a *= 1 - 0.45 * smoothstep(0.88, 0.97, 1 - abs(str.x)) * fs;
                     grad = 0.054 * str.yzw * fs + 0.06 * fib.yzw * ff + 0.043 * mid.yzw * fm;

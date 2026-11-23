@@ -108,6 +108,12 @@ namespace Stabby.Game.Editor
                 var rm = inflow.Mix[mouth - 1];
                 GameStatus.Lines["~watertint inflow"] = $"river {inflow.Id} enters lake {map.Water.LakeId[c]} at {mid.x:F0},{mid.z:F0}, Q {inflow.Discharge[mouth - 1]:F1}, river mix {rm.A:F2}/{rm.B:F2}/{rm.C:F2}, lake mix {lm.A:F2}/{lm.B:F2}/{lm.C:F2}";
                 for (var e = TintPair(cam, dir, "watertint-inflow"); e.MoveNext();) yield return null;
+                eye = mid + new Vector3(along.x, 0, along.y) * 50f + Vector3.up * 22f;
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 12f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(mid - eye));
+                for (var e = Settle(240); e.MoveNext();) yield return null;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "watertint-inflow-close");
             }
             else GameStatus.Lines["~watertint inflow"] = "no river enters a lake";
         }

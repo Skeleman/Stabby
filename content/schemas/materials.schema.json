@@ -2,9 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby material library",
   "type": "object",
-  "required": ["schemaVersion", "offsetAmplitudeM", "offsetWavelengthM", "tiltPerKm", "look", "sinter", "mud", "peat", "surface", "liquids", "strata"],
+  "required": ["schemaVersion", "offsetAmplitudeM", "offsetWavelengthM", "tiltPerKm", "look", "sinter", "mud", "peat", "surface", "liquids", "strata", "kit"],
   "additionalProperties": false,
   "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
     "amp": { "type": "number", "minimum": 0, "maximum": 1 },
     "length": { "type": "number", "minimum": 0.01, "maximum": 1000 },
     "depth": { "type": "number", "minimum": 0, "maximum": 2 },
@@ -179,6 +180,22 @@
           "name": { "type": "string" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
         }
+      }
+    },
+    "kit": {
+      "type": "object",
+      "required": ["timber", "plank", "plaster", "thatch", "iron", "cloth", "ash", "fungus", "turf"],
+      "additionalProperties": false,
+      "properties": {
+        "timber": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 6, "maxItems": 6 },
+        "plank": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1, "maxItems": 1 },
+        "plaster": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 3, "maxItems": 3 },
+        "thatch": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 4, "maxItems": 4 },
+        "iron": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 2, "maxItems": 2 },
+        "cloth": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 4, "maxItems": 4 },
+        "ash": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 5, "maxItems": 5 },
+        "fungus": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 10, "maxItems": 10 },
+        "turf": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 2, "maxItems": 2 }
       }
     },
     "strata": {

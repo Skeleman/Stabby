@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Text.RegularExpressions;
 
 namespace Stabby.Lint;
 
@@ -11,6 +12,10 @@ public static class Linter
     static readonly string[] Skip = { "/bin/", "/obj/", "/artifacts/" };
     const string GameDir = "unity/Assets/Game/";
     const string UnityDir = "unity/Assets/";
+    public const string KitShader = "unity/Assets/Game/Resources/Object.shader";
+    const string KitFunction = "float3 Built(";
+    static readonly Regex Colour = new(@"float3\(\s*[0-9.]+f?\s*,\s*[0-9.]+f?\s*,\s*[0-9.]+f?\s*\)");
+    static readonly Regex DotWeights = new(@"dot\([^()]*,\s*$");
     static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete" };
     static readonly string[] NativeMembers = { "linear", "gamma", "GammaToLinearSpace", "LinearToGammaSpace", "PerlinNoise" };
     static readonly string[] WorldDetailFiles = { "src/Stabby.World/Detail.cs", "src/Stabby.World/FoliageDefs.cs", "src/Stabby.World/ObjectDefs.cs" };
@@ -65,6 +70,8 @@ public static class Linter
             if (IsDetailCode(file))
                 foreach (var p in MetreProblems(file, root, allow, used)) problems.Add(p);
         }
+        var kit = Path.Combine(repo, KitShader);
+        if (File.Exists(kit)) problems.AddRange(ColourProblems(KitShader, File.ReadAllText(kit)));
         foreach (var key in allow.Keys.Where(k => !used.Contains(k)))
             problems.Add($"{AllowFile}: '{key}' matches nothing; remove it");
         return problems;
@@ -118,6 +125,27 @@ public static class Linter
             int line = acc.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             yield return $"{file}:{line}: {acc} calls native engine code, unsafe on worker threads; use a managed version or list {key} in {AllowFile} with a reason";
         }
+    }
+
+    public static List<string> ColourProblems(string file, string text)
+    {
+        var problems = new List<string>();
+        int start = text.IndexOf(KitFunction, StringComparison.Ordinal);
+        if (start < 0) { problems.Add($"{file}: {KitFunction.TrimEnd('(')} not found"); return problems; }
+        int open = text.IndexOf('{', start), depth = 0, end = open;
+        for (; end < text.Length; end++)
+        {
+            if (text[end] == '{') depth++;
+            else if (text[end] == '}' && --depth == 0) break;
+        }
+        foreach (Match m in Colour.Matches(text[..end], open))
+        {
+            var before = text[..m.Index].TrimEnd();
+            if (before.EndsWith('*') || DotWeights.IsMatch(before)) continue;
+            int line = text.AsSpan(0, m.Index).Count('\n') + 1;
+            problems.Add($"{file}:{line}: {m.Value} is a built-in colour; name a library material in content/materials.json kit");
+        }
+        return problems;
     }
 
     public static bool IsDetailCode(string file) =>

@@ -40,4 +40,22 @@ public class LintTests
         Assert.False(Linter.IsDetailCode("src/Stabby.World/Rivers.cs"));
         Assert.False(Linter.IsDetailCode("unity/Assets/Game/Editor/GameCapture.cs"));
     }
+
+    static List<string> Colours(string body) =>
+        Linter.ColourProblems(Linter.KitShader, "float3 Other() { return float3(0.1, 0.2, 0.3); }\nfloat3 Built(float3 a)\n{\n" + body + "\n}\nfloat3 After() { return float3(0.4, 0.5, 0.6); }");
+
+    [Theory]
+    [InlineData("return ToLinear(float3(0.42, 0.37, 0.30));")]
+    [InlineData("float3 c = a.x < 0.5 ? float3(0.5, 0.4, 0.3) : a; return c;")]
+    [InlineData("return lerp(a, float3(0.2f, 0.17f, 0.14f), 0.5);")]
+    public void FlagsBuiltInColours(string body) => Assert.Single(Colours(body));
+
+    [Theory]
+    [InlineData("return ToLinear(_StabbyKitSrgb[3].rgb) * float3(0.95, 1.05, 0.9);")]
+    [InlineData("return lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.2);")]
+    [InlineData("if (a.x > 0) { a = a * float3(0.5, 0.47, 0.43); } return a;")]
+    public void IgnoresKitColoursAndWeights(string body) => Assert.Empty(Colours(body));
+
+    [Fact]
+    public void MissingKitFunctionIsAProblem() => Assert.Single(Linter.ColourProblems(Linter.KitShader, "float3 Other() { return 0; }"));
 }
