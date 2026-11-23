@@ -206,7 +206,7 @@ Shader "Stabby/Foliage"
                 float alpha = 1;
                 float2 m = i.uv.xy * size, dm1 = ddx(m), dm2 = ddy(m);
                 float3 dp1 = ddx(wp), dp2 = ddy(wp);
-                Light l = GetMainLight(TransformWorldToShadowCoord(wp));
+                Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
                 float above = max(wp.y - fade.z, 0);
                 [branch] if (imp)
                 {

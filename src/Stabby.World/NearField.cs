@@ -68,6 +68,9 @@ namespace Stabby.World
             if (w.Water == null) return lines;
             float cm = w.Config.CellMeters;
             var rng = Rng.Stream(w.Config.Seed, "river-steps");
+            int n = w.Config.Size;
+            var spill = new Dictionary<int, Lake>();
+            foreach (var lake in w.Water.Lakes) if (lake.Outlet >= 0) spill[lake.Below] = lake;
             foreach (var r in w.Water.Rivers)
             {
                 int count = r.Cells.Count;
@@ -79,6 +82,13 @@ namespace Stabby.World
                     px.Add(r.X[k] * cm); pz.Add(r.Y[k] * cm); ps.Add(Hydrology.Stage(w.Config, r, k)); pw.Add(r.Width[k] * 0.5f); pd.Add(r.Depth[k]);
                     var m = k < r.Mix.Count ? r.Mix[k] : default;
                     for (int t = 0; t < tint.Length; t++) tint[t].Add(m[t]);
+                }
+                if (spill.TryGetValue(r.Cells[0], out var from0))
+                {
+                    int o = from0.Outlet;
+                    px.Insert(0, (r.X[0] + OutletReach * (o % n - r.X[0])) * cm); pz.Insert(0, (r.Y[0] + OutletReach * (o / n - r.Y[0])) * cm);
+                    ps.Insert(0, Math.Max(ps[0], from0.Level)); pw.Insert(0, pw[0]); pd.Insert(0, pd[0]);
+                    foreach (var t in tint) t.Insert(0, t[0]);
                 }
                 for (int it = 0; it < Chaikin; it++) { Smooth(px); Smooth(pz); Smooth(ps); Smooth(pw); Smooth(pd); foreach (var t in tint) Smooth(t); }
                 var falls = new List<RiverFall>(); var lips = new List<int>();
@@ -93,6 +103,8 @@ namespace Stabby.World
                 for (int k = 0; k < px.Count; k++) line.Mix[k] = new WaterMix { A = tint[0][k], B = tint[1][k], C = tint[2][k] };
                 Bends(line);
                 Steps(line, cm, ref rng);
+                for (int k = 0; k < px.Count; k++)
+                    if (!w.Sea[CellOf(line.X[k], line.Z[k], cm, w.Config.Size)]) line.S[k] = Math.Max(line.S[k], 0.5f * Erosion.MinLandHeight);
                 lines.Add(line);
             }
             return lines;
@@ -101,7 +113,7 @@ namespace Stabby.World
         public const float FallDepthFrac = 0.5f, FallDepthBaseM = 0.8f, FallDepthPerDrop = 0.15f;
         public static float PoolReach(float c, float r) => c + (1 + FallRimFrac) * r + Math.Max(FallRingMinM, FallRingFrac * r) + 1f;
         public const float FallRadiusNoise = 0.25f, FallBowlNoise = 0.2f, FallBowlWaveM = 1.7f, FallRimWaveFrac = 0.7f, FallRimWaveM = 3f, FallRimHeight = 0.35f, FallRimCap = 0.15f, FallTalusWaveM = 2.5f, FallLowFrac = 1.3f;
-        public const float FallTrimM = 0.1f, FallJagM = 0.6f, FallJagWaveM = 2.5f, FallRimFrac = 0.35f, FallRingMinM = 3f, FallRingFrac = 0.5f, FallLiftRise = 4f, FallBlendM = 1f, FallTalusFrac = 0.35f, FallSlumpFrac = 0.4f, FallClearM = 15f, FallOutletSlope = 1.2f, FallOutletFrac = 0.3f, FallOutletRise = 0.1f, FallFloorM = 0.02f, ShelfPadM = 2f;
+        public const float FallTrimM = 0.1f, FallJagM = 0.6f, FallJagWaveM = 2.5f, FallRimFrac = 0.35f, FallRingMinM = 3f, FallRingFrac = 0.5f, FallLiftRise = 4f, FallBlendM = 1f, FallTalusFrac = 0.35f, FallSlumpFrac = 0.4f, FallClearM = 15f, FallOutletSlope = 1.2f, FallOutletFrac = 0.3f, FallOutletRise = 0.1f, FallFloorM = 0.02f, SurfaceFloorM = 0.02f, MouthDepthM = 0.8f, ShelfPadM = 2f, OutletReach = 1f, OutletWidth = 0.5f;
 
         static float AlongLip(RiverFall f, float x, float z) => (x - f.LipX) * f.DirX + (z - f.LipZ) * f.DirZ;
 
@@ -223,13 +235,16 @@ namespace Stabby.World
             if (w.Water == null) return list;
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
-            foreach (var l in Lines(w))
+            var lines = Lines(w);
+            foreach (var l in lines)
             {
                 starts?.Add(list.Count);
                 var along = Along(l);
+                int lead = 0;
+                while (lead < l.X.Length && Lake(w, n, cm, l.X[lead], l.Z[lead])) lead++;
                 for (int k = 0; k + 1 < l.X.Length; k++)
                 {
-                    if (Wet(w, n, cm, l.X[k], l.Z[k]) || Wet(w, n, cm, l.X[k + 1], l.Z[k + 1])) continue;
+                    if (k >= lead && (Lake(w, n, cm, l.X[k], l.Z[k]) || Lake(w, n, cm, l.X[k + 1], l.Z[k + 1]))) continue;
                     var q = new RiverPiece
                     {
                         Ax = l.X[k], Az = l.Z[k], Bx = l.X[k + 1], Bz = l.Z[k + 1],
@@ -246,6 +261,33 @@ namespace Stabby.World
                         if (pool) { q.Fy = fall.BaseY; q.Fr = fall.PoolRadius; q.Fc = fall.PoolCentre; q.Fd = Math.Min(FallDepthFrac * fall.PoolRadius, FallDepthBaseM + FallDepthPerDrop * fall.Drop); q.Ft = Hydrology.FallThrow(fall.Drop); q.Fh = fall.LipPts == null ? fall.SheetHalf : 0; q.Fw = fall.LipPts == null ? q.Wb : l.W[Math.Min(lip + 1, l.W.Length - 1)]; Isles(ref q, fall); break; }
                     }
                     list.Add(q);
+                }
+            }
+            var hy = w.Water;
+            foreach (var lake in hy.Lakes)
+            {
+                if (lake.Outlet < 0 || lake.Outflow < w.Config.RiverMinDischarge) continue;
+                int below = lake.Below;
+                for (int r = 0, i = 0; r < hy.Rivers.Count; r++)
+                {
+                    var cells = hy.Rivers[r].Cells;
+                    if (cells.Count < 2) continue;
+                    var l = lines[i++];
+                    if (cells[0] == below || !cells.Contains(below)) continue;
+                    float ox = lake.Outlet % n * cm, oz = lake.Outlet / n * cm, bx = below % n * cm, bz = below / n * cm, near = float.MaxValue;
+                    int j = 0;
+                    for (int k = 0; k < l.X.Length; k++)
+                    {
+                        float dd = (l.X[k] - bx) * (l.X[k] - bx) + (l.Z[k] - bz) * (l.Z[k] - bz);
+                        if (dd < near) { near = dd; j = k; }
+                    }
+                    starts?.Add(list.Count);
+                    list.Add(new RiverPiece
+                    {
+                        Ax = ox, Az = oz, Bx = l.X[j], Bz = l.Z[j], Sa = Math.Max(lake.Level, l.S[j]), Sb = l.S[j],
+                        Wa = OutletWidth * l.W[j], Wb = OutletWidth * l.W[j], Da = l.D[j], Db = l.D[j], Ka = l.K[j], Kb = l.K[j], Pa = l.P[j], Pb = l.P[j], Ra = l.R[j], Rb = l.R[j]
+                    });
+                    break;
                 }
             }
             return list;
@@ -289,10 +331,10 @@ namespace Stabby.World
             return h;
         }
 
-        static bool Wet(GeneratedWorld w, int n, float cm, float x, float z)
+        static bool Lake(GeneratedWorld w, int n, float cm, float x, float z)
         {
             int i = CellOf(x, z, cm, n);
-            return w.Sea[i] || w.Water.LakeId[i] >= 0;
+            return w.Water.LakeId[i] >= 0;
         }
 
         static void Smooth(List<float> p)
@@ -462,7 +504,7 @@ namespace Stabby.World
             if (!near) return Isles(c, s0, s1, x, z, h);
             h = Carve(c, s0, s1, x, z, h, f);
 
-            float raised = h;
+            float raised = h, sea = Grid.Smoothstep(0.75f, 1, Lerp2(SeaWeight(c.Height(i00)), SeaWeight(c.Height(i10)), SeaWeight(c.Height(i01)), SeaWeight(c.Height(i11)), tx, tz));
             for (int k = s0; k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
@@ -470,13 +512,15 @@ namespace Stabby.World
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
                 if (d >= wb + f) continue;
                 float s = q.Sa + (q.Sb - q.Sa) * t, top = SmoothMax(h, s + Rise(w), 1f);
-                raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (1 - Gorge(c, s0, s1, x, z, s, f)));
+                float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, el = (float)Math.Sqrt(ex * ex + ez * ez), along = el > 1e-3f ? ((x - q.Ax) * ex + (z - q.Az) * ez) / el : 0;
+                float cap = Grid.Smoothstep(0, f, Math.Max(along - el, -along)) * sea;
+                raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (1 - Gorge(c, s0, s1, x, z, s, f)) * Grid.Smoothstep(0, Erosion.MinLandHeight, s) * (1 - cap) * (1 - sea * (1 - Grid.Smoothstep(2 * Erosion.MinLandHeight, 4 * Erosion.MinLandHeight, s))));
             }
-            float cut = float.MaxValue, pool = float.MaxValue, low = Math.Min(h, 0.5f * Erosion.MinLandHeight);
+            float cut = float.MaxValue, pool = float.MaxValue, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
             for (int k = s0; k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
-                if (q.Fr > 0) { pool = Math.Min(pool, Pool(c, q, x, z, raised)); if (PoolZone(q, x, z, f)) low = Math.Min(low, Math.Max(FallFloorM, 0.5f * Math.Min(q.Fy, Erosion.MinLandHeight))); }
+                if (q.Fr > 0 && PoolZone(q, x, z, f)) low = Math.Min(low, Math.Max(FallFloorM, 0.5f * Math.Min(q.Fy, Erosion.MinLandHeight)));
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
                 if (d >= wb + f) continue;
@@ -491,7 +535,9 @@ namespace Stabby.World
                     float bed = 1 - d * d / (w * w), plunge = q.Pa + (q.Pb - q.Pa) * t, rapid = q.Ra + (q.Rb - q.Ra) * t;
                     float rough = 1 + BedNoise * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 2u, x / BedNoiseM, z / BedNoiseM)));
                     float boulder = rapid > 0 ? rapid * BoulderFrac * depth * Grid.Smoothstep(-0.2f, 0.8f, Noise.Gradient(c.RiverSeed + 3u, x / BoulderM, z / BoulderM)) : 0;
-                    p = Math.Max(s - bed * (depth * (1 - BarSkew * inner) * rough + plunge - boulder) + bar * (1 - bed), 0.5f * Math.Min(s, Erosion.MinLandHeight));
+                    float mouth = MouthDepthM * bed * (1 - Grid.Smoothstep(0.5f * Erosion.MinLandHeight, Erosion.MinLandHeight, s));
+                    p = Math.Max(s - bed * (depth * (1 - BarSkew * inner) * rough + plunge - boulder) + bar * (1 - bed), 0.5f * Math.Min(s, Erosion.MinLandHeight) - mouth);
+                    low = Math.Min(low, land + (Math.Max(SurfaceFloorM, 0.5f * Math.Min(s, Erosion.MinLandHeight)) - mouth - land) * (1 - Grid.Smoothstep(0.5f * w, w, d)));
                 }
                 else
                 {
@@ -504,6 +550,13 @@ namespace Stabby.World
                     if (d >= wb) p += WallLift * Grid.Smoothstep(wb + 0.5f * f, wb + f, d);
                 }
                 cut = Math.Min(cut, p + (1 - gate) * Math.Max(0, raised + FallClearM - p));
+            }
+            for (int k = s0; k < s1; k++)
+            {
+                var q = c.Piece(c.PieceAt(k));
+                if (q.Fr <= 0) continue;
+                float v = Pool(c, q, x, z, raised), reach = PoolReach(q.Fc, q.Fr), along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz;
+                pool = Math.Min(pool, cut < float.MaxValue ? v + Grid.Smoothstep(reach, reach + 0.5f * f, along) * Math.Max(0, cut - v) : v);
             }
             return Isles(c, s0, s1, x, z, Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low));
         }
@@ -769,6 +822,8 @@ namespace Stabby.World
             float d = a - b;
             return 0.5f * (a + b - (float)Math.Sqrt(d * d + k * k));
         }
+
+        static float SeaWeight(float height) => 1 - Grid.Smoothstep(-1.8f * Erosion.MinLandHeight, -1.2f * Erosion.MinLandHeight, height);
 
         static float Lerp2(float v00, float v10, float v01, float v11, float tx, float tz)
         {

@@ -73,7 +73,7 @@ Shader "Stabby/GrassBlade"
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
-                Light l = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
+                Light l = GetMainLight(TransformWorldToShadowCoord(i.positionWS), i.positionWS, half4(1, 1, 1, 1));
                 l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - i.positionWS);
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
