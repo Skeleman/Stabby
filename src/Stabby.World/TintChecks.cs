@@ -7,6 +7,30 @@ namespace Stabby.World
     {
         public const float TintTolerance = 1e-3f;
 
+        static void CheckLakeCover(GeneratedWorld w, List<string> e)
+        {
+            var hy = w.Water;
+            int n = w.Config.Size;
+            foreach (var s in hy.Rivers)
+            {
+                int id = Hydrology.DrainsTo(hy, s);
+                if (id < 0) continue;
+                float level = hy.Lakes[id].Level;
+                foreach (int i in s.Cells)
+                {
+                    if (w.Sea[i] || hy.LakeId[i] >= 0 || w.Height[i] >= level || (hy.LakeCover != null && hy.LakeCover[i] == id)) continue;
+                    int x = i % n, y = i / n;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
+                        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                        int o = ny * n + nx;
+                        if (hy.LakeId[o] == id || (hy.LakeCover != null && hy.LakeCover[o] == id)) { e.Add($"river {s.Id} cell {i} sits below lake {id} without cover"); return; }
+                    }
+                }
+            }
+        }
+
         static void CheckTint(GeneratedWorld w, List<string> e)
         {
             if (w.Biome == null || w.Materials == null || w.Materials.TintSlots().Length == 0) return;
