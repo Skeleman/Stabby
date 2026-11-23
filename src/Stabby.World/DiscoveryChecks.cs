@@ -43,6 +43,8 @@ namespace Stabby.World
                 var def = w.Objects.Objects[s.Def];
                 string at = $"{def.Id} at {s.X:F0},{s.Z:F0}";
                 float r = field.SiteRadius(s);
+                int biome = w.Biome[Cell(n, cm, s.X, s.Z)];
+                if (def.Placement.Biomes.Count > 0 && (biome < 0 || !def.Placement.Biomes.Contains(w.BiomeIds[biome]))) { e.Add(at + $" stands in {(biome < 0 ? "no biome" : w.BiomeIds[biome])}, outside its biomes"); return; }
                 for (int k = 0; k < 9; k++)
                 {
                     float ux = k % 3 - 1, uz = k / 3 - 1, len = ux != 0 && uz != 0 ? 0.70710678f : 1f;
