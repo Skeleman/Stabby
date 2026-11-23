@@ -18,7 +18,7 @@ namespace Stabby.Game
     public struct CreatureSegmentRig
     {
         public float Length;
-        public float3 Idle, Forward, Back, Lift, RunForward, RunBack, RunLift, Alert;
+        public float3 Idle, Forward, Back, Lift, RunForward, RunBack, RunLift, Alert, Graze;
     }
 
     public struct CreatureRig
@@ -36,7 +36,7 @@ namespace Stabby.Game
         public BlobAssetReference<CreatureRig> Rig;
         public Entity Ghost;
         public float3 Position;
-        public float Heading, Pitch, Move, Alert, WalkSpeed, Phase, Clock, Sink, Wake;
+        public float Heading, Pitch, Move, Alert, Down, WalkSpeed, Phase, Clock, Sink, Wake;
         public bool Visible, Shadow, High, HighOn, LowOn;
         public float4 Fade;
     }
@@ -52,16 +52,19 @@ namespace Stabby.Game
         [GhostField(Quantization = 1000, Smoothing = SmoothingAction.Interpolate)] public float Heading;
         [GhostField(Quantization = 1000, Smoothing = SmoothingAction.Interpolate)] public float Move;
         [GhostField(Quantization = 100, Smoothing = SmoothingAction.Interpolate)] public float Alert;
+        [GhostField] public byte Act;
     }
 
     public struct CreatureBrain : IComponentData
     {
         public float2 Home, Offset;
-        public float2 Push;
-        public float Timer, Turn, Debt;
+        public float2 Push, Spot;
+        public float Timer, Turn, Debt, Seek;
         public int Herd;
         public Random Random;
-        public bool Walking;
+        public DriveLevels Levels;
+        public byte Want;
+        public bool Walking, Placed;
     }
 
     public struct CreaturePrefab : IComponentData
@@ -77,6 +80,7 @@ namespace Stabby.Game
         public ulong BodySeed, HerdSeed;
         public uint Seed;
         public HerdRoute Route;
+        public HerdNeeds Needs;
     }
 
     public struct CreaturePlanData
@@ -88,6 +92,7 @@ namespace Stabby.Game
         public BlobArray<float2> Reach;
         public BlobArray<float> Think, Length, Grade;
         public BlobArray<CreatureWary> Wary;
+        public BlobArray<CreatureDrives> Drives;
         public int Size;
         public float CellMeters;
         public BlobArray<byte> Wet;
@@ -118,6 +123,7 @@ namespace Stabby.Game
     {
         public HerdMind Mind;
         public HerdRoute Route;
+        public HerdNeeds Needs;
         public float2 Shift, Centre;
         public int Body;
         public bool Rehome;
@@ -186,7 +192,7 @@ namespace Stabby.Game
     public struct CreatureView
     {
         public int Override, Show;
-        public float Move, Phase, Run, Alert;
+        public float Move, Phase, Run, Alert, Down;
 
         sealed class Key { }
         static readonly SharedStatic<CreatureView> Shared = SharedStatic<CreatureView>.GetOrCreate<CreatureView, Key>();
