@@ -21,7 +21,7 @@ Shader "Stabby/Water"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
             float4 _StabbySky, _StabbyFieldUV;
-            float4 _StabbyLiquid[72];
+            float4 _StabbyLiquid[80];
             TEXTURE2D(_StabbySlope);
             SAMPLER(sampler_StabbySlope);
             TEXTURE2D(_StabbyBed);
@@ -35,7 +35,7 @@ Shader "Stabby/Water"
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
             static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05;
 
-            float4 Liquid(float id, int row) { return _StabbyLiquid[clamp((int)round(id), 0, 7) * 9 + row]; }
+            float4 Liquid(float id, int row) { return _StabbyLiquid[clamp((int)round(id), 0, 7) * 10 + row]; }
 
             float2 Grad(int2 p)
             {
@@ -107,7 +107,7 @@ Shader "Stabby/Water"
 
             half4 Curtain(Varyings i, float3 v, float dist, float2 uv)
             {
-                float4 L0 = Liquid(i.warm, 0), L1 = Liquid(i.warm, 1), L7 = Liquid(i.warm, 7);
+                float4 L0 = Liquid(i.warm, 0), L1 = Liquid(i.warm, 1), L7 = Liquid(i.warm, 7), L8 = Liquid(i.warm, 8), L9 = Liquid(i.warm, 9);
                 float u = saturate(i.fall.x), h = i.fall.y, y = u * h, x = i.chan.x * i.chan.y;
                 float2 fd = normalize(i.color.rg * 2 - 1), sd = float2(fd.y, -fd.x);
                 float flowQ = saturate(log2(1 + i.chan.z) / 9);
@@ -122,7 +122,7 @@ Shader "Stabby/Water"
                 float3 s3 = Noise(float2(x * 4.1 + 1.3 * warp.x, (tau - tm * 1.1) * 3.4) + 13.1) * detail;
                 float str = s1.x + 0.5 * s2.x + 0.3 * s3.x;
                 float aer = saturate(smoothstep(0.25, 1, u) * (0.6 + 0.45 * flowQ) + 0.1 * flowQ);
-                float white = saturate(aer + smoothstep(0.1, 0.6, str) * (0.2 + 0.45 * u) * (0.6 + 0.4 * flowQ));
+                float white = saturate(aer + smoothstep(0.1, 0.6, str) * (0.2 + 0.45 * u) * (0.6 + 0.4 * flowQ)) * L8.w;
                 float3 up = float3(0, 1, 0), f3 = float3(fd.x, 0, fd.y), s3d = float3(sd.x, 0, sd.y);
                 float3 nb = normalize(f3 * (0.35 + u) + up * (1 - u) * 0.9);
                 float3 tb = normalize(cross(s3d, nb));
@@ -154,7 +154,7 @@ Shader "Stabby/Water"
                 float fwdS = pow(saturate(dot(-v, l.direction)), 3) + 0.35 * pow(1 - abs(dot(nb, l.direction)), 4);
                 c += L1.rgb * l.color * fwdS * thinL * 0.7 * (1 - 0.5 * white);
                 float lit = saturate(dot(n, l.direction)) * 0.55 + 0.45;
-                float3 froth = (l.color * lit * 0.85 + sky * 0.3) * lerp(float3(1, 1, 1), 0.6 + L1.rgb * 0.5, 0.25 * (1 - u)) * (0.88 + 0.12 * s2.x);
+                float3 froth = (l.color * lit * 0.85 + sky * 0.3) * lerp(float3(1, 1, 1), 0.6 + L1.rgb * 0.5, 0.25 * (1 - u)) * (0.88 + 0.12 * s2.x) * L9.rgb;
                 c = lerp(c, froth, white * (0.75 + 0.25 * u));
                 float lipW = 0.12 + 0.06 * Noise(float2(x * 0.7, 1.7)).x;
                 float lip = (1 - smoothstep(lipW * 0.5, lipW, y)) * saturate(ScreenPx(lipW, dist) / LipPx);

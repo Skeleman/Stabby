@@ -11,6 +11,7 @@
     "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a", "bandM": 0.3, "roughness": 0.55
   },
   "mud": { "surface": "#6e6152", "clay": "#9c8c74", "grey": "#8c897f", "roughness": 0.3 },
+  "peat": { "wet": "#2b2117", "dark": "#16100a", "fibre": "#6b5838", "roughness": 0.22 },
   "liquids": [
     {
       "id": "water", "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8", "filmColor": "#000000", "emissionColor": "#000000",
@@ -19,7 +20,7 @@
       "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
       "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 1, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
-      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1 }
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     },
     {
       "id": "spring", "deepColor": "#1f6f86", "shallowColor": "#5fc8c4", "filmColor": "#000000", "emissionColor": "#000000",
@@ -28,7 +29,7 @@
       "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
       "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 0, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
-      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1 }
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     },
     {
       "id": "mud", "deepColor": "#43392f", "shallowColor": "#6e6152", "filmColor": "#7d705e", "emissionColor": "#000000",
@@ -37,7 +38,7 @@
       "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
       "flowSpeed": 0.2, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 1, "opacity": 1, "viscosity": 0.9, "bubbles": 1, "film": 0.3, "emission": 0, "roughness": 0.3,
-      "fall": { "spray": "none", "speed": 0.4, "sheetOpacity": 1 }
+      "fall": { "spray": "none", "speed": 0.4, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     },
     {
       "id": "peat", "deepColor": "#120d08", "shallowColor": "#3a2a17", "filmColor": "#6b6a4a", "emissionColor": "#000000",
@@ -46,7 +47,7 @@
       "swellScaleM": 140, "swellStrength": 0.05, "lakeSwell": 0.1,
       "flowSpeed": 0.3, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 1, "opacity": 0.85, "viscosity": 0.4, "bubbles": 0.1, "film": 0.7, "emission": 0, "roughness": 0.1,
-      "fall": { "spray": "mist", "speed": 0.8, "sheetOpacity": 1 }
+      "fall": { "spray": "mist", "speed": 0.8, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     }
   ],
   "surface": {

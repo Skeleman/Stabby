@@ -339,6 +339,20 @@ namespace Stabby.Game
             return w >= clay ? w : -clay;
         }
 
+        static float Peat(NativeEdits edits, float3 p)
+        {
+            float peat = 0;
+            for (int q = 0; q < edits.Count; q++)
+            {
+                var e = edits.Items[q];
+                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Carve || e.F > -0.5f || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
+                float edge = ObjectField.BogMargin(-e.F), d = math.length(new float2(p.x - e.Ax, p.z - e.Az));
+                d += ObjectField.BogPeatFadeM * (0.5f + 0.5f * noise.snoise(new float2(p.x, p.z) * 0.3f + e.S * 97f));
+                peat = math.max(peat, 1 - math.smoothstep(edge - ObjectField.BogPeatFadeM, edge, d));
+            }
+            return peat;
+        }
+
         public void Execute()
         {
             ref var g = ref Ground.Blob.Value;
@@ -454,6 +468,7 @@ namespace Stabby.Game
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, p.Pos));
+                p.Stitch.w = math.floor(p.Stitch.w) + 0.5f * Peat(edits, p.Pos);
                 if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;

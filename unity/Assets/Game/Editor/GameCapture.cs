@@ -161,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : 1;
+                phase = only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -390,6 +390,7 @@ namespace Stabby.Game.Editor
                 return;
             }
             if (phase == 350) { if (job == null) job = ControlsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 380) { if (job == null) job = LiquidsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 370) { if (job == null) job = RockBedsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 360) { if (job == null) job = TerrainFixTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 310) { if (job == null) job = SpeciesShot(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
@@ -2537,7 +2538,7 @@ namespace Stabby.Game.Editor
 
         const float BasinPitch = 35f;
 
-        static System.Collections.IEnumerator FallsTour(Camera cam, string dir, GeneratedWorld map, Ground ground)
+        static System.Collections.IEnumerator FallsTour(Camera cam, string dir, GeneratedWorld map, Ground ground, int views = 4)
         {
             var best = default(Stabby.Viewer.FallCurtain);
             bool found = false;
@@ -2600,7 +2601,7 @@ namespace Stabby.Game.Editor
             var basin = foot + fd * (0.3f * w);
             float reach = Mathf.Max(1.5f * h, 3f * w) + 20f;
             eyes[3] = basin + (fd * Mathf.Cos(BasinPitch * Mathf.Deg2Rad) + Vector3.up * Mathf.Sin(BasinPitch * Mathf.Deg2Rad)) * reach;
-            for (int v = 0; v < eyes.Length; v++)
+            for (int v = 0; v < views; v++)
             {
                 var eye = eyes[v];
                 var look = v == 3 ? basin : (lip + foot) * 0.5f;

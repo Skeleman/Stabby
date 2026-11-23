@@ -21,7 +21,7 @@ Shader "Stabby/VertexLit"
             #include "TerrainStitch.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
-            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface;
+            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre;
             float _StabbyStrataPeriod, _StabbyCellMeters;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -40,7 +40,7 @@ Shader "Stabby/VertexLit"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float peat : TEXCOORD6; };
 
             Varyings vert(Attributes i)
             {
@@ -57,6 +57,7 @@ Shader "Stabby/VertexLit"
                 o.xz = p.positionWS.xz - TmOrigin(_WorldSpaceCameraPos);
                 o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
                 o.sinter = i.strata.w;
+                o.peat = frac(i.stitch.w) * 2;
                 o.fog = ComputeFogFactor(p.positionCS.z);
                 return o;
             }
@@ -145,6 +146,24 @@ Shader "Stabby/VertexLit"
                     grad -= n * dot(grad, n);
                     m.albedo = lerp(m.albedo, a, cover);
                     tmRough = lerp(tmRough, lerp(0.9, _StabbyMudSurface.w, wet), cover);
+                    n = normalize(n - grad * cover);
+                }
+                [branch] if (i.peat > 0.01)
+                {
+                    float3 q = float3(i.xz.x, h, i.xz.y);
+                    float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
+                    float4 big = TmNoise3(q * 0.7 + 2.9, int3(0, 0, 0)), mid = TmNoise3(q * 3.1 + 6.1, int3(0, 0, 0)), fine = TmNoise3(q * 17 + 4.4, int3(0, 0, 0));
+                    float fm = TmFade(3.1, fp), ff = TmFade(17, fp);
+                    float cover = smoothstep(0.05, 0.6, i.peat + 0.25 * big.x + 0.1 * mid.x * fm);
+                    float wet = smoothstep(0.45, 0.95, i.peat + 0.2 * big.x + 0.08 * mid.x * fm);
+                    float fib = smoothstep(0.3, 0.8, 0.6 * fine.x + 0.5 * mid.x) * ff * (1 - wet);
+                    float3 a = lerp(_StabbyPeatWet.rgb, _StabbyPeatDark.rgb, wet * (0.75 + 0.25 * mid.x * fm));
+                    a = lerp(a, _StabbyPeatFibre.rgb, 0.55 * fib) * (0.92 + 0.08 * fine.x * ff);
+                    float3 grad = 0.05 * mid.yzw * fm * (1 - 0.6 * wet) + 0.03 * fine.yzw * ff;
+                    grad -= n * dot(grad, n);
+                    m.albedo = lerp(m.albedo, a, cover);
+                    tmRough = lerp(tmRough, lerp(0.8, _StabbyPeatWet.w, wet), cover);
+                    tmGrass *= 1 - cover;
                     n = normalize(n - grad * cover);
                 }
                 [branch] if (_StabbyGrassFar.x > 0 && tmGrass > 0.01)

@@ -19,7 +19,8 @@ namespace Stabby.World
             var seen = new HashSet<int>();
             void Fail(int kind, string message) { if (seen.Add(kind)) e.Add(message); }
             var contacts = new List<ObjectColumn>();
-            foreach (int c in ObjectChunks(w, edits, across, span))
+            var bogs = field.BogPools();
+            foreach (int c in ObjectChunks(w, edits, bogs, across, span))
             {
                 int cx = c % across, cz = c / across;
                 var a = field.Chunk(cx, cz);
@@ -44,6 +45,11 @@ namespace Stabby.World
                     grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                     if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring);
                     if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
+                    for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+                    {
+                        float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
+                        if (bx * bx + bz * bz < reach * reach) Fail(11, at + $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
+                    }
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
                     float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
                     float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
@@ -282,7 +288,7 @@ namespace Stabby.World
             return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
-        static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, int across, float span)
+        static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, int across, float span)
         {
             var picked = new List<int>();
             foreach (var f in edits)
@@ -291,6 +297,12 @@ namespace Stabby.World
                 if (!picked.Contains(c)) picked.Add(c);
                 if (picked.Count >= ObjectCheckChunks / 2) break;
             }
+            for (int k = 0; k < bogs.Length && k < 2 * ObjectField.BogStride; k += ObjectField.BogStride)
+            {
+                int c = Math.Min(across - 1, (int)(bogs[k + 1] / span)) * across + Math.Min(across - 1, (int)(bogs[k] / span));
+                if (!picked.Contains(c)) picked.Add(c);
+            }
+            int quota = picked.Count + ObjectCheckChunks / 2;
             var rivers = new List<int>();
             foreach (var r in w.Water.Rivers)
             {
@@ -298,7 +310,7 @@ namespace Stabby.World
                 int k = r.X.Count / 2;
                 int c = Math.Min(across - 1, (int)(r.Y[k] * w.Config.CellMeters / span)) * across + Math.Min(across - 1, (int)(r.X[k] * w.Config.CellMeters / span));
                 if (!picked.Contains(c)) picked.Add(c);
-                if (picked.Count >= ObjectCheckChunks) break;
+                if (picked.Count >= quota) break;
             }
             return picked;
         }

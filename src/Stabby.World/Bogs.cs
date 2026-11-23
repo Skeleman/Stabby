@@ -8,7 +8,7 @@ namespace Stabby.World
         public const int BogStride = 6;
         public const float BogCellM = 180f, BogChance = 0.55f, BogSpreadM = 16f, BogMinR = 3f, BogMaxR = 7f, BogMinDepthM = 0.35f, BogMaxDepthM = 0.6f;
         public const float BogRiverM = 6f, BogSiteM = 12f, BogRoadM = 6f, BogTownM = 200f, BogGapM = 2f, BogSteadyM = 0.8f, BogDipM = 0.12f, BogTopM = 0.3f;
-        public const float BogRound = 0.3f, BogBank = 1.5f, BogLobe = 0.15f, BogLumpM = 0.12f, BogLipM = 0.5f, BogHeadM = 1.2f;
+        public const float BogRound = 0.3f, BogBank = 1.5f, BogLobe = 0.15f, BogLumpM = 0.12f, BogLipM = 0.5f, BogHeadM = 1.2f, BogPeatM = 2.2f, BogPeatFadeM = 1.4f;
         readonly object bogLock = new object();
         float[] bogPools;
 
@@ -16,6 +16,8 @@ namespace Stabby.World
         {
             lock (bogLock) return bogPools ?? (bogPools = PlaceBogs());
         }
+
+        public static float BogMargin(float r) => r + BogPeatM;
 
         public static float BogReach(float r, float level, float top) => r + BogBank * (top - BogRound - level) + BogRound;
 
@@ -109,7 +111,7 @@ namespace Stabby.World
             {
                 float x = b[k], z = b[k + 1], r = b[k + 2], level = b[k + 3], floor = b[k + 4], top = b[k + 5] + BogHeadM;
                 float seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ 0xB0C5UL) >> 40) / 16777216.0);
-                list[e] = Disc(FeatureEdit.Carve, x, z, top, floor, BogReach(r, level, top) - BogRound, BogRound, -BogBank, -BogLobe, BogLumpM, seed, 0, 0);
+                list[e] = Disc(FeatureEdit.Carve, x, z, top, floor, BogReach(r, level, top) - BogRound, BogRound, -BogBank, -BogLobe, BogLumpM, seed, -r, 0);
             }
             return list;
         }
