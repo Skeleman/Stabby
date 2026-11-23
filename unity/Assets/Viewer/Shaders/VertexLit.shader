@@ -181,7 +181,7 @@ Shader "Stabby/VertexLit"
                 float2 xv = i.xz + TmOrigin(_WorldSpaceCameraPos);
                 m.albedo = ContactGround(m.albedo, xv, h);
                 float2 sj = 0.08 * float2(TmL2(xv, 0.9, 113.1).x, TmL2(xv, 0.9, 117.9).x) + 0.03 * float2(TmL2(xv, 3.1, 121.3).x, TmL2(xv, 3.1, 125.7).x);
-                Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)));
+                Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)), float3(xv.x, h, xv.y), half4(1, 1, 1, 1));
                 l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
