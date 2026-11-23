@@ -61,7 +61,7 @@ float TmRockRelief(float2 qa, float level, float2 levelGrad, float hard, float f
     float pres = smoothstep(0.05, 0.55, vd.x + 0.45 * vb.x + 0.5 * (hk0 - 0.5));
     float depth = beds * layered * rb.y * lerp(1.6, 0.5, hard) * lerp(0.3, 1.4, hk0) * pres * OrgFade(rb.x * 8, fp);
     float ws = 0.13 * lerp(0.45, 1.6, saturate(0.5 + 0.6 * vw.x)) * (x < 0 ? 1.5 : 0.8);
-    float fr = OrgFade(8, fp);
+    float fr = OrgRungW(1, fp);
     float3 rn = OrgNoise2(float2(al * 2.7, level * 3.3) + 9.1);
     float3 rn2 = fr * OrgNoise2(float2(al * 7.9, level * 8.3) + 21.7);
     float r = ws * (0.4 * rn.x + 0.18 * rn2.x), dp;
@@ -138,7 +138,7 @@ float TmCragPlane(float u, float y, float fp, float hard, float mass, out float2
     float conc = saturate(0.35 + gully + clamp(6 * tmCurv, -0.4, 0.4));
     float run = smoothstep(0.1, 0.45, jp.x + 0.3 * jm.x);
     float pj = step(0.6, OrgHash(int2((int)ij, 67))) * run * smoothstep(-0.1, 0.3, jm.x) * conc;
-    float fj = OrgFade(2, fp), fjf = OrgFade(0.4, fp);
+    float fj = OrgRungW(0, fp), fjf = OrgFade(0.4, fp);
     float3 jr = fj * OrgNoise2(float2(u * 3.1, y * 2.6) + 77.7);
     float3 jv = OrgNoise2(float2(y * (1.0 / 4), ij * 2.9 + 11));
     float wj = 0.024 * lerp(0.5, 1.7, saturate(0.5 + 0.6 * jv.x)) * lerp(0.6, 1.4, hk) * lerp(0.4, 1, run), dj;
@@ -224,11 +224,11 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     [branch] if (ck > 0) TmCrag(q.xz + orgO.xz, q.y, n, hard, mass, fp, crg, cav, ctone, streak);
     float crs = ck * lerp(0.8, 1.3, mass);
     float4 bump = OrgFbm3(q, ra.w, ra.z, 3, fp);
-    float gw = OrgFade(ra.y, fp), fw2 = OrgFade(ra.y * 2.9, fp);
-    float4 grain = OrgLN3(q, ra.y, 5.1, gw);
-    float4 fine = OrgLN3(q, ra.y * 2.9, 11.7, fw2);
-    float fw3 = OrgFade(ra.y * 7.3, fp);
-    float4 micro = OrgLN3(q, ra.y * 7.3, 53.3, fw3);
+    float gw = OrgRungW(0, fp), fw2 = OrgRungW(1, fp);
+    float4 grain = OrgRLN3(q, 0, 5.1, gw);
+    float4 fine = OrgRLN3(q, 1, 11.7, fw2);
+    float fw3 = OrgRungW(2, fp);
+    float4 micro = OrgRLN3(q, 2, 53.3, fw3);
     TmOut o;
     o.grad = g + crs * crg + (0.4 - 0.1 * stone) * bump.yzw + 0.3 * ra.x * (gw * grain.yzw + 0.5 * fw2 * fine.yzw + 0.3 * fw3 * micro.yzw);
     float speck = smoothstep(-0.6, 0.6, fine.x) - 0.5;
@@ -255,8 +255,8 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float wl0 = 0.05 * (1 + 0.6 * ln.x), wl = wl0 + fp * _StabbyRockB.x * 4;
     float pt = step(0.8, OrgHash(int2((int)kl, lb + 1))) * smoothstep(0.1, 0.45, OrgNoise2(float2(sa * 0.06, kl * 1.7) + 83.1).x) * saturate(0.4 + 1.2 * ln.x) * (wl0 / wl) * (1 - smoothstep(0, wl, abs(el + 0.03 * ln.y)));
     c *= 1 + flam * lerp(0.35, 0.6, bk) * (0.1 * lt - 0.12 * pt);
-    float fm = OrgFade(ra.y * 5, fp);
-    float4 mn = OrgLN3(q * float3(1, 3.5, 1), ra.y * 5, 43.1, fm);
+    float fm = OrgRungW(1, fp);
+    float4 mn = OrgLN3(q * float3(1, 3.5, 1), OrgF(1), 43.1, fm);
     float dm = fm * lerp(0.1, 1.8, smoothstep(-0.25, 0.35, 0.6 * drift.x + 0.4 * drift2.x)), gs = gw * grain.x * 0.5;
     float lgt = dm * (1 + gs) * smoothstep(0.35, 0.75, mn.x), drk = dm * (1 - gs) * smoothstep(0.35, 0.75, -mn.x);
     c = lerp(c, dot(c, lw) * 1.6, 0.2 * lgt) * (1 - 0.17 * drk);
@@ -279,11 +279,11 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     c = lerp(c, dot(c, lw) * float3(0.96, 1.02, 0.86) * (1.12 + 0.12 * mn.x), 0.35 * lic);
     [branch] if (stone > 0)
     {
-        float fwt = OrgFade(0.9, fp), fcr = OrgFade(3.6, fp);
+        float fwt = OrgFade(0.9, fp), fcr = OrgRungW(0, fp);
         float4 weather = OrgLN3(q, 0.9, 3.3, fwt);
         float4 gate = OrgLN3(q, 0.22, 7.7, fcr);
         float4 crack = OrgLN3(q, 0.45, 23.1, fcr);
-        c *= 1 - stone * 0.12 * fs * saturate(OrgLN3(q * float3(1, 0.057, 1), 2.1, 9.7, fs).x);
+        c *= 1 - stone * 0.12 * fs * saturate(OrgLN3(q * float3(1, 0.057, 1), OrgF(0), 9.7, fs).x);
         float w0 = 0.035 * (0.5 + saturate(0.5 + 0.8 * weather.x)), w = w0 + 0.3 * fp;
         float ax = abs(crack.x + 0.012 * fwt * weather.y), tc = saturate(ax / w), cg = fcr * smoothstep(-0.1, 0.3, gate.x) * (w0 / w);
         float seam = (1 - tc * tc * (3 - 2 * tc)) * cg;
@@ -335,13 +335,13 @@ TmOut TmGrass(float3 wp, float3 base, float fp, float4 A, float4 B)
     float fc = OrgFade(B.y, fp), ft = OrgFade(B.y * 2.6, fp);
     float3 clump = OrgLN2(p, B.y, 3.7, fc);
     float3 tuft = OrgLN2(p, B.y * 2.6, 8.3, ft);
-    float fb = OrgFade(A.w, fp);
+    float fb = OrgRungW(2, fp);
     float3 blade = 0;
     float2 bg = 0;
     [branch] if (fb > 0)
     {
-        blade = TmBlade(p, _StabbySurface.zw, A.w, float3(clump.x, clump.yz * OrgQ(B.y)), bg);
-        bg /= A.w;
+        blade = TmBlade(p, _StabbySurface.zw, OrgF(2), float3(clump.x, clump.yz * OrgQ(B.y)), bg);
+        bg /= OrgF(2);
     }
     float3 g2 = float3(bump.y + B.x * (fc * clump.y + 0.5 * ft * tuft.y), 0, bump.z + B.x * (fc * clump.z + 0.5 * ft * tuft.z));
     g2 += A.z * fb * float3(bg.x, 0, bg.y);
@@ -417,17 +417,17 @@ float TmSnowLie(float2 p, float hollow, float amount, float fp)
 
 float3 TmLichen(float2 p, float3 c, float fp, float share)
 {
-    float fl = OrgFade(14, fp);
+    float fl = OrgRungW(2, fp);
     [branch] if (fl <= 0) return c;
     float clump = saturate(1.6 * OrgLN2(p, 0.37, 63.1, 1).x);
-    float2 q = p + 0.16 * float2(OrgLN2(p, 1.4, 61.7, 1).x, OrgLN2(p, 1.4, 65.3, 1).x) + 0.035 * float2(OrgLN2(p, 11, 67.9, fl).x, OrgLN2(p, 11, 69.1, fl).x);
+    float2 q = p + 0.16 * float2(OrgLN2(p, 1.4, 61.7, 1).x, OrgLN2(p, 1.4, 65.3, 1).x) + 0.035 * float2(OrgLN2(p, OrgF(1), 67.9, fl).x, OrgLN2(p, OrgF(1), 69.1, fl).x);
     float sh = share * clump;
     float4 a = TmFleck(q, float2x2(1, 0.3, -0.3, 1), 4.1, fp, 71, 0.04, 0.34, sh * 0.6);
     float4 b = TmFleck(q, float2x2(1, -0.5, 0.5, 1), 9.7, fp, 77, 0.05, 0.32, sh * 1.4);
     float4 d = TmFleck(q, float2x2(1, 0.8, -0.8, 1), 21, fp, 83, 0.08, 0.38, sh * 2);
     float4 m = a.w >= b.w ? a : b;
     m = m.w >= d.w ? m : d;
-    float tex = 0.6 + 0.4 * OrgLN2(p, 23, 73.3, fl).x;
+    float tex = 0.6 + 0.4 * OrgLN2(p, OrgF(2), 73.3, fl).x;
     float op = 0.4 * m.w * fl * tex * (0.55 + 0.45 * abs(m.x) / max(m.w, 1e-3));
     return lerp(c, lerp(c, float3(0.36, 0.37, 0.3), 0.5), op);
 }
@@ -455,8 +455,8 @@ TmOut TmSoil(float3 wp, float3 n, float3 v, float3 base, float fp, float4 A, flo
     [branch] if (fpk > 0) h1 = TmPebbles(p, B.y, B.x * fpk, 21, gp, ring, tint);
     [branch] if (fq > 0) h2 = TmPebbles(p, B.y * 2.3, B.x * fq, 41, gq, ring2, tint2);
     float3 clod = OrgFbm2(p, A.y, A.x, 3, fp);
-    float fg = OrgFade(A.w, fp);
-    float3 grain = OrgLN2(p, A.w, 9.1, fg);
+    float fg = OrgRungW(2, fp);
+    float3 grain = OrgLN2(p, OrgF(2), 9.1, fg);
     float2 g = clod.yz + (h1 >= h2 ? gp : gq) + 0.4 * A.z * fg * grain.yz;
     float cold = 1 - smoothstep(0.22, 0.42, TmChroma(base));
     float3 soil = lerp(base, float3(0.16, 0.11, 0.07), 0.5);
@@ -518,11 +518,11 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
     float warm = dune * smoothstep(0.36, 0.5, (base.r - base.b) / max(base.r, 1e-3));
     float ripple = B.x * calm * 1.2 * dune * cos(6.2831853 * (dot(p, wind) * f + k0 + 0.5 * warp.x));
     float3 bump = OrgFbm2(p, A.y, A.x, 3, fp);
-    float fg = OrgFade(A.w, fp);
-    float3 grain = OrgLN2(p, A.w, 2.9, fg);
+    float fg = OrgRungW(2, fp);
+    float3 grain = OrgLN2(p, OrgF(2), 2.9, fg);
     float2 g = bump.yz + ripple * (wind + 0.05 * f * warp.yz) + 0.3 * A.z * fg * grain.yz;
-    float fm = OrgFade(7, fp);
-    float3 mid = OrgLN2(p, 7, 5.7, fm);
+    float fm = OrgRungW(1, fp);
+    float3 mid = OrgLN2(p, OrgF(1), 5.7, fm);
     float3 sand = lerp(base, ToLinear(_StabbySand.rgb), 1 - 0.5 * dune) * lerp(1, float3(1.03, 0.95, 0.78), warm);
     float3 c = sand * (1 + A.z * fg * grain.x) * (1 + B.w * patch.x) * (1 + 0.5 * B.w * fm * mid.x * float3(1, 1, 0.8));
     float sw = TmSwash(p, hw, fp, g);
@@ -541,22 +541,22 @@ TmOut TmSnow(float3 wp, float3 n, float3 base, float fp, float4 A, float4 B)
     float3 sz = OrgN2(float2(dot(pa, wind) * B.y * 0.3, dot(pa, side) * B.y) + 7.7, fs);
     float ridge = 1 - abs(sz.x), sgn = sz.x >= 0 ? -1 : 1;
     float2 sg = sgn * (sz.y * 0.3 * wind + sz.z * side);
-    float fg = OrgFade(A.w, fp);
-    float3 grain = OrgLN2(p, A.w, 4.4, fg);
+    float fg = OrgRungW(2, fp);
+    float3 grain = OrgLN2(p, OrgF(2), 4.4, fg);
     float hd = drift.x * A.y;
     float hollow = saturate(-hd * 3) + 0.4 * fs * (1 - ridge);
-    float fb = OrgFade(0.7, fp), ff = OrgFade(2.6, fp), fx = OrgFade(7, fp);
+    float fb = OrgFade(0.7, fp), ff = OrgRungW(0, fp), fx = OrgRungW(1, fp);
     float bm = OrgLN2(p, 0.7, 85.1, fb).x;
     float fn = OrgN2(float2(dot(pa, wind) * 0.9, dot(pa, side) * 2.6) + 3.1, ff).x;
-    float fx3 = OrgLN2(p, 7, 87.3, fx).x;
+    float fx3 = OrgLN2(p, OrgF(1), 87.3, fx).x;
     float conv = clamp(-10 * tmCurv, -0.7, 0.7) + 1.4 * hd + 0.45 * fs * (ridge - 0.5) + 1.2 * (1 - n.y) - 0.3 * dot(n.xz, wind) - 0.6 * dot(drift.yz, wind);
     float sv = 0.22 * OrgLN2(p, 0.045, 81.3, 1).x - conv + 0.2 * fb * bm + 0.13 * ff * fn + 0.07 * fx * fx3;
     float e = 0.02 + 0.35 * saturate(1.5 * fp);
     float lie = smoothstep(-e, e, sv + 0.42);
     float3 snow = TmSnowAlbedo(saturate(hollow) * (0.5 + B.w * 4)) * (1 + A.z * fg * grain.x * 0.5);
-    float ft = OrgFade(1.7, fp), fh = OrgFade(0.33, fp), f1 = OrgFade(0.9, fp), f2 = OrgFade(3.2, fp), f3 = OrgFade(9, fp);
+    float ft = OrgFade(1.7, fp), fh = OrgFade(0.33, fp), f1 = OrgFade(0.9, fp), f2 = OrgRungW(0, fp), f3 = OrgRungW(1, fp);
     float3 tuft = OrgLN2(p, 1.7, 44.1, ft);
-    float hv = OrgLN2(p, 0.33, 46.7, fh).x, m1 = OrgLN2(p, 0.9, 51.3, f1).x, m2 = OrgLN2(p, 3.2, 53.9, f2).x, m3 = OrgLN2(p, 9, 57.1, f3).x;
+    float hv = OrgLN2(p, 0.33, 46.7, fh).x, m1 = OrgLN2(p, 0.9, 51.3, f1).x, m2 = OrgLN2(p, OrgF(0), 53.9, f2).x, m3 = OrgLN2(p, OrgF(1), 57.1, f3).x;
     float3 heath = lerp(float3(0.15, 0.15, 0.072), float3(0.178, 0.13, 0.08), saturate(0.5 + 0.9 * fh * hv + 0.5 * f1 * m1));
     heath = lerp(heath, float3(0.2, 0.115, 0.068), saturate(1.6 * f2 * (m2 - 0.2)) * saturate(0.5 + f1 * m1));
     heath = lerp(heath, float3(0.155, 0.17, 0.07), 0.6 * saturate(2 * f3 * (m3 - 0.3)) * saturate(0.5 - f1 * m1));
@@ -579,10 +579,10 @@ void TmAdd(inout TmOut acc, TmOut m, float w)
 
 float3 TmMicro(float2 p, float fp)
 {
-    float f1 = OrgFade(0.333, fp), f2 = OrgFade(1.43, fp), f3 = OrgFade(4.76, fp);
+    float f1 = OrgFade(0.333, fp), f2 = OrgFade(1.43, fp), f3 = OrgRungW(1, fp);
     float3 s = f1 * OrgLN2(p, 0.333, 41.7, f1);
     float3 c = f2 * OrgLN2(p, 1.43, 5.3, f2);
-    float3 g = f3 * OrgLN2(p, 4.76, 17.3, f3);
+    float3 g = f3 * OrgLN2(p, OrgF(1), 17.3, f3);
     float2 d = 0.07 * s.yz + 0.05 * c.yz + 0.04 * g.yz;
     return float3(0.1 * s.x + 0.6 * c.x + 0.5 * g.x, d);
 }
@@ -592,7 +592,7 @@ TmOut TmEarth(float3 wp, float3 n, float3 base, float fp)
     float2 p = wp.xz, pa = p + orgO.xz;
     float sn = length(n.xz);
     float2 d = n.xz / max(sn, 1e-3);
-    float fr = OrgFade(2.5, fp) * saturate(sn * 3);
+    float fr = OrgRungW(0, fp) * saturate(sn * 3);
     float rut = 0;
     float2 rg = 0;
     [branch] if (fr > 0)
@@ -613,10 +613,10 @@ TmOut TmEarth(float3 wp, float3 n, float3 base, float fp)
         rut *= fr / ws;
         rg *= fr / ws;
     }
-    float fc = OrgFade(1.1, fp), fg = OrgFade(7, fp), ff = OrgFade(19, fp);
+    float fc = OrgFade(1.1, fp), fg = OrgRungW(1, fp), ff = OrgRungW(2, fp);
     float3 clod = OrgLN2(p, 1.1, 8.7, fc);
-    float3 grain = OrgLN2(p, 7, 14.9, fg);
-    float3 fine = OrgLN2(p, 19, 3.3, ff);
+    float3 grain = OrgLN2(p, OrgF(1), 14.9, fg);
+    float3 fine = OrgLN2(p, OrgF(2), 3.3, ff);
     float4 pb1 = TmFleck(p, float2x2(1, 0.3, -0.3, 1), 9, fp, 71, 0.1, 0.26, 0.4);
     float4 pb2 = TmFleck(p, float2x2(1, -0.6, 0.6, 1), 23, fp, 79, 0.12, 0.3, 0.3);
     float3 earth = lerp(base, float3(0.15, 0.125, 0.1), 0.7);
@@ -633,9 +633,9 @@ TmOut TmEarth(float3 wp, float3 n, float3 base, float fp)
 float2 TmFloorCover(float2 p, float4 fo, float fp)
 {
     float d = smoothstep(0.0, 0.75, fo.r + fo.g + 0.02 * OrgL2(p, 0.031, 91.3).x);
-    float fe = OrgFade(1.1, fp), fs = OrgFade(2.9, fp);
+    float fe = OrgFade(1.1, fp), fs = OrgRungW(0, fp);
     float2 wq = p + 0.3 * float2(OrgL2(p, 1.1, 85.3).x, OrgL2(p, 1.1, 86.9).x);
-    float pn = 0.08 * OrgL2(p, 0.42, 93.7).x + 0.5 * fe * OrgL2(wq, 1.4, 95.1).x + 0.42 * fs * OrgLN2(p, 2.9, 96.7, fs).x;
+    float pn = 0.08 * OrgL2(p, 0.42, 93.7).x + 0.5 * fe * OrgL2(wq, 1.4, 95.1).x + 0.42 * fs * OrgLN2(p, OrgF(0), 96.7, fs).x;
     float cue = d + 0.22 * smoothstep(0.1, 0.6, fo.b) * d + clamp(5 * tmCurv, -0.15, 0.15) * d;
     float fm = OrgFade(0.42, fp);
     return float2(max(lerp(0.7 * smoothstep(0.1, 0.9, cue), smoothstep(0.2, 0.8, cue + 0.3 * pn), fm), 0.6 * smoothstep(0.55, 0.95, d)), d);
@@ -655,8 +655,8 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         float2 g = 0.1 * hm.yz + 0.05 * dr.yz;
         [branch] if (bd > 0.01)
         {
-            float fa = OrgFade(24, fp), fc = OrgFade(3.2, fp), fl = OrgFade(8.5, fp), fx = OrgFade(19, fp);
-            float3 cl = OrgLN2(p, 3.2, 63.1, fc), lf = OrgLN2(p, 8.5, 67.3, fl), lx = OrgLN2(p, 19, 71.9, fx);
+            float fa = OrgRungW(2, fp), fc = OrgRungW(0, fp), fl = OrgRungW(1, fp), fx = OrgRungW(2, fp);
+            float3 cl = OrgLN2(p, OrgF(0), 63.1, fc), lf = OrgLN2(p, OrgF(1), 67.3, fl), lx = OrgLN2(p, OrgF(2), 71.9, fx);
             float mo = 0.5 * dr.x + 0.05 * hm.x + 0.15 * (0.5 - dk) + 0.3 * fc * cl.x + 0.2 * fl * lf.x + 0.1 * fx * lx.x;
             float pile = smoothstep(-0.55, 0.3, mo + 0.15 * fl * lf.x);
             float t = saturate(0.5 + 0.55 * (fc * cl.x + 0.8 * fl * lf.x + 0.5 * fx * lx.x - 0.4 * dr.x));
@@ -674,7 +674,7 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         }
         [branch] if (nd > 0.01)
         {
-            float fn = OrgFade(22, fp);
+            float fn = OrgRungW(2, fp);
             float3 mc = float3(0.068, 0.048, 0.034) * (1.06 - 0.12 * dk + 0.02 * hm.x + 0.1 * dr.x);
             float3 cn = mc;
             [branch] if (fn > 0)
@@ -694,10 +694,10 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
             g += nd * 0.1 * cone.yz;
             c += nd * cn;
         }
-        float fm = OrgFade(0.4, fp), fs = OrgFade(1.3, fp), fg = OrgFade(6, fp);
-        float3 m1 = OrgLN2(p, 0.4, 97.3, fm), m2 = OrgLN2(p, 1.3, 98.9, fs), mg = OrgLN2(p, 6, 99.7, fg);
-        float fe = OrgFade(4.5, fp), fe2 = OrgFade(12, fp);
-        float3 e1 = OrgLN2(p, 4.5, 102.7, fe), e2 = OrgLN2(p, 12, 104.3, fe2);
+        float fm = OrgFade(0.4, fp), fs = OrgFade(1.3, fp), fg = OrgRungW(1, fp);
+        float3 m1 = OrgLN2(p, 0.4, 97.3, fm), m2 = OrgLN2(p, 1.3, 98.9, fs), mg = OrgLN2(p, OrgF(1), 99.7, fg);
+        float fe = OrgRungW(0, fp), fe2 = OrgRungW(1, fp);
+        float3 e1 = OrgLN2(p, OrgF(0), 102.7, fe), e2 = OrgLN2(p, OrgF(1), 104.3, fe2);
         float mv = 0.25 * m1.x + 0.55 * m2.x + 0.1 * fg * mg.x + 0.16 * fe * e1.x + 0.08 * fe2 * e2.x;
         float ms = mv + 0.5 * fo.b - 0.2;
         float moss = wf * smoothstep(-0.2, 0.32, ms);
@@ -710,23 +710,23 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
         }
         float fc = 1 - OrgFade(0.12, fp);
         c = lerp(c, lerp(float3(0.098, 0.064, 0.036), float3(0.072, 0.052, 0.036), nd) * (1.05 - 0.1 * dk), fc);
-        float fw = OrgFade(2.1, fp), fr = OrgFade(7, fp), fq = OrgFade(0.9, fp);
-        float2 tw = p + 0.16 * fw * float2(OrgLN2(p, 2.1, 131.3, fw).x, OrgLN2(p, 2.1, 133.7, fw).x);
-        tw += 0.05 * fr * float2(OrgLN2(p, 7, 135.1, fr).x, OrgLN2(p, 7, 136.9, fr).x);
+        float fw = OrgRungW(0, fp), fr = OrgRungW(1, fp), fq = OrgFade(0.9, fp);
+        float2 tw = p + 0.16 * fw * float2(OrgLN2(p, OrgF(0), 131.3, fw).x, OrgLN2(p, OrgF(0), 133.7, fw).x);
+        tw += 0.05 * fr * float2(OrgLN2(p, OrgF(1), 135.1, fr).x, OrgLN2(p, OrgF(1), 136.9, fr).x);
         float tc = smoothstep(-0.15, 0.45, OrgLN2(p, 0.9, 137.9, fq).x) * (1 - 0.4 * sd);
         float4 t1 = TmFleck(tw, float2x2(1, 0.45, -0.45, 1), 1.3, fp, 113, 0.08, 0.45, 0.6 * tc);
         float4 t2 = TmFleck(tw, float2x2(1, -0.7, 0.7, 1), 3.4, fp, 117, 0.06, 0.4, 0.65 * tc);
         float4 lv = TmFleck(p, float2x2(1, 0.2, -0.2, 1), 2.3, fp, 121, 0.12, 0.3, 0.35);
         c = lerp(c, lerp(float3(0.17, 0.105, 0.05), float3(0.13, 0.11, 0.05), saturate(0.5 + lv.x)), 0.55 * lv.w * bd);
-        float tuft = saturate(t1.w + t2.w) * (1 - 0.7 * sd) * OrgFade(3, fp);
+        float tuft = saturate(t1.w + t2.w) * (1 - 0.7 * sd) * OrgRungW(0, fp);
         [branch] if (tuft > 0.01)
         {
-            float fj = OrgFade(1.7, fp), fk = OrgFade(5.5, fp);
-            float er = fj * OrgLN2(tw, 1.7, 139.3, fj).x + 0.55 * fk * OrgLN2(tw, 5.5, 141.7, fk).x;
+            float fj = OrgFade(1.7, fp), fk = OrgRungW(1, fp);
+            float er = fj * OrgLN2(tw, 1.7, 139.3, fj).x + 0.55 * fk * OrgLN2(tw, OrgF(1), 141.7, fk).x;
             tuft *= smoothstep(-0.12, 0.32, er);
         }
         float lb = dot(base, float3(0.2126, 0.7152, 0.0722)), lc = dot(c, float3(0.2126, 0.7152, 0.0722));
-        float mid = (1 - OrgFade(2.5, fp)) * (1 - smoothstep(0.55, 0.95, sd));
+        float mid = (1 - OrgRungW(0, fp)) * (1 - smoothstep(0.55, 0.95, sd));
         c *= lerp(1, min((lb + 0.4 * (lc - lb)) / max(lc, 1e-4), 2.5), mid);
         cov *= 1 - 0.5 * tuft;
         k.albedo = lerp(k.albedo, c, cov);
@@ -737,9 +737,9 @@ float TmLitter(inout TmOut k, float3 wp, float4 fo, float fp, float cov)
 
 void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float stone, float m)
 {
-    float fm = OrgFade(0.6, fp), fl = OrgFade(5.2, fp);
+    float fm = OrgFade(0.6, fp), fl = OrgRungW(1, fp);
     float4 patch = OrgLN3(wp, 0.6, 51.3, fm);
-    float4 streak = OrgLN3(wp * float3(1, 0.12, 1), 5.2, 61.7, fl);
+    float4 streak = OrgLN3(wp * float3(1, 0.12, 1), OrgF(1), 61.7, fl);
     float top = smoothstep(0.45, 0.9, n.y), side = 1 - top, wet = cw.x + 0.4 * cw.y, dry = cw.z + 0.5 * cw.y;
     float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.2 * fl * streak.x);
     float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fm * smoothstep(0.1, 0.45, patch.x + 0.3 * fl * streak.x) * (1 - moss);

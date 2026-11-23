@@ -19,3 +19,16 @@ CreaturePlanSystem plans herds from the managed map in a task and converts the p
 CreatureDrawSystem uploads instance buffers and issues indirect draws on managed GraphicsBuffers
 CreatureDrawSystem.Complete only after IsCompleted, or at teardown
 PlayerControls.Read clamps the unitless input vector to length 1, not a distance
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmRockRelief joint and bed noise runs in strata-aligned coordinates stretched along bedding
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmCragPlane joint-plane jitter runs in per-joint stretched coordinates
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmStrataWarp bed noise is stretched along strata and keyed by bed index
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmGrassGreen colour patches scale with the coat width w, a macro pattern
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmFleck fleck cells are a structural Voronoi lattice, warped by the caller
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmSwash swash ripples are wind-aligned waves warped by noise inside the phase
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmWet waterline step is a height threshold softened by noise
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmMicro micro streaks are stretched along the slope direction
+unity/Assets/Game/Resources/Object.shader:Wood rings, rays and fibres run in stretched trunk and grain coordinates
+unity/Assets/Game/Resources/Object.shader:CourseH course jitter runs in course-local coordinates keyed by row
+unity/Assets/Game/Resources/Object.shader:Built thatch and shingle strands are stretched along the strand direction
+unity/Assets/Game/Resources/Object.shader:frag stone lump is a macro pattern at 0.7 per metre; 13.1 scales a per-instance offset
+unity/Assets/Viewer/Shaders/Bark.hlsl:SpruceBark bark plates are a structural cell lattice on warped bark coordinates

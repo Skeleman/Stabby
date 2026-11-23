@@ -63,7 +63,7 @@ Shader "Stabby/VertexLit"
             }
 
             float SinterRim(float p) { return smoothstep(0.55, 0.93, p) * (1 - smoothstep(0.93, 1, p)); }
-            float4 SinterN(float3 p, float f, float c, float w) { float4 r = 0; [branch] if (w > 0) r = OrgRL3(p, f, c, 1); return r; }
+            float4 SinterN(float3 p, float f, float c, float w) { float4 r = 0; [branch] if (w > 0) r = OrgVRL3(p, f, c, 1); return r; }
 
             half4 frag(Varyings i) : SV_Target
             {
@@ -211,7 +211,7 @@ Shader "Stabby/VertexLit"
                 }
                 float2 xv = i.xz + OrgOrigin(_WorldSpaceCameraPos);
                 m.albedo = ContactGround(m.albedo, xv, h);
-                float2 sj = 0.08 * float2(OrgL2(xv, 0.9, 113.1).x, OrgL2(xv, 0.9, 117.9).x) + 0.03 * float2(OrgL2(xv, 3.1, 121.3).x, OrgL2(xv, 3.1, 125.7).x);
+                float2 sj = 0.08 * float2(OrgL2(xv, 0.9, 113.1).x, OrgL2(xv, 0.9, 117.9).x) + 0.03 * float2(OrgL2(xv, OrgF(0), 121.3).x, OrgL2(xv, OrgF(0), 125.7).x);
                 Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)), float3(xv.x, h, xv.y), half4(1, 1, 1, 1));
                 l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));

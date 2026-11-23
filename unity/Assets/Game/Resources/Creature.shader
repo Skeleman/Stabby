@@ -172,11 +172,11 @@ Shader "Stabby/Creature"
                 float3 freq = float3(110, 110, 16);
                 float4 strand = OrgNoise3(lp * freq, int3(0, 0, 0));
                 float4 tuft = OrgNoise3(lp * float3(34, 34, 6) + 7.7, int3(0, 0, 0));
-                float fs = OrgFade(110, fp) * (eye ? 0 : 1), ft = OrgFade(34, fp) * (eye ? 0 : 1);
+                float fs = OrgRungW(4, fp) * (eye ? 0 : 1), ft = OrgRungW(2, fp) * (eye ? 0 : 1);
                 albedo *= 1 + 0.16 * strand.x * fs + 0.1 * tuft.x * ft;
                 float4 knot = OrgNoise3(lp * float3(5, 5, 2.5) + 21.7, int3(0, 0, 0));
                 float4 ripple = OrgNoise3(lp * float3(13, 13, 6) + 5.1, int3(0, 0, 0));
-                float fk = OrgFade(5, fp) * (eye ? 0 : 1), fr = OrgFade(13, fp) * (eye ? 0 : 1);
+                float fk = OrgRungW(1, fp) * (eye ? 0 : 1), fr = OrgRungW(2, fp) * (eye ? 0 : 1);
                 float3 g = (strand.yzw * freq) * (0.0016 * fs) + (tuft.yzw * float3(34, 34, 6)) * (0.003 * ft)
                          + (knot.yzw * float3(5, 5, 2.5)) * (0.03 * fk) + (ripple.yzw * float3(13, 13, 6)) * (0.008 * fr);
                 float3 gw = g.x * ax + g.y * ay + g.z * az;

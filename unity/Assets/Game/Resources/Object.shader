@@ -133,7 +133,7 @@ Shader "Stabby/Object"
                 int code = (int)round(tone.x);
                 float age = tone.w;
                 float3 weathered = lerp(ToLinear(float3(0.56, 0.5, 0.42)), ToLinear(float3(0.47, 0.46, 0.44)), age);
-                float4 mn = OrgNoise3(wp * 2.3, int3(0, 0, 0)), mf = OrgNoise3(wp * 9.1 + 17.3, int3(0, 0, 0));
+                float4 mn = OrgRP3(wp, OrgF(0), 0, 0), mf = OrgRP3(wp, OrgF(1), 17.3, 1);
                 float mossAmt = code <= 2 ? tone.y : 0;
                 float patch = smoothstep(0.5, 0.8, 0.5 + 0.5 * mn.x + 0.2 * mossAmt * age - 0.15 + 0.25 * mf.x);
                 float moss = 0.9 * saturate(mossAmt * smoothstep(0.35, 0.85, n.y + 0.3 * mn.y) * patch * 1.3);
@@ -141,17 +141,17 @@ Shader "Stabby/Object"
                 float decay = lerp(1, 0.62, age * age);
                 [branch] if (code == 3 || code == 5)
                 {
-                    float4 cl = OrgNoise3(wp * 3.3 + 1.7, int3(0, 0, 0));
+                    float4 cl = OrgRP3(wp, OrgF(0), 1.7, 0);
                     float3 dirt = float3(0.115, 0.07, 0.038) * (0.75 + 0.4 * mn.y) * (0.8 + 0.35 * cl.x);
-                    float3 nz = OrgNoise3(wp * 6.1 + 4.4, int3(0, 0, 0)).yzw;
-                    float pebble = smoothstep(0.55, 0.75, OrgNoise3(wp * 13.7, int3(0, 0, 0)).x);
+                    float3 nz = OrgRP3(wp, OrgF(1), 4.4, 1).yzw;
+                    float pebble = smoothstep(0.55, 0.75, OrgRP3(wp, OrgF(2), 0, 2).x);
                     float3 contact = lerp(dirt * 0.4, gc * 0.25, 0.35);
                     albedo = lerp(dirt, gc * 0.5, 0.22 * saturate(tone.y * (0.7 + 0.6 * mn.x)));
                     albedo = code == 5 ? lerp(ToLinear(float3(0.43, 0.41, 0.38)) * (0.7 + 0.45 * mf.x), dirt, 0.25 + 0.2 * mn.z) : lerp(albedo, ToLinear(float3(0.42, 0.4, 0.37)), 0.5 * pebble * (1 - tone.y));
                     albedo = lerp(albedo, contact, 0.75 * tone.z);
-                    float fib = smoothstep(0.82, 0.95, 1 - abs(OrgNoise2(wp.xz * 7 + wp.y * 3.1).x)) * (1 - tone.y) * OrgFade(7, fp) * (code == 5 ? 0 : 1);
+                    float fib = smoothstep(0.82, 0.95, 1 - abs(OrgRP2(wp.xz, OrgF(1), wp.y * 3.1, 1).x)) * (1 - tone.y) * OrgRungW(1, fp) * (code == 5 ? 0 : 1);
                     albedo = lerp(albedo, ToLinear(float3(0.32, 0.25, 0.18)), 0.6 * fib);
-                    float3 g = (0.06 + 0.06 * (code == 5)) * nz * OrgFade(6, fp) + 0.05 * cl.yzw * OrgFade(3.3, fp);
+                    float3 g = (0.06 + 0.06 * (code == 5)) * nz * OrgRungW(1, fp) + 0.05 * cl.yzw * OrgRungW(0, fp);
                     nOut = normalize(n - (g - n * dot(g, n)));
                     return;
                 }
@@ -167,27 +167,27 @@ Shader "Stabby/Object"
                 }
                 [branch] if (code == 2)
                 {
-                    float keep = OrgFade(14, fp);
+                    float keep = OrgRungW(2, fp);
                     float3 wood = weathered * decay;
                     float2 g = 0;
                     if (tone.z > 0.5)
                     {
                         float2 q = float2(rc.x * 26, rc.y * 5) + along * 3;
                         float3 f = OrgNoise2(q);
-                        float fib = 1 - abs(f.x), sp = OrgNoise2(rc * 9 + 3.1).x;
+                        float fib = 1 - abs(f.x), sp = OrgRP2(rc, OrgF(1), 3.1, 1).x;
                         albedo = wood * (0.7 + 0.35 * lerp(0.6, fib, keep)) * (0.9 + 0.12 * sp);
-                        float3 sc = OrgNoise3(wp * 5.3 + 8.8, int3(0, 0, 0)).yzw;
+                        float3 sc = OrgRP3(wp, OrgF(1), 8.8, 1).yzw;
                         float3 gg = (0.05 * keep * sign(f.x)) * float3(f.y * 26, f.z * 5, 0) + 0.04 * sc;
                         nOut = normalize(n - (gg - n * dot(gg, n)));
                     }
                     else
                     {
-                        float wob = 0.06 * OrgNoise2(rc * 6 + along).x;
+                        float wob = 0.06 * OrgRP2(rc, OrgF(1), along, 1).x;
                         float r = (radius + wob) * 14;
                         float ring = 0.5 + 0.5 * cos(r * 6.2831853);
                         float crack = smoothstep(0.92, 1, OrgNoise2(float2(atan2(rc.y, rc.x) * 3, radius * 2)).x * 0.5 + 0.5);
                         albedo = wood * (1 - 0.18 * keep * ring) * (1 - 0.5 * crack * (0.4 + age));
-                        float3 sc = OrgNoise3(wp * 7.1 + 2.2, int3(0, 0, 0)).yzw;
+                        float3 sc = OrgRP3(wp, OrgF(1), 2.2, 1).yzw;
                         float3 gg = 0.015 * sc * keep;
                         nOut = normalize(n - (gg - n * dot(gg, n)));
                     }
@@ -208,7 +208,7 @@ Shader "Stabby/Object"
                 float3 bare = weathered * decay * (0.75 + 0.3 * (1 - abs(fibre.x)));
                 albedo = lerp(albedo, bare, loss);
                 albedo = lerp(albedo, mossC, moss);
-                float4 lc = OrgNoise3(wp * 4.7 + 31.1, int3(0, 0, 0));
+                float4 lc = OrgRP3(wp, OrgF(1), 31.1, 1);
                 float lic = smoothstep(0.5, 0.68, lc.x) * (spruce ? 0.25 : 0.4) * (0.6 + 0.6 * age) * (1 - moss) * BarkFade(4.7, fp);
                 albedo = lerp(albedo, dot(albedo, lw) * float3(0.9, 1.03, 0.78) * (2.1 + 0.3 * lc.y), 0.6 * saturate(lic));
                 float2 g = lerp(bk.yz, 0.08 * fibre.yz * float2(30, 3) * BarkFade(30, fp), loss);
@@ -220,18 +220,18 @@ Shader "Stabby/Object"
             {
                 float3 lw = float3(0.2126, 0.7152, 0.0722);
                 float3 bed = normalize(float3(0.4 * tone.z, 1, 0.4 * tone.y));
-                float f1 = OrgFade(2.2, fp), f2 = OrgFade(5.3, fp), f3 = OrgFade(11, fp), f4 = OrgFade(29, fp), f5 = OrgFade(73, fp), fl = OrgFade(19, fp);
-                float4 lump = OrgNoise3(p * 2.2 + 3.1, int3(0, 0, 0));
+                float f1 = OrgRungW(0, fp), f2 = OrgRungW(1, fp), f3 = OrgRungW(1, fp), f4 = OrgRungW(2, fp), f5 = OrgRungW(3, fp), fl = OrgRungW(2, fp);
+                float4 lump = OrgRP3(p, OrgF(0), 3.1, 0);
                 float4 dent = OrgNoise3(p * 0.9 + 47.3, int3(0, 0, 0));
-                float4 mot = OrgNoise3(p * 5.3 + 11.7, int3(0, 0, 0));
+                float4 mot = OrgRP3(p, OrgF(1), 11.7, 1);
                 float4 grain = 0, fine = 0, xtal = 0;
-                [branch] if (f3 > 0) grain = OrgNoise3(p * 11 + 23.3, int3(0, 0, 0));
-                [branch] if (f4 > 0) fine = OrgNoise3(p * 29 + 41.9, int3(0, 0, 0));
-                [branch] if (f5 > 0) xtal = OrgNoise3(p * 73 + 5.7, int3(0, 0, 0));
+                [branch] if (f3 > 0) grain = OrgRP3(p, OrgF(1), 23.3, 1);
+                [branch] if (f4 > 0) fine = OrgRP3(p, OrgF(2), 41.9, 2);
+                [branch] if (f5 > 0) xtal = OrgRP3(p, OrgF(3), 5.7, 3);
                 float4 lam = OrgNoise3(float3(dot(p, bed) * 19 + 0.9 * mot.x, 0.37, 0.71), int3(0, 0, 0));
                 float3 g = 0.07 * OrgFade(0.9, fp) * dent.yzw + 0.065 * f1 * lump.yzw + 0.032 * f2 * mot.yzw + 0.035 * f3 * grain.yzw + 0.03 * f4 * fine.yzw + 0.022 * f5 * xtal.yzw + 0.025 * fl * lam.y * bed;
-                float fc = OrgFade(33, fp), fg = OrgFade(1.3, fp);
-                float4 cr = OrgNoise3(p * 3.7 + 61.1, int3(0, 0, 0));
+                float fc = OrgRungW(2, fp), fg = OrgFade(1.3, fp);
+                float4 cr = OrgRP3(p, OrgF(0), 61.1, 0);
                 float gate = fg * fc * smoothstep(0.35, 0.7, OrgNoise3(p * 1.3 + 77.7, int3(0, 0, 0)).x) * saturate(0.5 + 1.5 * mot.x);
                 float wc0 = 0.012 * saturate(0.4 + 0.6 * mot.x + 0.4 * f3 * grain.x), wc = wc0 + 3.7 * fp + 1e-4;
                 float cx = cr.x + 0.06 * f2 * mot.x + 0.04 * f3 * grain.x, t = saturate(abs(cx) / wc);
@@ -312,7 +312,7 @@ Shader "Stabby/Object"
                 float lum = dot(albedo, float3(0.3, 0.59, 0.11));
                 float3 tint = lerp(float3(1.04, 0.98, 0.9), float3(1.08, 0.95, 0.8), 0.5 + 0.5 * tone.z);
                 albedo = lerp(lum * tint, albedo, 0.25) * (1 + 0.22 * tone.y);
-                float on = OrgNoise3(wp * 3.3, int3(0, 0, 0)).x + 0.5 * OrgNoise3(wp * 11.7 + 4.1, int3(0, 0, 0)).x;
+                float on = OrgRP3(wp, OrgF(0), 0, 0).x + 0.5 * OrgRP3(wp, OrgF(1), 4.1, 1).x;
                 float occ = saturate((1 - saturate(tone.x * 2 - 1)) * (1.2 + 0.7 * on));
                 albedo = lerp(albedo, albedo * float3(0.5, 0.47, 0.43), occ);
                 return occ;
@@ -324,9 +324,9 @@ Shader "Stabby/Object"
                 float open = saturate((tone.x - 2 * mat) * 2 - 1);
                 float3 sd = float3(th.w * 37.1, th.w * 11.3, th.w * 23.7);
                 float3 pg = q - g * dot(q, g) * 0.9 + sd;
-                float4 big = OrgNoise3(q * 1.1 + sd, int3(0, 0, 0)), mid = OrgNoise3(q * 4.3 + sd + 3.1, int3(0, 0, 0));
-                float4 str = OrgNoise3(pg * 9, int3(0, 0, 0)), fib = OrgNoise3(pg * 31 + 7.7, int3(0, 0, 0));
-                float fm = OrgFade(4.3, fp), fs = OrgFade(9, fp), ff = OrgFade(31, fp);
+                float4 big = OrgNoise3(q * 1.1 + sd, int3(0, 0, 0)), mid = OrgRP3(q, OrgF(0), sd + 3.1, 0);
+                float4 str = OrgRP3(pg, OrgF(1), 0, 1), fib = OrgRP3(pg, OrgF(2), 7.7, 2);
+                float fm = OrgRungW(0, fp), fs = OrgRungW(1, fp), ff = OrgRungW(2, fp);
                 float3 a, grad;
                 float shade = 0;
                 bool cap = th.x > 3.5 && th.x < 7.5, side = th.x > 7.5;
@@ -362,11 +362,11 @@ Shader "Stabby/Object"
                     float seam = smoothstep(0.06, 0.0, min(bf, 1 - bf) + 0.03 * n2.x) * fc;
                     a *= (1 - 0.3 * seam) * (1 - 0.45 * lip) * (1 - 0.2 * smoothstep(hem * 1.6 + 0.01, hem, d) * face);
                     Light ml = GetMainLight();
-                    float4 mn = OrgNoise3(q * 2.2 + 5.7, int3(0, 0, 0));
+                    float4 mn = OrgRP3(q, OrgF(0), 5.7, 0);
                     float moss = smoothstep(0.1, -0.2, dot(n, ml.direction)) * smoothstep(0.25, 0.75, 0.8 * mn.x + 0.35 * lip + 0.2 * (1 - open)) * fm;
                     a = lerp(a, _StabbyKit[12].rgb * (0.8 + 0.3 * n2.x * fb), 0.6 * moss);
-                    float4 st = OrgNoise3(q * 180 + sk, int3(0, 0, 0));
-                    float fe = OrgFade(180, fp);
+                    float4 st = OrgRP3(q, OrgF(4), sk, 4);
+                    float fe = OrgRungW(4, fp);
                     float3 ab = _StabbyKit[13].rgb * (0.75 + 0.45 * smoothstep(0.1, 0.5, st.x) * fe - 0.4 * smoothstep(-0.1, -0.5, st.x) * fe) * (0.9 + 0.2 * h4);
                     a = lerp(a, ab, butt);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.15);
@@ -393,8 +393,8 @@ Shader "Stabby/Object"
                 {
                     float h = th.w;
                     float3 dye = h < 0.3 ? _StabbyKitSrgb[16].rgb : h < 0.55 ? _StabbyKitSrgb[17].rgb : h < 0.8 ? _StabbyKitSrgb[18].rgb : _StabbyKitSrgb[19].rgb;
-                    float4 wv = OrgNoise3(q * 90 + sd, int3(0, 0, 0));
-                    float fw = OrgFade(90, fp);
+                    float4 wv = OrgRP3(q, OrgF(3), sd, 3);
+                    float fw = OrgRungW(3, fp);
                     a = ToLinear(lerp(dye, _StabbyKitSrgb[19].rgb, 0.12 + 0.1 * saturate(big.x))) * (0.86 + 0.08 * str.x * fs + 0.05 * wv.x * fw);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)), 0.2);
                     grad = 0.12 * fib.yzw * ff + 0.04 * wv.yzw * fw;
@@ -422,7 +422,7 @@ Shader "Stabby/Object"
                     else if (cap)
                     {
                         float rr = rf * rm / 0.012 + 0.6 * mid.x * fm;
-                        a = lerp(a, _StabbyKit[24].rgb, 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * OrgFade(83, fp));
+                        a = lerp(a, _StabbyKit[24].rgb, 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * OrgRungW(3, fp));
                     }
                 }
                 else if (mat == 8)
@@ -432,8 +432,8 @@ Shader "Stabby/Object"
                     if (th.x > 8.5)
                     {
                         float t = saturate((th.x - 9) / 4);
-                        float4 sp = OrgNoise3(q * 38 + sd, int3(0, 0, 0));
-                        float fsp = OrgFade(38, fp);
+                        float4 sp = OrgRP3(q, OrgF(3), sd, 3);
+                        float fsp = OrgRungW(3, fp);
                         a = hue * (0.82 + 0.16 * big.x + 0.08 * mid.x * fm + 0.05 * fib.x * ff);
                         a = lerp(a, a * 0.55, smoothstep(0.55, 1, t + 0.15 * mid.x * fm));
                         a = lerp(a, _StabbyKit[29].rgb, 0.3 * smoothstep(0.3, 0.0, t + 0.08 * big.x));
@@ -444,7 +444,7 @@ Shader "Stabby/Object"
                     else if (cap)
                     {
                         float ang = atan2(q.z, q.x) * 18 + 1.5 * mid.x * fm + 0.5 * fib.x * ff;
-                        float gill = 0.5 + 0.5 * cos(ang * 2), keep = OrgFade(60, fp);
+                        float gill = 0.5 + 0.5 * cos(ang * 2), keep = OrgRungW(3, fp);
                         a = ToLinear(lerp(_StabbyKitSrgb[31].rgb, _StabbyKitSrgb[32].rgb, 0.5 + 0.3 * big.x)) * (1 - 0.35 * gill * keep);
                         a *= 0.5 + 0.5 * smoothstep(0.1, 0.9, rf);
                         grad = 0.05 * fib.yzw * ff;
@@ -481,7 +481,7 @@ Shader "Stabby/Object"
                     float al = dot(q, g);
                     float3 sp = (q - g * al) * 15 + g * (al * 1.6) + sd, sp2 = sp * 2.3 + 5.1;
                     float4 bn = OrgNoise3(sp, int3(0, 0, 0)), bm = OrgNoise3(sp2, int3(0, 0, 0));
-                    float fb = OrgFade(15, fp), fb2 = OrgFade(34, fp);
+                    float fb = OrgRungW(2, fp), fb2 = OrgRungW(2, fp);
                     float rid = lerp(0.6, 1 - abs(bn.x), fb) * 0.65 + lerp(0.6, 1 - abs(bm.x), fb2) * 0.35;
                     a = _StabbyKit[0].rgb * (0.35 + 0.8 * smoothstep(0.15, 0.85, rid)) * (0.85 + 0.25 * big.x);
                     float lic = smoothstep(0.55, 0.85, 0.6 * big.x + 0.5 * mid.x * fm + 0.2 * rid) * saturate(0.4 + n.y);
@@ -493,7 +493,7 @@ Shader "Stabby/Object"
                 else if (cap && mat == 1)
                 {
                     float rr = (rf + 0.05 * mid.x * fm + 0.015 * fib.x * ff) * rm / 0.024;
-                    float ring = 0.5 + 0.5 * cos(rr * 6.2831853), keep = OrgFade(71, fp);
+                    float ring = 0.5 + 0.5 * cos(rr * 6.2831853), keep = OrgRungW(3, fp);
                     a = lerp(_StabbyKit[1].rgb, _StabbyKit[2].rgb, smoothstep(0.35, 0.75, rf + 0.1 * big.x));
                     a *= (1 - 0.22 * ring * keep) * (0.9 + 0.1 * fib.x * ff);
                     a = lerp(a, dot(a, float3(0.2126, 0.7152, 0.0722)) * float3(0.95, 0.95, 0.93), 0.35 + 0.25 * big.x);
@@ -602,8 +602,8 @@ Shader "Stabby/Object"
                             TmOut m = TmRock(wp - orgO, n, normalize(_WorldSpaceCameraPos - wp), fp, off, dux, duy, 1);
                             TmStoneCover(m, wp - orgO, n, cwn, fp, 1, 1);
                             float3 q = wp - orgO;
-                            float bf = OrgFade(2.9, fp);
-                            float4 lump = OrgNoise3(q * 0.7 + h1 * 13.1, int3(0, 0, 0)), nub = OrgNoise3(q * 2.9 + 5.3, int3(0, 0, 0));
+                            float bf = OrgRungW(0, fp);
+                            float4 lump = OrgNoise3(q * 0.7 + h1 * 13.1, int3(0, 0, 0)), nub = OrgRP3(q, OrgF(0), 5.3, 0);
                             float3 g = m.grad + 0.1 * lump.yzw * 0.7 + 0.05 * bf * nub.yzw * 2.9;
                             g -= n * dot(g, n);
                             n = normalize(n - g);

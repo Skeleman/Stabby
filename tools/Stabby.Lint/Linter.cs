@@ -70,6 +70,8 @@ public static class Linter
             if (IsDetailCode(file))
                 foreach (var p in MetreProblems(file, root, allow, used)) problems.Add(p);
         }
+        foreach (var file in ShaderFiles(repo))
+            problems.AddRange(ShaderProblems(file, File.ReadAllText(Path.Combine(repo, file)), allow, used));
         var kit = Path.Combine(repo, KitShader);
         if (File.Exists(kit)) problems.AddRange(ColourProblems(KitShader, File.ReadAllText(kit)));
         foreach (var key in allow.Keys.Where(k => !used.Contains(k)))
@@ -146,6 +148,101 @@ public static class Linter
             problems.Add($"{file}:{line}: {m.Value} is a built-in colour; name a library material in content/materials.json kit");
         }
         return problems;
+    }
+
+    public static IEnumerable<string> ShaderFiles(string repo)
+    {
+        var dir = Path.Combine(repo, UnityDir);
+        if (!Directory.Exists(dir)) return Enumerable.Empty<string>();
+        return Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
+            .Where(f => f.EndsWith(".shader", StringComparison.Ordinal) || f.EndsWith(".hlsl", StringComparison.Ordinal))
+            .Select(f => Path.GetRelativePath(repo, f).Replace(Path.DirectorySeparatorChar, '/'))
+            .Where(f => !ShaderExempt.Contains(Path.GetFileName(f)))
+            .OrderBy(f => f, StringComparer.Ordinal);
+    }
+
+    static readonly string[] ShaderExempt = { "Organic.hlsl", "Water.shader", "FallMist.shader", "Look.hlsl", "TerrainStitch.hlsl", "Contact.hlsl", "Wind.hlsl" };
+    static readonly Regex NoiseCall = new(@"\b(OrgFade|OrgL2|OrgL3|OrgLN2|OrgLN3|OrgFbm2|OrgFbm3|OrgNoise2|OrgNoise3|OrgRL2|OrgRL3|OrgRP2|OrgRP3|OrgVRL3|OrgValue3)\(");
+    static readonly Regex PatternCall = new(@"\b(floor|frac|step|sin|cos)\(");
+    static readonly Regex Scaled = new(@"\*\s*(\d+(?:\.\d+)?)(?![\w.])");
+    static readonly Regex Number = new(@"^\s*(\d+(?:\.\d+)?)\s*$");
+    static readonly Regex Position = new(@"\b(wp|p|q|l|pos|positionWS|worldPos|lp|pw|qa|wa)\b");
+    static readonly Regex Function = new(@"^\s*(?:inline\s+|static\s+)?(?:float|half|int|uint|bool|void|fixed)[1-4]?(?:x[1-4])?\s+(\w+)\s*\(", RegexOptions.Multiline);
+    static readonly Regex PassStart = new(@"\bPass\s*\{");
+    const double PrivateFrequency = 2.5;
+
+    public static List<string> ShaderProblems(string file, string text, Dictionary<string, string> allow) =>
+        ShaderProblems(file, text, allow, new HashSet<string>(StringComparer.Ordinal)).ToList();
+
+    static IEnumerable<string> ShaderProblems(string file, string text, Dictionary<string, string> allow, HashSet<string> used)
+    {
+        text = DropShadowPasses(text);
+        var funcs = Function.Matches(text).Select(m => (m.Index, m.Groups[1].Value)).ToList();
+        string Key(int at) => $"{file}:{funcs.LastOrDefault(f => f.Index <= at).Value ?? ""}";
+        int Line(int at) => text.AsSpan(0, at).Count('\n') + 1;
+        foreach (Match m in NoiseCall.Matches(text))
+        {
+            var args = SplitArgs(text, m.Index + m.Length);
+            if (args.Count == 0) continue;
+            string name = m.Groups[1].Value;
+            bool hit = name switch
+            {
+                "OrgFade" => IsHigh(args[0]),
+                "OrgNoise2" or "OrgNoise3" or "OrgValue3" => Scaled.Matches(args[0]).Any(s => IsHigh(s.Groups[1].Value)),
+                _ => args.Count > 1 && IsHigh(args[1]),
+            };
+            if (!hit) continue;
+            string key = Key(m.Index);
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            yield return $"{file}:{Line(m.Index)}: {name} uses a private detail frequency; use OrgF(k)/OrgRungW(k) from Organic.hlsl or list {key} in {AllowFile} with a reason";
+        }
+        foreach (Match m in PatternCall.Matches(text))
+        {
+            var args = SplitArgs(text, m.Index + m.Length);
+            string all = string.Join(",", args);
+            if (!Position.IsMatch(all) || all.Contains("Org", StringComparison.Ordinal)) continue;
+            string key = Key(m.Index);
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            yield return $"{file}:{Line(m.Index)}: {m.Groups[1].Value} on a position draws a clean line; warp it with Organic.hlsl noise or list {key} in {AllowFile} with a reason";
+        }
+    }
+
+    static bool IsHigh(string arg)
+    {
+        var m = Number.Match(arg);
+        return m.Success && double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) >= PrivateFrequency;
+    }
+
+    static string DropShadowPasses(string text)
+    {
+        int at;
+        while ((at = text.IndexOf("Name \"ShadowCaster\"", StringComparison.Ordinal)) >= 0)
+        {
+            var next = PassStart.Match(text, at);
+            int end = next.Success ? next.Index : text.Length;
+            text = text[..at] + new string('\n', text.AsSpan(at, end - at).Count('\n')) + text[end..];
+        }
+        return text;
+    }
+
+    static List<string> SplitArgs(string text, int start)
+    {
+        var args = new List<string>();
+        var cur = new System.Text.StringBuilder();
+        int depth = 0;
+        for (int i = start; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == '(' || c == '[') depth++;
+            else if (c == ')' || c == ']')
+            {
+                if (depth == 0) { args.Add(cur.ToString()); return args; }
+                depth--;
+            }
+            if (c == ',' && depth == 0) { args.Add(cur.ToString()); cur.Clear(); continue; }
+            cur.Append(c);
+        }
+        return args;
     }
 
     public static bool IsDetailCode(string file) =>
