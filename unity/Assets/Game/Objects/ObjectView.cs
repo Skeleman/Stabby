@@ -29,7 +29,9 @@ namespace Stabby.Game
     public struct ObjectLod : IComponentData
     {
         public BatchMeshID L0, L1, L2, Imp, Blend;
-        public float Lod1, Lod2, Fade, Shadow, Radius, Sway, Flutter, Impostor;
+        public Detail.Rule Rule;
+        public Detail.Decision Decision;
+        public float Radius, Impostor;
     }
 
     public struct ObjectSpawn
@@ -506,12 +508,7 @@ namespace Stabby.Game
             for (int d = 0; d < kinds.Length; d++)
             {
                 var kind = kinds[d];
-                defLods[d] = new DefLod
-                {
-                    Lods = math.clamp(kind.Lods, 1, Lods), Lod1 = kind.LodPixels.Length > 0 ? kind.LodPixels[0] : 0, Lod2 = kind.LodPixels.Length > 1 ? kind.LodPixels[1] : 0,
-                    Fade = kind.FadePixels, Shadow = kind.ShadowPixels, Sway = kind.Wind ? kind.SwayPixels : float.MaxValue,
-                    Flutter = kind.Wind ? kind.FlutterPixels : float.MaxValue, Impostor = kind.ImpostorPixels,
-                };
+                defLods[d] = new DefLod { Lods = math.clamp(kind.Lods, 1, Lods), Rule = kind.Rule(), Impostor = kind.ImpostorPixels };
             }
             castPrefab = Prefab(ShadowCastingMode.On, materialId, false);
             flatPrefab = Prefab(ShadowCastingMode.Off, materialId, false);
@@ -746,7 +743,8 @@ namespace Stabby.Game
         struct DefLod
         {
             public int Lods;
-            public float Lod1, Lod2, Fade, Shadow, Sway, Flutter, Impostor;
+            public Detail.Rule Rule;
+            public float Impostor;
         }
 
         struct SpawnWrite
@@ -786,10 +784,11 @@ namespace Stabby.Game
                 Color[w.E] = new ObjectColor { Value = s.Color };
                 Fade[w.E] = new ObjectFade { Value = new float4(1, s.Shadow ? 1 : 0, s.Ground, s.Size) };
                 if (w.Foliage) Leaf[w.E] = new ObjectLeaf { Value = s.Leaf };
+                var rule = k.Rule;
+                if (!s.Shadow) rule.ShadowCascadePixels = rule.ShadowPixels = Detail.Never;
                 Lod[w.E] = new ObjectLod
                 {
-                    L0 = Ids[m], L1 = Ids[m + math.min(1, k.Lods - 1)], L2 = Ids[m + math.min(2, k.Lods - 1)], Lod1 = k.Lod1, Lod2 = k.Lod2,
-                    Fade = k.Fade, Shadow = s.Shadow ? k.Shadow : float.MaxValue, Radius = s.Radius, Sway = k.Sway, Flutter = k.Flutter,
+                    L0 = Ids[m], L1 = Ids[m + math.min(1, k.Lods - 1)], L2 = Ids[m + math.min(2, k.Lods - 1)], Rule = rule, Radius = s.Radius,
                     Imp = imp ? Ids[m + Lods] : default, Blend = imp ? Ids[m + Lods + 1] : default, Impostor = imp ? k.Impostor : 0,
                 };
             }
@@ -885,16 +884,18 @@ namespace Stabby.Game
             [NativeDisableParallelForRestriction] public ComponentLookup<ObjectLeaf> Leaf;
             [NativeDisableParallelForRestriction] public ComponentLookup<ObjectImp> Imp;
 
-            void Execute(Entity e, in LocalToWorld ltw, in ObjectLod lod)
+            void Execute(Entity e, in LocalToWorld ltw, ref ObjectLod lod)
             {
-                float px = View.ScreenSize(2f * lod.Radius, ltw.Value.c3.xyz);
-                var t = new Detail.Thresholds(lod.Lod1, lod.Lod2, lod.Fade).Scaled(View.Quality);
+                float3 at = ltw.Value.c3.xyz;
+                float px = View.ScreenSize(2f * lod.Radius, at);
+                var d = View.Decide(lod.Rule, 2f * lod.Radius, at, lod.Decision);
+                lod.Decision = d;
+                var t = lod.Rule.Geometry.Scaled(View.Quality);
                 bool on = px >= t.Far;
                 if (Mmi.IsComponentEnabled(e) != on) Mmi.SetComponentEnabled(e, on);
                 if (!on) return;
                 var m = Mmi[e];
-                int was = m.MeshID.value == lod.L0.value ? 0 : m.MeshID.value == lod.L1.value ? 1 : 2;
-                int tier = math.min(Detail.Tier(px, t, was), 2);
+                int tier = math.min(d.Geometry, 2);
                 var id = tier == 0 ? lod.L0 : tier == 1 ? lod.L1 : lod.L2;
                 if (lod.Impostor > 0)
                 {
@@ -906,12 +907,14 @@ namespace Stabby.Game
                 }
                 if (m.MeshID.value != id.value) { m.MeshID = id; Mmi[e] = m; }
                 var old = Fade[e].Value;
-                bool shadow = Detail.Holds(px, lod.Shadow / View.Quality, old.y > 0);
-                var f = new float4(math.round(Detail.Crossfade(px, t.Far, 1.5f * t.Far) * 16f) / 16f, shadow ? 1 : 0, old.z, old.w);
+                float shadow = d.Shadow == Detail.ShadowCascade ? 1f : d.Shadow == Detail.ShadowLow ? 0.75f : 0f;
+                var f = new float4(math.round(Detail.Crossfade(px, t.Far, 1.5f * t.Far) * 16f) / 16f, shadow, old.z, old.w);
                 if (math.any(old != f)) Fade[e] = new ObjectFade { Value = f };
                 if (!Leaf.HasComponent(e)) return;
-                float sway = lod.Sway / View.Quality, flutter = lod.Flutter / View.Quality;
-                float w = math.round((Detail.Crossfade(px, sway, 1.5f * sway) + Detail.Crossfade(px, flutter, 1.5f * flutter)) * 16f) / 16f;
+                var a = lod.Rule.Animation.Scaled(View.Quality);
+                float sway = d.Animation <= Detail.AnimSway ? Detail.Crossfade(px, a.Far, 1.5f * a.Far) : 0;
+                float flutter = d.Animation == Detail.AnimFull ? Detail.Crossfade(px, a.Near, 1.5f * a.Near) : 0;
+                float w = math.round((sway + flutter) * 16f) / 16f;
                 var lv = Leaf[e].Value;
                 if (lv.w != w) { lv.w = w; Leaf[e] = new ObjectLeaf { Value = lv }; }
             }

@@ -71,7 +71,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "lods", "lodPixels", "fadePixels", "shadows", "shadowPixels", "wind", "animated", "solid"],
+        "required": ["id", "lods", "lodPixels", "fadePixels", "shadows", "shadowPixels", "shadowCascadePixels", "lightPixels", "wind", "animated", "solid"],
         "additionalProperties": false,
         "properties": {
           "id": { "enum": ["static", "interactive", "animated", "structure"] },
@@ -80,6 +80,8 @@
           "fadePixels": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1080 },
           "shadows": { "type": "boolean" },
           "shadowPixels": { "type": "number", "minimum": 0 },
+          "shadowCascadePixels": { "type": "number", "minimum": 0 },
+          "lightPixels": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 }, "minItems": 3, "maxItems": 3 },
           "wind": { "type": "boolean" },
           "swayPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
           "impostorPixels": { "type": "number", "minimum": 0, "maximum": 1080 },

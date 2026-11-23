@@ -252,6 +252,7 @@ namespace Stabby.Content
                 {
                     Id = k.String("id", ""), Lods = k.Int("lods", 0), LodPixels = k.Floats("lodPixels", Array.Empty<float>()),
                     FadePixels = k.Float("fadePixels", 0), Shadows = k.Bool("shadows", false), ShadowPixels = k.Float("shadowPixels", 0),
+                    ShadowCascadePixels = k.Float("shadowCascadePixels", 0), LightPixels = k.Floats("lightPixels", Array.Empty<float>()),
                     Wind = k.Bool("wind", false), SwayPixels = k.Float("swayPixels", 16.2f), FlutterPixels = k.Float("flutterPixels", 54f),
                     ImpostorPixels = k.Float("impostorPixels", 0), Animated = k.Bool("animated", false), Solid = k.Bool("solid", false),
                 });
@@ -355,6 +356,7 @@ namespace Stabby.Content
                     def.SpawnPixels = detail.Float("spawnPixels", def.SpawnPixels);
                     def.FadePixels = detail.Float("fadePixels", def.FadePixels);
                     def.ShadowPixels = detail.Float("shadowPixels", def.ShadowPixels);
+                    def.ShadowCascadePixels = detail.Float("shadowCascadePixels", def.ShadowCascadePixels);
                     def.AnimPixels = detail.Float("animPixels", def.AnimPixels);
                     def.IkPixels = detail.Float("ikPixels", def.IkPixels);
                     def.LowPixels = detail.Float("lowPixels", def.LowPixels);

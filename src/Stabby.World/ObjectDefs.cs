@@ -13,7 +13,19 @@ namespace Stabby.World
         public float ShadowPixels = 32.4f;
         public bool Wind, Animated;
         public float SwayPixels = 16.2f, FlutterPixels = 54f, ImpostorPixels;
+        public float ShadowCascadePixels = 64.8f;
+        public float[] LightPixels = { 432f, 108f, 10.8f };
         public bool Solid = true;
+
+        public Detail.Rule Rule()
+        {
+            float near = LodPixels != null && LodPixels.Length > 0 ? LodPixels[0] : FadePixels;
+            float mid = LodPixels != null && LodPixels.Length > 1 ? LodPixels[1] : FadePixels;
+            var never = new Detail.Thresholds(Detail.Never, Detail.Never, Detail.Never);
+            var light = LightPixels != null && LightPixels.Length == 3 ? new Detail.Thresholds(LightPixels[0], LightPixels[1], LightPixels[2]) : never;
+            return new Detail.Rule(new Detail.Thresholds(near, mid, FadePixels), ShadowCascadePixels, ShadowPixels,
+                Wind ? new Detail.Thresholds(FlutterPixels, FlutterPixels, SwayPixels) : never, light);
+        }
     }
 
     public sealed class ObjectPart
@@ -106,6 +118,23 @@ namespace Stabby.World
         public bool PartSolid(ObjectDef d, ObjectPart p) => p.Solid >= 0 ? p.Solid == 1 : KindOf(d).Solid;
         public bool PartShadows(ObjectDef d, ObjectPart p) => p.Shadows >= 0 ? p.Shadows == 1 : KindOf(d).Shadows;
 
+        public float CasterSize(ObjectDef d)
+        {
+            float s = 0;
+            foreach (var p in d.Parts)
+                if (PartShadows(d, p)) s = Math.Max(s, Math.Max(p.ScaleX, Math.Max(p.ScaleY, p.ScaleZ)));
+            return s * d.Placement.SizeMaxM;
+        }
+
+        public void AddShadows(ref Detail.ShadowSpan span, float pixelsPerMetre, float quality)
+        {
+            foreach (var d in Objects)
+            {
+                float size = CasterSize(d);
+                if (size > 0) span.Add(size, KindOf(d).Rule(), pixelsPerMetre, quality);
+            }
+        }
+
         public static readonly string[] KindNames = { "static", "interactive", "animated", "structure" };
         public static readonly string[] Verbs = { "take", "cut" };
         public const string Interactive = "interactive", Structure = "structure";
@@ -127,6 +156,9 @@ namespace Stabby.World
                     if (k.LodPixels[i] <= k.FadePixels || (i > 0 && k.LodPixels[i] >= k.LodPixels[i - 1])) errors.Add(k.Id + ": lodPixels must fall and stay above fadePixels");
                 if (k.FadePixels <= 0 || k.FadePixels >= Detail.ReferenceLines) errors.Add(k.Id + ": fadePixels must be above 0, below 1080");
                 if (k.ShadowPixels < 0) errors.Add(k.Id + ": shadowPixels below 0");
+                if (k.ShadowCascadePixels < k.ShadowPixels) errors.Add(k.Id + ": shadowCascadePixels must not sit below shadowPixels");
+                if (k.Wind && !(k.SwayPixels > 0 && k.FlutterPixels > k.SwayPixels)) errors.Add(k.Id + ": flutterPixels must sit above swayPixels above 0");
+                if (k.LightPixels == null || k.LightPixels.Length != 3 || !(k.LightPixels[2] > 0 && k.LightPixels[1] > k.LightPixels[2] && k.LightPixels[0] > k.LightPixels[1])) errors.Add(k.Id + ": lightPixels needs 3 falling numbers above 0");
                 if (k.ImpostorPixels != 0 && (k.ImpostorPixels <= k.FadePixels || k.LodPixels == null || k.LodPixels.Length == 0 || 1.5f * k.ImpostorPixels >= k.LodPixels[k.LodPixels.Length - 1])) errors.Add(k.Id + ": impostorPixels must sit above fadePixels and 1.5x below the last lodPixels");
             }
             var ids = new HashSet<string>();

@@ -1382,6 +1382,13 @@ namespace Stabby.Game
             float sunRun = math.length(sunDir.xz);
             float2 upsun = sunRun > 1e-4f ? -sunDir.xz / sunRun : float2.zero;
             float tanE = math.max(-sunDir.y / math.max(sunRun, 1e-4f), 0.2f);
+            float floor = float.MaxValue;
+            if (reach > 0)
+                foreach (int key in builtKeys)
+                {
+                    MinMaxAABB fb = tree.Box(key);
+                    if (fb.Min.y < floor && math.length(math.max(0, math.max(fb.Min - eye, eye - fb.Max))) < reach) floor = fb.Min.y;
+                }
             foreach (int key in builtKeys)
             {
                 var nd = nodes[key];
@@ -1417,7 +1424,7 @@ namespace Stabby.Game
                     nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
-                int cast = show && CastsNear(nb, eye, reach, upsun, tanE) ? 1 : 0;
+                int cast = show && CastsNear(nb, eye, reach, floor, upsun, tanE) ? 1 : 0;
                 if (cast != nd.Cast)
                 {
                     double tsh = frame.Elapsed.TotalMilliseconds;
@@ -1501,12 +1508,13 @@ namespace Stabby.Game
             return mask;
         }
 
-        static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float2 upsun, float tanE)
+        static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float floor, float2 upsun, float tanE)
         {
-            float run = math.min((nb.Max.y - nb.Min.y) / tanE, reach);
-            for (int k = 0; k <= 3; k++)
+            float run = (nb.Max.y - math.min(floor, nb.Min.y)) / tanE;
+            int steps = (int)math.clamp(math.ceil(run / math.max(math.cmin((nb.Max - nb.Min).xz), 1e-3f)), 1, 16);
+            for (int k = 0; k <= steps; k++)
             {
-                float2 o = -upsun * run * k / 3f;
+                float2 o = -upsun * run * k / steps;
                 float3 shift = new float3(o.x, 0, o.y);
                 if (math.length(math.max(0, math.max(nb.Min + shift - eye, eye - nb.Max - shift))) < reach) return true;
             }

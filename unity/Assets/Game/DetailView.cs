@@ -35,5 +35,8 @@ namespace Stabby.Game
         }
 
         public float ScreenSize(float sizeM, float3 at) => Detail.ScreenSize(sizeM, math.distance(at, Camera), PixelsPerMetre);
+
+        public Detail.Decision Decide(in Detail.Rule rule, float sizeM, float3 at, Detail.Decision previous) =>
+            Detail.Decide(rule, sizeM, math.distance(at, Camera), PixelsPerMetre, Quality, previous);
     }
 }
