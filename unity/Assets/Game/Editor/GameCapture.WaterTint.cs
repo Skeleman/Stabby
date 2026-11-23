@@ -37,15 +37,16 @@ namespace Stabby.Game.Editor
             foreach (var r in map.Water.Rivers)
                 for (int k = 8; k < r.Cells.Count - 8; k++)
                 {
-                    int a = SlotAt(r.Cells[k - 1]), b = SlotAt(r.Cells[k]);
-                    if (a == b || a == -2 || b == -2 || a < 0 && b < 0) continue;
+                    if (SlotAt(r.Cells[k]) == -2 || LakeAt(map, r.Cells[k - 8]) || LakeAt(map, r.Cells[k + 8])) continue;
+                    WaterMix p = r.Mix[k - 6], q = r.Mix[k + 6];
+                    float change = Mathf.Abs(p.A - q.A) + Mathf.Abs(p.B - q.B) + Mathf.Abs(p.C - q.C);
                     float d = (new Vector2(r.Cells[k] % n, r.Cells[k] / n) * cm - new Vector2(home.x, home.z)).magnitude;
-                    float score = Mathf.Log(1 + r.Discharge[k]) * 10 - d * 0.002f;
+                    float score = change * Mathf.Log(1 + r.Discharge[k]) - d * 0.000001f;
                     if (score > best) { best = score; river = r; cross = k; }
                 }
             Lake lake = null;
             foreach (var l in map.Water.Lakes)
-                if (l.Outlet >= 0 && map.Biome[l.Outlet] >= 0 && slotOf[map.Biome[l.Outlet]] >= 0 && (lake == null || l.Cells.Count > lake.Cells.Count)) lake = l;
+                if (l.Mix.A + l.Mix.B + l.Mix.C > 0.5f && (lake == null || l.Cells.Count > lake.Cells.Count)) lake = l;
             cam.fieldOfView = 60f;
             if (river != null)
             {
@@ -53,10 +54,10 @@ namespace Stabby.Game.Editor
                 var along = new Vector2(i1 % n - i0 % n, i1 / n - i0 / n).normalized;
                 var mid = new Vector3(c % n * cm, 0, c / n * cm);
                 mid.y = ground.HeightAt(mid.x, mid.z);
-                var eye = mid - new Vector3(along.x, 0, along.y) * 220f + Vector3.up * 140f;
+                var eye = mid - new Vector3(along.x, 0, along.y) * 320f + Vector3.up * 200f;
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 40f);
-                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(mid + new Vector3(along.x, 0, along.y) * 60f - eye));
-                GameStatus.Lines["~watertint river"] = $"river {river.Id} crosses {map.BiomeIds[map.Biome[river.Cells[cross - 1]]]} -> {map.BiomeIds[map.Biome[c]]} at {mid.x:F0},{mid.z:F0}, mix {river.Mix[cross - 8].A:F2}/{river.Mix[cross - 8].B:F2}/{river.Mix[cross - 8].C:F2} -> {river.Mix[cross + 8].A:F2}/{river.Mix[cross + 8].B:F2}/{river.Mix[cross + 8].C:F2}";
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(mid - eye));
+                GameStatus.Lines["~watertint river"] = $"river {river.Id} crosses {map.BiomeIds[map.Biome[river.Cells[cross - 1]]]} -> {map.BiomeIds[map.Biome[c]]} at {mid.x:F0},{mid.z:F0}, Q {river.Discharge[cross]:F0}, mix {river.Mix[cross - 6].A:F2}/{river.Mix[cross - 6].B:F2}/{river.Mix[cross - 6].C:F2} -> {river.Mix[cross + 6].A:F2}/{river.Mix[cross + 6].B:F2}/{river.Mix[cross + 6].C:F2}";
                 for (var e = TintPair(cam, dir, "watertint-river"); e.MoveNext();) yield return null;
             }
             else GameStatus.Lines["~watertint river"] = "no river crosses a tinted biome border";
@@ -78,11 +79,40 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(ground.HeightAt(eye.x, eye.z), lake.Level) + 18f;
                 var target = new Vector3(shore.x + to.x * 80f, lake.Level, shore.y + to.y * 80f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~watertint lake"] = $"lake {lake.Id} ({lake.Cells.Count} cells) in {map.BiomeIds[map.Biome[lake.Outlet]]}, mix {lake.Mix.A:F2}/{lake.Mix.B:F2}/{lake.Mix.C:F2}";
+                GameStatus.Lines["~watertint lake"] = $"lake {lake.Id} ({lake.Cells.Count} cells) in {(map.Biome[lake.Outlet] < 0 ? "?" : map.BiomeIds[map.Biome[lake.Outlet]])}, mix {lake.Mix.A:F2}/{lake.Mix.B:F2}/{lake.Mix.C:F2}";
                 for (var e = TintPair(cam, dir, "watertint-lake"); e.MoveNext();) yield return null;
             }
             else GameStatus.Lines["~watertint lake"] = "no lake drains a tinted biome";
+            RiverSegment inflow = null;
+            int mouth = -1;
+            float step = 0;
+            foreach (var r in map.Water.Rivers)
+                for (int k = 1; k < r.Cells.Count; k++)
+                {
+                    if (LakeAt(map, r.Cells[k - 1]) || !LakeAt(map, r.Cells[k])) continue;
+                    var m = map.Water.Lakes[map.Water.LakeId[r.Cells[k]]].Mix;
+                    var p = r.Mix[k - 1];
+                    float gap = (Mathf.Abs(p.A - m.A) + Mathf.Abs(p.B - m.B) + Mathf.Abs(p.C - m.C)) * Mathf.Log(1 + r.Discharge[k - 1]);
+                    if (gap > step) { step = gap; inflow = r; mouth = k; }
+                    break;
+                }
+            if (inflow != null)
+            {
+                int c = inflow.Cells[mouth], u = inflow.Cells[Mathf.Max(0, mouth - 4)];
+                var along = new Vector2(c % n - u % n, c / n - u / n).normalized;
+                var mid = new Vector3(c % n * cm, map.Water.WaterSurface[c], c / n * cm);
+                var eye = mid + new Vector3(along.x, 0, along.y) * 140f + Vector3.up * 60f;
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 40f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(mid - eye));
+                var lm = map.Water.Lakes[map.Water.LakeId[c]].Mix;
+                var rm = inflow.Mix[mouth - 1];
+                GameStatus.Lines["~watertint inflow"] = $"river {inflow.Id} enters lake {map.Water.LakeId[c]} at {mid.x:F0},{mid.z:F0}, Q {inflow.Discharge[mouth - 1]:F1}, river mix {rm.A:F2}/{rm.B:F2}/{rm.C:F2}, lake mix {lm.A:F2}/{lm.B:F2}/{lm.C:F2}";
+                for (var e = TintPair(cam, dir, "watertint-inflow"); e.MoveNext();) yield return null;
+            }
+            else GameStatus.Lines["~watertint inflow"] = "no river enters a lake";
         }
+
+        static bool LakeAt(GeneratedWorld map, int i) => map.Water.LakeId != null && map.Water.LakeId[i] >= 0;
 
         static System.Collections.IEnumerator TintPair(Camera cam, string dir, string name)
         {
