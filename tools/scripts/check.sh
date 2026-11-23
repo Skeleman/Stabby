@@ -2,7 +2,7 @@
 # Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full]
 # Exit 1 if anything fails. Full logs stay in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
-filter="${1:-FullyQualifiedName~Feature|FullyQualifiedName~Object|FullyQualifiedName~Discover}"
+filter="${1:-FullyQualifiedName~Feature|FullyQualifiedName~Object|FullyQualifiedName~Discover|FullyQualifiedName~Lint}"
 fail=0; args=" $* "
 say() { echo "$*"; }
 if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
