@@ -42,7 +42,24 @@ namespace Stabby.Game.Editor
             lines.Add($"shadow distance {asset.shadowDistance:F1} m, {asset.shadowCascadeCount} cascades, splits2 {asset.cascade2Split:F4} splits3 {asset.cascade3Split} splits4 {asset.cascade4Split}");
             Shot(cam, null, "warmup");
             Shot(cam, dir, "shadowtiers-forest");
-            lines.Add(Bench(cam, "shadowtiers-forest"));
+            float dist = asset.shadowDistance;
+            int cascades = asset.shadowCascadeCount;
+            var rows = new double[2, 3, 3, 2];
+            var casting = new string[2];
+            for (int run = 0; run < 3; run++)
+                for (int cfg = 0; cfg < 2; cfg++)
+                {
+                    asset.shadowDistance = cfg == 0 ? dist : 60f;
+                    asset.shadowCascadeCount = cfg == 0 ? cascades : 1;
+                    for (int k = 0; k < 4; k++) yield return null;
+                    BenchRound(cam, rows, cfg, run);
+                    if (GameStatus.Line("terrain", out var tl)) casting[cfg] = System.Text.RegularExpressions.Regex.Match(tl, @"\d+ casting \(\d+ vertices\)").Value;
+                }
+            asset.shadowDistance = dist;
+            asset.shadowCascadeCount = cascades;
+            for (int k = 0; k < 4; k++) yield return null;
+            lines.Add(MedianLine("shadowtiers-forest", rows, 0) + "; " + casting[0]);
+            lines.Add(MedianLine("shadowtiers-forest shadows forced to 60 m, 1 cascade", rows, 1) + "; " + casting[1]);
             const int MoveFrames = 120;
             const float MoveMetres = 24f;
             var rt = new RenderTexture(ProbeW, ProbeH, 24);
@@ -85,6 +102,37 @@ namespace Stabby.Game.Editor
             GameStatus.Line("terrain", out var t);
             lines.Add(t);
             GameStatus.Lines["~shadowtiers"] = string.Join("\n", lines);
+        }
+
+        static readonly (int w, int h)[] BenchSizes = { (1920, 1080), (2560, 1440), (3840, 2160) };
+
+        static void BenchRound(Camera cam, double[,,,] rows, int cfg, int run)
+        {
+            for (int r = 0; r < BenchSizes.Length; r++)
+            {
+                Shader.SetGlobalFloat("_StabbyDetailOff", 1);
+                rows[cfg, r, run, 0] = BenchAt(cam, BenchSizes[r].w, BenchSizes[r].h);
+                Shader.SetGlobalFloat("_StabbyDetailOff", 0);
+                rows[cfg, r, run, 1] = BenchAt(cam, BenchSizes[r].w, BenchSizes[r].h);
+            }
+        }
+
+        static string MedianLine(string label, double[,,,] rows, int cfg)
+        {
+            int runs = rows.GetLength(2);
+            var sb = new System.Text.StringBuilder($"bench {label}, median of {runs} interleaved (ms, base/full):");
+            for (int r = 0; r < BenchSizes.Length; r++)
+            {
+                sb.Append($" {BenchSizes[r].h}p");
+                for (int m = 0; m < 2; m++)
+                {
+                    var v = new double[runs];
+                    for (int k = 0; k < runs; k++) v[k] = rows[cfg, r, k, m];
+                    System.Array.Sort(v);
+                    sb.Append(m == 0 ? " " : "/").Append(v[runs / 2].ToString("F2"));
+                }
+            }
+            return sb.ToString();
         }
     }
 }
