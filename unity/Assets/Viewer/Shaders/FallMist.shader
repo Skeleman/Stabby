@@ -107,7 +107,7 @@ Shader "Stabby/FallMist"
                     float t = frac(tm / period + ph);
                     float3 dr = Noise(float2(ph * 17.3, tm * 0.2 + ph * 5.1));
                     wp += float3(rad * 0.4 * dr.y, rad * 0.2 + h * t * (1.2 - 0.2 * t), rad * 0.4 * dr.z) + float3(wind.x, 0, wind.y) * (h * WindDrift * t * t);
-                    float size = rad * (0.5 + 0.9 * t);
+                    float size = rad * (0.35 + 0.6 * t);
                     float px = ScreenPx(rad, length(_WorldSpaceCameraPos - wp));
                     size *= px < _StabbyMistPx.z ? 0 : 1;
                     float3 right = UNITY_MATRIX_V[0].xyz, up = UNITY_MATRIX_V[1].xyz;
@@ -167,7 +167,9 @@ Shader "Stabby/FallMist"
                     n = n1.x;
                     UNITY_BRANCH if (kind < 3.5) n += 0.5 * Noise(mul(Turn, pw) * 2.9 + ph * 13.1 + float2(-tm * 0.37, tm * 0.19)).x;
                     UNITY_BRANCH if (kind < 0.5) n += 0.3 * Noise(mul(pw, Turn) * 6.3 + float2(ph * 5.3, -tm * 0.9)).x;
-                    dens = saturate((0.7 - dot(pw, pw) + 1.2 * n) * 1.6) * saturate((1 - e2) * 2.5);
+                    dens = kind > 2.5 && kind < 3.5
+                        ? saturate((1.3 * n - 0.2 - 0.9 * dot(pw, pw)) * 2.2) * saturate((1 - e2) * 4)
+                        : saturate((0.7 - dot(pw, pw) + 1.2 * n) * 1.6) * saturate((1 - e2) * 2.5);
                     dens *= dens * i.puff.y;
                     op = kind > 3.5 ? (flowQ < 0.5 ? JetOpacity : ColumnSteamOpacity) : kind > 2.5 ? SteamOpacity : kind < 0.5 ? 0.5 + 0.25 * flowQ : 0.3 + 0.15 * flowQ;
                 }

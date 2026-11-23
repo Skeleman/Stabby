@@ -125,6 +125,7 @@ namespace Stabby.Game
         public float Top, Deep;
 
         public static float Step(int l) => NearField.NodeStep(l);
+        public static float FineStep => 0.5f * NearField.NodeStep(0);
         public static float Size(int l) => NearField.NodeSize(l);
         public int Key(int l, int ix, int iz) => Offset[l] + iz * Dim[l] + ix;
         public bool Sunk(int key) => Range[key].y < Deep;
@@ -246,7 +247,7 @@ namespace Stabby.Game
         public Ground Ground;
         public BlobAssetReference<TerrainLookData> Look;
         public int Ix, Iz, Level;
-        public bool Smooth;
+        public bool Smooth, Fine;
         public NativeList<TerrainVertex> Verts;
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
@@ -357,8 +358,8 @@ namespace Stabby.Game
         {
             ref var g = ref Ground.Blob.Value;
             ref var look = ref Look.Value;
-            int n = look.N, m = TerrainTree.Quads, w = m + 1;
-            float cm = g.CellMeters, top = n - 1, s = TerrainTree.Step(Level);
+            int n = look.N, m = Fine ? 2 * TerrainTree.Quads : TerrainTree.Quads, w = m + 1;
+            float cm = g.CellMeters, top = n - 1, s = Fine ? TerrainTree.FineStep : TerrainTree.Step(Level);
             var chunk = new NetsChunk { X0 = Ix * m, Z0 = Iz * m, Cells = m, StepM = s };
             var sink = new TerrainSink { Verts = Verts, Tris = Tris };
             var columns = new GroundColumns { Ground = Ground, StepM = s, Top = g.Top, Smooth = Smooth };
@@ -665,6 +666,7 @@ namespace Stabby.Game
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
         NativeHashSet<int> split, drawn;
+        readonly HashSet<int> fine = new HashSet<int>();
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
         NativeList<Entity> spare;
@@ -950,6 +952,7 @@ namespace Stabby.Game
             int d = tree.Dim[TerrainTree.Root];
             for (int iz = 0; iz < d; iz++)
                 for (int ix = 0; ix < d; ix++) roots.Add(tree.Key(TerrainTree.Root, ix, iz));
+            FineNodes();
             builtSmooth = SmoothOnly;
             TerrainTree.Capacity(TerrainTree.Tiers - 1, out _, out int most);
             if (!zeros.IsCreated) zeros = new NativeArray<int>(most, Allocator.Persistent);
@@ -967,6 +970,32 @@ namespace Stabby.Game
             upload = new TerrainLook.FieldUpload(prepared.Field, UploadBytes);
             prepared.Field = null;
             look = lookReady;
+        }
+
+        void FineNodes()
+        {
+            fine.Clear();
+            ref var edits = ref ground.Blob.Value.Edits;
+            float s0 = TerrainTree.Size(0);
+            for (int f = 0; f < edits.Length; f++)
+            {
+                var e = edits[f];
+                if (!e.Sinter) continue;
+                for (int iz = (int)math.floor(e.MinZ / s0); iz <= (int)math.floor(e.MaxZ / s0); iz++)
+                    for (int ix = (int)math.floor(e.MinX / s0); ix <= (int)math.floor(e.MaxX / s0); ix++)
+                    {
+                        int k = tree.At((ix + 0.5f) * s0, (iz + 0.5f) * s0, 0);
+                        if (k >= 0) fine.Add(k);
+                    }
+            }
+        }
+
+        bool Fine(int key, int l) => l == 0 && fine.Contains(key);
+
+        bool FineAt(float x, float z)
+        {
+            int k = tree.At(x, z, 0);
+            return k >= 0 && fine.Contains(k);
         }
 
         TerrainNode Node(int key) => nodes.TryGetValue(key, out var v) ? v : new TerrainNode { Entity = Entity.Null };
@@ -1007,7 +1036,7 @@ namespace Stabby.Game
             var vl = new NativeList<TerrainVertex>(TerrainTree.Vertices, Allocator.Persistent);
             var tl = new NativeList<int>(TerrainTree.Indices, Allocator.Persistent);
             var bounds = new NativeArray<float3>(2, Allocator.Persistent);
-            var job = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Smooth = builtSmooth, Verts = vl, Tris = tl, Bounds = bounds }.Schedule();
+            var job = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth, Verts = vl, Tris = tl, Bounds = bounds }.Schedule();
             pending.Add(new Pending { Key = key, Generation = generation, Handle = job, Verts = vl, Tris = tl, Bounds = bounds });
             nd.Pending = 1;
             nodes[key] = nd;
@@ -1396,10 +1425,11 @@ namespace Stabby.Game
                     levelCounts[l]++;
                     vertices += nd.Vertices;
                     int mask = StitchMask(key, l);
-                    float end = l < TerrainTree.Root ? TerrainTree.Step(l + 1) / allowed : 0;
+                    bool thin = Fine(key, l);
+                    float end = thin ? TerrainTree.Step(0) / allowed : l < TerrainTree.Root ? TerrainTree.Step(l + 1) / allowed : 0;
                     if (mask != nd.Stitch || end != nd.MorphEnd)
                     {
-                        var stitch = new float4(mask, MorphStart * end, end, TerrainTree.Step(l));
+                        var stitch = new float4(mask, MorphStart * end, end, thin ? TerrainTree.FineStep : TerrainTree.Step(l));
                         Queue(new TerrainWrite { Entity = nd.Entity, Kind = 1, Value = stitch });
                         Queue(new TerrainWrite { Entity = nd.Caster, Kind = 1, Value = stitch });
                         nd.Stitch = mask;
@@ -1439,24 +1469,26 @@ namespace Stabby.Game
             float s = TerrainTree.Size(l), x0 = c.x * s, z0 = c.y * s, x1 = x0 + s, z1 = z0 + s, o = 0.5f;
             float xa = x0 + 0.25f * s, xb = x0 + 0.75f * s, za = z0 + 0.25f * s, zb = z0 + 0.75f * s;
             int mask = 0;
-            mask |= Edge(x0 - o, za, x0 - o, zb, l, 1);
-            mask |= Edge(x1 + o, za, x1 + o, zb, l, 2);
-            mask |= Edge(xa, z0 - o, xb, z0 - o, l, 4);
-            mask |= Edge(xa, z1 + o, xb, z1 + o, l, 8);
+            bool thin = Fine(key, l);
+            mask |= Edge(x0 - o, za, x0 - o, zb, l, 1, thin);
+            mask |= Edge(x1 + o, za, x1 + o, zb, l, 2, thin);
+            mask |= Edge(xa, z0 - o, xb, z0 - o, l, 4, thin);
+            mask |= Edge(xa, z1 + o, xb, z1 + o, l, 8, thin);
             for (int q = 0; q < 4; q++)
             {
                 float xo = (q & 1) == 0 ? x0 - o : x1 + o, xi = (q & 1) == 0 ? x0 + o : x1 - o;
                 float zo = (q & 2) == 0 ? z0 - o : z1 + o, zi = (q & 2) == 0 ? z0 + o : z1 - o;
-                mask |= Edge(xo, zi, xi, zo, l, 16 << q) | Edge(xo, zo, xo, zo, l, 16 << q);
+                mask |= Edge(xo, zi, xi, zo, l, 16 << q, thin) | Edge(xo, zo, xo, zo, l, 16 << q, thin);
             }
             return mask;
         }
 
-        int Edge(float xa, float za, float xb, float zb, int l, int bit)
+        int Edge(float xa, float za, float xb, float zb, int l, int bit, bool thin)
         {
             int a = DrawnLevel(xa, za), b = DrawnLevel(xb, zb), mask = 0;
-            if (a > l || b > l) mask |= bit;
-            if ((a >= 0 && a < l) || (b >= 0 && b < l)) mask |= bit << 8;
+            bool fa = a == 0 && FineAt(xa, za), fb = b == 0 && FineAt(xb, zb);
+            if (a > l || b > l || thin && (a == 0 && !fa || b == 0 && !fb)) mask |= bit;
+            if ((a >= 0 && a < l) || (b >= 0 && b < l) || l == 0 && !thin && (fa || fb)) mask |= bit << 8;
             return mask;
         }
 
