@@ -13,9 +13,17 @@ namespace Stabby.Game.Editor
             GameStatus.HoldCamera = true;
             cam.fieldOfView = 60f;
             if (server == null || !AimBiome(cam, "temperate-forest") || !AimForest(cam, "temperate-forest", 1)) { GameStatus.Lines["~shadowtiers"] = "shadowtiers: no temperate forest found"; yield break; }
-            var fwd = cam.transform.forward;
-            var d = new Vector3(fwd.x, 0, fwd.z).normalized;
-            var start = cam.transform.position - d * 6f;
+            var stand = cam.transform.position;
+            var d = Vector3.forward;
+            float open = float.MaxValue;
+            for (int a = 0; a < 32; a++)
+            {
+                var td = Quaternion.Euler(0, a * 11.25f, 0) * Vector3.forward;
+                float eyeY = GroundHeight(stand.x, stand.z) + 14f, rise = float.MinValue;
+                for (float r = 20f; r <= 300f; r += 10f) rise = Mathf.Max(rise, (GroundHeight(stand.x + td.x * r, stand.z + td.z * r) - eyeY) / r);
+                if (rise < open) { open = rise; d = td; }
+            }
+            var start = stand;
             PlaceServerPlayers(server, new Vector2(start.x, start.z));
             Vector3 Pose(float along)
             {
@@ -23,12 +31,14 @@ namespace Stabby.Game.Editor
                 p.y = GroundHeight(p.x, p.z) + 14f;
                 return p;
             }
-            var look = Quaternion.LookRotation(d) * Quaternion.Euler(5f, 0, 0);
+            var far = start + d * 200f;
+            float pitch = Mathf.Atan2(Pose(0).y - GroundHeight(far.x, far.z), 200f) * Mathf.Rad2Deg;
+            var look = Quaternion.LookRotation(d) * Quaternion.Euler(pitch, 0, 0);
             cam.transform.SetPositionAndRotation(Pose(0), look);
             for (var w = Settle(360); w.MoveNext();) yield return null;
             for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             var asset = UniversalRenderPipeline.asset;
-            lines.Add($"pose eye {start.x:F0},{Pose(0).y:F0},{start.z:F0} along {d.x:F2},{d.z:F2}, 14 m above ground, pitch -5, FOV 60");
+            lines.Add($"pose eye {start.x:F0},{Pose(0).y:F0},{start.z:F0} along {d.x:F2},{d.z:F2}, 14 m above ground, pitch {-pitch:F1} aimed at ground 200 m out, worst rise {open:F2}, FOV 60");
             lines.Add($"shadow distance {asset.shadowDistance:F1} m, {asset.shadowCascadeCount} cascades, splits2 {asset.cascade2Split:F4} splits3 {asset.cascade3Split} splits4 {asset.cascade4Split}");
             Shot(cam, null, "warmup");
             Shot(cam, dir, "shadowtiers-forest");
