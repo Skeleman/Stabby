@@ -187,7 +187,7 @@ namespace Stabby.Game
                 p.Entry = WorldStore.Offer(w, sums, path);
                 long sumsMs = sw.ElapsedMilliseconds;
                 p.Packed = Pack(w, sums);
-                Shed(w);
+                p.Fill.ContinueWith(_ => Shed(w));
                 p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
                 return p;
             });
@@ -494,8 +494,9 @@ namespace Stabby.Game
                 if (bad != 0) return (bad, null, null, w);
                 var found = WorldStore.Find(sums);
                 if (found != null) return (0, null, found, null);
+                var fill = Ground.Fill(w);
                 ServerMapSystem.Shed(w);
-                return (0, Ground.Fill(w), null, w);
+                return (0, fill, null, w);
             });
         }
 

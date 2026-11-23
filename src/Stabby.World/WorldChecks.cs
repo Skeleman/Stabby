@@ -648,6 +648,39 @@ namespace Stabby.World
             return true;
         }
 
+        static void CheckArches(GeneratedWorld w, FeatureEdit[] edits, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            for (int a = 0; a < edits.Length; a++)
+            {
+                if (edits[a].Shape != FeatureEdit.Arch || (a > 0 && edits[a - 1].Shape == FeatureEdit.Arch && edits[a - 1].Bx == edits[a].Ax && edits[a - 1].Bz == edits[a].Az)) continue;
+                int b = a;
+                while (b + 1 < edits.Length && edits[b + 1].Shape == FeatureEdit.Arch && edits[b + 1].Ax == edits[b].Bx && edits[b + 1].Az == edits[b].Bz) b++;
+                float ax = edits[a].Ax / cm, az = edits[a].Az / cm, bx = edits[b].Bx / cm, bz = edits[b].Bz / cm, sx = bx - ax, sz = bz - az, len = (float)Math.Sqrt(sx * sx + sz * sz);
+                string at = $"arch at {edits[a].Ax:F0},{edits[a].Az:F0}";
+                int fa = Node(n, ax, az), fb = Node(n, bx, bz);
+                if (fa < 0 || fb < 0 || !Features.Dry(w, fa) || !Features.Dry(w, fb)) { e.Add(at + " has a foot off dry ground"); return; }
+                bool channel = false, across = false;
+                int steps = Math.Max(2, (int)Math.Ceiling(2 * len));
+                for (int s = 1; s < steps && !across; s++)
+                {
+                    int i = Node(n, ax + sx * s / steps, az + sz * s / steps);
+                    if (i < 0 || !Features.Channel(w, i)) continue;
+                    channel = true;
+                    if (Features.FlowDir(w, i, out float fx, out float fz) && Math.Abs(fx * sx + fz * sz) <= Features.ArchAcross * len) across = true;
+                }
+                if (!channel) { e.Add(at + " spans no river or dry bed"); return; }
+                if (!across) { e.Add(at + " runs along the flow"); return; }
+            }
+        }
+
+        static int Node(int n, float x, float z)
+        {
+            int ix = (int)Math.Round(x), iz = (int)Math.Round(z);
+            return ix >= 0 && iz >= 0 && ix < n && iz < n ? iz * n + ix : -1;
+        }
+
         static void CheckFeatures(GeneratedWorld w, List<string> e)
         {
             var detail = new TerrainDetail(w);
@@ -663,6 +696,7 @@ namespace Stabby.World
             CheckCaveWalk(w, detail, edits, e);
             CheckCliffFoot(w, detail, edits, e);
             CheckLandforms(w, edits, e);
+            CheckArches(w, edits, e);
             if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             foreach (var x in edits)
                 if (x.Shape != FeatureEdit.Boulder && x.Shape != FeatureEdit.Spring && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
