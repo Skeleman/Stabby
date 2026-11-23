@@ -12,6 +12,8 @@ namespace Stabby.World
         public float Level;
         public List<int> Cells = new List<int>();
         public int Outlet = -1;
+        public int Below = -1;
+        public float Outflow;
         public WaterMix Mix;
         public List<LakeInflow> Inflows = new List<LakeInflow>();
     }
@@ -87,6 +89,7 @@ namespace Stabby.World
             var runoff = new float[n * n];
             for (int i = 0; i < n * n; i++) runoff[i] = Runoff(c, sea[i], precipitationMm[i]);
             hy.DischargeM3s = Drainage.Accumulate(stack, hy.Receiver, runoff);
+            foreach (var lake in hy.Lakes) if (lake.Outlet >= 0) { lake.Below = hy.Receiver[lake.Outlet]; lake.Outflow = hy.DischargeM3s[lake.Outlet]; }
 
             hy.IsRiver = new bool[n * n];
             for (int i = 0; i < n * n; i++)
@@ -177,7 +180,7 @@ namespace Stabby.World
                 var lake = hy.Lakes[id];
                 lake.Cells.Add(i);
                 lake.Level = hy.WaterSurface[i];
-                if (hy.LakeId[hy.Receiver[i]] != id) lake.Outlet = i;
+                if (hy.LakeId[hy.Receiver[i]] != id) { lake.Outlet = i; lake.Below = hy.Receiver[i]; lake.Outflow = hy.DischargeM3s[i]; }
             }
             BuildSegments(c, sea, hy);
             Shelves(c, h, sea, hy);
