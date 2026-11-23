@@ -43,7 +43,7 @@ namespace Stabby.World
                     if (site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
                     if (site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, at + " is off its river or lake bank");
                     grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
-                    if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring);
+                    if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
                     if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
                     for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
                     {
@@ -76,14 +76,17 @@ namespace Stabby.World
             int across = field.ChunksAcross, checkedSites = 0;
             float span = field.ChunkMeters;
             var columns = new List<ObjectColumn>();
+            var dens = new List<FeatureEdit>();
             for (int c = 0; c < across * across && checkedSites < SiteCheckLimit; c++)
                 foreach (var s in field.Sites(c % across, c / across))
                 {
                     if (checkedSites++ >= SiteCheckLimit) break;
                     string at = $"{w.Objects.Objects[s.Def].Id} at {s.X:F0},{s.Z:F0}";
                     float reach = 2 * s.Size;
+                    dens.Clear();
+                    if (w.Objects.Objects[s.Def].Placement.Discovery == ObjectField.WolfDen) field.DenEditsOf(s, dens);
                     foreach (var f in grid.Edits)
-                        if (f.Shape == FeatureEdit.Boulder && field.SiteGap(s, 0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ)) < f.R) { e.Add($"boulder edit sits inside {at}"); return; }
+                        if (f.Shape == FeatureEdit.Boulder && !dens.Exists(d => d.Ax == f.Ax && d.Az == f.Az && d.R == f.R) && field.SiteGap(s, 0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ)) < f.R) { e.Add($"boulder edit sits inside {at}"); return; }
                     int x0 = Math.Max(0, (int)((s.X - reach) / span)), x1 = Math.Min(across - 1, (int)((s.X + reach) / span));
                     int z0 = Math.Max(0, (int)((s.Z - reach) / span)), z1 = Math.Min(across - 1, (int)((s.Z + reach) / span));
                     for (int cz = z0; cz <= z1; cz++)
@@ -283,8 +286,17 @@ namespace Stabby.World
         {
             if (f.Kind != FeatureEdit.Add || f.Shape != FeatureEdit.Boulder) return float.NegativeInfinity;
             float ex = f.Bx - f.Ax, ez = f.Bz - f.Az, ll = ex * ex + ez * ez;
-            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, ((x - f.Ax) * ex + (z - f.Az) * ez) / ll)) : 0f;
-            float qx = x - f.Ax - t * ex, qz = z - f.Az - t * ez, dd = f.R * f.R - qx * qx - qz * qz;
+            float best = TopAlong(f, x, z, ll > 0 ? Math.Max(0f, Math.Min(1f, ((x - f.Ax) * ex + (z - f.Az) * ez) / ll)) : 0f);
+            if (f.Ay != f.By)
+                for (int i = 0; i <= TopSamples; i++) best = Math.Max(best, TopAlong(f, x, z, i / (float)TopSamples));
+            return best;
+        }
+
+        const int TopSamples = 64;
+
+        static float TopAlong(FeatureEdit f, float x, float z, float t)
+        {
+            float qx = x - f.Ax - t * (f.Bx - f.Ax), qz = z - f.Az - t * (f.Bz - f.Az), dd = f.R * f.R - qx * qx - qz * qz;
             return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 

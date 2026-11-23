@@ -170,6 +170,34 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void WolfDensAppearWithTheirRocks()
+    {
+        int den = Objects.Objects.FindIndex(o => o.Id == "wolf-den"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var edits = Features.Place(w, detail);
+            var field = new ObjectField(w, detail, edits, Objects);
+            var dens = field.Discoveries().Where(o => o.Def == den).ToArray();
+            output.WriteLine($"seed {seed}: {dens.Length} dens " + string.Join(" ", dens.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+            var rocks = new List<FeatureEdit>();
+            foreach (var c in dens)
+            {
+                Assert.True(field.Fitness(ObjectField.WolfDen, c.X, c.Z) > float.MinValue);
+                Assert.Null(field.DenFault(c));
+                rocks.Clear();
+                field.DenEditsOf(c, rocks);
+                Assert.InRange(rocks.Count, 4, 5);
+                foreach (var r in rocks) Assert.Contains(edits, f => f.Shape == FeatureEdit.Boulder && f.Ax == r.Ax && f.Az == r.Az && f.R == r.R);
+            }
+            total += dens.Length;
+            if (dens.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 2, $"dens in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void HotSpringsSitNearRelief()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;
