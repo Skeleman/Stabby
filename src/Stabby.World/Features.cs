@@ -38,7 +38,14 @@ namespace Stabby.World
 
         public float Thick => R + Math.Min(W, H);
 
-        public bool Sinter => Shape == Spring && P < 0f && F == 0f && Kind == Add;
+        public bool Fine;
+
+        public FeatureEdit Finer()
+        {
+            var e = this;
+            e.Fine = true;
+            return e;
+        }
 
         float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
 
@@ -293,7 +300,7 @@ namespace Stabby.World
                 var e = edits.At(q);
                 if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
                 {
-                    if (e.Sinter) return false;
+                    if (e.Fine) return false;
                     any = true;
                 }
             }

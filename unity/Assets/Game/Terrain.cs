@@ -514,6 +514,7 @@ namespace Stabby.Game
     {
         public TerrainTree Tree;
         public NativeHashSet<int> Split;
+        [ReadOnly] public NativeHashSet<int> Fine;
         public NativeList<TerrainLeaf> Leaves;
         public float3 Eye;
         public float Allowed;
@@ -553,9 +554,10 @@ namespace Stabby.Game
                 {
                     int key = Leaves[k].Key, l = Tree.Level(key);
                     var c = Tree.Cell(key, l);
+                    int lb = l == 0 && Fine.Contains(key) ? -1 : l;
                     float s = TerrainTree.Size(l), x0 = c.x * s - 0.5f, z0 = c.y * s - 0.5f, x1 = c.x * s + s + 0.5f, z1 = c.y * s + s + 0.5f, cx = c.x * s + 0.5f * s, cz = c.y * s + 0.5f * s;
-                    changed |= Balance(x0, cz, l) | Balance(x1, cz, l) | Balance(cx, z0, l) | Balance(cx, z1, l);
-                    changed |= Balance(x0, z0, l) | Balance(x1, z0, l) | Balance(x0, z1, l) | Balance(x1, z1, l);
+                    changed |= Balance(x0, cz, lb) | Balance(x1, cz, lb) | Balance(cx, z0, lb) | Balance(cx, z1, lb);
+                    changed |= Balance(x0, z0, lb) | Balance(x1, z0, lb) | Balance(x0, z1, lb) | Balance(x1, z1, lb);
                 }
             }
             Leaves.Sort();
@@ -665,8 +667,7 @@ namespace Stabby.Game
         BlobBake<TerrainLookData> lookBake;
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
-        NativeHashSet<int> split, drawn;
-        readonly HashSet<int> fine = new HashSet<int>();
+        NativeHashSet<int> split, drawn, fine;
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
         NativeList<Entity> spare;
@@ -945,6 +946,7 @@ namespace Stabby.Game
             nodes = new NativeHashMap<int, TerrainNode>(1024, Allocator.Persistent);
             split = new NativeHashSet<int>(1024, Allocator.Persistent);
             drawn = new NativeHashSet<int>(1024, Allocator.Persistent);
+            fine = new NativeHashSet<int>(64, Allocator.Persistent);
             leaves = new NativeList<TerrainLeaf>(1024, Allocator.Persistent);
             planes = new NativeArray<float4>(6, Allocator.Persistent);
             roots = new NativeList<int>(16, Allocator.Persistent);
@@ -980,7 +982,7 @@ namespace Stabby.Game
             for (int f = 0; f < edits.Length; f++)
             {
                 var e = edits[f];
-                if (!e.Sinter) continue;
+                if (!e.Fine) continue;
                 for (int iz = (int)math.floor(e.MinZ / s0); iz <= (int)math.floor(e.MaxZ / s0); iz++)
                     for (int ix = (int)math.floor(e.MinX / s0); ix <= (int)math.floor(e.MaxX / s0); ix++)
                     {
@@ -1459,7 +1461,7 @@ namespace Stabby.Game
             float allowed = Allowed(cam);
             GeometryUtility.CalculateFrustumPlanes(cam, frustum);
             for (int p = 0; p < 6; p++) planes[p] = new float4(frustum[p].normal, frustum[p].distance);
-            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();
+            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Fine = fine, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();
             lodScheduled = true;
         }
 
@@ -1643,6 +1645,7 @@ namespace Stabby.Game
             if (split.IsCreated) split.Dispose();
             if (spare.IsCreated) spare.Dispose();
             if (drawn.IsCreated) drawn.Dispose();
+            if (fine.IsCreated) fine.Dispose();
             if (leaves.IsCreated) leaves.Dispose();
             if (planes.IsCreated) planes.Dispose();
             if (roots.IsCreated) roots.Dispose();

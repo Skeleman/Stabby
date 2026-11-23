@@ -501,8 +501,8 @@ namespace Stabby.World
                         }
                         float baseY = crest - (mound + cone) * u, moundY = baseY + mound * u, foot = Math.Min(low, baseY) - GeyserFootU * u;
                         float taper = (rout - mtop * u) / (moundY - foot);
-                        list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0));
-                        list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0));
+                        list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0).Finer());
+                        list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0).Finer());
                         carves.Add(Disc(FeatureEdit.Carve, x, z, top + rc - hole, floor - rc + hole, r + rc - hole, rc, 0, 0, 0.06f * u, seed, 0, 0));
                         continue;
                     }
