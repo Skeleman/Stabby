@@ -116,7 +116,9 @@ Shader "Stabby/VertexLit"
                     float cover = smoothstep(0.3, 0.7, i.sinter + 0.3 * big.x + 0.12 * mid.x * fm);
                     float t = smoothstep(0.1, 0.6, 1 - n.y);
                     float w1 = q.y * _StabbySinterA.w + 0.7 * big.x + 0.35 * mid.x * fm + 0.1 * fib.x * ff;
-                    float band = 0.5 + 0.5 * sin(w1 * 6.2831853);
+                    float s1 = frac(w1), riser = smoothstep(0.02, 0.1, s1) * (1 - smoothstep(0.24, 0.38, s1)), band = 1 - riser;
+                    float2 o = n.xz / max(length(n.xz), 1e-4);
+                    float lean = (0.55 * riser - 0.25 * band) * t * fm;
                     float run = saturate(str.x * 0.9 + 0.55 * big.x + 0.7 * t - 0.35 + 0.15 * mid.x * fm) * fs;
                     float warm = smoothstep(0.15, 0.75, run) * (0.25 + 0.75 * t);
                     float3 mineral = lerp(_StabbySinterB.rgb, _StabbySinterC.rgb, smoothstep(0.35, 0.9, run + 0.25 * t + 0.2 * fib.x * ff));
@@ -124,7 +126,7 @@ Shader "Stabby/VertexLit"
                     white = lerp(white, _StabbyMudGrey.rgb * (0.95 + 0.1 * fib.x * ff), 0.85 * saturate(0.6 + 0.5 * mid.x * fm - 0.45 * big.x + 0.3 * t));
                     float3 a = lerp(white, mineral, 0.85 * warm) * (0.93 + 0.05 * fib.x * ff);
                     a = lerp(a, a * float3(0.5, 0.47, 0.43), 0.12 * (1 - band) * t);
-                    float3 grad = 0.12 * big.yzw + 0.09 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - float3(0, 1, 0) * (0.06 * cos(w1 * 6.2831853) * fm * t);
+                    float3 grad = 0.12 * big.yzw + 0.09 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - float3(o.x, 0, o.y) * lean;
                     grad -= n * dot(grad, n);
                     m.albedo = lerp(m.albedo, a, cover);
                     tmRough = lerp(tmRough, _StabbySinterB.w, cover);

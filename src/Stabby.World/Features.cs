@@ -38,6 +38,15 @@ namespace Stabby.World
 
         public float Thick => R + Math.Min(W, H);
 
+        public bool Fine;
+
+        public FeatureEdit Finer()
+        {
+            var e = this;
+            e.Fine = true;
+            return e;
+        }
+
         float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
@@ -285,12 +294,17 @@ namespace Stabby.World
 
         public static bool Covers<TEdits>(TEdits edits, float x, float y, float z, float s) where TEdits : struct, IEditList
         {
+            bool any = false;
             for (int q = 0, n = edits.Count; q < n; q++)
             {
                 var e = edits.At(q);
-                if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
+                if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
+                {
+                    if (e.Fine) return false;
+                    any = true;
+                }
             }
-            return false;
+            return any;
         }
 
         public static int TileOf(FeatureEdit e, float cellMeters)

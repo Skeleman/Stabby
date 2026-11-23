@@ -1641,11 +1641,11 @@ namespace Stabby.Game.Editor
         static readonly string[] RuinShots = { "ruin-close", "ruin-mid" };
         static readonly string[] SpringShots = { "spring-close", "spring" };
         static readonly string[] FairyShots = { "fairyring-close", "fairyring-mid" };
-        static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot" };
+        static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot", "geyser-cone", "mudpot-rim" };
 
         static bool AimVent(Camera cam, int mode)
         {
-            int kind = mode == 2 ? ObjectField.MudPot : ObjectField.Geyser;
+            int kind = mode == 2 || mode == 4 ? ObjectField.MudPot : ObjectField.Geyser;
             foreach (var w in Unity.Entities.World.All)
             {
                 var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
@@ -1665,7 +1665,21 @@ namespace Stabby.Game.Editor
                 float r = pools[2];
                 Vector3 eye, target;
                 var side = new Vector3(0.8f, 0, 0.6f);
-                if (kind == ObjectField.Geyser)
+                if (mode == 3)
+                {
+                    Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
+                    TerrainViewSystem.ClockOverride = offset + duration + 0.5 * (interval - duration);
+                    float rout = pools[3];
+                    target = c + Vector3.up * 0.1f * rout;
+                    eye = c + side * 1.5f * rout + Vector3.up * 0.7f * rout;
+                }
+                else if (mode == 4)
+                {
+                    TerrainViewSystem.ClockOverride = null;
+                    target = c + side * 0.6f * r;
+                    eye = c + side * 1.9f * r + Vector3.up * 0.9f;
+                }
+                else if (kind == ObjectField.Geyser)
                 {
                     Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
                     TerrainViewSystem.ClockOverride = offset + 0.4 * duration;
