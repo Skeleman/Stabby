@@ -427,7 +427,7 @@ Shader "Stabby/Water"
                 }
                 c += Liquid(i.warm, 8).rgb;
 
-                float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * 4) * saturate((1 - i.chan.z) * MudFeather), opacity);
+                float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
                 return half4(lerp(MixFog(c, i.fog), c, clear), alpha);
             }

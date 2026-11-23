@@ -8,7 +8,7 @@ namespace Stabby.World
         public const int BogStride = 6;
         public const float BogCellM = 180f, BogChance = 0.55f, BogSpreadM = 16f, BogMinR = 3f, BogMaxR = 7f, BogMinDepthM = 0.35f, BogMaxDepthM = 0.6f;
         public const float BogRiverM = 6f, BogSiteM = 12f, BogRoadM = 6f, BogTownM = 200f, BogGapM = 2f, BogSteadyM = 0.8f, BogDipM = 0.12f, BogTopM = 0.3f;
-        public const float BogRound = 0.3f, BogBank = 1.5f, BogLobe = 0.15f, BogLumpM = 0.12f, BogLipM = 0.5f, BogHeadM = 1.2f, BogPeatM = 2.2f, BogPeatFadeM = 1.4f;
+        public const float BogRound = 0.3f, BogBank = 1.5f, BogLobe = 0.15f, BogLumpM = 0.12f, BogLipM = 0.5f, BogHeadM = 1.2f, BogPeatM = 0.8f, BogPeatFadeM = 0.6f;
         readonly object bogLock = new object();
         float[] bogPools;
 

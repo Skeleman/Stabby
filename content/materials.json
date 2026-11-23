@@ -11,7 +11,7 @@
     "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a", "bandM": 0.3, "roughness": 0.55
   },
   "mud": { "surface": "#6e6152", "clay": "#9c8c74", "grey": "#8c897f", "roughness": 0.3 },
-  "peat": { "wet": "#2b2117", "dark": "#16100a", "fibre": "#6b5838", "roughness": 0.22 },
+  "peat": { "wet": "#6e5b43", "dark": "#54432f", "fibre": "#8c7754", "roughness": 0.22 },
   "liquids": [
     {
       "id": "water", "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8", "filmColor": "#000000", "emissionColor": "#000000",
@@ -42,7 +42,7 @@
     },
     {
       "id": "peat", "deepColor": "#120d08", "shallowColor": "#3a2a17", "filmColor": "#6b6a4a", "emissionColor": "#000000",
-      "clarityM": 0.6, "shoreM": 0.1, "foamWidthM": 0,
+      "clarityM": 0.6, "shoreM": 0.35, "foamWidthM": 0,
       "waveScaleM": 18, "waveSpeed": 0.3, "waveStrength": 0.05,
       "swellScaleM": 140, "swellStrength": 0.05, "lakeSwell": 0.1,
       "flowSpeed": 0.3, "rapidsSlope": 0.04, "bedFieldM": 120,

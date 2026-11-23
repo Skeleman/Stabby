@@ -154,8 +154,8 @@ Shader "Stabby/VertexLit"
                     float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
                     float4 big = TmNoise3(q * 0.7 + 2.9, int3(0, 0, 0)), mid = TmNoise3(q * 3.1 + 6.1, int3(0, 0, 0)), fine = TmNoise3(q * 17 + 4.4, int3(0, 0, 0));
                     float fm = TmFade(3.1, fp), ff = TmFade(17, fp);
-                    float cover = smoothstep(0.05, 0.6, i.peat + 0.25 * big.x + 0.1 * mid.x * fm);
-                    float wet = smoothstep(0.45, 0.95, i.peat + 0.2 * big.x + 0.08 * mid.x * fm);
+                    float cover = smoothstep(0.35, 0.7, i.peat + 0.2 * big.x + 0.08 * mid.x * fm);
+                    float wet = smoothstep(0.6, 1, i.peat + 0.15 * big.x + 0.06 * mid.x * fm);
                     float fib = smoothstep(0.3, 0.8, 0.6 * fine.x + 0.5 * mid.x) * ff * (1 - wet);
                     float3 a = lerp(_StabbyPeatWet.rgb, _StabbyPeatDark.rgb, wet * (0.75 + 0.25 * mid.x * fm));
                     a = lerp(a, _StabbyPeatFibre.rgb, 0.55 * fib) * (0.92 + 0.08 * fine.x * ff);
