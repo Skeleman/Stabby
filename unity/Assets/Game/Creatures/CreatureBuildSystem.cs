@@ -409,6 +409,7 @@ namespace Stabby.Game
             rig.AnimPx = def.AnimPixels;
             rig.IkPx = def.IkPixels;
             rig.LowPx = def.LowPixels;
+            rig.Rule = def.Rule();
             var parts = b.Allocate(ref rig.Parts, body.Parts.Count);
             for (int i = 0; i < body.Parts.Count; i++)
             {

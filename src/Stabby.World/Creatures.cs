@@ -66,6 +66,11 @@ namespace Stabby.World
         public List<CreaturePartDef> Parts = new List<CreaturePartDef>();
         public List<CreatureDef> Bodies = new List<CreatureDef>();
 
+        public void AddShadows(ref Detail.ShadowSpan span, float pixelsPerMetre, float quality)
+        {
+            foreach (var b in Bodies) span.Add(b.Length * b.SizeMax, b.Rule(), pixelsPerMetre, quality);
+        }
+
         public CreaturePartDef Part(string id)
         {
             foreach (var p in Parts) if (p.Id == id) return p;

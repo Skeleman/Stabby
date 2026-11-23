@@ -264,14 +264,28 @@ namespace Stabby.World
         public static float CascadeReach(float sizeM, in Rule rule, float pixelsPerMetre, float quality) =>
             rule.ShadowCascadePixels >= Never ? 0 : Reach(sizeM, rule.ShadowCascadePixels / Math.Max(quality, 0.1f), pixelsPerMetre);
 
+        public struct ShadowSpan
+        {
+            public float Near, Range;
+
+            public void Add(float sizeM, in Rule rule, float pixelsPerMetre, float quality)
+            {
+                float far = ShadowReach(sizeM, rule, pixelsPerMetre, quality) / (1f - Hysteresis);
+                if (far <= 0) return;
+                Range = Math.Max(Range, far);
+                float near = CascadeReach(sizeM, rule, pixelsPerMetre, quality);
+                if (near > 0) Near = Near > 0 ? Math.Min(Near, near) : near;
+            }
+        }
+
         public const float RangeStep = 1.0905077f;
 
         public static float SnapRange(float range, float previous)
         {
             if (range <= 0) return 0;
             if (previous > 0 && range <= previous && range > previous * (1f - Hysteresis)) return previous;
-            float steps = (float)Math.Ceiling(Math.Log(range) / Math.Log(RangeStep));
-            return (float)Math.Pow(RangeStep, steps);
+            float steps = (float)Math.Ceiling(FMath.Log(range) / FMath.Log(RangeStep));
+            return (float)FMath.Pow(RangeStep, steps);
         }
 
         public struct Cascades
@@ -283,13 +297,13 @@ namespace Stabby.World
         public static Cascades CascadeSplits(float nearM, float rangeM)
         {
             float ratio = Math.Max(rangeM / Math.Max(nearM, 1e-3f), 4f);
-            int count = Math.Min(Math.Max((int)Math.Ceiling(Math.Log(ratio) / Math.Log(4.0)), 2), 4);
-            double a = Math.Pow(1.0 / ratio, 1.0 / count);
+            int count = Math.Min(Math.Max((int)Math.Ceiling(FMath.Log(ratio) / FMath.Log(4.0)), 2), 4);
+            double a = FMath.Pow(1.0 / ratio, 1.0 / count);
             return new Cascades
             {
                 Count = count,
-                Split1 = (float)Math.Pow(a, count - 1),
-                Split2 = count > 2 ? (float)Math.Pow(a, count - 2) : 0,
+                Split1 = (float)FMath.Pow(a, count - 1),
+                Split2 = count > 2 ? (float)FMath.Pow(a, count - 2) : 0,
                 Split3 = count > 3 ? (float)a : 0,
             };
         }

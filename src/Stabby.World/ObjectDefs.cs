@@ -118,6 +118,23 @@ namespace Stabby.World
         public bool PartSolid(ObjectDef d, ObjectPart p) => p.Solid >= 0 ? p.Solid == 1 : KindOf(d).Solid;
         public bool PartShadows(ObjectDef d, ObjectPart p) => p.Shadows >= 0 ? p.Shadows == 1 : KindOf(d).Shadows;
 
+        public float CasterSize(ObjectDef d)
+        {
+            float s = 0;
+            foreach (var p in d.Parts)
+                if (PartShadows(d, p)) s = Math.Max(s, Math.Max(p.ScaleX, Math.Max(p.ScaleY, p.ScaleZ)));
+            return s * d.Placement.SizeMaxM;
+        }
+
+        public void AddShadows(ref Detail.ShadowSpan span, float pixelsPerMetre, float quality)
+        {
+            foreach (var d in Objects)
+            {
+                float size = CasterSize(d);
+                if (size > 0) span.Add(size, KindOf(d).Rule(), pixelsPerMetre, quality);
+            }
+        }
+
         public static readonly string[] KindNames = { "static", "interactive", "animated", "structure" };
         public static readonly string[] Verbs = { "take", "cut" };
         public const string Interactive = "interactive", Structure = "structure";

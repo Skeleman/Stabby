@@ -313,14 +313,20 @@ Shader "Stabby/Foliage"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 float3 wn;
-                float3 wp = FoliageWind(i, wn);
+                float3 wp;
+                [branch] if (_Fade.y > 0.875) wp = FoliageWind(i, wn);
+                else
+                {
+                    wp = TransformObjectToWorld(i.positionOS.xyz);
+                    wn = TransformObjectToWorldNormal(i.normalOS);
+                }
                 float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, wn, _LightDirection));
                 #if UNITY_REVERSED_Z
                 cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);
                 #else
                 cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
                 #endif
-                o.positionCS = _StabbyFoliageOff > 0 || i.uv.w > 1.5 ? float4(0, 0, -2, 1) : cs;
+                o.positionCS = _StabbyFoliageOff > 0 || i.uv.w > 1.5 || _Fade.y < 0.5 ? float4(0, 0, -2, 1) : cs;
                 o.uv = i.uv;
                 return o;
             }

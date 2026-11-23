@@ -19,3 +19,4 @@ CreaturePlanSystem plans herds from the managed map in a task and converts the p
 CreatureDrawSystem uploads instance buffers and issues indirect draws on managed GraphicsBuffers
 CreatureDrawSystem.Complete only after IsCompleted, or at teardown
 PlayerControls.Read clamps the unitless input vector to length 1, not a distance
+ShadowViewSystem sets the managed URP asset's shadow range and cascades and steps the managed sun light

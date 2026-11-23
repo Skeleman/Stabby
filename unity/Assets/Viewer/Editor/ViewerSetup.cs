@@ -22,7 +22,6 @@ namespace Stabby.Viewer.Editor
             var data = ScriptableObject.CreateInstance<UniversalRendererData>();
             AssetDatabase.CreateAsset(data, SettingsDir + "/Renderer.asset");
             var asset = UniversalRenderPipelineAsset.Create(data);
-            asset.shadowDistance = 60;
             AssetDatabase.CreateAsset(asset, SettingsDir + "/URP.asset");
             GraphicsSettings.defaultRenderPipeline = asset;
             int current = QualitySettings.GetQualityLevel();

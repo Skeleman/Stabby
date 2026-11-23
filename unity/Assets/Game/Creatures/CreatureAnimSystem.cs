@@ -292,6 +292,8 @@ namespace Stabby.Game
                 float3 centre = new float3(c.Position.x, gy + rig.Stand, c.Position.z);
                 float q = math.max(View.Quality, 0.1f);
                 float px = View.ScreenSize(rig.Length, centre);
+                var d = View.Decide(rig.Rule, rig.Length, centre, c.Decision);
+                c.Decision = d;
                 float far = rig.FadePx / q;
                 bool visible = present && px >= far;
                 c.Visible = visible;
@@ -303,7 +305,7 @@ namespace Stabby.Game
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
                 if (!visible) return;
-                c.Shadow = Detail.Holds(px, rig.ShadowPx / q, c.Shadow);
+                c.Shadow = d.Casts;
                 if (Gpu)
                 {
                     if (!c.Shadow && Frustum.Outside(centre, rig.Length)) return;
@@ -315,8 +317,8 @@ namespace Stabby.Game
                 float fadeX = math.round(Detail.Crossfade(px, far, 1.5f * far) * 16f) / 16f;
                 float wake = Hold.Override != 0 ? 1 : Detail.Crossfade(c.Wake, 0, 1);
                 float highX = (1 - blend) * wake, lowX = blend >= 1 ? fadeX * wake : -blend * wake;
-                float anim = Detail.Crossfade(px, rig.AnimPx / q, 1.5f * rig.AnimPx / q);
-                float ik = Detail.Crossfade(px, rig.IkPx / q, 1.5f * rig.IkPx / q);
+                float anim = d.Animation <= Detail.AnimDecimated ? Detail.Crossfade(px, rig.AnimPx / q, 1.5f * rig.AnimPx / q) : 0;
+                float ik = d.Animation == Detail.AnimFull ? Detail.Crossfade(px, rig.IkPx / q, 1.5f * rig.IkPx / q) : 0;
 
                 float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * rig.Track;
                 float2 at = c.Position.xz, fore = at + fw * rig.Fore, hind = at + fw * rig.Hind;

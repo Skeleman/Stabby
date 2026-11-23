@@ -225,4 +225,35 @@ public class DetailTests
         Assert.Equal(64.8f, c.Animation.Near);
         Assert.Equal(10.8f, c.Animation.Mid);
     }
+
+    [Fact]
+    public void ShadowSpanCoversEveryCasterFromContent()
+    {
+        string root = Stabby.Content.ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+        var biomes = Stabby.Content.ContentLoader.LoadBiomes(root).Select(b => b.Id).ToList();
+        var objects = Stabby.Content.ContentLoader.LoadObjects(root, biomes);
+        var creatures = Stabby.Content.ContentLoader.LoadCreatures(root, biomes);
+        float ppm = Detail.ReferencePixelsPerMetre;
+        var span = new Detail.ShadowSpan();
+        objects.AddShadows(ref span, ppm, 1f);
+        creatures.AddShadows(ref span, ppm, 1f);
+        Assert.True(span.Near > 0 && span.Near < span.Range);
+        foreach (var d in objects.Objects)
+        {
+            float size = objects.CasterSize(d);
+            if (size <= 0) continue;
+            var rule = objects.KindOf(d).Rule();
+            float far = Detail.ShadowReach(size, rule, ppm, 1f);
+            Assert.True(far / (1f - Detail.Hysteresis) <= span.Range * 1.0001f, d.Id);
+            Assert.True(Detail.CascadeReach(size, rule, ppm, 1f) >= span.Near * 0.9999f, d.Id);
+            var at = Detail.Decide(rule, size, span.Range * 1.001f, ppm, 1f, new Detail.Decision(0, Detail.ShadowLow, 0, 0));
+            Assert.False(at.Casts, d.Id);
+        }
+        var wide = new Detail.ShadowSpan();
+        objects.AddShadows(ref wide, 2f * ppm, 1f);
+        creatures.AddShadows(ref wide, 2f * ppm, 1f);
+        Assert.Equal(2f * span.Range, wide.Range, 1);
+        var c = Detail.CascadeSplits(span.Near, Detail.SnapRange(span.Range, 0));
+        Assert.InRange(c.Count, 2, 4);
+    }
 }

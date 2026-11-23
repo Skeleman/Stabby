@@ -680,7 +680,7 @@ Shader "Stabby/Object"
                 #else
                 cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
                 #endif
-                o.positionCS = cs;
+                o.positionCS = _Fade.y < 0.5 ? float4(0, 0, -2, 1) : cs;
                 return o;
             }
 
