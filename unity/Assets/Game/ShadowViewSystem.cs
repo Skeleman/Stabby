@@ -17,8 +17,12 @@ namespace Stabby.Game
         public const float SunStepSeconds = 0.1f;
         public static Quaternion? SunTarget;
 
-        Task<Detail.ShadowSpan> spanTask;
+        Task<(Detail.ShadowSpan, float)> spanTask;
         Detail.ShadowSpan unit;
+        float texels;
+        public static Detail.ShadowMap Map;
+        public static float TexelScale = 1f;
+        static readonly int SplitId = Shader.PropertyToID("_StabbyShadowSplit"), TexelId = Shader.PropertyToID("_StabbyShadowTexelM");
         bool ready;
         Light sun;
         float sunAt = float.MinValue;
@@ -28,13 +32,15 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             SunTarget = null;
+            Map = default;
             spanTask = Task.Run(() =>
             {
                 var biomes = ContentFiles.Biomes();
                 var span = new Detail.ShadowSpan();
-                ContentFiles.Objects(biomes).AddShadows(ref span, Detail.ReferencePixelsPerMetre, 1f);
+                var objects = ContentFiles.Objects(biomes);
+                objects.AddShadows(ref span, Detail.ReferencePixelsPerMetre, 1f);
                 ContentFiles.Creatures(biomes).AddShadows(ref span, Detail.ReferencePixelsPerMetre, 1f);
-                return span;
+                return (span, objects.Terrain.ShadowTexels);
             });
         }
 
@@ -45,7 +51,7 @@ namespace Stabby.Game
             {
                 if (spanTask == null || !spanTask.IsCompleted) return;
                 if (spanTask.IsFaulted) { GameStatus.Failure = spanTask.Exception.ToString(); spanTask = null; Enabled = false; return; }
-                unit = spanTask.Result;
+                (unit, texels) = spanTask.Result;
                 spanTask = null;
                 ready = true;
             }
@@ -55,15 +61,32 @@ namespace Stabby.Game
             var view = DetailView.Refresh(cam);
             float scale = view.PixelsPerMetre / Detail.ReferencePixelsPerMetre * view.Quality;
             float range = Detail.SnapRange(unit.Range * scale, Range);
-            if (range == Range) return;
-            Range = range;
-            Near = unit.Near * scale;
-            Splits = Detail.CascadeSplits(Near, Range);
-            asset.shadowDistance = Range;
-            asset.shadowCascadeCount = Splits.Count;
-            if (Splits.Count == 2) asset.cascade2Split = Splits.Split1;
-            else if (Splits.Count == 3) asset.cascade3Split = new Vector2(Splits.Split1, Splits.Split2);
-            else asset.cascade4Split = new Vector3(Splits.Split1, Splits.Split2, Splits.Split3);
+            if (range != Range)
+            {
+                Range = range;
+                Near = unit.Near * scale;
+                Splits = Detail.CascadeSplits(Near, Range);
+                asset.shadowDistance = Range;
+                asset.shadowCascadeCount = Splits.Count;
+                if (Splits.Count == 2) asset.cascade2Split = Splits.Split1;
+                else if (Splits.Count == 3) asset.cascade3Split = new Vector2(Splits.Split1, Splits.Split2);
+                else asset.cascade4Split = new Vector3(Splits.Split1, Splits.Split2, Splits.Split3);
+            }
+            Map = Build(asset, cam, view.PixelsPerMetre, texels * TexelScale);
+            DetailView.SetShadows(Map);
+            Shader.SetGlobalVector(SplitId, new Vector4(Map.Far0, Map.Far1, Map.Far2, Map.Range));
+            Shader.SetGlobalVector(TexelId, new Vector4(Map.Texel0, Map.Texel1, Map.Texel2, Map.Texel3) * (Map.Texels / view.Quality));
+        }
+
+        static Detail.ShadowMap Build(UniversalRenderPipelineAsset asset, Camera cam, float ppm, float texels)
+        {
+            int count = asset.shadowCascadeCount;
+            var c = new Detail.Cascades { Count = count };
+            if (count == 2) c.Split1 = asset.cascade2Split;
+            else if (count == 3) { c.Split1 = asset.cascade3Split.x; c.Split2 = asset.cascade3Split.y; }
+            else if (count == 4) { c.Split1 = asset.cascade4Split.x; c.Split2 = asset.cascade4Split.y; c.Split3 = asset.cascade4Split.z; }
+            int res = asset.mainLightShadowmapResolution;
+            return Detail.ShadowMap.Build(c, asset.shadowDistance, count > 1 ? res / 2 : res, ppm, cam.aspect, texels);
         }
 
         void StepSun()

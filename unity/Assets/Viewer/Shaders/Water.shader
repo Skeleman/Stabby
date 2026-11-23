@@ -473,6 +473,7 @@ Shader "Stabby/Water"
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+            #include "Assets/Viewer/Shaders/ShadowTexel.hlsl"
 
             float3 _LightDirection;
 
@@ -492,7 +493,7 @@ Shader "Stabby/Water"
                 float3 wp = TransformObjectToWorld(i.positionOS.xyz);
                 float focal = _StabbyShadowPx.x, wd = 2 * i.chan.y;
                 float flowQ = saturate(log2(1 + i.curt.w) / 9);
-                float fade = smoothstep(_StabbyShadowPx.y, _StabbyShadowPx.z, wd / max(length(_StabbyShadowEye.xyz - wp), 0.01) * focal);
+                float fade = ShadowTexelFade(wd, length(_StabbyShadowEye.xyz - wp));
                 float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, _LightDirection, _LightDirection));
                 #if UNITY_REVERSED_Z
                 cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);

@@ -20,8 +20,7 @@
         "steamFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
         "columnFadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "columnFullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
-        "shadowPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 2000 },
-        "mistShadowPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 }
+        "shadowTexels": { "type": "number", "minimum": 0.25, "maximum": 8 }
       }
     },
     "foliage": {

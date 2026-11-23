@@ -103,8 +103,8 @@ public class DetailTests
     [InlineData(500f, 0, Detail.ShadowCascade, Detail.AnimFull, Detail.LightShadowed)]
     [InlineData(80f, 1, Detail.ShadowCascade, Detail.AnimFull, Detail.LightGlow)]
     [InlineData(45f, 1, Detail.ShadowLow, Detail.AnimSway, Detail.LightGlow)]
-    [InlineData(20f, 2, Detail.ShadowNone, Detail.AnimSway, Detail.LightGlow)]
-    [InlineData(12f, 2, Detail.ShadowNone, Detail.AnimFrozen, Detail.LightGlow)]
+    [InlineData(20f, 2, Detail.ShadowLow, Detail.AnimSway, Detail.LightGlow)]
+    [InlineData(12f, 2, Detail.ShadowLow, Detail.AnimFrozen, Detail.LightGlow)]
     [InlineData(5f, 3, Detail.ShadowNone, Detail.AnimFrozen, Detail.LightEmissive)]
     public void DecideAnswersEachTierBySize(float px, int geometry, int shadow, int anim, int light)
     {
@@ -124,12 +124,51 @@ public class DetailTests
         Assert.Equal(Detail.ShadowCascade, Decide(55f, cascade).Shadow);
         Assert.Equal(Detail.ShadowLow, Decide(50f, cascade).Shadow);
         var low = Decide(31f, default);
-        Assert.Equal(Detail.ShadowLow, Decide(27f, low).Shadow);
-        Assert.Equal(Detail.ShadowNone, Decide(25f, low).Shadow);
-        var none = Decide(25f, low);
-        Assert.Equal(Detail.ShadowNone, Decide(29f, none).Shadow);
-        Assert.Equal(Detail.ShadowLow, Decide(31f, none).Shadow);
-        Assert.Equal(Detail.ShadowCascade, Decide(61f, none).Shadow);
+        Assert.Equal(Detail.ShadowLow, Decide(15f, low).Shadow);
+        Assert.Equal(Detail.ShadowCascade, Decide(61f, low).Shadow);
+    }
+
+    static Detail.ShadowMap Flat(float texelM) => new Detail.ShadowMap
+    {
+        Count = 1, Range = 1000f, Far0 = 1000f, Far1 = 1000f, Far2 = 1000f,
+        Texel0 = texelM, Texel1 = texelM, Texel2 = texelM, Texel3 = texelM, Texels = 1f,
+    };
+
+    static Detail.Decision Decide(float px, in Detail.ShadowMap map, Detail.Decision previous, float quality = 1f) =>
+        Detail.Decide(Tree, 2f, At(px), Detail.ReferencePixelsPerMetre, quality, map, previous);
+
+    [Fact]
+    public void ShadowsStopOnlyUnderAboutOneTexelWithHysteresis()
+    {
+        var on = Decide(45f, Flat(1.9f), default);
+        Assert.Equal(Detail.ShadowLow, on.Shadow);
+        Assert.Equal(Detail.ShadowNone, Decide(45f, Flat(2.2f), default).Shadow);
+        Assert.Equal(Detail.ShadowLow, Decide(45f, Flat(2.2f), on).Shadow);
+        Assert.Equal(Detail.ShadowNone, Decide(45f, Flat(2.5f), on).Shadow);
+        Assert.True(Decide(45f, Flat(2.2f), default, 2f).Casts);
+        Assert.Equal(Detail.ShadowLow, Decide(15f, Flat(1.9f), on).Shadow);
+        var never = new Detail.Rule(Tree.Geometry, Detail.Never, Detail.Never, Tree.Animation, Tree.Light);
+        Assert.Equal(Detail.ShadowNone, Detail.Decide(never, 2f, 1f, Detail.ReferencePixelsPerMetre, 1f, Flat(0.01f), default).Shadow);
+    }
+
+    [Fact]
+    public void ShadowMapTexelGrowsPerCascadeAndShrinksWithResolution()
+    {
+        var c = Detail.CascadeSplits(10f, 400f);
+        var m = Detail.ShadowMap.Build(c, 400f, 1024, Detail.ReferencePixelsPerMetre, 16f / 9f, 1f);
+        Assert.Equal(c.Count, m.Count);
+        Assert.True(m.Texel0 > 0 && m.Texel0 < m.Texel1 && m.Texel1 < m.Texel2);
+        Assert.Equal(m.Texel0, m.TexelAt(1f));
+        Assert.Equal(m.Texel2, m.TexelAt(399f));
+        Assert.Equal(m.Texel2, m.TexelAt(5000f));
+        var fine = Detail.ShadowMap.Build(c, 400f, 2048, Detail.ReferencePixelsPerMetre, 16f / 9f, 1f);
+        Assert.Equal(0.5f * m.Texel2, fine.Texel2, 4);
+        var one = Detail.ShadowMap.Build(new Detail.Cascades { Count = 1 }, 60f, 2048, Detail.ReferencePixelsPerMetre, 16f / 9f, 1f);
+        Assert.Equal(one.Texel0, one.TexelAt(59f));
+        Assert.True(default(Detail.ShadowMap).Holds(1e-4f, 1e4f, 1f, false));
+        Assert.True(m.Holds(2f * m.Texel2, 399f, 1f, false));
+        Assert.False(m.Holds(0.5f * m.Texel2, 399f, 1f, true));
+        Assert.True(m.Holds(0.5f * m.Texel2, 1f, 1f, false));
     }
 
     [Fact]
@@ -171,8 +210,7 @@ public class DetailTests
         Assert.Equal(2f * ppm / 30f, far, 2);
         Assert.Equal(2f * ppm / 60f, near, 2);
         Assert.Equal(2f * far, Detail.ShadowReach(2f, Tree, ppm, 2f), 2);
-        Assert.Equal(Detail.ShadowLow, Detail.Decide(Tree, 2f, far * 0.99f, ppm, 1f, default).Shadow);
-        Assert.Equal(Detail.ShadowNone, Detail.Decide(Tree, 2f, far * 1.01f, ppm, 1f, default).Shadow);
+        Assert.Equal(Detail.ShadowLow, Detail.Decide(Tree, 2f, far * 1.01f, ppm, 1f, default).Shadow);
     }
 
     [Fact]
@@ -246,9 +284,10 @@ public class DetailTests
             float far = Detail.ShadowReach(size, rule, ppm, 1f);
             Assert.True(far / (1f - Detail.Hysteresis) <= span.Range * 1.0001f, d.Id);
             Assert.True(Detail.CascadeReach(size, rule, ppm, 1f) >= span.Near * 0.9999f, d.Id);
-            var at = Detail.Decide(rule, size, span.Range * 1.001f, ppm, 1f, new Detail.Decision(0, Detail.ShadowLow, 0, 0));
-            Assert.False(at.Casts, d.Id);
         }
+        float range = Detail.SnapRange(span.Range, 0);
+        var map = Detail.ShadowMap.Build(Detail.CascadeSplits(span.Near, range), range, 1024, ppm, 16f / 9f, objects.Terrain.ShadowTexels);
+        Assert.Contains(objects.Objects, d => objects.CasterSize(d) > 0 && map.Holds(objects.CasterSize(d), range, 1f, false));
         var wide = new Detail.ShadowSpan();
         objects.AddShadows(ref wide, 2f * ppm, 1f);
         creatures.AddShadows(ref wide, 2f * ppm, 1f);
