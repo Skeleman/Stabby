@@ -192,7 +192,7 @@ Shader "Stabby/Creature"
                 }
                 float above = max(wp.y - ground, 0);
                 float ao = lerp(0.8, 1, smoothstep(0, min(0.6 * size, 0.5), above)) * lerp(1, 0.6, saturate(-n.y));
-                Light l = GetMainLight(TransformWorldToShadowCoord(wp));
+                Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)
                 {
