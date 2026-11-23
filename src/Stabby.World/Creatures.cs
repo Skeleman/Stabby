@@ -44,9 +44,12 @@ namespace Stabby.World
         public int HerdMin = 1, HerdMax = 1;
         public float HerdChance;
         public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f, Dart;
-        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f;
+        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f, ShadowCascadePixels = 64.8f;
         public CreatureDrives Drives = new CreatureDrives { Hunger = DriveDef.Of(240, 0.6f, 30), Thirst = DriveDef.Of(600, 0.7f, 20), Rest = DriveDef.Of(900, 0.8f, 60) };
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
+
+        public Detail.Rule Rule() => new Detail.Rule(new Detail.Thresholds(LowPixels, FadePixels, FadePixels), ShadowCascadePixels, ShadowPixels,
+            new Detail.Thresholds(IkPixels, AnimPixels, AnimPixels), new Detail.Thresholds(Detail.Never, Detail.Never, Detail.Never));
     }
 
     public sealed class CreatureShape
@@ -123,6 +126,7 @@ namespace Stabby.World
                 if (b.Jitter < 0 || b.Jitter > 0.25f) errors.Add(b.Id + ": jitter out of 0..0.25");
                 if (!(b.FadePixels > 0 && b.AnimPixels > b.FadePixels && b.ShadowPixels > b.FadePixels && b.IkPixels > b.AnimPixels))
                     errors.Add(b.Id + ": detail pixels must rise fade < anim < ik and fade < shadow");
+                if (!(b.ShadowCascadePixels >= b.ShadowPixels)) errors.Add(b.Id + ": shadowCascadePixels must not sit below shadowPixels");
                 if (!(b.LowPixels >= 2 * b.FadePixels)) errors.Add(b.Id + ": lowPixels must be at least twice fadePixels");
                 if (b.Haunch < 0 || b.Haunch > 0.5f || b.Waist < 0 || b.Waist > 0.5f || b.Hump < 0 || b.Hump > 0.5f) errors.Add(b.Id + ": haunch, waist and hump out of 0..0.5");
                 for (int d = 0; d < Drives.Count; d++)
