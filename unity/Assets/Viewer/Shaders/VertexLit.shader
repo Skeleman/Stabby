@@ -47,12 +47,13 @@ Shader "Stabby/VertexLit"
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
                 float4 sm = _StitchMask;
-                float t = StitchT(i.positionOS.xyz, i.stitch);
+                float lift = ((uint)i.stitch.w & 4096u) != 0 ? sm.w * 0.5 + 20 : 0;
+                float t = StitchT(i.positionOS.xyz + float3(0, lift, 0), i.stitch);
                 VertexPositionInputs p = GetVertexPositionInputs(lerp(i.positionOS.xyz, i.stitch.xyz, t));
                 o.positionCS = p.positionCS;
                 o.normalWS = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));
                 o.color = lerp(i.color, i.stitchColor, t);
-                o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y, i.strata.z);
+                o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y + lift, i.strata.z);
                 o.xz = p.positionWS.xz - TmOrigin(_WorldSpaceCameraPos);
                 o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
                 o.sinter = i.strata.w;
