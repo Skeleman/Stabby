@@ -176,9 +176,10 @@ namespace Stabby.World
 
     public sealed class LiquidDef
     {
-        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 8;
+        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 8, TintSlots = 3;
         public static readonly string[] SprayNames = { "none", "mist", "dust", "shimmer" };
         public string Id;
+        public List<string> Biomes = new List<string>();
         public uint DeepColor, ShallowColor, FilmColor, EmissionColor;
         public float ClarityM, ShoreM, FoamWidthM;
         public float WaveScaleM, WaveSpeed, WaveStrength;
@@ -215,6 +216,14 @@ namespace Stabby.World
             for (int i = 0; Liquids != null && i < Liquids.Count; i++) if (Liquids[i].Id == id) return i;
             return -1;
         }
+
+        public int[] TintSlots()
+        {
+            var slots = new List<int>();
+            for (int i = 0; Liquids != null && i < Liquids.Count; i++) if (Liquids[i].Biomes.Count > 0) slots.Add(i);
+            return slots.ToArray();
+        }
+
         public LookDef Look = new LookDef();
         public SinterDef Sinter = new SinterDef();
         public MudDef Mud = new MudDef();
@@ -373,6 +382,12 @@ namespace Stabby.World
             {
                 if (lib.Liquids[0].Id != "water") errors.Add("liquids: first entry must be water");
                 if (lib.Liquids.Count > LiquidDef.Max) errors.Add($"liquids: {lib.Liquids.Count} entries, at most {LiquidDef.Max}");
+                if (lib.Liquids[0].Biomes.Count > 0) errors.Add("liquids: water is the default and takes no biomes");
+                if (lib.TintSlots().Length > LiquidDef.TintSlots) errors.Add($"liquids: {lib.TintSlots().Length} biome tints, at most {LiquidDef.TintSlots}");
+                var tinted = new HashSet<string>();
+                foreach (var l in lib.Liquids)
+                    foreach (var b in l.Biomes)
+                        if (!tinted.Add(b)) errors.Add($"liquids: biome {b} tinted twice");
                 for (int i = 0; i < lib.Liquids.Count; i++)
                 {
                     var w = lib.Liquids[i];

@@ -48,6 +48,36 @@
       "flowSpeed": 0.3, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 1, "opacity": 0.85, "viscosity": 0.4, "bubbles": 0.1, "film": 0.7, "emission": 0, "roughness": 0.1,
       "fall": { "spray": "mist", "speed": 0.8, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
+    },
+    {
+      "id": "glacial", "biomes": ["tundra", "alpine"],
+      "deepColor": "#3d7a86", "shallowColor": "#a6dcd8", "filmColor": "#000000", "emissionColor": "#000000",
+      "clarityM": 1.2, "shoreM": 0.4, "foamWidthM": 6,
+      "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
+      "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
+      "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 1, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
+    },
+    {
+      "id": "tannin", "biomes": ["wetland", "boreal"],
+      "deepColor": "#24180e", "shallowColor": "#8c6a3a", "filmColor": "#000000", "emissionColor": "#000000",
+      "clarityM": 1.4, "shoreM": 0.4, "foamWidthM": 6,
+      "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
+      "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
+      "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0.6, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
+    },
+    {
+      "id": "clear", "biomes": ["tropical-forest"],
+      "deepColor": "#0f4f60", "shallowColor": "#7ee6dc", "filmColor": "#000000", "emissionColor": "#000000",
+      "clarityM": 8, "shoreM": 0.4, "foamWidthM": 6,
+      "waveScaleM": 18, "waveSpeed": 0.6, "waveStrength": 0.12,
+      "swellScaleM": 140, "swellStrength": 0.15, "lakeSwell": 0.25,
+      "flowSpeed": 1, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0.3, "opacity": 0, "viscosity": 0, "bubbles": 0, "film": 0, "emission": 0, "roughness": 0.05,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     }
   ],
   "surface": {
