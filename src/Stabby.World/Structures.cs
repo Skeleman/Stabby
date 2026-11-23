@@ -36,8 +36,8 @@ namespace Stabby.World
         static readonly float[] WallSeat = { -0.45f, 0, -0.225f, 0, 0, 0, 0.225f, 0, 0.45f, 0 };
         static readonly float[] CairnSeat = { 0, 0, 0.4f, 0, -0.4f, 0, 0, 0.4f, 0, -0.4f };
 
-        static float Cos16(int k) => Dir[k & 15];
-        static float Sin16(int k) => Dir[(k + 12) & 15];
+        internal static float Cos16(int k) => Dir[k & 15];
+        internal static float Sin16(int k) => Dir[(k + 12) & 15];
 
         public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : KitSeat(shape);
 
