@@ -75,7 +75,11 @@
     that leaves no contact stamp.
     Structures also darken downward faces, gaps between pieces and inner
     seams. Normal and relief terms always carry organic noise, never clean
-    lines.
+    lines. Most surface detail comes from normals, not albedo. Every
+    material's procedural detail uses one shared frequency and screen-size
+    octave fade, so apparent density is uniform. Materials choose pattern and
+    strength, not scale. Exempt: texture-backed patterns (lettering, symbols,
+    leaves) and liquids.
 12. Every detail threshold is a screen size (Punchy's DetailPolicy). One
     engine-free `Detail` gives `ScreenSize(sizeM, distanceM, ppm)`: an
     object's approximate size over its 3D distance from the camera, in

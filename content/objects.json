@@ -300,6 +300,11 @@
       "id": "mud-pot", "name": "Mud pot", "kind": "structure", "material": "vent-mud", "variants": 8,
       "parts": [ { "id": "site", "shape": "mud-pot" } ],
       "placement": { "biomes": ["steppe", "shrubland", "boreal", "tundra", "alpine", "cold-desert"], "perHectare": 0, "discovery": "mud-pot", "liquid": "mud", "spacingM": 2500, "chance": 0.6, "slopeMax": 0.12, "sizeMinM": 14, "sizeMaxM": 18, "sink": 0.02 }
+    },
+    {
+      "id": "wolf-den", "name": "Wolf den", "kind": "structure", "material": "lichen-grey", "variants": 6,
+      "parts": [ { "id": "site", "shape": "wolf-den" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra"], "perHectare": 0, "discovery": "wolf-den", "spacingM": 800, "chance": 0.6, "slopeMax": 0.3, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8 },

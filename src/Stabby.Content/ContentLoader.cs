@@ -314,7 +314,7 @@ namespace Stabby.Content
                         Belly = s.Float("belly", 0), Rump = s.Float("rump", 0), Tip = s.Float("tip", 0),
                         Idle = idle, Reach = reach, Push = push, Lift = lift,
                         RunReach = s.Floats("runReach", reach), RunPush = s.Floats("runPush", push), RunLift = s.Floats("runLift", lift),
-                        Alert = s.Floats("alert", idle),
+                        Alert = s.Floats("alert", idle), Graze = s.Floats("graze", idle),
                     });
                     s.End();
                 }
@@ -371,6 +371,14 @@ namespace Stabby.Content
                     def.Dart = wary.Float("dart", def.Dart);
                     wary.End();
                 }
+                var drives = b.Object("drives");
+                if (drives != null)
+                {
+                    def.Drives.Hunger = Drive(drives.Object("hunger"), def.Drives.Hunger);
+                    def.Drives.Thirst = Drive(drives.Object("thirst"), def.Drives.Thirst);
+                    def.Drives.Rest = Drive(drives.Object("rest"), def.Drives.Rest);
+                    drives.End();
+                }
                 foreach (var s in b.Objects("slots", true))
                 {
                     float phase = s.Float("phase", 0), mirrorPhase = s.Float("mirrorPhase", 0);
@@ -390,6 +398,14 @@ namespace Stabby.Content
             errors.AddRange(CreatureLibrary.Validate(lib, biomeIds));
             Check(errors, source);
             return lib;
+        }
+
+        static DriveDef Drive(Json d, DriveDef fallback)
+        {
+            if (d == null) return fallback;
+            var r = DriveDef.Of(d.Float("fillSeconds", fallback.Fill), d.Float("threshold", fallback.Threshold), d.Float("sateSeconds", fallback.Sate));
+            d.End();
+            return r;
         }
 
         static uint Coat(Json coat, string tone, string id, MaterialLibrary materials, List<string> errors)
