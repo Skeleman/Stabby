@@ -116,14 +116,14 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   triangle or space jumps. The camera stops short of terrain between it and
   the player instead of clipping through mountains. Gamepad support likely via the Input System
   package; sprint and jump travel in PlayerInput and run on the host.
-- Playtest bugs (Zach 11-22; card b/terrain-fix-1, now): hill shadows shift
+- Playtest bugs (Zach 11-22; b/terrain-fix-1 merged: casters swept toward the sun, split nodes keep a fallback mesh so merges never collapse to the root (the blink), skirt seam lift, one-sided skirts; follow-up: raise tier 4-6 terrain mesh pools (156 misses), bench the larger caster set): hill shadows shift
   as the player approaches (shadow distance is 60 m with one cascade, terrain
   casters exist only inside that range and geomorph with camera distance); the
   island blinks out for a frame while moving, leaving objects behind (suspect
   terrain LOD swaps or culling bounds on pooled chunk entities; capture first); a strongly
   stretched layer at LOD seams (stitch or skirt geometry). Skirts are drawn
   double-sided (about 12% extra terrain triangles); make them one-sided, outward.
-- Rock beds (Zach 11-22; card b/rockbeds-1, after terrain-fix-1): cliff walls show
+- Rock beds (Zach 11-22; card b/rockbeds-1, now): cliff walls show
   evenly spaced, straight bed grooves (bedSpacingM 0.8, bedDepthM 0.1, TmRockRelief)
   that read as raked. Make them much shallower and irregular: varied bed
   thickness, broken and fading runs, no continuous stripes; remove if that
