@@ -29,10 +29,28 @@ namespace Stabby.World
             }
         }
 
+        static void CheckPools(ObjectField field, List<string> e)
+        {
+            int expected = field.BogPools().Length / ObjectField.BogStride;
+            var spots = new List<float>();
+            foreach (var o in field.Discoveries())
+                if (field.IsVent(o)) { field.SpringPoolsAt(o, spots); expected += spots.Count / ObjectField.SpringStride; }
+            var pools = field.LiquidPools();
+            if (pools.Length != expected) { e.Add($"{pools.Length} liquid pools are water bodies but {expected} pools were placed"); return; }
+            foreach (var p in pools)
+            {
+                string at = $"{(p.Kind == ObjectField.BogPool ? "bog" : "vent")} pool at {p.X:F0},{p.Z:F0}";
+                if (!(p.Level <= p.Rim)) { e.Add(at + $" stands at {p.Level:F2} m, above its basin rim at {p.Rim:F2} m"); return; }
+                if (p.Leaks) { e.Add(at + " spills out of its basin"); return; }
+                if (p.WetCount == 0 || !(p.Level - p.Floor >= ObjectField.PoolMinDepthM)) { e.Add(at + $" holds no water: level {p.Level:F2} m over floor {p.Floor:F2} m"); return; }
+            }
+        }
+
         static void CheckDiscoveries(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
             var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             CheckBogs(w, field, e);
+            CheckPools(field, e);
             var found = field.Discoveries();
             CheckMesaClearings(w, field, found, e);
             int n = w.Config.Size, across = field.ChunksAcross;
@@ -62,6 +80,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Hermit && !(field.Woods(s.X, s.Z) >= ObjectField.HermitWoods)) { e.Add(at + " is not deep in the woods"); return; }
                 if (def.Placement.Discovery == ObjectField.Ruin && field.Fitness(ObjectField.Ruin, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too broken for a ruin"); return; }
                 if (def.Placement.Discovery == ObjectField.FairyRing && field.Fitness(ObjectField.FairyRing, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too uneven for a fairy ring"); return; }
+                if (def.Placement.Discovery == ObjectField.WolfDen) { if (field.Fitness(ObjectField.WolfDen, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground unfit for a wolf den"); return; } var df = field.DenFault(s); if (df != null) { e.Add(at + " " + df); return; } }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
                 if (ObjectField.Pooled(def.Placement.Discovery)) { if (!(field.SpringDraw(s.X, s.Z) > 0)) { e.Add(at + " is not near a range or volcanic relief"); return; } var fault = field.VentFault(s); if (fault != null) { e.Add(at + " " + fault); return; } }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);

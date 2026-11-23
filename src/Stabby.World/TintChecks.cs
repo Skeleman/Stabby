@@ -7,6 +7,30 @@ namespace Stabby.World
     {
         public const float TintTolerance = 1e-3f;
 
+        static void CheckLakeCover(GeneratedWorld w, List<string> e)
+        {
+            var hy = w.Water;
+            int n = w.Config.Size;
+            foreach (var s in hy.Rivers)
+            {
+                int id = Hydrology.DrainsTo(hy, s);
+                if (id < 0) continue;
+                float level = hy.Lakes[id].Level;
+                foreach (int i in s.Cells)
+                {
+                    if (w.Sea[i] || hy.LakeId[i] >= 0 || w.Height[i] >= level || (hy.LakeCover != null && hy.LakeCover[i] == id)) continue;
+                    int x = i % n, y = i / n;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
+                        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                        int o = ny * n + nx;
+                        if (hy.LakeId[o] == id || (hy.LakeCover != null && hy.LakeCover[o] == id)) { e.Add($"river {s.Id} cell {i} sits below lake {id} without cover"); return; }
+                    }
+                }
+            }
+        }
+
         static void CheckTint(GeneratedWorld w, List<string> e)
         {
             if (w.Biome == null || w.Materials == null || w.Materials.TintSlots().Length == 0) return;
@@ -14,6 +38,15 @@ namespace Stabby.World
             int slots = w.Materials.TintSlots().Length;
             foreach (var lake in hy.Lakes)
                 if (!InRange(lake.Mix, slots)) { e.Add($"lake {lake.Id} tint mix out of range"); break; }
+            int n = w.Config.Size;
+            var entering = new Dictionary<int, float>();
+            foreach (var s in hy.Rivers)
+                for (int k = 1; k < s.Cells.Count; k++)
+                    if (Joins(w, s, k))
+                    {
+                        entering.TryGetValue(s.Cells[k], out float sum);
+                        entering[s.Cells[k]] = sum + hy.DischargeM3s[s.Cells[k - 1]];
+                    }
             foreach (var s in hy.Rivers)
             {
                 if (s.Mix.Count != s.Cells.Count) { e.Add($"river {s.Id} has {s.Mix.Count} tint mixes for {s.Cells.Count} cells"); break; }
@@ -22,7 +55,16 @@ namespace Stabby.World
                 {
                     int i = s.Cells[k];
                     if (!InRange(s.Mix[k], slots)) { e.Add($"river {s.Id} tint mix out of range at point {k}"); bad = true; }
-                    else if (hy.LakeId[i] >= 0 && !Same(s.Mix[k], hy.Lakes[hy.LakeId[i]].Mix)) { e.Add($"river {s.Id} enters lake {hy.LakeId[i]} with a different tint"); bad = true; }
+                    else if (hy.LakeId[i] >= 0 && !Same(s.Mix[k], WaterTint.MixAt(hy.Lakes[hy.LakeId[i]], n, i))) { e.Add($"river {s.Id} enters lake {hy.LakeId[i]} with a different tint"); bad = true; }
+                    else if (k > 0 && Joins(w, s, k))
+                    {
+                        float q = entering[i], joined = q > 0 ? Math.Max(0, q - hy.DischargeM3s[s.Cells[k - 1]]) / q : 0;
+                        for (int t = 0; t < slots && !bad; t++)
+                        {
+                            float jump = Math.Abs(s.Mix[k][t] - s.Mix[k - 1][t]);
+                            if (jump > joined + TintTolerance) { e.Add($"river {s.Id} tint jumps {jump:F3} entering lake {hy.LakeId[i]}, inflow allows {joined:F3}"); bad = true; }
+                        }
+                    }
                     else if (k > 0 && !w.Sea[i] && hy.LakeId[i] < 0)
                     {
                         float q = hy.DischargeM3s[i], joined = q > 0 ? Math.Max(0, q - hy.DischargeM3s[s.Cells[k - 1]]) / q : 0;
@@ -35,6 +77,13 @@ namespace Stabby.World
                 }
                 if (bad) break;
             }
+        }
+
+        static bool Joins(GeneratedWorld w, RiverSegment s, int k)
+        {
+            var hy = w.Water;
+            int i = s.Cells[k], p = s.Cells[k - 1];
+            return hy.LakeId[i] >= 0 && hy.LakeId[p] < 0 && !w.Sea[p] && hy.Lakes[hy.LakeId[i]].Outlet != i;
         }
 
         static bool InRange(WaterMix m, int slots)
