@@ -286,8 +286,17 @@ namespace Stabby.World
         {
             if (f.Kind != FeatureEdit.Add || f.Shape != FeatureEdit.Boulder) return float.NegativeInfinity;
             float ex = f.Bx - f.Ax, ez = f.Bz - f.Az, ll = ex * ex + ez * ez;
-            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, ((x - f.Ax) * ex + (z - f.Az) * ez) / ll)) : 0f;
-            float qx = x - f.Ax - t * ex, qz = z - f.Az - t * ez, dd = f.R * f.R - qx * qx - qz * qz;
+            float best = TopAlong(f, x, z, ll > 0 ? Math.Max(0f, Math.Min(1f, ((x - f.Ax) * ex + (z - f.Az) * ez) / ll)) : 0f);
+            if (f.Ay != f.By)
+                for (int i = 0; i <= TopSamples; i++) best = Math.Max(best, TopAlong(f, x, z, i / (float)TopSamples));
+            return best;
+        }
+
+        const int TopSamples = 64;
+
+        static float TopAlong(FeatureEdit f, float x, float z, float t)
+        {
+            float qx = x - f.Ax - t * (f.Bx - f.Ax), qz = z - f.Az - t * (f.Bz - f.Az), dd = f.R * f.R - qx * qx - qz * qz;
             return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 

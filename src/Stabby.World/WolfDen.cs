@@ -7,7 +7,6 @@ namespace Stabby.World
     {
         public const float WolfU = 1 / 12f;
         public const int DenStride = 8;
-        public const float DenLump = 0.3f, SlabLump = 0.15f;
 
         public static void DenRocks(ulong key, List<float> local, out float mx, out float gap)
         {
@@ -15,7 +14,7 @@ namespace Stabby.World
             var rng = Rng.Stream(key, "wolf-den-rocks");
             mx = rng.Range(-0.4f, 0.4f);
             gap = rng.Range(1.4f, 1.8f);
-            float big = rng.Range(1.25f, 1.55f), small = big * rng.Range(0.5f, 0.65f);
+            float big = rng.Range(1.2f, 1.4f), small = big * rng.Range(0.5f, 0.65f);
             bool bigLeft = rng.NextFloat() < 0.5f;
             float rl = bigLeft ? big : small, rr = bigLeft ? small : big, hl = 0, hr = 0;
             for (int side = -1; side <= 1; side += 2)
@@ -28,7 +27,7 @@ namespace Stabby.World
             bool frontLeft = rng.NextFloat() < 0.5f;
             float sxl = mx - 0.5f * gap - 0.9f * rl, sxr = mx + 0.5f * gap + 0.9f * rr;
             Add(local, sxl, frontLeft ? zs : zs - deep, sxr, frontLeft ? zs - deep : zs, rs, hl + sit, hr + sit, rng.NextFloat());
-            float rb = rng.Range(1.5f, 1.9f), bx = mx + rng.Range(-0.6f, 0.6f), bh = rng.Range(0.4f, 0.9f), bz = -2.7f - 0.9f * rb, up = rng.Range(0.4f, 0.8f);
+            float rb = rng.Range(1.3f, 1.42f), bx = mx + rng.Range(-0.6f, 0.6f), bh = rng.Range(0.6f, 1.1f), bz = -2.7f - 0.9f * rb, up = rng.Range(0.4f, 0.8f);
             bool upLeft = rng.NextFloat() < 0.5f;
             Add(local, bx - bh, bz + rng.Range(-0.3f, 0.3f), bx + bh, bz + rng.Range(-0.3f, 0.3f), rb, 0.35f * rb + (upLeft ? up : 0), 0.35f * rb + (upLeft ? 0 : up), rng.NextFloat());
             if (rng.NextFloat() < 0.7f)
@@ -152,7 +151,7 @@ namespace Stabby.World
                     Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r,
                     Ax = ax, Ay = GroundAt(detail, cm, ax, az) + local[k + 5] * u, Az = az,
                     Bx = bx, By = GroundAt(detail, cm, bx, bz) + local[k + 6] * u, Bz = bz,
-                    N = (k == 2 * Structures.DenStride ? Structures.SlabLump : Structures.DenLump) * r, S = local[k + 7],
+                    S = local[k + 7],
                 }.Finer());
             }
         }
