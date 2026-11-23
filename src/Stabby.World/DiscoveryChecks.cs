@@ -29,10 +29,28 @@ namespace Stabby.World
             }
         }
 
+        static void CheckPools(ObjectField field, List<string> e)
+        {
+            int expected = field.BogPools().Length / ObjectField.BogStride;
+            var spots = new List<float>();
+            foreach (var o in field.Discoveries())
+                if (field.IsVent(o)) { field.SpringPoolsAt(o, spots); expected += spots.Count / ObjectField.SpringStride; }
+            var pools = field.LiquidPools();
+            if (pools.Length != expected) { e.Add($"{pools.Length} liquid pools are water bodies but {expected} pools were placed"); return; }
+            foreach (var p in pools)
+            {
+                string at = $"{(p.Kind == ObjectField.BogPool ? "bog" : "vent")} pool at {p.X:F0},{p.Z:F0}";
+                if (!(p.Level <= p.Rim)) { e.Add(at + $" stands at {p.Level:F2} m, above its basin rim at {p.Rim:F2} m"); return; }
+                if (p.Leaks) { e.Add(at + " spills out of its basin"); return; }
+                if (p.WetCount == 0 || !(p.Level - p.Floor >= ObjectField.PoolMinDepthM)) { e.Add(at + $" holds no water: level {p.Level:F2} m over floor {p.Floor:F2} m"); return; }
+            }
+        }
+
         static void CheckDiscoveries(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
             var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             CheckBogs(w, field, e);
+            CheckPools(field, e);
             var found = field.Discoveries();
             CheckMesaClearings(w, field, found, e);
             int n = w.Config.Size, across = field.ChunksAcross;

@@ -59,6 +59,12 @@ namespace Stabby.World
             return float.NegativeInfinity;
         }
 
+        public static float Surface<TG, TE>(TG g, TE e, float s, float x, float z, float top, float bottom) where TG : struct, IGroundHeight where TE : struct, IEditList
+        {
+            float f = Floor(e, At(g, e, x, z, s), top, bottom);
+            return float.IsNaN(f) ? top : float.IsNegativeInfinity(f) ? bottom : f;
+        }
+
         static bool Try<TG, TE, TO>(TG g, TE e, TO o, float s, float y, float nx, float nz, float ux, float uz, float fall, out float ny) where TG : struct, IGroundHeight where TE : struct, IEditList where TO : struct, IColumnTable
         {
             ny = y;
