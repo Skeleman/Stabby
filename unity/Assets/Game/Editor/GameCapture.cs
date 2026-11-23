@@ -161,7 +161,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "siting" ? 450 : 1;
+                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -259,23 +259,25 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (phase == 270)
+            while (phase >= 270 && phase < 270 + SpringShots.Length)
             {
+                string name = SpringShots[phase - 270];
                 if (wait == 0)
                 {
-                    if (!AimSite(cam, 1, ObjectPart.HotSpring, Structures.SpringU, SpringShots, "hot spring", Vector3.zero, 0)) { GameStatus.Lines["~spring"] = "no hot spring placed"; phase++; }
-                    else { wait = 180; return; }
+                    if (!AimSite(cam, phase - 270, ObjectPart.HotSpring, Structures.SpringU, SpringShots, "hot spring", new Vector3(0.85f, 0.5f, 2.2f), 0f)) { GameStatus.Lines["~" + name] = "no hot spring placed"; phase++; continue; }
+                    wait = 180;
+                    return;
                 }
-                else
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 271)
                 {
-                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
-                    Shot(cam, null, "warmup");
-                    Shot(cam, dir, "spring");
                     GameStatus.Lines["~bench spring"] = Bench(cam, "hot spring");
                     GameStatus.Lines["~bench spring steam"] = BenchMist(cam, "hot spring");
-                    wait = 0;
-                    phase++;
                 }
+                wait = 0;
+                phase++;
             }
             while (phase >= 300 && phase < 300 + FairyShots.Length)
             {
@@ -365,7 +367,7 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "arch" && phase > 1) || (only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length) || (only == "wolfden" && phase >= 400 + DenShots.Length))
+            if ((only == "arch" && phase > 1) || (only == "spring" && phase >= 270 + SpringShots.Length) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length) || (only == "wolfden" && phase >= 400 + DenShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -407,7 +409,8 @@ namespace Stabby.Game.Editor
             if (phase == 430) { if (job == null) job = DesireShots(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 420) { if (job == null) job = BrainOnly(dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 350) { if (job == null) job = ControlsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
-            if (phase == 450) { if (job == null) job = SitingTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 450) { if (job == null) job = WaterfallTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 460) { if (job == null) job = SitingTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 440) { if (job == null) job = RiverMouthTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 390) { if (job == null) job = WaterTintTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 380) { if (job == null) job = LiquidsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }

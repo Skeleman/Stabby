@@ -546,13 +546,13 @@ namespace Stabby.World
                         Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
                         Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (crest + bottom), By = 0.5f * (crest + bottom),
                         W = rout - ra, H = Math.Max(0f, 0.5f * (crest - bottom) - ra), P = 0.15f, N = 0.1f * u, S = seed,
-                    });
+                    }.Finer());
                     carves.Add(new FeatureEdit
                     {
                         Kind = FeatureEdit.Carve, Shape = FeatureEdit.Spring, R = rc,
                         Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (top + floor), By = 0.5f * (top + floor),
                         W = r - hole, H = Math.Max(0f, 0.5f * (top - floor) - hole), N = 0.08f * u, S = seed,
-                    });
+                    }.Finer());
                 }
             }
             list.AddRange(carves);

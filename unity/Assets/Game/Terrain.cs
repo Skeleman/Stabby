@@ -325,17 +325,16 @@ namespace Stabby.Game
 
         const float SinterFadeM = 0.9f;
 
-        static float Sinter(NativeEdits edits, float3 p)
+        static float Sinter(NativeEdits edits, NativeEdits crusts, float3 p)
         {
             float w = 0, clay = 0;
+            for (int q = 0; q < crusts.Count; q++) w = math.max(w, crusts.Items[q].Crust(p.x, p.z));
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
-                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Add || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
+                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Add || e.F < 0.5f || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
                 float d = math.length(new float2(p.x - e.Ax, p.z - e.Az)) - e.W - e.R;
-                float s = 1 - math.smoothstep(-SinterFadeM, 0, d);
-                if (e.F > 0.5f) clay = math.max(clay, s);
-                else w = math.max(w, s);
+                clay = math.max(clay, 1 - math.smoothstep(-SinterFadeM, 0, d));
             }
             return w >= clay ? w : -clay;
         }
@@ -369,6 +368,14 @@ namespace Stabby.Game
             {
                 var e = g.Edits[f];
                 if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) edits.Items.Add(e.AtStep(s));
+            }
+            var crusts = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
+            for (int f = 0; f < g.Edits.Length; f++)
+            {
+                var e = g.Edits[f];
+                if (!e.Crusts) continue;
+                float ext = e.CrustExtent;
+                if (e.Ax + ext > x0m && e.Ax - ext < x1m && e.Az + ext > z0m && e.Az - ext < z1m) crusts.Items.Add(e);
             }
             if (edits.Count > 0) SurfaceNets.Edited(columns, edits, chunk, ref sink);
             else SurfaceNets.Heightfield(columns, chunk, ref sink);
@@ -468,7 +475,7 @@ namespace Stabby.Game
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
-                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, p.Pos));
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, crusts, p.Pos));
                 p.Stitch.w = math.floor(p.Stitch.w) + 0.5f * Peat(edits, p.Pos);
                 if (stitch)
                 {
