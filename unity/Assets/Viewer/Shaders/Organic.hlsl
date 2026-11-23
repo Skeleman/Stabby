@@ -25,12 +25,6 @@ float2 OrgGrad(int2 p)
     return float2(h & 0xffffu, h >> 16) * (2.0 / 65535) - 1;
 }
 
-float3 OrgGrad3(int3 p)
-{
-    uint h = OrgHashU((uint3)p);
-    return float3(h & 1023u, (h >> 10) & 1023u, (h >> 20) & 1023u) * (2.0 / 1023) - 1;
-}
-
 float3 OrgNoise2(float2 p, int2 s)
 {
     float2 fl = floor(p), f = p - fl;
@@ -50,24 +44,6 @@ float4 OrgNoise3(float3 p, int3 s)
     float3 fl = floor(p), f = p - fl;
     int3 i = (int3)fl + s;
     float3 u = f * f * f * (f * (f * 6 - 15) + 10), du = 30 * f * f * (f * (f - 2) + 1);
-    float3 ga = OrgGrad3(i), gb = OrgGrad3(i + int3(1, 0, 0)), gc = OrgGrad3(i + int3(0, 1, 0)), gd = OrgGrad3(i + int3(1, 1, 0));
-    float3 ge = OrgGrad3(i + int3(0, 0, 1)), gf = OrgGrad3(i + int3(1, 0, 1)), gg = OrgGrad3(i + int3(0, 1, 1)), gh = OrgGrad3(i + int3(1, 1, 1));
-    float a = dot(ga, f), b = dot(gb, f - float3(1, 0, 0)), c = dot(gc, f - float3(0, 1, 0)), d = dot(gd, f - float3(1, 1, 0));
-    float e = dot(ge, f - float3(0, 0, 1)), g = dot(gf, f - float3(1, 0, 1)), h = dot(gg, f - float3(0, 1, 1)), k = dot(gh, f - 1);
-    float k1 = b - a, k2 = c - a, k3 = e - a, k4 = a - b - c + d, k5 = a - c - e + h, k6 = a - b - e + g, k7 = -a + b + c - d + e - g - h + k;
-    float v = a + k1 * u.x + k2 * u.y + k3 * u.z + k4 * u.x * u.y + k5 * u.y * u.z + k6 * u.z * u.x + k7 * u.x * u.y * u.z;
-    float3 gr = ga + u.x * (gb - ga) + u.y * (gc - ga) + u.z * (ge - ga) + u.x * u.y * (ga - gb - gc + gd) + u.y * u.z * (ga - gc - ge + gg) + u.z * u.x * (ga - gb - ge + gf) + u.x * u.y * u.z * (-ga + gb + gc - gd + ge - gf - gg + gh)
-        + du * float3(k1 + k4 * u.y + k6 * u.z + k7 * u.y * u.z, k2 + k5 * u.z + k4 * u.x + k7 * u.z * u.x, k3 + k6 * u.x + k5 * u.y + k7 * u.x * u.y);
-    return 2.1 * float4(v, gr);
-}
-
-float4 OrgNoise3(float3 p) { return OrgNoise3(p, int3(0, 0, 0)); }
-
-float4 OrgValue3(float3 p, int3 s)
-{
-    float3 fl = floor(p), f = p - fl;
-    int3 i = (int3)fl + s;
-    float3 u = f * f * f * (f * (f * 6 - 15) + 10), du = 30 * f * f * (f * (f - 2) + 1);
     float a = OrgHash(i), b = OrgHash(i + int3(1, 0, 0)), c = OrgHash(i + int3(0, 1, 0)), d = OrgHash(i + int3(1, 1, 0));
     float e = OrgHash(i + int3(0, 0, 1)), g = OrgHash(i + int3(1, 0, 1)), h = OrgHash(i + int3(0, 1, 1)), k = OrgHash(i + int3(1, 1, 1));
     float k1 = b - a, k2 = c - a, k3 = e - a, k4 = a - b - c + d, k5 = a - c - e + h, k6 = a - b - e + g, k7 = -a + b + c - d + e - g - h + k;
@@ -75,6 +51,8 @@ float4 OrgValue3(float3 p, int3 s)
     float3 gr = du * float3(k1 + k4 * u.y + k6 * u.z + k7 * u.y * u.z, k2 + k5 * u.z + k4 * u.x + k7 * u.z * u.x, k3 + k6 * u.x + k5 * u.y + k7 * u.x * u.y);
     return float4(2 * v - 1, 2 * gr);
 }
+
+float4 OrgNoise3(float3 p) { return OrgNoise3(p, int3(0, 0, 0)); }
 
 float OrgQ(float f) { return round(f * 1024) * (1.0 / 1024); }
 
@@ -140,19 +118,6 @@ float4 OrgRP3(float3 p, float f, float3 c, int k)
     if (k == 0) return OrgNoise3(p * f + c);
     float3x3 r = (float3x3)OrgRot3[(k - 1) & 3] / OrgRotD3[(k - 1) & 3];
     float4 v = OrgNoise3(mul(r, p * f) + c);
-    return float4(v.x, mul(v.yzw, r));
-}
-
-float4 OrgVRL3(float3 l, float f, float3 c, int k)
-{
-    float q = OrgQ(f);
-    int2 s = OrgShift(q);
-    int3x3 m = OrgRot3[(k - 1) & 3];
-    int d = OrgRotD3[(k - 1) & 3];
-    int3 n = mul(m, int3(s.x, 0, s.y));
-    int3 i = int3(OrgDiv(n.x, d), OrgDiv(n.y, d), OrgDiv(n.z, d));
-    float3x3 r = (float3x3)m / d;
-    float4 v = OrgValue3(mul(r, l * q) + (float3)(n - i * d) / d + c, i);
     return float4(v.x, mul(v.yzw, r));
 }
 

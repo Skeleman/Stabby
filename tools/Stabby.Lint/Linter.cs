@@ -162,7 +162,7 @@ public static class Linter
     }
 
     static readonly string[] ShaderExempt = { "Organic.hlsl", "Water.shader", "FallMist.shader", "Look.hlsl", "TerrainStitch.hlsl", "Contact.hlsl", "Wind.hlsl" };
-    static readonly Regex NoiseCall = new(@"\b(OrgFade|OrgL2|OrgL3|OrgLN2|OrgLN3|OrgFbm2|OrgFbm3|OrgNoise2|OrgNoise3|OrgRL2|OrgRL3|OrgRP2|OrgRP3|OrgVRL3|OrgValue3)\(");
+    static readonly Regex NoiseCall = new(@"\b(OrgFade|OrgL2|OrgL3|OrgLN2|OrgLN3|OrgFbm2|OrgFbm3|OrgNoise2|OrgNoise3|OrgRL2|OrgRL3|OrgRP2|OrgRP3)\(");
     static readonly Regex PatternCall = new(@"\b(floor|frac|step|sin|cos)\(");
     static readonly Regex Scaled = new(@"\*\s*(\d+(?:\.\d+)?)(?![\w.])");
     static readonly Regex Number = new(@"^\s*(\d+(?:\.\d+)?)\s*$");
@@ -188,7 +188,7 @@ public static class Linter
             bool hit = name switch
             {
                 "OrgFade" => IsHigh(args[0]),
-                "OrgNoise2" or "OrgNoise3" or "OrgValue3" => Scaled.Matches(args[0]).Any(s => IsHigh(s.Groups[1].Value)),
+                "OrgNoise2" or "OrgNoise3" => Scaled.Matches(args[0]).Any(s => IsHigh(s.Groups[1].Value)),
                 _ => args.Count > 1 && IsHigh(args[1]),
             };
             if (!hit) continue;

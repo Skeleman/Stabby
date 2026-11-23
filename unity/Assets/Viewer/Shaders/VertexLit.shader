@@ -63,7 +63,7 @@ Shader "Stabby/VertexLit"
             }
 
             float SinterRim(float p) { return smoothstep(0.55, 0.93, p) * (1 - smoothstep(0.93, 1, p)); }
-            float4 SinterN(float3 p, float f, float c, float w) { float4 r = 0; [branch] if (w > 0) r = OrgVRL3(p, f, c, 1); return r; }
+            float4 SinterN(float3 p, float f, float c, float w) { float4 r = 0; [branch] if (w > 0) r = OrgRL3(p, f, c, 1); return r; }
 
             half4 frag(Varyings i) : SV_Target
             {
