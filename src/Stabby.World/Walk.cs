@@ -61,8 +61,29 @@ namespace Stabby.World
 
         public static float Surface<TG, TE>(TG g, TE e, float s, float x, float z, float top, float bottom) where TG : struct, IGroundHeight where TE : struct, IEditList
         {
-            float f = Floor(e, At(g, e, x, z, s), top, bottom);
-            return float.IsNaN(f) ? top : float.IsNegativeInfinity(f) ? bottom : f;
+            var c = At(g, e, x, z, s);
+            if (!c.Edited) return c.H >= bottom ? c.H : bottom;
+            bool adds = false;
+            for (int q = 0, n = e.Count; q < n && !adds; q++)
+            {
+                var f = e.At(q);
+                adds = f.Kind == FeatureEdit.Add && x >= f.MinX && x <= f.MaxX && z >= f.MinZ && z <= f.MaxZ;
+            }
+            float yp = top, dp = Density(e, c, top);
+            if (dp >= 0) return top;
+            float y = top - Probe;
+            if (!adds)
+            {
+                while (y >= bottom && y > c.H) { yp = y; y -= Probe; }
+                if (yp != top) dp = Density(e, c, yp);
+            }
+            for (; y >= bottom; y -= Probe)
+            {
+                float d = Density(e, c, y);
+                if (d >= 0) return yp + (y - yp) * dp / (dp - d);
+                yp = y; dp = d;
+            }
+            return bottom;
         }
 
         static bool Try<TG, TE, TO>(TG g, TE e, TO o, float s, float y, float nx, float nz, float ux, float uz, float fall, out float ny) where TG : struct, IGroundHeight where TE : struct, IEditList where TO : struct, IColumnTable
