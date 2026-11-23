@@ -201,28 +201,47 @@ namespace Stabby.Viewer
 
         public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells)
         {
-            int n = world.Config.Size;
-            float cm = world.Config.CellMeters, half = cm * 0.5f;
+            int n = world.Config.Size, x1 = Mathf.Min(cx + cells, n), y1 = Mathf.Min(cy + cells, n), row = x1 - cx + 1;
+            float cm = world.Config.CellMeters;
+            var corner = new int[row * (y1 - cy + 1)];
+            for (int k = 0; k < corner.Length; k++) corner[k] = -1;
             var verts = new List<Vector3>();
             var tris = new List<int>();
             var kinds = new List<Vector4>();
             var tints = new List<Vector4>();
-            for (int y = cy; y < Mathf.Min(cy + cells, n); y++)
-                for (int x = cx; x < Mathf.Min(cx + cells, n); x++)
+            int Corner(int X, int Y)
+            {
+                ref int v = ref corner[(Y - cy) * row + X - cx];
+                if (v >= 0) return v;
+                float h = 0, a = 0, b = 0, c = 0;
+                int count = 0, liquid = -1;
+                for (int j = Y - 1; j <= Y; j++)
+                    for (int i = X - 1; i <= X; i++)
+                    {
+                        if (i < 0 || j < 0 || i >= n || j >= n) continue;
+                        float ch = LakeHeight(world, i, j);
+                        if (ch == float.MinValue) continue;
+                        int id = LakeAt(world, i, j);
+                        if (id < 0) continue;
+                        var lk = world.Water.Lakes[id];
+                        var m = WaterTint.MixAt(lk, n, X - 0.5f, Y - 0.5f);
+                        h += ch; a += m.A; b += m.B; c += m.C; count++;
+                        if (liquid < 0) liquid = lk.Liquid;
+                    }
+                v = verts.Count;
+                count = Mathf.Max(count, 1);
+                verts.Add(new Vector3((X - 0.5f) * cm, h / count, (Y - 0.5f) * cm));
+                kinds.Add(new Vector4(0, 0, 0, Mathf.Max(liquid, 0)));
+                tints.Add(new Vector4(a / count, b / count, c / count, 0));
+                return v;
+            }
+            for (int y = cy; y < y1; y++)
+                for (int x = cx; x < x1; x++)
                 {
-                    float h = LakeHeight(world, x, y);
-                    if (h == float.MinValue) continue;
-                    int b = verts.Count;
-                    verts.Add(new Vector3(x * cm - half, h, y * cm - half));
-                    verts.Add(new Vector3(x * cm - half, h, y * cm + half));
-                    verts.Add(new Vector3(x * cm + half, h, y * cm - half));
-                    verts.Add(new Vector3(x * cm + half, h, y * cm + half));
-                    tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
-                    tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
-                    int id = LakeAt(world, x, y);
-                    var kind = new Vector4(0, 0, 0, id < 0 ? 0 : world.Water.Lakes[id].Liquid);
-                    var tint = id < 0 ? default : Tint(world.Water.Lakes[id].Mix);
-                    for (int k = 0; k < 4; k++) { kinds.Add(kind); tints.Add(tint); }
+                    if (LakeHeight(world, x, y) == float.MinValue) continue;
+                    int v00 = Corner(x, y), v01 = Corner(x, y + 1), v10 = Corner(x + 1, y), v11 = Corner(x + 1, y + 1);
+                    tris.Add(v00); tris.Add(v01); tris.Add(v10);
+                    tris.Add(v10); tris.Add(v01); tris.Add(v11);
                 }
             if (verts.Count == 0) return null;
             var lake = Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
@@ -237,14 +256,16 @@ namespace Stabby.Viewer
 
         static int LakeAt(GeneratedWorld world, int x, int y)
         {
-            int n = world.Config.Size, id = world.Water.LakeId[y * n + x];
+            int n = world.Config.Size, id = LakeOf(world.Water, y * n + x);
             for (int k = 0; k < 8 && id < 0; k++)
             {
                 int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
-                if (nx >= 0 && ny >= 0 && nx < n && ny < n) id = world.Water.LakeId[ny * n + nx];
+                if (nx >= 0 && ny >= 0 && nx < n && ny < n) id = LakeOf(world.Water, ny * n + nx);
             }
             return id;
         }
+
+        static int LakeOf(Hydrology hy, int i) => hy.LakeId[i] >= 0 || hy.LakeCover == null ? hy.LakeId[i] : hy.LakeCover[i];
 
         static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].SprayAmount > 0);
 
@@ -256,13 +277,16 @@ namespace Stabby.Viewer
             var hy = world.Water;
             if (world.Sea[c]) return float.MinValue;
             if (hy.LakeId[c] >= 0) return Mathf.Max(hy.WaterSurface[c], world.Height[c]) + LakeLift;
+            int own = LakeOf(hy, c);
+            if (own >= 0) return hy.Lakes[own].Level + LakeLift;
             float h = float.MinValue;
             for (int k = 0; k < 8; k++)
             {
                 int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
                 if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
                 int o = ny * n + nx;
-                if (!world.Sea[o] && hy.LakeId[o] >= 0 && world.Height[c] >= hy.WaterSurface[o]) h = Mathf.Max(h, hy.WaterSurface[o] + LakeLift);
+                int id = LakeOf(hy, o);
+                if (!world.Sea[o] && id >= 0 && world.Height[c] >= hy.Lakes[id].Level) h = Mathf.Max(h, hy.Lakes[id].Level + LakeLift);
             }
             return h;
         }

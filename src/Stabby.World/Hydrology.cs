@@ -13,6 +13,7 @@ namespace Stabby.World
         public List<int> Cells = new List<int>();
         public int Outlet = -1;
         public WaterMix Mix;
+        public List<LakeInflow> Inflows = new List<LakeInflow>();
     }
 
     public sealed class RiverSegment
@@ -55,6 +56,7 @@ namespace Stabby.World
         public float[] WaterSurface;
         public float[] DischargeM3s;
         public int[] LakeId;
+        public int[] LakeCover;
         public List<Lake> Lakes = new List<Lake>();
         public List<RiverSegment> Rivers = new List<RiverSegment>();
         public bool[] IsRiver;
@@ -92,6 +94,7 @@ namespace Stabby.World
             BuildSegments(c, sea, hy);
             CarveBeds(c, h, sea, hy);
             Shelves(c, h, sea, hy);
+            Cover(c, h, sea, hy);
             return hy;
         }
 
@@ -178,6 +181,7 @@ namespace Stabby.World
             }
             BuildSegments(c, sea, hy);
             Shelves(c, h, sea, hy);
+            Cover(c, h, sea, hy);
         }
 
         static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy)
@@ -223,6 +227,51 @@ namespace Stabby.World
             seg.Cells.Add(i);
             seg.Surface.Add(hy.WaterSurface[i]);
             seg.Discharge.Add(hy.DischargeM3s[i]);
+        }
+
+        public const int CoverWingCells = 3;
+
+        static void Cover(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
+        {
+            int n = c.Size;
+            hy.LakeCover = new int[n * n];
+            var into = new int[n * n];
+            var wing = new int[n * n];
+            for (int i = 0; i < n * n; i++) { hy.LakeCover[i] = -1; into[i] = -1; }
+            foreach (var s in hy.Rivers)
+            {
+                int id = DrainsTo(hy, s);
+                if (id >= 0) foreach (int i in s.Cells) into[i] = id;
+            }
+            var queue = new List<int>();
+            foreach (var lake in hy.Lakes)
+            {
+                queue.Clear();
+                queue.AddRange(lake.Cells);
+                for (int q = 0; q < queue.Count; q++)
+                {
+                    int i = queue[q], x = i % n, y = i / n;
+                    bool open = hy.LakeId[i] < 0;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        int nx = x + Grid.DX[k], ny = y + Grid.DY[k];
+                        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                        int o = ny * n + nx;
+                        if (sea[o] || hy.LakeId[o] >= 0 || hy.LakeCover[o] >= 0 || h[o] >= lake.Level) continue;
+                        if (into[o] == lake.Id) wing[o] = 0;
+                        else if (into[o] < 0 && !hy.IsRiver[o] && open && wing[i] < CoverWingCells) wing[o] = wing[i] + 1;
+                        else continue;
+                        hy.LakeCover[o] = lake.Id;
+                        queue.Add(o);
+                    }
+                }
+            }
+        }
+
+        public static int DrainsTo(Hydrology hy, RiverSegment s)
+        {
+            for (int hop = 0; s.End == RiverEnd.Junction && hop < hy.Rivers.Count; hop++) s = hy.Rivers[s.Downstream];
+            return s.End == RiverEnd.Lake ? s.LakeId : -1;
         }
 
         public static float Stage(WorldConfig c, RiverSegment s, int k)

@@ -106,6 +106,7 @@ namespace Stabby.World
                     if (!w.Sea[i] && w.Biome[i] < 0 && hy.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
 
             CheckTint(w, e);
+            CheckLakeCover(w, e);
             if (w.Sketch != null) CheckSketch(w, e);
             if (w.Sketch != null) CheckMesas(w, e);
             CheckDetail(w, e);
