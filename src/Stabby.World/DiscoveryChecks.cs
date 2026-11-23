@@ -80,13 +80,13 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Hermit && !(field.Woods(s.X, s.Z) >= ObjectField.HermitWoods)) { e.Add(at + " is not deep in the woods"); return; }
                 if (def.Placement.Discovery == ObjectField.Ruin && field.Fitness(ObjectField.Ruin, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too broken for a ruin"); return; }
                 if (def.Placement.Discovery == ObjectField.FairyRing && field.Fitness(ObjectField.FairyRing, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too uneven for a fairy ring"); return; }
-                if (def.Placement.Discovery == ObjectField.WolfDen) { if (field.Fitness(ObjectField.WolfDen, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground unfit for a wolf den"); return; } var df = field.DenFault(s); if (df != null) { e.Add(at + " " + df); return; } }
+                if (def.Placement.Discovery == ObjectField.WolfDen) { if (field.Fitness(ObjectField.WolfDen, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground unfit for a wolf den"); return; } if (!field.BesideRock(s.X, s.Z)) { e.Add(at + " is not beside steep rock"); return; } var df = field.DenFault(s); if (df != null) { e.Add(at + " " + df); return; } }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
-                if (ObjectField.Pooled(def.Placement.Discovery)) { if (!(field.SpringDraw(s.X, s.Z) > 0)) { e.Add(at + " is not near a range or volcanic relief"); return; } var fault = field.VentFault(s); if (fault != null) { e.Add(at + " " + fault); return; } }
+                if (ObjectField.Pooled(def.Placement.Discovery)) { if (!(field.Hotspots.Heat(s.X, s.Z) > 0)) { e.Add(at + " lies outside every geothermal hotspot"); return; } var fault = field.VentFault(s); if (fault != null) { e.Add(at + " " + fault); return; } }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);
                 for (int b = a + 1; b < found.Length; b++)
                 {
-                    float dx = found[b].X - s.X, dz = found[b].Z - s.Z, g = found[b].Def == s.Def ? gap : ObjectField.DiscoveryGapM;
+                    float dx = found[b].X - s.X, dz = found[b].Z - s.Z, g = field.IsVent(s) && field.IsVent(found[b]) ? ObjectField.VentGapM : found[b].Def == s.Def ? gap : ObjectField.DiscoveryGapM;
                     if (dx * dx + dz * dz < g * g) { e.Add(at + $" is closer than {g:F0} m to {w.Objects.Objects[found[b].Def].Id} at {found[b].X:F0},{found[b].Z:F0}"); return; }
                 }
                 int cx = (int)(s.X / span), cz = (int)(s.Z / span), hits = 0;
