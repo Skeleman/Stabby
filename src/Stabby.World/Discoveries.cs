@@ -5,12 +5,12 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11;
         public const float SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 4f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
-        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 5f, DenRiverM = 40f, DenWoods = 0.25f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
         public const int DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
@@ -112,11 +112,11 @@ namespace Stabby.World
             if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null)) break;
+                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || DenFault(o) == null)) break;
             }
             if (k == tries) return false;
             best = fit; pick = o;
@@ -613,6 +613,11 @@ namespace Stabby.World
             }
             if (kind == Ruin) return relief <= RuinReliefM ? rise - 0.2f * relief : float.MinValue;
             if (kind == FairyRing) return relief <= FairyReliefM ? -0.2f * relief - Math.Abs(Woods(x, z) - FairyWoods) : float.MinValue;
+            if (kind == WolfDen)
+            {
+                float woods = Woods(x, z);
+                return relief <= DenReliefM && woods >= DenWoods && RiverGap(x, z) >= DenRiverM ? 0.1f * rise - 0.1f * relief + woods : float.MinValue;
+            }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;
         }
