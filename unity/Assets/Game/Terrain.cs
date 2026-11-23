@@ -629,7 +629,8 @@ namespace Stabby.Game
         public int ApplyVertices = 150000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
-        public static bool Casting = true, HideSunk = true;
+        public static bool Casting = true, HideSunk = true, ShadowRule = true, SprayShadows = true;
+        float viewPpm = 1000, viewQuality = 1;
 
         sealed class Prepared
         {
@@ -778,6 +779,7 @@ namespace Stabby.Game
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
 
         static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx"), ColumnPxId = Shader.PropertyToID("_StabbyColumnPx"), ClockId = Shader.PropertyToID("_StabbyClock");
+        static readonly int ShadowPxId = Shader.PropertyToID("_StabbyShadowPx"), ShadowEyeId = Shader.PropertyToID("_StabbyShadowEye");
         const double ClockWrap = 86400, FallbackTickRate = 60;
         public static double? ClockOverride;
 
@@ -800,6 +802,11 @@ namespace Stabby.Game
             Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, steamFade, steamFull));
             quads.ColumnWindow(view.Quality, out float columnFade, out float columnFull);
             Shader.SetGlobalVector(ColumnPxId, new Vector4(columnFade, columnFull, 0, 0));
+            viewPpm = view.PixelsPerMetre;
+            viewQuality = view.Quality;
+            quads.MistShadowWindow(view.Quality, out float shadowFade, out float shadowFull);
+            Shader.SetGlobalVector(ShadowPxId, new Vector4(viewPpm, shadowFade, shadowFull, SprayShadows ? 1 : 0));
+            Shader.SetGlobalVector(ShadowEyeId, cam.transform.position);
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
 
@@ -1275,13 +1282,22 @@ namespace Stabby.Game
             GameStatus.Lines["terrain~steam"] = $"spring steam {steam.Count} pieces, {pools.Count} pool pieces";
         }
 
+        bool Casts(MeshParts part, BatchMaterialID mat)
+        {
+            if (mat == mistMaterial) return true;
+            if (part.Uv4 == null) return false;
+            for (int i = 0; i < part.Uv4.Length; i++)
+                if (part.Uv4[i].x > 0.5f) return true;
+            return false;
+        }
+
         void AddStatic(MeshParts part, BatchMaterialID mat, float pad)
         {
             var mesh = WaterGeometry.ToMesh(part);
             var id = graphics.RegisterMesh(mesh);
             statics.Add(mesh);
             var b = mesh.bounds;
-            Spawn(id, new AABB { Center = b.center, Extents = (float3)b.extents + pad }, mat);
+            Spawn(id, new AABB { Center = b.center, Extents = (float3)b.extents + pad }, mat, Casts(part, mat) ? ShadowCastingMode.On : ShadowCastingMode.Off);
         }
 
         bool Coverable(int key)
@@ -1424,7 +1440,7 @@ namespace Stabby.Game
                     nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
-                int cast = show && CastsNear(nb, eye, reach, floor, upsun, tanE) ? 1 : 0;
+                int cast = show && CastsNear(nb, eye, reach, floor, upsun, tanE) && Large(nb, eye, nd.Cast != 0) ? 1 : 0;
                 if (cast != nd.Cast)
                 {
                     double tsh = frame.Elapsed.TotalMilliseconds;
@@ -1506,6 +1522,13 @@ namespace Stabby.Game
             if (a > l || b > l || thin && (a == 0 && !fa || b == 0 && !fb)) mask |= bit;
             if ((a >= 0 && a < l) || (b >= 0 && b < l) || l == 0 && !thin && (fa || fb)) mask |= bit << 8;
             return mask;
+        }
+
+        bool Large(MinMaxAABB nb, float3 eye, bool was)
+        {
+            if (!ShadowRule) return true;
+            float dist = math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max)));
+            return Detail.Holds(Detail.ScreenSize(nb.Max.y - nb.Min.y, dist, viewPpm), quads.ShadowBoundary(viewQuality), was);
         }
 
         static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float floor, float2 upsun, float tanE)

@@ -344,6 +344,8 @@ public static class ContentLoader
         public float SteamFullPixels { get; set; } = new TerrainViewDef().SteamFullPixels;
         public float ColumnFadePixels { get; set; } = new TerrainViewDef().ColumnFadePixels;
         public float ColumnFullPixels { get; set; } = new TerrainViewDef().ColumnFullPixels;
+        public float ShadowPixels { get; set; } = new TerrainViewDef().ShadowPixels;
+        public float MistShadowPixels { get; set; } = new TerrainViewDef().MistShadowPixels;
     }
 
     sealed class FoliageEntry
@@ -524,7 +526,7 @@ public static class ContentLoader
             };
             lib.Objects.Add(def);
         }
-        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels, ColumnFadePixels = file.Terrain.ColumnFadePixels, ColumnFullPixels = file.Terrain.ColumnFullPixels };
+        if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels, ColumnFadePixels = file.Terrain.ColumnFadePixels, ColumnFullPixels = file.Terrain.ColumnFullPixels, ShadowPixels = file.Terrain.ShadowPixels, MistShadowPixels = file.Terrain.MistShadowPixels };
         if (file.Foliage != null)
         {
             var g = file.Foliage.Grass;

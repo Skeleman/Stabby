@@ -3,6 +3,42 @@ Shader "Stabby/Water"
     SubShader
     {
         Tags { "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" }
+
+        HLSLINCLUDE
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+        float4 _StabbyLiquid[80];
+        float4 _StabbyShadowPx;
+        float4 _StabbyShadowEye;
+
+        float4 Liquid(float id, int row) { return _StabbyLiquid[clamp((int)round(id), 0, 7) * 10 + row]; }
+
+        float2 Grad(int2 p)
+        {
+            uint2 q = asuint(p) * uint2(1597334673u, 3812015801u);
+            uint h = (q.x ^ q.y) * 1597334673u;
+            h ^= h >> 16;
+            h *= 2246822519u;
+            h ^= h >> 13;
+            return float2(h & 0xffffu, h >> 16) / 32767.5 - 1;
+        }
+
+        float3 Noise(float2 p)
+        {
+            float2 fl = floor(p), f = p - fl;
+            int2 i = (int2)fl;
+            float2 u = f * f * f * (f * (f * 6 - 15) + 10), du = 30 * f * f * (f * (f - 2) + 1);
+            float2 ga = Grad(i), gb = Grad(i + int2(1, 0)), gc = Grad(i + int2(0, 1)), gd = Grad(i + 1);
+            float va = dot(ga, f), vb = dot(gb, f - float2(1, 0)), vc = dot(gc, f - float2(0, 1)), vd = dot(gd, f - 1);
+            float k = va - vb - vc + vd;
+            float v = va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k;
+            float2 d = ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + float2(vb - va, vc - va));
+            return float3(v, d);
+        }
+
+        struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; float4 tint : TEXCOORD3; float4 curt : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
+        ENDHLSL
+
         Pass
         {
             Tags { "LightMode" = "UniversalForward" }
@@ -14,14 +50,12 @@ Shader "Stabby/Water"
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
 
             float4 _StabbySky, _StabbyFieldUV;
-            float4 _StabbyLiquid[80];
             float4 _StabbyTintSlot;
             TEXTURE2D(_StabbySlope);
             SAMPLER(sampler_StabbySlope);
@@ -35,31 +69,6 @@ Shader "Stabby/Water"
             static const float MudFeather = 4;
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
             static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05;
-
-            float4 Liquid(float id, int row) { return _StabbyLiquid[clamp((int)round(id), 0, 7) * 10 + row]; }
-
-            float2 Grad(int2 p)
-            {
-                uint2 q = asuint(p) * uint2(1597334673u, 3812015801u);
-                uint h = (q.x ^ q.y) * 1597334673u;
-                h ^= h >> 16;
-                h *= 2246822519u;
-                h ^= h >> 13;
-                return float2(h & 0xffffu, h >> 16) / 32767.5 - 1;
-            }
-
-            float3 Noise(float2 p)
-            {
-                float2 fl = floor(p), f = p - fl;
-                int2 i = (int2)fl;
-                float2 u = f * f * f * (f * (f * 6 - 15) + 10), du = 30 * f * f * (f * (f - 2) + 1);
-                float2 ga = Grad(i), gb = Grad(i + int2(1, 0)), gc = Grad(i + int2(0, 1)), gd = Grad(i + 1);
-                float va = dot(ga, f), vb = dot(gb, f - float2(1, 0)), vc = dot(gc, f - float2(0, 1)), vd = dot(gd, f - 1);
-                float k = va - vb - vc + vd;
-                float v = va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k;
-                float2 d = ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + float2(vb - va, vc - va));
-                return float3(v, d);
-            }
 
             float3 Bubbles(float2 p, float tm)
             {
@@ -101,7 +110,6 @@ Shader "Stabby/Water"
                 return g * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x));
             }
 
-            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; float4 tint : TEXCOORD3; float4 curt : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; float3 tint : TEXCOORD7; float4 curt : TEXCOORD8; };
 
             float4 Mixed(Varyings i, int row)
@@ -447,6 +455,65 @@ Shader "Stabby/Water"
                 half4 s = Sheet(i, v, dist, uv);
                 UNITY_BRANCH if (b > 0.001) s = lerp(s, Curtain(i, v, dist, uv), b);
                 return s;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Off
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            float3 _LightDirection;
+
+            struct Varyings { float4 positionCS : SV_POSITION; float4 sheet : TEXCOORD0; float2 shade : TEXCOORD1; };
+
+            float Bayer(float2 p)
+            {
+                uint2 q = (uint2)p & 3u;
+                static const float m[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+                return (m[(q.x << 2) | q.y] + 0.5) / 16.0;
+            }
+
+            Varyings vert(Attributes i)
+            {
+                Varyings o;
+                UNITY_SETUP_INSTANCE_ID(i);
+                float3 wp = TransformObjectToWorld(i.positionOS.xyz);
+                float focal = _StabbyShadowPx.x, wd = 2 * i.chan.y;
+                float flowQ = saturate(log2(1 + i.curt.w) / 9);
+                float fade = smoothstep(_StabbyShadowPx.y, _StabbyShadowPx.z, wd / max(length(_StabbyShadowEye.xyz - wp), 0.01) * focal);
+                float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, _LightDirection, _LightDirection));
+                #if UNITY_REVERSED_Z
+                cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                bool off = i.curt.z <= 0 || focal <= 0 || _StabbyShadowPx.w <= 0;
+                o.positionCS = off ? float4(0, 0, -2, 1) : cs;
+                o.sheet = float4(i.chan.x * i.chan.y, saturate(i.curt.y) * i.curt.z, i.curt.x, Liquid(i.reach.w, 7).x);
+                o.shade = float2(saturate(flowQ * 1.4 - 0.25) * fade * _StabbyShadowPx.w, i.chan.x);
+                return o;
+            }
+
+            half4 frag(Varyings i) : SV_Target
+            {
+                clip(min(i.sheet.z - 0.5, i.shade.x - 0.001));
+                float tau = sqrt(2 * max(i.sheet.y, 0) / 9.81), ph = tau - _Time.y * i.sheet.w * 0.8;
+                float n = Noise(float2(i.sheet.x * 1.3, ph * 0.66)).x + 0.5 * Noise(float2(i.sheet.x * 2.6, ph * 1.2) + 7.7).x;
+                float edge = smoothstep(1, 0.82, abs(i.shade.y));
+                clip(saturate(i.shade.x * edge * (0.55 + 0.6 * n)) - Bayer(i.positionCS.xy));
+                return 0;
             }
             ENDHLSL
         }
