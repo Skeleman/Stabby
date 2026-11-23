@@ -14,22 +14,23 @@ namespace Stabby.World
             local.Clear();
             var rng = Rng.Stream(key, "wolf-den-rocks");
             mx = rng.Range(-0.4f, 0.4f);
-            gap = rng.Range(1.3f, 1.7f);
-            float big = rng.Range(1.2f, 1.5f), small = big * rng.Range(0.6f, 0.8f);
+            gap = rng.Range(1.4f, 1.8f);
+            float big = rng.Range(1.25f, 1.55f), small = big * rng.Range(0.5f, 0.65f);
             bool bigLeft = rng.NextFloat() < 0.5f;
-            float rl = bigLeft ? big : small, rr = bigLeft ? small : big;
+            float rl = bigLeft ? big : small, rr = bigLeft ? small : big, hl = 0, hr = 0;
             for (int side = -1; side <= 1; side += 2)
             {
-                float r = side < 0 ? rl : rr, x = mx + side * (0.5f * gap + r), zf = -0.8f - r, len = rng.Range(0.2f, 0.6f), skew = side * rng.Range(0f, 0.3f);
-                Add(local, x, zf, x + skew, zf - len, r, 0.25f * r, 0.25f * r + rng.Range(0.3f, 0.6f), rng.NextFloat());
+                float r = side < 0 ? rl : rr, x = mx + side * (0.5f * gap + r), zf = -0.8f - r, len = rng.Range(0.2f, 0.6f), skew = side * rng.Range(0.1f, 0.4f), lift = ((side < 0) == bigLeft ? 0.1f : 0f) * r, rise = rng.Range(0.2f, 0.5f);
+                Add(local, x, zf, x + skew, zf - len, r, lift, lift + rise, rng.NextFloat());
+                if (side < 0) hl = lift + 0.85f * r + 0.5f * rise; else hr = lift + 0.85f * r + 0.5f * rise;
             }
-            float rs = rng.Range(0.6f, 0.75f), zs = -1.3f, deep = rng.Range(0.5f, 1.0f);
+            float rs = rng.Range(0.6f, 0.72f), zs = -1.1f, deep = rng.Range(0.6f, 1.1f), sit = 0.6f * rs;
             bool frontLeft = rng.NextFloat() < 0.5f;
-            float sxl = mx - 0.5f * gap - 0.8f * rl, sxr = mx + 0.5f * gap + 0.8f * rr;
-            Add(local, sxl, frontLeft ? zs : zs - deep, sxr, frontLeft ? zs - deep : zs, rs, 1.25f * rl + 0.3f * rs, 1.25f * rr + 0.3f * rs, rng.NextFloat());
-            float rb = rng.Range(1.5f, 1.9f), bx = mx + rng.Range(-0.6f, 0.6f), bh = rng.Range(0.4f, 0.9f), bz = -2.6f - rb, rise = rng.Range(0.3f, 0.7f);
+            float sxl = mx - 0.5f * gap - 0.9f * rl, sxr = mx + 0.5f * gap + 0.9f * rr;
+            Add(local, sxl, frontLeft ? zs : zs - deep, sxr, frontLeft ? zs - deep : zs, rs, hl + sit, hr + sit, rng.NextFloat());
+            float rb = rng.Range(1.5f, 1.9f), bx = mx + rng.Range(-0.6f, 0.6f), bh = rng.Range(0.4f, 0.9f), bz = -2.7f - 0.9f * rb, up = rng.Range(0.4f, 0.8f);
             bool upLeft = rng.NextFloat() < 0.5f;
-            Add(local, bx - bh, bz + rng.Range(-0.3f, 0.3f), bx + bh, bz + rng.Range(-0.3f, 0.3f), rb, 0.15f * rb + (upLeft ? rise : 0), 0.15f * rb + (upLeft ? 0 : rise), rng.NextFloat());
+            Add(local, bx - bh, bz + rng.Range(-0.3f, 0.3f), bx + bh, bz + rng.Range(-0.3f, 0.3f), rb, 0.35f * rb + (upLeft ? up : 0), 0.35f * rb + (upLeft ? 0 : up), rng.NextFloat());
             if (rng.NextFloat() < 0.7f)
             {
                 int side = rng.NextFloat() < 0.5f ? -1 : 1, d = rng.Range(0, 16);
