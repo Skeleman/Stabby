@@ -66,7 +66,7 @@ namespace Stabby.World
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
                         if (!roll) continue;
                         if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
-                        if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
+                        if (Pooled(pl.Discovery) || pl.Discovery == WolfDen) FaceDownhill(px, pz, ref qa, ref qb);
                         any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
                     }
                     if (any) list.Add(pick);
