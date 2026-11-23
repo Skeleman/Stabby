@@ -21,6 +21,7 @@ namespace Stabby.Viewer
         public Vector4 Surface, Wobble, RockA, RockB, RockC, Look, CoatRough;
         public Vector4[] CoatA, CoatB;
         public Vector4[] Liquids;
+        public Vector4 Tints;
         public Vector4[] Sinter;
     }
 
@@ -104,6 +105,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
             Shader.SetGlobalVectorArray("_StabbyLiquid", s.Liquids);
+            Shader.SetGlobalVector("_StabbyTintSlot", s.Tints);
             Shader.SetGlobalVector("_StabbySinterA", s.Sinter[0]);
             Shader.SetGlobalVector("_StabbySinterB", s.Sinter[1]);
             Shader.SetGlobalVector("_StabbySinterC", s.Sinter[2]);
@@ -319,6 +321,7 @@ namespace Stabby.Viewer
                 CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,
                 Liquids = LiquidLook(lib),
+                Tints = TintLook(lib),
                 Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat),
             };
         }
@@ -351,6 +354,14 @@ namespace Stabby.Viewer
         }
 
         public const int LiquidRows = 10;
+
+        static Vector4 TintLook(MaterialLibrary lib)
+        {
+            var v = Vector4.zero;
+            var slots = lib.TintSlots();
+            for (int t = 0; t < slots.Length && t < LiquidDef.TintSlots; t++) v[t] = slots[t];
+            return v;
+        }
 
         static Vector4[] LiquidLook(MaterialLibrary lib)
         {

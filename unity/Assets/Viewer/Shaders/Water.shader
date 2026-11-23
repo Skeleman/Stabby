@@ -22,6 +22,7 @@ Shader "Stabby/Water"
 
             float4 _StabbySky, _StabbyFieldUV;
             float4 _StabbyLiquid[80];
+            float4 _StabbyTintSlot;
             TEXTURE2D(_StabbySlope);
             SAMPLER(sampler_StabbySlope);
             TEXTURE2D(_StabbyBed);
@@ -100,14 +101,20 @@ Shader "Stabby/Water"
                 return g * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x));
             }
 
-            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; };
+            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; float4 tint : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; float3 tint : TEXCOORD7; };
+
+            float4 Mixed(Varyings i, int row)
+            {
+                float3 t = i.tint;
+                return Liquid(i.warm, row) * (1 - t.x - t.y - t.z) + Liquid(_StabbyTintSlot.x, row) * t.x + Liquid(_StabbyTintSlot.y, row) * t.y + Liquid(_StabbyTintSlot.z, row) * t.z;
+            }
 
             float ScreenPx(float size, float dist) { return size / max(dist, 0.01) * abs(UNITY_MATRIX_P[1][1]) * 540; }
 
             half4 Curtain(Varyings i, float3 v, float dist, float2 uv)
             {
-                float4 L0 = Liquid(i.warm, 0), L1 = Liquid(i.warm, 1), L7 = Liquid(i.warm, 7), L8 = Liquid(i.warm, 8), L9 = Liquid(i.warm, 9);
+                float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L7 = Mixed(i, 7), L8 = Mixed(i, 8), L9 = Mixed(i, 9);
                 float u = saturate(i.fall.x), h = i.fall.y, y = u * h, x = i.chan.x * i.chan.y;
                 float2 fd = normalize(i.color.rg * 2 - 1), sd = float2(fd.y, -fd.x);
                 float flowQ = saturate(log2(1 + i.chan.z) / 9);
@@ -198,6 +205,7 @@ Shader "Stabby/Water"
                 o.chan = float4(i.chan, i.reach.xy);
                 o.along = i.reach.z;
                 o.warm = i.reach.w;
+                o.tint = round(i.reach.w) == 0 ? saturate(i.tint.xyz) : 0;
                 o.fall = i.fall;
                 return o;
             }
@@ -209,7 +217,7 @@ Shader "Stabby/Water"
                 float3 v = toCam / dist;
                 float2 uv = i.screen.xy / i.screen.w;
                 UNITY_BRANCH if (i.fall.w > 0.5) return Curtain(i, v, dist, uv);
-                float4 L0 = Liquid(i.warm, 0), L1 = Liquid(i.warm, 1), L2 = Liquid(i.warm, 2), L3 = Liquid(i.warm, 3), L4 = Liquid(i.warm, 4), L5 = Liquid(i.warm, 5), L6 = Liquid(i.warm, 6), L7 = Liquid(i.warm, 7);
+                float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L2 = Mixed(i, 2), L3 = Mixed(i, 3), L4 = Mixed(i, 4), L5 = Mixed(i, 5), L6 = Mixed(i, 6), L7 = Mixed(i, 7);
                 float opacity = L5.x, visc = L5.y;
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
@@ -425,7 +433,7 @@ Shader "Stabby/Water"
                     float3 fc = L6.rgb * (l.color * saturate(dot(n, l.direction)) * 0.8 + sky * 0.4) + l.color * pow(saturate(dot(n, h)), 40) * 0.08;
                     c = lerp(c, fc, film);
                 }
-                c += Liquid(i.warm, 8).rgb;
+                c += Mixed(i, 8).rgb;
 
                 float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);

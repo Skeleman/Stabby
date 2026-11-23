@@ -11,7 +11,7 @@ namespace Stabby.Viewer
         public Vector3[] Verts, Norms;
         public Color[] Cols;
         public Vector2[] Uvs;
-        public Vector4[] Uv1, Uv2;
+        public Vector4[] Uv1, Uv2, Uv3;
         public int[] Tris;
     }
 
@@ -61,6 +61,7 @@ namespace Stabby.Viewer
             if (d.Uvs != null) mesh.SetUVs(0, d.Uvs);
             if (d.Uv1 != null) mesh.SetUVs(1, d.Uv1);
             if (d.Uv2 != null) mesh.SetUVs(2, d.Uv2);
+            if (d.Uv3 != null) mesh.SetUVs(3, d.Uv3);
             mesh.SetTriangles(d.Tris, 0);
             mesh.RecalculateBounds();
             return mesh;
@@ -205,6 +206,7 @@ namespace Stabby.Viewer
             var verts = new List<Vector3>();
             var tris = new List<int>();
             var kinds = new List<Vector4>();
+            var tints = new List<Vector4>();
             for (int y = cy; y < Mathf.Min(cy + cells, n); y++)
                 for (int x = cx; x < Mathf.Min(cx + cells, n); x++)
                 {
@@ -217,18 +219,23 @@ namespace Stabby.Viewer
                     verts.Add(new Vector3(x * cm + half, h, y * cm + half));
                     tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
                     tris.Add(b + 2); tris.Add(b + 1); tris.Add(b + 3);
-                    var kind = new Vector4(0, 0, 0, LakeLiquid(world, x, y));
-                    for (int k = 0; k < 4; k++) kinds.Add(kind);
+                    int id = LakeAt(world, x, y);
+                    var kind = new Vector4(0, 0, 0, id < 0 ? 0 : world.Water.Lakes[id].Liquid);
+                    var tint = id < 0 ? default : Tint(world.Water.Lakes[id].Mix);
+                    for (int k = 0; k < 4; k++) { kinds.Add(kind); tints.Add(tint); }
                 }
             if (verts.Count == 0) return null;
             var lake = Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
             lake.Uvs = new Vector2[verts.Count];
             lake.Uv1 = kinds.ToArray();
             lake.Uv2 = new Vector4[verts.Count];
+            lake.Uv3 = tints.ToArray();
             return lake;
         }
 
-        static int LakeLiquid(GeneratedWorld world, int x, int y)
+        static Vector4 Tint(WaterMix m) => new Vector4(m.A, m.B, m.C, 0);
+
+        static int LakeAt(GeneratedWorld world, int x, int y)
         {
             int n = world.Config.Size, id = world.Water.LakeId[y * n + x];
             for (int k = 0; k < 8 && id < 0; k++)
@@ -236,7 +243,7 @@ namespace Stabby.Viewer
                 int nx = x + Stabby.World.Grid.DX[k], ny = y + Stabby.World.Grid.DY[k];
                 if (nx >= 0 && ny >= 0 && nx < n && ny < n) id = world.Water.LakeId[ny * n + nx];
             }
-            return id < 0 ? 0 : world.Water.Lakes[id].Liquid;
+            return id;
         }
 
         static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].SprayAmount > 0);
@@ -265,10 +272,11 @@ namespace Stabby.Viewer
             public readonly List<Vector3> Verts = new List<Vector3>();
             public readonly List<Color> Cols = new List<Color>();
             public readonly List<Vector2> Chan = new List<Vector2>();
-            public readonly List<Vector4> Reach = new List<Vector4>(), Fall = new List<Vector4>();
+            public readonly List<Vector4> Reach = new List<Vector4>(), Fall = new List<Vector4>(), Tints = new List<Vector4>();
             public readonly List<int> Tris = new List<int>();
+            public Vector4 Tint;
 
-            public void Clear() { Verts.Clear(); Cols.Clear(); Chan.Clear(); Reach.Clear(); Fall.Clear(); Tris.Clear(); }
+            public void Clear() { Verts.Clear(); Cols.Clear(); Chan.Clear(); Reach.Clear(); Fall.Clear(); Tints.Clear(); Tris.Clear(); }
 
             public void Row(Vector3 p, Vector3 dir, float half, float slope, Vector4 reach, Vector4 fall, bool join)
             {
@@ -282,6 +290,8 @@ namespace Stabby.Viewer
                 Chan.Add(new Vector2(1, half));
                 Reach.Add(reach);
                 Reach.Add(reach);
+                Tints.Add(Tint);
+                Tints.Add(Tint);
                 Fall.Add(fall);
                 Fall.Add(fall);
                 if (!join) return;
@@ -308,6 +318,7 @@ namespace Stabby.Viewer
                         Cols.Add(flow);
                         Chan.Add(new Vector2(2f * c / (cols - 1) - 1, half * f.Span));
                         Reach.Add(reach);
+                        Tints.Add(Tint);
                         Fall.Add(fall);
                     }
                     if (c == 0) continue;
@@ -338,6 +349,7 @@ namespace Stabby.Viewer
                         Cols.Add(flow);
                         Chan.Add(new Vector2(2f * c / (cols - 1) - 1, half * f.Span));
                         Reach.Add(reach);
+                        Tints.Add(Tint);
                         Fall.Add(fv);
                         if (j == 0 || c == 0) continue;
                         int v = b + j * cols + c, a = v - cols;
@@ -361,6 +373,7 @@ namespace Stabby.Viewer
                 m.Uvs = Chan.ToArray();
                 m.Uv1 = Reach.ToArray();
                 m.Uv2 = Fall.ToArray();
+                m.Uv3 = Tints.ToArray();
                 return m;
             }
         }
@@ -551,8 +564,10 @@ namespace Stabby.Viewer
                     if (pool.x > NoPool.x) half = Mathf.Max(half, pool.z * (1 - Mathf.Clamp01((s - pool.x) / (PoolSpread * pool.z))));
                     var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, r.Liquid);
                     bool join = k > 0;
+                    buf.Tint = Tint(r.Mix[k]);
                     if (k > 0 && FallAt(r, k, out var f, out float lt))
                     {
+                        buf.Tint = Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], lt));
                         var fd = new Vector3(f.DirX, 0, f.DirZ);
                         var prev = new Vector3(pts[k - 1].x, 0, pts[k - 1].z);
                         float sl = s - seg * (1 - lt), th = FallThrowAt(f.Drop), ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
@@ -569,8 +584,10 @@ namespace Stabby.Viewer
                         pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);
                         var footRow = Vector3.Lerp(prev, new Vector3(p.x, 0, p.z), ft);
                         footRow.y = f.BaseY;
+                        buf.Tint = Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], ft));
                         buf.Row(footRow, fd, Mathf.Lerp(0.5f * f.Width, half, (ft - lt) / (1 - lt)), slopes[k], new Vector4(rv.x, rv.y, s - seg * (1 - ft), rv.w), pool, false);
                     }
+                    buf.Tint = Tint(r.Mix[k]);
                     buf.Row(p, dir, half, slopes[k], rv, pool, join);
                 }
             }

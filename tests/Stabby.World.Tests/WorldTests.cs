@@ -247,11 +247,19 @@ public class WorldTests
         Assert.True(lib.Water.DeepColor != 0 && lib.Water.ShoreM > 0 && lib.Water.FoamWidthM > 0);
         Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Liquids = { new LiquidDef { Id = "water" } } }), e => e.Contains("water.shoreM"));
         foreach (var b in ContentLoader.LoadBiomes(root)) Assert.True(lib.Surface.CoatOf(b.Id) >= 0, b.Id + " has no coat");
+        var biomeIds = ContentLoader.LoadBiomes(root).Select(b => b.Id).ToHashSet();
+        Assert.NotEmpty(lib.TintSlots());
+        foreach (int t in lib.TintSlots())
+            foreach (var b in lib.Liquids[t].Biomes) Assert.True(biomeIds.Contains(b), lib.Liquids[t].Id + " tints unknown biome " + b);
         lib.Surface.Coats[1].GrainAmp = 2;
         lib.Surface.Coats[3].Biomes.Add(lib.Surface.Coats[0].Biomes[0]);
+        lib.Liquids[lib.TintSlots()[1]].Biomes.Add(lib.Liquids[lib.TintSlots()[0]].Biomes[0]);
+        lib.Liquids[0].Biomes.Add("tundra");
         var errors = MaterialLibrary.Validate(lib);
         Assert.Contains(errors, e => e.Contains("coats.soil.grainAmp"));
         Assert.Contains(errors, e => e.Contains("already has a coat"));
+        Assert.Contains(errors, e => e.Contains("water is the default"));
+        Assert.Contains(errors, e => e.Contains("tinted twice"));
         var item = top.GetProperty("properties").GetProperty("strata").GetProperty("items");
         var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).ToList();
         var allowed = item.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();

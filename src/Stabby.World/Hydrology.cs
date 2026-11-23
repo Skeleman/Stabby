@@ -12,6 +12,7 @@ namespace Stabby.World
         public float Level;
         public List<int> Cells = new List<int>();
         public int Outlet = -1;
+        public WaterMix Mix;
     }
 
     public sealed class RiverSegment
@@ -29,6 +30,7 @@ namespace Stabby.World
         public int Downstream = -1;
         public int LakeId = -1;
         public List<RiverFall> Falls = new List<RiverFall>();
+        public List<WaterMix> Mix = new List<WaterMix>();
     }
 
     public struct RiverFall
@@ -59,6 +61,8 @@ namespace Stabby.World
 
         const float SecondsPerYear = 31557600f;
 
+        public static float Runoff(WorldConfig c, bool sea, float precipitationMm) => sea ? 0 : c.CellMeters * c.CellMeters * precipitationMm / 1000f / SecondsPerYear;
+
         public static Hydrology Build(WorldConfig c, float[] h, bool[] sea, float[] precipitationMm, bool[] keepDry)
         {
             int n = c.Size;
@@ -78,9 +82,8 @@ namespace Stabby.World
             hy.Receiver = Drainage.Receivers(surface, sea, n, c.CellMeters);
             foreach (var lake in hy.Lakes) RouteToOutlet(n, lake, hy, surface);
             var stack = Drainage.Stack(hy.Receiver, n);
-            float cellArea = c.CellMeters * c.CellMeters;
             var runoff = new float[n * n];
-            for (int i = 0; i < n * n; i++) runoff[i] = sea[i] ? 0 : cellArea * precipitationMm[i] / 1000f / SecondsPerYear;
+            for (int i = 0; i < n * n; i++) runoff[i] = Runoff(c, sea[i], precipitationMm[i]);
             hy.DischargeM3s = Drainage.Accumulate(stack, hy.Receiver, runoff);
 
             hy.IsRiver = new bool[n * n];

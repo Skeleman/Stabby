@@ -105,6 +105,7 @@ public static class ContentLoader
         public float FlowSpeed { get; set; }
         public float RapidsSlope { get; set; }
         public float BedFieldM { get; set; }
+        public List<string>? Biomes { get; set; }
     }
 
     sealed class SurfaceEntry
@@ -278,6 +279,7 @@ public static class ContentLoader
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
         FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope, BedFieldM = e.BedFieldM,
+        Biomes = e.Biomes ?? new List<string>(),
     };
 
     static uint Hex(string s, string path, string field) =>

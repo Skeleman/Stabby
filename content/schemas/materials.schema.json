@@ -87,6 +87,7 @@
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+          "biomes": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z-]*$" }, "uniqueItems": true },
           "deepColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
           "shallowColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
           "filmColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },

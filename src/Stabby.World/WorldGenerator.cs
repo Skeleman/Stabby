@@ -50,12 +50,14 @@ namespace Stabby.World
             f.Fs(Climate.TemperatureC); f.Fs(Climate.PrecipitationMm);
             f.Is(Water.Receiver); f.Fs(Water.WaterSurface); f.Fs(Water.DischargeM3s); f.Is(Water.LakeId); f.Bs(Water.IsRiver);
             f.Mix((ulong)Water.Lakes.Count);
-            foreach (var l in Water.Lakes) { f.F(l.Level); f.Mix((ulong)l.Outlet); f.Mix((ulong)l.Cells.Count); }
+            foreach (var l in Water.Lakes) { f.F(l.Level); f.Mix((ulong)l.Outlet); f.Mix((ulong)l.Cells.Count); f.F(l.Mix.A); f.F(l.Mix.B); f.F(l.Mix.C); }
             f.Mix((ulong)Water.Rivers.Count);
             foreach (var r in Water.Rivers)
             {
                 f.Mix((ulong)r.Cells.Count);
                 for (int k = 0; k < r.Cells.Count; k++) { f.Mix((ulong)r.Cells[k]); f.F(r.Surface[k]); f.F(r.Width[k]); f.F(r.Depth[k]); f.F(r.X[k]); f.F(r.Y[k]); }
+                f.Mix((ulong)r.Mix.Count);
+                foreach (var m in r.Mix) { f.F(m.A); f.F(m.B); f.F(m.C); }
                 f.Mix((ulong)r.Falls.Count);
                 foreach (var fl in r.Falls)
                 {
@@ -119,6 +121,7 @@ namespace Stabby.World
             w.BiomeIds = new string[biomes.Count];
             for (int b = 0; b < biomes.Count; b++) w.BiomeIds[b] = biomes[b].Id;
             Biomes.ApplyRegions(c, biomes, sketch, wet, w.Biome);
+            WaterTint.Apply(w);
             stage?.Invoke("biomes");
             return w;
         }
