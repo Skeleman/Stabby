@@ -183,6 +183,28 @@ namespace Stabby.World
             return dist < R;
         }
 
+        public const float CrustReach = 3f, CrustWarp = 0.4f;
+
+        public bool Crusts => Shape == Spring && Kind == Add && F < 0.5f;
+
+        public float CrustR => R + W + Math.Abs(T) * H;
+
+        public float CrustExtent => CrustR * (1f + (CrustReach - 1f) * (1f + CrustWarp));
+
+        public float Crust(float x, float z)
+        {
+            float rf = CrustR, dx = x - Ax, dz = z - Az, ext = CrustExtent;
+            if (Math.Abs(dx) >= ext || Math.Abs(dz) >= ext) return 0f;
+            float dist = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (dist >= ext) return 0f;
+            uint seed = Seed ^ 0x2C1B3C6Du;
+            float k = 1f / rf;
+            float n = 0.5f * Value(seed, x * k, 0f, z * k) + 0.3f * Value(seed ^ 0x297A2D39u, 2.3f * k * x, 0f, 2.3f * k * z) + 0.2f * Value(seed ^ 0x1B873593u, 5.1f * k * x, 0f, 5.1f * k * z);
+            float t = (dist - rf) / ((CrustReach - 1f) * rf) + 2f * CrustWarp * (n - 0.5f);
+            t = Math.Max(0f, Math.Min(1f, t));
+            return 1f - t * t * (3f - 2f * t);
+        }
+
         public bool Under(float x, float z)
         {
             if (Shape == Spring)
@@ -504,27 +526,58 @@ namespace Stabby.World
             });
         }
 
+        public const float DryBedShare = 0.25f, ArchClearM = 25f, ArchAcross = 0.5f;
+        public const int FlowSteps = 3;
+
+        public static bool Channel(GeneratedWorld w, int i) => w.Water.IsRiver[i] || (!w.Sea[i] && w.Water.LakeId[i] < 0 && w.Height[i] > 0 && w.Water.DischargeM3s[i] >= DryBedShare * w.Config.RiverMinDischarge);
+
+        public static bool FlowDir(GeneratedWorld w, int i, out float fx, out float fz)
+        {
+            int n = w.Config.Size, j = i;
+            for (int k = 0; k < FlowSteps; k++)
+            {
+                int r = w.Water.Receiver[j];
+                if (r < 0 || r == j) break;
+                j = r;
+            }
+            fx = j % n - i % n; fz = j / n - i / n;
+            float len = (float)Math.Sqrt(fx * fx + fz * fz);
+            if (len <= 0) return false;
+            fx /= len; fz /= len;
+            return true;
+        }
+
+        static bool DryAt(GeneratedWorld w, float x, float z)
+        {
+            int n = w.Config.Size, ix = (int)Math.Round(x), iz = (int)Math.Round(z);
+            return ix >= 0 && iz >= 0 && ix < n && iz < n && Dry(w, iz * n + ix);
+        }
+
         static void Arch(GeneratedWorld w, TerrainDetail detail, int tx, int ty, ref Rng r, List<FeatureEdit> output)
         {
-            float roll = r.NextFloat(), px = r.Range(0.3f, 0.7f), pz = r.Range(0.3f, 0.7f);
-            float dx = r.Range(-1f, 1f), dz = r.Range(-1f, 1f), span = r.Range(110f, 200f), radius = r.Range(16f, 22f), rise = r.Range(0.45f, 0.7f);
+            float roll = r.NextFloat(), span = r.Range(110f, 200f), radius = r.Range(16f, 22f), rise = r.Range(0.45f, 0.7f);
             if (roll >= ArchChance) return;
-            float len = (float)Math.Sqrt(dx * dx + dz * dz);
-            if (len < 0.2f) { dx = 1f; dz = 0f; len = 1f; }
-            dx /= len; dz /= len;
             int n = w.Config.Size;
-            float cm = w.Config.CellMeters;
-            float mx = (tx + px) * TileCells, mz = (ty + pz) * TileCells, half = span * 0.5f / cm;
-            float ax = mx - dx * half, az = mz - dz * half, bx = mx + dx * half, bz = mz + dz * half;
+            float cm = w.Config.CellMeters, half = span * 0.5f / cm, leg = radius / cm;
             float pad = MarginCells + radius / cm, x0 = tx * TileCells + pad, x1 = (tx + 1) * TileCells - pad, z0 = ty * TileCells + pad, z1 = (ty + 1) * TileCells - pad;
-            if (Math.Min(ax, bx) < x0 || Math.Max(ax, bx) > x1 || Math.Min(az, bz) < z0 || Math.Max(az, bz) > z1) return;
-            if (!Dry(w, (int)az * n + (int)ax) || !Dry(w, (int)bz * n + (int)bx) || !Dry(w, (int)mz * n + (int)mx)) return;
-            float ha = detail.HeightAt(ax, az), hb = detail.HeightAt(bx, bz);
-            float ground = Math.Max(ha, hb);
-            for (int s = 1; s < 8; s++) ground = Math.Max(ground, detail.HeightAt(ax + (bx - ax) * s / 8f, az + (bz - az) * s / 8f));
-            float apex = Math.Max(ha, hb) + span * rise;
-            if (apex - radius < ground + 25f) return;
-            float y0 = ha - radius * 0.5f, y1 = hb - radius * 0.5f, ctrl = 2f * apex - 0.5f * (y0 + y1);
+            float best = 0, ax = 0, az = 0, bx = 0, bz = 0, ha = 0, hb = 0;
+            for (int y = (int)Math.Ceiling(z0); y <= (int)z1; y++)
+                for (int x = (int)Math.Ceiling(x0); x <= (int)x1; x++)
+                {
+                    int c = y * n + x;
+                    if (!Channel(w, c) || !FlowDir(w, c, out float fx, out float fz)) continue;
+                    float sx = -fz, sz = fx, pax = x - sx * half, paz = y - sz * half, pbx = x + sx * half, pbz = y + sz * half;
+                    if (Math.Min(pax, pbx) < x0 || Math.Max(pax, pbx) > x1 || Math.Min(paz, pbz) < z0 || Math.Max(paz, pbz) > z1) continue;
+                    if (!DryAt(w, pax, paz) || !DryAt(w, pbx, pbz) || !DryAt(w, pax + sx * leg, paz + sz * leg) || !DryAt(w, pbx - sx * leg, pbz - sz * leg)) continue;
+                    float qa = detail.HeightAt(pax, paz), qb = detail.HeightAt(pbx, pbz), score = Math.Min(qa, qb) - detail.HeightAt(x, y);
+                    if (score <= best) continue;
+                    float ground = Math.Max(qa, qb);
+                    for (int s = 1; s < 8; s++) ground = Math.Max(ground, detail.HeightAt(pax + (pbx - pax) * s / 8f, paz + (pbz - paz) * s / 8f));
+                    if (Math.Max(qa, qb) + span * rise - radius < ground + ArchClearM) continue;
+                    best = score; ax = pax; az = paz; bx = pbx; bz = pbz; ha = qa; hb = qb;
+                }
+            if (!(best > 0)) return;
+            float apex = Math.Max(ha, hb) + span * rise, y0 = ha - radius * 0.5f, y1 = hb - radius * 0.5f, ctrl = 2f * apex - 0.5f * (y0 + y1);
             const int Pieces = 5;
             float lx = ax, lz = az, ly = y0;
             for (int s = 1; s <= Pieces; s++)

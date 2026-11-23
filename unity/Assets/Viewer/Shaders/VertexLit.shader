@@ -62,6 +62,10 @@ Shader "Stabby/VertexLit"
                 return o;
             }
 
+            float SinterRim(float p) { return smoothstep(0.55, 0.93, p) * (1 - smoothstep(0.93, 1, p)); }
+            static const float3x3 SinterRot = float3x3(0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64);
+            float4 SinterN(float3 p, float f, float c, float w) { float4 r = TmLN3(mul(SinterRot, p), f, c, w); r.yzw = mul(r.yzw, SinterRot); return r; }
+
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
@@ -103,34 +107,61 @@ Shader "Stabby/VertexLit"
                     float gl = length(gm), coh = gl / max(0.25 * (length(ge) + length(gw) + length(gn) + length(gs)), 1e-5);
                     tmShore = float4(gm / max(gl, 1e-5), gl, smoothstep(0.004, 0.014, gl) * smoothstep(0.32, 0.18, gl) * smoothstep(0.82, 0.96, coh));
                 }
+                float3 ng = n;
                 TmOut m = TmEvaluate(float3(i.xz.x, h, i.xz.y), n, color, off, mix, stone);
                 n = m.grad;
                 [branch] if (i.sinter > 0.01)
                 {
-                    float3 q = float3(i.xz.x, h, i.xz.y), pg = float3(q.x, 0.1 * q.y, q.z);
+                    float4 ra = _StabbyRockA, rb = _StabbyRockB;
+                    float3 q = float3(i.xz.x, h, i.xz.y), lw = float3(0.2126, 0.7152, 0.0722);
                     float3 dx = ddx(q), dy = ddy(q);
-                    float fp = max(max(length(dx), length(dy)) * 0.7, 1e-4);
-                    float4 big = TmNoise3(q * 1.1, int3(0, 0, 0)), mid = TmNoise3(q * 4.3 + 3.1, int3(0, 0, 0));
-                    float4 str = TmNoise3(pg * 9, int3(0, 0, 0)), fib = TmNoise3(pg * 31 + 7.7, int3(0, 0, 0));
-                    float fm = TmFade(4.3, fp), fs = TmFade(9, fp), ff = TmFade(31, fp);
-                    float cover = smoothstep(0.3, 0.7, i.sinter + 0.3 * big.x + 0.12 * mid.x * fm);
-                    float t = smoothstep(0.1, 0.6, 1 - n.y);
-                    float w1 = q.y * _StabbySinterA.w + 0.7 * big.x + 0.35 * mid.x * fm + 0.1 * fib.x * ff;
-                    float s1 = frac(w1), riser = smoothstep(0.02, 0.1, s1) * (1 - smoothstep(0.24, 0.38, s1)), band = 1 - riser;
-                    float2 o = n.xz / max(length(n.xz), 1e-4);
-                    float lean = (0.55 * riser - 0.25 * band) * t * fm;
-                    float run = saturate(str.x * 0.9 + 0.55 * big.x + 0.7 * t - 0.35 + 0.15 * mid.x * fm) * fs;
-                    float warm = smoothstep(0.15, 0.75, run) * (0.25 + 0.75 * t);
-                    float3 mineral = lerp(_StabbySinterB.rgb, _StabbySinterC.rgb, smoothstep(0.35, 0.9, run + 0.25 * t + 0.2 * fib.x * ff));
-                    float3 white = _StabbySinterA.rgb * (0.86 + 0.08 * big.x + 0.06 * mid.x * fm - 0.06 * (1 - band) * t);
-                    white = lerp(white, _StabbyMudGrey.rgb * (0.95 + 0.1 * fib.x * ff), 0.85 * saturate(0.6 + 0.5 * mid.x * fm - 0.45 * big.x + 0.3 * t));
-                    float3 a = lerp(white, mineral, 0.85 * warm) * (0.93 + 0.05 * fib.x * ff);
-                    a = lerp(a, a * float3(0.5, 0.47, 0.43), 0.12 * (1 - band) * t);
-                    float3 grad = 0.12 * big.yzw + 0.09 * mid.yzw * fm + 0.05 * fib.yzw * ff + 0.04 * str.yzw * fs - float3(o.x, 0, o.y) * lean;
+                    float la = length(dx), lb = length(dy);
+                    float fp = max(max(sqrt(la * lb), 0.4 * max(la, lb)), 1e-4);
+                    float s = saturate(i.sinter), t = smoothstep(0.05, 0.5, 1 - ng.y);
+                    float4 wa = SinterN(q, ra.y * 0.45, 43.7, 1), wb = SinterN(q, ra.y * 0.45, 47.1, 1);
+                    float4 ma = SinterN(q, rb.z, 51.3, 1), mb = SinterN(q, rb.z, 53.9, 1);
+                    float3 qw = q + float3(wa.x, 0, wb.x) * (0.55 / ra.y), qm = q + float3(ma.x, 0, mb.x) * (0.5 / rb.z);
+                    float4 zone = SinterN(qm, ra.w * 0.3, 61.7, 1), chan = SinterN(qm, ra.w * 0.7, 67.3, 1), sect = SinterN(qm, ra.w * 0.15, 59.9, 1);
+                    float4 bump = TmFbm3(mul(SinterRot, qm + (qw - q)), ra.w, 1, 3, fp); bump.yzw = mul(bump.yzw, SinterRot);
+                    float gw = TmFade(ra.y, fp), fw2 = TmFade(ra.y * 2.9, fp), fw3 = TmFade(ra.y * 7.3, fp);
+                    float4 grain = SinterN(qw, ra.y, 71.3, gw);
+                    float3 qf = qw + float3(grain.y, 0, grain.w) * (0.4 / ra.y);
+                    float4 fine = SinterN(qf, ra.y * 2.9, 77.9, fw2), micro = SinterN(qf + float3(fine.w, 0, fine.y) * (0.25 / ra.y), ra.y * 7.3, 83.1, fw3);
+                    float bv = bump.x * ra.w;
+                    float bleach = smoothstep(0, 0.3, s * (1 + 0.6 * zone.x + 0.25 * bv));
+                    float crust = smoothstep(0.42, 0.72, s + 0.22 * zone.x + 0.1 * bv + 0.05 * gw * grain.x);
+                    float vent = smoothstep(0.7, 0.95, s + 0.12 * zone.x);
+                    float near = smoothstep(0.45, 0.85, s + 0.1 * zone.x), cwid = 0.05 + 0.09 * vent;
+                    float chv = abs(chan.x + 0.12 * gw * grain.x + 0.05 * fw2 * fine.x);
+                    float runoff = smoothstep(cwid, 0.35 * cwid, chv) * near * smoothstep(-0.15, 0.25, sect.x) * crust;
+                    float core = smoothstep(0.6 * cwid, 0, chv), outlet = runoff * vent;
+                    float tf = rb.x * 2, ftf = TmFade(tf, fp), tr = smoothstep(0.15, 0.55, 1 - ng.y);
+                    float w1 = (h + 0.06 * ma.x + 0.03 * wa.x + 0.01 * gw * grain.x) * tf;
+                    float dr = (SinterRim(frac(w1 + 0.02)) - SinterRim(frac(w1 - 0.02))) * 25;
+                    float3 terr = 0.02 * dr * tf * ftf * tr * crust * near * (float3(0, 1, 0) + 0.18 * bump.yzw);
+                    float cf = rb.z * 2, fcr = TmFade(cf * 4, fp);
+                    float4 cn = SinterN(qm + 0.25 * (qw - q), cf, 91.3, fcr);
+                    float cv = cn.x + 0.3 * gw * grain.x, cw = 0.07 + 0.03 * fine.x * fw2;
+                    float ck = saturate(abs(cv) / cw), crack = (1 - ck * ck * (3 - 2 * ck)) * fcr * crust * (1 - runoff);
+                    float3 crg = 0.06 * ck * (1 - ck) * fcr * crust * (1 - runoff) * sign(cv) / cw * (cf * cn.yzw + 0.3 * ra.y * gw * grain.yzw);
+                    float3 nod = (0.1 * fw2 * (0.7 + 0.3 * fine.x) * fine.yzw + 0.06 * fw3 * (0.7 + 0.3 * micro.x) * micro.yzw) * crust * (0.3 + 0.7 * vent) * (1 - runoff);
+                    float rf = ra.y * 2.9, w2 = (h + 0.04 * gw * grain.x / ra.y + 0.02 * wa.x / ra.y) * rf;
+                    float3 rip = 0.004 * rf * fw2 * sin(6.2832 * w2) * runoff * t * t * float3(0, 1, 0);
+                    float3 grad = 0.35 * bump.yzw * crust + 0.3 * ra.x * gw * grain.yzw * bleach + terr + crg + nod + rip;
+                    n = normalize(lerp(n, ng, crust));
                     grad -= n * dot(grad, n);
-                    m.albedo = lerp(m.albedo, a, cover);
-                    tmRough = lerp(tmRough, _StabbySinterB.w, cover);
-                    n = normalize(n - grad * cover);
+                    float3 base = m.albedo;
+                    float3 dead = lerp(dot(base, lw) * float3(1.08, 1.0, 0.84) * 1.2, _StabbyMudGrey.rgb, 0.4 + 0.2 * zone.x);
+                    float pg = saturate(0.35 + 0.4 * zone.x - 0.2 * bv + 0.1 * sect.x);
+                    float3 cream = lerp(_StabbySinterA.rgb, _StabbyMudGrey.rgb, 0.4 * pg) * (0.96 + 0.03 * bv + 0.02 * gw * grain.x - 0.05 * fw2 * saturate(-fine.x));
+                    float3 mineral = lerp(_StabbySinterB.rgb, _StabbySinterC.rgb, saturate(0.35 * core + 0.65 * vent)) * lerp(1, 0.6, outlet * core) * (0.94 + 0.04 * gw * grain.x);
+                    float3 a = lerp(base, dead, bleach);
+                    a = lerp(a, cream, crust);
+                    a = lerp(a, mineral, 0.85 * runoff);
+                    m.albedo = a * (1 - 0.1 * crack);
+                    tmRough = lerp(lerp(tmRough, _StabbySinterB.w, crust), 0.2, 0.7 * outlet);
+                    tmGrass *= 1 - bleach;
+                    n = normalize(n - grad);
                 }
                 [branch] if (i.sinter < -0.01)
                 {

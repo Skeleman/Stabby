@@ -164,6 +164,92 @@ namespace Stabby.World
             return list.ToArray();
         }
 
+        public const float DenRockM = 90f, DenFaceDropM = 40f, DenRockRiseM = 6f;
+
+        public bool BesideRock(float x, float z)
+        {
+            float reach = Math.Max(DenRockM, 2 * cm), run = Math.Max(cm, Features.ReferenceCellM), drop = Math.Min(DenFaceDropM, DenFaceDropM / Features.ReferenceCellM * cm), ground = GroundAt(detail, cm, x, z);
+            int r = (int)Math.Ceiling(reach / cm), cx = (int)Math.Round(x / cm), cz = (int)Math.Round(z / cm);
+            for (int gz = Math.Max(0, cz - r); gz <= Math.Min(n - 1, cz + r); gz++)
+                for (int gx = Math.Max(0, cx - r); gx <= Math.Min(n - 1, cx + r); gx++)
+                {
+                    float ox = gx * cm - x, oz = gz * cm - z;
+                    if (ox * ox + oz * oz > reach * reach) continue;
+                    float h = detail.HeightAt(gx, gz);
+                    if (h < ground + DenRockRiseM) continue;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        float d = run / Grid.Dist[k], fx = gx * cm + Grid.DX[k] * d, fz = gz * cm + Grid.DY[k] * d;
+                        if (fx < 0 || fz < 0 || fx > worldM || fz > worldM) continue;
+                        if (h - detail.Sample(fx, fz) >= drop) return true;
+                    }
+                }
+            return false;
+        }
+
+        public const float DenBackGapM = 4f, DenFaceRunM = 8f, DenFaceRiseM = 5f, DenFaceStepM = 0.5f;
+
+        public const float DenScanStepM = 2f;
+        public const int DenRunSteps = 4;
+
+        public float DenRear(ObjectInstance o) => DenRear(o.Def, o.Variant, o.Size);
+
+        public float DenRear(int d, int variant, float size)
+        {
+            var local = new List<float>();
+            Structures.DenRocks(ObjectMeshes.Key(lib.Objects[d].Id, 0, variant), local, out _, out _);
+            float rear = 0;
+            for (int k = 0; k < local.Count; k += Structures.DenStride) rear = Math.Max(rear, local[k + 4] - Math.Min(local[k + 1], local[k + 3]));
+            return rear * Structures.WolfU * size;
+        }
+
+        bool ToFace(ref float x, ref float z, float rear, float x0, float z0, float x1, float z1, out float qa, out float qb)
+        {
+            qa = 1; qb = 0;
+            int steps = (int)(DenRockM / DenScanStepM);
+            var g = new float[steps + DenRunSteps + 1];
+            float rise = DenFaceRise, foot = float.MaxValue, bx = 0, bz = 0;
+            for (int k = 0; k < 16; k++)
+            {
+                float ux = Structures.Cos16(k), uz = Structures.Sin16(k);
+                for (int i = 0; i < g.Length && (i - DenRunSteps) * DenScanStepM < foot; i++)
+                {
+                    float px = x + ux * i * DenScanStepM, pz = z + uz * i * DenScanStepM;
+                    if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) break;
+                    g[i] = GroundAt(detail, cm, px, pz);
+                    if (i >= DenRunSteps && g[i] - g[i - DenRunSteps] >= rise) { foot = (i - DenRunSteps) * DenScanStepM; bx = ux; bz = uz; break; }
+                }
+            }
+            if (foot == float.MaxValue) return false;
+            float move = Math.Max(0, foot - DenScanStepM) - rear, nx = x + bx * move, nz = z + bz * move;
+            if (nx < x0 || nz < z0 || nx > x1 || nz > z1) return false;
+            x = nx; z = nz;
+            qa = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - bz)));
+            qb = (bx > 0 ? -1 : 1) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + bz)));
+            return true;
+        }
+
+        public float DenFaceRise => Math.Min(DenFaceRiseM, DenFaceRiseM * Features.ReferenceCellM / 4 / cm);
+
+        public bool FaceBehind(float x, float z, float bx, float bz)
+        {
+            float rise = DenFaceRise;
+            for (float s = 0; s <= DenBackGapM; s += DenFaceStepM)
+            {
+                float fx = x + bx * s, fz = z + bz * s;
+                if (GroundAt(detail, cm, fx + bx * DenFaceRunM, fz + bz * DenFaceRunM) - GroundAt(detail, cm, fx, fz) >= rise) return true;
+            }
+            return false;
+        }
+
+        public string DenBackFault(ObjectInstance o)
+        {
+            Rotate(o, 0, 0, -1, out float bx, out _, out float bz);
+            float bl = (float)Math.Sqrt(bx * bx + bz * bz), rear = DenRear(o);
+            bx /= bl; bz /= bl;
+            return FaceBehind(o.X + bx * rear, o.Z + bz * rear, bx, bz) ? null : "has no steep rock face at its back";
+        }
+
         public string DenFault(ObjectInstance o)
         {
             var rocks = new List<FeatureEdit>();

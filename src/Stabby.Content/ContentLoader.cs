@@ -9,7 +9,7 @@ namespace Stabby.Content
     public static class ContentLoader
     {
         public const int BiomeSchemaVersion = 1;
-        public const int MaterialSchemaVersion = 3;
+        public const int MaterialSchemaVersion = 4;
         public const int ObjectSchemaVersion = 4;
         public const int CreatureSchemaVersion = 2;
 
@@ -117,7 +117,7 @@ namespace Stabby.Content
             lib.Sinter = sinter == null ? null : new SinterDef
             {
                 White = Hex(sinter.String("white", ""), source, "sinter.white"), Ochre = Hex(sinter.String("ochre", ""), source, "sinter.ochre"),
-                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
+                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), Roughness = sinter.Float("roughness", 0),
             };
             sinter?.End();
             var mud = root.Object("mud");

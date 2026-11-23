@@ -8,11 +8,12 @@ namespace Stabby.World
         public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den" };
         static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den" };
         public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11;
-        public const float SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 4f, VentSteady = 0.15f;
+        public const int VentsPerHotspot = 3;
+        public const float VentGapM = 80f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
-        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 5f, DenRiverM = 40f, DenWoods = 0.25f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 4f, DenProbeM = 6f, DenSeekM = 50f, DenRiverM = 40f, DenWoods = 0.25f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
-        public const int DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
+        public const int DenSeekRings = 3, DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
         ObjectInstance[] discoveries;
@@ -20,6 +21,7 @@ namespace Stabby.World
         float[] treeCover;
         List<LandmarkSketch> towns;
         WorldSketch sketch;
+        Geothermal hotspots;
         float[] routes;
 
         public List<LandmarkSketch> Towns => towns ?? (towns = (w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)))).Landmarks);
@@ -50,6 +52,7 @@ namespace Stabby.World
             var def = lib.Objects[d];
             var pl = def.Placement;
             if (pl.Discovery == Shrine) { PlaceShrines(d, root, list); return; }
+            if (Pooled(pl.Discovery)) { PlaceVents(d, root, list); return; }
             float step = DiscoveryStep(worldM, pl.SpacingM), inset = DiscoveryInset * step;
             int cells = (int)Math.Round(worldM / step);
             for (int gz = 0; gz < cells; gz++)
@@ -66,11 +69,46 @@ namespace Stabby.World
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
                         if (!roll) continue;
                         if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
-                        if (Pooled(pl.Discovery) || pl.Discovery == WolfDen) FaceDownhill(px, pz, ref qa, ref qb);
+                        if (pl.Discovery == WolfDen)
+                        {
+                            float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
+                            SeekDen(ref px, ref pz, x0, z0, x1, z1);
+                            if (!ToFace(ref px, ref pz, DenRear(d, variant, size), x0, z0, x1, z1, out qa, out qb)) continue;
+                        }
+                        if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
                         any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
                     }
                     if (any) list.Add(pick);
                 }
+        }
+
+        void PlaceVents(int d, ulong root, List<ObjectInstance> list)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var hot = Hotspots;
+            for (int h = 0; h < hot.Count; h++)
+            {
+                var rng = new Rng(Rng.Mix(root ^ key[d] ^ ((ulong)(h + 1) * 0x9E3779B97F4A7C15UL)));
+                if (rng.NextFloat() >= pl.Chance) continue;
+                int vents = 1 + (int)(rng.NextU32() % VentsPerHotspot);
+                for (int v = 0; v < vents; v++)
+                {
+                    bool any = false;
+                    float best = float.MinValue;
+                    ObjectInstance pick = default;
+                    for (int t = 0; t < DiscoveryTries; t++)
+                    {
+                        float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), px = hot.X[h] + ox * hot.R[h], pz = hot.Z[h] + oz * hot.R[h];
+                        float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
+                        int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                        if (ox * ox + oz * oz >= 1 || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
+                        FaceDownhill(px, pz, ref qa, ref qb);
+                        any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
+                    }
+                    if (any) list.Add(pick);
+                }
+            }
         }
 
         void PlaceShrines(int d, ulong root, List<ObjectInstance> list)
@@ -116,7 +154,7 @@ namespace Stabby.World
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || DenFault(o) == null)) break;
+                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null))) break;
             }
             if (k == tries) return false;
             best = fit; pick = o;
@@ -168,13 +206,14 @@ namespace Stabby.World
             return true;
         }
 
-        static bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list)
+        bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list)
         {
+            bool vent = Pooled(lib.Objects[d].Placement.Discovery);
             foreach (var o in list)
             {
                 if (o.Def == d) continue;
-                float dx = o.X - x, dz = o.Z - z;
-                if (dx * dx + dz * dz < DiscoveryGapM * DiscoveryGapM) return false;
+                float dx = o.X - x, dz = o.Z - z, g = vent && IsVent(o) ? VentGapM : DiscoveryGapM;
+                if (dx * dx + dz * dz < g * g) return false;
             }
             return true;
         }
@@ -332,20 +371,7 @@ namespace Stabby.World
             return best;
         }
 
-        public float SpringDraw(float x, float z)
-        {
-            var sk = w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)));
-            float px = x / cm, pz = z / cm, best = 0;
-            foreach (var g in sk.Ranges)
-                if (g.Width > 0) best = Math.Max(best, 1 - WorldSketch.DistanceToPolyline(g.X, g.Y, px, pz) / (3 * g.Width));
-            foreach (var h in sk.Highlands)
-            {
-                if (h.Plateau || h.Radius <= 0) continue;
-                float dx = h.X - px, dz = h.Y - pz;
-                best = Math.Max(best, 1 - (float)Math.Sqrt(dx * dx + dz * dz) / (1.5f * h.Radius));
-            }
-            return best;
-        }
+        public Geothermal Hotspots => hotspots ?? (hotspots = Geothermal.Build(w, w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)))));
 
         void FaceDownhill(float x, float z, ref float qa, ref float qb)
         {
@@ -520,13 +546,13 @@ namespace Stabby.World
                         Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
                         Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (crest + bottom), By = 0.5f * (crest + bottom),
                         W = rout - ra, H = Math.Max(0f, 0.5f * (crest - bottom) - ra), P = 0.15f, N = 0.1f * u, S = seed,
-                    });
+                    }.Finer());
                     carves.Add(new FeatureEdit
                     {
                         Kind = FeatureEdit.Carve, Shape = FeatureEdit.Spring, R = rc,
                         Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (top + floor), By = 0.5f * (top + floor),
                         W = r - hole, H = Math.Max(0f, 0.5f * (top - floor) - hole), N = 0.08f * u, S = seed,
-                    });
+                    }.Finer());
                 }
             }
             list.AddRange(carves);
@@ -574,9 +600,23 @@ namespace Stabby.World
                 }
         }
 
+        void SeekDen(ref float x, ref float z, float x0, float z0, float x1, float z1)
+        {
+            float best = Fitness(WolfDen, x, z), bx = x, bz = z;
+            for (int ring = 1; ring <= DenSeekRings; ring++)
+                for (int k = 0; k < 8; k++)
+                {
+                    FanDir(k, 0.70710678f, out float ux, out float uz);
+                    float px = Math.Min(x1, Math.Max(x0, x + ux * ring * DenSeekM)), pz = Math.Min(z1, Math.Max(z0, z + uz * ring * DenSeekM));
+                    float fit = Fitness(WolfDen, px, pz);
+                    if (fit > best) { best = fit; bx = px; bz = pz; }
+                }
+            x = bx; z = bz;
+        }
+
         public float Fitness(int kind, float x, float z)
         {
-            float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : DiscoveryProbeM, rise = 0, relief = 0;
+            float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
             for (int k = 0; k < 8; k++)
             {
                 FanDir(k, 0.70710678f, out float ux, out float uz);
@@ -607,7 +647,7 @@ namespace Stabby.World
             }
             if (Pooled(kind))
             {
-                float draw = SpringDraw(x, z);
+                float draw = Hotspots.Heat(x, z);
                 if (!(draw > 0) || relief > (kind == Spring ? SpringReliefM : VentReliefM) || RiverGap(x, z) < SpringRiverM) return float.MinValue;
                 return draw - 0.05f * relief;
             }
@@ -616,7 +656,7 @@ namespace Stabby.World
             if (kind == WolfDen)
             {
                 float woods = Woods(x, z);
-                return relief <= DenReliefM && woods >= DenWoods && RiverGap(x, z) >= DenRiverM ? 0.1f * rise - 0.1f * relief + woods : float.MinValue;
+                return relief <= DenReliefM && woods >= DenWoods && RiverGap(x, z) >= DenRiverM && BesideRock(x, z) ? 0.1f * rise - 0.1f * relief + woods : float.MinValue;
             }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;

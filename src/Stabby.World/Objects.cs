@@ -21,7 +21,7 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f;
+        public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f, CrustThin = 0.85f;
         public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
 
         readonly GeneratedWorld w;
@@ -30,7 +30,7 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
@@ -58,6 +58,7 @@ namespace Stabby.World
             chainStream = Rng.Stream(w.Config.Seed, "structures-chain").NextU64();
             bankStream = Rng.Stream(w.Config.Seed, "objects-bank").NextU64();
             lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
+            sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -98,7 +99,8 @@ namespace Stabby.World
                 for (int e = 0; e < this.edits.Length; e++)
                 {
                     var f = this.edits[e];
-                    Mark(f.MinX - maxR, f.MinZ - maxR, f.MaxX + maxR, f.MaxZ + maxR, ~e, fill, items);
+                    float ext = f.Crusts ? f.CrustExtent : 0f;
+                    Mark(Math.Min(f.MinX, f.Ax - ext) - maxR, Math.Min(f.MinZ, f.Az - ext) - maxR, Math.Max(f.MaxX, f.Ax + ext) + maxR, Math.Max(f.MaxZ, f.Az + ext) + maxR, ~e, fill, items);
                 }
                 for (int p = 0; p < pax.Count; p++)
                 {
@@ -483,6 +485,7 @@ namespace Stabby.World
                     var f = edits[~item];
                     if (site > 0 && (f.Shape == FeatureEdit.Spring || (site == WolfDen && f.Shape == FeatureEdit.Boulder))) continue;
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;
+                    if (f.Crusts && CrustDraw(x, z) < CrustThin * f.Crust(x, z)) return false;
                     continue;
                 }
                 if (bank) continue;
@@ -491,6 +494,12 @@ namespace Stabby.World
                 if (dist < 2 * hw + r + BankReachM && y < psurf[item] + ShoreClearM) return false;
             }
             return true;
+        }
+
+        float CrustDraw(float x, float z)
+        {
+            ulong h = Rng.Mix(sinterStream ^ ((ulong)(uint)(int)Math.Floor(x * 16f) << 32 | (uint)(int)Math.Floor(z * 16f)));
+            return (h >> 40) * (1f / 16777216f);
         }
 
         float Distance(int p, float x, float z)

@@ -111,6 +111,8 @@ namespace Stabby.World
             if (w.Sketch != null) CheckMesas(w, e);
             CheckDetail(w, e);
             CheckNearField(w, e);
+            CheckRiverMouths(w, e);
+            CheckLakeOutlets(w, e);
             CheckFalls(w, e);
             CheckRiverShape(w, e);
             CheckGeometry(w, e);
@@ -139,6 +141,7 @@ namespace Stabby.World
             int n = w.Config.Size;
             var hy = w.Water;
             var d = new TerrainDetail(w);
+            var mouth = MouthCells(w);
             for (int y = 0; y < n - 1; y++)
                 for (int x = 0; x < n - 1; x++)
                 {
@@ -146,11 +149,44 @@ namespace Stabby.World
                     bool wet = (w.Sea[i] || hy.LakeId[i] >= 0) && d.Cells.PieceStart(i) == d.Cells.PieceStart(i + 1);
                     if (wet && d.HeightAt(x, y) != w.Height[i]) { e.Add($"detail moves water cell {i}"); return; }
                     if (w.Height[i] > 0 && w.Height[i + 1] > 0 && w.Height[i + n] > 0 && w.Height[i + n + 1] > 0
-                        && d.HeightAt(x + 0.5f, y + 0.5f) <= 0) { e.Add($"detail sinks land below the sea near cell {i}"); return; }
+                        && !mouth.Contains(i) && d.HeightAt(x + 0.5f, y + 0.5f) <= 0) { e.Add($"detail sinks land below the sea near cell {i}"); return; }
+                    if (x > 0 && y > 0 && x < n - 2 && y < n - 2 && OpenSea(w, i) && d.HeightAt(x + 0.5f, y + 0.5f) > 0 && !InFall(w, (x + 0.5f) * w.Config.CellMeters, (y + 0.5f) * w.Config.CellMeters, true))
+                    { e.Add($"detail raises open sea above the water near cell {i}"); return; }
                 }
         }
 
-        public const float SeamEpsilonM = 0.01f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f;
+        static bool OpenSea(GeneratedWorld w, int i)
+        {
+            int n = w.Config.Size;
+            for (int dy = -1; dy <= 2; dy++)
+                for (int dx = -1; dx <= 2; dx++)
+                {
+                    int j = i + dy * n + dx;
+                    if (!w.Sea[j] || w.Height[j] >= 0) return false;
+                }
+            return true;
+        }
+
+        static HashSet<int> MouthCells(GeneratedWorld w)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var cells = new HashSet<int>();
+            foreach (var l in NearField.Lines(w))
+            {
+                int m = l.X.Length;
+                if (!w.Sea[NearField.CellOf(l.X[m - 1], l.Z[m - 1], cm, n)]) continue;
+                for (int j = m - 1; j >= 0 && l.S[j] <= 0.5f * Erosion.MinLandHeight + 1e-4f; j--)
+                {
+                    int r = (int)(l.W[j] / cm) + 2, cx = (int)(l.X[j] / cm), cz = (int)(l.Z[j] / cm);
+                    for (int y = Math.Max(0, cz - r); y <= Math.Min(n - 1, cz + r); y++)
+                        for (int x = Math.Max(0, cx - r); x <= Math.Min(n - 1, cx + r); x++) cells.Add(y * n + x);
+                }
+            }
+            return cells;
+        }
+
+        public const float SeamEpsilonM = 0.01f, SeamTolerance = 0.05f, MeshTolerance = 0.25f, BankTolerance = 0.05f, NearStepM = 1f, MouthDepthM = 0.2f;
         public const int SeamStride = 3, NearCells = 24;
 
         public const float FallPoolDepthM = 0.5f, FallEdgeM = 1f, FallEdgeShare = 0.5f, IsleTolerance = 0.05f, IsleProbe = 0.25f, IsleAboveM = 0.5f;
@@ -282,7 +318,7 @@ namespace Stabby.World
             {
                 var q = pieces[p];
                 float mx = 0.5f * (q.Ax + q.Bx), mz = 0.5f * (q.Az + q.Bz), ex = q.Bx - q.Ax, ez = q.Bz - q.Az, l = (float)Math.Sqrt(ex * ex + ez * ez);
-                if (l < 1e-3f) continue;
+                if (l < 1e-3f || w.Sea[NearField.CellOf(q.Ax, q.Az, cm, n)] || w.Sea[NearField.CellOf(q.Bx, q.Bz, cm, n)]) continue;
                 float s = 0.5f * (q.Sa + q.Sb), hw = 0.5f * (q.Wa + q.Wb), depth = 0.5f * (q.Da + q.Db), reach = hw + NearField.Bank(hw);
                 if (!Crowded(pieces, p, mx, mz, -1, float.MinValue) && depth > 0.2f && s > Erosion.MinLandHeight + depth && d.Sample(mx, mz) > s - 0.1f * depth)
                 { e.Add($"river bed at {mx:F0},{mz:F0} sits above its water {s:F1}"); return; }
@@ -312,6 +348,90 @@ namespace Stabby.World
                         run += len;
                     }
                 }
+        }
+
+        static void CheckRiverMouths(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var d = new TerrainDetail(w);
+            foreach (var l in NearField.Lines(w))
+            {
+                int m = l.X.Length;
+                if (!w.Sea[NearField.CellOf(l.X[m - 1], l.Z[m - 1], cm, n)]) continue;
+                int k = m - 1;
+                while (k > 0 && w.Sea[NearField.CellOf(l.X[k - 1], l.Z[k - 1], cm, n)]) k--;
+                for (int j = k - 1; j >= 0 && l.S[j] <= 0.5f * Erosion.MinLandHeight + 1e-4f; j--)
+                {
+                    float g = d.Sample(l.X[j], l.Z[j]);
+                    if (g > -MouthDepthM && !InFall(w, l.X[j], l.Z[j], true)) { e.Add($"river mouth at {l.X[j]:F0},{l.Z[j]:F0} is too shallow for the sea to run in: ground {g:F2} above {-MouthDepthM:F2}"); return; }
+                }
+                for (int j = Math.Max(0, k - 1); j + 1 < m; j++)
+                {
+                    float ex = l.X[j + 1] - l.X[j], ez = l.Z[j + 1] - l.Z[j], len = (float)Math.Sqrt(ex * ex + ez * ez);
+                    bool foot = j > 0 && Math.Abs(l.X[j - 1] - l.X[j]) + Math.Abs(l.Z[j - 1] - l.Z[j]) < NearStepM && l.S[j - 1] > l.S[j];
+                    for (float a = foot ? NearStepM : 0; a < len; a += NearStepM)
+                    {
+                        float t = a / len, x = l.X[j] + ex * t, z = l.Z[j] + ez * t, s = Math.Max(0, l.S[j] + (l.S[j + 1] - l.S[j]) * t), g = d.Sample(x, z);
+                        if (g > s + BankTolerance) { e.Add($"river mouth at {x:F0},{z:F0} has a land lip: ground {g:F1} above water {s:F1}"); return; }
+                    }
+                }
+            }
+        }
+
+        static void CheckLakeOutlets(GeneratedWorld w, List<string> e)
+        {
+            var hy = w.Water;
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var lines = NearField.Lines(w);
+            var lineOf = new RiverLine[hy.Rivers.Count];
+            for (int r = 0, l = 0; r < hy.Rivers.Count; r++) if (hy.Rivers[r].Cells.Count >= 2) lineOf[r] = lines[l++];
+            var d = new TerrainDetail(w);
+            foreach (var lake in hy.Lakes)
+            {
+                if (lake.Outlet < 0 || hy.DischargeM3s[lake.Outlet] < w.Config.RiverMinDischarge) continue;
+                int c = hy.Receiver[lake.Outlet], steps = 0;
+                while (!w.Sea[c] && hy.LakeId[c] < 0 && hy.Receiver[c] != c && steps++ < n * n) c = hy.Receiver[c];
+                if (!w.Sea[c]) continue;
+                int below = hy.Receiver[lake.Outlet];
+                int first = hy.Rivers.FindIndex(s => s.Cells.Count >= 2 && s.Cells.Contains(below));
+                if (first < 0 || lineOf[first] == null) { e.Add($"lake {lake.Id} drains to the sea with no outlet river"); continue; }
+                float px = lake.Outlet % n * cm, pz = lake.Outlet / n * cm, ps = lake.Level;
+                int start = 0;
+                if (hy.Rivers[first].Cells[0] != below)
+                {
+                    var l0 = lineOf[first]; float bx = below % n * cm, bz = below / n * cm, near = float.MaxValue;
+                    for (int j = 0; j < l0.X.Length; j++)
+                    {
+                        float dd = (l0.X[j] - bx) * (l0.X[j] - bx) + (l0.Z[j] - bz) * (l0.Z[j] - bz);
+                        if (dd < near) { near = dd; start = j; }
+                    }
+                }
+                for (int r = first; r >= 0; r = hy.Rivers[r].End == RiverEnd.Junction ? hy.Rivers[r].Downstream : -1)
+                {
+                    var l = lineOf[r];
+                    if (l == null) break;
+                    bool blocked = false;
+                    for (int j = start - 1; j + 1 < l.X.Length && !blocked; j++)
+                    {
+                        float ax = j < start ? px : l.X[j], az = j < start ? pz : l.Z[j], sa = j < start ? ps : l.S[j];
+                        float ex = l.X[j + 1] - ax, ez = l.Z[j + 1] - az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                        for (float a = 0; a < len; a += NearStepM)
+                        {
+                            float t = a / len, x = ax + ex * t, z = az + ez * t, s = Math.Max(0, sa + (l.S[j + 1] - sa) * t), g = d.Sample(x, z);
+                            int ci = NearField.CellOf(x, z, cm, n);
+                            if (hy.LakeId[ci] == lake.Id || hy.LakeCover[ci] == lake.Id) s = Math.Max(s, lake.Level);
+                            if (g > s + BankTolerance && !InFall(w, x, z, true))
+                            { e.Add($"lake {lake.Id} outlet to the sea is blocked at {x:F0},{z:F0}: ground {g:F1} above water {s:F1}"); blocked = true; break; }
+                        }
+                    }
+                    if (blocked) break;
+                    if (hy.Rivers[r].End != RiverEnd.Junction) break;
+                    int m = l.X.Length - 1;
+                    px = l.X[m]; pz = l.Z[m]; ps = l.S[m]; start = 0;
+                }
+            }
         }
 
         static bool InFall(GeneratedWorld w, float x, float z, bool wall = false)
@@ -528,6 +648,39 @@ namespace Stabby.World
             return true;
         }
 
+        static void CheckArches(GeneratedWorld w, FeatureEdit[] edits, List<string> e)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            for (int a = 0; a < edits.Length; a++)
+            {
+                if (edits[a].Shape != FeatureEdit.Arch || (a > 0 && edits[a - 1].Shape == FeatureEdit.Arch && edits[a - 1].Bx == edits[a].Ax && edits[a - 1].Bz == edits[a].Az)) continue;
+                int b = a;
+                while (b + 1 < edits.Length && edits[b + 1].Shape == FeatureEdit.Arch && edits[b + 1].Ax == edits[b].Bx && edits[b + 1].Az == edits[b].Bz) b++;
+                float ax = edits[a].Ax / cm, az = edits[a].Az / cm, bx = edits[b].Bx / cm, bz = edits[b].Bz / cm, sx = bx - ax, sz = bz - az, len = (float)Math.Sqrt(sx * sx + sz * sz);
+                string at = $"arch at {edits[a].Ax:F0},{edits[a].Az:F0}";
+                int fa = Node(n, ax, az), fb = Node(n, bx, bz);
+                if (fa < 0 || fb < 0 || !Features.Dry(w, fa) || !Features.Dry(w, fb)) { e.Add(at + " has a foot off dry ground"); return; }
+                bool channel = false, across = false;
+                int steps = Math.Max(2, (int)Math.Ceiling(2 * len));
+                for (int s = 1; s < steps && !across; s++)
+                {
+                    int i = Node(n, ax + sx * s / steps, az + sz * s / steps);
+                    if (i < 0 || !Features.Channel(w, i)) continue;
+                    channel = true;
+                    if (Features.FlowDir(w, i, out float fx, out float fz) && Math.Abs(fx * sx + fz * sz) <= Features.ArchAcross * len) across = true;
+                }
+                if (!channel) { e.Add(at + " spans no river or dry bed"); return; }
+                if (!across) { e.Add(at + " runs along the flow"); return; }
+            }
+        }
+
+        static int Node(int n, float x, float z)
+        {
+            int ix = (int)Math.Round(x), iz = (int)Math.Round(z);
+            return ix >= 0 && iz >= 0 && ix < n && iz < n ? iz * n + ix : -1;
+        }
+
         static void CheckFeatures(GeneratedWorld w, List<string> e)
         {
             var detail = new TerrainDetail(w);
@@ -543,6 +696,7 @@ namespace Stabby.World
             CheckCaveWalk(w, detail, edits, e);
             CheckCliffFoot(w, detail, edits, e);
             CheckLandforms(w, edits, e);
+            CheckArches(w, edits, e);
             if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             foreach (var x in edits)
                 if (x.Shape != FeatureEdit.Boulder && x.Shape != FeatureEdit.Spring && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }

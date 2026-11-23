@@ -101,8 +101,8 @@ Shader "Stabby/Water"
                 return g * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x));
             }
 
-            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; float4 tint : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; float3 tint : TEXCOORD7; };
+            struct Attributes { float4 positionOS : POSITION; float4 color : COLOR; float2 chan : TEXCOORD0; float4 reach : TEXCOORD1; float4 fall : TEXCOORD2; float4 tint : TEXCOORD3; float4 curt : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; float3 tint : TEXCOORD7; float4 curt : TEXCOORD8; };
 
             float4 Mixed(Varyings i, int row)
             {
@@ -115,9 +115,9 @@ Shader "Stabby/Water"
             half4 Curtain(Varyings i, float3 v, float dist, float2 uv)
             {
                 float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L7 = Mixed(i, 7), L8 = Mixed(i, 8), L9 = Mixed(i, 9);
-                float u = saturate(i.fall.x), h = i.fall.y, y = u * h, x = i.chan.x * i.chan.y;
+                float u = saturate(i.curt.y), h = i.curt.z, y = u * h, x = i.chan.x * i.chan.y;
                 float2 fd = normalize(i.color.rg * 2 - 1), sd = float2(fd.y, -fd.x);
-                float flowQ = saturate(log2(1 + i.chan.z) / 9);
+                float flowQ = saturate(log2(1 + i.curt.w) / 9);
                 float tau = sqrt(2 * y / 9.81), tm = _Time.y * L7.x;
                 float fp = max(length(ddx(float2(x, y))), length(ddy(float2(x, y))));
                 float detail = saturate(1.5 - fp * 1.2);
@@ -180,7 +180,7 @@ Shader "Stabby/Water"
                 float3 wp = TransformObjectToWorld(i.positionOS.xyz);
                 UNITY_BRANCH if (i.fall.w > 0.5)
                 {
-                    float u = saturate(i.fall.x), h = i.fall.y, wd = 2 * i.chan.y;
+                    float u = saturate(i.curt.y), h = i.curt.z, wd = 2 * i.chan.y;
                     float move = smoothstep(CurtainPxLo, CurtainPxHi, ScreenPx(wd, length(_WorldSpaceCameraPos - wp)));
                     UNITY_BRANCH if (move > 0)
                     {
@@ -189,7 +189,7 @@ Shader "Stabby/Water"
                         float tau = sqrt(2 * u * h / 9.81), ph = (tau - _Time.y * 0.8 * Liquid(i.reach.w, 7).x) * 2.2;
                         float3 fl = Noise(float2(i.reach.z * 0.03 + 1.3, ph * 0.3));
                         float3 er = Noise(float2(i.chan.x * 3.7 + i.reach.z * 0.1, ph + 9.1));
-                        float flowQ = saturate(log2(1 + i.reach.x) / 9);
+                        float flowQ = saturate(log2(1 + i.curt.w) / 9);
                         float side = fl.x * u * min(CurtainFlutter * wd, 0.04 * h);
                         float edge = er.x * smoothstep(0, 0.3, u) * CurtainRipple * wd * i.chan.x;
                         float bulge = 6.75 * u * (1 - u) * (1 - u) * flowQ * min(CurtainBulge * h, 0.25 * wd) + fl.y * u * 0.015 * h;
@@ -207,16 +207,12 @@ Shader "Stabby/Water"
                 o.warm = i.reach.w;
                 o.tint = round(i.reach.w) == 0 ? saturate(i.tint.xyz) : 0;
                 o.fall = i.fall;
+                o.curt = i.curt;
                 return o;
             }
 
-            half4 frag(Varyings i) : SV_Target
+            half4 Sheet(Varyings i, float3 v, float dist, float2 uv)
             {
-                float3 toCam = _WorldSpaceCameraPos - i.positionWS;
-                float dist = length(toCam);
-                float3 v = toCam / dist;
-                float2 uv = i.screen.xy / i.screen.w;
-                UNITY_BRANCH if (i.fall.w > 0.5) return Curtain(i, v, dist, uv);
                 float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L2 = Mixed(i, 2), L3 = Mixed(i, 3), L4 = Mixed(i, 4), L5 = Mixed(i, 5), L6 = Mixed(i, 6), L7 = Mixed(i, 7);
                 float opacity = L5.x, visc = L5.y;
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
@@ -438,6 +434,19 @@ Shader "Stabby/Water"
                 float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
                 return half4(lerp(MixFog(c, i.fog), c, clear), alpha);
+            }
+
+            half4 frag(Varyings i) : SV_Target
+            {
+                float3 toCam = _WorldSpaceCameraPos - i.positionWS;
+                float dist = length(toCam);
+                float3 v = toCam / dist;
+                float2 uv = i.screen.xy / i.screen.w;
+                float b = i.curt.x;
+                UNITY_BRANCH if (b > 0.999) return Curtain(i, v, dist, uv);
+                half4 s = Sheet(i, v, dist, uv);
+                UNITY_BRANCH if (b > 0.001) s = lerp(s, Curtain(i, v, dist, uv), b);
+                return s;
             }
             ENDHLSL
         }

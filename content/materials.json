@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "offsetAmplitudeM": 18,
   "offsetWavelengthM": 2400,
   "tiltPerKm": 6,
@@ -8,7 +8,7 @@
     "saturation": 0.65, "roughness": 0.85, "specular": 0.04, "roughnessVar": 0.12
   },
   "sinter": {
-    "white": "#e8e4d8", "ochre": "#c99a4a", "orange": "#c4642a", "bandM": 0.3, "roughness": 0.55
+    "white": "#d6cfbf", "ochre": "#c99a4a", "orange": "#c4642a", "roughness": 0.55
   },
   "mud": { "surface": "#6e6152", "clay": "#9c8c74", "grey": "#8c897f", "roughness": 0.3 },
   "peat": { "wet": "#6e5b43", "dark": "#54432f", "fibre": "#8c7754", "roughness": 0.22 },
