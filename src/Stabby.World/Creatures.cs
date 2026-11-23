@@ -12,7 +12,7 @@ namespace Stabby.World
         public int Tone;
         public float Belly, Rump, Tip;
         public float[] Idle = new float[3], Reach = new float[3], Push = new float[3], Lift = new float[3];
-        public float[] RunReach = new float[3], RunPush = new float[3], RunLift = new float[3], Alert = new float[3];
+        public float[] RunReach = new float[3], RunPush = new float[3], RunLift = new float[3], Alert = new float[3], Graze = new float[3];
     }
 
     public sealed class CreaturePartDef
@@ -45,6 +45,7 @@ namespace Stabby.World
         public float HerdChance;
         public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f, Dart;
         public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f;
+        public CreatureDrives Drives = new CreatureDrives { Hunger = DriveDef.Of(240, 0.6f, 30), Thirst = DriveDef.Of(600, 0.7f, 20), Rest = DriveDef.Of(900, 0.8f, 60) };
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
     }
 
@@ -94,7 +95,7 @@ namespace Stabby.World
                     if (s.Tone < 0) errors.Add(at + ": unknown tone");
                     if (s.Belly < 0 || s.Belly > 1 || s.Rump < 0 || s.Rump > 1 || s.Tip < 0 || s.Tip > 1) errors.Add(at + ": belly/rump/tip out of 0..1");
                     if (s.Idle.Length != 3 || s.Reach.Length != 3 || s.Push.Length != 3 || s.Lift.Length != 3
-                        || s.RunReach.Length != 3 || s.RunPush.Length != 3 || s.RunLift.Length != 3 || s.Alert.Length != 3) errors.Add(at + ": poses need 3 angles");
+                        || s.RunReach.Length != 3 || s.RunPush.Length != 3 || s.RunLift.Length != 3 || s.Alert.Length != 3 || s.Graze.Length != 3) errors.Add(at + ": poses need 3 angles");
                 }
             }
             var bodyIds = new HashSet<string>();
@@ -124,6 +125,12 @@ namespace Stabby.World
                     errors.Add(b.Id + ": detail pixels must rise fade < anim < ik and fade < shadow");
                 if (!(b.LowPixels >= 2 * b.FadePixels)) errors.Add(b.Id + ": lowPixels must be at least twice fadePixels");
                 if (b.Haunch < 0 || b.Haunch > 0.5f || b.Waist < 0 || b.Waist > 0.5f || b.Hump < 0 || b.Hump > 0.5f) errors.Add(b.Id + ": haunch, waist and hump out of 0..0.5");
+                for (int d = 0; d < Drives.Count; d++)
+                {
+                    var drive = b.Drives[d];
+                    if (!(drive.Fill >= 10 && drive.Fill <= 86400 && drive.Sate >= 1 && drive.Sate <= 3600)) errors.Add(b.Id + ": drive " + d + " fillSeconds or sateSeconds out of range");
+                    if (!(drive.Threshold > Drives.Done && drive.Threshold < 1)) errors.Add(b.Id + ": drive " + d + " threshold out of (" + Drives.Done + ", 1)");
+                }
                 var seen = new List<string>();
                 foreach (var s in b.Slots)
                 {
@@ -159,7 +166,7 @@ namespace Stabby.World
         public int Shape;
         public float Length, Radius, Flatten;
         public float[] Idle = new float[3], Reach = new float[3], Push = new float[3], Lift = new float[3];
-        public float[] RunReach = new float[3], RunPush = new float[3], RunLift = new float[3], Alert = new float[3];
+        public float[] RunReach = new float[3], RunPush = new float[3], RunLift = new float[3], Alert = new float[3], Graze = new float[3];
     }
 
     public sealed class CreatureBody
@@ -301,7 +308,7 @@ namespace Stabby.World
         static void Poses(CreatureSegmentInstance seg, CreatureSegmentDef s, float side)
         {
             seg.Idle = Pose(s.Idle, side); seg.Reach = Pose(s.Reach, side); seg.Push = Pose(s.Push, side); seg.Lift = Pose(s.Lift, side);
-            seg.RunReach = Pose(s.RunReach, side); seg.RunPush = Pose(s.RunPush, side); seg.RunLift = Pose(s.RunLift, side); seg.Alert = Pose(s.Alert, side);
+            seg.RunReach = Pose(s.RunReach, side); seg.RunPush = Pose(s.RunPush, side); seg.RunLift = Pose(s.RunLift, side); seg.Alert = Pose(s.Alert, side); seg.Graze = Pose(s.Graze, side);
         }
 
         static float[] Pose(float[] deg, float side) => new[] { deg[0] * Radians, deg[1] * Radians * side, deg[2] * Radians * side };
@@ -325,6 +332,7 @@ namespace Stabby.World
         public ulong BodySeed, HerdSeed;
         public uint Seed;
         public HerdRoute Route;
+        public HerdNeeds Needs;
     }
 
     public struct WorldWet : IWetCells
@@ -337,7 +345,9 @@ namespace Stabby.World
     public static class CreaturePlan
     {
         public const int SiteCells = 16, Tries = 16, MaxHerd = 16, MaxBodies = 16;
-        public const float HerdSpread = 4f;
+        public const float HerdSpread = 4f, EdgeM = 4f, RiverCost = 30f;
+        public const float NeedM = 180f, BedM = 90f;
+        public static int CellsFor(float meters, float cellMeters) => Math.Max(1, (int)Math.Ceiling(meters / cellMeters));
 
         public static float SpawnReach(CreatureDef def) => Detail.SimulationReach(def.Length, def.SpawnPixels);
 
@@ -403,6 +413,7 @@ namespace Stabby.World
                 ulong herdSeed = HerdSeed(root, HerdOf(site << 8 | b << 4));
                 float heading = rng.Range(0f, 6.2831853f);
                 var route = Route(w, cells, def, herdSeed, cell, cx, cz);
+                var needs = Needs(w, cells, def, cell);
                 float grade = Footing.Grade(def.MaxSlope);
                 for (int k = 0; k < count; k++)
                 {
@@ -415,7 +426,7 @@ namespace Stabby.World
                         Id = site << 8 | b << 4 | k, Body = b,
                         X = cx + ox, Z = cz + oz,
                         Heading = heading + rng.Range(-0.7f, 0.7f), BodySeed = seed, Seed = rng.NextU32() | 1u, HerdSeed = herdSeed,
-                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed), Route = route,
+                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed), Route = route, Needs = needs,
                     });
                 }
             }
@@ -452,6 +463,83 @@ namespace Stabby.World
                 for (int k = 1; k <= last; k++) route.Set(k, back ? route.X1 : cx, back ? route.Z1 : cz);
             }
             return route;
+        }
+
+        public static bool Drinkable(GeneratedWorld w, int i) => !w.Sea[i] && (w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i]);
+
+        public static bool Cover(GeneratedWorld w, int i)
+        {
+            var surface = w.Materials?.Surface;
+            return surface == null || w.Biome == null || surface.CoatOf(w.BiomeIds[w.Biome[i]]) == 0;
+        }
+
+        public static HerdNeeds Needs(GeneratedWorld w, NearArrays cells, CreatureDef def, int cell)
+        {
+            int n = w.Config.Size, hx = cell % n, hz = cell / n;
+            float cm = w.Config.CellMeters, cx = (hx + 0.5f) * cm, cz = (hz + 0.5f) * cm;
+            float grade = Footing.Grade(def.MaxSlope);
+            var wet = new WorldWet { World = w };
+            var needs = new HerdNeeds();
+            float drink = float.MaxValue, graze = float.MaxValue, bed = float.MaxValue;
+            int reachCells = CellsFor(NeedM, cm), bedCells = CellsFor(BedM, cm);
+            var surface = w.Materials?.Surface;
+            var cover = new bool[w.BiomeIds?.Length ?? 0];
+            for (int b = 0; b < cover.Length; b++) cover[b] = surface == null || surface.CoatOf(w.BiomeIds[b]) == 0;
+            for (int ring = 0; ring <= reachCells && !(ring > bedCells && ring * cm * ring * cm > graze && (ring - 1) * cm > drink); ring++)
+                for (int dz = -ring; dz <= ring; dz++)
+                    for (int dx = -ring; dx <= ring; dx += Math.Abs(dz) == ring ? 1 : 2 * ring)
+                    {
+                        int x = hx + dx, z = hz + dz;
+                        if (x <= 0 || z <= 0 || x >= n - 1 || z >= n - 1) continue;
+                        int i = z * n + x;
+                        if (Wet(w, i)) continue;
+                        float px = (x + 0.5f) * cm, pz = (z + 0.5f) * cm;
+                        float far = (px - cx) * (px - cx) + (pz - cz) * (pz - cz);
+                        bool near = Math.Abs(dx) <= bedCells && Math.Abs(dz) <= bedCells;
+                        bool grazeHere = far < graze && (surface == null || w.Biome == null || cover[w.Biome[i]]);
+                        float bedScore = float.MaxValue;
+                        if (near)
+                        {
+                            float gx = w.Height[i + 1] - w.Height[i - 1], gz = w.Height[i + n] - w.Height[i - n];
+                            bedScore = (gx * gx + gz * gz) / (cm * cm) * 1e6f + far;
+                        }
+                        if ((grazeHere || bedScore < bed) && Habitable(w, cells, def, x, z) && !HerdMind.CrossesWet(ref wet, n, cm, cx, cz, px, pz))
+                        {
+                            if (grazeHere) { graze = far; needs.GrazeX = px; needs.GrazeZ = pz; needs.Has |= HerdNeeds.HasGraze; }
+                            if (bedScore < bed) { bed = bedScore; needs.BedX = px; needs.BedZ = pz; needs.Has |= HerdNeeds.HasBed; }
+                        }
+                        for (int k = 0; k < 4; k++)
+                        {
+                            int ex = k == 0 ? 1 : k == 1 ? -1 : 0, ez = k == 2 ? 1 : k == 3 ? -1 : 0;
+                            int j = i + ez * n + ex;
+                            if (!Drinkable(w, j) || (float)Math.Sqrt(far) - cm + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost) >= drink) continue;
+                            for (float t = cm * 0.5f - 1; t >= cm * 0.5f - EdgeM; t -= 0.5f)
+                            {
+                                float qx = px + ex * t, qz = pz + ez * t;
+                                if (Footing.SteepAt(cells, qx, qz, grade)) continue;
+                                float rise = Math.Max(0, NearField.Sample(cells, qx, qz) - w.Water.WaterSurface[j]);
+                                float score = (float)Math.Sqrt((qx - cx) * (qx - cx) + (qz - cz) * (qz - cz)) + rise * 20 + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost);
+                                if (score < drink && !HerdMind.CrossesWet(ref wet, n, cm, cx, cz, qx, qz))
+                                {
+                                    drink = score; needs.DrinkX = qx; needs.DrinkZ = qz; needs.WaterX = ex; needs.WaterZ = ez; needs.Has |= HerdNeeds.HasDrink;
+                                }
+                                break;
+                            }
+                        }
+                    }
+            return needs;
+        }
+
+        public static bool AtShore(GeneratedWorld w, NearArrays cells, CreatureDef def, in HerdNeeds needs)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            if (HerdMind.OffMap(n, cm, needs.DrinkX, needs.DrinkZ, out int c) || Wet(w, c)) return false;
+            int ex = (int)needs.WaterX, ez = (int)needs.WaterZ;
+            if (Math.Abs(ex) + Math.Abs(ez) != 1 || !Drinkable(w, c + ez * n + ex)) return false;
+            float edge = ex != 0 ? (c % n + 0.5f + 0.5f * ex) * cm : (c / n + 0.5f + 0.5f * ez) * cm;
+            float gap = Math.Abs((ex != 0 ? needs.DrinkX : needs.DrinkZ) - edge);
+            return gap <= EdgeM + 0.01f && !Footing.SteepAt(cells, needs.DrinkX, needs.DrinkZ, Footing.Grade(def.MaxSlope));
         }
 
         public static void MemberAt(in CreatureSpawn s, double t, out float x, out float z, out float heading)

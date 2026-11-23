@@ -429,7 +429,7 @@ namespace Stabby.Game
                 segs[i] = new CreatureSegmentRig
                 {
                     Length = s.Length, Idle = V(s.Idle), Forward = V(s.Reach), Back = V(s.Push), Lift = V(s.Lift),
-                    RunForward = V(s.RunReach), RunBack = V(s.RunPush), RunLift = V(s.RunLift), Alert = V(s.Alert),
+                    RunForward = V(s.RunReach), RunBack = V(s.RunPush), RunLift = V(s.RunLift), Alert = V(s.Alert), Graze = V(s.Graze),
                 };
             }
             b.Allocate(ref rig.RestPos, body.Segments.Count);
@@ -447,13 +447,13 @@ namespace Stabby.Game
             var rot = new NativeArray<quaternion>(n, Allocator.Persistent);
             var end = new NativeArray<float3>(parts, Allocator.Persistent);
             var endRot = new NativeArray<quaternion>(parts, Allocator.Persistent);
-            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, pos, rot, end, endRot);
+            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, 0, pos, rot, end, endRot);
             for (int i = 0; i < n; i++)
             {
                 rig.RestPos[i] = pos[i];
                 rig.RestRot[i] = rot[i];
             }
-            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 1, pos, rot, end, endRot);
+            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, 1, pos, rot, end, endRot);
             float footY = 0, travel = 0, fore = 0, hind = 0, track = 0;
             int legs = 0, fores = 0;
             for (int i = 0; i < parts; i++)
@@ -474,9 +474,9 @@ namespace Stabby.Game
             {
                 ref var part = ref rig.Parts[i];
                 if (part.Role != CreaturePartDef.Leg) continue;
-                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(-part.Phase), 1, 0, 0, 0, 1, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(-part.Phase), 1, 0, 0, 0, 0, 1, pos, rot, end, endRot);
                 float front = end[i].z;
-                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(0.5f - part.Phase), 1, 0, 0, 0, 1, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(0.5f - part.Phase), 1, 0, 0, 0, 0, 1, pos, rot, end, endRot);
                 travel += front - end[i].z;
             }
             if (legs > 0)

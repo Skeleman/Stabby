@@ -69,6 +69,8 @@ namespace Stabby.World
             }
             FleeStaysAshore(w, lib, a, e);
             RoutesStayAshore(w, cells, lib, a, e);
+            NeedsHold(w, cells, lib, a, e);
+            DrivesStayBounded(lib, a, e);
             return e;
         }
 
@@ -113,6 +115,62 @@ namespace Stabby.World
             if (done.Count >= 4 && moving * 2 < done.Count) e.Add("only " + moving + " of " + done.Count + " creature herds have a grazing route");
         }
 
+        static void NeedsHold(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        {
+            var wet = new WorldWet { World = w };
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var done = new HashSet<int>();
+            int drinkers = 0;
+            foreach (var s in plan)
+            {
+                int herd = CreaturePlan.HerdOf(s.Id);
+                if (!done.Add(herd)) continue;
+                var def = lib.Bodies[s.Body];
+                var needs = s.Needs;
+                float hx = s.Route.X0, hz = s.Route.Z0, far = (CreaturePlan.NeedM + cm) * 1.5f;
+                for (byte act = Drives.Graze; act <= Drives.Bed; act++)
+                {
+                    if (!needs.Can(act)) continue;
+                    needs.Target(act, out float x, out float z);
+                    if ((x - hx) * (x - hx) + (z - hz) * (z - hz) > far * far) e.Add("creature herd " + herd + " need " + act + " target lies " + (int)Math.Sqrt((x - hx) * (x - hx) + (z - hz) * (z - hz)) + " m from home");
+                    if (HerdMind.CrossesWet(ref wet, n, cm, hx, hz, x, z)) e.Add("creature herd " + herd + " need " + act + " target lies across water");
+                    if (act != Drives.Drink && !CreaturePlan.Habitable(w, cells, def, (int)(x / cm), (int)(z / cm))) e.Add("creature herd " + herd + " need " + act + " target is not habitable");
+                }
+                if (needs.Can(Drives.Graze) && !CreaturePlan.Cover(w, (int)(needs.GrazeZ / cm) * n + (int)(needs.GrazeX / cm))) e.Add("creature herd " + herd + " grazes off ground cover");
+                if (needs.Can(Drives.Drink))
+                {
+                    drinkers++;
+                    if (!CreaturePlan.AtShore(w, cells, def, needs)) e.Add("creature herd " + herd + " drinks away from a walkable lake or river edge at " + (int)needs.DrinkX + "," + (int)needs.DrinkZ);
+                }
+            }
+            if (done.Count >= 8 && drinkers * 10 < done.Count) e.Add("only " + drinkers + " of " + done.Count + " creature herds have water to drink");
+        }
+
+        public const float DriveStepSeconds = 5f;
+
+        static void DrivesStayBounded(CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        {
+            var done = new HashSet<int>();
+            foreach (var s in plan)
+            {
+                if (!done.Add(CreaturePlan.HerdOf(s.Id))) continue;
+                var drives = lib.Bodies[s.Body].Drives;
+                for (double t = 0; t < 7200; t += 997)
+                {
+                    byte want = Drives.Wake(drives, s.Needs, t, s.HerdSeed, s.Seed, out var levels);
+                    for (int k = 0; k < 400; k++)
+                    {
+                        want = Drives.Choose(levels, drives, s.Needs, want);
+                        Drives.Advance(ref levels, drives, want, DriveStepSeconds);
+                    }
+                    for (int i = 0; i < Drives.Count; i++)
+                        if (!(levels[i] >= 0 && levels[i] <= 1)) { e.Add("creature " + s.Id + " drive " + i + " left 0..1"); return; }
+                    if (want != Drives.None && !s.Needs.Can(want)) { e.Add("creature " + s.Id + " wants a need its herd has no target for"); return; }
+                }
+            }
+        }
+
         public const int FleeDirections = 8;
 
         static void FleeStaysAshore(GeneratedWorld w, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
@@ -151,6 +209,9 @@ namespace Stabby.World
             && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed && a.HerdSeed == b.HerdSeed
             && a.Route.X0 == b.Route.X0 && a.Route.Z0 == b.Route.Z0 && a.Route.X1 == b.Route.X1 && a.Route.Z1 == b.Route.Z1
             && a.Route.X2 == b.Route.X2 && a.Route.Z2 == b.Route.Z2 && a.Route.X3 == b.Route.X3 && a.Route.Z3 == b.Route.Z3
-            && a.Route.Speed == b.Route.Speed && a.Route.Dwell == b.Route.Dwell && a.Route.Phase == b.Route.Phase;
+            && a.Route.Speed == b.Route.Speed && a.Route.Dwell == b.Route.Dwell && a.Route.Phase == b.Route.Phase
+            && a.Needs.Has == b.Needs.Has && a.Needs.GrazeX == b.Needs.GrazeX && a.Needs.GrazeZ == b.Needs.GrazeZ
+            && a.Needs.DrinkX == b.Needs.DrinkX && a.Needs.DrinkZ == b.Needs.DrinkZ && a.Needs.WaterX == b.Needs.WaterX && a.Needs.WaterZ == b.Needs.WaterZ
+            && a.Needs.BedX == b.Needs.BedX && a.Needs.BedZ == b.Needs.BedZ;
     }
 }
