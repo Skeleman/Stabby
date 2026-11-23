@@ -25,6 +25,7 @@ namespace Stabby.Game
     {
         public float Length, Rear, Stand, Stride, RunStride, RunRatio, Fore, Hind, Track;
         public float FadePx, ShadowPx, AnimPx, IkPx, LowPx;
+        public Detail.Rule Rule;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
         public BlobArray<float3> RestPos;
@@ -38,6 +39,7 @@ namespace Stabby.Game
         public float3 Position;
         public float Heading, Pitch, Move, Alert, Down, WalkSpeed, Phase, Clock, Sink, Wake;
         public bool Visible, Shadow, High, HighOn, LowOn;
+        public Detail.Decision Decision;
         public float4 Fade;
     }
 

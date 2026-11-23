@@ -77,4 +77,183 @@ public class DetailTests
     [Fact]
     public void QualityShrinksTerrainError() =>
         Assert.True(new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 2f) < new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 1f));
+    static readonly Detail.Rule Tree = new Detail.Rule(new Detail.Thresholds(100f, 40f, 10f), 60f, 30f,
+        new Detail.Thresholds(50f, 50f, 15f), new Detail.Thresholds(400f, 100f, 10f));
+
+    static float At(float px) => Detail.Reach(2f, px, Detail.ReferencePixelsPerMetre);
+
+    static Detail.Decision Decide(float px, Detail.Decision previous, float quality = 1f) =>
+        Detail.Decide(Tree, 2f, At(px), Detail.ReferencePixelsPerMetre, quality, previous);
+
+    [Fact]
+    public void DecisionPacksEveryAnswer()
+    {
+        var d = new Detail.Decision(2, Detail.ShadowCanopy, Detail.AnimSway, Detail.LightEmissive);
+        Assert.False(d.IsFirst);
+        Assert.Equal(2, d.Geometry);
+        Assert.Equal(Detail.ShadowCanopy, d.Shadow);
+        Assert.Equal(Detail.AnimSway, d.Animation);
+        Assert.Equal(Detail.LightEmissive, d.Light);
+        Assert.True(default(Detail.Decision).IsFirst);
+        Assert.Equal(-1, default(Detail.Decision).Shadow);
+        Assert.False(default(Detail.Decision).Casts);
+    }
+
+    [Theory]
+    [InlineData(500f, 0, Detail.ShadowCascade, Detail.AnimFull, Detail.LightShadowed)]
+    [InlineData(80f, 1, Detail.ShadowCascade, Detail.AnimFull, Detail.LightGlow)]
+    [InlineData(45f, 1, Detail.ShadowLow, Detail.AnimSway, Detail.LightGlow)]
+    [InlineData(20f, 2, Detail.ShadowNone, Detail.AnimSway, Detail.LightGlow)]
+    [InlineData(12f, 2, Detail.ShadowNone, Detail.AnimFrozen, Detail.LightGlow)]
+    [InlineData(5f, 3, Detail.ShadowNone, Detail.AnimFrozen, Detail.LightEmissive)]
+    public void DecideAnswersEachTierBySize(float px, int geometry, int shadow, int anim, int light)
+    {
+        var d = Decide(px, default);
+        Assert.Equal(geometry, d.Geometry);
+        Assert.Equal(shadow, d.Shadow);
+        Assert.Equal(anim, d.Animation);
+        Assert.Equal(light, d.Light);
+        Assert.Equal(shadow < Detail.ShadowNone, d.Casts);
+    }
+
+    [Fact]
+    public void DecideHoldsShadowTiersWithHysteresis()
+    {
+        var cascade = Decide(61f, default);
+        Assert.Equal(Detail.ShadowCascade, cascade.Shadow);
+        Assert.Equal(Detail.ShadowCascade, Decide(55f, cascade).Shadow);
+        Assert.Equal(Detail.ShadowLow, Decide(50f, cascade).Shadow);
+        var low = Decide(31f, default);
+        Assert.Equal(Detail.ShadowLow, Decide(27f, low).Shadow);
+        Assert.Equal(Detail.ShadowNone, Decide(25f, low).Shadow);
+        var none = Decide(25f, low);
+        Assert.Equal(Detail.ShadowNone, Decide(29f, none).Shadow);
+        Assert.Equal(Detail.ShadowLow, Decide(31f, none).Shadow);
+        Assert.Equal(Detail.ShadowCascade, Decide(61f, none).Shadow);
+    }
+
+    [Fact]
+    public void DecideDropsShadowsOnceGeometryIsGone()
+    {
+        var always = new Detail.Rule(Tree.Geometry, 0.001f, 0.001f, Tree.Animation, Tree.Light);
+        var d = Detail.Decide(always, 2f, At(5f), Detail.ReferencePixelsPerMetre, 1f, default);
+        Assert.Equal(Detail.GeometryGone, d.Geometry);
+        Assert.Equal(Detail.ShadowNone, d.Shadow);
+    }
+
+    [Fact]
+    public void QualityScalesEveryAnswer()
+    {
+        var d = Decide(45f, default, 3f);
+        Assert.Equal(0, d.Geometry);
+        Assert.Equal(Detail.ShadowCascade, d.Shadow);
+        Assert.Equal(Detail.AnimFull, d.Animation);
+        Assert.Equal(Detail.LightUnshadowed, d.Light);
+    }
+
+    [Fact]
+    public void NeverRulesStayAtTheLastTier()
+    {
+        var never = new Detail.Thresholds(Detail.Never, Detail.Never, Detail.Never);
+        var r = new Detail.Rule(Tree.Geometry, Detail.Never, Detail.Never, never, never);
+        var d = Detail.Decide(r, 2f, 0.5f, Detail.ReferencePixelsPerMetre, 0.5f, default);
+        Assert.Equal(Detail.ShadowNone, d.Shadow);
+        Assert.Equal(Detail.AnimFrozen, d.Animation);
+        Assert.Equal(Detail.LightEmissive, d.Light);
+        Assert.Equal(0f, Detail.ShadowReach(2f, r, Detail.ReferencePixelsPerMetre, 1f));
+    }
+
+    [Fact]
+    public void ShadowReachInvertsTheShadowThresholds()
+    {
+        float ppm = Detail.ReferencePixelsPerMetre;
+        float far = Detail.ShadowReach(2f, Tree, ppm, 1f), near = Detail.CascadeReach(2f, Tree, ppm, 1f);
+        Assert.Equal(2f * ppm / 30f, far, 2);
+        Assert.Equal(2f * ppm / 60f, near, 2);
+        Assert.Equal(2f * far, Detail.ShadowReach(2f, Tree, ppm, 2f), 2);
+        Assert.Equal(Detail.ShadowLow, Detail.Decide(Tree, 2f, far * 0.99f, ppm, 1f, default).Shadow);
+        Assert.Equal(Detail.ShadowNone, Detail.Decide(Tree, 2f, far * 1.01f, ppm, 1f, default).Shadow);
+    }
+
+    [Fact]
+    public void SnapRangeStepsAndHolds()
+    {
+        float a = Detail.SnapRange(100f, 0f);
+        Assert.True(a >= 100f && a < 100f * Detail.RangeStep);
+        Assert.Equal(a, Detail.SnapRange(99.5f, 0f));
+        Assert.Equal(a, Detail.SnapRange(95f, a));
+        Assert.True(Detail.SnapRange(80f, a) < a);
+        Assert.True(Detail.SnapRange(a * 1.01f, a) > a);
+        Assert.Equal(0f, Detail.SnapRange(0f, a));
+    }
+
+    [Theory]
+    [InlineData(40f, 120f, 2)]
+    [InlineData(10f, 400f, 3)]
+    [InlineData(2f, 1000f, 4)]
+    [InlineData(500f, 400f, 2)]
+    public void CascadeSplitsAreGeometricFromNearToRange(float near, float range, int count)
+    {
+        var c = Detail.CascadeSplits(near, range);
+        Assert.Equal(count, c.Count);
+        float[] s = { c.Split1, c.Split2, c.Split3 };
+        for (int i = 0; i < count - 1; i++)
+        {
+            Assert.True(s[i] > 0f && s[i] < 1f);
+            if (i > 0) Assert.True(s[i] > s[i - 1]);
+        }
+        for (int i = count - 1; i < 3; i++) Assert.Equal(0f, s[i]);
+        if (count > 2) Assert.Equal(c.Split2 / c.Split1, c.Split3 > 0 ? c.Split3 / c.Split2 : 1f / c.Split2, 3);
+    }
+
+    [Fact]
+    public void KindAndCreatureRulesComeFromContent()
+    {
+        var kind = new ObjectKind { Id = "animated", Lods = 3, LodPixels = new[] { 108f, 32.4f }, FadePixels = 6.48f, ShadowPixels = 43.2f, ShadowCascadePixels = 86.4f, Wind = true };
+        var r = kind.Rule();
+        Assert.Equal(108f, r.Geometry.Near);
+        Assert.Equal(32.4f, r.Geometry.Mid);
+        Assert.Equal(6.48f, r.Geometry.Far);
+        Assert.Equal(86.4f, r.ShadowCascadePixels);
+        Assert.Equal(43.2f, r.ShadowPixels);
+        Assert.Equal(kind.FlutterPixels, r.Animation.Near);
+        Assert.Equal(kind.SwayPixels, r.Animation.Far);
+        kind.Wind = false;
+        Assert.Equal(Detail.Never, kind.Rule().Animation.Far);
+        var c = new CreatureDef().Rule();
+        Assert.Equal(64.8f, c.ShadowCascadePixels);
+        Assert.Equal(64.8f, c.Animation.Near);
+        Assert.Equal(10.8f, c.Animation.Mid);
+    }
+
+    [Fact]
+    public void ShadowSpanCoversEveryCasterFromContent()
+    {
+        string root = Stabby.Content.ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+        var biomes = Stabby.Content.ContentLoader.LoadBiomes(root).Select(b => b.Id).ToList();
+        var objects = Stabby.Content.ContentLoader.LoadObjects(root, biomes);
+        var creatures = Stabby.Content.ContentLoader.LoadCreatures(root, biomes);
+        float ppm = Detail.ReferencePixelsPerMetre;
+        var span = new Detail.ShadowSpan();
+        objects.AddShadows(ref span, ppm, 1f);
+        creatures.AddShadows(ref span, ppm, 1f);
+        Assert.True(span.Near > 0 && span.Near < span.Range);
+        foreach (var d in objects.Objects)
+        {
+            float size = objects.CasterSize(d);
+            if (size <= 0) continue;
+            var rule = objects.KindOf(d).Rule();
+            float far = Detail.ShadowReach(size, rule, ppm, 1f);
+            Assert.True(far / (1f - Detail.Hysteresis) <= span.Range * 1.0001f, d.Id);
+            Assert.True(Detail.CascadeReach(size, rule, ppm, 1f) >= span.Near * 0.9999f, d.Id);
+            var at = Detail.Decide(rule, size, span.Range * 1.001f, ppm, 1f, new Detail.Decision(0, Detail.ShadowLow, 0, 0));
+            Assert.False(at.Casts, d.Id);
+        }
+        var wide = new Detail.ShadowSpan();
+        objects.AddShadows(ref wide, 2f * ppm, 1f);
+        creatures.AddShadows(ref wide, 2f * ppm, 1f);
+        Assert.Equal(2f * span.Range, wide.Range, 1);
+        var c = Detail.CascadeSplits(span.Near, Detail.SnapRange(span.Range, 0));
+        Assert.InRange(c.Count, 2, 4);
+    }
 }

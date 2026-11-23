@@ -393,6 +393,8 @@ public static class ContentLoader
         public float FadePixels { get; set; }
         public bool Shadows { get; set; }
         public float ShadowPixels { get; set; }
+        public float ShadowCascadePixels { get; set; }
+        public float[] LightPixels { get; set; } = Array.Empty<float>();
         public bool Wind { get; set; }
         public float SwayPixels { get; set; } = 16.2f;
         public float FlutterPixels { get; set; } = 54f;
@@ -486,7 +488,7 @@ public static class ContentLoader
             lib.Kinds.Add(new ObjectKind
             {
                 Id = k.Id, Lods = k.Lods, LodPixels = k.LodPixels, FadePixels = k.FadePixels,
-                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, ImpostorPixels = k.ImpostorPixels, Animated = k.Animated, Solid = k.Solid,
+                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, ShadowCascadePixels = k.ShadowCascadePixels, LightPixels = k.LightPixels, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, ImpostorPixels = k.ImpostorPixels, Animated = k.Animated, Solid = k.Solid,
             });
         foreach (var o in file.Objects)
         {

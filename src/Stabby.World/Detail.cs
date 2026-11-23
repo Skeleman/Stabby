@@ -204,6 +204,110 @@ namespace Stabby.World
             return Math.Max(held, previous);
         }
 
+        public const int ShadowCascade = 0, ShadowLow = 1, ShadowNone = 2, ShadowFarMap = 3, ShadowCanopy = 4;
+        public const int AnimFull = 0, AnimDecimated = 1, AnimSway = 2, AnimFrozen = 3;
+        public const int LightShadowed = 0, LightUnshadowed = 1, LightGlow = 2, LightEmissive = 3;
+        public const int GeometryGone = 3;
+        public const float Never = float.MaxValue;
+
+        public struct Rule
+        {
+            public Thresholds Geometry, Animation, Light;
+            public float ShadowCascadePixels, ShadowPixels;
+
+            public Rule(Thresholds geometry, float shadowCascadePixels, float shadowPixels, Thresholds animation, Thresholds light)
+            {
+                Geometry = geometry;
+                ShadowCascadePixels = shadowCascadePixels;
+                ShadowPixels = shadowPixels;
+                Animation = animation;
+                Light = light;
+            }
+        }
+
+        public struct Decision
+        {
+            public ushort Bits;
+
+            public Decision(int geometry, int shadow, int animation, int light) =>
+                Bits = (ushort)((geometry & 3 | (shadow & 7) << 2 | (animation & 3) << 5 | (light & 3) << 7) + 1);
+
+            public bool IsFirst => Bits == 0;
+            public int Geometry => IsFirst ? -1 : Bits - 1 & 3;
+            public int Shadow => IsFirst ? -1 : Bits - 1 >> 2 & 7;
+            public int Animation => IsFirst ? -1 : Bits - 1 >> 5 & 3;
+            public int Light => IsFirst ? -1 : Bits - 1 >> 7 & 3;
+            public bool Casts => !IsFirst && Shadow < ShadowNone;
+        }
+
+        public static Decision Decide(in Rule rule, float sizeM, float distanceM, float pixelsPerMetre, float quality, Decision previous)
+        {
+            float px = ScreenSize(sizeM, distanceM, pixelsPerMetre);
+            int geometry = Tier(px, rule.Geometry.Scaled(quality), previous.Geometry);
+            int shadow = geometry == GeometryGone ? ShadowNone : ShadowTier(px, rule, quality, previous.Shadow);
+            int animation = Tier(px, rule.Animation.Scaled(quality), previous.Animation);
+            int light = Tier(px, rule.Light.Scaled(quality), previous.Light);
+            return new Decision(geometry, shadow, animation, light);
+        }
+
+        static int ShadowTier(float px, in Rule rule, float quality, int previous)
+        {
+            var t = new Thresholds(rule.ShadowCascadePixels, rule.ShadowPixels, rule.ShadowPixels).Scaled(quality);
+            int was = previous == ShadowCascade ? 0 : previous == ShadowLow ? 1 : previous < 0 ? -1 : 3;
+            int tier = Tier(px, t, was);
+            return tier == 0 ? ShadowCascade : tier == 1 ? ShadowLow : ShadowNone;
+        }
+
+        public static float ShadowReach(float sizeM, in Rule rule, float pixelsPerMetre, float quality) =>
+            rule.ShadowPixels >= Never ? 0 : Reach(sizeM, rule.ShadowPixels / Math.Max(quality, 0.1f), pixelsPerMetre);
+
+        public static float CascadeReach(float sizeM, in Rule rule, float pixelsPerMetre, float quality) =>
+            rule.ShadowCascadePixels >= Never ? 0 : Reach(sizeM, rule.ShadowCascadePixels / Math.Max(quality, 0.1f), pixelsPerMetre);
+
+        public struct ShadowSpan
+        {
+            public float Near, Range;
+
+            public void Add(float sizeM, in Rule rule, float pixelsPerMetre, float quality)
+            {
+                float far = ShadowReach(sizeM, rule, pixelsPerMetre, quality) / (1f - Hysteresis);
+                if (far <= 0) return;
+                Range = Math.Max(Range, far);
+                float near = CascadeReach(sizeM, rule, pixelsPerMetre, quality);
+                if (near > 0) Near = Near > 0 ? Math.Min(Near, near) : near;
+            }
+        }
+
+        public const float RangeStep = 1.0905077f;
+
+        public static float SnapRange(float range, float previous)
+        {
+            if (range <= 0) return 0;
+            if (previous > 0 && range <= previous && range > previous * (1f - Hysteresis)) return previous;
+            float steps = (float)Math.Ceiling(FMath.Log(range) / FMath.Log(RangeStep));
+            return (float)FMath.Pow(RangeStep, steps);
+        }
+
+        public struct Cascades
+        {
+            public int Count;
+            public float Split1, Split2, Split3;
+        }
+
+        public static Cascades CascadeSplits(float nearM, float rangeM)
+        {
+            float ratio = Math.Max(rangeM / Math.Max(nearM, 1e-3f), 4f);
+            int count = Math.Min(Math.Max((int)Math.Ceiling(FMath.Log(ratio) / FMath.Log(4.0)), 2), 4);
+            double a = FMath.Pow(1.0 / ratio, 1.0 / count);
+            return new Cascades
+            {
+                Count = count,
+                Split1 = (float)FMath.Pow(a, count - 1),
+                Split2 = count > 2 ? (float)FMath.Pow(a, count - 2) : 0,
+                Split3 = count > 3 ? (float)a : 0,
+            };
+        }
+
         public static bool Holds(float value, float boundary, bool was) =>
             value > boundary || was && value > boundary * (1f - Hysteresis);
 
