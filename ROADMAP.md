@@ -103,7 +103,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   behaviour system serves every agent; NPCs add ownership of items and
   structures, households and family ties, and dialogue about themselves,
   their background and culture. Theft and trespass follow from ownership.
-  Burst ECS systems, host-authoritative. Step 1 (b/creatures-desires): animal drives (hunger, thirst, rest) pick graze, drink and bed-down targets inside the shared brain job. | now
+  Burst ECS systems, host-authoritative. Step 1 merged (b/creatures-desires): animal drives (hunger, thirst, rest) pick graze, drink and bed-down targets inside the shared brain job; drinkers stopped by a bank drink when water is in reach. Next: walkable drink spots precomputed in CreaturePlan (changes output, GV bump). | now
 - Creatures, NPCs and items follow Punchy closely (Punchy `Assets/Game/Scripts/Fauna`,
   `Assets/Game/Fauna/Limbs`, `Scripts/Items`): procedural bodies from simple
   hierarchical parts (arm, leg, tail, head types) that share definitions and
