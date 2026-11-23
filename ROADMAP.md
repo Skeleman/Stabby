@@ -110,13 +110,13 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   animations and vary per entity; animation from a few keyframes plus inverse
   kinematics; all rendering through the shared material library. Part
   definitions live in `content/`, ported to ECS and Burst. Step 1 (b/creatures-1): part and body definitions in content, engine-free assembly, a code-built deer with idle and walk from keyframes plus leg IK. Step 1 done (b/creatures-1): deer wander with idle and stride, Burst animation, screen-size fade; b/creatures-2 done: shoulder hump, waist and haunch shaping with coat normal noise, and a low geometry tier by screen size through the shared crossfade. Zach: creatures are host-owned and synced; b/creatures-3 makes them Netcode for Entities ghosts, with spawn, wander and animation state decided on the host and clients only interpolating and animating. b/creatures-3 merged: host plans, spawns and wanders ghosts per-connection relevancy, clients agree within quantization; b/creatures-4 merged: herds go calm, alert, flee by reach-pixel thresholds with hysteresis, host-decided, client gap under 0.5 m while fleeing; b/creatures-5 merged: fleeing herds steer along shores and away from the map edge, alert when cornered; b/creatures-scale next. b/creature-footing merged (GV 78). b/creatures-species merged (GV 80): hare (darts, flees early) and boar as data only, coats named from new library materials, per-species biome and slope checks; mixed bench within about 10% of deer-only, client build cost lower. Follow-up: the boar reads as a tapir (tube body, long snout); b/creatures-boar merged: high humped shoulders, wedge head with tusks, dark spine crest, shorter legs; new rigid part role (no sway) and dusky-fur library entry. Next: b/creatures-desires, step 1 of the shared desire system for animals (graze, drink, rest drives as species data in the one brain job). | now
-- Player control (Zach 11-22, for playtest builds; card b/controls-1, now):
+- Player control (Zach 11-22, for playtest builds; b/controls-1 merged, gamepad and mouse lock untested on hardware; boom ignores objects and overhangs):
   mouse or right stick orbits the view and movement follows the camera;
   L3 toggles sprint, which ends on a second press or when movement stops;
   triangle or space jumps. The camera stops short of terrain between it and
   the player instead of clipping through mountains. Gamepad support likely via the Input System
   package; sprint and jump travel in PlayerInput and run on the host.
-- Playtest bugs (Zach 11-22; card b/terrain-fix-1, after controls-1): hill shadows shift
+- Playtest bugs (Zach 11-22; card b/terrain-fix-1, now): hill shadows shift
   as the player approaches (shadow distance is 60 m with one cascade, terrain
   casters exist only inside that range and geomorph with camera distance); the
   island blinks out for a frame while moving, leaving objects behind (suspect
