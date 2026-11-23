@@ -92,6 +92,10 @@ namespace Stabby.Game.Editor
             sem.CompleteAllTrackedJobs();
             using var es = sem.CreateEntity(sem.CreateArchetype(typeof(CreatureState), typeof(CreatureBrain)), n, Allocator.Temp);
             ref var sys = ref server.Unmanaged.GetUnsafeSystemRef<CreatureHostSystem>(host);
+            int bodies = 1;
+            BlobAssetReference<CreaturePlanData> plan = default;
+            using (var pq = sem.CreateEntityQuery(typeof(CreaturePlanBlob)))
+                if (pq.CalculateEntityCount() > 0) { plan = pq.GetSingleton<CreaturePlanBlob>().Value; bodies = math.max(1, plan.Value.Reach.Length); }
             for (int i = 0; i < n; i++)
             {
                 uint h = math.hash(new uint2((uint)i, (uint)r + 991u));
@@ -99,9 +103,13 @@ namespace Stabby.Game.Editor
                 float ang = (i / 10) * 2.39996f, rad = math.lerp(20f, reach, ((i / 10) * 0.618034f) % 1f);
                 float2 centre = at + new float2(math.sin(ang), math.cos(ang)) * rad;
                 float2 p = centre + new float2((h & 0xFF) / 255f - 0.5f, (h >> 8 & 0xFF) / 255f - 0.5f) * 8f;
-                sem.SetComponentData(es[i], new CreatureState { Id = -1 - i - 100000 * (r + 1), Body = 0, Seed = h, WalkSpeed = 1.2f, Position = p, Heading = ang });
-                sem.SetComponentData(es[i], new CreatureBrain { Home = p, Offset = p - centre, Herd = herd, Random = new Unity.Mathematics.Random(h | 1), Timer = 0.5f + (h % 997) / 997f * 3 });
-                if (!sys.Herds.ContainsKey(herd)) sys.Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(h), Body = 0, Route = new HerdRoute { X0 = centre.x, Z0 = centre.y }, Centre = centre });
+                int body = (i / 10) % bodies;
+                sem.SetComponentData(es[i], new CreatureState { Id = -1 - i - 100000 * (r + 1), Body = body, Seed = h, WalkSpeed = 1.2f, Position = p, Heading = ang });
+                var needs = new HerdNeeds { GrazeX = centre.x + 15, GrazeZ = centre.y, DrinkX = centre.x, DrinkZ = centre.y + 25, WaterZ = 1, BedX = centre.x - 10, BedZ = centre.y - 10, Has = HerdNeeds.HasGraze | HerdNeeds.HasDrink | HerdNeeds.HasBed };
+                var drives = plan.IsCreated ? plan.Value.Drives[body] : new CreatureDef().Drives;
+                byte want = Drives.Wake(drives, needs, server.Time.ElapsedTime, (ulong)(herd * 2654435761L), h, out var levels);
+                sem.SetComponentData(es[i], new CreatureBrain { Home = p, Offset = p - centre, Herd = herd, Random = new Unity.Mathematics.Random(h | 1), Timer = 0.5f + (h % 997) / 997f * 3, Levels = levels, Want = want });
+                if (!sys.Herds.ContainsKey(herd)) sys.Herds.Add(herd, new CreatureHerd { Mind = HerdMind.Start(h), Body = body, Route = new HerdRoute { X0 = centre.x, Z0 = centre.y }, Centre = centre, Needs = needs });
             }
         }
 
@@ -382,6 +390,22 @@ namespace Stabby.Game.Editor
             using var bq = em.CreateEntityQuery(typeof(CreatureState), typeof(CreatureBrain));
             using var all = bq.ToEntityArray(Allocator.Temp);
             foreach (var e in all) if (em.GetComponentData<CreatureState>(e).Id < 0) em.DestroyEntity(e);
+        }
+
+        static System.Collections.IEnumerator BrainOnly(string dir)
+        {
+            var server = ServerWorld();
+            for (int k = 0; k < 600 && (server == null || CreaturePlanSystem.Planned == 0); k++)
+            {
+                yield return null;
+                server = ServerWorld();
+            }
+            if (server == null) { System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "brain-bench.txt"), "no server world"); yield break; }
+            for (int k = 0; k < 120; k++) yield return null;
+            var brain = BrainBench(server);
+            while (brain.MoveNext()) yield return null;
+            for (int i = 0; i < brainLines.Count; i++) GameStatus.Lines[$"~brain bench {i:D2}"] = brainLines[i];
+            System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, "brain-bench.txt"), brainLines);
         }
 
         static System.Collections.IEnumerator BrainBench(Unity.Entities.World server)

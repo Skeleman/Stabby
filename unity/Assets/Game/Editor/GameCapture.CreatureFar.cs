@@ -212,6 +212,8 @@ namespace Stabby.Game.Editor
                     row.Id = site << 8 | slots[site] << 4 | k;
                     row.At += shift;
                     for (int w = 0; w < HerdRoute.Points; w++) row.Route.Set(w, row.Route.X(w) + shift.x, row.Route.Z(w) + shift.y);
+                    row.Needs.GrazeX += shift.x; row.Needs.GrazeZ += shift.y; row.Needs.BedX += shift.x; row.Needs.BedZ += shift.y;
+                    row.Needs.Has &= unchecked((byte)~HerdNeeds.HasDrink);
                     perSite[site].Add(row);
                     rowsMade++;
                 }
@@ -239,6 +241,8 @@ namespace Stabby.Game.Editor
             for (int i = 0; i < think.Length; i++) think[i] = real.Think[i];
             for (int i = 0; i < length.Length; i++) length[i] = real.Length[i];
             for (int i = 0; i < wary.Length; i++) wary[i] = real.Wary[i];
+            var drives = b.Allocate(ref root.Drives, real.Drives.Length);
+            for (int i = 0; i < drives.Length; i++) drives[i] = real.Drives[i];
             var wet = b.Allocate(ref root.Wet, real.Wet.Length);
             for (int i = 0; i < wet.Length; i++) wet[i] = real.Wet[i];
             var start = b.Allocate(ref root.SiteStart, sites + 1);
@@ -459,7 +463,7 @@ namespace Stabby.Game.Editor
                 float baseY = pass == 0 ? gy : centre, pitch = pass == 0 ? c.Pitch : 0, sink = pass == 0 ? c.Sink : 0;
                 var rootPos = new float3(at.x, baseY + rig.Stand - sink + bob, at.y);
                 var rootRot = math.mul(quaternion.RotateY(c.Heading), quaternion.RotateX(-pitch + rock));
-                CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert, c.Clock, 1, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert, c.Down, c.Clock, 1, pos, rot, end, endRot);
                 var unrot = math.inverse(rootRot);
                 for (int i = 0; i < parts; i++)
                 {

@@ -35,7 +35,7 @@ namespace Stabby.Game
 
         public static float Run(ref CreatureRig rig, float move) => math.saturate((move - 1) / math.max(rig.RunRatio - 1, 1e-3f));
 
-        public static void Solve(ref CreatureRig rig, float3 rootPos, quaternion rootRot, float phase, float move, float run, float alert, float clock, float swayScale,
+        public static void Solve(ref CreatureRig rig, float3 rootPos, quaternion rootRot, float phase, float move, float run, float alert, float down, float clock, float swayScale,
             NativeArray<float3> pos, NativeArray<quaternion> rot, NativeArray<float3> end, NativeArray<quaternion> endRot)
         {
             for (int i = 0; i < rig.Parts.Length; i++)
@@ -51,7 +51,7 @@ namespace Stabby.Game
                 for (int j = 0; j < part.Count; j++)
                 {
                     ref var seg = ref rig.Segments[part.First + j];
-                    float3 stand = math.lerp(seg.Idle, seg.Alert, alert);
+                    float3 stand = math.lerp(math.lerp(seg.Idle, seg.Graze, down), seg.Alert, alert);
                     float3 cycle = math.lerp(Cycle(seg.Forward, seg.Back, seg.Lift, p), Cycle(seg.RunForward, seg.RunBack, seg.RunLift, p), run);
                     float3 a = math.lerp(stand, cycle, gait) + sway;
                     r = math.mul(r, quaternion.EulerZXY(a));
@@ -263,12 +263,14 @@ namespace Stabby.Game
                 {
                     c.Move = Hold.Run > 0 ? 1 + Hold.Run * (rig.RunRatio - 1) : Hold.Move;
                     c.Alert = Hold.Alert;
+                    c.Down = Hold.Down;
                     c.Phase = Hold.Phase;
                     c.Clock = 0;
                     return;
                 }
                 c.Move = s.Move;
                 c.Alert = s.Alert;
+                c.Down = math.lerp(c.Down, s.Act == Drives.Graze || s.Act == Drives.Drink ? 1 : 0, math.min(1, 1.5f * Dt));
                 float stride = math.lerp(rig.Stride, rig.RunStride, CreaturePose.Run(ref rig, c.Move));
                 c.Phase = math.frac(c.Phase + c.Move * c.WalkSpeed / stride * Dt);
                 c.Clock += Dt;
@@ -351,7 +353,7 @@ namespace Stabby.Game
                 {
                     var end = Scratch(End, PartCap, parts, fits);
                     var endRot = Scratch(EndRot, PartCap, parts, fits);
-                    CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert * anim, c.Clock, anim, pos, rot, end, endRot);
+                    CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert * anim, c.Down * anim, c.Clock, anim, pos, rot, end, endRot);
                     sink = Legs(ref rig, rootPos, rootRot, gy, c.Sink, ik, pos, rot, end, floor);
                 }
                 c.Sink = Hold.Override != 0 ? sink : math.lerp(c.Sink, sink, math.min(1, 3 * Dt));

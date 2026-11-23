@@ -138,6 +138,52 @@ public class CreatureTests
         Assert.InRange(CreaturePlan.SpawnReach(deer), 150f, 400f);
     }
 
+    [Fact]
+    public void HerdsFindWaterGrassAndBeds()
+    {
+        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var herds = plan.GroupBy(s => CreaturePlan.HerdOf(s.Id)).Select(g => g.First()).ToList();
+        foreach (var body in Enumerable.Range(0, Lib.Bodies.Count))
+        {
+            var mine = herds.Where(h => h.Body == body).ToList();
+            if (mine.Count == 0) continue;
+            Assert.True(mine.Count(h => h.Needs.Can(Drives.Drink)) * 10 >= mine.Count, Lib.Bodies[body].Id + " rarely finds water");
+            Assert.True(mine.Count(h => h.Needs.Can(Drives.Bed)) * 10 >= mine.Count * 9, Lib.Bodies[body].Id + " rarely finds a bed");
+        }
+        Assert.Contains(herds, h => h.Needs.Can(Drives.Graze));
+    }
+
+    [Theory]
+    [InlineData("deer")]
+    [InlineData("hare")]
+    [InlineData("boar")]
+    public void DrivesRiseSateAndChooseByPriority(string id)
+    {
+        var drives = Lib.Body(id)!.Drives;
+        var all = new HerdNeeds { Has = HerdNeeds.HasGraze | HerdNeeds.HasDrink | HerdNeeds.HasBed };
+        var levels = new DriveLevels();
+        Assert.Equal(Drives.None, Drives.Choose(levels, drives, all, Drives.None));
+        levels.Hunger = 1; levels.Thirst = 1; levels.Rest = 1;
+        Assert.Equal(Drives.Drink, Drives.Choose(levels, drives, all, Drives.None));
+        Assert.Equal(Drives.Graze, Drives.Choose(levels, drives, new HerdNeeds { Has = HerdNeeds.HasGraze | HerdNeeds.HasBed }, Drives.None));
+        Assert.Equal(Drives.Bed, Drives.Choose(levels, drives, all, Drives.Bed));
+        Drives.Advance(ref levels, drives, Drives.Drink, drives.Thirst.Sate * 2);
+        Assert.Equal(0f, levels.Thirst);
+        Assert.Equal(1f, levels.Hunger);
+        Assert.Equal(Drives.Graze, Drives.Choose(levels, drives, all, Drives.None));
+        levels.Thirst = 0;
+        Assert.Equal(Drives.Graze, Drives.Choose(levels, drives, all, Drives.Drink));
+        for (double t = 0; t < 20000; t += 37)
+        {
+            float v = Drives.At(drives.Hunger, t, 0.3f, out bool acting);
+            Assert.InRange(v, Drives.Done - 1e-3f, drives.Hunger.Threshold + 1e-3f);
+            Drives.Wake(drives, all, t, 0x1234_5678_9ABC_DEF0UL, 0xA5A5A5A5u, out var w);
+            for (int i = 0; i < Drives.Count; i++) Assert.InRange(w[i], 0f, 1f);
+        }
+        float a = Drives.At(drives.Thirst, 1000, 0.5f, out _), b = Drives.At(drives.Thirst, 1001, 0.5f, out _);
+        Assert.True(Math.Abs(b - a) <= Math.Max(drives.Thirst.Rise, drives.Thirst.Drop) * 1.01f);
+    }
+
     [Theory]
     [InlineData("deer")]
     [InlineData("hare")]

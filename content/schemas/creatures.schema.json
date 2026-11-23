@@ -37,7 +37,8 @@
                 "runReach": { "$ref": "#/$defs/angles" },
                 "runPush": { "$ref": "#/$defs/angles" },
                 "runLift": { "$ref": "#/$defs/angles" },
-                "alert": { "$ref": "#/$defs/angles" }
+                "alert": { "$ref": "#/$defs/angles" },
+                "graze": { "$ref": "#/$defs/angles" }
               }
             }
           }
@@ -103,6 +104,16 @@
               "dart": { "type": "number", "minimum": 0, "maximum": 60 }
             }
           },
+          "drives": {
+            "type": "object",
+            "required": ["hunger", "thirst", "rest"],
+            "additionalProperties": false,
+            "properties": {
+              "hunger": { "$ref": "#/$defs/drive" },
+              "thirst": { "$ref": "#/$defs/drive" },
+              "rest": { "$ref": "#/$defs/drive" }
+            }
+          },
           "slots": {
             "type": "array",
             "items": {
@@ -129,6 +140,16 @@
   },
   "$defs": {
     "angles": { "type": "array", "items": { "type": "number", "minimum": -360, "maximum": 360 }, "minItems": 3, "maxItems": 3 },
+    "drive": {
+      "type": "object",
+      "required": ["fillSeconds", "threshold", "sateSeconds"],
+      "additionalProperties": false,
+      "properties": {
+        "fillSeconds": { "type": "number", "minimum": 10, "maximum": 86400 },
+        "threshold": { "type": "number", "exclusiveMinimum": 0.05, "exclusiveMaximum": 1 },
+        "sateSeconds": { "type": "number", "minimum": 1, "maximum": 3600 }
+      }
+    },
     "vector": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
   }
 }
