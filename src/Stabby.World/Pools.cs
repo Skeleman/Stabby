@@ -49,7 +49,9 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        LiquidPool Pool(int kind, int liquid, float x, float z, float reach, float designed, float bottom, float top)
+        LiquidPool Pool(int kind, int liquid, float x, float z, float reach, float designed, float bottom, float top) => Pool(kind, liquid, x, z, reach, designed, bottom, top, null);
+
+        LiquidPool Pool(int kind, int liquid, float x, float z, float reach, float designed, float bottom, float top, FeatureEdit? only)
         {
             float half = reach + PoolPadM;
             int i0 = (int)Math.Floor((x - half) / PoolStepM), j0 = (int)Math.Floor((z - half) / PoolStepM);
@@ -57,8 +59,9 @@ namespace Stabby.World
             var p = new LiquidPool { X = x, Z = z, Reach = reach, Designed = designed, Kind = kind, Liquid = liquid, I0 = i0, J0 = j0, Nx = nx, Nz = nz };
             float x0 = i0 * PoolStepM, z0 = j0 * PoolStepM, x1 = x0 + (nx - 1) * PoolStepM, z1 = z0 + (nz - 1) * PoolStepM;
             var near = new List<FeatureEdit>();
+            if (only.HasValue) near.Add(only.Value);
             foreach (var f in edits)
-                if (f.MaxX >= x0 - PoolSlopeM && f.MinX <= x1 + PoolSlopeM && f.MaxZ >= z0 - PoolSlopeM && f.MinZ <= z1 + PoolSlopeM) near.Add(f);
+                if ((!only.HasValue || f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring) && f.MaxX >= x0 - PoolSlopeM && f.MinX <= x1 + PoolSlopeM && f.MaxZ >= z0 - PoolSlopeM && f.MinZ <= z1 + PoolSlopeM) near.Add(f);
             var list = new EditArray { Items = near.ToArray() };
             var g = new DetailGround { Detail = detail };
             p.Ground = new float[nx * nz];
@@ -68,7 +71,7 @@ namespace Stabby.World
             int ci = Math.Max(0, Math.Min(nx - 1, (int)Math.Round(x / PoolStepM) - i0)), cj = Math.Max(0, Math.Min(nz - 1, (int)Math.Round(z / PoolStepM) - j0));
             p.Centre = cj * nx + ci;
             p.Rim = Spill(p.Ground, nx, nz, p.Centre);
-            p.Level = designed;
+            p.Level = Math.Min(designed, p.Rim - PoolGapM);
             Flood(p);
             return p;
         }
