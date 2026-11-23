@@ -208,7 +208,6 @@ public class DiscoveryTests
             foreach (var c in field.Discoveries().Where(o => o.Def == geyser || o.Def == mud))
             {
                 Assert.Null(field.VentFault(c));
-                Assert.Null(field.WaterFault(c));
                 field.SpringPoolsAt(c, pools);
                 if (c.Def == geyser) { geysers++; Assert.Equal(1, pools.Count / ObjectField.SpringStride); Assert.True(pools[5] > pools[4]); }
                 else { muds++; Assert.InRange(pools.Count / ObjectField.SpringStride, 1, 3); Assert.True(pools[5] - pools[4] < pools[4] - pools[6]); }

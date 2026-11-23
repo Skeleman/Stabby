@@ -416,82 +416,10 @@ namespace Stabby.World
                     }
                 }
                 else if (kind == MudPot) { level = sum / 8 + (MudFillU - MudSinkU) * u; crest = level + (MudCrestU - MudFillU) * u; floor = level - (MudDepthU + MudFillU) * u; }
-                float top = Math.Max(high, crest) + SpringTopU * u;
-                if (kind == Geyser) level = Math.Min(level, GeyserRim(key, x, z, r, rout, crest, floor, top, u, VentDiscSeed(x, z, world.Count)) - GeyserLipU * u);
                 last = level;
                 world.Add(x); world.Add(z); world.Add(r); world.Add(rout); world.Add(level); world.Add(crest); world.Add(floor);
-                world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(top);
+                world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(Math.Max(high, crest) + SpringTopU * u);
             }
-        }
-
-        static float VentDiscSeed(float x, float z, int k) => (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
-
-        void GeyserDiscs(ulong key, float x, float z, float r, float rout, float crest, float floor, float top, float u, float seed, List<FeatureEdit> list, List<FeatureEdit> carves)
-        {
-            float rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc;
-            Structures.GeyserShape(key, out float mound, out float mtop, out float cone, out float ctop);
-            float low = GroundAt(detail, cm, x, z);
-            for (int p = 0; p < 8; p++)
-            {
-                FanDir(p, 0.70710678f, out float ux, out float uz);
-                low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
-            }
-            float baseY = crest - (mound + cone) * u, moundY = baseY + mound * u, foot = Math.Min(low, baseY) - GeyserFootU * u;
-            float taper = (rout - mtop * u) / (moundY - foot);
-            list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0));
-            list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0));
-            carves.Add(Disc(FeatureEdit.Carve, x, z, top + rc - hole, floor - rc + hole, r + rc - hole, rc, 0, 0, 0.06f * u, seed, 0, 0));
-        }
-
-        public const int RimDirs = 16, RimSteps = 16, RimIters = 14;
-        public const float RimReachU = 2f;
-
-        float GeyserRim(ulong key, float x, float z, float r, float rout, float crest, float floor, float top, float u, float seed)
-        {
-            var list = new List<FeatureEdit>();
-            var carves = new List<FeatureEdit>();
-            GeyserDiscs(key, x, z, r, rout, crest, floor, top, u, seed, list, carves);
-            list.AddRange(carves);
-            var edits = new EditArray { Items = list.ToArray() };
-            float rim = float.MaxValue, hi = crest + 0.5f * u;
-            for (int p = 0; p < RimDirs; p++)
-            {
-                FanDir(p >> 1, 0.70710678f, out float ax, out float az);
-                FanDir((p + 1) >> 1, 0.70710678f, out float bx, out float bz);
-                float dx = ax + bx, dz = az + bz, len = (float)Math.Sqrt(dx * dx + dz * dz);
-                dx /= len; dz /= len;
-                float ridge = floor;
-                for (int s = 0; s <= RimSteps; s++)
-                {
-                    float rad = r + RimReachU * u * s / RimSteps, px = x + dx * rad, pz = z + dz * rad, g = GroundAt(detail, cm, px, pz);
-                    if (Features.Edit(edits, g - hi, px, hi, pz) > 0f) { ridge = hi; break; }
-                    float lo = ridge, up = hi;
-                    if (Features.Edit(edits, g - lo, px, lo, pz) <= 0f) continue;
-                    for (int i = 0; i < RimIters; i++)
-                    {
-                        float mid = 0.5f * (lo + up);
-                        if (Features.Edit(edits, g - mid, px, mid, pz) > 0f) lo = mid; else up = mid;
-                    }
-                    ridge = lo;
-                }
-                rim = Math.Min(rim, ridge);
-            }
-            return rim;
-        }
-
-        public string WaterFault(ObjectInstance o)
-        {
-            if (VentKind(o) != Geyser) return null;
-            var pools = new List<float>();
-            SpringPoolsAt(o, pools);
-            ulong key = ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant);
-            float u = Structures.SpringU * o.Size;
-            for (int k = 0; k < pools.Count; k += SpringStride)
-            {
-                float rim = GeyserRim(key, pools[k], pools[k + 1], pools[k + 2], pools[k + 3], pools[k + 5], pools[k + 6], pools[k + 8], u, VentDiscSeed(pools[k], pools[k + 1], k));
-                if (pools[k + 4] > rim) return $"geyser water {pools[k + 4]:F2} floats above its vent rim {rim:F2}";
-            }
-            return null;
         }
 
         public string PoolFault(ObjectInstance o)
@@ -561,10 +489,21 @@ namespace Stabby.World
                 for (int k = 0; k < pools.Count; k += SpringStride)
                 {
                     float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], crest = pools[k + 5], floor = pools[k + 6], bottom = pools[k + 7], top = pools[k + 8];
-                    float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = VentDiscSeed(x, z, k);
+                    float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
                     if (kind == Geyser)
                     {
-                        GeyserDiscs(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), x, z, r, rout, crest, floor, top, u, seed, list, carves);
+                        Structures.GeyserShape(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), out float mound, out float mtop, out float cone, out float ctop);
+                        float low = GroundAt(detail, cm, x, z);
+                        for (int p = 0; p < 8; p++)
+                        {
+                            FanDir(p, 0.70710678f, out float ux, out float uz);
+                            low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
+                        }
+                        float baseY = crest - (mound + cone) * u, moundY = baseY + mound * u, foot = Math.Min(low, baseY) - GeyserFootU * u;
+                        float taper = (rout - mtop * u) / (moundY - foot);
+                        list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0));
+                        list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0));
+                        carves.Add(Disc(FeatureEdit.Carve, x, z, top + rc - hole, floor - rc + hole, r + rc - hole, rc, 0, 0, 0.06f * u, seed, 0, 0));
                         continue;
                     }
                     if (kind == MudPot)
