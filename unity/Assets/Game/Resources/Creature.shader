@@ -159,8 +159,8 @@ Shader "Stabby/Creature"
                 float3 lp = i.local.xyz;
                 bool eye = i.tone.w > 0.5 && i.tone.x > 1.5;
 
-                float4 big = TmNoise3(wp * 1.7 + 13.1, int3(0, 0, 0));
-                float4 mid = TmNoise3(lp * float3(9, 9, 4) + 3.3, int3(0, 0, 0));
+                float4 big = OrgNoise3(wp * 1.7 + 13.1, int3(0, 0, 0));
+                float4 mid = OrgNoise3(lp * float3(9, 9, 4) + 3.3, int3(0, 0, 0));
                 float edge = saturate(i.tone.y + 0.18 * mid.x + 0.08 * big.x);
                 float3 albedo = lerp(baseC, accentC, smoothstep(0.38, 0.62, edge));
                 albedo *= 1 + 0.1 * big.x + 0.06 * mid.x;
@@ -170,13 +170,13 @@ Shader "Stabby/Creature"
                 albedo = i.tone.x > 0.5 && i.tone.x <= 1.5 ? lerp(accentC, baseC, 0.15 + 0.1 * mid.x) : albedo;
 
                 float3 freq = float3(110, 110, 16);
-                float4 strand = TmNoise3(lp * freq, int3(0, 0, 0));
-                float4 tuft = TmNoise3(lp * float3(34, 34, 6) + 7.7, int3(0, 0, 0));
-                float fs = TmFade(110, fp) * (eye ? 0 : 1), ft = TmFade(34, fp) * (eye ? 0 : 1);
+                float4 strand = OrgNoise3(lp * freq, int3(0, 0, 0));
+                float4 tuft = OrgNoise3(lp * float3(34, 34, 6) + 7.7, int3(0, 0, 0));
+                float fs = OrgFade(110, fp) * (eye ? 0 : 1), ft = OrgFade(34, fp) * (eye ? 0 : 1);
                 albedo *= 1 + 0.16 * strand.x * fs + 0.1 * tuft.x * ft;
-                float4 knot = TmNoise3(lp * float3(5, 5, 2.5) + 21.7, int3(0, 0, 0));
-                float4 ripple = TmNoise3(lp * float3(13, 13, 6) + 5.1, int3(0, 0, 0));
-                float fk = TmFade(5, fp) * (eye ? 0 : 1), fr = TmFade(13, fp) * (eye ? 0 : 1);
+                float4 knot = OrgNoise3(lp * float3(5, 5, 2.5) + 21.7, int3(0, 0, 0));
+                float4 ripple = OrgNoise3(lp * float3(13, 13, 6) + 5.1, int3(0, 0, 0));
+                float fk = OrgFade(5, fp) * (eye ? 0 : 1), fr = OrgFade(13, fp) * (eye ? 0 : 1);
                 float3 g = (strand.yzw * freq) * (0.0016 * fs) + (tuft.yzw * float3(34, 34, 6)) * (0.003 * ft)
                          + (knot.yzw * float3(5, 5, 2.5)) * (0.03 * fk) + (ripple.yzw * float3(13, 13, 6)) * (0.008 * fr);
                 float3 gw = g.x * ax + g.y * ay + g.z * az;

@@ -9,7 +9,7 @@ namespace Stabby.Content
     public static class ContentLoader
     {
         public const int BiomeSchemaVersion = 1;
-        public const int MaterialSchemaVersion = 4;
+        public const int MaterialSchemaVersion = 5;
         public const int ObjectSchemaVersion = 4;
         public const int CreatureSchemaVersion = 2;
 
@@ -109,7 +109,8 @@ namespace Stabby.Content
             lib.Look = look == null ? null : new LookDef
             {
                 NoiseContrast = look.Float("noiseContrast", 0), AlbedoVar = look.Float("albedoVar", 0),
-                DetailWavelengthM = look.Float("detailWavelengthM", 0), Saturation = look.Float("saturation", 0),
+                DetailWavelengthM = look.Float("detailWavelengthM", 0), DetailLacunarity = look.Float("detailLacunarity", 0),
+                DetailOctaves = look.Int("detailOctaves", 0), DetailGain = look.Float("detailGain", 0), Saturation = look.Float("saturation", 0),
                 Roughness = look.Float("roughness", 0), Specular = look.Float("specular", 0), RoughnessVar = look.Float("roughnessVar", 0),
             };
             look?.End();
@@ -211,7 +212,7 @@ namespace Stabby.Content
             {
                 d.Rock = new RockSurface
                 {
-                    GrainAmp = r.Float("grainAmp", 0), GrainWavelengthM = r.Float("grainWavelengthM", 0),
+                    GrainAmp = r.Float("grainAmp", 0),
                     BumpAmp = r.Float("bumpAmp", 0), BumpWavelengthM = r.Float("bumpWavelengthM", 0),
                     BedSpacingM = r.Float("bedSpacingM", 0), BedDepthM = r.Float("bedDepthM", 0),
                     JointSpacingM = r.Float("jointSpacingM", 0), JointDepthM = r.Float("jointDepthM", 0),
@@ -229,7 +230,7 @@ namespace Stabby.Content
                 {
                     Id = SurfaceDetail.CoatKinds[k], Biomes = c.Strings("biomes", new List<string>()),
                     BumpAmp = c.Float("bumpAmp", 0), BumpWavelengthM = c.Float("bumpWavelengthM", 0),
-                    GrainAmp = Nan(c, "grainAmp"), GrainWavelengthM = Nan(c, "grainWavelengthM"),
+                    GrainAmp = Nan(c, "grainAmp"),
                     FeatureAmp = c.Float("featureAmp", 0), FeatureWavelengthM = c.Float("featureWavelengthM", 0),
                     Parallax = c.Float("parallax", 0), AlbedoVar = Nan(c, "albedoVar"), Roughness = Nan(c, "roughness"),
                 };

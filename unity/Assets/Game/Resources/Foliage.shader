@@ -248,13 +248,13 @@ Shader "Stabby/Foliage"
                     {
                         float3 sideN = normalize(float3(n.x, 0, n.z) + 1e-4), ld = normalize(float3(l.direction.x, 0, l.direction.z) + 1e-4);
                         float shadeSide = 0.5 - 0.5 * dot(sideN, ld);
-                        float4 mn = TmNoise3(wp * 2.3, int3(0, 0, 0)), mf = TmNoise3(wp * 9.1 + 17.3, int3(0, 0, 0));
+                        float4 mn = OrgNoise3(wp * 2.3, int3(0, 0, 0)), mf = OrgNoise3(wp * 9.1 + 17.3, int3(0, 0, 0));
                         float reach = lerp(0.25, 1.6, shadeSide) + 0.45 * mn.x;
                         moss = saturate((reach - above) * 3 + 0.5 * mf.x) * smoothstep(0.15, 0.6, shadeSide + 0.35 * mn.x) * (spruce ? 0.8 : lerp(1.3, 0.7, saturate(tone)));
                         moss = saturate(moss);
                         albedo = lerp(albedo, float3(0.15, 0.19, 0.065) * (0.85 + 0.3 * mf.x), moss);
                     }
-                    float4 lc = TmNoise3(wp * 4.7 + 31.1, int3(0, 0, 0));
+                    float4 lc = OrgNoise3(wp * 4.7 + 31.1, int3(0, 0, 0));
                     float lic = smoothstep(0.42, 0.62, lc.x) * (spruce ? 0.35 : 0.55) * (1 - moss) * BarkFade(4.7, fp);
                     albedo = lerp(albedo, dot(albedo, lw) * float3(0.9, 1.03, 0.78) * (2.1 + 0.3 * lc.y), 0.6 * lic);
                     [branch] if (_StabbyFieldUV.x > 0 && above < 1) albedo = ContactObject(albedo, wp, fade.z + ContactBed(wp.xz) - ContactBed(i.origin.xz), size);
