@@ -45,6 +45,10 @@ and converts once into native data.
   shadowed lights, then glow, far emissive and emissive-only fallbacks by screen
   size and importance. Before fires, torches or night effects. Lights are their own
   detail category (Zach 11-23), not thresholds copied per object kind.
+- Day/night cycle (Zach 11-23, before light budgets so night lighting can be judged):
+  sun and moon on the shared clock, sky and ambient follow them, sun steps every 0.1 s
+  as today. Tests, captures and benches pin the time of day unless they test shadow
+  movement; a check fails any capture or bench that leaves time unpinned.
 - Water interaction: local wakes and bow waves around moving entities (Punchy had them).
   Separate lane from b/water-look so it benches on its own (audit 11-23).
 - Audit 11-23 follow-ups: (1) detail-tier review: confirm geometry, animation, shadow,
