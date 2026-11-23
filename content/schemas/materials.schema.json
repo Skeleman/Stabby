@@ -28,7 +28,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "const": 3 },
+    "schemaVersion": { "const": 4 },
     "offsetAmplitudeM": { "type": "number", "minimum": 0 },
     "offsetWavelengthM": { "type": "number", "exclusiveMinimum": 0 },
     "tiltPerKm": { "type": "number", "minimum": 0 },
@@ -48,13 +48,12 @@
     },
     "sinter": {
       "type": "object",
-      "required": ["white", "ochre", "orange", "bandM", "roughness"],
+      "required": ["white", "ochre", "orange", "roughness"],
       "additionalProperties": false,
       "properties": {
         "white": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
         "ochre": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
         "orange": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "bandM": { "type": "number", "minimum": 0.01, "maximum": 2 },
         "roughness": { "$ref": "#/$defs/amp" }
       }
     },

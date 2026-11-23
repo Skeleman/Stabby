@@ -7,7 +7,7 @@ namespace Stabby.World.Tests.Legacy;
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
-    public const int MaterialSchemaVersion = 3;
+    public const int MaterialSchemaVersion = 4;
 
     sealed class MaterialFile
     {
@@ -65,7 +65,6 @@ public static class ContentLoader
         public string White { get; set; } = "";
         public string Ochre { get; set; } = "";
         public string Orange { get; set; } = "";
-        public float BandM { get; set; }
         public float Roughness { get; set; }
     }
 
@@ -237,7 +236,7 @@ public static class ContentLoader
             Sinter = file.Sinter == null ? null! : new SinterDef
             {
                 White = Hex(file.Sinter.White, path, "sinter.white"), Ochre = Hex(file.Sinter.Ochre, path, "sinter.ochre"), Orange = Hex(file.Sinter.Orange, path, "sinter.orange"),
-                BandM = file.Sinter.BandM, Roughness = file.Sinter.Roughness,
+                Roughness = file.Sinter.Roughness,
             },
             Mud = file.Mud == null ? null! : new MudDef
             {

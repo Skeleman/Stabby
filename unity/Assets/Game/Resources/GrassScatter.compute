@@ -84,7 +84,10 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         if (u + v > 1) { u = 1 - u; v = 1 - v; }
         float w = 1 - u - v;
         float3 p = a * w + b * u + c * v;
-        if (sa.w * w + sb.w * u + sc.w * v > -0.3) continue;
+        float sinter = sa.w * w + sb.w * u + sc.w * v;
+        if (sinter < -0.3 || TmHashU(uint3(cell.x, cell.y, cell.z ^ 0x5171u)) * (1.0 / 4294967296.0) < 1.15 * sinter - 0.1) continue;
+        float hw = p.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, p.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
+        if (hw < 0.3) continue;
         float d = distance(p, _Eye.xyz);
         float keep = min(1, pow(near / max(d, 1e-3), thin));
         if (d > reach || rank >= keep || Outside(p, hMax)) continue;
@@ -113,7 +116,6 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
         float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
         float3 lp = float3(p.x - tmO.x, p.y, p.z - tmO.z);
-        float hw = p.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
         float2 wd = hw < 4.8 ? TmWet(lp, hw, max(d * _Eye.w, 1e-4)) : 0;
         float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - tmO.xz, fo, max(d * _Eye.w, 1e-4)).y) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));
         float2 ck = ContactAt(xa);
@@ -145,7 +147,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float dr = saturate(sqrt(best) * 1.5);
         float faceA = atan2(-bo.y, -bo.x) * (1.0 / 6.2831853) + (Rand(cell, 5) - 0.5) * 0.3;
         float leanAmt = saturate((0.2 + 0.8 * dr) * (0.55 + 0.9 * cr4.z));
-        float dry = (1 - lush) * Rand(cell, 9) < saturate(0.1 + 0.06 * saturate(-1.5 * hn) + 0.06 * dirt + 0.08 * (cr4.y - 0.5)) * smoothstep(0.35, 0.85, col.a) ? 0.45 + 0.55 * Rand(cell, 10) : 0;
+        float dry = (1 - lush) * Rand(cell, 9) < saturate(0.1 + 0.06 * saturate(-1.5 * hn) + 0.06 * dirt + 0.08 * (cr4.y - 0.5)) * smoothstep(0.35, 0.85, col.a) + 1.5 * max(sinter, 0) ? 0.45 + 0.55 * Rand(cell, 10) : 0;
         bool seedHead = Rand(cell, 11) < 0.035 * (0.4 + 1.2 * cr4.z);
         float fp = max(d * _Eye.w, 1e-4);
         float3 root = color;
