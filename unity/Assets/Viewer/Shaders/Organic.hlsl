@@ -58,7 +58,13 @@ float OrgQ(float f) { return round(f * 1024) * (1.0 / 1024); }
 
 int2 OrgShift(float q) { return (int2)((orgO.xz * (1.0 / 1024)) * (q * 1024)); }
 
-int OrgDiv(int n, int d) { return n >= 0 ? n / d : -((d - 1 - n) / d); }
+int OrgDiv(int n, int d)
+{
+    int i = (int)floor((float)n / d);
+    i -= i * d > n ? 1 : 0;
+    i += (i + 1) * d <= n ? 1 : 0;
+    return i;
+}
 
 static const int2x2 OrgRot2[4] = { int2x2(3, -4, 4, 3), int2x2(5, 12, -12, 5), int2x2(8, -15, 15, 8), int2x2(7, 24, -24, 7) };
 static const int OrgRotD2[4] = { 5, 13, 17, 25 };
