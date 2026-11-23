@@ -43,8 +43,16 @@ and converts once into native data.
   hierarchy's streaming and collision are measured.
 - Light budgets (from Punchy `LightPolicy`, `LightBudget`, `FarLightPolicy`): caps on real and
   shadowed lights, then glow, far emissive and emissive-only fallbacks by screen
-  size and importance. Before fires, torches or night effects.
+  size and importance. Before fires, torches or night effects. Lights are their own
+  detail category (Zach 11-23), not thresholds copied per object kind.
 - Water interaction: local wakes and bow waves around moving entities (Punchy had them).
+  Separate lane from b/water-look so it benches on its own (audit 11-23).
+- Audit 11-23 follow-ups: (1) detail-tier review: confirm geometry, animation, shadow,
+  light and think answers all read one packed per-entity decision, not separate LOD
+  systems under one name; keep implementations specialised. (2) Bench the instanced
+  creature path with the screen-size shadow tiers and crossfades together before
+  making it default. (3) CI has no Unity batch build; add a compile-only Unity job
+  if a runner allows it.
 - Weather, precipitation and volumetric clouds.
 
 Overhangs, layers, vertical faces, caves and arches share one geometry model
