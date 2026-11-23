@@ -56,7 +56,7 @@
     "rock": {
       "grainAmp": 0.18, "grainWavelengthM": 0.35,
       "bumpAmp": 0.45, "bumpWavelengthM": 2.5,
-      "bedSpacingM": 0.8, "bedDepthM": 0.1,
+      "bedSpacingM": 0.8, "bedDepthM": 0.035,
       "jointSpacingM": 2.2, "jointDepthM": 0.06,
       "parallax": 1
     },
