@@ -43,9 +43,9 @@ namespace Stabby.Viewer
         public const float FallMinDrop = 0.3f;
         const float FallMargin = 0.3f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerPool = 0.5f, MistPerDrop = 0.25f, MistPhase = 0.618034f, MistSpread = 0.8f, SprayStep = 3f, SprayPerPool = 0.35f, SprayPerDrop = 0.12f, SpraySpread = 0.95f, SprayAhead = 0.2f, VeilWidth = 1.1f, VeilHeight = 0.4f, VeilAhead = 1f;
         public const float MistPad = 40f;
-        const float SteamRadius = 0.55f, SteamRise = 2.2f, SpringOverlap = 0.3f, ColumnRadius = 0.9f;
+        const float SteamRadius = 0.55f, SteamRise = 2.2f, ShoreOvershoot = 0.25f, ColumnRadius = 0.9f;
         public const float ColumnPerRadius = 14f;
-        const int SteamPuffs = 2, SpringSides = 32, JetPuffs = 7, ColumnSteamPuffs = 3;
+        const int SteamPuffs = 2, JetPuffs = 7, ColumnSteamPuffs = 3;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f;
@@ -205,10 +205,7 @@ namespace Stabby.Viewer
             float cm = world.Config.CellMeters;
             var corner = new int[row * (y1 - cy + 1)];
             for (int k = 0; k < corner.Length; k++) corner[k] = -1;
-            var verts = new List<Vector3>();
-            var tris = new List<int>();
-            var kinds = new List<Vector4>();
-            var tints = new List<Vector4>();
+            var sheet = new SheetBuffers();
             int Corner(int X, int Y)
             {
                 ref int v = ref corner[(Y - cy) * row + X - cx];
@@ -228,28 +225,47 @@ namespace Stabby.Viewer
                         h += ch; a += m.A; b += m.B; c += m.C; count++;
                         if (liquid < 0) liquid = lk.Liquid;
                     }
-                v = verts.Count;
                 count = Mathf.Max(count, 1);
-                verts.Add(new Vector3((X - 0.5f) * cm, h / count, (Y - 0.5f) * cm));
-                kinds.Add(new Vector4(0, 0, 0, Mathf.Max(liquid, 0)));
-                tints.Add(new Vector4(a / count, b / count, c / count, 0));
-                return v;
+                return v = sheet.Add(new Vector3((X - 0.5f) * cm, h / count, (Y - 0.5f) * cm), new Vector4(0, 0, 0, Mathf.Max(liquid, 0)), new Vector4(a / count, b / count, c / count, 0));
             }
             for (int y = cy; y < y1; y++)
                 for (int x = cx; x < x1; x++)
                 {
                     if (LakeHeight(world, x, y) == float.MinValue) continue;
                     int v00 = Corner(x, y), v01 = Corner(x, y + 1), v10 = Corner(x + 1, y), v11 = Corner(x + 1, y + 1);
-                    tris.Add(v00); tris.Add(v01); tris.Add(v10);
-                    tris.Add(v10); tris.Add(v01); tris.Add(v11);
+                    sheet.Quad(v00, v01, v10, v11);
                 }
-            if (verts.Count == 0) return null;
-            var lake = Flat($"Water {cx},{cy}", verts, null, tris, LakeKind);
-            lake.Uvs = new Vector2[verts.Count];
-            lake.Uv1 = kinds.ToArray();
-            lake.Uv2 = new Vector4[verts.Count];
-            lake.Uv3 = tints.ToArray();
-            return lake;
+            return sheet.Piece($"Water {cx},{cy}", LakeKind);
+        }
+
+        sealed class SheetBuffers
+        {
+            readonly List<Vector3> verts = new List<Vector3>();
+            readonly List<int> tris = new List<int>();
+            readonly List<Vector4> kinds = new List<Vector4>(), tints = new List<Vector4>();
+
+            public int Add(Vector3 p, Vector4 kind, Vector4 tint)
+            {
+                verts.Add(p); kinds.Add(kind); tints.Add(tint);
+                return verts.Count - 1;
+            }
+
+            public void Quad(int v00, int v01, int v10, int v11)
+            {
+                tris.Add(v00); tris.Add(v01); tris.Add(v10);
+                tris.Add(v10); tris.Add(v01); tris.Add(v11);
+            }
+
+            public MeshParts Piece(string name, Color kind)
+            {
+                if (verts.Count == 0) return null;
+                var m = Flat(name, verts, null, tris, kind);
+                m.Uvs = new Vector2[verts.Count];
+                m.Uv1 = kinds.ToArray();
+                m.Uv2 = new Vector4[verts.Count];
+                m.Uv3 = tints.ToArray();
+                return m;
+            }
         }
 
         static Vector4 Tint(WaterMix m) => new Vector4(m.A, m.B, m.C, 0);
@@ -484,19 +500,16 @@ namespace Stabby.Viewer
         {
             var mist = new MistBuffers();
             var pools = new List<float>();
-            var verts = new List<Vector3>();
-            var tris = new List<int>();
-            var tags = new List<float>();
-            var rims = new List<float>();
+            var liquid = field.LiquidPools();
+            int next = 0;
             foreach (var o in field.Discoveries())
             {
                 if (!field.IsVent(o)) continue;
                 int kind = field.VentKind(o);
                 field.SpringPoolsAt(o, pools);
-                float u = Structures.SpringU * o.Size;
                 for (int k = 0; k < pools.Count; k += ObjectField.SpringStride)
                 {
-                    var c = new Vector3(pools[k], pools[k + 4], pools[k + 1]);
+                    var c = new Vector3(pools[k], liquid[next++].Level, pools[k + 1]);
                     float r = pools[k + 2], seed = Mathf.Repeat(c.x * 0.0137f + c.z * 0.0291f, 1f);
                     int puffs = kind == ObjectField.MudPot ? 1 : SteamPuffs;
                     for (int m = 0; m < puffs; m++) mist.Vent(c, Mathf.Repeat(seed + m * MistPhase, 1f), SteamRadius * r, SteamRise * r);
@@ -507,36 +520,49 @@ namespace Stabby.Viewer
                         for (int m = 0; m < JetPuffs + ColumnSteamPuffs; m++)
                             mist.Column(c, duty, start, m < JetPuffs ? 0 : 1, Mathf.Repeat(seed + (m < JetPuffs ? (float)m / JetPuffs : m * MistPhase), 1f), ColumnRadius * r, h, interval);
                     }
-                    Disc(c, r + SpringOverlap * u, field.LiquidOf(o), field.Materials, verts, tris, tags, rims);
                 }
                 if (mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
             }
             if (mist.Verts.Count > 0) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
-            var bogs = field.BogPools();
-            int peat = field.Materials == null ? 0 : Mathf.Max(0, field.Materials.Liquid("peat"));
-            for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
-                Disc(new Vector3(bogs[k], bogs[k + 3], bogs[k + 1]), ObjectField.BogMargin(bogs[k + 2]), peat, field.Materials, verts, tris, tags, rims);
-            if (verts.Count == 0) return;
-            var pool = Flat("Liquid pools", verts, null, tris, SpringKind);
-            pool.Uvs = new Vector2[verts.Count];
-            pool.Uv1 = new Vector4[verts.Count];
-            pool.Uv2 = new Vector4[verts.Count];
-            for (int k = 0; k < verts.Count; k++) pool.Uv1[k] = new Vector4(rims[k], 0, 0, tags[k]);
-            water.Add(pool);
+            var sheet = new SheetBuffers();
+            foreach (var p in liquid) Pool(p, field.Materials != null && field.Materials.Liquids[p.Liquid].Opacity > 0.5f, sheet);
+            var piece = sheet.Piece("Liquid pools", SpringKind);
+            if (piece != null) water.Add(piece);
         }
 
-        static void Disc(Vector3 c, float edge, int liquid, MaterialLibrary lib, List<Vector3> verts, List<int> tris, List<float> tags, List<float> rims)
+        static void Pool(LiquidPool p, bool opaque, SheetBuffers sheet)
         {
-            int b = verts.Count;
-            bool opaque = lib != null && lib.Liquids[liquid].Opacity > 0.5f;
-            for (int s = 0; s <= SpringSides; s++) { tags.Add(liquid); rims.Add(s > 0 && opaque ? 1 : 0); }
-            verts.Add(c);
-            for (int s = 0; s < SpringSides; s++)
+            int nx = p.Nx, nz = p.Nz;
+            var index = new int[nx * nz];
+            for (int k = 0; k < index.Length; k++) index[k] = -1;
+            int Node(int i, int j)
             {
-                float a = s * (2 * Mathf.PI / SpringSides);
-                verts.Add(c + new Vector3(Mathf.Cos(a) * edge, 0, Mathf.Sin(a) * edge));
-                tris.Add(b); tris.Add(b + 1 + (s + 1) % SpringSides); tris.Add(b + 1 + s);
+                int k = j * nx + i;
+                if (index[k] >= 0) return index[k];
+                float x = p.NodeX(i), z = p.NodeZ(j), rim = 0;
+                if (!p.Wet[k])
+                {
+                    float sx = 0, sz = 0, gd = p.Ground[k];
+                    int count = 0;
+                    for (int nj = Mathf.Max(0, j - 1); nj <= Mathf.Min(nz - 1, j + 1); nj++)
+                        for (int ni = Mathf.Max(0, i - 1); ni <= Mathf.Min(nx - 1, i + 1); ni++)
+                        {
+                            int m = nj * nx + ni;
+                            if (!p.Wet[m]) continue;
+                            float gw = p.Ground[m], t = gd >= p.Level && gd > gw ? Mathf.Min(1f, (p.Level - gw) / (gd - gw) + ShoreOvershoot) : 0.5f, wx = p.NodeX(ni), wz = p.NodeZ(nj);
+                            sx += wx + (x - wx) * t; sz += wz + (z - wz) * t; count++;
+                        }
+                    if (count > 0) { x = sx / count; z = sz / count; }
+                    rim = opaque ? 1 : 0;
+                }
+                return index[k] = sheet.Add(new Vector3(x, p.Level, z), new Vector4(rim, 0, 0, p.Liquid), Vector4.zero);
             }
+            for (int j = 0; j + 1 < nz; j++)
+                for (int i = 0; i + 1 < nx; i++)
+                {
+                    int k = j * nx + i;
+                    if (p.Wet[k] || p.Wet[k + 1] || p.Wet[k + nx] || p.Wet[k + nx + 1]) sheet.Quad(Node(i, j), Node(i, j + 1), Node(i + 1, j), Node(i + 1, j + 1));
+                }
         }
 
         public static List<MeshParts> Rivers(GeneratedWorld world, TerrainDetail detail, List<MeshParts> mists)

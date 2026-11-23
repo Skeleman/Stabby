@@ -89,6 +89,8 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < BogTownM * BogTownM) return;
             }
             if (RoadSide(x, z, out _, out _) < rout + BogRoadM) return;
+            var basin = Pool(BogPool, 0, x, z, rout, level, level - depth - BogHeadM, top + BogHeadM, BogEdit(x, z, r, level, level - depth, top + BogHeadM));
+            if (basin.Leaks || basin.WetCount == 0 || !(basin.Level - basin.Floor >= PoolMinDepthM)) return;
             list.Add(x); list.Add(z); list.Add(r); list.Add(level); list.Add(level - depth); list.Add(top);
         }
 
@@ -108,12 +110,14 @@ namespace Stabby.World
             var b = BogPools();
             var list = new FeatureEdit[b.Length / BogStride];
             for (int k = 0, e = 0; k < b.Length; k += BogStride, e++)
-            {
-                float x = b[k], z = b[k + 1], r = b[k + 2], level = b[k + 3], floor = b[k + 4], top = b[k + 5] + BogHeadM;
-                float seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ 0xB0C5UL) >> 40) / 16777216.0);
-                list[e] = Disc(FeatureEdit.Carve, x, z, top, floor, BogReach(r, level, top) - BogRound, BogRound, -BogBank, -BogLobe, BogLumpM, seed, -r, 0);
-            }
+                list[e] = BogEdit(b[k], b[k + 1], b[k + 2], b[k + 3], b[k + 4], b[k + 5] + BogHeadM);
             return list;
+        }
+
+        static FeatureEdit BogEdit(float x, float z, float r, float level, float floor, float top)
+        {
+            float seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ 0xB0C5UL) >> 40) / 16777216.0);
+            return Disc(FeatureEdit.Carve, x, z, top, floor, BogReach(r, level, top) - BogRound, BogRound, -BogBank, -BogLobe, BogLumpM, seed, -r, 0);
         }
     }
 }
