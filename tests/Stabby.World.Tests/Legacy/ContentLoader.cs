@@ -19,6 +19,7 @@ public static class ContentLoader
         public List<LiquidEntry> Liquids { get; set; } = new();
         public SinterEntry? Sinter { get; set; }
         public MudEntry? Mud { get; set; }
+        public PeatEntry? Peat { get; set; }
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
         public List<MaterialEntry> Materials { get; set; } = new();
@@ -50,6 +51,14 @@ public static class ContentLoader
         public float Roughness { get; set; }
     }
 
+    sealed class PeatEntry
+    {
+        public string Wet { get; set; } = "";
+        public string Dark { get; set; } = "";
+        public string Fibre { get; set; } = "";
+        public float Roughness { get; set; }
+    }
+
     sealed class SinterEntry
     {
         public string White { get; set; } = "";
@@ -64,6 +73,9 @@ public static class ContentLoader
         public string Spray { get; set; } = "";
         public float Speed { get; set; }
         public float SheetOpacity { get; set; }
+        public string SprayColor { get; set; } = "#ffffff";
+        public float SprayAmount { get; set; }
+        public float Froth { get; set; }
     }
 
     sealed class LiquidEntry
@@ -230,6 +242,11 @@ public static class ContentLoader
                 Surface = Hex(file.Mud.Surface, path, "mud.surface"),
                 Clay = Hex(file.Mud.Clay, path, "mud.clay"), Grey = Hex(file.Mud.Grey, path, "mud.grey"), Roughness = file.Mud.Roughness,
             },
+            Peat = file.Peat == null ? null! : new PeatDef
+            {
+                Wet = Hex(file.Peat.Wet, path, "peat.wet"), Dark = Hex(file.Peat.Dark, path, "peat.dark"),
+                Fibre = Hex(file.Peat.Fibre, path, "peat.fibre"), Roughness = file.Peat.Roughness,
+            },
             Look = file.Look == null ? null! : new LookDef
             {
                 NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM,
@@ -256,6 +273,7 @@ public static class ContentLoader
         Silt = e.Silt, Opacity = e.Opacity, Viscosity = e.Viscosity, Bubbles = e.Bubbles, Film = e.Film, Emission = e.Emission, Roughness = e.Roughness,
         Spray = e.Fall == null ? -1 : Array.IndexOf(LiquidDef.SprayNames, e.Fall.Spray),
         FallSpeed = e.Fall?.Speed ?? 0, SheetOpacity = e.Fall?.SheetOpacity ?? 0,
+        SprayColor = e.Fall == null ? 0 : Hex(e.Fall.SprayColor, path, e.Id + ".fall.sprayColor"), SprayAmount = e.Fall?.SprayAmount ?? 0, Froth = e.Fall?.Froth ?? 0,
         ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,

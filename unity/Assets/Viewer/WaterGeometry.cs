@@ -239,7 +239,9 @@ namespace Stabby.Viewer
             return id < 0 ? 0 : world.Water.Lakes[id].Liquid;
         }
 
-        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || world.Materials.Liquids[liquid].Spray == LiquidDef.SprayMist;
+        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].SprayAmount > 0);
+
+        static float SprayAmount(GeneratedWorld world, int liquid) => world.Materials == null ? 1 : world.Materials.Liquids[liquid].SprayAmount;
 
         public static float LakeHeight(GeneratedWorld world, int x, int y)
         {
@@ -370,16 +372,18 @@ namespace Stabby.Viewer
             public readonly List<Vector2> Size = new List<Vector2>();
             public readonly List<Vector4> Corner = new List<Vector4>();
             public readonly List<int> Tris = new List<int>();
+            public float Amount = 1;
+            public int Liquid;
 
             public void Foot(FallCurtain f, float along, float h, Vector3 push, Vector3 fwd, Vector3 side)
             {
                 float flowQ = Mathf.Clamp01(Mathf.Log(1 + f.Discharge, 2) / 9), seed = along * 0.0137f + f.Mid * 0.37f;
                 var basePos = new Vector3(f.BaseX, f.BaseY, f.BaseZ) + push;
                 float spray = Mathf.Clamp(SprayPerPool * f.PoolRadius + SprayPerDrop * f.Drop, 1.2f, 6f);
-                int sprays = Mathf.Clamp(Mathf.RoundToInt(f.RunWidth / SprayStep) + 1, 2, SprayMax);
+                int sprays = Mathf.Clamp(Mathf.RoundToInt((Mathf.RoundToInt(f.RunWidth / SprayStep) + 1) * Amount), 2, SprayMax);
                 for (int m = 0; m < sprays; m++)
                     Puff(At(f, basePos, fwd, side, ((m + 0.5f) / sprays * 2 - 1) * SpraySpread * f.Span) + fwd * (SprayAhead * spray), fwd, flowQ, Mathf.Repeat(m * MistPhase + seed, 1f), new Vector2(spray, f.Drop), 0);
-                int mists = Mathf.Clamp(Mathf.RoundToInt(f.RunWidth / MistPerWidth + f.Drop / MistPerHeight + MistPerFlow * Mathf.Sqrt(f.Discharge)), 1, MistMax);
+                int mists = Mathf.Clamp(Mathf.RoundToInt((f.RunWidth / MistPerWidth + f.Drop / MistPerHeight + MistPerFlow * Mathf.Sqrt(f.Discharge)) * Amount), 1, MistMax);
                 float radius = Mathf.Clamp(MistPerPool * f.PoolRadius + MistPerDrop * f.Drop, 2.5f, 14f);
                 for (int m = 0; m < mists; m++)
                 {
@@ -423,7 +427,7 @@ namespace Stabby.Viewer
                     Verts.Add(c);
                     Cols.Add(col);
                     Size.Add(size);
-                    Corner.Add(new Vector4((corner & 1) * 2 - 1, (corner >> 1) * 2 - 1, kind, 0));
+                    Corner.Add(new Vector4((corner & 1) * 2 - 1, (corner >> 1) * 2 - 1, kind, kind < 3 ? Liquid : 0));
                 }
                 Tris.Add(q); Tris.Add(q + 2); Tris.Add(q + 1);
                 Tris.Add(q + 1); Tris.Add(q + 2); Tris.Add(q + 3);
@@ -474,7 +478,7 @@ namespace Stabby.Viewer
             var bogs = field.BogPools();
             int peat = field.Materials == null ? 0 : Mathf.Max(0, field.Materials.Liquid("peat"));
             for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
-                Disc(new Vector3(bogs[k], bogs[k + 3], bogs[k + 1]), bogs[k + 2] + ObjectField.BogLipM, peat, field.Materials, verts, tris, tags, rims);
+                Disc(new Vector3(bogs[k], bogs[k + 3], bogs[k + 1]), ObjectField.BogMargin(bogs[k + 2]), peat, field.Materials, verts, tris, tags, rims);
             if (verts.Count == 0) return;
             var pool = Flat("Liquid pools", verts, null, tris, SpringKind);
             pool.Uvs = new Vector2[verts.Count];
@@ -512,6 +516,7 @@ namespace Stabby.Viewer
                 }
                 if (mist != null && mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
                 var spray = Sprays(world, r.Liquid) ? mist : null;
+                if (spray != null) { spray.Amount = SprayAmount(world, r.Liquid); spray.Liquid = r.Liquid; }
                 var pts = new List<Vector4>();
                 for (int k = 0; k < r.X.Length; k++)
                     pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));

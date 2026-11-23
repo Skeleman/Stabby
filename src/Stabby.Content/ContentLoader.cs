@@ -127,6 +127,13 @@ namespace Stabby.Content
                 Clay = Hex(mud.String("clay", ""), source, "mud.clay"), Grey = Hex(mud.String("grey", ""), source, "mud.grey"), Roughness = mud.Float("roughness", 0),
             };
             mud?.End();
+            var peat = root.Object("peat");
+            lib.Peat = peat == null ? null : new PeatDef
+            {
+                Wet = Hex(peat.String("wet", ""), source, "peat.wet"), Dark = Hex(peat.String("dark", ""), source, "peat.dark"),
+                Fibre = Hex(peat.String("fibre", ""), source, "peat.fibre"), Roughness = peat.Float("roughness", 0),
+            };
+            peat?.End();
             var strata = new List<StratumDef>();
             foreach (var s in root.Objects("strata"))
             {
@@ -173,6 +180,9 @@ namespace Stabby.Content
                 w.Spray = Array.IndexOf(LiquidDef.SprayNames, f.String("spray", ""));
                 w.FallSpeed = f.Float("speed", 0);
                 w.SheetOpacity = f.Float("sheetOpacity", 0);
+                w.SprayColor = Hex(f.String("sprayColor", ""), path, id + ".fall.sprayColor");
+                w.SprayAmount = f.Float("sprayAmount", 0);
+                w.Froth = f.Float("froth", 0);
                 f.End();
             }
             else w.Spray = -1;

@@ -44,6 +44,12 @@ namespace Stabby.World
         public float Roughness = 0.3f;
     }
 
+    public sealed class PeatDef
+    {
+        public uint Wet = 0x2a2016, Dark = 0x17110b, Fibre = 0x5a4630;
+        public float Roughness = 0.25f;
+    }
+
     public sealed class LookDef
     {
         public float NoiseContrast = 0.12f, AlbedoVar = 0.08f, DetailWavelengthM = 0.05f;
@@ -180,7 +186,8 @@ namespace Stabby.World
         public float FlowSpeed, RapidsSlope, BedFieldM;
         public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness;
         public int Spray;
-        public float FallSpeed, SheetOpacity;
+        public float FallSpeed, SheetOpacity, SprayAmount, Froth;
+        public uint SprayColor;
     }
 
     public sealed class LibraryMaterial
@@ -211,6 +218,7 @@ namespace Stabby.World
         public LookDef Look = new LookDef();
         public SinterDef Sinter = new SinterDef();
         public MudDef Mud = new MudDef();
+        public PeatDef Peat = new PeatDef();
         public List<StratumDef> Strata = new List<StratumDef>();
         public List<LibraryMaterial> Materials = new List<LibraryMaterial>();
 
@@ -300,6 +308,8 @@ namespace Stabby.World
             }
             if (lib.Mud == null) errors.Add("mud: required");
             else Amp(errors, "mud.roughness", lib.Mud.Roughness);
+            if (lib.Peat == null) errors.Add("peat: required");
+            else Amp(errors, "peat.roughness", lib.Peat.Roughness);
             if (lib.Strata.Count == 0) errors.Add("strata: at least one stratum required");
             var ids = new HashSet<string>();
             foreach (var s in lib.Strata)
@@ -389,6 +399,8 @@ namespace Stabby.World
                     Amp(errors, n + ".emission", w.Emission);
                     Amp(errors, n + ".roughness", w.Roughness);
                     Amp(errors, n + ".fall.sheetOpacity", w.SheetOpacity);
+                    Amp(errors, n + ".fall.froth", w.Froth);
+                    if (!(w.SprayAmount >= 0 && w.SprayAmount <= 2)) errors.Add($"{n}.fall.sprayAmount {w.SprayAmount} outside 0..2");
                     if (!(w.Spray >= 0 && w.Spray < LiquidDef.SprayNames.Length)) errors.Add($"{n}.fall.spray {w.Spray} unknown");
                     if (!(w.FallSpeed >= 0.05f && w.FallSpeed <= 4)) errors.Add($"{n}.fall.speed {w.FallSpeed} outside 0.05..4");
                 }

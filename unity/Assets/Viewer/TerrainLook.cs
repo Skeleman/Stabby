@@ -110,6 +110,9 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyMudSurface", s.Sinter[3]);
             Shader.SetGlobalVector("_StabbyMudClay", s.Sinter[4]);
             Shader.SetGlobalVector("_StabbyMudGrey", s.Sinter[5]);
+            Shader.SetGlobalVector("_StabbyPeatWet", s.Sinter[6]);
+            Shader.SetGlobalVector("_StabbyPeatDark", s.Sinter[7]);
+            Shader.SetGlobalVector("_StabbyPeatFibre", s.Sinter[8]);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -316,7 +319,7 @@ namespace Stabby.Viewer
                 CoatRough = coatR,
                 CoatA = coatA, CoatB = coatB,
                 Liquids = LiquidLook(lib),
-                Sinter = SinterLook(lib.Sinter, lib.Mud),
+                Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat),
             };
         }
 
@@ -341,13 +344,13 @@ namespace Stabby.Viewer
             return level;
         }
 
-        static Vector4[] SinterLook(SinterDef d, MudDef m)
+        static Vector4[] SinterLook(SinterDef d, MudDef m, PeatDef p)
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
-            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0) };
+            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0) };
         }
 
-        public const int LiquidRows = 9;
+        public const int LiquidRows = 10;
 
         static Vector4[] LiquidLook(MaterialLibrary lib)
         {
@@ -355,7 +358,7 @@ namespace Stabby.Viewer
             for (int i = 0; i < lib.Liquids.Count && i < LiquidDef.Max; i++)
             {
                 var w = lib.Liquids[i];
-                float3 deep = ToLinear(Unpack(w.DeepColor)), shallow = ToLinear(Unpack(w.ShallowColor)), film = ToLinear(Unpack(w.FilmColor)), glow = ToLinear(Unpack(w.EmissionColor)) * w.Emission;
+                float3 deep = ToLinear(Unpack(w.DeepColor)), shallow = ToLinear(Unpack(w.ShallowColor)), film = ToLinear(Unpack(w.FilmColor)), glow = ToLinear(Unpack(w.EmissionColor)) * w.Emission, spray = ToLinear(Unpack(w.SprayColor));
                 int b = i * LiquidRows;
                 v[b] = new Vector4(deep.x, deep.y, deep.z, 1f / w.ClarityM);
                 v[b + 1] = new Vector4(shallow.x, shallow.y, shallow.z, 1f / w.ShoreM);
@@ -365,7 +368,8 @@ namespace Stabby.Viewer
                 v[b + 5] = new Vector4(w.Opacity, w.Viscosity, w.Bubbles, w.Film);
                 v[b + 6] = new Vector4(film.x, film.y, film.z, w.Silt);
                 v[b + 7] = new Vector4(w.FallSpeed, w.SheetOpacity, w.Spray, w.Roughness);
-                v[b + 8] = new Vector4(glow.x, glow.y, glow.z, 0);
+                v[b + 8] = new Vector4(glow.x, glow.y, glow.z, w.Froth);
+                v[b + 9] = new Vector4(spray.x, spray.y, spray.z, w.SprayAmount);
             }
             return v;
         }
