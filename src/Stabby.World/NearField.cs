@@ -520,7 +520,7 @@ namespace Stabby.World
             for (int k = s0; k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
-                if (q.Fr > 0) { pool = Math.Min(pool, Pool(c, q, x, z, raised)); if (PoolZone(q, x, z, f)) low = Math.Min(low, Math.Max(FallFloorM, 0.5f * Math.Min(q.Fy, Erosion.MinLandHeight))); }
+                if (q.Fr > 0 && PoolZone(q, x, z, f)) low = Math.Min(low, Math.Max(FallFloorM, 0.5f * Math.Min(q.Fy, Erosion.MinLandHeight)));
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
                 if (d >= wb + f) continue;
@@ -550,6 +550,13 @@ namespace Stabby.World
                     if (d >= wb) p += WallLift * Grid.Smoothstep(wb + 0.5f * f, wb + f, d);
                 }
                 cut = Math.Min(cut, p + (1 - gate) * Math.Max(0, raised + FallClearM - p));
+            }
+            for (int k = s0; k < s1; k++)
+            {
+                var q = c.Piece(c.PieceAt(k));
+                if (q.Fr <= 0) continue;
+                float v = Pool(c, q, x, z, raised), reach = PoolReach(q.Fc, q.Fr), along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz;
+                pool = Math.Min(pool, cut < float.MaxValue ? v + Grid.Smoothstep(reach, reach + 0.5f * f, along) * Math.Max(0, cut - v) : v);
             }
             return Isles(c, s0, s1, x, z, Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low));
         }
