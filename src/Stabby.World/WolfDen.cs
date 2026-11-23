@@ -89,13 +89,14 @@ namespace Stabby.World
             Touch(l, f, rx, -0.02f, rz, 0.25f);
             int sd = rng.Range(0, 16);
             float sx = mx + rng.Range(-1.4f, 1.4f), sz2 = rng.Range(0.5f, 2.6f);
-            Round(l, rng.NextU64(), f, sx, -0.04f, sz2, 0.17f, 0.14f, 0.24f, Plaster, GZ, RoundDome, 0, 1, Cos16(sd), Sin16(sd));
+            Log(l, rng.NextU64(), f, sx, -0.03f, sz2, 0.2f, 0.15f, Cos16(sd + 4), Sin16(sd + 4), Plaster, 0, 1);
+            Round(l, rng.NextU64(), f, sx, 0.13f, sz2, 0.17f, 0.1f, 0.24f, Plaster, GZ, RoundDome, 0, 1, Cos16(sd), Sin16(sd));
             Touch(l, f, sx, -0.02f, sz2, 0.16f);
             int discs = rng.Range(2, 5);
             for (int i = 0; i < discs; i++)
             {
                 float x = sx + rng.Range(-0.6f, 0.6f), z = sz2 + rng.Range(-0.6f, 0.6f), dd = rng.Range(0.06f, 0.09f);
-                Round(l, rng.NextU64(), f, x, -0.01f, z, dd, 0.04f, dd, Plaster, GV, RoundDisc, 0, 0);
+                Log(l, rng.NextU64(), f, x, -0.01f, z, dd, 0.05f, Cos16(sd + 2 * i), Sin16(sd + 2 * i), Plaster, 0, 0);
             }
             Drape(l, bones);
 
