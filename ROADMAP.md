@@ -133,6 +133,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 ## Later
 
 - Map publishing: the baked `.stabbymap` stays in `out/` until builds are released.
+- Compact map file (Zach 11-23): layers at their own fidelity instead of one 32-byte record per cell. Biome 1 byte; temperature and precipitation 1 byte each, quantised, on a coarse grid (45 m is fine); land height and water surface 16-bit with a scale and offset; discharge log-quantised; lake id 16-bit. Quantise heights before the final hydrology checks so 2 cm steps can't make flats or uphill flow. About 42 MB at 2048 instead of 134 MB; makes a finer stored height grid affordable.
 - Map editing on top of `sketch.json`.
 - Material viewer (Zach 11-22, long-term): every library material on test shapes
   with an orbit camera and a name list, so Zach can audit surfaces and point at
