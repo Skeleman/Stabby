@@ -143,13 +143,18 @@ namespace Stabby.Game.Editor
             Vector2 side = new Vector2(-water.x * 0.6f + tangent.x * 0.8f, -water.y * 0.6f + tangent.y * 0.8f).normalized;
             Vector2 aim = new Vector2(target.x, target.y);
             double t0 = server.Time.ElapsedTime;
-            int members = 0, acting = 0;
+            int members = 0, acting = 0, wanting = 0;
+            float near = 0, thirst = 0, seek = 0, lag = 0;
+            var trace = new List<string>();
+            double mark = 0;
             float far = 0, alert = 0;
             HerdMode mode = HerdMode.Calm;
             while (server.Time.ElapsedTime - t0 < DesireSeconds)
             {
                 PlaceServerPlayers(server, new Vector2(player.x, player.y));
-                members = acting = 0;
+                members = acting = wanting = 0;
+                near = float.MaxValue;
+                thirst = 0; seek = float.MaxValue; lag = 0;
                 far = alert = 0;
                 sem.CompleteAllTrackedJobs();
                 using (var q = sem.CreateEntityQuery(typeof(CreatureState), typeof(CreatureBrain)))
@@ -160,11 +165,17 @@ namespace Stabby.Game.Editor
                         if (brains[i].Herd != herd) continue;
                         members++;
                         alert = math.max(alert, states[i].Alert);
+                        if (brains[i].Want == act) wanting++;
+                        thirst = math.max(thirst, brains[i].Levels[act - 1]);
+                        seek = math.min(seek, brains[i].Seek);
+                        if (brains[i].Want == act && states[i].Act != act) lag = math.max(lag, math.distance(states[i].Position, brains[i].Spot));
+                        near = math.min(near, math.distance(states[i].Position, brains[i].Spot));
                         if (states[i].Act != act) continue;
                         acting++;
                         far = math.max(far, math.distance(states[i].Position, target));
                     }
                 if (HerdMindOf(server, herd, out var mind)) mode = mind.Mode;
+                if (server.Time.ElapsedTime - t0 >= mark) { trace.Add($"{mark:F0}s w{wanting} a{acting} n{near:F1} f{lag:F1} l{thirst:F2} s{seek:F0} {mode}"); mark += 4; }
                 Vector2 seen = HerdCentre(view, herd, out int count, out _);
                 if (count > 0) aim = Vector2.Lerp(aim, seen, 0.1f);
                 AimHerd(cam, aim, side);
@@ -176,7 +187,7 @@ namespace Stabby.Game.Editor
             AimHerd(cam, aim, side);
             Shot(cam, null, "warmup");
             Shot(cam, dir, name);
-            lines.Add($"{name}: herd {herd} {acting}/{members} acting after {server.Time.ElapsedTime - t0:F1} s, mode {mode}, max alert {alert:F2}, furthest actor {far:F1} m from target, water dir {water.x:F2},{water.y:F2}");
+            lines.Add($"{name}: herd {herd} {acting}/{members} acting after {server.Time.ElapsedTime - t0:F1} s, mode {mode}, {wanting} wanting, nearest {near:F1} m from spot, max alert {alert:F2}, furthest actor {far:F1} m from target, water dir {water.x:F2},{water.y:F2}; trace {string.Join(", ", trace)}");
         }
     }
 }

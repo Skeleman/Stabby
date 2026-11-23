@@ -316,7 +316,7 @@ namespace Stabby.Game
             if (!b.Placed) { b.Spot = Spot(s.Seed, b.Offset, want, needs, ref ground); b.Placed = true; b.Seek = Drives.GiveUp + 2 * math.distance(b.Spot, s.Position) / math.max(0.1f, s.WalkSpeed); }
             float2 to = b.Spot - s.Position;
             float d = math.length(to);
-            if (s.Act == want || d <= Drives.Arrive)
+            if (s.Act == want || d <= Drives.Arrive || d <= Drives.Reach && math.lengthsq(b.Push) > 0)
             {
                 s.Act = want;
                 s.Move = math.lerp(s.Move, 0, math.min(1, 3 * dt));
@@ -337,12 +337,20 @@ namespace Stabby.Game
             float feel = math.min(Footing.FeelM, d);
             if (s.Move > 0.05f && ground.Crosses(s.Position.x, s.Position.y, s.Position.x + fwd.x * feel, s.Position.y + fwd.y * feel))
             {
+                if (d <= Drives.Reach || want == Drives.Drink && NearWater(s.Position, needs, ref ground)) { s.Act = want; return true; }
                 s.Move *= 0.5f;
                 s.Heading += (s.Seed & 1) == 0 ? 1.2f : -1.2f;
                 return true;
             }
             s.Position += fwd * (s.Move * s.WalkSpeed * dt);
             return true;
+        }
+
+        static bool NearWater(float2 at, in HerdNeeds needs, ref CreatureGround ground)
+        {
+            for (float k = 1; k <= Drives.Shore; k += 1)
+                if (ground.Blocked(at.x + needs.WaterX * k, at.y + needs.WaterZ * k)) return true;
+            return false;
         }
 
         static float2 Spot(uint seed, float2 offset, byte want, in HerdNeeds needs, ref CreatureGround ground)

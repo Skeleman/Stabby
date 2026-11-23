@@ -50,7 +50,7 @@ namespace Stabby.World
     {
         public const byte None = 0, Graze = 1, Drink = 2, Bed = 3;
         public const int Count = 3;
-        public const float Done = 0.05f, GiveUp = 40f, Arrive = 0.6f, Jitter = 0.03f;
+        public const float Done = 0.05f, GiveUp = 40f, Arrive = 0.6f, Reach = 4f, Shore = 12f, Jitter = 0.03f;
 
         public static void Advance(ref DriveLevels levels, in CreatureDrives drives, byte act, float dt)
         {
