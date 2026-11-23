@@ -198,7 +198,7 @@ public class DiscoveryTests
     }
 
     [Fact]
-    public void HotSpringsSitNearRelief()
+    public void HotSpringsSitInHotspots()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;
         var pools = new System.Collections.Generic.List<float>();
@@ -208,10 +208,10 @@ public class DiscoveryTests
             var detail = new TerrainDetail(w);
             var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
             var springs = field.Discoveries().Where(o => o.Def == spring).ToArray();
-            output.WriteLine($"seed {seed}: {springs.Length} springs " + string.Join(" ", springs.Select(c => $"{c.X:F0},{c.Z:F0}:{field.SpringDraw(c.X, c.Z):F2}")));
+            output.WriteLine($"seed {seed}: {springs.Length} springs " + string.Join(" ", springs.Select(c => $"{c.X:F0},{c.Z:F0}:{field.Hotspots.Heat(c.X, c.Z):F2}")));
             foreach (var c in springs)
             {
-                Assert.True(field.SpringDraw(c.X, c.Z) > 0);
+                Assert.True(field.Hotspots.Heat(c.X, c.Z) > 0);
                 Assert.True(field.RiverGap(c.X, c.Z) >= ObjectField.SpringRiverM);
                 Assert.Null(field.PoolFault(c));
                 field.SpringPoolsAt(c, pools);

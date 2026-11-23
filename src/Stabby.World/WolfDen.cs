@@ -164,6 +164,29 @@ namespace Stabby.World
             return list.ToArray();
         }
 
+        public const float DenRockM = 90f, DenFaceDropM = 40f, DenRockRiseM = 6f;
+
+        public bool BesideRock(float x, float z)
+        {
+            float reach = Math.Max(DenRockM, 2 * cm), run = Math.Max(cm, Features.ReferenceCellM), drop = Math.Min(DenFaceDropM, DenFaceDropM / Features.ReferenceCellM * cm), ground = GroundAt(detail, cm, x, z);
+            int r = (int)Math.Ceiling(reach / cm), cx = (int)Math.Round(x / cm), cz = (int)Math.Round(z / cm);
+            for (int gz = Math.Max(0, cz - r); gz <= Math.Min(n - 1, cz + r); gz++)
+                for (int gx = Math.Max(0, cx - r); gx <= Math.Min(n - 1, cx + r); gx++)
+                {
+                    float ox = gx * cm - x, oz = gz * cm - z;
+                    if (ox * ox + oz * oz > reach * reach) continue;
+                    float h = detail.HeightAt(gx, gz);
+                    if (h < ground + DenRockRiseM) continue;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        float d = run / Grid.Dist[k], fx = gx * cm + Grid.DX[k] * d, fz = gz * cm + Grid.DY[k] * d;
+                        if (fx < 0 || fz < 0 || fx > worldM || fz > worldM) continue;
+                        if (h - detail.Sample(fx, fz) >= drop) return true;
+                    }
+                }
+            return false;
+        }
+
         public string DenFault(ObjectInstance o)
         {
             var rocks = new List<FeatureEdit>();
