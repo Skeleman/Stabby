@@ -125,6 +125,7 @@ namespace Stabby.Game
         public float Top, Deep;
 
         public static float Step(int l) => NearField.NodeStep(l);
+        public static float FineStep => 0.5f * NearField.NodeStep(0);
         public static float Size(int l) => NearField.NodeSize(l);
         public int Key(int l, int ix, int iz) => Offset[l] + iz * Dim[l] + ix;
         public bool Sunk(int key) => Range[key].y < Deep;
@@ -246,7 +247,7 @@ namespace Stabby.Game
         public Ground Ground;
         public BlobAssetReference<TerrainLookData> Look;
         public int Ix, Iz, Level;
-        public bool Smooth;
+        public bool Smooth, Fine;
         public NativeList<TerrainVertex> Verts;
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
@@ -326,23 +327,39 @@ namespace Stabby.Game
 
         static float Sinter(NativeEdits edits, float3 p)
         {
-            float w = 0;
+            float w = 0, clay = 0;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
                 if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Add || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
                 float d = math.length(new float2(p.x - e.Ax, p.z - e.Az)) - e.W - e.R;
-                w = math.max(w, 1 - math.smoothstep(-SinterFadeM, 0, d));
+                float s = 1 - math.smoothstep(-SinterFadeM, 0, d);
+                if (e.F > 0.5f) clay = math.max(clay, s);
+                else w = math.max(w, s);
             }
-            return w;
+            return w >= clay ? w : -clay;
+        }
+
+        static float Peat(NativeEdits edits, float3 p)
+        {
+            float peat = 0;
+            for (int q = 0; q < edits.Count; q++)
+            {
+                var e = edits.Items[q];
+                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Carve || e.F > -0.5f || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
+                float edge = ObjectField.BogMargin(-e.F), d = math.length(new float2(p.x - e.Ax, p.z - e.Az));
+                d += ObjectField.BogPeatFadeM * (0.5f + 0.5f * noise.snoise(new float2(p.x, p.z) * 0.3f + e.S * 97f));
+                peat = math.max(peat, 1 - math.smoothstep(edge - ObjectField.BogPeatFadeM, edge, d));
+            }
+            return peat;
         }
 
         public void Execute()
         {
             ref var g = ref Ground.Blob.Value;
             ref var look = ref Look.Value;
-            int n = look.N, m = TerrainTree.Quads, w = m + 1;
-            float cm = g.CellMeters, top = n - 1, s = TerrainTree.Step(Level);
+            int n = look.N, m = Fine ? 2 * TerrainTree.Quads : TerrainTree.Quads, w = m + 1;
+            float cm = g.CellMeters, top = n - 1, s = Fine ? TerrainTree.FineStep : TerrainTree.Step(Level);
             var chunk = new NetsChunk { X0 = Ix * m, Z0 = Iz * m, Cells = m, StepM = s };
             var sink = new TerrainSink { Verts = Verts, Tris = Tris };
             var columns = new GroundColumns { Ground = Ground, StepM = s, Top = g.Top, Smooth = Smooth };
@@ -452,6 +469,7 @@ namespace Stabby.Game
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, p.Pos));
+                p.Stitch.w = math.floor(p.Stitch.w) + 0.5f * Peat(edits, p.Pos);
                 if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
@@ -485,8 +503,6 @@ namespace Stabby.Game
                 int a2 = first + r, b2 = first + (r + 1) % ringCount;
                 Tris.Add(a); Tris.Add(b); Tris.Add(a2);
                 Tris.Add(b); Tris.Add(b2); Tris.Add(a2);
-                Tris.Add(a); Tris.Add(a2); Tris.Add(b);
-                Tris.Add(b); Tris.Add(a2); Tris.Add(b2);
             }
             Bounds[0] = lo;
             Bounds[1] = hi;
@@ -498,6 +514,7 @@ namespace Stabby.Game
     {
         public TerrainTree Tree;
         public NativeHashSet<int> Split;
+        [ReadOnly] public NativeHashSet<int> Fine;
         public NativeList<TerrainLeaf> Leaves;
         public float3 Eye;
         public float Allowed;
@@ -537,9 +554,10 @@ namespace Stabby.Game
                 {
                     int key = Leaves[k].Key, l = Tree.Level(key);
                     var c = Tree.Cell(key, l);
+                    int lb = l == 0 && Fine.Contains(key) ? -1 : l;
                     float s = TerrainTree.Size(l), x0 = c.x * s - 0.5f, z0 = c.y * s - 0.5f, x1 = c.x * s + s + 0.5f, z1 = c.y * s + s + 0.5f, cx = c.x * s + 0.5f * s, cz = c.y * s + 0.5f * s;
-                    changed |= Balance(x0, cz, l) | Balance(x1, cz, l) | Balance(cx, z0, l) | Balance(cx, z1, l);
-                    changed |= Balance(x0, z0, l) | Balance(x1, z0, l) | Balance(x0, z1, l) | Balance(x1, z1, l);
+                    changed |= Balance(x0, cz, lb) | Balance(x1, cz, lb) | Balance(cx, z0, lb) | Balance(cx, z1, lb);
+                    changed |= Balance(x0, z0, lb) | Balance(x1, z0, lb) | Balance(x0, z1, lb) | Balance(x1, z1, lb);
                 }
             }
             Leaves.Sort();
@@ -639,6 +657,7 @@ namespace Stabby.Game
         List<MeshParts> steam, pools;
         int steamApplied;
         bool hasMist;
+        Light sun;
         IEnumerator<string> loading;
         public bool Loading => loading != null || look.IsCreated;
         Prepared prepared;
@@ -648,7 +667,7 @@ namespace Stabby.Game
         BlobBake<TerrainLookData> lookBake;
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
-        NativeHashSet<int> split, drawn;
+        NativeHashSet<int> split, drawn, fine;
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
         NativeList<Entity> spare;
@@ -665,6 +684,7 @@ namespace Stabby.Game
         readonly Plane[] frustum = new Plane[6];
         JobHandle lodHandle;
         bool lodScheduled, selected;
+        int splitSeen;
         float3 lodEye;
         quaternion lodTurn;
         float lodFov = -1f;
@@ -711,7 +731,7 @@ namespace Stabby.Game
                 double tu = frame.Elapsed.TotalMilliseconds;
                 Collect();
                 double tc = frame.Elapsed.TotalMilliseconds;
-                Roots(); Statics(); Steam();
+                Roots(); Statics(); Steam(); Clock();
                 double ts = frame.Elapsed.TotalMilliseconds;
                 lodRequests = lodDraw = lodNodes = lodEvictMs = lodShadowMs = 0;
                 lodEvicts = lodDeferred = lodShadows = 0;
@@ -750,7 +770,20 @@ namespace Stabby.Game
 
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
 
-        static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx");
+        static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx"), ColumnPxId = Shader.PropertyToID("_StabbyColumnPx"), ClockId = Shader.PropertyToID("_StabbyClock");
+        const double ClockWrap = 86400, FallbackTickRate = 60;
+        public static double? ClockOverride;
+
+        void Clock()
+        {
+            double clock = UnityEngine.Time.timeAsDouble;
+            if (SystemAPI.TryGetSingleton(out NetworkTime time) && time.ServerTick.IsValid)
+            {
+                double rate = SystemAPI.TryGetSingleton(out ClientServerTickRate tr) && tr.SimulationTickRate > 0 ? tr.SimulationTickRate : FallbackTickRate;
+                clock = (time.ServerTick.TickIndexForValidTick + (double)time.ServerTickFraction) / rate;
+            }
+            Shader.SetGlobalFloat(ClockId, (float)((ClockOverride ?? clock) % ClockWrap));
+        }
 
         float Allowed(Camera cam)
         {
@@ -758,6 +791,8 @@ namespace Stabby.Game
             quads.MistWindow(view.Quality, out float mistFade, out float mistFull);
             quads.SteamWindow(view.Quality, out float steamFade, out float steamFull);
             Shader.SetGlobalVector(MistPxId, new Vector4(mistFade, mistFull, steamFade, steamFull));
+            quads.ColumnWindow(view.Quality, out float columnFade, out float columnFull);
+            Shader.SetGlobalVector(ColumnPxId, new Vector4(columnFade, columnFull, 0, 0));
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
 
@@ -911,6 +946,7 @@ namespace Stabby.Game
             nodes = new NativeHashMap<int, TerrainNode>(1024, Allocator.Persistent);
             split = new NativeHashSet<int>(1024, Allocator.Persistent);
             drawn = new NativeHashSet<int>(1024, Allocator.Persistent);
+            fine = new NativeHashSet<int>(64, Allocator.Persistent);
             leaves = new NativeList<TerrainLeaf>(1024, Allocator.Persistent);
             planes = new NativeArray<float4>(6, Allocator.Persistent);
             roots = new NativeList<int>(16, Allocator.Persistent);
@@ -918,6 +954,7 @@ namespace Stabby.Game
             int d = tree.Dim[TerrainTree.Root];
             for (int iz = 0; iz < d; iz++)
                 for (int ix = 0; ix < d; ix++) roots.Add(tree.Key(TerrainTree.Root, ix, iz));
+            FineNodes();
             builtSmooth = SmoothOnly;
             TerrainTree.Capacity(TerrainTree.Tiers - 1, out _, out int most);
             if (!zeros.IsCreated) zeros = new NativeArray<int>(most, Allocator.Persistent);
@@ -935,6 +972,32 @@ namespace Stabby.Game
             upload = new TerrainLook.FieldUpload(prepared.Field, UploadBytes);
             prepared.Field = null;
             look = lookReady;
+        }
+
+        void FineNodes()
+        {
+            fine.Clear();
+            ref var edits = ref ground.Blob.Value.Edits;
+            float s0 = TerrainTree.Size(0);
+            for (int f = 0; f < edits.Length; f++)
+            {
+                var e = edits[f];
+                if (!e.Fine) continue;
+                for (int iz = (int)math.floor(e.MinZ / s0); iz <= (int)math.floor(e.MaxZ / s0); iz++)
+                    for (int ix = (int)math.floor(e.MinX / s0); ix <= (int)math.floor(e.MaxX / s0); ix++)
+                    {
+                        int k = tree.At((ix + 0.5f) * s0, (iz + 0.5f) * s0, 0);
+                        if (k >= 0) fine.Add(k);
+                    }
+            }
+        }
+
+        bool Fine(int key, int l) => l == 0 && fine.Contains(key);
+
+        bool FineAt(float x, float z)
+        {
+            int k = tree.At(x, z, 0);
+            return k >= 0 && fine.Contains(k);
         }
 
         TerrainNode Node(int key) => nodes.TryGetValue(key, out var v) ? v : new TerrainNode { Entity = Entity.Null };
@@ -975,7 +1038,7 @@ namespace Stabby.Game
             var vl = new NativeList<TerrainVertex>(TerrainTree.Vertices, Allocator.Persistent);
             var tl = new NativeList<int>(TerrainTree.Indices, Allocator.Persistent);
             var bounds = new NativeArray<float3>(2, Allocator.Persistent);
-            var job = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Smooth = builtSmooth, Verts = vl, Tris = tl, Bounds = bounds }.Schedule();
+            var job = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth, Verts = vl, Tris = tl, Bounds = bounds }.Schedule();
             pending.Add(new Pending { Key = key, Generation = generation, Handle = job, Verts = vl, Tris = tl, Bounds = bounds });
             nd.Pending = 1;
             nodes[key] = nd;
@@ -1276,6 +1339,7 @@ namespace Stabby.Game
                 lodHandle.Complete();
                 lodScheduled = false;
                 selected = true;
+                splitSeen = split.Count;
             }
             double t0 = frame.Elapsed.TotalMilliseconds;
             int behind = selected ? 0 : 1;
@@ -1287,6 +1351,13 @@ namespace Stabby.Game
                 behind++;
                 if (nd.Pending == 0 && pending.Count < BuildBudget) Request(key);
             }
+            if (pending.Count < BuildBudget)
+                foreach (int key in split)
+                {
+                    if (pending.Count >= BuildBudget) break;
+                    var nd = Node(key);
+                    if (nd.Built == 0 && nd.Pending == 0) Request(key);
+                }
             double t1 = frame.Elapsed.TotalMilliseconds;
             drawn.Clear();
             for (int r = 0; r < roots.Length; r++) Draw(roots[r]);
@@ -1299,6 +1370,11 @@ namespace Stabby.Game
             float3 eye = cam.transform.position;
             float reach = Casting && UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.shadowDistance : 0;
             int vertices = 0, casting = 0, castVertices = 0, sunk = 0;
+            if (sun == null) sun = RenderSettings.sun != null ? RenderSettings.sun : Array.Find(UnityEngine.Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
+            float3 sunDir = sun != null ? (float3)sun.transform.forward : new float3(0, -1, 0);
+            float sunRun = math.length(sunDir.xz);
+            float2 upsun = sunRun > 1e-4f ? -sunDir.xz / sunRun : float2.zero;
+            float tanE = math.max(-sunDir.y / math.max(sunRun, 1e-4f), 0.2f);
             foreach (int key in builtKeys)
             {
                 var nd = nodes[key];
@@ -1334,7 +1410,7 @@ namespace Stabby.Game
                     nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
-                int cast = show && math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max))) < reach ? 1 : 0;
+                int cast = show && CastsNear(nb, eye, reach, upsun, tanE) ? 1 : 0;
                 if (cast != nd.Cast)
                 {
                     double tsh = frame.Elapsed.TotalMilliseconds;
@@ -1351,10 +1427,11 @@ namespace Stabby.Game
                     levelCounts[l]++;
                     vertices += nd.Vertices;
                     int mask = StitchMask(key, l);
-                    float end = l < TerrainTree.Root ? TerrainTree.Step(l + 1) / allowed : 0;
+                    bool thin = Fine(key, l);
+                    float end = thin ? TerrainTree.Step(0) / allowed : l < TerrainTree.Root ? TerrainTree.Step(l + 1) / allowed : 0;
                     if (mask != nd.Stitch || end != nd.MorphEnd)
                     {
-                        var stitch = new float4(mask, MorphStart * end, end, TerrainTree.Step(l));
+                        var stitch = new float4(mask, MorphStart * end, end, thin ? TerrainTree.FineStep : TerrainTree.Step(l));
                         Queue(new TerrainWrite { Entity = nd.Entity, Kind = 1, Value = stitch });
                         Queue(new TerrainWrite { Entity = nd.Caster, Kind = 1, Value = stitch });
                         nd.Stitch = mask;
@@ -1384,7 +1461,7 @@ namespace Stabby.Game
             float allowed = Allowed(cam);
             GeometryUtility.CalculateFrustumPlanes(cam, frustum);
             for (int p = 0; p < 6; p++) planes[p] = new float4(frustum[p].normal, frustum[p].distance);
-            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();
+            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Fine = fine, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();
             lodScheduled = true;
         }
 
@@ -1394,25 +1471,39 @@ namespace Stabby.Game
             float s = TerrainTree.Size(l), x0 = c.x * s, z0 = c.y * s, x1 = x0 + s, z1 = z0 + s, o = 0.5f;
             float xa = x0 + 0.25f * s, xb = x0 + 0.75f * s, za = z0 + 0.25f * s, zb = z0 + 0.75f * s;
             int mask = 0;
-            mask |= Edge(x0 - o, za, x0 - o, zb, l, 1);
-            mask |= Edge(x1 + o, za, x1 + o, zb, l, 2);
-            mask |= Edge(xa, z0 - o, xb, z0 - o, l, 4);
-            mask |= Edge(xa, z1 + o, xb, z1 + o, l, 8);
+            bool thin = Fine(key, l);
+            mask |= Edge(x0 - o, za, x0 - o, zb, l, 1, thin);
+            mask |= Edge(x1 + o, za, x1 + o, zb, l, 2, thin);
+            mask |= Edge(xa, z0 - o, xb, z0 - o, l, 4, thin);
+            mask |= Edge(xa, z1 + o, xb, z1 + o, l, 8, thin);
             for (int q = 0; q < 4; q++)
             {
                 float xo = (q & 1) == 0 ? x0 - o : x1 + o, xi = (q & 1) == 0 ? x0 + o : x1 - o;
                 float zo = (q & 2) == 0 ? z0 - o : z1 + o, zi = (q & 2) == 0 ? z0 + o : z1 - o;
-                mask |= Edge(xo, zi, xi, zo, l, 16 << q) | Edge(xo, zo, xo, zo, l, 16 << q);
+                mask |= Edge(xo, zi, xi, zo, l, 16 << q, thin) | Edge(xo, zo, xo, zo, l, 16 << q, thin);
             }
             return mask;
         }
 
-        int Edge(float xa, float za, float xb, float zb, int l, int bit)
+        int Edge(float xa, float za, float xb, float zb, int l, int bit, bool thin)
         {
             int a = DrawnLevel(xa, za), b = DrawnLevel(xb, zb), mask = 0;
-            if (a > l || b > l) mask |= bit;
-            if ((a >= 0 && a < l) || (b >= 0 && b < l)) mask |= bit << 8;
+            bool fa = a == 0 && FineAt(xa, za), fb = b == 0 && FineAt(xb, zb);
+            if (a > l || b > l || thin && (a == 0 && !fa || b == 0 && !fb)) mask |= bit;
+            if ((a >= 0 && a < l) || (b >= 0 && b < l) || l == 0 && !thin && (fa || fb)) mask |= bit << 8;
             return mask;
+        }
+
+        static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float2 upsun, float tanE)
+        {
+            float run = math.min((nb.Max.y - nb.Min.y) / tanE, reach);
+            for (int k = 0; k <= 3; k++)
+            {
+                float2 o = -upsun * run * k / 3f;
+                float3 shift = new float3(o.x, 0, o.y);
+                if (math.length(math.max(0, math.max(nb.Min + shift - eye, eye - nb.Max - shift))) < reach) return true;
+            }
+            return false;
         }
 
         public void NearMeshes(float3 eye, float reach, List<Mesh> into)
@@ -1421,6 +1512,69 @@ namespace Stabby.Game
             if (!ready || !drawn.IsCreated) return;
             foreach (int key in drawn)
                 if (tree.Level(key) == 0 && tree.Distance(key, eye) < reach && meshes.TryGetValue(key, out var m)) into.Add(m);
+        }
+
+        public int[] Audit()
+        {
+            var r = new int[12];
+            if (!ready || !drawn.IsCreated) return r;
+            var em = EntityManager;
+            em.CompleteAllTrackedJobs();
+            double area = 0, total = 0;
+            for (int k = 0; k < roots.Length; k++) total += TerrainTree.Size(TerrainTree.Root) * (double)TerrainTree.Size(TerrainTree.Root);
+            foreach (int key in drawn)
+            {
+                float s = TerrainTree.Size(tree.Level(key));
+                area += s * (double)s;
+                var nd = nodes[key];
+                if (nd.Drawn == 0) continue;
+                r[0]++;
+                var e = nd.Entity;
+                if (e == Entity.Null || !em.Exists(e) || !em.IsComponentEnabled<MaterialMeshInfo>(e)) { r[1]++; continue; }
+                if (em.GetComponentData<MaterialMeshInfo>(e).MeshID != nd.Mesh) r[2]++;
+                MinMaxAABB box = tree.Box(key);
+                AABB want = box;
+                var rb = em.GetComponentData<RenderBounds>(e).Value;
+                if (math.any(math.abs(rb.Center - want.Center) > 0.01f) || math.any(math.abs(rb.Extents - want.Extents) > 0.01f)) r[3]++;
+                if (em.HasComponent<WorldRenderBounds>(e))
+                {
+                    var wb = em.GetComponentData<WorldRenderBounds>(e).Value;
+                    if (math.any(math.abs(wb.Center - want.Center) > 0.01f) || math.any(math.abs(wb.Extents - want.Extents) > 0.01f)) r[4]++;
+                }
+            }
+            using var q = em.CreateEntityQuery(ComponentType.ReadOnly<TerrainStitch>(), ComponentType.ReadOnly<MaterialMeshInfo>());
+            r[5] = q.CalculateEntityCount() - r[0] - shownCasting;
+            r[6] = (int)math.max(0, total - area);
+            (r[7], r[8], r[9], r[10], r[11]) = (splitSeen, shownWanted, drawn.Count, lodScheduled ? 1 : 0, rootsReady ? 1 : 0);
+            return r;
+        }
+
+        public bool Seam(float3 eye, float near, float far, out float3 at, out float3 across)
+        {
+            at = across = default;
+            if (!ready || !drawn.IsCreated) return false;
+            float best = 0;
+            foreach (int key in drawn)
+            {
+                var nd = nodes[key];
+                int l = tree.Level(key);
+                if (nd.Drawn == 0 || l > 2 || (nd.Stitch & 15) == 0) continue;
+                MinMaxAABB box = tree.Box(key);
+                for (int e = 0; e < 4; e++)
+                {
+                    if ((nd.Stitch & (1 << e)) == 0) continue;
+                    float3 n = e == 0 ? new float3(-1, 0, 0) : e == 1 ? new float3(1, 0, 0) : e == 2 ? new float3(0, 0, -1) : new float3(0, 0, 1);
+                    float3 c = (box.Min + box.Max) * 0.5f;
+                    float3 p = new float3(c.x + n.x * (box.Max.x - box.Min.x) * 0.5f, 0, c.z + n.z * (box.Max.z - box.Min.z) * 0.5f);
+                    float d = math.distance(p.xz, eye.xz);
+                    float relief = box.Max.y - box.Min.y;
+                    if (d < near || d > far || relief <= best) continue;
+                    best = relief;
+                    at = p;
+                    across = n;
+                }
+            }
+            return best > 0;
         }
 
         void Show(Entity e, bool show) => Queue(new TerrainWrite { Entity = e, Kind = 0, Value = show ? 1 : 0 });
@@ -1491,6 +1645,7 @@ namespace Stabby.Game
             if (split.IsCreated) split.Dispose();
             if (spare.IsCreated) spare.Dispose();
             if (drawn.IsCreated) drawn.Dispose();
+            if (fine.IsCreated) fine.Dispose();
             if (leaves.IsCreated) leaves.Dispose();
             if (planes.IsCreated) planes.Dispose();
             if (roots.IsCreated) roots.Dispose();

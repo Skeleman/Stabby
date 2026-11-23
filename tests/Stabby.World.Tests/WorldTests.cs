@@ -39,6 +39,21 @@ public class WorldTests
     }
 
     [Fact]
+    public void DrySeedsRaiseMesasAndButtes()
+    {
+        int mesas = 0, buttes = 0, lips = 0;
+        Parallel.For(1, 21, s =>
+        {
+            var w = Gen((ulong)s);
+            foreach (var m in w.Sketch.Mesas)
+                if (m.Butte) Interlocked.Increment(ref buttes); else Interlocked.Increment(ref mesas);
+            foreach (var e in Features.Place(w, new TerrainDetail(w)))
+                if (e.Shape == FeatureEdit.Lip) Interlocked.Increment(ref lips);
+        });
+        Assert.True(mesas >= 10 && buttes >= 4 && lips >= 6, $"{mesas} mesas, {buttes} buttes, {lips} lips in 20 seeds");
+    }
+
+    [Fact]
     public void SameSeedSameWorld()
     {
         Assert.Equal(Gen(42).Fingerprint(), Gen(42).Fingerprint());
@@ -221,17 +236,30 @@ public class WorldTests
         Same(rock, surfaceData.GetProperty("rock"));
         Same(surface.GetProperty("properties").GetProperty("coats"), surfaceData.GetProperty("coats"));
         foreach (var c in surfaceData.GetProperty("coats").EnumerateObject()) Same(coat, c.Value);
-        Same(top.GetProperty("properties").GetProperty("water"), data.RootElement.GetProperty("water"));
+        var liquid = top.GetProperty("properties").GetProperty("liquids").GetProperty("items");
+        foreach (var l in data.RootElement.GetProperty("liquids").EnumerateArray())
+        {
+            Same(liquid, l);
+            Same(liquid.GetProperty("properties").GetProperty("fall"), l.GetProperty("fall"));
+        }
         var lib = ContentLoader.LoadMaterials(root);
         Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.Rock.BedSpacingM > 0);
         Assert.True(lib.Water.DeepColor != 0 && lib.Water.ShoreM > 0 && lib.Water.FoamWidthM > 0);
-        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Water = new WaterDef() }), e => e.Contains("water.shoreM"));
+        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Liquids = { new LiquidDef { Id = "water" } } }), e => e.Contains("water.shoreM"));
         foreach (var b in ContentLoader.LoadBiomes(root)) Assert.True(lib.Surface.CoatOf(b.Id) >= 0, b.Id + " has no coat");
+        var biomeIds = ContentLoader.LoadBiomes(root).Select(b => b.Id).ToHashSet();
+        Assert.NotEmpty(lib.TintSlots());
+        foreach (int t in lib.TintSlots())
+            foreach (var b in lib.Liquids[t].Biomes) Assert.True(biomeIds.Contains(b), lib.Liquids[t].Id + " tints unknown biome " + b);
         lib.Surface.Coats[1].GrainAmp = 2;
         lib.Surface.Coats[3].Biomes.Add(lib.Surface.Coats[0].Biomes[0]);
+        lib.Liquids[lib.TintSlots()[1]].Biomes.Add(lib.Liquids[lib.TintSlots()[0]].Biomes[0]);
+        lib.Liquids[0].Biomes.Add("tundra");
         var errors = MaterialLibrary.Validate(lib);
         Assert.Contains(errors, e => e.Contains("coats.soil.grainAmp"));
         Assert.Contains(errors, e => e.Contains("already has a coat"));
+        Assert.Contains(errors, e => e.Contains("water is the default"));
+        Assert.Contains(errors, e => e.Contains("tinted twice"));
         var item = top.GetProperty("properties").GetProperty("strata").GetProperty("items");
         var required = item.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).ToList();
         var allowed = item.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToHashSet();

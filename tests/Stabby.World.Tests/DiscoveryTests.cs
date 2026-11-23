@@ -144,6 +144,32 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void FairyRingsAppearOnLevelGround()
+    {
+        int ring = Objects.Objects.FindIndex(o => o.Id == "fairy-ring"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var all = field.Discoveries();
+            var rings = all.Where(o => o.Def == ring).ToArray();
+            output.WriteLine($"seed {seed}: {rings.Length} rings " + string.Join(" ", rings.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+            foreach (var c in rings)
+            {
+                Assert.True(field.Fitness(ObjectField.FairyRing, c.X, c.Z) > float.MinValue);
+                foreach (var o in all.Where(o => o.Def != ring))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+                int cx = (int)(c.X / field.ChunkMeters), cz = (int)(c.Z / field.ChunkMeters);
+                Assert.Contains(field.Chunk(cx, cz), o => o.Def == ring && o.X == c.X && o.Z == c.Z);
+            }
+            total += rings.Length;
+            if (rings.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 2, $"rings in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void HotSpringsSitNearRelief()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;
@@ -167,6 +193,103 @@ public class DiscoveryTests
             if (springs.Length > 0) worlds++;
         }
         Assert.True(worlds >= 2, $"hot springs in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
+    public void GeysersAndMudPotsSitOnSteadyGround()
+    {
+        int geyser = Objects.Objects.FindIndex(o => o.Id == "geyser"), mud = Objects.Objects.FindIndex(o => o.Id == "mud-pot"), geysers = 0, muds = 0;
+        var pools = new System.Collections.Generic.List<float>();
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            foreach (var c in field.Discoveries().Where(o => o.Def == geyser || o.Def == mud))
+            {
+                Assert.Null(field.VentFault(c));
+                field.SpringPoolsAt(c, pools);
+                if (c.Def == geyser) { geysers++; Assert.Equal(1, pools.Count / ObjectField.SpringStride); Assert.True(pools[5] > pools[4]); }
+                else { muds++; Assert.InRange(pools.Count / ObjectField.SpringStride, 1, 3); Assert.True(pools[5] - pools[4] < pools[4] - pools[6]); }
+            }
+        }
+        output.WriteLine($"{geysers} geysers, {muds} mud pots");
+        Assert.True(geysers > 0 && muds > 0, $"{geysers} geysers, {muds} mud pots in 4 worlds");
+    }
+
+    [Fact]
+    public void BogPoolsSitShallowInWetland()
+    {
+        int total = 0;
+        var materials = ContentLoader.LoadMaterials(Root);
+        Assert.True(materials.Liquid("peat") > 0);
+        foreach (var o in Objects.Objects)
+            if (o.Placement.Liquid != null) Assert.True(materials.Liquid(o.Placement.Liquid) >= 0, o.Id + " names an unknown liquid");
+        for (ulong seed = 1; seed <= 6; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, materials, null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var bogs = field.BogPools();
+            int wet = Array.IndexOf(w.BiomeIds, "wetland"), n = w.Config.Size;
+            for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+            {
+                total++;
+                int c = Math.Min(n - 1, (int)(bogs[k + 1] / w.Config.CellMeters + 0.5f)) * n + Math.Min(n - 1, (int)(bogs[k] / w.Config.CellMeters + 0.5f));
+                Assert.Equal(wet, w.Biome[c]);
+                Assert.InRange(bogs[k + 3] - bogs[k + 4], ObjectField.BogMinDepthM, ObjectField.BogMaxDepthM);
+            }
+        }
+        output.WriteLine($"{total} bog pools");
+        Assert.True(total > 0, "no bog pools in 6 worlds");
+    }
+
+    [Fact]
+    public void ObjectsKeepOutOfBogMargins()
+    {
+        var materials = ContentLoader.LoadMaterials(Root);
+        int pools = 0, near = 0;
+        for (ulong seed = 1; seed <= 2; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, materials, null, null, Objects);
+            var detail = new TerrainDetail(w);
+            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var bogs = field.BogPools();
+            float span = field.ChunkMeters;
+            var seen = new HashSet<int>();
+            for (int k = 0; k < bogs.Length && k < 3 * ObjectField.BogStride; k += ObjectField.BogStride)
+            {
+                pools++;
+                float edge = ObjectField.BogMargin(bogs[k + 2]) + 4f;
+                for (int cz = (int)((bogs[k + 1] - edge) / span); cz <= (int)((bogs[k + 1] + edge) / span); cz++)
+                    for (int cx = (int)((bogs[k] - edge) / span); cx <= (int)((bogs[k] + edge) / span); cx++)
+                    {
+                        if (cx < 0 || cz < 0 || cx >= field.ChunksAcross || cz >= field.ChunksAcross || !seen.Add(cz * field.ChunksAcross + cx)) continue;
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            float r = 0.5f * field.Footprint(o.Def) * o.Size;
+                            for (int j = 0; j < bogs.Length; j += ObjectField.BogStride)
+                            {
+                                float dx = o.X - bogs[j], dz = o.Z - bogs[j + 1], reach = ObjectField.BogMargin(bogs[j + 2]) + r;
+                                if (dx * dx + dz * dz < (reach + 4f) * (reach + 4f)) near++;
+                                Assert.False(dx * dx + dz * dz < reach * reach, $"seed {seed}: {Objects.Objects[o.Def].Id} at {o.X:F1},{o.Z:F1} stands in the bog margin at {bogs[j]:F0},{bogs[j + 1]:F0}");
+                            }
+                        }
+                    }
+            }
+        }
+        output.WriteLine($"{pools} bog pools, {near} objects within 4 m of a margin");
+        Assert.True(pools > 0);
+    }
+
+    [Fact]
+    public void GeyserCyclesDifferPerSite()
+    {
+        Structures.GeyserCycle(1, out float i1, out float d1, out float o1);
+        Structures.GeyserCycle(2, out float i2, out float d2, out _);
+        Assert.InRange(d1, 1, i1);
+        Assert.InRange(o1, 0, i1);
+        Assert.False(i1 == i2 && d1 == d2);
     }
 
     [Fact]

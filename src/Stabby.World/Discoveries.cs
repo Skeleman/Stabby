@@ -5,12 +5,12 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7;
-        public const float SpringRiverM = 40f, SpringReliefM = 8f;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10;
+        public const float SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 4f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
-        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
         public const int DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
@@ -66,7 +66,7 @@ namespace Stabby.World
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
                         if (!roll) continue;
                         if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
-                        if (pl.Discovery == Spring) FaceDownhill(px, pz, ref qa, ref qb);
+                        if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
                         any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
                     }
                     if (any) list.Add(pick);
@@ -111,12 +111,12 @@ namespace Stabby.World
             float fit = Fitness(lib.Objects[d].Placement.Discovery, px, pz);
             if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
             int kind = lib.Objects[d].Placement.Discovery;
-            bool shrine = kind == Shrine, spring = kind == Spring;
-            int tries = shrine || spring || kind == Ruin ? lib.Objects[d].Variants : 1, k = 0;
+            bool shrine = kind == Shrine, spring = Pooled(kind);
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || PoolFault(o) == null)) break;
+                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null)) break;
             }
             if (k == tries) return false;
             best = fit; pick = o;
@@ -360,16 +360,39 @@ namespace Stabby.World
         }
 
         public bool IsSpring(ObjectInstance o) => lib.Objects[o.Def].Placement.Discovery == Spring;
+        public bool IsVent(ObjectInstance o) => Pooled(lib.Objects[o.Def].Placement.Discovery);
+        public static bool Pooled(int kind) => kind == Spring || kind == Geyser || kind == MudPot;
+        public int VentKind(ObjectInstance o) => lib.Objects[o.Def].Placement.Discovery;
+
+        public MaterialLibrary Materials => w.Materials;
+
+        public int LiquidOf(ObjectInstance o)
+        {
+            string id = lib.Objects[o.Def].Placement.Liquid;
+            return id == null || w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid(id));
+        }
+
+        public static void LocalPools(int kind, ulong key, List<float> local)
+        {
+            if (kind == Geyser) Structures.GeyserPools(key, local);
+            else if (kind == MudPot) Structures.MudPools(key, local);
+            else Structures.SpringPools(key, local);
+        }
+
+        public ulong VentSeed(ObjectInstance o) => Rng.Mix(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant) ^ ((ulong)(uint)(int)(o.X * 16f) << 32 | (uint)(int)(o.Z * 16f)));
 
         public const int SpringStride = 9;
-        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f;
+        public const float SpringStepU = 0.2f, SpringFloorU = 3f, SpringTopU = 2f, GeyserLipU = 0.15f, GeyserVentU = 2.5f, GeyserTaper = 0.9f, GeyserFootU = 0.5f, MudSinkU = 0.15f, MudFillU = 0.3f, MudCrestU = 0.45f, MudDepthU = 0.5f, MudBankU = 0.3f, MudBank = 1.1f, MudShelf = 2.5f, MudShelfU = 0.08f, MudShelfTopU = 0.2f, MudRimU = 0.7f, MudRimSlope = 0.7f, MudLobe = 0.3f, GeyserLobe = 0.18f;
 
         public void SpringPoolsAt(ObjectInstance o, List<float> world)
         {
             world.Clear();
             var local = new List<float>();
-            Structures.SpringPools(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), local);
-            float u = Structures.SpringU * o.Size, last = float.MaxValue;
+            int kind = VentKind(o);
+            ulong key = ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant);
+            LocalPools(kind, key, local);
+            float u = Structures.SpringU * o.Size, last = float.MaxValue, lift = 0;
+            if (kind == Geyser) { Structures.GeyserShape(key, out float mound, out _, out float cone, out _); lift = (mound + cone) * u; }
             for (int k = 0; k < local.Count; k += Structures.PoolStride)
             {
                 Rotate(o, local[k] * u, 0, local[k + 1] * u, out float rx, out _, out float rz);
@@ -383,6 +406,16 @@ namespace Stabby.World
                     low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
                 }
                 float level = Math.Min(sum / 8, last - SpringStepU * u), crest = level + Structures.SpringCrest * u, floor = level - Structures.SpringDepth * u;
+                if (kind == Geyser)
+                {
+                    crest = (sum + high) / 9 + lift; level = crest - GeyserLipU * u; floor = level - GeyserVentU * u;
+                    for (int p = 0; p < 8; p++)
+                    {
+                        FanDir(p, 0.70710678f, out float ux, out float uz);
+                        high = Math.Max(high, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
+                    }
+                }
+                else if (kind == MudPot) { level = sum / 8 + (MudFillU - MudSinkU) * u; crest = level + (MudCrestU - MudFillU) * u; floor = level - (MudDepthU + MudFillU) * u; }
                 last = level;
                 world.Add(x); world.Add(z); world.Add(r); world.Add(rout); world.Add(level); world.Add(crest); world.Add(floor);
                 world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(Math.Max(high, crest) + SpringTopU * u);
@@ -411,6 +444,37 @@ namespace Stabby.World
             return null;
         }
 
+        public string VentFault(ObjectInstance o)
+        {
+            string fault = PoolFault(o);
+            int kind = VentKind(o);
+            if (fault != null || kind == Spring) return fault;
+            var pools = new List<float>();
+            SpringPoolsAt(o, pools);
+            for (int k = 0; k < pools.Count; k += SpringStride)
+            {
+                float x = pools[k], z = pools[k + 1], rout = pools[k + 3], low = GroundAt(detail, cm, x, z), high = low;
+                for (int p = 0; p < 8; p++)
+                {
+                    FanDir(p, 0.70710678f, out float ux, out float uz);
+                    float g = GroundAt(detail, cm, x + ux * rout, z + uz * rout);
+                    low = Math.Min(low, g); high = Math.Max(high, g);
+                }
+                if (high - low > VentSteady * 2 * rout) return "vent sits on unsteady ground";
+            }
+            return null;
+        }
+
+        static FeatureEdit Disc(int kind, float x, float z, float top, float bottom, float r, float round, float taper, float p, float n, float seed, float mud, float d)
+        {
+            float y0 = bottom + round, y1 = top - round, w = r + (taper != 0f ? taper * (y1 - y0) - round * ((float)Math.Sqrt(1f + taper * taper) - 1f) : 0f) - round;
+            return new FeatureEdit
+            {
+                Kind = kind, Shape = FeatureEdit.Spring, R = round, Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (y0 + y1), By = 0.5f * (y0 + y1),
+                W = w, H = Math.Max(0f, 0.5f * (y1 - y0)), T = taper, P = p, N = n, S = seed, F = mud, D = d,
+            };
+        }
+
         public FeatureEdit[] SpringEdits()
         {
             var list = new List<FeatureEdit>();
@@ -418,13 +482,39 @@ namespace Stabby.World
             var pools = new List<float>();
             foreach (var o in Discoveries())
             {
-                if (!IsSpring(o)) continue;
+                if (!IsVent(o)) continue;
                 SpringPoolsAt(o, pools);
-                float u = Structures.SpringU * o.Size;
+                int kind = VentKind(o);
+                float u = Structures.SpringU * o.Size, mud = kind == MudPot ? 1f : 0f;
                 for (int k = 0; k < pools.Count; k += SpringStride)
                 {
                     float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], crest = pools[k + 5], floor = pools[k + 6], bottom = pools[k + 7], top = pools[k + 8];
                     float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
+                    if (kind == Geyser)
+                    {
+                        Structures.GeyserShape(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), out float mound, out float mtop, out float cone, out float ctop);
+                        float low = GroundAt(detail, cm, x, z);
+                        for (int p = 0; p < 8; p++)
+                        {
+                            FanDir(p, 0.70710678f, out float ux, out float uz);
+                            low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
+                        }
+                        float baseY = crest - (mound + cone) * u, moundY = baseY + mound * u, foot = Math.Min(low, baseY) - GeyserFootU * u;
+                        float taper = (rout - mtop * u) / (moundY - foot);
+                        list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0).Finer());
+                        list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0).Finer());
+                        carves.Add(Disc(FeatureEdit.Carve, x, z, top + rc - hole, floor - rc + hole, r + rc - hole, rc, 0, 0, 0.06f * u, seed, 0, 0));
+                        continue;
+                    }
+                    if (kind == MudPot)
+                    {
+                        float level = pools[k + 4] - MudFillU * u, bank = MudBankU * u;
+                        list.Add(Disc(FeatureEdit.Add, x, z, crest, bottom, r + MudRimU * u, ra, MudRimSlope, -MudLobe, 0.1f * u, seed, mud, 0));
+                        carves.Add(Disc(FeatureEdit.Carve, x, z, top, floor, r + MudBank * (top - bank - level), bank, -MudBank, -MudLobe, 0.06f * u, seed, mud, 0));
+                        float shelf = MudShelfU * u, lip = level + MudShelfTopU * u;
+                        carves.Add(Disc(FeatureEdit.Carve, x, z, lip, level - 2f * shelf, r + MudShelf * (lip - shelf - level) + shelf * (float)Math.Sqrt(1f + MudShelf * MudShelf), shelf, -MudShelf, -MudLobe, 0.04f * u, seed, mud, 0));
+                        continue;
+                    }
                     list.Add(new FeatureEdit
                     {
                         Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
@@ -515,13 +605,14 @@ namespace Stabby.World
                 if (relief > ShrineReliefM) return float.MinValue;
                 return d >= ShrineRoadMinM && d <= ShrineRoadM ? -Math.Abs(d - ShrineRoadAimM) / ShrineRoadM - 0.1f * relief : float.MinValue;
             }
-            if (kind == Spring)
+            if (Pooled(kind))
             {
                 float draw = SpringDraw(x, z);
-                if (!(draw > 0) || relief > SpringReliefM || RiverGap(x, z) < SpringRiverM) return float.MinValue;
+                if (!(draw > 0) || relief > (kind == Spring ? SpringReliefM : VentReliefM) || RiverGap(x, z) < SpringRiverM) return float.MinValue;
                 return draw - 0.05f * relief;
             }
             if (kind == Ruin) return relief <= RuinReliefM ? rise - 0.2f * relief : float.MinValue;
+            if (kind == FairyRing) return relief <= FairyReliefM ? -0.2f * relief - Math.Abs(Woods(x, z) - FairyWoods) : float.MinValue;
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;
         }

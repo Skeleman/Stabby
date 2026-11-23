@@ -9,8 +9,8 @@ namespace Stabby.Content
     public static class ContentLoader
     {
         public const int BiomeSchemaVersion = 1;
-        public const int MaterialSchemaVersion = 2;
-        public const int ObjectSchemaVersion = 2;
+        public const int MaterialSchemaVersion = 3;
+        public const int ObjectSchemaVersion = 4;
         public const int CreatureSchemaVersion = 2;
 
         public static string FindContentRoot(string start)
@@ -36,7 +36,7 @@ namespace Stabby.Content
         public static ObjectLibrary LoadObjects(string contentRoot, IReadOnlyList<string> biomeIds = null)
         {
             var path = Path.Combine(contentRoot, "objects.json");
-            return ParseObjects(File.ReadAllText(path), biomeIds, path);
+            return ParseObjects(File.ReadAllText(path), biomeIds, path, LoadMaterials(contentRoot));
         }
 
         public static CreatureLibrary LoadCreatures(string contentRoot, IReadOnlyList<string> biomeIds = null)
@@ -104,8 +104,7 @@ namespace Stabby.Content
             };
             var surface = root.Object("surface");
             lib.Surface = surface == null ? null : Surface(surface);
-            var water = root.Object("water");
-            lib.Water = water == null ? null : Water(water, source);
+            foreach (var l in root.Objects("liquids")) lib.Liquids.Add(Liquid(l, source));
             var look = root.Object("look");
             lib.Look = look == null ? null : new LookDef
             {
@@ -118,10 +117,23 @@ namespace Stabby.Content
             lib.Sinter = sinter == null ? null : new SinterDef
             {
                 White = Hex(sinter.String("white", ""), source, "sinter.white"), Ochre = Hex(sinter.String("ochre", ""), source, "sinter.ochre"),
-                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), Water = Hex(sinter.String("water", ""), source, "sinter.water"),
-                Deep = Hex(sinter.String("deep", ""), source, "sinter.deep"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
+                Orange = Hex(sinter.String("orange", ""), source, "sinter.orange"), BandM = sinter.Float("bandM", 0), Roughness = sinter.Float("roughness", 0),
             };
             sinter?.End();
+            var mud = root.Object("mud");
+            lib.Mud = mud == null ? null : new MudDef
+            {
+                Surface = Hex(mud.String("surface", ""), source, "mud.surface"),
+                Clay = Hex(mud.String("clay", ""), source, "mud.clay"), Grey = Hex(mud.String("grey", ""), source, "mud.grey"), Roughness = mud.Float("roughness", 0),
+            };
+            mud?.End();
+            var peat = root.Object("peat");
+            lib.Peat = peat == null ? null : new PeatDef
+            {
+                Wet = Hex(peat.String("wet", ""), source, "peat.wet"), Dark = Hex(peat.String("dark", ""), source, "peat.dark"),
+                Fibre = Hex(peat.String("fibre", ""), source, "peat.fibre"), Roughness = peat.Float("roughness", 0),
+            };
+            peat?.End();
             var strata = new List<StratumDef>();
             foreach (var s in root.Objects("strata"))
             {
@@ -145,17 +157,36 @@ namespace Stabby.Content
             return lib;
         }
 
-        static WaterDef Water(Json e, string path)
+        static LiquidDef Liquid(Json e, string path)
         {
-            var w = new WaterDef
+            string id = e.String("id", "");
+            var w = new LiquidDef
             {
-                DeepColor = Hex(e.String("deepColor", ""), path, "water.deepColor"),
-                ShallowColor = Hex(e.String("shallowColor", ""), path, "water.shallowColor"),
+                Id = id,
+                DeepColor = Hex(e.String("deepColor", ""), path, id + ".deepColor"),
+                ShallowColor = Hex(e.String("shallowColor", ""), path, id + ".shallowColor"),
+                FilmColor = Hex(e.String("filmColor", ""), path, id + ".filmColor"),
+                EmissionColor = Hex(e.String("emissionColor", ""), path, id + ".emissionColor"),
                 ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0),
                 WaveScaleM = e.Float("waveScaleM", 0), WaveSpeed = e.Float("waveSpeed", 0), WaveStrength = e.Float("waveStrength", 0),
                 SwellScaleM = e.Float("swellScaleM", 0), SwellStrength = e.Float("swellStrength", 0), LakeSwell = e.Float("lakeSwell", 0),
                 FlowSpeed = e.Float("flowSpeed", 0), RapidsSlope = e.Float("rapidsSlope", 0), BedFieldM = e.Float("bedFieldM", 0),
+                Silt = e.Float("silt", 0), Opacity = e.Float("opacity", 0), Viscosity = e.Float("viscosity", 0), Bubbles = e.Float("bubbles", 0),
+                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0),
+                Biomes = e.Strings("biomes", new List<string>()),
             };
+            var f = e.Object("fall");
+            if (f != null)
+            {
+                w.Spray = Array.IndexOf(LiquidDef.SprayNames, f.String("spray", ""));
+                w.FallSpeed = f.Float("speed", 0);
+                w.SheetOpacity = f.Float("sheetOpacity", 0);
+                w.SprayColor = Hex(f.String("sprayColor", ""), path, id + ".fall.sprayColor");
+                w.SprayAmount = f.Float("sprayAmount", 0);
+                w.Froth = f.Float("froth", 0);
+                f.End();
+            }
+            else w.Spray = -1;
             e.End();
             return w;
         }
@@ -202,7 +233,7 @@ namespace Stabby.Content
             return d;
         }
 
-        public static ObjectLibrary ParseObjects(string json, IReadOnlyList<string> biomeIds, string source)
+        public static ObjectLibrary ParseObjects(string json, IReadOnlyList<string> biomeIds, string source, MaterialLibrary materials)
         {
             var root = Root(json, source, ObjectSchemaVersion);
             var errors = new List<string>();
@@ -220,7 +251,7 @@ namespace Stabby.Content
             }
             foreach (var o in root.Objects("objects"))
             {
-                lib.Objects.Add(Object(o, errors));
+                lib.Objects.Add(Object(o, errors, materials));
                 o.End();
             }
             var terrain = root.Object("terrain");
@@ -233,6 +264,7 @@ namespace Stabby.Content
                     ContactTexelPixels = terrain.Float("contactTexelPixels", t0.ContactTexelPixels),
                     MistFadePixels = terrain.Float("mistFadePixels", t0.MistFadePixels), MistFullPixels = terrain.Float("mistFullPixels", t0.MistFullPixels),
                     SteamFadePixels = terrain.Float("steamFadePixels", t0.SteamFadePixels), SteamFullPixels = terrain.Float("steamFullPixels", t0.SteamFullPixels),
+                    ColumnFadePixels = terrain.Float("columnFadePixels", t0.ColumnFadePixels), ColumnFullPixels = terrain.Float("columnFullPixels", t0.ColumnFullPixels),
                 };
                 terrain.End();
             }
@@ -377,13 +409,27 @@ namespace Stabby.Content
             return m.Color;
         }
 
-        static ObjectDef Object(Json o, List<string> errors)
+        static uint Material(Json j, string field, string where, MaterialLibrary materials, List<string> errors)
+        {
+            string name = j.String(field, "");
+            var m = materials?.Find(name);
+            if (m == null) { errors.Add(where + "." + field + ": unknown material \"" + name + "\""); return 0; }
+            return m.Color;
+        }
+
+        static void InlineColor(Json j, string field, string where, List<string> errors)
+        {
+            if (j.String(field, null) != null) errors.Add(where + ": inline \"" + field + "\"; name a materials.json material instead");
+        }
+
+        static ObjectDef Object(Json o, List<string> errors, MaterialLibrary materials)
         {
             string id = o.String("id", "");
+            InlineColor(o, "color", id, errors);
             var def = new ObjectDef
             {
                 Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""),
-                Color = Hex(o.String("color", "#ff00ff")), Variants = o.Int("variants", 1),
+                Color = Material(o, "material", id, materials, errors), Variants = o.Int("variants", 1),
             };
             var interact = o.Object("interact");
             if (interact != null)
@@ -399,14 +445,15 @@ namespace Stabby.Content
                 var scale = p.Floats("scale", null);
                 if ((offset != null && offset.Length != 3) || (scale != null && scale.Length != 3))
                     errors.Add(id + ": part " + pid + " offset/scale need 3 numbers");
-                var color = p.String("color", null);
-                var leaf = p.String("leafColor", null);
+                InlineColor(p, "color", id + ": part " + pid, errors);
+                InlineColor(p, "leafColor", id + ": part " + pid, errors);
+                bool color = p.String("material", null) != null, leaf = p.String("leafMaterial", null) != null;
                 var part = new ObjectPart
                 {
                     Id = pid, Shape = ObjectLibrary.ShapeOf(p.String("shape", "")),
                     Solid = ObjectLibrary.Tri(p.String("solid", "")), Shadows = ObjectLibrary.Tri(p.String("shadows", "")),
-                    HasColor = color != null, Color = color != null ? Hex(color) : def.Color,
-                    HasLeafColor = leaf != null, LeafColor = leaf != null ? Hex(leaf) : 0,
+                    HasColor = color, Color = color ? Material(p, "material", id + ".parts." + pid, materials, errors) : def.Color,
+                    HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0,
                 };
                 string ends = p.String("ends", "auto");
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, ends);
@@ -432,7 +479,7 @@ namespace Stabby.Content
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
                     ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
                     Bank = pl.String("bank", null), PerHundredM = pl.Float("perHundredM", 0),
-                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
+                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), Liquid = pl.String("liquid", null), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
                 };
                 foreach (var b in pl.Objects("biomeDensity"))
                 {

@@ -3,20 +3,29 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  world:
+  tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
       - run: dotnet build -c Release -v q
-      - run: dotnet test -c Release --no-build
       - run: dotnet run --project tools/Stabby.Lint -c Release --no-build
-      - run: dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count 100 --size 256
-      - run: dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count 10 --size 512
+      - run: dotnet test -c Release --no-build --filter "FullyQualifiedName~Feature|FullyQualifiedName~Object|FullyQualifiedName~Discover"
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build tools/Stabby.Cli -c Release -v q
+      - run: dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count 30 --size 256

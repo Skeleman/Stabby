@@ -14,6 +14,8 @@ namespace Stabby.World
         public float[] X, Z, S, W, D, K, P, R;
         public RiverFall[] Falls;
         public int[] Lip;
+        public int Liquid;
+        public WaterMix[] Mix;
     }
 
     public interface INearCells
@@ -71,20 +73,24 @@ namespace Stabby.World
                 int count = r.Cells.Count;
                 if (count < 2) continue;
                 var px = new List<float>(); var pz = new List<float>(); var ps = new List<float>(); var pw = new List<float>(); var pd = new List<float>();
+                var tint = new[] { new List<float>(), new List<float>(), new List<float>() };
                 for (int k = 0; k < count; k++)
                 {
                     px.Add(r.X[k] * cm); pz.Add(r.Y[k] * cm); ps.Add(Hydrology.Stage(w.Config, r, k)); pw.Add(r.Width[k] * 0.5f); pd.Add(r.Depth[k]);
+                    var m = k < r.Mix.Count ? r.Mix[k] : default;
+                    for (int t = 0; t < tint.Length; t++) tint[t].Add(m[t]);
                 }
-                for (int it = 0; it < Chaikin; it++) { Smooth(px); Smooth(pz); Smooth(ps); Smooth(pw); Smooth(pd); }
+                for (int it = 0; it < Chaikin; it++) { Smooth(px); Smooth(pz); Smooth(ps); Smooth(pw); Smooth(pd); foreach (var t in tint) Smooth(t); }
                 var falls = new List<RiverFall>(); var lips = new List<int>();
                 int from = 0;
                 foreach (var f in r.Falls)
                 {
-                    int at = InsertFall(f, from, px, pz, ps, pw, pd);
+                    int at = InsertFall(f, from, px, pz, ps, pw, pd, tint);
                     if (at < 0) continue;
                     falls.Add(f); lips.Add(at); from = at + 2;
                 }
-                var line = new RiverLine { X = px.ToArray(), Z = pz.ToArray(), S = ps.ToArray(), W = pw.ToArray(), D = pd.ToArray(), Falls = falls.ToArray(), Lip = lips.ToArray() };
+                var line = new RiverLine { X = px.ToArray(), Z = pz.ToArray(), S = ps.ToArray(), W = pw.ToArray(), D = pd.ToArray(), Falls = falls.ToArray(), Lip = lips.ToArray(), Liquid = r.Liquid, Mix = new WaterMix[px.Count] };
+                for (int k = 0; k < px.Count; k++) line.Mix[k] = new WaterMix { A = tint[0][k], B = tint[1][k], C = tint[2][k] };
                 Bends(line);
                 Steps(line, cm, ref rng);
                 lines.Add(line);
@@ -99,7 +105,7 @@ namespace Stabby.World
 
         static float AlongLip(RiverFall f, float x, float z) => (x - f.LipX) * f.DirX + (z - f.LipZ) * f.DirZ;
 
-        static int InsertFall(RiverFall f, int from, List<float> px, List<float> pz, List<float> ps, List<float> pw, List<float> pd)
+        static int InsertFall(RiverFall f, int from, List<float> px, List<float> pz, List<float> ps, List<float> pw, List<float> pd, List<float>[] tint)
         {
             int m = px.Count, j = -1;
             float best = float.MaxValue, bt = 0;
@@ -117,6 +123,12 @@ namespace Stabby.World
             while (hi < m && AlongLip(f, px[hi], pz[hi]) < Hydrology.FallBaseOffsetM + FallTrimM) hi++;
             if (lo < from) return -1;
             int cut = hi - lo - 1;
+            foreach (var t in tint)
+            {
+                float v = t[j] + (t[j + 1] - t[j]) * bt;
+                t.RemoveRange(lo + 1, cut);
+                t.InsertRange(lo + 1, new[] { v, v });
+            }
             px.RemoveRange(lo + 1, cut); pz.RemoveRange(lo + 1, cut); ps.RemoveRange(lo + 1, cut); pw.RemoveRange(lo + 1, cut); pd.RemoveRange(lo + 1, cut);
             px.InsertRange(lo + 1, new[] { f.LipX, f.BaseX }); pz.InsertRange(lo + 1, new[] { f.LipZ, f.BaseZ });
             ps.InsertRange(lo + 1, new[] { f.LipY, f.BaseY }); pw.InsertRange(lo + 1, new[] { f.LipPts == null ? w : Math.Max(w, f.ShelfHalf + ShelfPadM), w }); pd.InsertRange(lo + 1, new[] { depth, depth });

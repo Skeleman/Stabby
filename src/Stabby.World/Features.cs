@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Shapes = 8;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Shapes = 9;
 
         public const float Blend = 0.5f;
 
@@ -34,16 +34,27 @@ namespace Stabby.World
         public float W, H, P, T;
         public float D, F, N, S;
 
-        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f;
+        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f;
 
         public float Thick => R + Math.Min(W, H);
 
-        public float MinX => Math.Min(Ax, Bx) - R - W;
-        public float MaxX => Math.Max(Ax, Bx) + R + W;
+        public bool Fine;
+
+        public FeatureEdit Finer()
+        {
+            var e = this;
+            e.Fine = true;
+            return e;
+        }
+
+        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
+
+        public float MinX => Math.Min(Ax, Bx) - R - Spread;
+        public float MaxX => Math.Max(Ax, Bx) + R + Spread;
         public float MinY => Math.Min(Ay, By) - R - H;
         public float MaxY => Math.Max(Ay, By) + R + H;
-        public float MinZ => Math.Min(Az, Bz) - R - W;
-        public float MaxZ => Math.Max(Az, Bz) + R + W;
+        public float MinZ => Math.Min(Az, Bz) - R - Spread;
+        public float MaxZ => Math.Max(Az, Bz) + R + Spread;
 
         public bool Contains(float x, float y, float z) => x >= MinX && x <= MaxX && y >= MinY && y <= MaxY && z >= MinZ && z <= MaxZ;
 
@@ -145,11 +156,30 @@ namespace Stabby.World
         bool Basin(float x, float y, float z, out float dist)
         {
             float dx = x - Ax, dz = z - Az;
-            float wob = P > 0f ? P * W * Value(Seed, x / 1.5f, 0f, z / 1.5f) : 0f;
-            float a = Math.Max((float)Math.Sqrt(dx * dx + dz * dz) - W - wob, 0f);
+            float h = Math.Max(y - Ay + H, 0f);
+            if (D > 0f)
+            {
+                float j = 0.6f * Value(Seed ^ 0x3C6EF372u, x / 3f, 0f, z / 3f), s = h / D + j, i = (float)Math.Floor(s), f = s - i;
+                float f2 = f * f;
+                h = Math.Max(0f, D * (i + Lerp(f, f2 * f2, Riser) - j));
+            }
+            float rad = T != 0f ? W - T * h : W;
+            float wob = P > 0f ? P * rad * Value(Seed, x / 1.5f, 0f, z / 1.5f) : 0f;
+            if (P < 0f)
+            {
+                float l = Math.Max(W, LobeM);
+                wob += P * W * (1f - Value(Seed ^ 0xA54FF53Au, x / l, 0f, z / l));
+            }
+            float a = (float)Math.Sqrt(dx * dx + dz * dz) - rad - wob;
+            if (T != 0f) a /= (float)Math.Sqrt(1f + T * T);
+            a = Math.Max(a, 0f);
             float c = Math.Max(Math.Abs(y - Ay) - H, 0f);
             dist = (float)Math.Sqrt(a * a + c * c);
-            if (N > 0f) dist += N * Lump(x, y, z);
+            if (N > 0f)
+            {
+                float sc = Math.Max(1f, LumpM / (Wave * R));
+                dist += N * Lump(x / sc, y / sc, z / sc);
+            }
             return dist < R;
         }
 
@@ -157,7 +187,7 @@ namespace Stabby.World
         {
             if (Shape == Spring)
             {
-                float sx = x - Ax, sz = z - Az, rr = W + R;
+                float sx = x - Ax, sz = z - Az, rr = Spread + R;
                 return sx * sx + sz * sz <= rr * rr;
             }
             if (W > 0f)
@@ -264,12 +294,17 @@ namespace Stabby.World
 
         public static bool Covers<TEdits>(TEdits edits, float x, float y, float z, float s) where TEdits : struct, IEditList
         {
+            bool any = false;
             for (int q = 0, n = edits.Count; q < n; q++)
             {
                 var e = edits.At(q);
-                if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
+                if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
+                {
+                    if (e.Fine) return false;
+                    any = true;
+                }
             }
-            return false;
+            return any;
         }
 
         public static int TileOf(FeatureEdit e, float cellMeters)
@@ -293,11 +328,13 @@ namespace Stabby.World
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
-            if (boulders.Length + springs.Length == 0) return terrain;
-            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length];
+            var bogs = field.BogEdits();
+            if (boulders.Length + springs.Length + bogs.Length == 0) return terrain;
+            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
             springs.CopyTo(all, terrain.Length + boulders.Length);
+            bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             return all;
         }
 
@@ -311,6 +348,8 @@ namespace Stabby.World
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "caves").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
+            ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64();
+            var lips = Landforms.BiomeMask(w, Mesas.Biomes);
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
             int from = 0;
@@ -343,6 +382,10 @@ namespace Stabby.World
                     tile.Clear();
                     Landforms.Hoodoo(w, detail, strata, hoodoos, tx, ty, ref r, tile);
                     if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rl + t));
+                    tile.Clear();
+                    Mesas.Lip(w, detail, lips, tx, ty, ref r, tile);
+                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
                     from = list.Count;
                 }
             return list.ToArray();

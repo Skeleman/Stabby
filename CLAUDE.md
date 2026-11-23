@@ -14,7 +14,10 @@
    material-scaled detail. Meshes, collision and features all call it. Meshes
    sample on one global lattice, 1 m near the player and doubling per LOD
    ring, computed per chunk on demand; nothing finer than the stored grid is
-   kept. Chunks no feature touches
+   kept. Special features (geyser cones, vent rims, basins) earn finer
+   vertices: near-ring nodes inside a feature edit that asks for it sample
+   the same field at 0.5 m, stitched crack-free to their neighbours. Chunks
+   no feature touches
    take the heightfield fast path, which must match the general mesher vertex
    for vertex. One material library serves every surface: rock strata by world
    height plus a regional offset, biome coats on upward faces.

@@ -46,7 +46,7 @@ namespace Stabby.Game
                 var sw = Stopwatch.StartNew();
                 if (texture == null)
                 {
-                    texture = new Texture2D(Res, Res, TextureFormat.R8, false, true) { name = "Contact", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                    texture = new Texture2D(Res, Res, TextureFormat.RG16, false, true) { name = "Contact", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
                     Shader.SetGlobalTexture("_StabbyContact", texture);
                 }
                 texture.LoadRawTextureData(s.Data);
@@ -84,9 +84,10 @@ namespace Stabby.Game
             var sw = Stopwatch.StartNew();
             float span = Res * texelM;
             float x0 = Mathf.Floor((cx - 0.5f * span) / texelM) * texelM, z0 = Mathf.Floor((cz - 0.5f * span) / texelM) * texelM;
-            var data = new byte[Res * Res];
+            var data = new byte[Res * Res * 2];
             var objects = new List<ObjectInstance>();
             var columns = new List<ObjectColumn>();
+            var lush = new List<ObjectColumn>();
             float cm = field.ChunkMeters;
             int n = field.ChunksAcross;
             int ax = Math.Max(0, (int)Math.Floor((x0 - 2f) / cm)), bx = Math.Min(n - 1, (int)Math.Floor((x0 + span + 2f) / cm));
@@ -100,16 +101,18 @@ namespace Stabby.Game
                     {
                         if (gone.Contains(o.Id)) continue;
                         columns.Clear();
-                        field.ColumnsOf(o, columns);
-                        float low = o.Y + 0.35f + 0.1f * o.Size;
+                        field.ContactsOf(o, columns);
                         bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
                         float foot = built ? Structures.FootReach * o.Size : 0f;
                         foreach (var c in columns)
                         {
-                            if (c.Bottom > low) continue;
+                            if (!ObjectField.Stamps(field.Library, o, c)) continue;
                             Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot), built);
                             count++;
                         }
+                        lush.Clear();
+                        field.LushOf(o, lush);
+                        foreach (var c in lush) Ring(data, x0, z0, texelM, c.X, c.Z, c.R, c.Bottom);
                     }
                 }
             return new Splat { Data = data, X0 = x0, Z0 = z0, TexelM = texelM, Columns = count, Ms = sw.ElapsedMilliseconds };
@@ -132,7 +135,30 @@ namespace Stabby.Game
                     if (t <= 0) continue;
                     t = t >= 1 ? 1 : t * t * (3 - 2 * t);
                     byte v = (byte)(t * 255f);
-                    if (v > data[row + i]) data[row + i] = v;
+                    int k = 2 * (row + i);
+                    if (v > data[k]) data[k] = v;
+                }
+            }
+        }
+
+        static void Ring(byte[] data, float x0, float z0, float texelM, float x, float z, float r, float width)
+        {
+            float half = 0.5f * width, soft = 0.45f * width, outer = r + half + soft;
+            int ia = Math.Max(0, (int)((x - outer - x0) / texelM)), ib = Math.Min(Res - 1, (int)((x + outer - x0) / texelM) + 1);
+            int ja = Math.Max(0, (int)((z - outer - z0) / texelM)), jb = Math.Min(Res - 1, (int)((z + outer - z0) / texelM) + 1);
+            for (int j = ja; j <= jb; j++)
+            {
+                float dz = z0 + (j + 0.5f) * texelM - z;
+                int row = j * Res;
+                for (int i = ia; i <= ib; i++)
+                {
+                    float dx = x0 + (i + 0.5f) * texelM - x;
+                    float t = (half + soft - Mathf.Abs(Mathf.Sqrt(dx * dx + dz * dz) - r)) / soft;
+                    if (t <= 0) continue;
+                    t = t >= 1 ? 1 : t * t * (3 - 2 * t);
+                    byte v = (byte)(t * 255f);
+                    int k = 2 * (row + i) + 1;
+                    if (v > data[k]) data[k] = v;
                 }
             }
         }

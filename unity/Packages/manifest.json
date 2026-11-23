@@ -1,5 +1,13 @@
 {
   "dependencies": {
+    "com.stabby.content": "file:../../src/Stabby.Content",
+    "com.stabby.world": "file:../../src/Stabby.World",
+    "com.unity.entities": "6.5.0",
+    "com.unity.entities.graphics": "6.5.0",
+    "com.unity.inputsystem": "1.20.1",
+    "com.unity.netcode": "6.5.0",
+    "com.unity.render-pipelines.universal": "17.5.0",
+    "com.unity.transport": "6.5.0",
     "com.unity.modules.accessibility": "1.0.0",
     "com.unity.modules.adaptiveperformance": "1.0.0",
     "com.unity.modules.ai": "1.0.0",
@@ -33,13 +41,6 @@
     "com.unity.modules.vehicles": "1.0.0",
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
-    "com.unity.modules.xr": "1.0.0",
-    "com.stabby.content": "file:../../src/Stabby.Content",
-    "com.stabby.world": "file:../../src/Stabby.World",
-    "com.unity.entities": "6.5.0",
-    "com.unity.entities.graphics": "6.5.0",
-    "com.unity.netcode": "6.5.0",
-    "com.unity.render-pipelines.universal": "17.5.0",
-    "com.unity.transport": "6.5.0"
+    "com.unity.modules.xr": "1.0.0"
   }
 }

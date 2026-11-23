@@ -49,11 +49,13 @@ namespace Stabby.Game
         public const string PortVariable = "STABBY_PORT";
         public static ushort ActivePort => ushort.TryParse(System.Environment.GetEnvironmentVariable(PortVariable), out var p) && p != 0 ? p : Port;
         public const ulong Seed = 3;
+        public const string SeedVariable = "STABBY_SEED";
+        public static ulong ActiveSeed => ulong.TryParse(System.Environment.GetEnvironmentVariable(SeedVariable), out var s) && s != 0 ? s : Seed;
         public const int Size = 2048;
         public const int PieceBytes = 1024;
         public const int PiecesPerTick = 256, BacklogBytes = 96 * 1024;
         public const int ReliableWindow = 128;
-        public const float WalkSpeed = 6f;
+        public const float WalkSpeed = 6f, SprintSpeed = WalkSpeed * 1.8f, JumpSpeed = 7f, Gravity = 20f;
         public static float GraphicsQuality = 1f;
         public static readonly string[] Clients = { "Client1", "Client2" };
         public const string FullStreamClient = "Client2";

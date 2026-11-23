@@ -132,3 +132,6 @@ Batch run: `Unity -batchmode -projectPath unity -executeMethod
 Stabby.Game.Editor.GameCapture.Run [-stabbySpikes [ms]]` writes
 `out/unity/game/` (`stats.txt`, chase and overhead shots); `-stabbySpikes`
 lists the top profiler markers for every frame over `ms` (default 33).
+Playable build: `tools/scripts/play-build.sh` writes `play/game/Stabby.exe` with a
+snapshot of `content/` and a baked seed 3 map beside it, so later changes to the
+repo never break it.

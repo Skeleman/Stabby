@@ -47,10 +47,10 @@ namespace Stabby.World
                         }
                     }
                     if (x0 > x1) { x0 = z0 = -footprint[d]; x1 = z1 = footprint[d]; }
-                    if (def.Placement.Discovery == Spring)
+                    if (Pooled(def.Placement.Discovery))
                     {
                         var pools = new List<float>();
-                        Structures.SpringPools(ObjectMeshes.Key(def.Id, 0, v), pools);
+                        LocalPools(def.Placement.Discovery, ObjectMeshes.Key(def.Id, 0, v), pools);
                         for (int k = 0; k < pools.Count; k += Structures.PoolStride)
                         {
                             float px = pools[k] * Structures.SpringU, pz = pools[k + 1] * Structures.SpringU, pr = pools[k + 3] * Structures.SpringU;

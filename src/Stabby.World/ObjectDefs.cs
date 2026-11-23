@@ -18,11 +18,11 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Shapes = 28;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, Shapes = 34;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
-        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape < Shapes);
-        public static bool IsStone(int shape) => shape == Rock || IsStructure(shape);
+        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot);
+        public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || IsStructure(shape);
         public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5;
         public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn" };
 
@@ -57,6 +57,7 @@ namespace Stabby.World
         public string Bank;
         public float PerHundredM;
         public int Discovery;
+        public string Liquid;
         public float SpacingM, Chance = 1f;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
     }
@@ -142,7 +143,7 @@ namespace Stabby.World
                 foreach (var p in d.Parts)
                 {
                     if (p.Shape < 0 || p.Shape >= ObjectPart.Shapes) errors.Add(d.Id + ": part " + p.Id + " has an unknown shape");
-                    if (ObjectPart.IsFoliage(p.Shape) && !p.HasLeafColor) errors.Add(d.Id + ": part " + p.Id + " needs a leafColor");
+                    if (ObjectPart.IsFoliage(p.Shape) && !p.HasLeafColor) errors.Add(d.Id + ": part " + p.Id + " needs a leafMaterial");
                     if (p.ScaleX <= 0 || p.ScaleY <= 0 || p.ScaleZ <= 0) errors.Add(d.Id + ": part " + p.Id + " scale must be above 0");
                     if (ObjectPart.IsStructure(p.Shape) != (d.Kind == Structure)) errors.Add(d.Id + ": structure shapes belong only to structure objects");
                     if (p.Ends < 0 || p.Ends >= ObjectPart.EndNames.Length) errors.Add(d.Id + ": part " + p.Id + " has unknown ends");
@@ -178,6 +179,7 @@ namespace Stabby.World
                 if (pl.Bank == null && pl.PerHundredM != 0) errors.Add(d.Id + ": perHundredM belongs only to bank placement");
                 if (pl.Discovery < 0 || (pl.Discovery > 0 && (d.Kind != Structure || pl.PerHectare > 0 || pl.Bank != null || pl.SpacingM < 200 || pl.SpacingM > 5000 || pl.Chance <= 0 || pl.Chance > 1)))
                     errors.Add(d.Id + ": discovery placement needs a known discovery, a structure, no perHectare or bank, spacingM 200-5000 and chance above 0, at most 1");
+                if (pl.Liquid != null && !ObjectField.Pooled(pl.Discovery)) errors.Add(d.Id + ": liquid belongs only to spring, geyser and mud-pot discoveries");
                 foreach (var bd in pl.BiomeDensity)
                 {
                     if (bd.Scale < 0 || bd.Scale > 1) errors.Add(d.Id + ": biomeDensity scale must be 0-1");

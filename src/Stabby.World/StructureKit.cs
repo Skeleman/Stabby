@@ -4,9 +4,11 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6;
+        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9;
         const int GX = 0, GV = 1, GZ = 2;
-        const int RoundLog = 1, RoundDisc = 2;
+        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4;
+        static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };
+        static readonly float[] DomeLowR = { 1f, 0.8f }, DomeLowY = { -0.8f, 0.3f };
 
         static readonly float[] UnitBox = MakeUnitBox();
         static readonly int[] UnitBoxIdx = MakeUnitBoxIdx();
@@ -58,10 +60,11 @@ namespace Stabby.World
         static float[] RoundMesh(ulong key, int shape, int tier, out int[] idx, out float[] lift)
         {
             var rng = Rng.Stream(key, "round");
-            int sides = shape == RoundDisc ? 32 : tier < 2 ? 16 : 8;
+            int sides = shape == RoundDisc ? 32 : tier < (shape >= RoundStem ? 1 : 2) ? 16 : 8;
             var dc = new float[sides];
             var ds = new float[sides];
             for (int i = 0; i < sides; i++) RoundDir(i, sides, out dc[i], out ds[i]);
+            if (shape == RoundDome) return DomeMesh(ref rng, sides, tier, dc, ds, out idx, out lift);
             if (shape == RoundDisc)
             {
                 var r = RoundNoise(ref rng, sides, 0.66f, 1f);
@@ -128,6 +131,59 @@ namespace Stabby.World
                 }
             }
             idx = id.ToArray();
+            if (shape == RoundStem)
+                for (int v = 0; v < w.Length; v += 3)
+                {
+                    float y = w[v], k = 1.12f - 0.08f * (y + 1);
+                    w[v] = k * w[v + 1]; w[v + 1] = y; w[v + 2] *= k;
+                }
+            if (shape == RoundStem)
+                for (int t = 0; t < idx.Length; t += 3) { int a = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = a; }
+            return w;
+        }
+
+        static float[] DomeMesh(ref Rng rng, int sides, int tier, float[] dc, float[] ds, out int[] idx, out float[] lift)
+        {
+            var pr = tier < 2 ? DomeR : DomeLowR;
+            var py = tier < 2 ? DomeY : DomeLowY;
+            int rings = pr.Length, top = rings * sides, apex = top, under = top + 1, centre = under + sides;
+            var r = RoundNoise(ref rng, sides, 0.88f, 1f);
+            float tx = rng.Range(-0.06f, 0.06f), tz = rng.Range(-0.06f, 0.06f), ay = rng.Range(0.94f, 1.04f);
+            var w = new float[3 * (centre + 1)];
+            lift = new float[centre + 1];
+            var id = new System.Collections.Generic.List<int>();
+            for (int j = 0; j < rings; j++)
+            {
+                float t = (py[j] + 0.8f) / 1.8f;
+                for (int i = 0; i < sides; i++)
+                {
+                    int v = j * sides + i;
+                    float rr = pr[j] * (r[i] + (1 - r[i]) * 0.5f * t);
+                    w[3 * v] = rr * dc[i] + tx * t; w[3 * v + 1] = py[j]; w[3 * v + 2] = rr * ds[i] + tz * t;
+                    lift[v] = 9 + (int)Math.Round(4f * j / rings);
+                }
+            }
+            w[3 * apex] = tx; w[3 * apex + 1] = ay; w[3 * apex + 2] = tz;
+            lift[apex] = 13;
+            for (int j = 0; j < rings; j++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int a = j * sides + i, b = j * sides + (i + 1) % sides;
+                    if (j + 1 == rings) { id.Add(a); id.Add(apex); id.Add(b); continue; }
+                    int c = b + sides, d = a + sides;
+                    id.Add(a); id.Add(c); id.Add(b);
+                    id.Add(a); id.Add(d); id.Add(c);
+                }
+            for (int i = 0; i < sides; i++)
+            {
+                int v = under + i;
+                w[3 * v] = w[3 * i]; w[3 * v + 1] = w[3 * i + 1]; w[3 * v + 2] = w[3 * i + 2];
+                lift[v] = 7;
+                id.Add(centre); id.Add(v); id.Add(under + (i + 1) % sides);
+            }
+            w[3 * centre + 1] = -0.55f;
+            lift[centre] = 4;
+            idx = id.ToArray();
             return w;
         }
 
@@ -182,6 +238,18 @@ namespace Stabby.World
         {
             if (f.Lo > 0) return;
             l.Columns.Add(new ObjectColumn { X = f.X + f.U * (f.C * x - f.S * z), Z = f.Z + f.U * (f.S * x + f.C * z), R = f.U * r, Bottom = f.Y + f.U * bottom, Top = f.Y + f.U * top });
+        }
+
+        static void Touch(StructureLayout l, in Frame f, float x, float y, float z, float r)
+        {
+            if (f.Lo > 0) return;
+            l.Contacts.Add(new ObjectColumn { X = f.X + f.U * (f.C * x - f.S * z), Z = f.Z + f.U * (f.S * x + f.C * z), R = f.U * r, Bottom = f.Y + f.U * y, Top = f.Y + f.U * y });
+        }
+
+        static void Band(StructureLayout l, in Frame f, float x, float z, float r, float width)
+        {
+            if (f.Lo > 0) return;
+            l.Lush.Add(new ObjectColumn { X = f.X + f.U * (f.C * x - f.S * z), Z = f.Z + f.U * (f.S * x + f.C * z), R = f.U * r, Bottom = f.U * width, Top = f.Y });
         }
 
         static void Grain(in StructurePiece p, out float gx, out float gz)
