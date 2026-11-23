@@ -34,8 +34,8 @@ namespace Stabby.World
 
     public sealed class SinterDef
     {
-        public uint White = 0xe8e4d8, Ochre = 0xc99a4a, Orange = 0xc4642a;
-        public float BandM = 0.3f, Roughness = 0.55f;
+        public uint White = 0xd6cfbf, Ochre = 0xc99a4a, Orange = 0xc4642a;
+        public float Roughness = 0.55f;
     }
 
     public sealed class MudDef
@@ -325,7 +325,6 @@ namespace Stabby.World
             if (lib.Sinter == null) errors.Add("sinter: required");
             else
             {
-                if (!(lib.Sinter.BandM >= 0.01f && lib.Sinter.BandM <= 2)) errors.Add($"sinter.bandM {lib.Sinter.BandM} outside 0.01..2");
                 Amp(errors, "sinter.roughness", lib.Sinter.Roughness);
             }
             if (lib.Mud == null) errors.Add("mud: required");

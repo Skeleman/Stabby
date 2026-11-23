@@ -183,6 +183,28 @@ namespace Stabby.World
             return dist < R;
         }
 
+        public const float CrustReach = 3f, CrustWarp = 0.4f;
+
+        public bool Crusts => Shape == Spring && Kind == Add && F < 0.5f;
+
+        public float CrustR => R + W + Math.Abs(T) * H;
+
+        public float CrustExtent => CrustR * (1f + (CrustReach - 1f) * (1f + CrustWarp));
+
+        public float Crust(float x, float z)
+        {
+            float rf = CrustR, dx = x - Ax, dz = z - Az, ext = CrustExtent;
+            if (Math.Abs(dx) >= ext || Math.Abs(dz) >= ext) return 0f;
+            float dist = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (dist >= ext) return 0f;
+            uint seed = Seed ^ 0x2C1B3C6Du;
+            float k = 1f / rf;
+            float n = 0.5f * Value(seed, x * k, 0f, z * k) + 0.3f * Value(seed ^ 0x297A2D39u, 2.3f * k * x, 0f, 2.3f * k * z) + 0.2f * Value(seed ^ 0x1B873593u, 5.1f * k * x, 0f, 5.1f * k * z);
+            float t = (dist - rf) / ((CrustReach - 1f) * rf) + 2f * CrustWarp * (n - 0.5f);
+            t = Math.Max(0f, Math.Min(1f, t));
+            return 1f - t * t * (3f - 2f * t);
+        }
+
         public bool Under(float x, float z)
         {
             if (Shape == Spring)

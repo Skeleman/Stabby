@@ -355,7 +355,7 @@ namespace Stabby.Viewer
         static Vector4[] SinterLook(SinterDef d, MudDef m, PeatDef p)
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
-            return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0) };
+            return new[] { C(d.White, 0), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0) };
         }
 
         static Vector4[] KitLook(MaterialLibrary lib, bool linear)

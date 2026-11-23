@@ -259,23 +259,25 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
-            if (phase == 270)
+            while (phase >= 270 && phase < 270 + SpringShots.Length)
             {
+                string name = SpringShots[phase - 270];
                 if (wait == 0)
                 {
-                    if (!AimSite(cam, 1, ObjectPart.HotSpring, Structures.SpringU, SpringShots, "hot spring", Vector3.zero, 0)) { GameStatus.Lines["~spring"] = "no hot spring placed"; phase++; }
-                    else { wait = 180; return; }
+                    if (!AimSite(cam, phase - 270, ObjectPart.HotSpring, Structures.SpringU, SpringShots, "hot spring", new Vector3(0.85f, 0.5f, 2.2f), 0f)) { GameStatus.Lines["~" + name] = "no hot spring placed"; phase++; continue; }
+                    wait = 180;
+                    return;
                 }
-                else
+                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                if (phase == 271)
                 {
-                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
-                    Shot(cam, null, "warmup");
-                    Shot(cam, dir, "spring");
                     GameStatus.Lines["~bench spring"] = Bench(cam, "hot spring");
                     GameStatus.Lines["~bench spring steam"] = BenchMist(cam, "hot spring");
-                    wait = 0;
-                    phase++;
                 }
+                wait = 0;
+                phase++;
             }
             while (phase >= 300 && phase < 300 + FairyShots.Length)
             {
@@ -350,7 +352,7 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "spring" && phase > 270) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
+            if ((only == "spring" && phase >= 270 + SpringShots.Length) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
