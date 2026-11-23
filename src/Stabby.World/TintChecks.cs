@@ -14,6 +14,15 @@ namespace Stabby.World
             int slots = w.Materials.TintSlots().Length;
             foreach (var lake in hy.Lakes)
                 if (!InRange(lake.Mix, slots)) { e.Add($"lake {lake.Id} tint mix out of range"); break; }
+            int n = w.Config.Size;
+            var entering = new Dictionary<int, float>();
+            foreach (var s in hy.Rivers)
+                for (int k = 1; k < s.Cells.Count; k++)
+                    if (Joins(w, s, k))
+                    {
+                        entering.TryGetValue(s.Cells[k], out float sum);
+                        entering[s.Cells[k]] = sum + hy.DischargeM3s[s.Cells[k - 1]];
+                    }
             foreach (var s in hy.Rivers)
             {
                 if (s.Mix.Count != s.Cells.Count) { e.Add($"river {s.Id} has {s.Mix.Count} tint mixes for {s.Cells.Count} cells"); break; }
@@ -22,7 +31,16 @@ namespace Stabby.World
                 {
                     int i = s.Cells[k];
                     if (!InRange(s.Mix[k], slots)) { e.Add($"river {s.Id} tint mix out of range at point {k}"); bad = true; }
-                    else if (hy.LakeId[i] >= 0 && !Same(s.Mix[k], hy.Lakes[hy.LakeId[i]].Mix)) { e.Add($"river {s.Id} enters lake {hy.LakeId[i]} with a different tint"); bad = true; }
+                    else if (hy.LakeId[i] >= 0 && !Same(s.Mix[k], WaterTint.MixAt(hy.Lakes[hy.LakeId[i]], n, i))) { e.Add($"river {s.Id} enters lake {hy.LakeId[i]} with a different tint"); bad = true; }
+                    else if (k > 0 && Joins(w, s, k))
+                    {
+                        float q = entering[i], joined = q > 0 ? Math.Max(0, q - hy.DischargeM3s[s.Cells[k - 1]]) / q : 0;
+                        for (int t = 0; t < slots && !bad; t++)
+                        {
+                            float jump = Math.Abs(s.Mix[k][t] - s.Mix[k - 1][t]);
+                            if (jump > joined + TintTolerance) { e.Add($"river {s.Id} tint jumps {jump:F3} entering lake {hy.LakeId[i]}, inflow allows {joined:F3}"); bad = true; }
+                        }
+                    }
                     else if (k > 0 && !w.Sea[i] && hy.LakeId[i] < 0)
                     {
                         float q = hy.DischargeM3s[i], joined = q > 0 ? Math.Max(0, q - hy.DischargeM3s[s.Cells[k - 1]]) / q : 0;
@@ -35,6 +53,13 @@ namespace Stabby.World
                 }
                 if (bad) break;
             }
+        }
+
+        static bool Joins(GeneratedWorld w, RiverSegment s, int k)
+        {
+            var hy = w.Water;
+            int i = s.Cells[k], p = s.Cells[k - 1];
+            return hy.LakeId[i] >= 0 && hy.LakeId[p] < 0 && !w.Sea[p] && hy.Lakes[hy.LakeId[i]].Outlet != i;
         }
 
         static bool InRange(WaterMix m, int slots)

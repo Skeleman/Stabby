@@ -13,6 +13,7 @@ namespace Stabby.World
         public List<int> Cells = new List<int>();
         public int Outlet = -1;
         public WaterMix Mix;
+        public List<LakeInflow> Inflows = new List<LakeInflow>();
     }
 
     public sealed class RiverSegment
