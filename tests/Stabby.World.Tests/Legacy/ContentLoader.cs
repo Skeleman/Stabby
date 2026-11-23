@@ -23,6 +23,7 @@ public static class ContentLoader
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
         public List<MaterialEntry> Materials { get; set; } = new();
+        public Dictionary<string, List<string>> Kit { get; set; } = new();
     }
 
     sealed class MaterialEntry
@@ -260,6 +261,10 @@ public static class ContentLoader
             }).ToList(),
             Materials = file.Materials.Select(m => new LibraryMaterial { Id = m.Id, Name = m.Name, Color = Hex(m.Color, path, "materials.color") }).ToList(),
         };
+        foreach (var name in MaterialLibrary.KitNames)
+            if (file.Kit.TryGetValue(name, out var ids)) lib.Kit[name] = ids;
+        foreach (var name in file.Kit.Keys)
+            if (!lib.Kit.ContainsKey(name)) lib.Kit[name] = file.Kit[name];
         lib.FillCoats();
         var errors = MaterialLibrary.Validate(lib);
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));

@@ -230,12 +230,25 @@ namespace Stabby.World
         public PeatDef Peat = new PeatDef();
         public List<StratumDef> Strata = new List<StratumDef>();
         public List<LibraryMaterial> Materials = new List<LibraryMaterial>();
+        public static readonly string[] KitNames = { "timber", "plank", "plaster", "thatch", "iron", "cloth", "ash", "fungus", "turf" };
+        public static readonly int[] KitSlots = { 6, 1, 3, 4, 2, 4, 5, 10, 2 };
+        public const int KitColors = 37;
+        public Dictionary<string, List<string>> Kit = new Dictionary<string, List<string>>();
 
         public LibraryMaterial Find(string id)
         {
             foreach (var m in Materials)
                 if (m.Id == id) return m;
             return null;
+        }
+
+        public uint[] KitPalette()
+        {
+            var c = new uint[KitColors];
+            int k = 0;
+            foreach (var name in KitNames)
+                foreach (var id in Kit[name]) c[k++] = Find(id).Color;
+            return c;
         }
         public float OffsetAmplitudeM;
         public float OffsetWavelengthM;
@@ -330,6 +343,16 @@ namespace Stabby.World
             var names = new HashSet<string>();
             foreach (var m in lib.Materials)
                 if (string.IsNullOrEmpty(m.Id) || !names.Add(m.Id)) errors.Add($"materials: id '{m.Id}' missing or repeated");
+            for (int i = 0; i < KitNames.Length; i++)
+            {
+                if (lib.Kit == null || !lib.Kit.TryGetValue(KitNames[i], out var kitIds) || kitIds == null) { errors.Add($"kit.{KitNames[i]}: required"); continue; }
+                if (kitIds.Count != KitSlots[i]) errors.Add($"kit.{KitNames[i]}: {kitIds.Count} materials, expected {KitSlots[i]}");
+                foreach (var id in kitIds)
+                    if (!names.Contains(id)) errors.Add($"kit.{KitNames[i]}: unknown material '{id}'");
+            }
+            if (lib.Kit != null)
+                foreach (var key in lib.Kit.Keys)
+                    if (Array.IndexOf(KitNames, key) < 0) errors.Add($"kit: unknown kit material '{key}'");
             if (!(lib.OffsetAmplitudeM >= 0)) errors.Add("offsetAmplitudeM must be >= 0");
             if (!(lib.OffsetWavelengthM > 0)) errors.Add("offsetWavelengthM must be > 0");
             if (!(lib.TiltPerKm >= 0)) errors.Add("tiltPerKm must be >= 0");

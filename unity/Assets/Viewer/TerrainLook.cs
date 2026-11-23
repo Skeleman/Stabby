@@ -23,6 +23,7 @@ namespace Stabby.Viewer
         public Vector4[] Liquids;
         public Vector4 Tints;
         public Vector4[] Sinter;
+        public Vector4[] Kit, KitSrgb;
     }
 
     public sealed class FieldLook
@@ -115,6 +116,8 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyPeatWet", s.Sinter[6]);
             Shader.SetGlobalVector("_StabbyPeatDark", s.Sinter[7]);
             Shader.SetGlobalVector("_StabbyPeatFibre", s.Sinter[8]);
+            Shader.SetGlobalVectorArray("_StabbyKit", s.Kit);
+            Shader.SetGlobalVectorArray("_StabbyKitSrgb", s.KitSrgb);
         }
 
         public static float3 Bilinear(float3 a, float3 b, float3 c, float3 d, float tx, float ty) =>
@@ -323,6 +326,8 @@ namespace Stabby.Viewer
                 Liquids = LiquidLook(lib),
                 Tints = TintLook(lib),
                 Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat),
+                Kit = KitLook(lib, true),
+                KitSrgb = KitLook(lib, false),
             };
         }
 
@@ -351,6 +356,19 @@ namespace Stabby.Viewer
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
             return new[] { C(d.White, 1f / d.BandM), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0) };
+        }
+
+        static Vector4[] KitLook(MaterialLibrary lib, bool linear)
+        {
+            var c = lib.KitPalette();
+            var v = new Vector4[c.Length];
+            for (int i = 0; i < c.Length; i++)
+            {
+                var u = Unpack(c[i]);
+                var l = linear ? ToLinear(u) : u;
+                v[i] = new Vector4(l.x, l.y, l.z, 1);
+            }
+            return v;
         }
 
         public const int LiquidRows = 10;

@@ -151,6 +151,13 @@ namespace Stabby.Content
                 lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")) });
                 m.End();
             }
+            var kit = root.Object("kit");
+            if (kit != null)
+            {
+                foreach (var name in MaterialLibrary.KitNames)
+                    if (kit.Has(name)) lib.Kit[name] = kit.Strings(name, new List<string>());
+                kit.End();
+            }
             root.End();
             lib.FillCoats();
             Check(MaterialLibrary.Validate(lib), source);
