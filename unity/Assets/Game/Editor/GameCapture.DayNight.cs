@@ -11,18 +11,21 @@ namespace Stabby.Game.Editor
         {
             if (System.Environment.GetEnvironmentVariable(DayNightSystem.HourVariable) == null)
                 System.Environment.SetEnvironmentVariable(DayNightSystem.HourVariable, PinnedMidday.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (System.Environment.GetEnvironmentVariable(DayNightSystem.PhaseVariable) == null)
+                System.Environment.SetEnvironmentVariable(DayNightSystem.PhaseVariable, Stabby.World.SkyDef.FullMoon.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         public static void RequirePinnedTime(string what)
         {
             if (DayNightSystem.ShownPinned || GameStatus.Failure != null) return;
-            GameStatus.Failure = $"{what} ran without a pinned time of day; set {DayNightSystem.HourVariable} or DayNightSystem.PinnedHour";
+            GameStatus.Failure = $"{what} ran without a pinned time of day and moon phase; set {DayNightSystem.HourVariable} and {DayNightSystem.PhaseVariable}, or DayNightSystem.PinnedHour and PinnedPhase";
         }
 
-        static System.Collections.IEnumerator ShowHour(float hour)
+        static System.Collections.IEnumerator ShowHour(float hour, float phase = Stabby.World.SkyDef.FullMoon)
         {
             DayNightSystem.PinnedHour = hour;
-            for (int k = 0; k < 600 && !(DayNightSystem.ShownPinned && Mathf.Abs(DayNightSystem.ShownHour - hour) < 1e-3f); k++) yield return null;
+            DayNightSystem.PinnedPhase = phase;
+            for (int k = 0; k < 600 && !(DayNightSystem.ShownPinned && Mathf.Abs(DayNightSystem.ShownHour - hour) < 1e-3f && Mathf.Abs(DayNightSystem.Shown.Phase - phase) < 1e-3f); k++) yield return null;
         }
 
         static System.Collections.IEnumerator NightTour(Camera cam, string dir)
@@ -57,10 +60,16 @@ namespace Stabby.Game.Editor
             for (var w = Settle(360); w.MoveNext();) yield return null;
             for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             var s = DayNightSystem.Shown;
-            lines.Add($"night hour {s.Hour:F2}: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F3}, sun height {s.SunHeight:F2}, moon height {s.MoonHeight:F2}");
+            lines.Add($"night hour {s.Hour:F2}, full moon: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F3}, lit {s.Illumination:F2}, ambient sky {s.AmbientSky.B:F3}, sun height {s.SunHeight:F2}, moon height {s.MoonHeight:F2}");
             lines.Add($"eye {eye.x:F0},{eye.y:F0},{eye.z:F0} over valley floor {low.y:F0} m (home ground {homeY:F0} m), {Vector3.Distance(eye, focus):F0} m to focus");
             Shot(cam, null, "warmup");
             Shot(cam, dir, "night");
+            for (var w = ShowHour(NightHour, 0f); w.MoveNext();) yield return null;
+            for (var w = Settle(30); w.MoveNext();) yield return null;
+            s = DayNightSystem.Shown;
+            lines.Add($"night hour {s.Hour:F2}, new moon: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F4}, lit {s.Illumination:F2}, ambient sky {s.AmbientSky.B:F4}, sky {s.Sky.R:F3},{s.Sky.G:F3},{s.Sky.B:F3}");
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "night-newmoon");
             for (var w = ShowHour(DuskHour); w.MoveNext();) yield return null;
             var sun = DayNightSystem.Shown;
             var west = Vector3.ProjectOnPlane(-new Vector3(sun.DirX, sun.DirY, sun.DirZ), Vector3.up).normalized;

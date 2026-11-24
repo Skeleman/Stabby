@@ -16,12 +16,12 @@ namespace Stabby.Game
     public partial class DayNightSystem : SystemBase
     {
         public const float StepSeconds = 0.1f;
-        public const string HourVariable = "STABBY_HOUR";
+        public const string HourVariable = "STABBY_HOUR", PhaseVariable = "STABBY_MOON";
         const double FallbackTickRate = 60;
         const float ScrubHoursPerSecond = 2f;
 
         public static double Clock;
-        public static float? PinnedHour;
+        public static float? PinnedHour, PinnedPhase;
         public static Quaternion? LightOverride;
         public static float ShownHour = float.NaN;
         public static bool ShownPinned;
@@ -42,6 +42,8 @@ namespace Stabby.Game
             ShownPinned = false;
             string pin = System.Environment.GetEnvironmentVariable(HourVariable);
             PinnedHour = float.TryParse(pin, NumberStyles.Float, CultureInfo.InvariantCulture, out float h) ? h : (float?)null;
+            string moon = System.Environment.GetEnvironmentVariable(PhaseVariable);
+            PinnedPhase = float.TryParse(moon, NumberStyles.Float, CultureInfo.InvariantCulture, out float p) ? p : (float?)null;
             load = Task.Run(ContentFiles.Sky);
         }
 
@@ -64,10 +66,10 @@ namespace Stabby.Game
             float now = UnityEngine.Time.time;
             if (now - stepAt < StepSeconds) return;
             stepAt = math.floor(now / StepSeconds) * StepSeconds;
-            bool pinned = PinnedHour.HasValue;
-            float hour = pinned ? Wrap(PinnedHour.Value) : sky.Hour(Clock);
-            Apply(sky.At(hour));
-            ShownPinned = pinned;
+            float hour = PinnedHour.HasValue ? Wrap(PinnedHour.Value) : sky.Hour(Clock);
+            float phase = PinnedPhase.HasValue ? PinnedPhase.Value - math.floor(PinnedPhase.Value) : sky.Phase(Clock);
+            Apply(sky.At(hour, phase));
+            ShownPinned = PinnedHour.HasValue && PinnedPhase.HasValue;
         }
 
         double SharedClock()
@@ -91,7 +93,7 @@ namespace Stabby.Game
             Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B));
             Shown = s;
             ShownHour = s.Hour;
-            GameStatus.Lines["sky"] = $"sky hour {s.Hour:F2}{(PinnedHour.HasValue ? " pinned" : "")}, {(s.Moon ? "moon" : "sun")} {s.Intensity:F2}, sun height {s.SunHeight:F2}";
+            GameStatus.Lines["sky"] = $"sky hour {s.Hour:F2}{(PinnedHour.HasValue ? " pinned" : "")}, moon phase {s.Phase:F2} lit {s.Illumination:F2}{(PinnedPhase.HasValue ? " pinned" : "")}, {(s.Moon ? "moon" : "sun")} {s.Intensity:F2}, sun height {s.SunHeight:F2}";
         }
 
         void Scrub()

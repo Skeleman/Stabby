@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby sky and day/night cycle",
   "type": "object",
-  "required": ["schemaVersion", "dayLengthS", "startHour", "sun", "moon", "moonColor", "moonIntensity", "moonSwitchHeight", "moonFadeHeight", "stops"],
+  "required": ["schemaVersion", "dayLengthS", "startHour", "sun", "moon", "moonColor", "moonIntensity", "moonSwitchHeight", "moonFadeHeight", "moonCycleDays", "moonStartPhase", "newMoonLight", "newMoonAmbient", "stops"],
   "additionalProperties": false,
   "$defs": {
     "rgb": { "type": "array", "items": { "type": "number", "minimum": 0, "maximum": 1 }, "minItems": 3, "maxItems": 3 },
@@ -27,6 +27,10 @@
     "moonIntensity": { "type": "number", "minimum": 0, "maximum": 2 },
     "moonSwitchHeight": { "type": "number", "minimum": -0.5, "maximum": 0 },
     "moonFadeHeight": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+    "moonCycleDays": { "type": "number", "minimum": 1, "maximum": 365 },
+    "moonStartPhase": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
+    "newMoonLight": { "type": "number", "minimum": 0, "maximum": 1 },
+    "newMoonAmbient": { "type": "number", "minimum": 0, "maximum": 1 },
     "stops": {
       "type": "array",
       "minItems": 2,

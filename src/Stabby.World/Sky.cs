@@ -29,7 +29,7 @@ namespace Stabby.World
         public float Hour, SunHeight, MoonHeight;
         public float DirX, DirY, DirZ;
         public Rgb Light, Sky, AmbientSky, AmbientGround;
-        public float Intensity;
+        public float Intensity, Phase, Illumination;
         public bool Moon;
     }
 
@@ -40,6 +40,8 @@ namespace Stabby.World
         public Orbit Moon = new Orbit { NoonElevationDeg = 52, NoonAzimuthDeg = 20, HourOffset = 12 };
         public Rgb MoonColor = new Rgb(0.62f, 0.72f, 1f);
         public float MoonIntensity = 0.18f, MoonSwitchHeight = -0.06f, MoonFadeHeight = 0.1f;
+        public float MoonCycleDays = 8, MoonStartPhase = 0.5f, NewMoonLight = 0.03f, NewMoonAmbient = 0.2f;
+        public const float FullMoon = 0.5f;
         public List<SkyStop> Stops = new List<SkyStop>();
 
         public float Hour(double clockS)
@@ -48,6 +50,14 @@ namespace Stabby.World
             h -= Math.Floor(h / 24.0) * 24.0;
             return (float)h;
         }
+
+        public float Phase(double clockS)
+        {
+            double p = MoonStartPhase + clockS / DayLengthS / MoonCycleDays;
+            return (float)(p - Math.Floor(p));
+        }
+
+        public static float Illumination(float phase) => (float)((1 - Math.Cos(phase * 2 * Math.PI)) * 0.5);
 
         public static void Toward(Orbit o, float hour, out float x, out float y, out float z)
         {
@@ -85,15 +95,20 @@ namespace Stabby.World
             SunHeight = h, Sky = s.Sky, AmbientSky = s.AmbientSky, AmbientGround = s.AmbientGround, Sun = s.Sun, SunIntensity = s.SunIntensity,
         };
 
-        public SkyState At(float hour)
+        public SkyState At(float hour) => At(hour, FullMoon);
+
+        public SkyState At(float hour, float phase)
         {
             Toward(Sun, hour, out float sx, out float sy, out float sz);
             Toward(Moon, hour, out float mx, out float my, out float mz);
             var b = Blend(sy);
+            float lit = Illumination(phase);
+            float dark = Clamp01((MoonSwitchHeight - sy) / MoonFadeHeight);
+            float ambient = 1 + (NewMoonAmbient + (1 - NewMoonAmbient) * lit - 1) * dark;
             var st = new SkyState
             {
-                Hour = hour, SunHeight = sy, MoonHeight = my,
-                Sky = b.Sky, AmbientSky = b.AmbientSky, AmbientGround = b.AmbientGround,
+                Hour = hour, SunHeight = sy, MoonHeight = my, Phase = phase, Illumination = lit,
+                Sky = Scale(b.Sky, ambient), AmbientSky = Scale(b.AmbientSky, ambient), AmbientGround = Scale(b.AmbientGround, ambient),
             };
             if (sy > MoonSwitchHeight)
             {
@@ -102,13 +117,15 @@ namespace Stabby.World
                 st.Intensity = b.SunIntensity;
                 return st;
             }
-            float rise = Clamp01((MoonSwitchHeight - sy) / MoonFadeHeight) * Clamp01(my / MoonFadeHeight);
+            float rise = dark * Clamp01(my / MoonFadeHeight);
             st.Moon = true;
             st.DirX = -mx; st.DirY = -my; st.DirZ = -mz;
             st.Light = MoonColor;
-            st.Intensity = MoonIntensity * rise;
+            st.Intensity = MoonIntensity * rise * (NewMoonLight + (1 - NewMoonLight) * lit);
             return st;
         }
+
+        static Rgb Scale(Rgb c, float k) => new Rgb(c.R * k, c.G * k, c.B * k);
 
         static float Clamp01(float v) => v < 0 ? 0 : v > 1 ? 1 : v;
 
@@ -124,6 +141,10 @@ namespace Stabby.World
             if (!(d.MoonIntensity >= 0 && d.MoonIntensity <= 2)) e.Add($"sky.moonIntensity {d.MoonIntensity} outside 0..2");
             if (!(d.MoonSwitchHeight >= -0.5f && d.MoonSwitchHeight <= 0)) e.Add($"sky.moonSwitchHeight {d.MoonSwitchHeight} outside -0.5..0");
             if (!(d.MoonFadeHeight > 0 && d.MoonFadeHeight <= 1)) e.Add($"sky.moonFadeHeight {d.MoonFadeHeight} outside 0..1");
+            if (!(d.MoonCycleDays >= 1 && d.MoonCycleDays <= 365)) e.Add($"sky.moonCycleDays {d.MoonCycleDays} outside 1..365");
+            if (!(d.MoonStartPhase >= 0 && d.MoonStartPhase < 1)) e.Add($"sky.moonStartPhase {d.MoonStartPhase} outside 0..1");
+            if (!(d.NewMoonLight >= 0 && d.NewMoonLight <= 1)) e.Add($"sky.newMoonLight {d.NewMoonLight} outside 0..1");
+            if (!(d.NewMoonAmbient >= 0 && d.NewMoonAmbient <= 1)) e.Add($"sky.newMoonAmbient {d.NewMoonAmbient} outside 0..1");
             if (d.Stops == null || d.Stops.Count < 2) { e.Add("sky.stops: at least two stops required"); return e; }
             for (int i = 0; i < d.Stops.Count; i++)
             {

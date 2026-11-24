@@ -85,6 +85,55 @@ public class SkyTests
         Assert.InRange(Sky.Hour(-1), 0, 24);
     }
 
+    [Fact]
+    public void IlluminationFollowsThePhase()
+    {
+        Assert.Equal(0f, SkyDef.Illumination(0), 5);
+        Assert.Equal(0.5f, SkyDef.Illumination(0.25f), 5);
+        Assert.Equal(1f, SkyDef.Illumination(SkyDef.FullMoon), 5);
+        Assert.Equal(0.5f, SkyDef.Illumination(0.75f), 5);
+        float prev = -1;
+        for (float p = 0; p <= SkyDef.FullMoon; p += 0.01f)
+        {
+            float i = SkyDef.Illumination(p);
+            Assert.True(i >= prev - 1e-6f);
+            Assert.Equal(i, SkyDef.Illumination(1 - p), 5);
+            prev = i;
+        }
+        Assert.Equal(Sky.MoonStartPhase, Sky.Phase(0), 5);
+        Assert.Equal(Sky.MoonStartPhase, Sky.Phase(Sky.DayLengthS * Sky.MoonCycleDays), 4);
+        Assert.InRange(Sky.Phase(-1), 0, 1);
+        Assert.True(Sky.MoonCycleDays >= 4);
+    }
+
+    [Fact]
+    public void FullMoonIsTheDefaultNight()
+    {
+        var full = Sky.At(0, SkyDef.FullMoon);
+        var plain = Sky.At(0);
+        Assert.Equal(plain.Intensity, full.Intensity, 6);
+        Assert.Equal(plain.AmbientSky.B, full.AmbientSky.B, 6);
+        Assert.Equal(1f, full.Illumination, 5);
+    }
+
+    [Fact]
+    public void NewMoonNightsAreNearlyBlack()
+    {
+        var full = Sky.At(0, SkyDef.FullMoon);
+        var dark = Sky.At(0, 0);
+        Assert.Equal(full.Intensity * Sky.NewMoonLight, dark.Intensity, 5);
+        Assert.True(dark.Intensity < 0.01f);
+        Assert.True(dark.AmbientSky.R + dark.AmbientSky.G + dark.AmbientSky.B < 0.03f);
+        Assert.True(dark.Sky.R + dark.Sky.G + dark.Sky.B < 0.04f);
+        Assert.True(dark.Sky.B > 0);
+        Assert.True(full.Intensity > 5 * dark.Intensity);
+        var noon = Sky.At(12, 0);
+        Assert.Equal(Sky.At(12).Intensity, noon.Intensity, 6);
+        Assert.Equal(Sky.At(12).Sky.R, noon.Sky.R, 6);
+        for (float h = 0; h < 24; h += 0.05f)
+            Assert.True(Sky.At(h, 0).Intensity <= Sky.At(h, SkyDef.FullMoon).Intensity + 1e-6f);
+    }
+
     [Theory]
     [InlineData("\"stops\": []")]
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": 0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]")]
@@ -95,7 +144,8 @@ public class SkyTests
         var json = "{\"schemaVersion\": 1, \"dayLengthS\": 600, \"startHour\": 9, " +
             "\"sun\": {\"noonElevationDeg\": 38, \"noonAzimuthDeg\": 320, \"hourOffset\": 0}, " +
             "\"moon\": {\"noonElevationDeg\": 50, \"noonAzimuthDeg\": 20, \"hourOffset\": 12}, " +
-            "\"moonColor\": [0.6, 0.7, 1], \"moonIntensity\": 0.2, \"moonSwitchHeight\": -0.06, \"moonFadeHeight\": 0.1, " + stops + "}";
+            "\"moonColor\": [0.6, 0.7, 1], \"moonIntensity\": 0.2, \"moonSwitchHeight\": -0.06, \"moonFadeHeight\": 0.1, " +
+            "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, " + stops + "}";
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseSky(json, "sky.json"));
     }
 }

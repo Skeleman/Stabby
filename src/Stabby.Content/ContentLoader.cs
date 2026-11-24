@@ -61,6 +61,8 @@ namespace Stabby.Content
                 Sun = Orbit(root.Object("sun")), Moon = Orbit(root.Object("moon")),
                 MoonColor = Color(root, "moonColor", source), MoonIntensity = root.Float("moonIntensity", 0),
                 MoonSwitchHeight = root.Float("moonSwitchHeight", 0), MoonFadeHeight = root.Float("moonFadeHeight", 0),
+                MoonCycleDays = root.Float("moonCycleDays", 0), MoonStartPhase = root.Float("moonStartPhase", 0),
+                NewMoonLight = root.Float("newMoonLight", 0), NewMoonAmbient = root.Float("newMoonAmbient", 0),
             };
             foreach (var s in root.Objects("stops", true))
             {
