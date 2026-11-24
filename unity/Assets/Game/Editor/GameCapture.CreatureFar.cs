@@ -555,7 +555,7 @@ namespace Stabby.Game.Editor
             float gy = GroundHeight(pos.x, pos.z);
             var target = new Vector3(pos.x, gy + 0.4f * stand3, pos.z);
             var eye = new Vector3(eyeXZ.x, math.max(GroundHeight(eyeXZ.x, eyeXZ.y), gy) + 0.3f * stand3, eyeXZ.y);
-            for (int k = 0; k < 60 || (Settling() && k < 1800); k++)
+            for (int k = 0; k < 60 || Settling(); k++)
             {
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
                 yield return null;
@@ -566,7 +566,7 @@ namespace Stabby.Game.Editor
             FreezeCreatures(false);
         }
 
-        static bool Settling() => GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0;
+        static bool Settling() => Loading();
 
         static System.Collections.IEnumerator FarTour(Camera cam, string dir)
         {
@@ -609,7 +609,7 @@ namespace Stabby.Game.Editor
             float2 stand = p0 + toEye * standDist, stage = p0 + toEye * (despawn + routeReach + 20f);
             PlaceServerPlayers(server, new Vector2(stage.x, stage.y));
             cam.fieldOfView = WakeFov;
-            for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
+            for (int k = 0; k < 120 || Settling(); k++)
             {
                 PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
                 AimAt(cam, eye, p);
@@ -687,7 +687,7 @@ namespace Stabby.Game.Editor
             float px = 0.5f * (wakeInfo.LowPx + wakeInfo.FadePx) / q;
             float range = Detail.Reach(math.max(wakeInfo.Length, 0.5f), math.max(px, 1f), DetailView.Current.PixelsPerMetre);
             bool clear = EyeFor(planRef, ps1, range, toEye, out Vector3 rangeEye, HerdFov, RangeSteps, 3) == 0;
-            for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
+            for (int k = 0; k < 120 || Settling(); k++)
             {
                 PlanHerd(planRef, herd, server.Time.ElapsedTime, out var p, out _, out _);
                 AimAt(cam, rangeEye, p);
@@ -762,7 +762,7 @@ namespace Stabby.Game.Editor
                 PlaceServerPlayers(server, new Vector2(denseStage.x, denseStage.y));
                 var look = Quaternion.LookRotation(new Vector3(out2.x, -0.05f, out2.y));
                 var camAt = new Vector3(denseStage.x, GroundHeight(denseStage.x, denseStage.y) + 3f, denseStage.y);
-                for (int k = 0; k < 120 || (Settling() && k < 1800); k++)
+                for (int k = 0; k < 120 || Settling(); k++)
                 {
                     cam.transform.SetPositionAndRotation(camAt, look);
                     yield return null;

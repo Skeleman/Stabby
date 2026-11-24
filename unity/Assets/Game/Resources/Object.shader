@@ -45,6 +45,8 @@ Shader "Stabby/Object"
             #pragma multi_compile_instancing
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ _CLUSTER_LIGHT_LOOP
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -66,6 +68,7 @@ Shader "Stabby/Object"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Bark.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
+            #include "Assets/Viewer/Shaders/LocalLights.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings
@@ -641,7 +644,7 @@ Shader "Stabby/Object"
                     bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
                 }
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
-                float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + ambient * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao;
+                float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLights(wp, n, i.positionCS)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao;
                 return half4(MixFog(c, i.pof.w), 1);
             }
             ENDHLSL
