@@ -87,6 +87,13 @@ namespace Stabby.World
         public float Scale = 1f;
     }
 
+    public sealed class ObjectLight
+    {
+        public string Category;
+        public uint Color;
+        public float Intensity, RangeM, Importance, Flicker, FlickerHz;
+    }
+
     public sealed class ObjectDef
     {
         public string Id, Name, Kind;
@@ -96,6 +103,7 @@ namespace Stabby.World
         public float ReachM;
         public List<ObjectPart> Parts = new List<ObjectPart>();
         public ObjectPlacement Placement = new ObjectPlacement();
+        public ObjectLight Light;
 
         public float FootprintRadius()
         {
@@ -131,6 +139,20 @@ namespace Stabby.World
         }
 
         public Detail.Rule RuleOf(ObjectKind k) => k.Rule(LightOf(k));
+
+        public LightKind LightNamed(string id)
+        {
+            foreach (var l in Lights) if (l.Id == id) return l;
+            return null;
+        }
+
+        public ObjectDef EmitterFor(int shape)
+        {
+            foreach (var d in Objects)
+                if (d.Light != null)
+                    foreach (var p in d.Parts) if (p.Shape == shape) return d;
+            return null;
+        }
 
         public bool PartSolid(ObjectDef d, ObjectPart p) => p.Solid >= 0 ? p.Solid == 1 : KindOf(d).Solid;
         public bool PartShadows(ObjectDef d, ObjectPart p) => p.Shadows >= 0 ? p.Shadows == 1 : KindOf(d).Shadows;
@@ -208,6 +230,15 @@ namespace Stabby.World
                     else if (p.Ends != ObjectPart.EndsAuto && p.Shape != ObjectPart.Log && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " ends belong only to logs and stumps");
                     else if ((p.Ends == ObjectPart.EndsRooted || p.Ends == ObjectPart.EndsWorn) && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " " + ObjectPart.EndNames[p.Ends] + " ends belong only to logs");
                     else if (p.Ends == ObjectPart.EndsSnapped && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " snapped ends belong only to stumps");
+                }
+                if (d.Light != null)
+                {
+                    var li = d.Light;
+                    if (!lights.Contains(li.Category ?? "")) errors.Add(d.Id + ": light category " + li.Category + " is not defined");
+                    if (!(li.Intensity > 0) || !(li.RangeM > 0)) errors.Add(d.Id + ": light needs intensity and radiusM above 0");
+                    if (li.Importance < 0) errors.Add(d.Id + ": light importance must not be below 0");
+                    if (li.Flicker < 0 || li.Flicker > 1 || (li.Flicker > 0 && !(li.FlickerHz > 0))) errors.Add(d.Id + ": light flicker must be 0-1 and needs flickerHz above 0");
+                    if (d.Kind != Structure) errors.Add(d.Id + ": lights belong only to structure objects");
                 }
                 var pl = d.Placement;
                 if (pl.PerHectare < 0 || pl.PerHectare > 400) errors.Add(d.Id + ": perHectare must be 0-400");

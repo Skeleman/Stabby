@@ -57,10 +57,12 @@ namespace Stabby.Game
             int need = hidden ? 0 : items.Length;
             if (glowData.Length < need * 2) glowData = new GlowItem[math.max(need * 2, 64)];
             int used = 0;
+            float t = (float)(DayNightSystem.Clock % 3600.0);
             for (int i = 0; i < need; i++)
             {
                 var e = items[i];
                 var s = e.Slot;
+                e.Intensity *= e.Gain(t);
                 if ((s.Shadow > 0f && s.Shadow < 1f) || (s.Real > 0f && s.Real < 1f) || (s.Glow > 0f && s.Glow < 1f)) Fading = true;
                 var color = new Vector4(e.Color.x, e.Color.y, e.Color.z, 0f);
                 if (s.Real > 0f)

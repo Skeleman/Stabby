@@ -51,7 +51,9 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
-            float4 _StabbyKit[37], _StabbyKitSrgb[37];
+            float4 _StabbyKit[39], _StabbyKitSrgb[39];
+            float _StabbyClock;
+            static float3 emberGlow;
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -93,7 +95,7 @@ Shader "Stabby/Object"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
                 VertexPositionInputs p = GetVertexPositionInputs(i.positionOS.xyz);
-                [branch] if (_StabbyFieldUV.x > 0 && ((floor(i.tone.x * 0.5) >= 7 && floor(i.tone.x * 0.5) <= 9) || i.tone.w > 63.5))
+                [branch] if (_StabbyFieldUV.x > 0 && ((floor(i.tone.x * 0.5) >= 7 && floor(i.tone.x * 0.5) <= 10) || i.tone.w > 63.5))
                 {
                     float3 org = UNITY_MATRIX_M._m03_m13_m23;
                     p.positionWS.y += _Fade.z - org.y + ContactBed(p.positionWS.xz) - ContactBed(org.xz);
@@ -407,8 +409,9 @@ Shader "Stabby/Object"
                         a *= 1 - 0.45 * smoothstep(0.7, 0.95, roll) * fs - 0.2 * smoothstep(0.85, 1, rf);
                     }
                 }
-                else if (mat == 7)
+                else if (mat == 7 || mat == 10)
                 {
+                    float edge = 1;
                     float dust = smoothstep(0.35, 0.95, 0.15 + 0.45 * n.y + 0.5 * big.x + 0.35 * mid.x * fm + 0.15 * fib.x * ff);
                     a = lerp(_StabbyKit[20].rgb, _StabbyKit[21].rgb, dust) * (0.85 + 0.15 * fib.x * ff);
                     float crack = smoothstep(0.9, 0.98, 1 - abs(str.x + 0.2 * mid.x)) * fs * (1 - dust);
@@ -421,11 +424,22 @@ Shader "Stabby/Object"
                         a = lerp(_StabbyKit[23].rgb, a, smoothstep(0.15, 0.75, rf + 0.25 * big.x + 0.2 * mid.x * fm));
                         a = lerp(a, ContactColor(wp.xz, wp.y), 0.85 * smoothstep(0.45, 0.95, e));
                         grad *= 1 - smoothstep(0.5, 0.95, e);
+                        edge = 1 - smoothstep(0.3, 0.8, e);
                     }
                     else if (cap)
                     {
                         float rr = rf * rm / 0.012 + 0.6 * mid.x * fm;
                         a = lerp(a, _StabbyKit[24].rgb, 0.5 * (0.5 + 0.5 * cos(rr * 6.2831853)) * OrgRungW(3, fp));
+                    }
+                    [branch] if (mat == 10)
+                    {
+                        float3 cell = floor((wp - q) * 7.3);
+                        float ph = frac((cell.x * 0.1031 + cell.y * 0.1137 + cell.z * 0.1279) * 97.13);
+                        float t = _StabbyClock + 0.6 * big.x;
+                        float pulse = 0.72 + 0.16 * sin(6.2831853 * (t * 0.9 + ph)) + 0.12 * sin(6.2831853 * (t * 2.3 + 1.7 * ph + 0.5 * mid.x));
+                        float heat = saturate(1.8 * crack + smoothstep(0.45, 0.1, dust) * (0.55 + 0.45 * fib.x * ff) * smoothstep(-0.2, 0.4, mid.x + 0.3 * big.x)) * edge;
+                        a = lerp(a, a * 0.3, saturate(1.4 * heat));
+                        emberGlow = lerp(_StabbyKit[37].rgb, _StabbyKit[38].rgb, heat * heat) * (2.5 * heat * heat * pulse);
                     }
                 }
                 else if (mat == 8)
@@ -541,6 +555,7 @@ Shader "Stabby/Object"
                 float3 albedo;
                 float occ = 0;
                 tmRough = LookRough();
+                emberGlow = 0;
                 float3 gn = normalize(i.grain), qo = wp - i.origin, acr = cross(gn, n);
                 acr *= rsqrt(max(dot(acr, acr), 1e-8));
                 float yf = i.tone.w - i.seed, suq = dot(qo, acr);
@@ -644,7 +659,7 @@ Shader "Stabby/Object"
                     bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
                 }
                 float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
-                float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLights(wp, n, i.positionCS)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao;
+                float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLights(wp, n, i.positionCS)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao + emberGlow;
                 return half4(MixFog(c, i.pof.w), 1);
             }
             ENDHLSL

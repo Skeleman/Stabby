@@ -431,8 +431,20 @@ public static class ContentLoader
         public string Material { get; set; } = "";
         public int Variants { get; set; } = 1;
         public InteractEntry? Interact { get; set; }
+        public ObjectLightEntry? Light { get; set; }
         public List<PartEntry> Parts { get; set; } = new();
         public PlacementEntry Placement { get; set; } = new();
+    }
+
+    sealed class ObjectLightEntry
+    {
+        public string Category { get; set; } = "";
+        public string Material { get; set; } = "";
+        public float Intensity { get; set; }
+        public float RadiusM { get; set; }
+        public float Importance { get; set; }
+        public float Flicker { get; set; }
+        public float FlickerHz { get; set; }
     }
 
     sealed class InteractEntry
@@ -516,6 +528,8 @@ public static class ContentLoader
         foreach (var o in file.Objects)
         {
             var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
+            if (o.Light != null)
+                def.Light = new ObjectLight { Category = o.Light.Category, Color = Mat(o.Light.Material), Intensity = o.Light.Intensity, RangeM = o.Light.RadiusM, Importance = o.Light.Importance, Flicker = o.Light.Flicker, FlickerHz = o.Light.FlickerHz };
             foreach (var p in o.Parts)
             {
                 if ((p.Offset != null && p.Offset.Length != 3) || (p.Scale != null && p.Scale.Length != 3))

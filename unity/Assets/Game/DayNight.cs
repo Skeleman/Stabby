@@ -27,7 +27,7 @@ namespace Stabby.Game
         public static bool ShownPinned;
         public static SkyState Shown;
 
-        static readonly int SkyId = Shader.PropertyToID("_StabbySky"), GroundId = Shader.PropertyToID("_StabbyGround");
+        static readonly int SkyId = Shader.PropertyToID("_StabbySky"), GroundId = Shader.PropertyToID("_StabbyGround"), ClockId = Shader.PropertyToID("_StabbyClock");
 
         Task<SkyDef> load;
         SkyDef sky;
@@ -50,6 +50,7 @@ namespace Stabby.Game
         protected override void OnUpdate()
         {
             Clock = SharedClock();
+            Shader.SetGlobalFloat(ClockId, (float)(Clock % 3600.0));
             if (sky == null)
             {
                 if (load == null || !load.IsCompleted) return;

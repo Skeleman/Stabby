@@ -9,7 +9,7 @@ namespace Stabby.Game
     public struct LightEmitter : IComponentData
     {
         public float3 Position, Color;
-        public float RangeM, Intensity, Importance;
+        public float RangeM, Intensity, Importance, Flicker, FlickerHz, Phase;
         public Detail.Thresholds Thresholds;
         public LightBudget.Slot Slot;
 
@@ -23,6 +23,8 @@ namespace Stabby.Game
             Thresholds = kind.Thresholds(),
             Slot = LightBudget.Slot.Fresh,
         };
+
+        public float Gain(float t) => Flicker <= 0f ? 1f : 1f + Flicker * (0.6f * math.sin(2f * math.PI * (t * FlickerHz + Phase)) + 0.4f * math.sin(2f * math.PI * (t * FlickerHz * 2.31f + 1.7f * Phase)));
     }
 
     public struct LightBudgetState : IComponentData

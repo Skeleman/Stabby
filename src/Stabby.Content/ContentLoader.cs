@@ -513,6 +513,17 @@ namespace Stabby.Content
                 def.ReachM = interact.Float("reachM", 0);
                 interact.End();
             }
+            var light = o.Object("light");
+            if (light != null)
+            {
+                def.Light = new ObjectLight
+                {
+                    Category = light.String("category", ""), Color = Material(light, "material", id + ".light", materials, errors),
+                    Intensity = light.Float("intensity", 0), RangeM = light.Float("radiusM", 0), Importance = light.Float("importance", 0),
+                    Flicker = light.Float("flicker", 0), FlickerHz = light.Float("flickerHz", 0),
+                };
+                light.End();
+            }
             foreach (var p in o.Objects("parts"))
             {
                 string pid = p.String("id", "");

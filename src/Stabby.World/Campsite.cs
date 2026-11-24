@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const int Ash = 7;
+        public const int Ash = 7, Ember = 10;
         public const float CampU = 1 / 10f;
 
         static void Rock(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi, float lean = 0)
@@ -75,13 +75,13 @@ namespace Stabby.World
                 Rock(l, rng.NextU64(), f, dx * rr, -0.12f * sy, dz * rr, sx, sy, sz, c * n, s * n, 0, 2, rng.Range(-0.1f, 0.1f));
             }
             Round(l, key, f, 0, -0.004f, 0, 2.05f * r, 0.016f, 2.05f * r, Ash, GV, RoundDisc, 0, 2, Cos16(off), Sin16(off));
-            Round(l, key, f, rng.Range(-0.06f, 0.06f), 0, rng.Range(-0.06f, 0.06f), 1.3f * r, 0.026f, 1.3f * r, Ash, GV, RoundDisc, 0, 1, Cos16(off + 5), Sin16(off + 5));
+            Round(l, key, f, rng.Range(-0.06f, 0.06f), 0, rng.Range(-0.06f, 0.06f), 1.3f * r, 0.026f, 1.3f * r, Ember, GV, RoundDisc, 0, 1, Cos16(off + 5), Sin16(off + 5));
             int logs = rng.Range(2, 5), lk = rng.Range(0, 16);
             for (int i = 0; i < logs; i++)
             {
                 int k = lk + i * 16 / logs + rng.Range(0, 2);
                 float dx = Cos16(k), dz = Sin16(k), len = rng.Range(0.35f, 0.55f), at = rng.Range(0.05f, 0.25f) + 0.5f * len, d = rng.Range(0.07f, 0.11f);
-                Log(l, key, f, dx * at, 0.05f * d, dz * at, len, d, dx, dz, Ash, 0, 1);
+                Log(l, key, f, dx * at, 0.05f * d, dz * at, len, d, dx, dz, Ember, 0, 1);
             }
             if (rng.NextFloat() < 0.5f)
             {
@@ -99,6 +99,7 @@ namespace Stabby.World
                 Box(l, key, f, 0, py, 0, 0.24f, 0.2f, 0.24f, Iron, GV, 0, 0, Cos16(2), Sin16(2), 0, 0, 0.12f);
             }
             Col(l, f, 0, 0, r + 0.15f, 0, 0.25f);
+            l.Lights.Add(new StructureLight { X = f.X, Y = f.Y + f.U * 0.3f, Z = f.Z, Shape = ObjectPart.FirePit });
         }
 
         static void LogSeat(StructureLayout l, ulong key, in Frame f)
