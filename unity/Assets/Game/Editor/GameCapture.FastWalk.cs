@@ -39,6 +39,10 @@ namespace Stabby.Game.Editor
             var args = System.Environment.GetCommandLineArgs();
             int fovAt = System.Array.IndexOf(args, "-stabbyWalkFov");
             cam.fieldOfView = fovAt >= 0 && fovAt + 1 < args.Length && float.TryParse(args[fovAt + 1], out float fov) ? fov : 60f;
+            int resAt = System.Array.IndexOf(args, "-stabbyWalkRes");
+            int rows = resAt >= 0 && resAt + 1 < args.Length && int.TryParse(args[resAt + 1], out int r) ? r : 1080;
+            var target = new RenderTexture(rows * 16 / 9, rows, 24);
+            cam.targetTexture = target;
             var start = new Vector2(home.x, home.z);
             Vector2 d = WalkLine(ground, start, NormalWalkM + FastWalkM, out float land, out float relief);
             int to = System.Array.IndexOf(args, "-stabbyWalkTo");
@@ -57,7 +61,7 @@ namespace Stabby.Game.Editor
             var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
             var lines = new List<string>
             {
-                $"walk line from {start.x:F0},{start.y:F0} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
+                $"walk line from {start.x:F0},{start.y:F0} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {GameSettings.GraphicsQuality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
             };
             try
             {
@@ -96,15 +100,68 @@ namespace Stabby.Game.Editor
                     }
                     lines.Add(WalkReport(label, speed, length, frames));
                     for (var s = Settle(120); s.MoveNext();) yield return null;
+                    lines.Add(Resident(view, label));
                 }
+                var end = start + d * (NormalWalkM + FastWalkM);
+                var jump = TeleportSpot(ground, end, d);
+                PlaceServerPlayers(server, jump);
+                var jfoot = new Vector3(jump.x, GroundHeight(jump.x, jump.y), jump.y);
+                var jfwd = new Vector3(d.x, 0, d.y);
+                var jeye = jfoot - jfwd * 6f + Vector3.up * 3f;
+                jeye.y = Mathf.Max(jeye.y, GroundHeight(jeye.x, jeye.z) + 1.5f);
+                cam.transform.SetPositionAndRotation(jeye, Quaternion.LookRotation(jfoot + jfwd * 20f + Vector3.up * 1.2f - jeye));
+                float t0 = Time.realtimeSinceStartup;
+                var fill = new List<float[]>();
+                int settled = 0;
+                while (settled < 3 && Time.realtimeSinceStartup - t0 < 120f)
+                {
+                    yield return null;
+                    var row = new float[WalkParts.Length + 5];
+                    row[0] = Time.unscaledDeltaTime * 1000f;
+                    row[1] = mainRec.LastValue / 1e6f;
+                    float sum = 0;
+                    foreach (var (part, rec) in recs) { float ms = rec.LastValue / 1e6f; row[3 + part] += ms; sum += ms; }
+                    row[2] = Mathf.Max(0, row[1] - sum);
+                    fill.Add(row);
+                    settled = Loading() ? 0 : settled + 1;
+                }
+                float filled = Time.realtimeSinceStartup - t0;
+                lines.Add($"teleport {Vector2.Distance(end, jump):F0} m to {jump.x:F0},{jump.y:F0}: view filled in {filled:F2} s ({fill.Count} frames{(settled < 3 ? ", timed out" : "")})");
+                lines.Add(WalkReport("teleport fill", 0, 0, fill));
+                for (var s = Settle(240); s.MoveNext();) yield return null;
+                lines.Add(Resident(view, "after teleport"));
+                var proc = System.Diagnostics.Process.GetCurrentProcess();
+                lines.Add($"memory: process peak working set {proc.PeakWorkingSet64 / 1e9:F2} GB, now {proc.WorkingSet64 / 1e9:F2} GB; Unity reserved {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1e9:F2} GB, allocated {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1e9:F2} GB, graphics driver {UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / 1e9:F2} GB");
             }
             finally
             {
+                cam.targetTexture = null;
+                Object.DestroyImmediate(target);
                 foreach (var (_, rec) in recs) rec.Dispose();
                 mainRec.Dispose();
                 allocRec.Dispose();
             }
             GameStatus.Lines["~walk"] = string.Join("\n", lines);
+        }
+
+        static string Resident(Unity.Entities.World view, string label)
+        {
+            GameStatus.Line("terrain", out var terrain);
+            return $"resident {label}: {ObjectViewSystem.LiveEntities} object entities, {ObjectViewSystem.ChunksHeld} object chunks, {ObjectViewSystem.PartsHeld} parts, {view.EntityManager.UniversalQuery.CalculateEntityCount()} view-world entities; {terrain}; {GrassViewSystem.Counts()}";
+        }
+
+        static Vector2 TeleportSpot(Ground ground, Vector2 from, Vector2 d)
+        {
+            float top = ground.Top, margin = 300f;
+            var side = new Vector2(-d.y, d.x);
+            foreach (float m in new[] { 1f, -1f })
+                for (float dist = 1600f; dist >= 800f; dist -= 200f)
+                {
+                    var p = from + side * m * dist;
+                    if (p.x < margin || p.y < margin || p.x > top - margin || p.y > top - margin) continue;
+                    if (ground.Surface(p.x, p.y) > 2f) return p;
+                }
+            return new Vector2(top - from.x, top - from.y);
         }
 
         static Vector2 WalkLine(Ground ground, Vector2 start, float length, out float land, out float relief)
