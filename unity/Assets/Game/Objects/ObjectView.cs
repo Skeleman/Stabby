@@ -130,6 +130,7 @@ namespace Stabby.Game
         int liveEntities, chunksLoaded, chunksHeld, chunksUnloaded, partsHeld, peakParts, peakChunks;
         int[] liveByDef;
         ObjectKind[] kinds;
+        Detail.Rule[] rules;
         float worstUpdate;
 
         public static int Pending { get; private set; } = 1;
@@ -217,6 +218,7 @@ namespace Stabby.Game
             tile = new float[defs];
             liveByDef = new int[defs];
             kinds = new ObjectKind[defs];
+            rules = new Detail.Rule[defs];
             var shapes = new List<int>();
             var keys = new List<ulong>();
             var parts = new List<ObjectPart>();
@@ -237,6 +239,7 @@ namespace Stabby.Game
                     }
                 }
                 kinds[d] = kind;
+                rules[d] = lib.RuleOf(kind);
                 reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
                 float t = span;
                 while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
@@ -508,7 +511,7 @@ namespace Stabby.Game
             for (int d = 0; d < kinds.Length; d++)
             {
                 var kind = kinds[d];
-                defLods[d] = new DefLod { Lods = math.clamp(kind.Lods, 1, Lods), Rule = kind.Rule(), Impostor = kind.ImpostorPixels };
+                defLods[d] = new DefLod { Lods = math.clamp(kind.Lods, 1, Lods), Rule = rules[d], Impostor = kind.ImpostorPixels };
             }
             castPrefab = Prefab(ShadowCastingMode.On, materialId, false);
             flatPrefab = Prefab(ShadowCastingMode.Off, materialId, false);

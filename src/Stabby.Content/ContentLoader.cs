@@ -10,7 +10,7 @@ namespace Stabby.Content
     {
         public const int BiomeSchemaVersion = 1;
         public const int MaterialSchemaVersion = 4;
-        public const int ObjectSchemaVersion = 4;
+        public const int ObjectSchemaVersion = 5;
         public const int CreatureSchemaVersion = 2;
 
         public static string FindContentRoot(string start)
@@ -245,13 +245,21 @@ namespace Stabby.Content
             var root = Root(json, source, ObjectSchemaVersion);
             var errors = new List<string>();
             var lib = new ObjectLibrary();
+            foreach (var l in root.Objects("lights"))
+            {
+                lib.Lights.Add(new LightKind
+                {
+                    Id = l.String("id", ""), ShadowedPixels = l.Float("shadowedPixels", 0), UnshadowedPixels = l.Float("unshadowedPixels", 0), GlowPixels = l.Float("glowPixels", 0),
+                });
+                l.End();
+            }
             foreach (var k in root.Objects("kinds"))
             {
                 lib.Kinds.Add(new ObjectKind
                 {
                     Id = k.String("id", ""), Lods = k.Int("lods", 0), LodPixels = k.Floats("lodPixels", Array.Empty<float>()),
                     FadePixels = k.Float("fadePixels", 0), Shadows = k.Bool("shadows", false), ShadowPixels = k.Float("shadowPixels", 0),
-                    ShadowCascadePixels = k.Float("shadowCascadePixels", 0), LightPixels = k.Floats("lightPixels", Array.Empty<float>()),
+                    ShadowCascadePixels = k.Float("shadowCascadePixels", 0), Light = k.String("light", ""),
                     Wind = k.Bool("wind", false), SwayPixels = k.Float("swayPixels", 16.2f), FlutterPixels = k.Float("flutterPixels", 54f),
                     ImpostorPixels = k.Float("impostorPixels", 0), Animated = k.Bool("animated", false), Solid = k.Bool("solid", false),
                 });
@@ -358,6 +366,7 @@ namespace Stabby.Content
                     def.ShadowPixels = detail.Float("shadowPixels", def.ShadowPixels);
                     def.ShadowCascadePixels = detail.Float("shadowCascadePixels", def.ShadowCascadePixels);
                     def.AnimPixels = detail.Float("animPixels", def.AnimPixels);
+                    def.ThinkPixels = detail.Float("thinkPixels", def.ThinkPixels);
                     def.IkPixels = detail.Float("ikPixels", def.IkPixels);
                     def.LowPixels = detail.Float("lowPixels", def.LowPixels);
                     detail.End();

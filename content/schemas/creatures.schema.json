@@ -80,7 +80,7 @@
           "jitter": { "type": "number", "minimum": 0, "maximum": 0.25 },
           "detail": {
             "type": "object",
-            "required": ["spawnPixels", "fadePixels", "shadowPixels", "shadowCascadePixels", "animPixels", "ikPixels", "lowPixels"],
+            "required": ["spawnPixels", "fadePixels", "shadowPixels", "shadowCascadePixels", "animPixels", "thinkPixels", "ikPixels", "lowPixels"],
             "additionalProperties": false,
             "properties": {
               "spawnPixels": { "type": "number", "exclusiveMinimum": 0 },
@@ -88,6 +88,7 @@
               "shadowPixels": { "type": "number", "exclusiveMinimum": 0 },
               "shadowCascadePixels": { "type": "number", "exclusiveMinimum": 0 },
               "animPixels": { "type": "number", "exclusiveMinimum": 0 },
+              "thinkPixels": { "type": "number", "exclusiveMinimum": 0 },
               "ikPixels": { "type": "number", "exclusiveMinimum": 0 },
               "lowPixels": { "type": "number", "exclusiveMinimum": 0 }
             }

@@ -38,7 +38,7 @@ namespace Stabby.Game
         public Entity Ghost;
         public float3 Position;
         public float Heading, Pitch, Move, Alert, Down, WalkSpeed, Phase, Clock, Sink, Wake;
-        public bool Visible, Shadow, High, HighOn, LowOn;
+        public bool Visible, Shadow, HighOn, LowOn;
         public Detail.Decision Decision;
         public float4 Fade;
     }

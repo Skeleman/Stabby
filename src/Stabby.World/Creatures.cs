@@ -44,7 +44,7 @@ namespace Stabby.World
         public int HerdMin = 1, HerdMax = 1;
         public float HerdChance;
         public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f, Dart;
-        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f, ShadowCascadePixels = 64.8f;
+        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, ThinkPixels = 10.8f, LowPixels = 32.4f, ShadowCascadePixels = 64.8f;
         public CreatureDrives Drives = new CreatureDrives { Hunger = DriveDef.Of(240, 0.6f, 30), Thirst = DriveDef.Of(600, 0.7f, 20), Rest = DriveDef.Of(900, 0.8f, 60) };
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
 
@@ -133,6 +133,7 @@ namespace Stabby.World
                     errors.Add(b.Id + ": detail pixels must rise fade < anim < ik and fade < shadow");
                 if (!(b.ShadowCascadePixels >= b.ShadowPixels)) errors.Add(b.Id + ": shadowCascadePixels must not sit below shadowPixels");
                 if (!(b.LowPixels >= 2 * b.FadePixels)) errors.Add(b.Id + ": lowPixels must be at least twice fadePixels");
+                if (!(b.ThinkPixels > b.SpawnPixels)) errors.Add(b.Id + ": thinkPixels must stay above spawnPixels");
                 if (b.Haunch < 0 || b.Haunch > 0.5f || b.Waist < 0 || b.Waist > 0.5f || b.Hump < 0 || b.Hump > 0.5f) errors.Add(b.Id + ": haunch, waist and hump out of 0..0.5");
                 for (int d = 0; d < Drives.Count; d++)
                 {
@@ -359,6 +360,7 @@ namespace Stabby.World
         public static int CellsFor(float meters, float cellMeters) => Math.Max(1, (int)Math.Ceiling(meters / cellMeters));
 
         public static float SpawnReach(CreatureDef def) => Detail.SimulationReach(def.Length, def.SpawnPixels);
+        public static float ThinkReach(CreatureDef def) => Detail.SimulationReach(def.Length, def.ThinkPixels);
 
         public static float DespawnReach(CreatureDef def) => SpawnReach(def) / (1f - Detail.Hysteresis);
 

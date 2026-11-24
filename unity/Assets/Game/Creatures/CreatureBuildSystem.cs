@@ -288,7 +288,7 @@ namespace Stabby.Game
                 EntityManager.SetComponentData(roots[i], new CreatureRoot
                 {
                     Rig = a.Rig, Ghost = a.Ghost, Position = new float3(a.State.Position.x, 0, a.State.Position.y), Heading = a.State.Heading, WalkSpeed = a.State.WalkSpeed,
-                    Visible = true, Shadow = true, High = true, HighOn = true, LowOn = true,
+                    Visible = true, Shadow = true, HighOn = true, LowOn = true,
                     Phase = (seed % 389) / 389f, Clock = (seed % 211) / 7f,
                 });
                 var buffer = EntityManager.GetBuffer<CreatureLink>(roots[i]);

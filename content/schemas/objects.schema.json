@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby world objects",
   "type": "object",
-  "required": ["schemaVersion", "kinds", "objects", "terrain", "foliage"],
+  "required": ["schemaVersion", "lights", "kinds", "objects", "terrain", "foliage"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 4 },
+    "schemaVersion": { "const": 5 },
     "terrain": {
       "type": "object",
       "required": ["quadPixels"],
@@ -67,12 +67,27 @@
         }
       }
     },
+    "lights": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "shadowedPixels", "unshadowedPixels", "glowPixels"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "shadowedPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 },
+          "unshadowedPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 },
+          "glowPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 }
+        }
+      }
+    },
     "kinds": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "lods", "lodPixels", "fadePixels", "shadows", "shadowPixels", "shadowCascadePixels", "lightPixels", "wind", "animated", "solid"],
+        "required": ["id", "lods", "lodPixels", "fadePixels", "shadows", "shadowPixels", "shadowCascadePixels", "light", "wind", "animated", "solid"],
         "additionalProperties": false,
         "properties": {
           "id": { "enum": ["static", "interactive", "animated", "structure"] },
@@ -82,7 +97,7 @@
           "shadows": { "type": "boolean" },
           "shadowPixels": { "type": "number", "minimum": 0 },
           "shadowCascadePixels": { "type": "number", "minimum": 0 },
-          "lightPixels": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 }, "minItems": 3, "maxItems": 3 },
+          "light": { "type": "string", "minLength": 1 },
           "wind": { "type": "boolean" },
           "swayPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
           "impostorPixels": { "type": "number", "minimum": 0, "maximum": 1080 },
