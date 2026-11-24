@@ -694,6 +694,7 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckDiscoveries(w, detail, grid, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaves(w, detail, edits, caves, e);
+            CheckCaveNormals(w, detail, grid, caves, e);
             CheckCliffFoot(w, detail, edits, e);
             CheckLandforms(w, edits, e);
             CheckArches(w, edits, e);
@@ -808,6 +809,59 @@ namespace Stabby.World
                 }
                 string why = Underground.Unreached(detail, items, g);
                 if (why != null) { e.Add(why); return; }
+            }
+        }
+
+        public const float CaveNormalDeg = 1.5f;
+        public const int CaveNormalLevels = 3, CaveCoverSteps = 4;
+
+        public static void CheckCaveNormals(GeneratedWorld w, TerrainDetail detail, EditGrid grid, CaveGraph[] caves, List<string> e)
+        {
+            if (caves == null || caves.Length == 0) return;
+            CaveNode spot = null;
+            foreach (var g in caves) foreach (var nd in g.Nodes) if (spot == null || nd.Hall && !spot.Hall) spot = nd;
+            if (spot == null) return;
+            var placed = grid.Edits;
+            var ids = new List<int>();
+            for (int level = 0; level < CaveNormalLevels; level++)
+            {
+                float sm = NearField.NodeStep(level), size = NearField.NodeSize(level);
+                float x0 = (float)Math.Floor(spot.X / size) * size, z0 = (float)Math.Floor(spot.Z / size) * size, x1 = x0 + size, z1 = z0 + size;
+                var meshed = new List<FeatureEdit>();
+                grid.Near(x0 - 0.5f * sm, z0 - 0.5f * sm, x1 + 0.5f * sm, z1 + 0.5f * sm, ids);
+                foreach (int q in ids) if (placed[q].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(placed[q].AtStep(sm));
+                if (meshed.Count == 0) continue;
+                var list = new EditArray { Items = meshed.ToArray() };
+                var f = new NetsBuffers();
+                SurfaceNets.Edited(new DetailColumns { Detail = detail, StepM = sm }, list, new NetsChunk { X0 = (int)(x0 / sm), Z0 = (int)(z0 / sm), Cells = NearField.NodeQuads, StepM = sm }, ref f);
+                var cols = new DetailColumns { Detail = detail, StepM = sm };
+                float Base(int i, float y, int k) => Features.Level(cols, cols.Height(i, k) - y, i, k, sm);
+                float Field(float x, float y, float z)
+                {
+                    int i = (int)Math.Floor(x / sm), k = (int)Math.Floor(z / sm);
+                    float u = x / sm - i, w = z / sm - k;
+                    float a = Base(i, y, k) + (Base(i + 1, y, k) - Base(i, y, k)) * u, b = Base(i, y, k + 1) + (Base(i + 1, y, k + 1) - Base(i, y, k + 1)) * u;
+                    return Features.Edit(list, a + (b - a) * w, x, y, z);
+                }
+                var miss = new List<double>();
+                foreach (int t in new HashSet<int>(f.Tris))
+                {
+                    float x = f.Verts[6 * t], y = f.Verts[6 * t + 1], z = f.Verts[6 * t + 2];
+                    bool cave = false;
+                    foreach (var m in meshed) if (m.Kind == FeatureEdit.Carve && (m.Shape == FeatureEdit.Cave || m.Shape == FeatureEdit.CaveRoom) && m.Reach(x, y, z, out _)) { cave = true; break; }
+                    if (!cave || Math.Abs(Field(x, y, z)) > 0.75f * sm || detail.Sample(x, z) - y < CaveCoverSteps * sm) continue;
+                    const float d = 0.05f;
+                    float gx = Field(x + d, y, z) - Field(x - d, y, z), gy = Field(x, y + d, z) - Field(x, y - d, z), gz = Field(x, y, z + d) - Field(x, y, z - d);
+                    float gl = (float)Math.Sqrt(gx * gx + gy * gy + gz * gz);
+                    if (!(gl > 0)) continue;
+                    float dot = -(gx * f.Verts[6 * t + 3] + gy * f.Verts[6 * t + 4] + gz * f.Verts[6 * t + 5]) / gl;
+                    miss.Add(Math.Acos(Math.Max(-1f, Math.Min(1f, dot))) * 180 / Math.PI);
+                }
+                if (miss.Count == 0) continue;
+                miss.Sort();
+                double mid = miss[miss.Count / 2];
+                if (mid > CaveNormalDeg)
+                { e.Add($"cave wall normals near {spot.X:F0},{spot.Z:F0} at level {level} miss the field gradient by a median {mid:F1} degrees"); return; }
             }
         }
 

@@ -86,6 +86,15 @@ public class CaveTests
     }
 
     [Fact]
+    public void HallWallNormalsFollowTheField()
+    {
+        var (s, hall) = Find(g => g.Class == "hall");
+        var e = new List<string>();
+        WorldChecks.CheckCaveNormals(s.W, s.Detail, new EditGrid(s.Edits, s.W.Config.Size * s.W.Config.CellMeters), new[] { hall }, e);
+        Assert.Empty(e);
+    }
+
+    [Fact]
     public void FilledTunnelLeavesChambersUnreachable()
     {
         var (s, g) = Find(g => g.Edges.Count >= 2 && !g.Nodes.TrueForAll(n => n.Entrance));
