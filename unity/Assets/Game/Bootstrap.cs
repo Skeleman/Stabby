@@ -57,6 +57,15 @@ namespace Stabby.Game
         public const int ReliableWindow = 128;
         public const float WalkSpeed = 6f, SprintSpeed = WalkSpeed * 1.8f, JumpSpeed = 7f, Gravity = 20f;
         public static float GraphicsQuality = 1f;
+        public static string GraphicsLevel = "";
+        public const string QualityVariable = "STABBY_QUALITY";
+
+        public static void UseQuality(Stabby.World.QualityDef def)
+        {
+            var level = def.Pick(System.Environment.GetEnvironmentVariable(QualityVariable));
+            GraphicsLevel = level.Id;
+            GraphicsQuality = level.Scale;
+        }
         public static readonly string[] Clients = { "Client1", "Client2" };
         public const string FullStreamClient = "Client2";
         public const string ViewClient = "Client1";
