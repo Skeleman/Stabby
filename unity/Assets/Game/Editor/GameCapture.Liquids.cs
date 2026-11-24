@@ -12,7 +12,6 @@ namespace Stabby.Game.Editor
             {
                 if (!AimBog(cam, v)) { GameStatus.Lines["~" + LiquidShots[v]] = "no bog pool placed"; continue; }
                 for (var s = Settle(180); s.MoveNext();) yield return null;
-                for (int k = 0; ObjectViewSystem.Pending > 0 && k < 1800; k++) yield return null;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, LiquidShots[v]);
             }

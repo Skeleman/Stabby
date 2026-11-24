@@ -58,7 +58,6 @@ namespace Stabby.Game.Editor
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(focus - eye));
             for (var w = ShowHour(NightHour); w.MoveNext();) yield return null;
             for (var w = Settle(360); w.MoveNext();) yield return null;
-            for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             var s = DayNightSystem.Shown;
             lines.Add($"night hour {s.Hour:F2}, full moon: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F3}, lit {s.Illumination:F2}, ambient sky {s.AmbientSky.B:F3}, sun height {s.SunHeight:F2}, moon height {s.MoonHeight:F2}");
             lines.Add($"eye {eye.x:F0},{eye.y:F0},{eye.z:F0} over valley floor {low.y:F0} m (home ground {homeY:F0} m), {Vector3.Distance(eye, focus):F0} m to focus");
@@ -86,7 +85,6 @@ namespace Stabby.Game.Editor
             }
             cam.transform.SetPositionAndRotation(duskEye, Quaternion.LookRotation(Quaternion.AngleAxis(-25f, Vector3.up) * west + Vector3.down * 0.12f));
             for (var w = Settle(360); w.MoveNext();) yield return null;
-            for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             sun = DayNightSystem.Shown;
             lines.Add($"dusk hour {sun.Hour:F2}: {(sun.Moon ? "moon" : "sun")} light {sun.Intensity:F3}, sun height {sun.SunHeight:F3}, eye {duskEye.x:F0},{duskEye.y:F0},{duskEye.z:F0}");
             Shot(cam, null, "warmup");

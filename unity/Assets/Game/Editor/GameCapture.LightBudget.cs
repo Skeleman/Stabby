@@ -42,7 +42,6 @@ namespace Stabby.Game.Editor
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(ahead + Vector3.down * 0.12f));
             for (var w = ShowHour(NightHour, 0f); w.MoveNext();) yield return null;
             for (var w = Settle(360); w.MoveNext();) yield return null;
-            for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             var world = ViewWorld();
             if (world == null) { GameStatus.Failure = "lightbudget: no client view world"; yield break; }
             var em = world.EntityManager;
