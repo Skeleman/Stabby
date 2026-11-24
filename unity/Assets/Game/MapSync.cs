@@ -322,6 +322,7 @@ namespace Stabby.Game
         bool requested;
         Stopwatch clock;
         Entity inbox;
+        readonly MainCost cost = new MainCost();
 
         public List<BiomeDef> Defs { get; private set; }
         public MaterialLibrary Materials { get; private set; }
@@ -336,6 +337,9 @@ namespace Stabby.Game
             Materials = ContentFiles.Materials(ContentFiles.MaterialsPath);
             Objects = ContentFiles.Objects(Defs);
             GameSettings.UseQuality(Objects.Quality);
+            var c = cost;
+            string name = World.Name;
+            GameStatus.Live[name + "~map cost"] = () => $"{name}: {c.Text("map arrivals")}";
         }
 
         protected override void OnDestroy()
@@ -386,6 +390,14 @@ namespace Stabby.Game
                 genMs = clock.ElapsedMilliseconds;
             }
             if (inbox == Entity.Null || mine == null) return;
+            bool joining = Map == null;
+            cost.Begin();
+            Sync();
+            cost.End(joining, joining && Map != null ? 1 : 0);
+        }
+
+        void Sync()
+        {
             var box = EntityManager.GetComponentData<ChunkInbox>(inbox);
             if (!requested && box.SumsIn == box.HostSums.Length && borrowed != null)
             {

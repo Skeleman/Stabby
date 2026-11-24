@@ -8,7 +8,8 @@ TerrainViewSystem.Complete only after IsCompleted, or at teardown
 BlobBake.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
-ObjectColumnsSystem debt: streams collision regions near players as they move, rebuilding each region from managed placement in a task before converting it to a blob
+ObjectColumnsSystem converts each chunk's managed placement to native instances once, in a task; region bakes, including re-entry, are Burst jobs
+ObjectColumnsSystem.Complete only after IsCompleted, or at teardown
 ObjectViewSystem debt: streams object tiles from the managed ObjectField as the camera moves; registering their meshes with Entities Graphics is the engine part
 GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera
 ServerObjectDeltaSystem debt: validates every incoming object removal against the managed ObjectField in a task and replicates the result
