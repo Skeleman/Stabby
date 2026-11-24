@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace Stabby.World
 {
@@ -12,12 +13,15 @@ namespace Stabby.World
         int siteChunks;
         uint siteSeed;
         ObjectInstance[][] sites;
+        object[] siteGates;
+        int siteComputes;
 
         void InitSites()
         {
             int defs = lib.Objects.Count;
             siteBox = new float[defs][];
             sites = new ObjectInstance[across * across][];
+            siteGates = new object[across * across];
             siteSeed = Rng.Stream(w.Config.Seed, "site-clearing").NextU32();
             float natural = 0;
             for (int d = 0; d < defs; d++)
@@ -70,14 +74,25 @@ namespace Stabby.World
 
         public bool IsSite(int def) => siteBox[def] != null;
 
+        public int SiteComputes => siteComputes;
+
         public ObjectInstance[] Sites(int cx, int cz)
         {
             int c = cz * across + cx;
-            var s = sites[c];
+            var s = Volatile.Read(ref sites[c]);
             if (s != null) return s;
-            var list = new List<ObjectInstance>();
-            PlaceInto(cx, cz, false, list, null, true);
-            return sites[c] = list.ToArray();
+            var gate = Volatile.Read(ref siteGates[c]) ?? Interlocked.CompareExchange(ref siteGates[c], new object(), null) ?? siteGates[c];
+            lock (gate)
+            {
+                s = sites[c];
+                if (s != null) return s;
+                var list = new List<ObjectInstance>();
+                PlaceInto(cx, cz, false, list, null, true);
+                Interlocked.Increment(ref siteComputes);
+                s = list.ToArray();
+                Volatile.Write(ref sites[c], s);
+                return s;
+            }
         }
 
         [ThreadStatic] static List<ObjectInstance> nearScratch;

@@ -684,7 +684,7 @@ namespace Stabby.World
         static void CheckFeatures(GeneratedWorld w, List<string> e)
         {
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail);
+            var edits = Features.Place(w, detail, out var caves);
             float cm = w.Config.CellMeters, s = LatticeStepM;
             var grid = new EditGrid(edits, w.Config.Size * cm);
             CheckChunkBounds(w, grid, e);
@@ -693,7 +693,7 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckStructures(w, detail, grid, e);
             if (w.Objects != null && w.Biome != null) CheckDiscoveries(w, detail, grid, e);
             CheckCavePaths(w, detail, edits, e);
-            CheckCaveWalk(w, detail, edits, e);
+            CheckCaves(w, detail, edits, caves, e);
             CheckCliffFoot(w, detail, edits, e);
             CheckLandforms(w, edits, e);
             CheckArches(w, edits, e);
@@ -710,7 +710,7 @@ namespace Stabby.World
                 int tile = Features.TileOf(x, cm);
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
-                    if (y.Shape == x.Shape && Features.TileOf(y, cm) == tile)
+                    if ((y.Shape == x.Shape || (x.Shape == FeatureEdit.Bridge && (y.Shape == FeatureEdit.Cave || y.Shape == FeatureEdit.CaveRoom))) && Features.TileOf(y, cm) == tile)
                     {
                         group.Add(y);
                         minX = Math.Min(minX, y.MinX); maxX = Math.Max(maxX, y.MaxX);
@@ -732,7 +732,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.Lip ? "mesa lip" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -772,12 +772,9 @@ namespace Stabby.World
             }
         }
 
-        public const float CaveFloorSlope = 0.6f;
-
         static void CheckCavePaths(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
         {
-            float cm = w.Config.CellMeters, s = LatticeStepM;
-            var cols = new DetailColumns { Detail = detail, StepM = s };
+            float cm = w.Config.CellMeters;
             foreach (var p in edits)
             {
                 if (p.Shape != FeatureEdit.Cave) continue;
@@ -786,51 +783,31 @@ namespace Stabby.World
                 int tile = Features.TileOf(p, cm);
                 var near = new List<FeatureEdit>();
                 foreach (var y in edits) if (Features.TileOf(y, cm) == tile) near.Add(y);
-                var solid = new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = new EditArray { Items = near.ToArray() }, StepM = s };
-                int steps = Math.Max(1, (int)Math.Ceiling(run / s)), li = int.MinValue, lk = 0;
-                float last = 0;
-                for (int t = 0; t <= steps; t++)
-                {
-                    float f = t / (float)steps;
-                    int i = (int)Math.Round((p.Ax + (p.Bx - p.Ax) * f) / s), k = (int)Math.Round((p.Az + (p.Bz - p.Az) * f) / s);
-                    if (i == li && k == lk) continue;
-                    float floor = CaveFloor(solid, i, k, p.Ay + (p.By - p.Ay) * f, s);
-                    if (float.IsNaN(floor)) { e.Add($"cave path at {p.Ax:F0},{p.Az:F0} is blocked at {i * s:F0},{k * s:F0}"); return; }
-                    if (li != int.MinValue)
-                    {
-                        float d = (float)Math.Sqrt((i - li) * (i - li) + (k - lk) * (k - lk)) * s;
-                        if (Math.Abs(floor - last) > CaveFloorSlope * d) { e.Add($"cave path at {p.Ax:F0},{p.Az:F0} has a {Math.Abs(floor - last):F1} m step at {i * s:F0},{k * s:F0}"); return; }
-                    }
-                    li = i; lk = k; last = floor;
-                }
+                string fault = Underground.PathFault(detail, near.ToArray(), p);
+                if (fault != null) { e.Add(fault); return; }
             }
         }
 
-        public const float WalkStride = 0.5f;
+        public const float WalkStride = Underground.WalkStride;
 
-        static void CheckCaveWalk(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        public static void CheckCaves(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, List<string> e)
         {
-            float cm = w.Config.CellMeters, s = LatticeStepM;
-            var ground = new DetailGround { Detail = detail };
-            foreach (var p in edits)
+            float cm = w.Config.CellMeters;
+            foreach (var x in edits)
+                if ((x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.CaveRoom) && Underground.Wet(w, x)) { e.Add($"cave at {x.Ax:F0},{x.Az:F0} breaks into the sea or a lake"); return; }
+            foreach (var g in caves)
             {
-                if (p.Shape != FeatureEdit.Cave) continue;
-                int tile = Features.TileOf(p, cm);
                 var near = new List<FeatureEdit>();
-                foreach (var q in edits) if (Features.TileOf(q, cm) == tile) near.Add(q);
-                var list = new EditArray { Items = near.ToArray() };
-                float x = p.Ax, y = p.Ay, z = p.Az, run = (float)Math.Sqrt((p.Bx - p.Ax) * (p.Bx - p.Ax) + (p.Bz - p.Az) * (p.Bz - p.Az));
-                Walk.Step(ground, list, s, ref x, ref y, ref z, 0, 0, Walk.Reach);
-                int steps = Math.Max(1, (int)Math.Ceiling(run / WalkStride));
-                float dx = (p.Bx - p.Ax) / steps, dz = (p.Bz - p.Az) / steps, fall = Walk.FallSpeed * WalkStride / 6f;
-                for (int t = 0; t < steps; t++)
+                foreach (var q in edits) if (Features.TileOf(q, cm) == g.Tile) near.Add(q);
+                var items = near.ToArray();
+                foreach (var q in items)
                 {
-                    float px = x, pz = z;
-                    Walk.Step(ground, list, s, ref x, ref y, ref z, dx, dz, fall);
-                    if (Math.Abs(x - px - dx) > 1e-3f || Math.Abs(z - pz - dz) > 1e-3f) { e.Add($"walker in cave at {p.Ax:F0},{p.Az:F0} is stopped at {x:F0},{y:F0},{z:F0}"); return; }
+                    if (q.Shape != FeatureEdit.Bridge) continue;
+                    string fault = Underground.BridgeFault(detail, items, q);
+                    if (fault != null) { e.Add(fault); return; }
                 }
-                float floor = p.By - p.R * Features.CaveHollow;
-                if (Math.Abs(y - floor) > 0.25f * p.R) { e.Add($"walker in cave at {p.Ax:F0},{p.Az:F0} ends at height {y:F1}, floor is {floor:F1}"); return; }
+                string why = Underground.Unreached(detail, items, g);
+                if (why != null) { e.Add(why); return; }
             }
         }
 
@@ -901,18 +878,6 @@ namespace Stabby.World
                     if (x >= f.MinX - 2f && x <= f.MaxX + 2f && z >= f.MinZ - 2f && z <= f.MaxZ + 2f) return false;
             }
             return true;
-        }
-
-        static float CaveFloor<TSolid>(TSolid solid, int i, int k, float centre, float s) where TSolid : struct, ISolidField
-        {
-            int j = (int)Math.Round(centre / s);
-            if (solid.Density(i, j, k) >= 0) return float.NaN;
-            for (int n = 0; n < 64; n++, j--)
-            {
-                float above = solid.Density(i, j, k), below = solid.Density(i, j - 1, k);
-                if (below >= 0) return (j - 1 + below / (below - above)) * s;
-            }
-            return float.NaN;
         }
 
         static void CheckSketch(GeneratedWorld w, List<string> e)
