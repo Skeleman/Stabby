@@ -135,6 +135,7 @@ namespace Stabby.Game
         ObjectKind[] kinds;
         Detail.Rule[] rules;
         float worstUpdate;
+        static readonly Unity.Profiling.ProfilerMarker LoadMarker = new Unity.Profiling.ProfilerMarker("ObjectView.LoadChunks"), DespawnMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Despawn"), SpawnMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Spawn"), RegisterMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Register");
 
         public static int Pending { get; private set; } = 1;
         static float3 readyAt;
@@ -882,7 +883,7 @@ namespace Stabby.Game
         {
             if (!Warm()) return;
             if (field == null && !Prepare()) return;
-            if (!Register()) return;
+            using (RegisterMarker.Auto()) if (!Register()) return;
             var cam = Camera.main;
             if (cam == null) return;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -895,9 +896,10 @@ namespace Stabby.Game
             }
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
-            LoadChunks(pos, maxReach);
-            Despawn(pos);
-            int waiting = Spawn(pos, t0);
+            using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
+            using (DespawnMarker.Auto()) Despawn(pos);
+            int waiting;
+            using (SpawnMarker.Auto()) waiting = Spawn(pos, t0);
             if (waiting > 0) Pending = 1;
             if (Pending == 0) { readyAt = pos; readyFrame = UnityEngine.Time.frameCount; }
             LiveEntities = liveEntities;
