@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "dayLengthS": 1440,
+  "startHour": 9,
+  "sun": { "noonElevationDeg": 38, "noonAzimuthDeg": 320, "hourOffset": 0 },
+  "moon": { "noonElevationDeg": 52, "noonAzimuthDeg": 20, "hourOffset": 12 },
+  "moonColor": [0.62, 0.72, 1.0],
+  "moonIntensity": 0.18,
+  "moonSwitchHeight": -0.06,
+  "moonFadeHeight": 0.1,
+  "moonCycleDays": 8,
+  "moonStartPhase": 0.5,
+  "newMoonLight": 0.03,
+  "newMoonAmbient": 0.2,
+  "stops": [
+    { "sunHeight": 0.35, "sky": [0.62, 0.74, 0.86], "ambientSky": [0.279, 0.333, 0.387], "ambientGround": [0.14, 0.14, 0.13], "sun": [1.0, 0.96, 0.88], "sunIntensity": 0.8 },
+    { "sunHeight": 0.12, "sky": [0.74, 0.68, 0.6], "ambientSky": [0.29, 0.28, 0.28], "ambientGround": [0.13, 0.115, 0.1], "sun": [1.0, 0.8, 0.58], "sunIntensity": 0.68 },
+    { "sunHeight": 0.0, "sky": [0.7, 0.46, 0.34], "ambientSky": [0.2, 0.16, 0.17], "ambientGround": [0.08, 0.065, 0.055], "sun": [1.0, 0.52, 0.28], "sunIntensity": 0.3 },
+    { "sunHeight": -0.06, "sky": [0.34, 0.28, 0.36], "ambientSky": [0.11, 0.1, 0.14], "ambientGround": [0.04, 0.035, 0.04], "sun": [1.0, 0.45, 0.25], "sunIntensity": 0.0 },
+    { "sunHeight": -0.14, "sky": [0.1, 0.12, 0.2], "ambientSky": [0.05, 0.06, 0.1], "ambientGround": [0.02, 0.02, 0.028], "sun": [1.0, 0.45, 0.25], "sunIntensity": 0.0 },
+    { "sunHeight": -0.3, "sky": [0.03, 0.045, 0.08], "ambientSky": [0.03, 0.042, 0.07], "ambientGround": [0.012, 0.014, 0.02], "sun": [1.0, 0.45, 0.25], "sunIntensity": 0.0 }
+  ]
+}

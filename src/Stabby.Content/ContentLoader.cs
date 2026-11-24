@@ -12,6 +12,7 @@ namespace Stabby.Content
         public const int MaterialSchemaVersion = 4;
         public const int ObjectSchemaVersion = 5;
         public const int CreatureSchemaVersion = 2;
+        public const int SkySchemaVersion = 1;
 
         public static string FindContentRoot(string start)
         {
@@ -43,6 +44,53 @@ namespace Stabby.Content
         {
             var path = Path.Combine(contentRoot, "creatures.json");
             return ParseCreatures(File.ReadAllText(path), biomeIds, path, LoadMaterials(contentRoot));
+        }
+
+        public static SkyDef LoadSky(string contentRoot)
+        {
+            var path = Path.Combine(contentRoot, "sky.json");
+            return ParseSky(File.ReadAllText(path), path);
+        }
+
+        public static SkyDef ParseSky(string json, string source)
+        {
+            var root = Root(json, source, SkySchemaVersion);
+            var d = new SkyDef
+            {
+                DayLengthS = root.Float("dayLengthS", 0), StartHour = root.Float("startHour", 0),
+                Sun = Orbit(root.Object("sun")), Moon = Orbit(root.Object("moon")),
+                MoonColor = Color(root, "moonColor", source), MoonIntensity = root.Float("moonIntensity", 0),
+                MoonSwitchHeight = root.Float("moonSwitchHeight", 0), MoonFadeHeight = root.Float("moonFadeHeight", 0),
+                MoonCycleDays = root.Float("moonCycleDays", 0), MoonStartPhase = root.Float("moonStartPhase", 0),
+                NewMoonLight = root.Float("newMoonLight", 0), NewMoonAmbient = root.Float("newMoonAmbient", 0),
+            };
+            foreach (var s in root.Objects("stops", true))
+            {
+                d.Stops.Add(new SkyStop
+                {
+                    SunHeight = s.Float("sunHeight", 0), Sky = Color(s, "sky", source), AmbientSky = Color(s, "ambientSky", source),
+                    AmbientGround = Color(s, "ambientGround", source), Sun = Color(s, "sun", source), SunIntensity = s.Float("sunIntensity", 0),
+                });
+                s.End();
+            }
+            root.End();
+            Check(SkyDef.Validate(d), source);
+            return d;
+        }
+
+        static Orbit Orbit(Json o)
+        {
+            if (o == null) return null;
+            var r = new Orbit { NoonElevationDeg = o.Float("noonElevationDeg", 0), NoonAzimuthDeg = o.Float("noonAzimuthDeg", 0), HourOffset = o.Float("hourOffset", 0) };
+            o.End();
+            return r;
+        }
+
+        static Rgb Color(Json j, string key, string source)
+        {
+            var f = j.Floats(key, null);
+            if (f == null || f.Length != 3) throw new InvalidDataException(source + ": " + key + " must be [r, g, b]");
+            return new Rgb(f[0], f[1], f[2]);
         }
 
         public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>

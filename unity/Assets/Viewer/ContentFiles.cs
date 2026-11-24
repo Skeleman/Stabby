@@ -13,8 +13,11 @@ namespace Stabby.Viewer
         public static string MaterialsPath => Path.Combine(Root, "materials.json");
         public static string ObjectsPath => Path.Combine(Root, "objects.json");
         public static string CreaturesPath => Path.Combine(Root, "creatures.json");
+        public static string SkyPath => Path.Combine(Root, "sky.json");
 
         public static List<BiomeDef> Biomes() => ContentLoader.ParseBiomes(File.ReadAllText(BiomesPath), BiomesPath);
+
+        public static SkyDef Sky() => ContentLoader.ParseSky(File.ReadAllText(SkyPath), SkyPath);
 
         public static MaterialLibrary Materials(string path) => ContentLoader.ParseMaterials(File.ReadAllText(path), path);
 

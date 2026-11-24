@@ -12,7 +12,6 @@ using Unity.Entities.Graphics;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
-using Unity.NetCode;
 using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
@@ -780,18 +779,12 @@ namespace Stabby.Game
 
         static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx"), ColumnPxId = Shader.PropertyToID("_StabbyColumnPx"), ClockId = Shader.PropertyToID("_StabbyClock");
         static readonly int ShadowPxId = Shader.PropertyToID("_StabbyShadowPx"), ShadowEyeId = Shader.PropertyToID("_StabbyShadowEye");
-        const double ClockWrap = 86400, FallbackTickRate = 60;
+        const double ClockWrap = 86400;
         public static double? ClockOverride;
 
         void Clock()
         {
-            double clock = UnityEngine.Time.timeAsDouble;
-            if (SystemAPI.TryGetSingleton(out NetworkTime time) && time.ServerTick.IsValid)
-            {
-                double rate = SystemAPI.TryGetSingleton(out ClientServerTickRate tr) && tr.SimulationTickRate > 0 ? tr.SimulationTickRate : FallbackTickRate;
-                clock = (time.ServerTick.TickIndexForValidTick + (double)time.ServerTickFraction) / rate;
-            }
-            Shader.SetGlobalFloat(ClockId, (float)((ClockOverride ?? clock) % ClockWrap));
+            Shader.SetGlobalFloat(ClockId, (float)((ClockOverride ?? DayNightSystem.Clock) % ClockWrap));
         }
 
         float Allowed(Camera cam)
@@ -934,8 +927,6 @@ namespace Stabby.Game
             foreach (string step in TerrainLook.StrataSteps(prepared.Strata)) yield return step;
             while (!lookBake.IsCompleted) yield return "blob wait";
             lookReady = lookBake.Take();
-            Shader.SetGlobalColor("_StabbySky", new Color(0.62f, 0.74f, 0.86f) * 0.45f);
-            Shader.SetGlobalColor("_StabbyGround", new Color(0.14f, 0.14f, 0.13f));
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
             graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
             var scene = UnityEngine.Object.FindFirstObjectByType<GameScene>();

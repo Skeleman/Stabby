@@ -29,6 +29,7 @@ namespace Stabby.Game.Editor
         public static void Run()
         {
             GameCapture.BuildScene();
+            GameCapture.PinTime();
             using (var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp))
             {
                 socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
@@ -223,6 +224,7 @@ namespace Stabby.Game.Editor
         {
             string dir = SessionState.GetString(DirKey, "");
             if (dir.Length == 0 || Application.isBatchMode && SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null) return;
+            GameCapture.RequirePinnedTime("capture " + name);
             Directory.CreateDirectory(dir);
             var cam = Camera.main;
             GameStatus.ToolFrame = Time.frameCount;

@@ -202,6 +202,7 @@ namespace Stabby.Game.Editor
 
         static float[] Probe(Camera cam, RenderTexture rt, Texture2D tex)
         {
+            RequirePinnedTime("probe");
             cam.targetTexture = rt;
             cam.Render();
             RenderTexture.active = rt;

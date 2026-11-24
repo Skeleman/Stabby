@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stabby sky and day/night cycle",
+  "type": "object",
+  "required": ["schemaVersion", "dayLengthS", "startHour", "sun", "moon", "moonColor", "moonIntensity", "moonSwitchHeight", "moonFadeHeight", "moonCycleDays", "moonStartPhase", "newMoonLight", "newMoonAmbient", "stops"],
+  "additionalProperties": false,
+  "$defs": {
+    "rgb": { "type": "array", "items": { "type": "number", "minimum": 0, "maximum": 1 }, "minItems": 3, "maxItems": 3 },
+    "orbit": {
+      "type": "object",
+      "required": ["noonElevationDeg", "noonAzimuthDeg", "hourOffset"],
+      "additionalProperties": false,
+      "properties": {
+        "noonElevationDeg": { "type": "number", "exclusiveMinimum": 0, "maximum": 90 },
+        "noonAzimuthDeg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 },
+        "hourOffset": { "type": "number", "minimum": 0, "exclusiveMaximum": 24 }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "dayLengthS": { "type": "number", "minimum": 10, "maximum": 86400 },
+    "startHour": { "type": "number", "minimum": 0, "exclusiveMaximum": 24 },
+    "sun": { "$ref": "#/$defs/orbit" },
+    "moon": { "$ref": "#/$defs/orbit" },
+    "moonColor": { "$ref": "#/$defs/rgb" },
+    "moonIntensity": { "type": "number", "minimum": 0, "maximum": 2 },
+    "moonSwitchHeight": { "type": "number", "minimum": -0.5, "maximum": 0 },
+    "moonFadeHeight": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+    "moonCycleDays": { "type": "number", "minimum": 1, "maximum": 365 },
+    "moonStartPhase": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
+    "newMoonLight": { "type": "number", "minimum": 0, "maximum": 1 },
+    "newMoonAmbient": { "type": "number", "minimum": 0, "maximum": 1 },
+    "stops": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["sunHeight", "sky", "ambientSky", "ambientGround", "sun", "sunIntensity"],
+        "additionalProperties": false,
+        "properties": {
+          "sunHeight": { "type": "number", "minimum": -1, "maximum": 1 },
+          "sky": { "$ref": "#/$defs/rgb" },
+          "ambientSky": { "$ref": "#/$defs/rgb" },
+          "ambientGround": { "$ref": "#/$defs/rgb" },
+          "sun": { "$ref": "#/$defs/rgb" },
+          "sunIntensity": { "type": "number", "minimum": 0, "maximum": 2 }
+        }
+      }
+    }
+  }
+}
