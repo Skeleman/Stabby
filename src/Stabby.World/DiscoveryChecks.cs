@@ -75,10 +75,11 @@ namespace Stabby.World
             var hot = field.Hotspots;
             for (int h = 0; h < hot.Count; h++)
             {
-                int sites = field.HotspotSites(h), vents = 0;
+                int sites = field.HotspotSites(h), vents = 0, geysers = 0;
                 if (sites < ObjectField.VentSitesMin) continue;
-                foreach (var o in found) if (field.IsVent(o) && hot.Index(o.X, o.Z) == h) vents++;
+                foreach (var o in found) if (field.IsVent(o) && hot.Index(o.X, o.Z) == h) { vents++; if (field.VentKind(o) == ObjectField.Geyser) geysers++; }
                 if (vents < ObjectField.VentsMin) e.Add($"geothermal hotspot at {hot.X[h]:F0},{hot.Z[h]:F0} has {sites} calm vent sites but {vents} vents");
+                else if (geysers == 0 && field.KindCluster(h, ObjectField.Geyser) >= ObjectField.VentSitesMin) e.Add($"geothermal hotspot at {hot.X[h]:F0},{hot.Z[h]:F0} has a geyser-ground cluster but no geyser");
             }
             CheckMesaClearings(w, field, found, e);
             int n = w.Config.Size, across = field.ChunksAcross;

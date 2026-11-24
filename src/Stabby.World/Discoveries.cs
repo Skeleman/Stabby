@@ -95,6 +95,7 @@ namespace Stabby.World
             var dense = new List<VentSite>();
             var counts = new int[vents.Length];
             var cluster = new int[vents.Length];
+            int gk = Array.FindIndex(vents, d => lib.Objects[d].Placement.Discovery == Geyser);
             ulong root = Rng.Stream(w.Config.Seed, "geothermal-fields").NextU64(), siteRoot = Rng.Stream(w.Config.Seed, "geothermal-field-sites").NextU64();
             for (int h = 0; h < hot.Count; h++)
             {
@@ -112,11 +113,14 @@ namespace Stabby.World
                 }
                 int target = VentsMin + (int)(rng.NextU32() % (uint)(VentsMax - VentsMin + 1)), first = (int)(rng.NextU32() % 64);
                 if (most < 0) continue;
+                bool want = gk >= 0 && cluster[gk] >= VentSitesMin;
+                if (want) mask |= 1 << gk;
                 if (mask == 0) mask = 1 << most;
                 best.Clear();
+                int bestScore = 0;
                 for (int pass = 0; pass < 2 && best.Count < VentsMin; pass++)
                 {
-                    if (pass == 1) { if (mask == 1 << most) break; mask = 1 << most; }
+                    if (pass == 1) { if (mask == 1 << most) break; mask = 1 << most; want = false; }
                     present.Clear();
                     usable.Clear();
                     for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) present.Add(vents[k]);
@@ -133,7 +137,9 @@ namespace Stabby.World
                         if (c >= VentSitesMin) dense.Add(s);
                     }
                     var centres = dense.Count > 0 ? dense : usable;
-                    for (int c = 0; c < FieldTries && best.Count < target; c++)
+                    if (want && centres.Exists(s => (s.Mask & (1 << gk)) != 0)) centres = centres.FindAll(s => (s.Mask & (1 << gk)) != 0);
+                    int full = target + (want ? VentsMax + 1 : 0), lead = want ? present.IndexOf(vents[gk]) : 0;
+                    for (int c = 0; c < FieldTries && bestScore < full; c++)
                     {
                         var site = centres[(int)(pick.NextU32() % (uint)centres.Count)];
                         near.Clear();
@@ -145,13 +151,22 @@ namespace Stabby.World
                         int start = list.Count;
                         for (int v = 0; v < target; v++)
                             for (int k = 0; k < present.Count; k++)
-                                if (PlaceVent(present[(first + v + k) % present.Count], near, ref rng, list)) break;
-                        if (list.Count - start > best.Count) { best.Clear(); for (int i = start; i < list.Count; i++) best.Add(list[i]); }
+                                if (PlaceVent(present[want ? VentOrder(v, k, first, lead, present.Count) : (first + v + k) % present.Count], near, ref rng, list)) break;
+                        int got = list.Count - start, score = got;
+                        if (want && got >= VentsMin) for (int i = start; i < list.Count; i++) if (list[i].Def == vents[gk]) { score += VentsMax + 1; break; }
+                        if (score > bestScore) { bestScore = score; best.Clear(); for (int i = start; i < list.Count; i++) best.Add(list[i]); }
                         list.RemoveRange(start, list.Count - start);
                     }
                 }
                 if (best.Count >= VentsMin) list.AddRange(best);
             }
+        }
+
+        static int VentOrder(int v, int k, int first, int lead, int count)
+        {
+            if (v == 0) return (lead + k) % count;
+            if (k == count - 1) return lead;
+            return (lead + 1 + (first + v + k) % (count - 1)) % count;
         }
 
         bool PlaceVent(int d, List<VentSite> near, ref Rng rng, List<ObjectInstance> list)
@@ -503,6 +518,15 @@ namespace Stabby.World
         }
 
         public int HotspotSites(int h) => VentSites(Hotspots.X[h], Hotspots.Z[h], Hotspots.R[h]);
+
+        public int KindCluster(int h, int discovery)
+        {
+            int k = Array.FindIndex(VentDefs, d => lib.Objects[d].Placement.Discovery == discovery);
+            if (k < 0) return 0;
+            var cluster = new int[VentDefs.Length];
+            VentSites(Hotspots.X[h], Hotspots.Z[h], Hotspots.R[h], null, int.MaxValue, cluster);
+            return cluster[k];
+        }
 
         int VentGround(float x, float z, int[] vents)
         {
