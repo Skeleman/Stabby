@@ -72,6 +72,8 @@ namespace Stabby.Game.Editor
                     bool first = true;
                     int gcRuns = System.GC.CollectionCount(0);
                     bool profile = label == "fast" && System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE") == "1";
+                    var churn0 = Churn();
+                    float churnT0 = Time.realtimeSinceStartup;
                     while (along < from + length)
                     {
                         if (profile && frames.Count % 1000 == 0) WalkProfile(frames.Count / 1000);
@@ -102,6 +104,7 @@ namespace Stabby.Game.Editor
                     }
                     if (profile) UnityEngine.Profiling.Profiler.enabled = false;
                     lines.Add(WalkReport(label, speed, length, frames));
+                    lines.Add(ChurnReport(label, churn0, Churn(), Time.realtimeSinceStartup - churnT0));
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
                 }
@@ -146,6 +149,16 @@ namespace Stabby.Game.Editor
                 allocRec.Dispose();
             }
             GameStatus.Lines["~walk"] = string.Join("\n", lines);
+        }
+
+        static (long bytes, long native, int chunks, int allocs, int made, int destroyed) Churn() =>
+            (TerrainViewSystem.ChunkBytes, TerrainViewSystem.NativeBytes, TerrainViewSystem.ChunksApplied, TerrainViewSystem.NativeAllocs, TerrainViewSystem.MeshesMade, TerrainViewSystem.MeshesDestroyed);
+
+        static string ChurnReport(string label, (long bytes, long native, int chunks, int allocs, int made, int destroyed) a, (long bytes, long native, int chunks, int allocs, int made, int destroyed) b, float seconds)
+        {
+            int chunks = Mathf.Max(1, b.chunks - a.chunks);
+            float minutes = Mathf.Max(seconds, 1e-3f) / 60f;
+            return $"terrain churn {label}: {b.chunks - a.chunks} chunks applied in {seconds:F1} s, managed {(b.bytes - a.bytes) / (double)chunks:F0} B/chunk, native {(b.allocs - a.allocs) / (double)chunks:F2} allocs and {(b.native - a.native) / 1024.0 / chunks:F0} KB/chunk, meshes made {b.made - a.made} ({(b.made - a.made) / minutes:F1}/min), destroyed {b.destroyed - a.destroyed}";
         }
 
         static void WalkProfile(int segment)
