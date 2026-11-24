@@ -1,26 +1,29 @@
 GameScene scene MonoBehaviour that hands the terrain material to presentation
-ServerMapSystem runs managed Stabby.World generation off the main thread
-ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks
+ServerMapSystem loads or generates the managed Stabby.World map once at startup, off the main thread
+ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks once per world it joins
 ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
+ClientViewSystem.ToEntityArray copies only player ghosts that still lack a mesh; the query is empty on almost every frame
 TerrainViewSystem applies Mesh objects and registers them with Entities Graphics
 TerrainViewSystem.Complete only after IsCompleted, or at teardown
 BlobBake.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
-ObjectColumnsSystem streams collision regions near players, building each from managed placement in a task and converting it to a blob once
-ObjectViewSystem registers object meshes with Entities Graphics and streams tiles around the managed camera
+ObjectColumnsSystem debt: streams collision regions near players as they move, rebuilding each region from managed placement in a task before converting it to a blob
+ObjectViewSystem debt: streams object tiles from the managed ObjectField as the camera moves; registering their meshes with Entities Graphics is the engine part
 GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera
-ServerObjectDeltaSystem validates and replicates object removals against the managed ObjectField at the network boundary
-ClientObjectDeltaSystem resolves replicated object removals against the managed ObjectField and reads UnityEngine.Input
-ContactFieldSystem splats object footprints into the ground contact texture off the main thread and uploads it
+ServerObjectDeltaSystem debt: validates every incoming object removal against the managed ObjectField in a task and replicates the result
+ClientObjectDeltaSystem debt: resolves every replicated object removal against the managed ObjectField; it also reads UnityEngine.Input
+ContactFieldSystem splats object footprints off the main thread and uploads them to a managed Texture2D
 CreatureBuildSystem assembles bodies for arriving creature ghosts in a task and registers their meshes with Entities Graphics
+CreatureBuildSystem.ToEntityArray copies only pending arrivals, when that query is non-empty
+CreatureBuildSystem.ToComponentDataArray reads states of pending arrivals and rigs of vanished ghosts only, when those queries are non-empty
 CreaturePrefabSystem GhostPrefabCreation is managed and runs once
 CreaturePlanSystem plans herds from the managed map in a task and converts the plan to a blob once
 CreatureDrawSystem uploads instance buffers and issues indirect draws on managed GraphicsBuffers
 CreatureDrawSystem.Complete only after IsCompleted, or at teardown
 PlayerControls.Read clamps the unitless input vector to length 1, not a distance
 ShadowViewSystem sets the managed URP asset's shadow range and cascades
-DayNightSystem loads managed sky content in a task and steps the managed light, camera, fog and shader globals
+DayNightSystem loads managed sky content in a task and steps the UnityEngine Light, Camera, fog and shader globals
 DayNightSystem.linear converts sky colours on the main thread in Apply, because SetGlobalColor passes gamma values through raw
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmRockRelief joint and bed noise runs in strata-aligned coordinates stretched along bedding
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmCragPlane joint-plane jitter runs in per-joint stretched coordinates
@@ -36,3 +39,5 @@ unity/Assets/Game/Resources/Object.shader:Built thatch and shingle strands are s
 unity/Assets/Game/Resources/Object.shader:frag stone lump is a macro pattern at 0.7 per metre; 13.1 scales a per-instance offset
 unity/Assets/Viewer/Shaders/Bark.hlsl:SpruceBark bark plates are a structural cell lattice on warped bark coordinates
 LightPresenterSystem drives managed UnityEngine.Light objects and an indirect glow draw from the Burst budget's tiers
+LightPresenterSystem.ToComponentDataArray debt: copies every LightEmitter each update to drive the light pool and glow buffer
+LightBudgetSystem.ToComponentDataArray debt: copies every LightEmitter each update to rank and step the light budget, then writes them back

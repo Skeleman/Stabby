@@ -86,4 +86,90 @@ public class LintTests
     [Fact]
     public void ShadowPassIsSkipped() =>
         Assert.Empty(Linter.ShaderProblems("S.shader", "Pass { Name \"ShadowCaster\"\nfloat3 F(float3 wp) { return frac(wp); }\n}", new Dictionary<string, string>()));
+
+    static List<string> Ecs(string code, Dictionary<string, string>? allow = null) =>
+        Linter.EcsProblems(GameFile, code, allow ?? new Dictionary<string, string>());
+
+    [Theory]
+    [InlineData("struct Tag : IComponentData { public string Name; }")]
+    [InlineData("struct Tag : IBufferElementData { public int[] Values; }")]
+    [InlineData("struct Tag : Unity.Entities.ICleanupComponentData { public List<int> Items; }")]
+    [InlineData("class Kit { } struct Tag : IComponentData { public Kit Value; }")]
+    [InlineData("struct Tag : IComponentData { public Mesh Shape { get; set; } }")]
+    [InlineData("class Tag : IComponentData { public int Value; }")]
+    public void FlagsManagedComponents(string code) => Assert.Single(Ecs(code));
+
+    [Theory]
+    [InlineData("struct Tag : IComponentData { public int A; public float3 B; public Entity C; public FixedString64Bytes D; }")]
+    [InlineData("struct Tag : IComponentData { public UnityObjectRef<Mesh> Shape; public BlobAssetReference<Kit> Blob; public static string Name; }")]
+    [InlineData("struct Tag : IComponentData { public string Name => \"x\"; public const string Key = \"k\"; }")]
+    [InlineData("struct Plain { public string Name; }")]
+    public void IgnoresUnmanagedComponents(string code) => Assert.Empty(Ecs(code));
+
+    [Fact]
+    public void AllowListSilencesAManagedComponent() =>
+        Assert.Empty(Ecs("class Tag : IComponentData { public int Value; }", new Dictionary<string, string> { ["Tag"] = "reason" }));
+
+    const string Copying = "[BurstCompile] partial struct Sys : ISystem { EntityQuery q; [BurstCompile] public void OnUpdate(ref SystemState s) { Step(); } void Step() { var a = q.ToComponentDataArray<Tag>(Allocator.Temp); } }";
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { EntityQuery q; [BurstCompile] public void OnUpdate(ref SystemState s) { var a = q.ToEntityArray(Allocator.Temp); } }")]
+    [InlineData(Copying)]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { EntityQuery q; [BurstCompile] public void OnUpdate(ref SystemState s) { this.Step(); } void Step() { var a = q.ToComponentDataListAsync<Tag>(Allocator.Temp, out var h); } }")]
+    public void FlagsRecurringCopies(string code) => Assert.Single(Ecs(code));
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { EntityQuery q; [BurstCompile] public void OnCreate(ref SystemState s) { var a = q.ToEntityArray(Allocator.Temp); } [BurstCompile] public void OnUpdate(ref SystemState s) { } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { EntityQuery q; [BurstCompile] public void OnUpdate(ref SystemState s) { } void Unused() { var a = q.ToEntityArray(Allocator.Temp); } }")]
+    [InlineData("static class Tools { static void OnUpdate(EntityQuery q) { foreach (var t in SystemAPI.Query<RefRO<Tag>>()) { } } }")]
+    public void IgnoresCopiesOutsideUpdate(string code) => Assert.Empty(Ecs(code));
+
+    [Fact]
+    public void AllowListSilencesACopy() =>
+        Assert.Empty(Ecs(Copying, new Dictionary<string, string> { ["Sys.ToComponentDataArray"] = "reason" }));
+
+    const string Structural = "[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) s.EntityManager.DestroyEntity(e); } }";
+
+    [Theory]
+    [InlineData(Structural)]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) { if (t.ValueRO.A > 0) s.EntityManager.AddComponent<Gone>(e); } } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) EntityManager.Instantiate(e); } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { Entities.ForEach((Entity e, in Tag t) => { EntityManager.RemoveComponent<Tag>(e); }).Run(); } }")]
+    public void FlagsStructuralChangesInEntityLoops(string code) =>
+        Assert.Single(Ecs(code, new Dictionary<string, string> { ["Sys"] = "registers meshes with Entities Graphics" }));
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { var ecb = new EntityCommandBuffer(Allocator.Temp); foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) ecb.DestroyEntity(e); ecb.Playback(s.EntityManager); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) { } s.EntityManager.CreateEntity(); } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { Entities.WithStructuralChanges().ForEach((Entity e, in Tag t) => { EntityManager.RemoveComponent<Tag>(e); }).Run(); } }")]
+    public void IgnoresBufferedOrOutsideStructuralChanges(string code) =>
+        Assert.Empty(Ecs(code, new Dictionary<string, string> { ["Sys"] = "registers meshes with Entities Graphics" }));
+
+    [Fact]
+    public void AllowListSilencesAStructuralChange() =>
+        Assert.Empty(Ecs(Structural, new Dictionary<string, string> { ["Sys.DestroyEntity"] = "reason" }));
+
+    const string Managed = "partial class Sys : SystemBase { protected override void OnUpdate() { } }";
+
+    [Theory]
+    [InlineData("builds the managed world")]
+    [InlineData("streams regions near players")]
+    [InlineData("mentions a mesh and a camera in lower case")]
+    public void FlagsVagueSystemReasons(string reason) => Assert.Single(Ecs(Managed, new Dictionary<string, string> { ["Sys"] = reason }));
+
+    [Theory]
+    [InlineData("creates the ghost prefab once")]
+    [InlineData("drives managed UnityEngine.Light objects")]
+    [InlineData("dispatches compute on managed GraphicsBuffers")]
+    [InlineData("registers meshes with Entities Graphics")]
+    [InlineData("debt: rebuilds a managed list every frame")]
+    public void AcceptsHonestSystemReasons(string reason) => Assert.Empty(Ecs(Managed, new Dictionary<string, string> { ["Sys"] = reason }));
+
+    [Fact]
+    public void OnlyRuntimeCodeGetsEcsChecks()
+    {
+        Assert.True(Linter.IsRuntime(GameFile));
+        Assert.False(Linter.IsRuntime("unity/Assets/Game/Editor/GameCapture.cs"));
+        Assert.False(Linter.IsRuntime("unity/Assets/Viewer/Viewer.cs"));
+    }
 }

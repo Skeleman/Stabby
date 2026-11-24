@@ -57,14 +57,14 @@ public static class Linter
         var problems = new List<string>();
         var allow = ReadAllow(repo, problems);
         var used = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var file in SourceFiles(repo))
+        var trees = SourceFiles(repo).Select(f => (File: f, Root: Parse(File.ReadAllText(Path.Combine(repo, f))).GetRoot())).ToList();
+        var classes = ClassNames(trees.Select(t => t.Root));
+        foreach (var (file, root) in trees)
         {
-            var tree = Parse(File.ReadAllText(Path.Combine(repo, file)));
-            var root = tree.GetRoot();
             foreach (var c in Comments(root))
                 problems.Add($"{file}:{c.GetLocation().GetLineSpan().StartLinePosition.Line + 1}: comment (put reasons in the commit message)");
-            if (file.StartsWith(GameDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
-                foreach (var p in EcsProblems(file, root, allow, used)) problems.Add(p);
+            if (IsRuntime(file))
+                foreach (var p in EcsProblems(file, root, allow, used, classes)) problems.Add(p);
             if (file.StartsWith(UnityDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
                 foreach (var p in BlockingProblems(file, root, allow, used)) problems.Add(p);
             if (IsDetailCode(file))
@@ -79,20 +79,151 @@ public static class Linter
         return problems;
     }
 
-    static IEnumerable<string> EcsProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used)
+    static readonly string[] ComponentInterfaces = { "IComponentData", "IBufferElementData", "ICleanupComponentData", "ICleanupBufferElementData" };
+    static readonly string[] ManagedTypes = { "string", "object", "dynamic", "String", "Object", "List", "Dictionary", "HashSet", "Queue", "Stack", "Task", "Action", "Func", "StringBuilder", "Exception", "Mesh", "Material", "GameObject", "Transform", "Texture", "Texture2D", "Texture3D", "RenderTexture", "Camera", "Light", "GraphicsBuffer", "ComputeBuffer", "Shader" };
+    static readonly string[] CopyMembers = { "ToEntityArray", "ToEntityListAsync", "ToComponentDataArray", "ToComponentDataListAsync", "ToArchetypeChunkArray", "ToArchetypeChunkListAsync" };
+    static readonly string[] StructuralMembers = { "CreateEntity", "DestroyEntity", "AddComponent", "AddComponentData", "AddBuffer", "AddSharedComponent", "AddSharedComponentManaged", "RemoveComponent", "Instantiate", "CreateSingleton", "SetSharedComponent", "SetSharedComponentManaged" };
+    static readonly Regex Once = new(@"\bonce\b", RegexOptions.IgnoreCase);
+    static readonly Regex EngineApi = new(@"\b(Mesh|Light|GraphicsBuffer|URP|Input|GhostPrefabCreation|Camera|Entities Graphics|Texture|Texture2D)(es|s)?\b");
+    public const string Debt = "debt:";
+
+    public static bool IsRuntime(string file) =>
+        file.StartsWith(GameDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal);
+
+    public static HashSet<string> ClassNames(IEnumerable<SyntaxNode> roots) =>
+        roots.SelectMany(r => r.DescendantNodes().OfType<ClassDeclarationSyntax>()).Select(c => c.Identifier.Text).ToHashSet(StringComparer.Ordinal);
+
+    public static bool IsSystemReason(string reason) =>
+        reason.StartsWith(Debt, StringComparison.Ordinal) || Once.IsMatch(reason) || EngineApi.IsMatch(reason);
+
+    public static List<string> EcsProblems(string file, string text, Dictionary<string, string> allow)
     {
+        var root = Parse(text).GetRoot();
+        return EcsProblems(file, root, allow, new HashSet<string>(StringComparer.Ordinal), ClassNames(new[] { root })).ToList();
+    }
+
+    static string LastName(string type) => type[(type.LastIndexOf('.') + 1)..];
+
+    static IEnumerable<string> EcsProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used, HashSet<string> classes)
+    {
+        bool Allowed(string key)
+        {
+            if (!allow.ContainsKey(key)) return false;
+            used.Add(key);
+            return true;
+        }
+        int LineOf(SyntaxNode n) => n.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
         foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
             var bases = type.BaseList?.Types.Select(b => b.Type.ToString()).ToList() ?? new List<string>();
             string name = type.Identifier.Text;
-            int line = type.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-            bool allowed = allow.ContainsKey(name);
-            if (allowed) used.Add(name);
+            int line = LineOf(type);
+            bool allowed = Allowed(name);
             if (type is ClassDeclarationSyntax && bases.Any(b => b is "SystemBase" or "MonoBehaviour") && !allowed)
                 yield return $"{file}:{line}: {name} is managed; make it a Burst ISystem or list it in {AllowFile} with a reason";
+            if (type is ClassDeclarationSyntax && bases.Contains("SystemBase") && allowed && !IsSystemReason(allow[name]))
+                yield return $"{file}:{line}: {AllowFile} reason for {name} must say it runs once, name an engine API with no unmanaged form, or start with '{Debt}'";
             if (type is StructDeclarationSyntax && bases.Contains("ISystem") && !allowed &&
                 !type.AttributeLists.SelectMany(a => a.Attributes).Any(a => a.Name.ToString() is "BurstCompile" or "BurstCompileAttribute"))
                 yield return $"{file}:{line}: ISystem {name} lacks [BurstCompile]";
+            bool component = bases.Any(b => ComponentInterfaces.Contains(LastName(b)));
+            if (component && type is ClassDeclarationSyntax && !allowed)
+                yield return $"{file}:{line}: component {name} is a managed class; make it an unmanaged struct or list {name} in {AllowFile} with a reason";
+            if (component && type is StructDeclarationSyntax)
+                foreach (var (member, typeSyntax, at) in InstanceMembers(type))
+                {
+                    if (!IsManaged(typeSyntax, classes)) continue;
+                    string key = $"{name}.{member}";
+                    if (Allowed(key)) continue;
+                    yield return $"{file}:{LineOf(at)}: component {name}.{member} is {typeSyntax}, a managed type; components must be unmanaged";
+                }
+        }
+        foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
+        {
+            var update = type.Members.OfType<MethodDeclarationSyntax>().FirstOrDefault(m => m.Identifier.Text == "OnUpdate");
+            if (update == null) continue;
+            string owner = type.Identifier.Text;
+            foreach (var method in Reached(type, update))
+                foreach (var call in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
+                {
+                    if (call.Expression is not MemberAccessExpressionSyntax m || !CopyMembers.Contains(m.Name.Identifier.Text)) continue;
+                    string key = $"{owner}.{m.Name.Identifier.Text}";
+                    if (Allowed(key)) continue;
+                    yield return $"{file}:{LineOf(call)}: {m} copies a query every update; iterate with SystemAPI.Query or a job, or list {key} in {AllowFile} with a reason";
+                }
+        }
+        foreach (var body in EntityLoopBodies(root))
+            foreach (var call in body.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                if (call.Expression is not MemberAccessExpressionSyntax m || !StructuralMembers.Contains(m.Name.Identifier.Text)) continue;
+                if (LastName(m.Expression.ToString()) != "EntityManager") continue;
+                string owner = call.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
+                string key = $"{owner}.{m.Name.Identifier.Text}";
+                if (Allowed(key)) continue;
+                yield return $"{file}:{LineOf(call)}: {m} is a structural change inside an entity loop; record it on an EntityCommandBuffer or list {key} in {AllowFile} with a reason";
+            }
+    }
+
+    static IEnumerable<(string Name, TypeSyntax Type, SyntaxNode At)> InstanceMembers(TypeDeclarationSyntax type)
+    {
+        foreach (var member in type.Members)
+        {
+            if (member.Modifiers.Any(t => t.IsKind(SyntaxKind.StaticKeyword) || t.IsKind(SyntaxKind.ConstKeyword))) continue;
+            if (member is FieldDeclarationSyntax f && !f.Modifiers.Any(t => t.IsKind(SyntaxKind.FixedKeyword)))
+                foreach (var v in f.Declaration.Variables) yield return (v.Identifier.Text, f.Declaration.Type, f);
+            if (member is PropertyDeclarationSyntax p && p.ExpressionBody == null && p.AccessorList != null &&
+                p.AccessorList.Accessors.All(a => a.Body == null && a.ExpressionBody == null))
+                yield return (p.Identifier.Text, p.Type, p);
+        }
+    }
+
+    static bool IsManaged(TypeSyntax type, HashSet<string> classes) => type switch
+    {
+        ArrayTypeSyntax => true,
+        NullableTypeSyntax n => IsManaged(n.ElementType, classes),
+        PredefinedTypeSyntax p => p.Keyword.Text is "string" or "object" or "dynamic",
+        QualifiedNameSyntax q => IsManaged(q.Right, classes),
+        AliasQualifiedNameSyntax a => IsManaged(a.Name, classes),
+        SimpleNameSyntax s => ManagedTypes.Contains(s.Identifier.Text) || classes.Contains(s.Identifier.Text),
+        _ => false,
+    };
+
+    static IEnumerable<MethodDeclarationSyntax> Reached(TypeDeclarationSyntax type, MethodDeclarationSyntax start)
+    {
+        var methods = type.Members.OfType<MethodDeclarationSyntax>().ToLookup(m => m.Identifier.Text);
+        var seen = new HashSet<MethodDeclarationSyntax> { start };
+        var todo = new Queue<MethodDeclarationSyntax>(seen);
+        while (todo.Count > 0)
+        {
+            var m = todo.Dequeue();
+            yield return m;
+            foreach (var call in m.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                string callee = call.Expression switch
+                {
+                    IdentifierNameSyntax i => i.Identifier.Text,
+                    GenericNameSyntax g => g.Identifier.Text,
+                    MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } t => t.Name.Identifier.Text,
+                    _ => "",
+                };
+                foreach (var next in methods[callee])
+                    if (seen.Add(next)) todo.Enqueue(next);
+            }
+        }
+    }
+
+    static IEnumerable<SyntaxNode> EntityLoopBodies(SyntaxNode root)
+    {
+        foreach (var loop in root.DescendantNodes().OfType<CommonForEachStatementSyntax>())
+            if (loop.Expression.DescendantNodesAndSelf().OfType<MemberAccessExpressionSyntax>().Any(m => m.ToString().StartsWith("SystemAPI.Query", StringComparison.Ordinal)))
+                yield return loop.Statement;
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "ForEach" } m) continue;
+            var chain = m.Expression.ToString();
+            if (!chain.StartsWith("Entities", StringComparison.Ordinal) || chain.Contains("WithStructuralChanges", StringComparison.Ordinal)) continue;
+            foreach (var lambda in call.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>())
+                yield return lambda.Body;
         }
     }
 
