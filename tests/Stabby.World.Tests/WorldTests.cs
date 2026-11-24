@@ -9,11 +9,12 @@ public class WorldTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(ContentLoader.FindContentRoot(AppContext.BaseDirectory), Biomes.Select(b => b.Id).ToList());
+    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
     static WorldConfig Cfg(ulong seed, int size = 256) =>
         new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) };
 
-    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials, null, null, Objects);
+    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials, null, null, Objects, Caves);
 
     [Fact]
     public void HundredSeedsPassEveryCheck()
