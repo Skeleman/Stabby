@@ -80,6 +80,8 @@ Shader "Stabby/Creature"
             #pragma target 4.5 STABBY_CREATURE_BUFFER
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ _CLUSTER_LIGHT_LOOP
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -99,6 +101,7 @@ Shader "Stabby/Creature"
             #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
+            #include "Assets/Viewer/Shaders/LocalLights.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; CREATURE_INPUT };
             struct Varyings
@@ -205,7 +208,7 @@ Shader "Stabby/Creature"
                 float3 v = normalize(_WorldSpaceCameraPos - wp);
                 float wrap = eye ? saturate(dot(n, l.direction)) : saturate((dot(n, l.direction) + 0.35) / 1.35);
                 float rim = eye ? 0 : pow(1 - saturate(dot(n, v)), 4) * 0.25 * saturate(dot(-v, l.direction) + 0.3);
-                float3 c = LookColor(albedo, 1) * (l.color * (wrap + rim) * l.shadowAttenuation + ambient * ao);
+                float3 c = LookColor(albedo, 1) * (l.color * (wrap + rim) * l.shadowAttenuation + (ambient + LocalLights(wp, n, i.positionCS)) * ao);
                 c += eye ? l.color * l.shadowAttenuation * 0.6 * pow(saturate(dot(n, normalize(l.direction + v))), 120) + ambient * 0.05 * pow(1 - saturate(dot(n, v)), 2) : LookSheen(n, v, l.direction, l.color * l.shadowAttenuation, tmRough) * ao * 0.5;
                 return half4(MixFog(c, i.local.w), 1);
             }
