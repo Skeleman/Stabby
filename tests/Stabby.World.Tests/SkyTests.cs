@@ -134,6 +134,24 @@ public class SkyTests
             Assert.True(Sky.At(h, 0).Intensity <= Sky.At(h, SkyDef.FullMoon).Intensity + 1e-6f);
     }
 
+    [Fact]
+    public void NightSkyStaysDarkAndDuskGlowsTowardTheSun()
+    {
+        var full = Sky.At(0, SkyDef.FullMoon);
+        var dark = Sky.At(0, 0);
+        Assert.True(dark.Zenith.R + dark.Zenith.G + dark.Zenith.B < 0.02f);
+        Assert.Equal(0f, dark.MoonGlow, 6);
+        Assert.True(full.MoonGlow > 0 && full.MoonGlow <= Sky.MoonGlow);
+        Assert.True(full.Stars < dark.Stars && dark.Stars <= Sky.StarBrightness);
+        Assert.True(full.Zenith.B < full.Sky.B);
+        Assert.Equal(0f, Sky.At(12).Stars, 6);
+        Assert.Equal(0f, Sky.At(12).MoonGlow, 6);
+        Assert.Equal(-full.MoonX, full.DirX, 5);
+        Assert.Equal(-Sky.At(12).SunY, Sky.At(12).DirY, 5);
+        var dusk = Sky.At(18.15f);
+        Assert.True(dusk.Glow.R > dusk.Glow.B && dusk.Glow.R > Sky.At(12).Glow.R);
+    }
+
     [Theory]
     [InlineData("\"stops\": []")]
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": 0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]")]
@@ -145,7 +163,8 @@ public class SkyTests
             "\"sun\": {\"noonElevationDeg\": 38, \"noonAzimuthDeg\": 320, \"hourOffset\": 0}, " +
             "\"moon\": {\"noonElevationDeg\": 50, \"noonAzimuthDeg\": 20, \"hourOffset\": 12}, " +
             "\"moonColor\": [0.6, 0.7, 1], \"moonIntensity\": 0.2, \"moonSwitchHeight\": -0.06, \"moonFadeHeight\": 0.1, " +
-            "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, " + stops + "}";
+            "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, \"moonGlow\": 0.02, \"starBrightness\": 0.01, " +
+            stops.Replace("\"ambientSky\"", "\"zenith\": [0.3,0.4,0.6], \"glow\": [0,0,0], \"ambientSky\"") + "}";
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseSky(json, "sky.json"));
     }
 }

@@ -5,7 +5,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        public const float PinnedMidday = 12f, NightHour = 0f, DuskHour = 18.15f;
+        public const float PinnedMidday = 12f, NightHour = 0f, DuskHour = 18.15f, DawnHour = 24f - DuskHour;
 
         public static void PinTime()
         {
@@ -69,10 +69,7 @@ namespace Stabby.Game.Editor
             lines.Add($"night hour {s.Hour:F2}, new moon: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F4}, lit {s.Illumination:F2}, ambient sky {s.AmbientSky.B:F4}, sky {s.Sky.R:F3},{s.Sky.G:F3},{s.Sky.B:F3}");
             Shot(cam, null, "warmup");
             Shot(cam, dir, "night-newmoon");
-            for (var w = ShowHour(DuskHour); w.MoveNext();) yield return null;
-            var sun = DayNightSystem.Shown;
-            var west = Vector3.ProjectOnPlane(-new Vector3(sun.DirX, sun.DirY, sun.DirZ), Vector3.up).normalized;
-            var duskEye = home;
+            var peakEye = home;
             float peak = float.MinValue;
             for (int a = 0; a < 32; a++)
             {
@@ -80,17 +77,28 @@ namespace Stabby.Game.Editor
                 for (float r = 0f; r <= 1500f; r += 100f)
                 {
                     float h = GroundHeight(home.x + d.x * r, home.z + d.z * r);
-                    if (h > peak) { peak = h; duskEye = new Vector3(home.x + d.x * r, h + 60f, home.z + d.z * r); }
+                    if (h > peak) { peak = h; peakEye = new Vector3(home.x + d.x * r, h + 60f, home.z + d.z * r); }
                 }
             }
-            cam.transform.SetPositionAndRotation(duskEye, Quaternion.LookRotation(Quaternion.AngleAxis(-25f, Vector3.up) * west + Vector3.down * 0.12f));
-            for (var w = Settle(360); w.MoveNext();) yield return null;
-            sun = DayNightSystem.Shown;
-            lines.Add($"dusk hour {sun.Hour:F2}: {(sun.Moon ? "moon" : "sun")} light {sun.Intensity:F3}, sun height {sun.SunHeight:F3}, eye {duskEye.x:F0},{duskEye.y:F0},{duskEye.z:F0}");
-            Shot(cam, null, "warmup");
-            Shot(cam, dir, "dusk");
+            for (var w = SkyView(cam, dir, lines, peakEye, NightHour, Stabby.World.SkyDef.FullMoon, "night-moon", true, 0f, 0.05f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, NightHour, 0f, "night-newmoon-sky", true, 0f, 0.05f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, DawnHour, Stabby.World.SkyDef.FullMoon, "dawn", false, 25f, -0.12f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, PinnedMidday, Stabby.World.SkyDef.FullMoon, "noon", false, 90f, -0.05f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, DuskHour, Stabby.World.SkyDef.FullMoon, "dusk", false, -25f, -0.12f); w.MoveNext();) yield return null;
             for (var w = ShowHour(PinnedMidday); w.MoveNext();) yield return null;
             GameStatus.Lines["~daynight"] = string.Join("\n", lines);
+        }
+        static System.Collections.IEnumerator SkyView(Camera cam, string dir, List<string> lines, Vector3 eye, float hour, float phase, string name, bool moon, float turn, float pitch)
+        {
+            for (var w = ShowHour(hour, phase); w.MoveNext();) yield return null;
+            var s = DayNightSystem.Shown;
+            var toward = Vector3.ProjectOnPlane(moon ? new Vector3(s.MoonX, s.MoonY, s.MoonZ) : new Vector3(s.SunX, s.SunY, s.SunZ), Vector3.up).normalized;
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(Quaternion.AngleAxis(turn, Vector3.up) * toward + Vector3.down * pitch));
+            for (var w = Settle(240); w.MoveNext();) yield return null;
+            s = DayNightSystem.Shown;
+            lines.Add($"{name} hour {s.Hour:F2} phase {s.Phase:F2}: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F4}, sun height {s.SunHeight:F3}, moon height {s.MoonHeight:F3}, ambient sky {s.AmbientSky.R:F4},{s.AmbientSky.G:F4},{s.AmbientSky.B:F4}, horizon {s.Sky.R:F3},{s.Sky.G:F3},{s.Sky.B:F3}, zenith {s.Zenith.R:F3},{s.Zenith.G:F3},{s.Zenith.B:F3}, glow {s.Glow.R:F3},{s.Glow.G:F3},{s.Glow.B:F3}, moon glow {s.MoonGlow:F4}, stars {s.Stars:F4}, eye {eye.x:F0},{eye.y:F0},{eye.z:F0}");
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, name);
         }
     }
 }

@@ -28,10 +28,14 @@ namespace Stabby.Game
         public static SkyState Shown;
 
         static readonly int SkyId = Shader.PropertyToID("_StabbySky"), GroundId = Shader.PropertyToID("_StabbyGround"), ClockId = Shader.PropertyToID("_StabbyClock");
+        static readonly int ZenithId = Shader.PropertyToID("_StabbyZenith"), HorizonId = Shader.PropertyToID("_StabbyHorizon"), GlowId = Shader.PropertyToID("_StabbyGlow");
+        static readonly int SunDirId = Shader.PropertyToID("_StabbySunDir"), SunTintId = Shader.PropertyToID("_StabbySunTint");
+        static readonly int MoonDirId = Shader.PropertyToID("_StabbyMoonDir"), MoonTintId = Shader.PropertyToID("_StabbyMoonTint"), StarsId = Shader.PropertyToID("_StabbyStars");
 
         Task<SkyDef> load;
         SkyDef sky;
         Light light;
+        Material skyMaterial;
         float stepAt = float.MinValue;
 
         protected override void OnCreate()
@@ -57,6 +61,8 @@ namespace Stabby.Game
                 if (load.IsFaulted) { GameStatus.Failure = load.Exception.ToString(); load = null; Enabled = false; return; }
                 sky = load.Result;
                 load = null;
+                var shader = Shader.Find("Stabby/Sky");
+                if (shader != null) { skyMaterial = new Material(shader) { hideFlags = HideFlags.DontSave }; RenderSettings.skybox = skyMaterial; }
             }
             Scrub();
             if (light == null)
@@ -88,8 +94,21 @@ namespace Stabby.Game
             light.intensity = s.Intensity;
             var skyColor = new Color(s.Sky.R, s.Sky.G, s.Sky.B);
             var cam = Camera.main;
-            if (cam != null) cam.backgroundColor = skyColor;
+            if (cam != null)
+            {
+                cam.backgroundColor = skyColor;
+                if (skyMaterial != null && cam.clearFlags != CameraClearFlags.Skybox) cam.clearFlags = CameraClearFlags.Skybox;
+            }
+            if (skyMaterial != null && RenderSettings.skybox != skyMaterial) RenderSettings.skybox = skyMaterial;
             RenderSettings.fogColor = skyColor;
+            Shader.SetGlobalColor(HorizonId, new Color(s.Sky.R, s.Sky.G, s.Sky.B, skyMaterial != null ? 1 : 0).linear);
+            Shader.SetGlobalColor(ZenithId, new Color(s.Zenith.R, s.Zenith.G, s.Zenith.B).linear);
+            Shader.SetGlobalColor(GlowId, new Color(s.Glow.R, s.Glow.G, s.Glow.B).linear);
+            Shader.SetGlobalVector(SunDirId, new Vector4(s.SunX, s.SunY, s.SunZ, 0));
+            Shader.SetGlobalColor(SunTintId, s.Moon ? Color.black : new Color(s.Light.R, s.Light.G, s.Light.B).linear);
+            Shader.SetGlobalVector(MoonDirId, new Vector4(s.MoonX, s.MoonY, s.MoonZ, s.MoonGlow));
+            Shader.SetGlobalColor(MoonTintId, new Color(sky.MoonColor.R, sky.MoonColor.G, sky.MoonColor.B).linear);
+            Shader.SetGlobalFloat(StarsId, s.Stars);
             Shader.SetGlobalColor(SkyId, new Color(s.AmbientSky.R, s.AmbientSky.G, s.AmbientSky.B));
             Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B));
             Shown = s;
