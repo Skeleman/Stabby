@@ -90,9 +90,28 @@ architecture contract. The other steps fit the contract as it stands.
 | Item | Status |
 |---|---|
 | Cross-runtime erosion drift: Unity (Mono) and .NET generate seed 3 up to ~60 m apart before strata, ~180 m with them. The host map is authoritative and chunk sync corrects clients, so bake shipped maps on one runtime | later |
-| **Zach:** cave expansion beyond the current fundamentals (cave networks, a dungeon scale); after surface look and objects | later |
 
-## Next: surface look and objects (before bigger caves)
+## Next: underground (Zach 11-24: caves, tunnels, mines, dungeons)
+
+Goals (Zach 11-24): caves from a single chamber to labyrinths; special caves with colossal chambers, many entrances and rock bridges; cave water, some fed from groundwater; dense stalactites and stalagmites; biome caves (crystal with geometric walls in fantasy biomes, ice in snow and glacier, obsidian with lava pits and flows in volcanic); mines; roads between cities, landmarks and mines that switchback up mountains or tunnel through, with varied tunnels (a river beside the path, camp or settlement chambers, pools, underground groves, vines, roots, mineral deposits, columns, ruin entrances); dungeons as overworld structures or small entrances that expand underground, in several architectures from grid-snapped reusable kit pieces, joining caves. Darkness rule holds: no ambient lift underground; light comes from entrances, skylights, glow fungus, crystals, lava and carried light.
+
+| Step | Status |
+|---|---|
+| U0 contract draft for Zach's review: an underground stage after hydrology (own streams) emits cave graphs (nodes = chambers, edges = tunnels) expanded into sparse carve edits in the EditGrid; underground water joins the one drainage graph (springs and sinks link cave streams to surface flow); dungeon and mine kits snap to one grid and place as structure blueprints (rule 11) whose volumes are carve edits; road network as its own stage after sites | proposed |
+| U1 cave graph (b/caves-graph): size classes from data (single chamber, branching, labyrinth, grand hall with several entrances and rock bridges); chambers and tunnels as warped capsule and ellipsoid carves with organic noise; checks: every cave walkable from an entrance, bridges hold, no carve breaks into sea or lake; stream and collision bench on a labyrinth | next |
+| U2 speleothems (b/caves-detail): stalactites, stalagmites, flowstone and columns as instanced objects placed on cave ceilings and floors from their own stream (big columns as edits); screen-size LOD; rock walls from the material library | after U1 |
+| U3 cave water (b/caves-water): chamber pools on the shared water path (real water); underground streams fed by groundwater that resurface as springs on the drainage graph; waterfalls inside grand halls | after U1 |
+| U4 biome caves: crystal (faceted cell carve primitive, glowing crystal objects), ice (ice library material, translucent shader), obsidian (glassy material, lava pools and flows once the lava liquid lands) | after U2 |
+| U5 mines (b/mines): adits and shafts carved on the grid, timber supports, rails and carts from the structure kit, placed in ore-rich rock near ranges; links to roads later | after U1 + kit grid |
+| R1 roads (b/roads-1): network between towns, key landmarks and mines; slope-cost routing with switchbacks; road surface as a terrain coat | after towns |
+| R2 tunnels (b/roads-tunnel): where a route through a ridge costs less than over it, a tunnel from the cave graph with variety sockets every 100-200 m (river alongside, camp chamber, pool, grove under a skylight, roots, vines, mineral veins, columns, ruin entrance) | after R1 + U3 |
+| D1 dungeon kit (b/dungeon-kit): grid modules (corridor, room, stairs, door, pillar, collapse) with architecture styles as data (materials and trim per style); first style proven end to end | after U1 |
+| D2 dungeon layouts: overworld structures and small entrances that expand underground, room graph from their own stream; ruins reuse the kit | after D1 |
+| D3 interfaces: dungeon breaches into caves and cave links into dungeons through shared connector sockets; more architectures | after D2 + U1 |
+
+Push-back notes: groves underground need a light source (skylight shafts or glow flora) to keep the darkness theme; tunnels wait for roads, roads for towns; obsidian lava waits for the lava liquid.
+
+## Next: surface look and objects
 
 Art direction (Zach): stylised natural realism. Real-world colour palettes (no saturated cartoon hues), shader surfaces that mimic real materials, and enough noise and imperfection to feel organic. Fidelity can stay modest; palette and material believability come first.
 
@@ -165,7 +184,5 @@ One visual identity (Zach): every shader follows the same look budget, with shar
 - Material viewer (Zach 11-22, long-term): every library material on test shapes
   with an orbit camera and a name list, so Zach can audit surfaces and point at
   entries by name.
-- Dungeons about 4x the size of caves, built on the same carve edits (idea).
-- Cave system expansion well beyond the current fundamentals (idea).
 
 Not planned yet: a general job framework (Task.Run plus cancellation covers current needs).
