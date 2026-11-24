@@ -208,6 +208,35 @@ namespace Stabby.Game
         public float Height(int i, int k) => At(i * StepM, k * StepM);
     }
 
+    struct CachedColumns : IColumnField
+    {
+        public GroundColumns Columns;
+        public NativeArray<float> Cells;
+        public int I0, K0, W;
+
+        public CachedColumns(GroundColumns columns, int i0, int k0, int w)
+        {
+            Columns = columns;
+            I0 = i0;
+            K0 = k0;
+            W = w;
+            Cells = new NativeArray<float>(w * w, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+            for (int a = 0; a < Cells.Length; a++) Cells[a] = float.NaN;
+        }
+
+        public float At(float x, float z) => Columns.At(x, z);
+
+        public float Height(int i, int k)
+        {
+            int u = i - I0, v = k - K0;
+            if ((uint)u >= (uint)W || (uint)v >= (uint)W) return Columns.Height(i, k);
+            int a = v * W + u;
+            float h = Cells[a];
+            if (math.isnan(h)) { h = Columns.Height(i, k); Cells[a] = h; }
+            return h;
+        }
+    }
+
     struct TerrainSink : INetsSink
     {
         public NativeList<TerrainVertex> Verts;
@@ -300,7 +329,7 @@ namespace Stabby.Game
             return true;
         }
 
-        static float3 Coarse(GroundColumns coarse, NativeEdits near, float s2, int cx, int j, int cz, bool sx, float ax, bool sz, float az, out float3 nrm)
+        static float3 Coarse(CachedColumns coarse, NativeEdits near, float s2, int cx, int j, int cz, bool sx, float ax, bool sz, float az, out float3 nrm)
         {
             SurfaceNets.CoarseVertex(coarse, near, s2, cx, j, cz, out float x, out float y, out float z, out nrm.x, out nrm.y, out nrm.z);
             if (sx) x = ax;
@@ -309,7 +338,7 @@ namespace Stabby.Game
             return new float3(x, y, z);
         }
 
-        static void Row(GroundColumns coarse, NativeEdits near, float s2, int cx, bool sx, bool lx, float ax, int cz, bool sz, float az, int j, out float3 pos, out float3 nrm)
+        static void Row(CachedColumns coarse, NativeEdits near, float s2, int cx, bool sx, bool lx, float ax, int cz, bool sz, float az, int j, out float3 pos, out float3 nrm)
         {
             pos = Coarse(coarse, near, s2, cx, j, cz, sx && !lx, ax, sz, az, out nrm);
             if (lx)
@@ -376,11 +405,12 @@ namespace Stabby.Game
                 float ext = e.CrustExtent;
                 if (e.Ax + ext > x0m && e.Ax - ext < x1m && e.Az + ext > z0m && e.Az - ext < z1m) crusts.Items.Add(e);
             }
-            if (edits.Count > 0) SurfaceNets.Edited(columns, edits, chunk, ref sink);
-            else SurfaceNets.Heightfield(columns, chunk, ref sink);
+            var cached = new CachedColumns(columns, chunk.X0 - 3, chunk.Z0 - 3, m + 6);
+            if (edits.Count > 0) SurfaceNets.Edited(cached, edits, chunk, ref sink);
+            else SurfaceNets.Heightfield(cached, chunk, ref sink);
 
             bool stitch = Level < TerrainTree.Root;
-            var coarse = new GroundColumns { Ground = Ground, StepM = 2 * s, Top = g.Top, Smooth = Smooth };
+            var coarse = new CachedColumns(new GroundColumns { Ground = Ground, StepM = 2 * s, Top = g.Top, Smooth = Smooth }, chunk.X0 / 2 - 3, chunk.Z0 / 2 - 3, stitch ? m / 2 + 8 : 0);
             var near = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             for (int f = 0; stitch && f < g.Edits.Length; f++)
             {
@@ -482,7 +512,7 @@ namespace Stabby.Game
                     float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
-                    float sCover = Cover(near, coarse, p.Stitch.xyz, out float sStone, out _), sLift = Lift(sCover);
+                    float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _), sLift = Lift(sCover);
                     p.StitchNormal = new half4(new float4(sn, math.max(sc.w, sLift)));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover) + sStone));
                 }

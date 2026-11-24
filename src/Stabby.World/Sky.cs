@@ -15,7 +15,7 @@ namespace Stabby.World
     public sealed class SkyStop
     {
         public float SunHeight;
-        public Rgb Sky, AmbientSky, AmbientGround, Sun;
+        public Rgb Sky, Zenith, Glow, AmbientSky, AmbientGround, Sun;
         public float SunIntensity;
     }
 
@@ -27,9 +27,9 @@ namespace Stabby.World
     public struct SkyState
     {
         public float Hour, SunHeight, MoonHeight;
-        public float DirX, DirY, DirZ;
-        public Rgb Light, Sky, AmbientSky, AmbientGround;
-        public float Intensity, Phase, Illumination;
+        public float DirX, DirY, DirZ, SunX, SunY, SunZ, MoonX, MoonY, MoonZ;
+        public Rgb Light, Sky, Zenith, Glow, AmbientSky, AmbientGround;
+        public float Intensity, Phase, Illumination, MoonGlow, Stars;
         public bool Moon;
     }
 
@@ -40,7 +40,7 @@ namespace Stabby.World
         public Orbit Moon = new Orbit { NoonElevationDeg = 52, NoonAzimuthDeg = 20, HourOffset = 12 };
         public Rgb MoonColor = new Rgb(0.62f, 0.72f, 1f);
         public float MoonIntensity = 0.18f, MoonSwitchHeight = -0.06f, MoonFadeHeight = 0.1f;
-        public float MoonCycleDays = 8, MoonStartPhase = 0.5f, NewMoonLight = 0.03f, NewMoonAmbient = 0.2f;
+        public float MoonCycleDays = 8, MoonStartPhase = 0.5f, NewMoonLight = 0.03f, NewMoonAmbient = 0.2f, MoonGlow = 0.02f, StarBrightness = 0.01f;
         public const float FullMoon = 0.5f;
         public List<SkyStop> Stops = new List<SkyStop>();
 
@@ -83,6 +83,8 @@ namespace Stabby.World
             SkyStop hi = Stops[i - 1], lo = Stops[i];
             float t = (hi.SunHeight - sunHeight) / (hi.SunHeight - lo.SunHeight);
             r.Sky = Rgb.Lerp(hi.Sky, lo.Sky, t);
+            r.Zenith = Rgb.Lerp(hi.Zenith, lo.Zenith, t);
+            r.Glow = Rgb.Lerp(hi.Glow, lo.Glow, t);
             r.AmbientSky = Rgb.Lerp(hi.AmbientSky, lo.AmbientSky, t);
             r.AmbientGround = Rgb.Lerp(hi.AmbientGround, lo.AmbientGround, t);
             r.Sun = Rgb.Lerp(hi.Sun, lo.Sun, t);
@@ -92,7 +94,7 @@ namespace Stabby.World
 
         static SkyStop Copy(SkyStop s, float h) => new SkyStop
         {
-            SunHeight = h, Sky = s.Sky, AmbientSky = s.AmbientSky, AmbientGround = s.AmbientGround, Sun = s.Sun, SunIntensity = s.SunIntensity,
+            SunHeight = h, Sky = s.Sky, Zenith = s.Zenith, Glow = s.Glow, AmbientSky = s.AmbientSky, AmbientGround = s.AmbientGround, Sun = s.Sun, SunIntensity = s.SunIntensity,
         };
 
         public SkyState At(float hour) => At(hour, FullMoon);
@@ -108,7 +110,9 @@ namespace Stabby.World
             var st = new SkyState
             {
                 Hour = hour, SunHeight = sy, MoonHeight = my, Phase = phase, Illumination = lit,
-                Sky = Scale(b.Sky, ambient), AmbientSky = Scale(b.AmbientSky, ambient), AmbientGround = Scale(b.AmbientGround, ambient),
+                SunX = sx, SunY = sy, SunZ = sz, MoonX = mx, MoonY = my, MoonZ = mz,
+                MoonGlow = MoonGlow * lit * dark * Clamp01(my / MoonFadeHeight + 0.5f), Stars = StarBrightness * dark * (1 - 0.6f * lit),
+                Sky = Scale(b.Sky, ambient), Zenith = Scale(b.Zenith, ambient), Glow = Scale(b.Glow, ambient), AmbientSky = Scale(b.AmbientSky, ambient), AmbientGround = Scale(b.AmbientGround, ambient),
             };
             if (sy > MoonSwitchHeight)
             {
@@ -145,6 +149,8 @@ namespace Stabby.World
             if (!(d.MoonStartPhase >= 0 && d.MoonStartPhase < 1)) e.Add($"sky.moonStartPhase {d.MoonStartPhase} outside 0..1");
             if (!(d.NewMoonLight >= 0 && d.NewMoonLight <= 1)) e.Add($"sky.newMoonLight {d.NewMoonLight} outside 0..1");
             if (!(d.NewMoonAmbient >= 0 && d.NewMoonAmbient <= 1)) e.Add($"sky.newMoonAmbient {d.NewMoonAmbient} outside 0..1");
+            if (!(d.MoonGlow >= 0 && d.MoonGlow <= 0.2f)) e.Add($"sky.moonGlow {d.MoonGlow} outside 0..0.2");
+            if (!(d.StarBrightness >= 0 && d.StarBrightness <= 0.05f)) e.Add($"sky.starBrightness {d.StarBrightness} outside 0..0.05");
             if (d.Stops == null || d.Stops.Count < 2) { e.Add("sky.stops: at least two stops required"); return e; }
             for (int i = 0; i < d.Stops.Count; i++)
             {
@@ -153,6 +159,8 @@ namespace Stabby.World
                 if (!(s.SunHeight >= -1 && s.SunHeight <= 1)) e.Add($"{p}.sunHeight {s.SunHeight} outside -1..1");
                 if (i > 0 && !(s.SunHeight < d.Stops[i - 1].SunHeight)) e.Add($"{p}.sunHeight must fall below the previous stop");
                 CheckColor(e, p + ".sky", s.Sky);
+                CheckColor(e, p + ".zenith", s.Zenith);
+                CheckColor(e, p + ".glow", s.Glow);
                 CheckColor(e, p + ".ambientSky", s.AmbientSky);
                 CheckColor(e, p + ".ambientGround", s.AmbientGround);
                 CheckColor(e, p + ".sun", s.Sun);

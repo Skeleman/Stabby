@@ -63,12 +63,13 @@ namespace Stabby.Content
                 MoonSwitchHeight = root.Float("moonSwitchHeight", 0), MoonFadeHeight = root.Float("moonFadeHeight", 0),
                 MoonCycleDays = root.Float("moonCycleDays", 0), MoonStartPhase = root.Float("moonStartPhase", 0),
                 NewMoonLight = root.Float("newMoonLight", 0), NewMoonAmbient = root.Float("newMoonAmbient", 0),
+                MoonGlow = root.Float("moonGlow", 0), StarBrightness = root.Float("starBrightness", 0),
             };
             foreach (var s in root.Objects("stops", true))
             {
                 d.Stops.Add(new SkyStop
                 {
-                    SunHeight = s.Float("sunHeight", 0), Sky = Color(s, "sky", source), AmbientSky = Color(s, "ambientSky", source),
+                    SunHeight = s.Float("sunHeight", 0), Sky = Color(s, "sky", source), Zenith = Color(s, "zenith", source), Glow = Color(s, "glow", source), AmbientSky = Color(s, "ambientSky", source),
                     AmbientGround = Color(s, "ambientGround", source), Sun = Color(s, "sun", source), SunIntensity = s.Float("sunIntensity", 0),
                 });
                 s.End();
