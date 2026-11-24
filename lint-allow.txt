@@ -34,3 +34,4 @@ unity/Assets/Game/Resources/Object.shader:CourseH course jitter runs in course-l
 unity/Assets/Game/Resources/Object.shader:Built thatch and shingle strands are stretched along the strand direction
 unity/Assets/Game/Resources/Object.shader:frag stone lump is a macro pattern at 0.7 per metre; 13.1 scales a per-instance offset
 unity/Assets/Viewer/Shaders/Bark.hlsl:SpruceBark bark plates are a structural cell lattice on warped bark coordinates
+LightPresenterSystem drives managed UnityEngine.Light objects and an indirect glow draw from the Burst budget's tiers
