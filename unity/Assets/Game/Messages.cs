@@ -59,6 +59,7 @@ namespace Stabby.Game
         public BlobArray<RiverPiece> Pieces;
         public BlobArray<FeatureEdit> Edits;
         public BlobArray<int> EditStart, EditItems;
+        public BlobArray<float2> CaveLight;
     }
 
     public struct Ground : IComponentData, IGroundHeight
@@ -112,7 +113,7 @@ namespace Stabby.Game
         public static GroundParts Fill(GeneratedWorld w)
         {
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail);
+            var edits = Features.Place(w, detail, out var caves);
             var c = detail.Cells;
             int n = c.N, nn = n * n;
             var b = new BlobBuilder(Allocator.Persistent);
@@ -147,6 +148,9 @@ namespace Stabby.Game
             for (int i = 0; i < cellStart.Length; i++) es[i] = cellStart[i];
             var ei = b.Allocate(ref root.EditItems, cellItems.Length);
             for (int i = 0; i < cellItems.Length; i++) ei[i] = cellItems[i];
+            var dark = CaveLight.Distances(edits, caves);
+            var cl = b.Allocate(ref root.CaveLight, edits.Length);
+            for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
             return new GroundParts { Detail = detail, Edits = edits, Blob = b };
         }
 

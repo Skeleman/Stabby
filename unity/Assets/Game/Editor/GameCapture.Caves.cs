@@ -47,6 +47,13 @@ namespace Stabby.Game.Editor
             }
         }
 
+        static void GeometryShot(Camera cam, string dir, string name)
+        {
+            Shader.SetGlobalFloat("_StabbyCaveDarkOff", 1f);
+            Shot(cam, dir, name);
+            Shader.SetGlobalFloat("_StabbyCaveDarkOff", 0f);
+        }
+
         static void ExposedShot(Camera cam, string dir, string name, float ev)
         {
             GameStatus.ToolFrame = Time.frameCount;
@@ -142,6 +149,35 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "caves-labyrinth-entrance");
             lines.Add(CollisionBench(ground, cols, lab, home));
 
+            var reach = CaveLight.Distances(edits, graphs);
+            int deep = -1;
+            for (int q = 0; q < edits.Length; q++)
+                if (CaveLight.Lit(edits[q]) && edits[q].Shape == FeatureEdit.Cave && Features.TileOf(edits[q], map.Config.CellMeters) == lab.Tile && reach[2 * q] < CaveLight.Unlit && (deep < 0 || Mathf.Min(reach[2 * q], reach[2 * q + 1]) > Mathf.Min(reach[2 * deep], reach[2 * deep + 1])))
+                    deep = q;
+            if (deep >= 0)
+            {
+                var de = edits[deep];
+                bool fromA = reach[2 * deep] <= reach[2 * deep + 1];
+                var da = fromA ? new Vector3(de.Ax, de.Ay, de.Az) : new Vector3(de.Bx, de.By, de.Bz);
+                var db = fromA ? new Vector3(de.Bx, de.By, de.Bz) : new Vector3(de.Ax, de.Ay, de.Az);
+                var at = Vector3.Lerp(da, db, 0.3f);
+                float tx = at.x, ty = at.y, tz = at.z;
+                Walk.Step(ground, ground.EditsNear(tx, tz, Walk.Radius), cols, ground.WalkStep, ref tx, ref ty, ref tz, 0, 0, Walk.Reach);
+                eye = new Vector3(tx, ty + 1.7f, tz);
+                var ahead = db - da;
+                ahead.y = 0;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(ahead.normalized));
+                waited = LoadWaitTotal();
+                for (var w = Settle(120); w.MoveNext();) yield return null;
+                float walked = Mathf.Lerp(reach[2 * deep], reach[2 * deep + 1], fromA ? 0.3f : 0.7f);
+                lines.Add($"deep tunnel at {eye.x:F0},{eye.y:F0},{eye.z:F0}: {walked:F0} m of tunnel from the nearest mouth, tunnel R {de.R:F0} m: stream wait {LoadWaitTotal() - waited:F2} s");
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "caves-deep-tunnel");
+                ExposedShot(cam, dir, "caves-deep-tunnel-debug-exposure", CaveDebugExposure);
+                GeometryShot(cam, dir, "caves-deep-tunnel-debug-unlit");
+            }
+            else lines.Add("deep tunnel: no labyrinth tunnel reachable from a mouth");
+
             var hn = hall.Nodes.Find(n => n.Hall);
             var hc = new Vector3(hn.X, hn.Y, hn.Z);
             float rh = 0f;
@@ -165,8 +201,9 @@ namespace Stabby.Game.Editor
             Shot(cam, null, "warmup");
             Shot(cam, dir, "caves-hall");
             ExposedShot(cam, dir, "caves-hall-debug-exposure", CaveDebugExposure);
+            GeometryShot(cam, dir, "caves-hall-debug-unlit");
             var sky = DayNightSystem.Shown;
-            lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added");
+            lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
             GameStatus.Lines["~caves"] = string.Join("\n", lines);
         }
 
