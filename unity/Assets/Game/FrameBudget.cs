@@ -2,7 +2,7 @@ namespace Stabby.Game
 {
     public struct FrameBudget
     {
-        public const int CreatureEntities = 384;
+        public const int CreatureEntities = 768;
 
         public int Limit, Spent;
 
