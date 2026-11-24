@@ -84,7 +84,15 @@ namespace Stabby.World
                 else if (hy.LakeId[i] >= 0) hy.WaterSurface[i] = hy.Lakes[hy.LakeId[i]].Level;
             }
             hy.Receiver = Drainage.Receivers(surface, sea, n, c.CellMeters);
-            foreach (var lake in hy.Lakes) RouteToOutlet(n, lake, hy, surface);
+            foreach (var lake in hy.Lakes)
+            {
+                RouteToOutlet(n, lake, hy, surface);
+                if (lake.Outlet < 0) continue;
+                int below = hy.Receiver[lake.Outlet];
+                if (sea[below] || surface[below] <= lake.Level) continue;
+                lake.Level = surface[below];
+                foreach (int i in lake.Cells) hy.WaterSurface[i] = lake.Level;
+            }
             var stack = Drainage.Stack(hy.Receiver, n);
             var runoff = new float[n * n];
             for (int i = 0; i < n * n; i++) runoff[i] = Runoff(c, sea[i], precipitationMm[i]);

@@ -19,6 +19,7 @@ namespace Stabby.Game
 
         public void Hide(ObjectInstance o)
         {
+            scan.Complete();
             if (!hidden.IsCreated) hidden = new NativeParallelHashSet<ulong>(64, Allocator.Persistent);
             if (!hidden.Add(o.Id) || tile == null || o.Def >= tile.Length) return;
             long key = Key(o.Def, (int)(o.X / tile[o.Def]), (int)(o.Z / tile[o.Def]));

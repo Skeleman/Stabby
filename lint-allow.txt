@@ -10,6 +10,7 @@ PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem converts each chunk's managed placement to native instances once, in a task; region bakes, including re-entry, are Burst jobs
 ObjectColumnsSystem.Complete only after IsCompleted, or at teardown
+ObjectViewSystem.Complete only after IsCompleted, at teardown, or before Hide edits the spawned set the tile scan reads
 ObjectViewSystem debt: streams object tiles from the managed ObjectField as the camera moves; registering their meshes with Entities Graphics is the engine part
 GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera
 ServerObjectDeltaSystem debt: validates every incoming object removal against the managed ObjectField in a task and replicates the result
