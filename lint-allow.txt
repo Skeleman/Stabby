@@ -41,3 +41,5 @@ unity/Assets/Viewer/Shaders/Bark.hlsl:SpruceBark bark plates are a structural ce
 LightPresenterSystem drives managed UnityEngine.Light objects and an indirect glow draw from the Burst budget's tiers
 LightPresenterSystem.ToComponentDataArray debt: copies every LightEmitter each update to drive the light pool and glow buffer
 LightBudgetSystem.ToComponentDataArray debt: copies every LightEmitter each update to rank and step the light budget, then writes them back
+CaveDarkSystem follows Camera.main and uploads a Burst-built cave darkness volume to a managed Texture3D (Texture API, no unmanaged form)
+CaveDarkSystem.Complete only after IsCompleted, or at teardown
