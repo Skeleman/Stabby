@@ -2,10 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby world objects",
   "type": "object",
-  "required": ["schemaVersion", "lights", "kinds", "objects", "terrain", "foliage"],
+  "required": ["schemaVersion", "lightBudget", "lights", "kinds", "objects", "terrain", "foliage"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 5 },
+    "schemaVersion": { "const": 6 },
+    "lightBudget": {
+      "type": "object",
+      "required": ["shadowed", "unshadowed", "glow"],
+      "additionalProperties": false,
+      "properties": {
+        "shadowed": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "unshadowed": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "glow": { "type": "integer", "minimum": 0, "maximum": 1024 }
+      }
+    },
     "terrain": {
       "type": "object",
       "required": ["quadPixels"],
@@ -72,13 +82,14 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "shadowedPixels", "unshadowedPixels", "glowPixels"],
+        "required": ["id", "shadowedPixels", "unshadowedPixels", "glowPixels", "importance"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "shadowedPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 },
           "unshadowedPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 },
-          "glowPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 }
+          "glowPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 1080 },
+          "importance": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 }
         }
       }
     },

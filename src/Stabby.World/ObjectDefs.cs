@@ -30,7 +30,7 @@ namespace Stabby.World
     public sealed class LightKind
     {
         public string Id;
-        public float ShadowedPixels = 432f, UnshadowedPixels = 108f, GlowPixels = 10.8f;
+        public float ShadowedPixels = 432f, UnshadowedPixels = 108f, GlowPixels = 10.8f, Importance = 1f;
 
         public Detail.Thresholds Thresholds() => new Detail.Thresholds(ShadowedPixels, UnshadowedPixels, GlowPixels);
     }
@@ -112,6 +112,7 @@ namespace Stabby.World
     public sealed class ObjectLibrary
     {
         public List<LightKind> Lights = new List<LightKind>();
+        public LightBudget.Caps LightCaps = new LightBudget.Caps(2, 12, 48);
         public List<ObjectKind> Kinds = new List<ObjectKind>();
         public List<ObjectDef> Objects = new List<ObjectDef>();
         public TerrainViewDef Terrain = new TerrainViewDef();
@@ -167,7 +168,9 @@ namespace Stabby.World
                 if (string.IsNullOrEmpty(l.Id)) errors.Add("light without id");
                 else if (!lights.Add(l.Id)) errors.Add("duplicate light " + l.Id);
                 if (!(l.GlowPixels > 0 && l.UnshadowedPixels > l.GlowPixels && l.ShadowedPixels > l.UnshadowedPixels)) errors.Add("light " + l.Id + ": shadowedPixels > unshadowedPixels > glowPixels > 0");
+                if (!(l.Importance > 0)) errors.Add("light " + l.Id + ": importance > 0");
             }
+            if (lib.LightCaps.Shadowed < 0 || lib.LightCaps.Unshadowed < 0 || lib.LightCaps.Glow < 0) errors.Add("lightBudget: caps >= 0");
             var kinds = new HashSet<string>();
             foreach (var k in lib.Kinds)
             {

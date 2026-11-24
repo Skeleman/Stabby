@@ -323,12 +323,13 @@ public static class ContentLoader
         return d;
     }
 
-    public const int ObjectSchemaVersion = 5;
+    public const int ObjectSchemaVersion = 6;
 
     sealed class ObjectFile
     {
         public int SchemaVersion { get; set; }
         public List<LightEntry> Lights { get; set; } = new();
+        public BudgetEntry LightBudget { get; set; } = new();
         public List<KindEntry> Kinds { get; set; } = new();
         public List<ObjectEntry> Objects { get; set; } = new();
         public TerrainEntry? Terrain { get; set; }
@@ -394,6 +395,14 @@ public static class ContentLoader
         public float ShadowedPixels { get; set; }
         public float UnshadowedPixels { get; set; }
         public float GlowPixels { get; set; }
+        public float Importance { get; set; }
+    }
+
+    sealed class BudgetEntry
+    {
+        public int Shadowed { get; set; }
+        public int Unshadowed { get; set; }
+        public int Glow { get; set; }
     }
 
     sealed class KindEntry
@@ -496,7 +505,8 @@ public static class ContentLoader
         var materials = LoadMaterials(contentRoot);
         uint Mat(string id) => materials.Find(id)?.Color ?? 0;
         foreach (var l in file.Lights)
-            lib.Lights.Add(new LightKind { Id = l.Id, ShadowedPixels = l.ShadowedPixels, UnshadowedPixels = l.UnshadowedPixels, GlowPixels = l.GlowPixels });
+            lib.Lights.Add(new LightKind { Id = l.Id, ShadowedPixels = l.ShadowedPixels, UnshadowedPixels = l.UnshadowedPixels, GlowPixels = l.GlowPixels, Importance = l.Importance });
+        lib.LightCaps = new LightBudget.Caps(file.LightBudget.Shadowed, file.LightBudget.Unshadowed, file.LightBudget.Glow);
         foreach (var k in file.Kinds)
             lib.Kinds.Add(new ObjectKind
             {

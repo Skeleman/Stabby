@@ -10,7 +10,7 @@ namespace Stabby.Content
     {
         public const int BiomeSchemaVersion = 1;
         public const int MaterialSchemaVersion = 5;
-        public const int ObjectSchemaVersion = 5;
+        public const int ObjectSchemaVersion = 6;
         public const int CreatureSchemaVersion = 2;
         public const int SkySchemaVersion = 1;
 
@@ -294,11 +294,18 @@ namespace Stabby.Content
             var root = Root(json, source, ObjectSchemaVersion);
             var errors = new List<string>();
             var lib = new ObjectLibrary();
+            var budget = root.Object("lightBudget");
+            if (budget != null)
+            {
+                lib.LightCaps = new LightBudget.Caps(budget.Int("shadowed", -1), budget.Int("unshadowed", -1), budget.Int("glow", -1));
+                budget.End();
+            }
             foreach (var l in root.Objects("lights"))
             {
                 lib.Lights.Add(new LightKind
                 {
                     Id = l.String("id", ""), ShadowedPixels = l.Float("shadowedPixels", 0), UnshadowedPixels = l.Float("unshadowedPixels", 0), GlowPixels = l.Float("glowPixels", 0),
+                    Importance = l.Float("importance", 0),
                 });
                 l.End();
             }
