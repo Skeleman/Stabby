@@ -177,7 +177,7 @@ namespace Stabby.Content
                     PrecipMinMm = b.Float("precipMinMm", 0), PrecipMaxMm = b.Float("precipMaxMm", 0),
                     Color = Hex(b.String("color", "#ff00ff")),
                     HeightMinM = Nan(b, "heightMinM"), HeightMaxM = Nan(b, "heightMaxM"),
-                    WaterWithinM = Nan(b, "waterWithinM"), CoastWithinM = Nan(b, "coastWithinM"),
+                    WaterWithinM = Nan(b, "waterWithinM"), WaterRiseM = Nan(b, "waterRiseM"), CoastWithinM = Nan(b, "coastWithinM"),
                 });
                 b.End();
             }

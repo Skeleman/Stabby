@@ -24,6 +24,7 @@
           "heightMinM": { "type": "number" },
           "heightMaxM": { "type": "number" },
           "waterWithinM": { "type": "number", "exclusiveMinimum": 0 },
+          "waterRiseM": { "type": "number", "exclusiveMinimum": 0 },
           "coastWithinM": { "type": "number", "exclusiveMinimum": 0 }
         }
       }
