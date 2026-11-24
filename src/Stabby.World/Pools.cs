@@ -51,7 +51,7 @@ namespace Stabby.World
 
         LiquidPool Pool(int kind, int liquid, float x, float z, float reach, float designed, float bottom, float top) => Pool(kind, liquid, x, z, reach, designed, bottom, top, null);
 
-        LiquidPool Pool(int kind, int liquid, float x, float z, float reach, float designed, float bottom, float top, FeatureEdit? only)
+        LiquidPool Pool(int kind, int liquid, float x, float z, float reach, float designed, float bottom, float top, FeatureEdit[] own)
         {
             float half = reach + PoolPadM;
             int i0 = (int)Math.Floor((x - half) / PoolStepM), j0 = (int)Math.Floor((z - half) / PoolStepM);
@@ -59,9 +59,9 @@ namespace Stabby.World
             var p = new LiquidPool { X = x, Z = z, Reach = reach, Designed = designed, Kind = kind, Liquid = liquid, I0 = i0, J0 = j0, Nx = nx, Nz = nz };
             float x0 = i0 * PoolStepM, z0 = j0 * PoolStepM, x1 = x0 + (nx - 1) * PoolStepM, z1 = z0 + (nz - 1) * PoolStepM;
             var near = new List<FeatureEdit>();
-            if (only.HasValue) near.Add(only.Value);
+            if (own != null) near.AddRange(own);
             foreach (var f in edits)
-                if ((!only.HasValue || f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring) && f.MaxX >= x0 - PoolSlopeM && f.MinX <= x1 + PoolSlopeM && f.MaxZ >= z0 - PoolSlopeM && f.MinZ <= z1 + PoolSlopeM) near.Add(f);
+                if ((own == null || f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring) && f.MaxX >= x0 - PoolSlopeM && f.MinX <= x1 + PoolSlopeM && f.MaxZ >= z0 - PoolSlopeM && f.MinZ <= z1 + PoolSlopeM) near.Add(f);
             var list = new EditArray { Items = near.ToArray() };
             var g = new DetailGround { Detail = detail };
             p.Ground = new float[nx * nz];
@@ -99,9 +99,10 @@ namespace Stabby.World
             {
                 int k = order[q], i = k % nx, j = k / nx;
                 parent[k] = k;
-                for (int d = 0; d < 4; d++)
+                for (int d = 0; d < 9; d++)
                 {
-                    int ni = i + (d == 0 ? 1 : d == 1 ? -1 : 0), nj = j + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (d == 4) continue;
+                    int ni = i + d % 3 - 1, nj = j + d / 3 - 1;
                     if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
                     int m = nj * nx + ni;
                     if (parent[m] < 0) continue;
@@ -130,9 +131,10 @@ namespace Stabby.World
                 p.WetCount++;
                 p.Floor = Math.Min(p.Floor, p.Ground[k]);
                 if (i == 0 || j == 0 || i == nx - 1 || j == nz - 1) p.Leaks = true;
-                for (int d = 0; d < 4; d++)
+                for (int d = 0; d < 9; d++)
                 {
-                    int ni = i + (d == 0 ? 1 : d == 1 ? -1 : 0), nj = j + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (d == 4) continue;
+                    int ni = i + d % 3 - 1, nj = j + d / 3 - 1;
                     if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
                     int m = nj * nx + ni;
                     if (p.Wet[m] || !(p.Ground[m] < p.Level)) continue;

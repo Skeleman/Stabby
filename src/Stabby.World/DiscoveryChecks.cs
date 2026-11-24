@@ -43,7 +43,27 @@ namespace Stabby.World
                 if (!(p.Level <= p.Rim)) { e.Add(at + $" stands at {p.Level:F2} m, above its basin rim at {p.Rim:F2} m"); return; }
                 if (p.Leaks) { e.Add(at + " spills out of its basin"); return; }
                 if (p.WetCount == 0 || !(p.Level - p.Floor >= ObjectField.PoolMinDepthM)) { e.Add(at + $" holds no water: level {p.Level:F2} m over floor {p.Floor:F2} m"); return; }
+                if (SheetFault(p, out float sx, out float sz, out float g)) { e.Add(at + $" spreads water at {p.Level:F2} m past its basin over ground at {g:F2} m ({sx:F1},{sz:F1})"); return; }
             }
+        }
+
+        static bool SheetFault(LiquidPool p, out float x, out float z, out float g)
+        {
+            x = z = g = 0;
+            for (int k = 0; k < p.Wet.Length; k++)
+            {
+                if (!p.Wet[k]) continue;
+                int i = k % p.Nx, j = k / p.Nx;
+                for (int nj = Math.Max(0, j - 1); nj <= Math.Min(p.Nz - 1, j + 1); nj++)
+                    for (int ni = Math.Max(0, i - 1); ni <= Math.Min(p.Nx - 1, i + 1); ni++)
+                    {
+                        int m = nj * p.Nx + ni;
+                        if (p.Wet[m] || !(p.Ground[m] < p.Level)) continue;
+                        x = p.NodeX(ni); z = p.NodeZ(nj); g = p.Ground[m];
+                        return true;
+                    }
+            }
+            return false;
         }
 
         static void CheckDiscoveries(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
