@@ -11,6 +11,42 @@ namespace Stabby.Game.Editor
     {
         const float CaveShotHour = PinnedMidday, CaveDebugExposure = 3f;
 
+        static Vector3 OpenGround(Ground ground, CaveGraph[] graphs, float dist, float span)
+        {
+            for (int a = 0; a < 64; a++)
+            {
+                float t = a * (2f * Mathf.PI / 64f);
+                var p = home + new Vector3(Mathf.Cos(t), 0, Mathf.Sin(t)) * dist;
+                if (p.x < 500f || p.z < 500f || p.x > span - 500f || p.z > span - 500f) continue;
+                float h = ground.HeightAt(p.x, p.z);
+                if (h < 20f) continue;
+                bool clear = true;
+                foreach (var g in graphs)
+                    foreach (var n in g.Nodes)
+                        if (new Vector2(n.X - p.x, n.Z - p.z).magnitude < 800f) clear = false;
+                if (clear) return new Vector3(p.x, h + 1.7f, p.z);
+            }
+            return home;
+        }
+
+        static System.Collections.IEnumerator SettleWhy(int frames, double[] why)
+        {
+            double last = EditorApplication.timeSinceStartup;
+            for (int k = 0; k < frames || Loading(); k++)
+            {
+                yield return null;
+                double now = EditorApplication.timeSinceStartup, dt = now - last;
+                last = now;
+                bool columns = true;
+                foreach (var w in Unity.Entities.World.All)
+                    if (w.Name == GameSettings.ViewClient) columns = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Settled ?? false;
+                var cam = Camera.main;
+                if (GameStatus.TerrainBehind > 0) why[0] += dt;
+                if (!columns) why[1] += dt;
+                if (cam != null && !ObjectViewSystem.ReadyAround(cam.transform.position, ReadyWithin)) why[2] += dt;
+            }
+        }
+
         static void ExposedShot(Camera cam, string dir, string name, float ev)
         {
             GameStatus.ToolFrame = Time.frameCount;
@@ -64,14 +100,14 @@ namespace Stabby.Game.Editor
                 g.Objects = sys.Objects;
                 g.Caves = caves;
                 MapGen.RaiseMound(g);
-                return g;
+                long gen = watch.ElapsedMilliseconds;
+                var placed = Features.Place(g, new TerrainDetail(g), out var gs);
+                return (g, placed, gs, gen, watch.ElapsedMilliseconds - gen);
             });
             while (!full.IsCompleted) yield return null;
             if (full.IsFaulted) { GameStatus.Lines["~caves"] = GameStatus.Failure = "caves: " + full.Exception; yield break; }
-            var map = full.Result;
-            long genMs = watch.ElapsedMilliseconds;
-            var edits = Features.Place(map, new TerrainDetail(map), out var graphs);
-            lines.Add($"caves: {graphs.Length} graphs ({string.Join(", ", graphs.GroupBy(g => g.Class).Select(g => g.Key + " " + g.Count()))}) placed in {watch.ElapsedMilliseconds - genMs} ms after a {genMs} ms full regeneration, GV {WorldConfig.GeneratorVersion}");
+            var (map, edits, graphs, genMs, placeMs) = full.Result;
+            lines.Add($"caves: {graphs.Length} graphs ({string.Join(", ", graphs.GroupBy(g => g.Class).Select(g => g.Key + " " + g.Count()))}) placed in {placeMs} ms after a {genMs} ms full regeneration, both in a task, GV {WorldConfig.GeneratorVersion}");
             var hall = Nearest(graphs, "hall");
             var lab = Nearest(graphs, "labyrinth");
             if (hall == null || lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no " + (hall == null ? "hall" : "labyrinth") + " in this world"; yield break; }
@@ -88,8 +124,19 @@ namespace Stabby.Game.Editor
             var eye = m - din * 10f;
             eye.y = Mathf.Max(ground.HeightAt(eye.x, eye.z) + 1.7f, m.y + 1.5f);
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(m + din * 3f - eye));
-            double waited = LoadWaitTotal(), wall = EditorApplication.timeSinceStartup;
-            for (var w = Settle(120); w.MoveNext();) yield return null;
+            cam.transform.GetPositionAndRotation(out var keepP, out var keepR);
+            var open = OpenGround(ground, graphs, Vector3.Distance(m, home), map.Config.Size * map.Config.CellMeters);
+            cam.transform.SetPositionAndRotation(open, Quaternion.LookRotation(din));
+            var why = new double[3];
+            double waited = LoadWaitTotal();
+            for (var w = SettleWhy(120, why); w.MoveNext();) yield return null;
+            lines.Add($"open ground control {open.x:F0},{open.y:F0},{open.z:F0}, {Vector3.Distance(open, home):F0} m from home: stream wait {LoadWaitTotal() - waited:F2} s (terrain {why[0]:F1}, object columns {why[1]:F1}, objects {why[2]:F1})");
+            cam.transform.SetPositionAndRotation(keepP, keepR);
+            why = new double[3];
+            double wall = EditorApplication.timeSinceStartup;
+            waited = LoadWaitTotal();
+            for (var w = SettleWhy(120, why); w.MoveNext();) yield return null;
+            lines.Add($"labyrinth busy: terrain {why[0]:F1} s, object columns {why[1]:F1} s, objects {why[2]:F1} s");
             lines.Add($"labyrinth {lab.Nodes.Count} chambers {lab.Edges.Count} tunnels, mouth {m.x:F0},{m.y:F0},{m.z:F0}, {Vector3.Distance(m, home):F0} m from home: stream wait {LoadWaitTotal() - waited:F2} s, settle {EditorApplication.timeSinceStartup - wall:F2} s");
             Shot(cam, null, "warmup");
             Shot(cam, dir, "caves-labyrinth-entrance");

@@ -297,7 +297,8 @@ namespace Stabby.World
                     sink.SetInt(col + 1, end);
                     for (; j < end; j++)
                     {
-                        Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
+                        if (Plain(edits, h00, h10, h01, h11, s, ci, j, ck)) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
+                        else Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
                         next++;
                     }
                 }
@@ -311,8 +312,10 @@ namespace Stabby.World
                     float h = H(ref sink, rw, i, k), hx = H(ref sink, rw, i + 1, k), hz = H(ref sink, rw, i, k + 1);
                     float l = sink.GetFloat(sl + k * hw + i), lx = sink.GetFloat(sl + k * hw + i + 1), lz = sink.GetFloat(sl + (k + 1) * hw + i);
                     float xa = ci * s, xb = (ci + 1) * s, za = ck * s, zb = (ck + 1) * s;
+                    float hxz = H(ref sink, rw, i + 1, k + 1);
                     for (int j = jLo; j < jHi; j++)
                     {
+                        if (Plain(edits, h, hx, hz, hxz, s, ci, j, ck)) continue;
                         float yb = j * s, yt = (j + 1) * s;
                         bool p = Features.Edit(edits, (h - yb) / l, xa, yb, za) > 0;
                         if (p != Features.Edit(edits, (hx - yb) / lx, xb, yb, za) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
@@ -378,6 +381,23 @@ namespace Stabby.World
                 j = Math.Min(j, (int)Math.Floor(e.MinY / s) - 1);
                 end = Math.Max(end, (int)Math.Floor(e.MaxY / s) + 2);
             }
+        }
+
+        static bool Plain<TEdits>(TEdits edits, float h00, float h10, float h01, float h11, float s, int ci, int j, int ck) where TEdits : struct, IEditList
+        {
+            if (!AllInside(h00, h10, h01, h11, j, s) && !AllOutside(h00, h10, h01, h11, j, s)) return false;
+            float x0 = ci * s, y0 = j * s, z0 = ck * s, x1 = x0 + s, y1 = y0 + s, z1 = z0 + s;
+            for (int q = 0, count = edits.Count; q < count; q++)
+            {
+                var e = edits.At(q);
+                if (e.MaxX < x0 || e.MinX > x1 || e.MaxY < y0 || e.MinY > y1 || e.MaxZ < z0 || e.MinZ > z1) continue;
+                if (e.Shape == FeatureEdit.Spring || e.W > 0f) return false;
+                double ex = e.Bx - e.Ax, ey = e.By - e.Ay, ez = e.Bz - e.Az, px = x0 + 0.5 * s - e.Ax, py = y0 + 0.5 * s - e.Ay, pz = z0 + 0.5 * s - e.Az;
+                double ll = ex * ex + ey * ey + ez * ez, t = ll > 0 ? Math.Max(0.0, Math.Min(1.0, (px * ex + py * ey + pz * ez) / ll)) : 0.0;
+                double qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
+                if (Math.Sqrt(qx * qx + qy * qy + qz * qz) < e.R + 0.8661 * s + 0.01) return false;
+            }
+            return true;
         }
 
         static bool Emit<TSink, TCols, TEdits>(ref TSink sink, EditedSolid<TCols, TEdits> solid, TEdits edits, int ci, int j, int ck, float s,
