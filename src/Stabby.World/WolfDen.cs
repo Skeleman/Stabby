@@ -187,10 +187,10 @@ namespace Stabby.World
             return false;
         }
 
-        public const float DenBackGapM = 4f, DenFaceRunM = 8f, DenFaceRiseM = 5f, DenFaceStepM = 0.5f;
+        public const float DenBackGapM = 4f, DenFaceRunM = 16f, DenFaceRiseM = 6f, DenFaceStepM = 0.5f;
 
         public const float DenScanStepM = 2f;
-        public const int DenRunSteps = 4;
+        public const int DenRunSteps = (int)(DenFaceRunM / DenScanStepM);
 
         public float DenRear(ObjectInstance o) => DenRear(o.Def, o.Variant, o.Size);
 
@@ -208,7 +208,7 @@ namespace Stabby.World
             qa = 1; qb = 0;
             int steps = (int)(DenRockM / DenScanStepM);
             var g = new float[steps + DenRunSteps + 1];
-            float rise = DenFaceRise, foot = float.MaxValue, bx = 0, bz = 0;
+            float rise = DenFaceRiseM, foot = float.MaxValue, bx = 0, bz = 0;
             for (int k = 0; k < 16; k++)
             {
                 float ux = Structures.Cos16(k), uz = Structures.Sin16(k);
@@ -229,11 +229,9 @@ namespace Stabby.World
             return true;
         }
 
-        public float DenFaceRise => Math.Min(DenFaceRiseM, DenFaceRiseM * Features.ReferenceCellM / 4 / cm);
-
         public bool FaceBehind(float x, float z, float bx, float bz)
         {
-            float rise = DenFaceRise;
+            float rise = DenFaceRiseM;
             for (float s = 0; s <= DenBackGapM; s += DenFaceStepM)
             {
                 float fx = x + bx * s, fz = z + bz * s;

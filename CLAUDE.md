@@ -8,7 +8,10 @@
    rivers) -> biomes -> features. Each stage reads the one before it and never
    derives a second copy. World geometry is one solid field: the heightfield
    base plus an ordered list of sparse feature edits (overhangs, arches,
-   caves) that add or carve solid only inside their bounds. One engine-free
+   caves) that add or carve solid only inside their bounds. An underground
+   stage after hydrology turns cave graphs (chambers and tunnels) into
+   sparse carve edits; underground water joins the one drainage graph
+   through springs and sinks. One engine-free
    sample function reads that field at any point: the stored grid smoothly
    interpolated, plus river and shore profiles from hydrology and
    material-scaled detail. Meshes, collision and features all call it. Meshes
@@ -60,7 +63,9 @@
     places kit pieces or whole lower blueprints as single elements, so a
     building blueprint (an inn's shell) sits inside a site blueprint (its
     yard, stalls and signs), and a town places sites. Each level expands
-    deterministically from its own stream. Assets are
+    deterministically from its own stream. Dungeon and mine kits snap to
+    one shared grid and place as nested blueprints whose volumes are carve
+    edits. Assets are
     built in code. Material surfaces are shaders (procedural normals, cheap
     parallax) so files stay small, surfaces scale and materials share
     features. Every part names a material from the one library

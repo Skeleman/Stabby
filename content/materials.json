@@ -197,7 +197,10 @@
     { "id": "fungus-stem",      "name": "Fungus stem",      "color": "#d1c7ad" },
     { "id": "stem-base",        "name": "Stem base",        "color": "#807057" },
     { "id": "roof-turf",        "name": "Roof turf",        "color": "#40661f" },
-    { "id": "turf-sprout",      "name": "Turf sprout",      "color": "#668529" }
+    { "id": "turf-sprout",      "name": "Turf sprout",      "color": "#668529" },
+    { "id": "ember-glow",       "name": "Ember glow",       "color": "#ff5a12" },
+    { "id": "ember-core",       "name": "Ember core",       "color": "#ffb04a" },
+    { "id": "firelight",        "name": "Firelight",        "color": "#ff9a4c" }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],
@@ -208,7 +211,8 @@
     "cloth": ["madder-cloth", "woad-cloth", "weld-cloth", "undyed-cloth"],
     "ash": ["charcoal", "hearth-ash", "ember-crack", "soot", "hearth-ring"],
     "fungus": ["red-cap", "brown-cap", "tan-cap", "ochre-cap", "cap-rim", "cap-wart", "dark-gill", "pale-gill", "fungus-stem", "stem-base"],
-    "turf": ["roof-turf", "turf-sprout"]
+    "turf": ["roof-turf", "turf-sprout"],
+    "ember": ["ember-glow", "ember-core"]
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },

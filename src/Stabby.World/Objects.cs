@@ -146,6 +146,7 @@ namespace Stabby.World
         public void ColumnsOf(ObjectInstance o, List<ObjectColumn> list) => AddColumns(lib, shapes, o, list);
         public void ContactsOf(ObjectInstance o, List<ObjectColumn> list) => AddContacts(lib, shapes, o, list);
         public void LushOf(ObjectInstance o, List<ObjectColumn> list) => AddLush(lib, shapes, o, list);
+        public void LightsOf(ObjectInstance o, List<StructureLight> list) => AddLights(lib, shapes, o, list);
         public void PartContactsOf(ObjectInstance o, int part, List<ObjectColumn> list) => AddPart(lib, shapes, o, part, list, true);
 
         public ObjectInstance[] Chunk(int cx, int cz)
@@ -552,6 +553,22 @@ namespace Stabby.World
             }
         }
 
+        public static void AddLights(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<StructureLight> list)
+        {
+            var def = lib.Objects[o.Def];
+            for (int pi = 0; pi < def.Parts.Count; pi++)
+            {
+                var anchors = shapes.Lights[o.Def][pi];
+                if (anchors == null || anchors[o.Variant] == null) continue;
+                var p = def.Parts[pi];
+                foreach (var a in anchors[o.Variant])
+                {
+                    Rotate(o, (p.OffsetX + a.X * p.ScaleX) * o.Size, (p.OffsetY + a.Y * p.ScaleY) * o.Size, (p.OffsetZ + a.Z * p.ScaleZ) * o.Size, out float lx, out float ly, out float lz);
+                    list.Add(new StructureLight { X = lx + o.X, Y = ly + o.Y, Z = lz + o.Z, Shape = a.Shape });
+                }
+            }
+        }
+
         public static void AddPart(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, int pi, List<ObjectColumn> list, bool contact)
         {
             var def = lib.Objects[o.Def];
@@ -620,11 +637,12 @@ namespace Stabby.World
     {
         public float[][][] Heights;
         public ObjectColumn[][][][] Columns, Contacts, Lush;
+        public StructureLight[][][][] Lights;
 
         public static PartShapes Of(ObjectLibrary lib)
         {
             int n = lib.Objects.Count;
-            var s = new PartShapes { Heights = new float[n][][], Columns = new ObjectColumn[n][][][], Contacts = new ObjectColumn[n][][][], Lush = new ObjectColumn[n][][][] };
+            var s = new PartShapes { Heights = new float[n][][], Columns = new ObjectColumn[n][][][], Contacts = new ObjectColumn[n][][][], Lush = new ObjectColumn[n][][][], Lights = new StructureLight[n][][][] };
             for (int d = 0; d < n; d++)
             {
                 var def = lib.Objects[d];
@@ -632,6 +650,7 @@ namespace Stabby.World
                 s.Columns[d] = new ObjectColumn[def.Parts.Count][][];
                 s.Contacts[d] = new ObjectColumn[def.Parts.Count][][];
                 s.Lush[d] = new ObjectColumn[def.Parts.Count][][];
+                s.Lights[d] = new StructureLight[def.Parts.Count][][];
                 for (int p = 0; p < def.Parts.Count; p++)
                 {
                     int shape = def.Parts[p].Shape;
@@ -650,6 +669,11 @@ namespace Stabby.World
                         var l = Structures.Layout(shape, k);
                         s.Columns[d][p][v] = l.Columns.ToArray();
                         s.Contacts[d][p][v] = l.Contacts.ToArray();
+                        if (l.Lights.Count > 0)
+                        {
+                            if (s.Lights[d][p] == null) s.Lights[d][p] = new StructureLight[def.Variants][];
+                            s.Lights[d][p][v] = l.Lights.ToArray();
+                        }
                         if (l.Lush.Count == 0) continue;
                         if (s.Lush[d][p] == null) s.Lush[d][p] = new ObjectColumn[def.Variants][];
                         s.Lush[d][p][v] = l.Lush.ToArray();

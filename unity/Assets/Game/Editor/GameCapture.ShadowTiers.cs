@@ -231,13 +231,23 @@ namespace Stabby.Game.Editor
                 if (w.Name == GameSettings.ViewClient) field = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
             var pick = default(ObjectInstance);
             float best = float.MaxValue;
+            var mates = new List<ObjectInstance>();
             if (field != null)
-                foreach (var o in field.Discoveries())
+            {
+                var found = field.Discoveries();
+                foreach (var o in found)
                 {
                     if (!field.IsVent(o) || field.VentKind(o) != ObjectField.Geyser) continue;
-                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                    int near = 0;
+                    foreach (var m in found)
+                        if (field.IsVent(m) && new Vector2(m.X - o.X, m.Z - o.Z).magnitude <= ObjectField.VentFieldM) near++;
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude - 1e6f * near;
                     if (score < best) { best = score; pick = o; }
                 }
+                if (best < float.MaxValue)
+                    foreach (var m in found)
+                        if (field.IsVent(m) && new Vector2(m.X - pick.X, m.Z - pick.Z).magnitude <= ObjectField.VentFieldM) mates.Add(m);
+            }
             if (best < float.MaxValue)
             {
                 var pools = new List<float>();
@@ -245,6 +255,23 @@ namespace Stabby.Game.Editor
                 var c = new Vector3(pools[0], pools[4], pools[1]);
                 Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
                 TerrainViewSystem.ClockOverride = offset + duration + 0.5 * (interval - duration);
+                for (var e = ShowHour(PinnedMidday); e.MoveNext();) yield return null;
+                var mid = Vector3.zero;
+                foreach (var m in mates) mid += new Vector3(m.X, 0, m.Z);
+                mid /= mates.Count;
+                float span = 0;
+                foreach (var m in mates) span = Mathf.Max(span, new Vector2(m.X - mid.x, m.Z - mid.z).magnitude);
+                mid.y = GroundHeight(mid.x, mid.z);
+                float back = 1.6f * span + 30f;
+                var feye = mid + across * back + Vector3.up * 0.4f * back;
+                feye.y = Mathf.Max(feye.y, GroundHeight(feye.x, feye.z) + 2f);
+                cam.transform.SetPositionAndRotation(feye, Quaternion.LookRotation(mid - feye));
+                for (var e = Settle(240); e.MoveNext();) yield return null;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "geyserpool-field");
+                var kinds = new System.Text.StringBuilder();
+                foreach (var m in mates) kinds.Append(field.VentKind(m) == ObjectField.Geyser ? 'g' : field.VentKind(m) == ObjectField.MudPot ? 'm' : 'h');
+                lines.Add($"field of {mates.Count} vents ({kinds}) within {2 * span:F0} m at {mid.x:F0},{mid.z:F0}, eye {back:F0} m back");
                 float[] dist = { 34f, 16f, 7f };
                 float[] rise = { 0.45f, 0.2f, 0.35f };
                 string[] names = { "geyserpool-far", "geyserpool-low", "geyserpool-near" };

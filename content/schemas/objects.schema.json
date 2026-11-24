@@ -160,6 +160,20 @@
               "reachM": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 }
             }
           },
+          "light": {
+            "type": "object",
+            "required": ["category", "material", "intensity", "radiusM"],
+            "additionalProperties": false,
+            "properties": {
+              "category": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+              "material": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+              "intensity": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+              "radiusM": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
+              "importance": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+              "flicker": { "type": "number", "minimum": 0, "maximum": 1 },
+              "flickerHz": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 }
+            }
+          },
           "parts": {
             "type": "array",
             "minItems": 1,
