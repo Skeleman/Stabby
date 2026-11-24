@@ -79,8 +79,8 @@ namespace Stabby.Game.Editor
             if (!hasGround) { GameStatus.Lines["~rig dump"] = "rig dump: no ground"; yield break; }
 
             GameStatus.HoldCamera = true;
-            var eye = cam.transform.position;
-            var flatFwd = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+            var eye = new Vector3(11500f, 0, 11500f);
+            var flatFwd = Vector3.forward;
             eye.y = GroundHeight(eye.x, eye.z) + 1.7f;
             cam.fieldOfView = 60f;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(flatFwd) * Quaternion.Euler(6f, 0, 0));
