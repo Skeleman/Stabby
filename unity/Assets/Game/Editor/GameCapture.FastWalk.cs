@@ -9,12 +9,12 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        static readonly string[] WalkParts = { "terrain", "objects", "collision", "grass", "map", "creatures" };
+        static readonly string[] WalkParts = { "terrain", "objects", "collision", "grass", "map", "creatures", "contacts" };
 
         static readonly (System.Type type, int part)[] WalkSystems =
         {
             (typeof(TerrainViewSystem), 0),
-            (typeof(ObjectViewSystem), 1), (typeof(ObjectLodSystem), 1), (typeof(ContactFieldSystem), 1), (typeof(ClientObjectDeltaSystem), 1), (typeof(ServerObjectDeltaSystem), 1),
+            (typeof(ObjectViewSystem), 1), (typeof(ObjectLodSystem), 1), (typeof(ContactFieldSystem), 6), (typeof(ClientObjectDeltaSystem), 6), (typeof(ServerObjectDeltaSystem), 6),
             (typeof(ObjectColumnsSystem), 2), (typeof(PlayerMoveSystem), 2),
             (typeof(GrassViewSystem), 3),
             (typeof(ClientMapSystem), 4), (typeof(ServerMapSystem), 4), (typeof(ClientChunkReceiveSystem), 4), (typeof(ServerChunkStreamSystem), 4),
