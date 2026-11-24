@@ -39,6 +39,7 @@ namespace Stabby.World
         public const float ContactSizeM = 1f, ContactMaxTexelM = 1f;
         public float QuadPixels = 10.8f, ContactPixels = 7.3f, ContactTexelPixels = 1.8f;
         public float MistFadePixels = 4f, MistFullPixels = 16f, SteamFadePixels = 3f, SteamFullPixels = 12f, ColumnFadePixels = 2f, ColumnFullPixels = 8f;
+        public float ShadowPixels = 300f, MistShadowPixels = 8f;
 
         public float Allowed(float pixelsPerMetre, float quality) => QuadPixels / (pixelsPerMetre * Math.Max(quality, 0.1f));
 
@@ -70,8 +71,19 @@ namespace Stabby.World
             fullPixels = ColumnFullPixels / q;
         }
 
+        public float ShadowBoundary(float quality) => ShadowPixels / Math.Max(quality, 0.1f);
+
+        public void MistShadowWindow(float quality, out float fadePixels, out float fullPixels)
+        {
+            float q = Math.Max(quality, 0.1f);
+            fadePixels = 0.5f * MistShadowPixels / q;
+            fullPixels = MistShadowPixels / q;
+        }
+
         public void Validate(List<string> errors)
         {
+            if (ShadowPixels < 1 || ShadowPixels > 2000) errors.Add("terrain: shadowPixels must be 1-2000");
+            if (MistShadowPixels < 0.1f || MistShadowPixels > 200) errors.Add("terrain: mistShadowPixels must be 0.1-200");
             if (QuadPixels < 1 || QuadPixels > 100) errors.Add("terrain: quadPixels must be 1-100");
             if (ContactPixels < 1 || ContactPixels > 100) errors.Add("terrain: contactPixels must be 1-100");
             if (ContactTexelPixels < 0.1f || ContactTexelPixels > 20) errors.Add("terrain: contactTexelPixels must be 0.1-20");

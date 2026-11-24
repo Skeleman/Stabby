@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Stabby.Viewer;
+using Stabby.World;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -44,22 +46,25 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "shadowtiers-forest");
             float dist = asset.shadowDistance;
             int cascades = asset.shadowCascadeCount;
-            var rows = new double[2, 3, 3, 2];
-            var casting = new string[2];
+            var rows = new double[3, 3, 3, 2];
+            var casting = new string[3];
             for (int run = 0; run < 3; run++)
-                for (int cfg = 0; cfg < 2; cfg++)
+                for (int cfg = 0; cfg < 3; cfg++)
                 {
-                    asset.shadowDistance = cfg == 0 ? dist : 60f;
-                    asset.shadowCascadeCount = cfg == 0 ? cascades : 1;
+                    asset.shadowDistance = cfg == 1 ? 60f : dist;
+                    asset.shadowCascadeCount = cfg == 1 ? 1 : cascades;
+                    TerrainViewSystem.ShadowRule = TerrainViewSystem.SprayShadows = cfg != 2;
                     for (int k = 0; k < 4; k++) yield return null;
                     BenchRound(cam, rows, cfg, run);
                     if (GameStatus.Line("terrain", out var tl)) casting[cfg] = System.Text.RegularExpressions.Regex.Match(tl, @"\d+ casting \(\d+ vertices\)").Value;
                 }
             asset.shadowDistance = dist;
             asset.shadowCascadeCount = cascades;
+            TerrainViewSystem.ShadowRule = TerrainViewSystem.SprayShadows = true;
             for (int k = 0; k < 4; k++) yield return null;
             lines.Add(MedianLine("shadowtiers-forest", rows, 0) + "; " + casting[0]);
             lines.Add(MedianLine("shadowtiers-forest shadows forced to 60 m, 1 cascade", rows, 1) + "; " + casting[1]);
+            lines.Add(MedianLine("shadowtiers-forest terrain rule and spray shadows off", rows, 2) + "; " + casting[2]);
             const int MoveFrames = 120;
             const float MoveMetres = 24f;
             var rt = new RenderTexture(ProbeW, ProbeH, 24);
@@ -102,6 +107,88 @@ namespace Stabby.Game.Editor
             GameStatus.Line("terrain", out var t);
             lines.Add(t);
             GameStatus.Lines["~shadowtiers"] = string.Join("\n", lines);
+        }
+
+        static System.Collections.IEnumerator SprayShadowsTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            cam.fieldOfView = 60f;
+            var lines = new List<string>();
+            Light sun = RenderSettings.sun != null ? RenderSettings.sun : System.Array.Find(Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
+            var sd = sun != null ? sun.transform.forward : Vector3.down;
+            var across = new Vector3(-sd.z, 0, sd.x).normalized;
+            if (across.sqrMagnitude < 0.5f) across = Vector3.right;
+            float drop = Mathf.Max(-sd.y, 0.15f);
+            ObjectField field = null;
+            ClientMapSystem map = null;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient)
+                {
+                    field = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+                    map = w.GetExistingSystemManaged<ClientMapSystem>();
+                }
+            if (field != null)
+            {
+                var pick = default(ObjectInstance);
+                float best = float.MaxValue;
+                foreach (var o in field.Discoveries())
+                {
+                    if (!field.IsVent(o) || field.VentKind(o) != ObjectField.Geyser) continue;
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                    if (score < best) { best = score; pick = o; }
+                }
+                if (best < float.MaxValue)
+                {
+                    var pools = new List<float>();
+                    field.SpringPoolsAt(pick, pools);
+                    var c = new Vector3(pools[0], pools[4], pools[1]);
+                    float h = WaterGeometry.ColumnPerRadius * pools[2];
+                    Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
+                    TerrainViewSystem.ClockOverride = offset + 0.4 * duration;
+                    var s = c + new Vector3(sd.x, 0, sd.z) * (0.5f * h / drop);
+                    for (var e = SprayShot(cam, dir, "sprayshadows-geyser", 0.5f * (c + Vector3.up * 0.3f * h + s), across, Mathf.Max(h, (s - c).magnitude) * 1.5f); e.MoveNext();) yield return null;
+                    TerrainViewSystem.ClockOverride = null;
+                    lines.Add($"geyser at {c.x:F0},{c.y:F0},{c.z:F0}, column {h:F1} m, shadow centre {s.x:F0},{s.z:F0}");
+                }
+                else lines.Add("no geyser found");
+            }
+            if (map?.Map != null)
+            {
+                var best = default(FallCurtain);
+                bool found = false;
+                foreach (var l in NearField.Lines(map.Map))
+                    for (int k = 1; k < l.X.Length; k++)
+                        if (WaterGeometry.FallAt(l, k, out var f, out _) && f.Drop >= 3f && (!found || f.Discharge > best.Discharge)) { best = f; found = true; }
+                if (found)
+                {
+                    var fd = new Vector3(best.DirX, 0, best.DirZ);
+                    var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
+                    float h = best.Drop;
+                    var mid = lip + fd * 0.5f - Vector3.up * 0.55f * h;
+                    var side = Vector3.Dot(fd, sd) > 0 ? fd : (fd + 0.6f * new Vector3(fd.z, 0, -fd.x)).normalized;
+                    for (var e = SprayShot(cam, dir, "sprayshadows-curtain", mid, side, 1.3f * h + 0.6f * best.Width + 6f); e.MoveNext();) yield return null;
+                    lines.Add($"fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {best.Width:F0} m, discharge {best.Discharge:F0}");
+                }
+                else lines.Add("no waterfall found");
+            }
+            lines.Add($"sun {sd.x:F2},{sd.y:F2},{sd.z:F2}");
+            GameStatus.Lines["~sprayshadows"] = string.Join("\n", lines);
+        }
+
+        static System.Collections.IEnumerator SprayShot(Camera cam, string dir, string name, Vector3 target, Vector3 side, float dist)
+        {
+            var eye = target + side * dist + Vector3.up * 0.45f * dist;
+            eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + 2f);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+            for (var w = Settle(240); w.MoveNext();) yield return null;
+            for (int k = 0; k < 1200 && ObjectViewSystem.Pending > 0; k++) yield return null;
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, name);
+            TerrainViewSystem.SprayShadows = false;
+            for (int k = 0; k < 4; k++) yield return null;
+            Shot(cam, dir, name + "-off");
+            TerrainViewSystem.SprayShadows = true;
+            for (int k = 0; k < 4; k++) yield return null;
         }
 
         static readonly (int w, int h)[] BenchSizes = { (1920, 1080), (2560, 1440), (3840, 2160) };
