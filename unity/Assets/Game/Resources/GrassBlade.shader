@@ -13,10 +13,12 @@ Shader "Stabby/GrassBlade"
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma target 4.5
+            #pragma multi_compile_fragment _ _CLUSTER_LIGHT_LOOP
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
+            #include "Assets/Viewer/Shaders/LocalLights.hlsl"
 
             struct Blade { float4 p0; uint4 q; };
             StructuredBuffer<Blade> _Blades;
@@ -79,7 +81,7 @@ Shader "Stabby/GrassBlade"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
                 float occ = 1 - i.color.a * (1 - smoothstep(0, 0.5, i.look.x));
-                float3 c = (LookColor(lerp(i.color.rgb, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
+                float3 c = (LookColor(lerp(i.color.rgb, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient + LocalLights(i.positionWS, n, i.positionCS)) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
                 return half4(MixFog(c, i.look.w), 1);
             }
             ENDHLSL
