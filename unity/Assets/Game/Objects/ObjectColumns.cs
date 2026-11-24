@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
@@ -20,17 +22,18 @@ namespace Stabby.Game
 
         public bool IsCreated => Starts.IsCreated;
 
-        public static RegionColumns Of(ColumnRegion r)
+        public static RegionColumns Of(ColumnBake b)
         {
+            int starts = b.Cells + 1;
             var c = new RegionColumns
             {
-                Grid = r.Grid,
-                Starts = new UnsafeList<int>(r.Starts.Length, Allocator.Persistent),
-                Items = new UnsafeList<ObjectColumn>(r.Count, Allocator.Persistent),
-                Owners = new UnsafeList<ulong>(r.Count, Allocator.Persistent),
+                Grid = b.Grid,
+                Starts = new UnsafeList<int>(starts, Allocator.Persistent),
+                Items = new UnsafeList<ObjectColumn>(b.Count, Allocator.Persistent),
+                Owners = new UnsafeList<ulong>(b.Count, Allocator.Persistent),
             };
-            for (int k = 0; k < r.Starts.Length; k++) c.Starts.AddNoResize(r.Starts[k]);
-            for (int k = 0; k < r.Count; k++) { c.Items.AddNoResize(r.Items[k]); c.Owners.AddNoResize(r.Owners[k]); }
+            for (int k = 0; k < starts; k++) c.Starts.AddNoResize(b.Starts[k]);
+            for (int k = 0; k < b.Count; k++) { c.Items.AddNoResize(b.Items[k]); c.Owners.AddNoResize(b.Owners[k]); }
             return c;
         }
 
@@ -90,10 +93,15 @@ namespace Stabby.Game
     {
         sealed class Built
         {
+            public ObjectField Field;
+            public int Index;
             public RegionColumns Region;
             public int Columns;
             public long Ms;
         }
+
+        static readonly Func<object, Built> bake = Bake;
+        static readonly Action<Built> dispose = b => b.Region.Dispose();
 
         Task<ObjectField> fieldTask;
         UnsafeList<RegionColumns> regions;
@@ -101,6 +109,7 @@ namespace Stabby.Game
         readonly List<int> resident = new List<int>();
         readonly List<int> wanted = new List<int>();
         readonly List<int> done = new List<int>();
+        readonly Stack<Built> pool = new Stack<Built>();
         readonly List<Unity.Mathematics.float2> spots = new List<Unity.Mathematics.float2>();
         ObjectLibrary lib;
         float reach, freeReach;
@@ -121,7 +130,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
-            foreach (var t in building.Values) Owned.Release(t, b => b.Region.Dispose());
+            foreach (var t in building.Values) Owned.Release(t, dispose);
             building.Clear();
             if (!regions.IsCreated) return;
             for (int k = 0; k < regions.Length; k++) if (regions[k].IsCreated) regions[k].Dispose();
@@ -194,12 +203,18 @@ namespace Stabby.Game
                 building.Remove(r);
                 if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
                 var b = task.Result;
-                if (!Near(r, freeReach)) { b.Region.Dispose(); continue; }
-                regions[r] = b.Region;
+                var region = b.Region;
+                int made = b.Columns;
+                long ms = b.Ms;
+                b.Field = null;
+                b.Region = default;
+                pool.Push(b);
+                if (!Near(r, freeReach)) { region.Dispose(); continue; }
+                regions[r] = region;
                 resident.Add(r);
-                columns += b.Columns;
-                lastColumns = b.Columns;
-                lastMs = b.Ms;
+                columns += made;
+                lastColumns = made;
+                lastMs = ms;
                 if (deltas != null) foreach (ulong id in deltas.InChunk(r)) oc.Kill(id);
             }
         }
@@ -225,16 +240,23 @@ namespace Stabby.Game
             foreach (int r in wanted)
             {
                 if (regions[r].IsCreated || building.ContainsKey(r)) continue;
-                int region = r;
-                building[r] = Task.Run(() => Bake(field, region));
+                var b = pool.Count > 0 ? pool.Pop() : new Built();
+                b.Field = field;
+                b.Index = r;
+                building[r] = Task.Factory.StartNew(bake, b, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
             }
         }
 
-        static Built Bake(ObjectField field, int index)
+        static Built Bake(object state)
         {
-            var sw = Stopwatch.StartNew();
-            var r = ColumnRegion.Build(field, index);
-            return new Built { Region = RegionColumns.Of(r), Columns = r.Count, Ms = sw.ElapsedMilliseconds };
+            var b = (Built)state;
+            long t0 = Stopwatch.GetTimestamp();
+            var work = ColumnBake.Local;
+            work.Run(b.Field, b.Index);
+            b.Region = RegionColumns.Of(work);
+            b.Columns = work.Count;
+            b.Ms = (Stopwatch.GetTimestamp() - t0) * 1000 / Stopwatch.Frequency;
+            return b;
         }
 
         void Status()
