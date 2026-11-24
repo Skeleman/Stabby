@@ -45,12 +45,6 @@ namespace Stabby.Game
             public CreatureBody Body;
         }
 
-        struct Shown
-        {
-            public Entity Root;
-            public BlobAssetReference<CreatureRig> Rig;
-        }
-
         static readonly VertexAttributeDescriptor[] Layout =
         {
             new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
@@ -68,13 +62,11 @@ namespace Stabby.Game
         Material material;
         BatchMaterialID materialId;
         readonly List<Mesh> meshes = new List<Mesh>();
-        readonly Dictionary<Entity, Shown> shown = new Dictionary<Entity, Shown>();
-        readonly List<Entity> gone = new List<Entity>();
         readonly List<Arrival> queue = new List<Arrival>();
-        readonly HashSet<Entity> queued = new HashSet<Entity>();
-        EntityQuery ghosts;
+        EntityQuery pending, vanished, presented;
         EntityArchetype rootType;
         bool counts, instanced;
+        int live;
         Entity tally;
 
         protected override void OnCreate()
@@ -84,7 +76,9 @@ namespace Stabby.Game
             if (counts) Count = 0;
             EntityManager.CreateSingleton(new CreaturePresenter { Index = Math.Max(0, Array.IndexOf(GameSettings.Clients, World.Name)) });
             tally = EntityManager.CreateSingleton(new CreatureTally { Instanced = instanced });
-            ghosts = SystemAPI.QueryBuilder().WithAll<CreatureState>().Build();
+            pending = SystemAPI.QueryBuilder().WithAll<CreatureState>().WithNone<CreatureClaimed>().Build();
+            vanished = SystemAPI.QueryBuilder().WithAll<CreaturePresented>().WithNone<CreatureState>().Build();
+            presented = SystemAPI.QueryBuilder().WithAll<CreaturePresented>().Build();
             rootType = instanced
                 ? EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink), typeof(CreatureFur))
                 : EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink));
@@ -96,9 +90,10 @@ namespace Stabby.Game
             Owned.Release(arriving, Drop);
             Drop(queue);
             queue.Clear();
-            queued.Clear();
-            foreach (var s in shown.Values) if (s.Rig.IsCreated) s.Rig.Dispose();
-            shown.Clear();
+            using (var ps = presented.ToComponentDataArray<CreaturePresented>(Allocator.Temp))
+                foreach (var s in ps) if (s.Rig.IsCreated) s.Rig.Dispose();
+            EntityManager.RemoveComponent<CreaturePresented>(presented);
+            live = 0;
             foreach (var m in meshes) if (m != null) Object.Destroy(m);
             meshes.Clear();
             if (material != null) Object.Destroy(material);
@@ -156,21 +151,22 @@ namespace Stabby.Game
             }
 
             if (queue.Count > 0) Arrive();
-            if (counts) Count = shown.Count;
-            if (arriving != null) return;
+            if (counts) Count = live;
+            if (arriving != null || pending.IsEmpty) return;
 
-            var es = ghosts.ToEntityArray(Allocator.Temp);
+            var es = pending.ToEntityArray(Allocator.Temp);
+            var states = pending.ToComponentDataArray<CreatureState>(Allocator.Temp);
+            EntityManager.AddComponent<CreatureClaimed>(pending);
             List<Arrival> fresh = null;
-            foreach (var e in es)
+            for (int i = 0; i < es.Length; i++)
             {
-                if (shown.ContainsKey(e) || queued.Contains(e)) continue;
-                var st = EntityManager.GetComponentData<CreatureState>(e);
+                var st = states[i];
                 if (st.Body < 0 || st.Body >= kit.Lib.Bodies.Count) continue;
                 fresh ??= new List<Arrival>();
-                fresh.Add(new Arrival { Ghost = e, State = st });
-                queued.Add(e);
+                fresh.Add(new Arrival { Ghost = es[i], State = st });
             }
             es.Dispose();
+            states.Dispose();
             if (fresh == null) return;
             var k = kit;
             arriving = Task.Run(() =>
@@ -182,22 +178,21 @@ namespace Stabby.Game
 
         void Vanish()
         {
-            gone.Clear();
-            foreach (var kv in shown)
-                if (!Alive(kv.Key)) gone.Add(kv.Key);
-            if (gone.Count == 0) return;
-            var doomed = new NativeList<Entity>(gone.Count * 32, Allocator.Temp);
+            if (vanished.IsEmpty) return;
+            var gone = vanished.ToComponentDataArray<CreaturePresented>(Allocator.Temp);
+            var doomed = new NativeList<Entity>(gone.Length * 32, Allocator.Temp);
             int dropped = 0;
-            foreach (var g in gone)
+            foreach (var s in gone)
             {
-                var s = shown[g];
-                var links = EntityManager.GetBuffer<CreatureLink>(s.Root);
+                var links = EntityManager.GetBuffer<CreatureLink>(s.Root, true);
                 dropped += links.Length;
                 for (int i = 0; i < links.Length; i++) if (links[i].Value != Entity.Null) doomed.Add(links[i].Value);
                 doomed.Add(s.Root);
                 s.Rig.Dispose();
-                shown.Remove(g);
             }
+            live -= gone.Length;
+            gone.Dispose();
+            EntityManager.RemoveComponent<CreaturePresented>(vanished);
             EntityManager.DestroyEntity(doomed.AsArray());
             doomed.Dispose();
             AddLinks(-dropped);
@@ -246,10 +241,9 @@ namespace Stabby.Game
             for (int i = queue.Count - 1; i >= 0; i--)
             {
                 var a = queue[i];
-                if (shown.ContainsKey(a.Ghost) || !Alive(a.Ghost))
+                if (!Alive(a.Ghost))
                 {
                     if (a.Rig.IsCreated) a.Rig.Dispose();
-                    queued.Remove(a.Ghost);
                     queue.RemoveAt(i);
                     continue;
                 }
@@ -278,6 +272,8 @@ namespace Stabby.Game
             var linkOwner = new NativeArray<int>(links, Allocator.TempJob);
             var fur = new NativeArray<float4>(3 * m, Allocator.TempJob);
             var size = new NativeArray<float>(m, Allocator.TempJob);
+            var ready = new NativeArray<Entity>(m, Allocator.Temp);
+            var marks = new NativeArray<CreaturePresented>(m, Allocator.Temp);
             Array.Clear(perPrefab, 0, perPrefab.Length);
             int at = 0;
             for (int i = 0; i < m; i++)
@@ -308,9 +304,14 @@ namespace Stabby.Game
                 fur[3 * i + 1] = a.Accent;
                 fur[3 * i + 2] = a.Dark;
                 size[i] = a.Length;
-                shown[a.Ghost] = new Shown { Root = roots[i], Rig = a.Rig };
-                queued.Remove(a.Ghost);
+                ready[i] = a.Ghost;
+                marks[i] = new CreaturePresented { Root = roots[i], Rig = a.Rig };
             }
+            EntityManager.AddComponent<CreaturePresented>(ready);
+            for (int i = 0; i < m; i++) EntityManager.SetComponentData(ready[i], marks[i]);
+            live += m;
+            ready.Dispose();
+            marks.Dispose();
             queue.RemoveRange(0, m);
             foreach (var arr in made) if (arr.IsCreated) arr.Dispose();
             roots.Dispose();

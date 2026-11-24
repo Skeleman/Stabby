@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Stabby.World
@@ -40,6 +41,8 @@ namespace Stabby.World
         readonly FeatureEdit[] edits;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly ObjectInstance[][] chunks;
+        readonly object[] chunkGates;
+        int chunkComputes;
 
         public ObjectField(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, ObjectLibrary lib)
         {
@@ -48,6 +51,7 @@ namespace Stabby.World
             n = w.Config.Size; cm = w.Config.CellMeters; worldM = n * cm;
             across = WorldChunks.Across(n);
             chunks = new ObjectInstance[across * across][];
+            chunkGates = new object[across * across];
             stream = Rng.Stream(w.Config.Seed, "objects").NextU64();
             footStream = Rng.Stream(w.Config.Seed, "objects-foot").NextU64();
             thinStream = Rng.Stream(w.Config.Seed, "objects-thin").NextU64();
@@ -149,10 +153,23 @@ namespace Stabby.World
         public void LightsOf(ObjectInstance o, List<StructureLight> list) => AddLights(lib, shapes, o, list);
         public void PartContactsOf(ObjectInstance o, int part, List<ObjectColumn> list) => AddPart(lib, shapes, o, part, list, true);
 
+        public int ChunkComputes => chunkComputes;
+
         public ObjectInstance[] Chunk(int cx, int cz)
         {
             int c = cz * across + cx;
-            return chunks[c] ?? (chunks[c] = Place(cx, cz));
+            var s = Volatile.Read(ref chunks[c]);
+            if (s != null) return s;
+            var gate = Volatile.Read(ref chunkGates[c]) ?? Interlocked.CompareExchange(ref chunkGates[c], new object(), null) ?? chunkGates[c];
+            lock (gate)
+            {
+                s = chunks[c];
+                if (s != null) return s;
+                s = Place(cx, cz);
+                Interlocked.Increment(ref chunkComputes);
+                Volatile.Write(ref chunks[c], s);
+                return s;
+            }
         }
 
         [ThreadStatic] static List<ObjectInstance> scratch;
@@ -168,7 +185,7 @@ namespace Stabby.World
         public void SolidInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = chunks[cz * across + cx];
+            var cached = Volatile.Read(ref chunks[cz * across + cx]);
             if (cached != null) list.AddRange(cached);
             else PlaceInto(cx, cz, true, list, null);
         }
@@ -176,7 +193,7 @@ namespace Stabby.World
         public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = chunks[cz * across + cx];
+            var cached = Volatile.Read(ref chunks[cz * across + cx]);
             if (cached != null) list.AddRange(cached);
             else PlaceInto(cx, cz, false, list, null);
         }
