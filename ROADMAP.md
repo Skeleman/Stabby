@@ -51,7 +51,7 @@ and converts once into native data.
   movement; a check fails any capture or bench that leaves time unpinned.
   Zach 11-23: darkness is a core theme; nights and caves may be very dark. Moon phases on
   the shared clock: full-moon nights clearly brighter, new-moon nights very dark.
-  In progress on b/day-night (cycle done; phases added before merge).
+  b/day-night merged: shared clock (content/sky.json), one directional light for sun and moon, sky, fog and ambient follow it; moon phases (8-day cycle, new moon very dark); captures pin hour and phase.
   Capture follow-ups from b/day-night: captures must wait for object regions (with a
   cached map file they start about 14 s early and show no trees); the cliff-lows capture
   should steer the light via DayNightSystem.LightOverride.
@@ -121,7 +121,7 @@ One visual identity (Zach): every shader follows the same look budget, with shar
   behaviour system serves every agent; NPCs add ownership of items and
   structures, households and family ties, and dialogue about themselves,
   their background and culture. Theft and trespass follow from ownership.
-  Burst ECS systems, host-authoritative. Step 1 merged (b/creatures-desires): animal drives (hunger, thirst, rest) pick graze, drink and bed-down targets inside the shared brain job; drinkers stopped by a bank drink when water is in reach. Next: walkable drink spots precomputed in CreaturePlan (changes output, GV bump). | now
+  Burst ECS systems, host-authoritative. Step 1 merged (b/creatures-desires): animal drives (hunger, thirst, rest) pick graze, drink and bed-down targets inside the shared brain job; drinkers stopped by a bank drink when water is in reach. b/drink-spots merged (GV 99): sparse drink spots on lake and river banks per site in CreaturePlan (own stream, check DrinkSpotsHold); the brain heads for the nearest one when thirsty. Mud and spring pools are not drink spots yet. | now
 - Creatures, NPCs and items follow Punchy closely (Punchy `Assets/Game/Scripts/Fauna`,
   `Assets/Game/Fauna/Limbs`, `Scripts/Items`): procedural bodies from simple
   hierarchical parts (arm, leg, tail, head types) that share definitions and
