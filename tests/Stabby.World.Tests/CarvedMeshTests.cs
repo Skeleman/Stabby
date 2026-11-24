@@ -29,27 +29,38 @@ public class CarvedMeshTests
             var cols = new DetailColumns { Detail = detail, StepM = sm };
             var seen = new HashSet<(float, float)>();
             double fast = 0, full = 0;
-            foreach (var node in maze.Nodes)
+            int n = 0;
+            var picks = maze.Nodes.Select(v => (v.X, v.Z, true)).ToList();
+            foreach (var g in graphs.Where(g => g.Class != "labyrinth").Take(2)) picks.Add((g.Nodes[0].X, g.Nodes[0].Z, false));
+            foreach (var (nx, nz, inMaze) in picks)
             {
-                float x0 = (float)Math.Floor(node.X / size) * size, z0 = (float)Math.Floor(node.Z / size) * size;
-                if (!seen.Add((x0, z0)) || seen.Count > 2) continue;
+                float x0 = (float)Math.Floor(nx / size) * size, z0 = (float)Math.Floor(nz / size) * size;
+                if ((inMaze && n >= 2) || !seen.Add((x0, z0))) continue;
                 var list = new EditArray { Items = placed.Where(e => e.MeshedIn(sm, x0, z0, x0 + size, z0 + size)).Select(e => e.AtStep(sm)).ToArray() };
-                Assert.Contains(list.Items, e => e.Kind == FeatureEdit.Carve);
+                if (inMaze) Assert.Contains(list.Items, e => e.Kind == FeatureEdit.Carve);
                 var c = new NetsChunk { X0 = (int)(x0 / sm), Z0 = (int)(z0 / sm), Cells = NearField.NodeQuads, StepM = sm };
                 var warm = new NetsBuffers();
                 SurfaceNets.Edited(cols, list, new NetsChunk { X0 = c.X0, Z0 = c.Z0, Cells = 2, StepM = sm }, ref warm);
                 var clock = Stopwatch.StartNew();
                 var a = new NetsBuffers();
                 SurfaceNets.Edited(cols, list, c, ref a);
-                fast += clock.Elapsed.TotalMilliseconds;
+                double ta = clock.Elapsed.TotalMilliseconds;
                 clock.Restart();
                 var b = new NetsBuffers();
                 SurfaceNets.Edited(cols, list, c, ref b, false);
-                full += clock.Elapsed.TotalMilliseconds;
+                double tb = clock.Elapsed.TotalMilliseconds;
                 Assert.True(a.SameAs(b), $"chunk {x0},{z0} differs from the full path");
+                var again = new NetsBuffers();
+                SurfaceNets.Edited(cols, list, new NetsChunk { X0 = c.X0 + 3, Z0 = c.Z0 + 5, Cells = 7, StepM = sm }, ref again);
+                var againFull = new NetsBuffers();
+                SurfaceNets.Edited(cols, list, new NetsChunk { X0 = c.X0 + 3, Z0 = c.Z0 + 5, Cells = 7, StepM = sm }, ref againFull, false);
+                Assert.True(again.SameAs(againFull), $"small chunk at {x0},{z0} differs after reusing scratch");
+                if (!inMaze) continue;
+                fast += ta;
+                full += tb;
+                n++;
             }
-            int n = Math.Min(seen.Count, 2);
-            output.WriteLine($"seed {seed}: {n} labyrinth chunks, skip path {fast / n:F0} ms, full path {full / n:F0} ms per chunk");
+            output.WriteLine($"seed {seed}: {n} labyrinth chunks, skip path {fast / n:F0} ms, full path {full / n:F0} ms per chunk, {seen.Count - n} other cave chunks");
             return;
         }
         throw new Xunit.Sdk.XunitException("no labyrinth in seeds 1-8");

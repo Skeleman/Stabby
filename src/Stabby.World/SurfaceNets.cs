@@ -215,6 +215,8 @@ namespace Stabby.World
 
     public static class SurfaceNets
     {
+        [ThreadStatic] static ulong[] plainBits;
+
         public static void HeightRange<T>(T columns, NetsChunk c, out int jMin, out int jMax) where T : struct, IColumnField
         {
             float lo = float.MaxValue, hi = float.MinValue;
@@ -286,7 +288,8 @@ namespace Stabby.World
                     int r = (k + 1) * rw + i + 1;
                     sink.SetFloat(sl + k * hw + i, Features.Slope(sink.GetFloat(r + 1), sink.GetFloat(r - 1), sink.GetFloat(r + rw), sink.GetFloat(r - rw), s));
                 }
-            int next = 0;
+            int next = 0, count = edits.Count;
+            ulong[] bits = plainBits;
             for (int k = 0; k < w; k++)
                 for (int i = 0; i < w; i++)
                 {
@@ -299,11 +302,41 @@ namespace Stabby.World
                     sink.SetInt(col, j);
                     sink.SetInt(col + 2, next);
                     sink.SetInt(col + 1, end);
-                    for (; j < end; j++)
+                    if (!skip)
                     {
-                        if (skip && Plain(edits, h00, h10, h01, h11, l00, l10, l01, l11, s, ci, j, ck)) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
-                        else Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
-                        next++;
+                        for (; j < end; j++, next++) Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
+                        continue;
+                    }
+                    int need = (next + end - j + 63) >> 6;
+                    if (bits == null || bits.Length < need) { Array.Resize(ref bits, Math.Max(need, bits == null ? 1024 : 2 * bits.Length)); plainBits = bits; }
+                    float x0 = ci * s, z0 = ck * s, x1 = x0 + s, z1 = z0 + s;
+                    int tLo = int.MaxValue, tHi = int.MinValue;
+                    for (int q = 0; q < count; q++)
+                    {
+                        var e = edits.At(q);
+                        if (e.MaxX < x0 || e.MinX > x1 || e.MaxZ < z0 || e.MinZ > z1) continue;
+                        tLo = Math.Min(tLo, (int)Math.Floor(e.MinY / s) - 1);
+                        tHi = Math.Max(tHi, (int)Math.Floor(e.MaxY / s) + 1);
+                    }
+                    int jIn = j, jOut = end;
+                    while (jIn < end && AllInside(h00, h10, h01, h11, jIn, s)) jIn++;
+                    while (jOut > jIn && AllOutside(h00, h10, h01, h11, jOut - 1, s)) jOut--;
+                    for (; j < end; j++, next++)
+                    {
+                        bool plain = j >= tLo && j <= tHi
+                            ? Plain(edits, h00, h10, h01, h11, l00, l10, l01, l11, s, ci, j, ck)
+                            : j < jIn || j >= jOut;
+                        ulong m = 1UL << (next & 63);
+                        if (plain)
+                        {
+                            bits[next >> 6] |= m;
+                            sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
+                        }
+                        else
+                        {
+                            bits[next >> 6] &= ~m;
+                            Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
+                        }
                     }
                 }
             for (int k = 1; k < w; k++)
@@ -317,9 +350,15 @@ namespace Stabby.World
                     float l = sink.GetFloat(sl + k * hw + i), lx = sink.GetFloat(sl + k * hw + i + 1), lz = sink.GetFloat(sl + (k + 1) * hw + i);
                     float xa = ci * s, xb = (ci + 1) * s, za = ck * s, zb = (ck + 1) * s;
                     float hxz = H(ref sink, rw, i + 1, k + 1), lxz = sink.GetFloat(sl + (k + 1) * hw + i + 1);
+                    int start = sink.GetInt(col), cb = sink.GetInt(col + 2) - start;
+                    if (skip)
+                    {
+                        jLo = Math.Max(jLo, start);
+                        jHi = Math.Min(jHi, sink.GetInt(col + 1));
+                    }
                     for (int j = jLo; j < jHi; j++)
                     {
-                        if (skip && Plain(edits, h, hx, hz, hxz, l, lx, lz, lxz, s, ci, j, ck)) continue;
+                        if (skip && (bits[(cb + j) >> 6] & (1UL << ((cb + j) & 63))) != 0) continue;
                         float yb = j * s, yt = (j + 1) * s;
                         bool p = Features.Edit(edits, (h - yb) / l, xa, yb, za) > 0;
                         if (p != Features.Edit(edits, (hx - yb) / lx, xb, yb, za) > 0) QuadAt(ref sink, p, cz, j - 1, cz, j, col, j, col, j - 1);
