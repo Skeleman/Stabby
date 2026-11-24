@@ -23,6 +23,7 @@ namespace Stabby.Game
             int frame = Time.frameCount;
             if (Shared.Data.Frame != frame || Shared.Data.PixelsPerMetre <= 0)
             {
+                GameSettings.UseLines(cam.pixelHeight);
                 Shared.Data = new DetailView
                 {
                     Camera = cam.transform.position,

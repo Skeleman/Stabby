@@ -97,7 +97,8 @@ namespace Stabby.Game
         float cm, worldM, span;
         int across;
         int[][] meshBase;
-        float[] reach, tile;
+        float[] reach, baseReach, tile;
+        float reachQuality;
         Task<MeshSet> meshTask;
         MeshSet meshSet;
         Mesh[] meshes;
@@ -224,6 +225,7 @@ namespace Stabby.Game
             int defs = lib.Objects.Count, count = 0;
             meshBase = new int[defs][];
             reach = new float[defs];
+            baseReach = new float[defs];
             tile = new float[defs];
             liveByDef = new int[defs];
             kinds = new ObjectKind[defs];
@@ -249,7 +251,8 @@ namespace Stabby.Game
                 }
                 kinds[d] = kind;
                 rules[d] = lib.RuleOf(kind);
-                reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels / math.max(GameSettings.GraphicsQuality, 0.1f));
+                baseReach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
+                reach[d] = baseReach[d] * GameSettings.GraphicsScale;
                 float t = span;
                 while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
                 tile[d] = t;
@@ -555,10 +558,13 @@ namespace Stabby.Game
 
         long Key(int def, int tx, int tz) => ((long)def << 40) | ((long)tx << 20) | (long)tz;
 
+        [System.ThreadStatic] static List<ObjectInstance> placedScratch;
+        [System.ThreadStatic] static List<StructureLight> anchorScratch;
+
         ChunkParts Collect(int c)
         {
             int cx = c % across, cz = c / across;
-            var placed = new List<ObjectInstance>();
+            var placed = placedScratch ??= new List<ObjectInstance>();
             field.PlaceInto(cx, cz, placed);
             int n = 0;
             for (int i = 0; i < placed.Count; i++) n += lib.Objects[placed[i].Def].Parts.Count;
@@ -604,7 +610,7 @@ namespace Stabby.Game
         List<LightEmitter> LightsIn(List<ObjectInstance> placed)
         {
             List<LightEmitter> lights = null;
-            var anchors = new List<StructureLight>();
+            var anchors = anchorScratch ??= new List<StructureLight>();
             foreach (var o in placed)
             {
                 anchors.Clear();
@@ -880,7 +886,13 @@ namespace Stabby.Game
             var cam = Camera.main;
             if (cam == null) return;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            float3 pos = DetailView.Refresh(cam).Camera;
+            var view = DetailView.Refresh(cam);
+            float3 pos = view.Camera;
+            if (view.Quality != reachQuality)
+            {
+                reachQuality = view.Quality;
+                for (int d = 0; d < reach.Length; d++) reach[d] = baseReach[d] * reachQuality;
+            }
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
             LoadChunks(pos, maxReach);

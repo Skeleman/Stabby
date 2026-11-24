@@ -9,6 +9,127 @@ public class LightBudgetTests
         public LightBudget.Slot[] Items;
         public int Count => Items.Length;
         public LightBudget.Slot this[int i] { get => Items[i]; set => Items[i] = value; }
+        public int[] Order;
+        public int GetOrder(int i) => Order[i];
+        public void SetOrder(int i, int v) => (Order ??= new int[Items.Length])[i] = v;
+    }
+
+    [Fact]
+    public void TopKRankingMatchesRepeatedBestScans()
+    {
+        var rng = Rng.Stream(7, "light-topk-test");
+        for (int trial = 0; trial < 400; trial++)
+        {
+            int n = 1 + (int)(rng.NextU32() % 120);
+            var items = new LightBudget.Slot[n];
+            for (int i = 0; i < n; i++)
+            {
+                uint r = rng.NextU32();
+                var x = LightBudget.Slot.Fresh;
+                x.Pixels = (r % 4) == 0 ? 50f * (1 + rng.NextU32() % 4) : rng.NextU32() % 2000;
+                x.Importance = (r >> 3) % 5 == 0 ? 0f : 0.5f + (rng.NextU32() % 4) * 0.5f;
+                x.Wanted = (byte)(rng.NextU32() % (Detail.LightEmissive + 1));
+                x.Target = (byte)(rng.NextU32() % (Detail.LightEmissive + 1));
+                x.Shadow = (r >> 6) % 3 == 0 ? 1f : (r >> 6) % 3 == 1 ? 0.5f : 0f;
+                x.Real = Math.Max(x.Shadow, (r >> 9) % 2 == 0 ? 1f : 0f);
+                x.Glow = (r >> 10) % 4 == 0 ? 0.3f : 0f;
+                items[i] = x;
+            }
+            var caps = trial % 10 == 0 ? LightBudget.Caps.None : new LightBudget.Caps((int)(rng.NextU32() % 6), (int)(rng.NextU32() % 20), (int)(rng.NextU32() % 30));
+            var fast = new Slots { Items = (LightBudget.Slot[])items.Clone() };
+            var slow = (LightBudget.Slot[])items.Clone();
+            for (int frame = 0; frame < 3; frame++)
+            {
+                var a = LightBudget.Rank(ref fast, caps);
+                var b = ReferenceRank(slow, caps);
+                Assert.Equal(b, a);
+                Assert.Equal(slow, fast.Items);
+                LightBudget.Step(ref fast, 0.1f);
+                var ref2 = new Slots { Items = slow };
+                LightBudget.Step(ref ref2, 0.1f);
+            }
+        }
+    }
+
+    const int Pending = 100;
+
+    static LightBudget.Counts ReferenceRank(LightBudget.Slot[] slots, LightBudget.Caps caps)
+    {
+        int n = slots.Length, heldS = 0, heldR = 0, heldG = 0;
+        for (int i = 0; i < n; i++)
+        {
+            slots[i].Previous = slots[i].Target;
+            slots[i].Target = LightBudget.Unranked;
+            if (slots[i].Shadow > 0f) heldS++;
+            if (slots[i].Real > 0f) heldR++;
+            if (slots[i].Glow > 0f) heldG++;
+        }
+        int shadowed = ReferenceChoose(slots, Detail.LightShadowed, Math.Min(caps.Shadowed, caps.Real));
+        ReferenceChoose(slots, Detail.LightUnshadowed, Math.Max(caps.Real - shadowed, 0));
+        ReferenceChoose(slots, Detail.LightGlow, caps.Glow);
+        for (int i = 0; i < n; i++)
+        {
+            if (slots[i].Target == LightBudget.Unranked) slots[i].Target = Detail.LightEmissive;
+            slots[i].Tier = (byte)(slots[i].Target == Detail.LightEmissive ? Detail.LightEmissive : Pending + slots[i].Target);
+        }
+        int freeS = Math.Max(caps.Shadowed - heldS, 0), freeR = Math.Max(caps.Real - heldR, 0), freeG = Math.Max(caps.Glow - heldG, 0);
+        var c = new LightBudget.Counts();
+        for (int t = Detail.LightShadowed; t < Detail.LightEmissive; t++)
+        {
+            while (true)
+            {
+                int best = ReferenceBest(slots, Pending + t, t, false);
+                if (best < 0) break;
+                ref var b = ref slots[best];
+                bool needS = t == Detail.LightShadowed && b.Shadow <= 0f;
+                bool needR = t <= Detail.LightUnshadowed && b.Real <= 0f;
+                bool needG = t == Detail.LightGlow && b.Glow <= 0f;
+                if ((needS && freeS <= 0) || (needR && freeR <= 0) || (needG && freeG <= 0))
+                    b.Tier = (byte)(t + 1 == Detail.LightEmissive ? Detail.LightEmissive : Pending + t + 1);
+                else
+                {
+                    if (needS) freeS--;
+                    if (needR) freeR--;
+                    if (needG) freeG--;
+                    b.Tier = (byte)t;
+                }
+            }
+        }
+        foreach (var s in slots)
+        {
+            if (s.Tier == Detail.LightShadowed) c.Shadowed++;
+            else if (s.Tier == Detail.LightUnshadowed) c.Unshadowed++;
+            else if (s.Tier == Detail.LightGlow) c.Glow++;
+            else c.Emissive++;
+        }
+        return c;
+    }
+
+    static int ReferenceChoose(LightBudget.Slot[] slots, int tier, int picks)
+    {
+        int taken = 0;
+        while (taken < picks)
+        {
+            int best = ReferenceBest(slots, LightBudget.Unranked, tier, true);
+            if (best < 0) break;
+            slots[best].Target = (byte)tier;
+            taken++;
+        }
+        return taken;
+    }
+
+    static int ReferenceBest(LightBudget.Slot[] slots, int mark, int tier, bool ranking)
+    {
+        int best = -1;
+        float top = -1f;
+        for (int i = 0; i < slots.Length; i++)
+        {
+            var s = slots[i];
+            if (ranking ? s.Target != mark || s.Wanted > tier : s.Tier != mark) continue;
+            float score = s.Pixels * s.Importance * (s.Previous <= tier ? LightBudget.Stickiness : 1f);
+            if (score > top) { top = score; best = i; }
+        }
+        return best;
     }
 
     static Slots Make(int n, float importance = 1f)

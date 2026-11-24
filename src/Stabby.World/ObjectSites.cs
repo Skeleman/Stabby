@@ -95,14 +95,17 @@ namespace Stabby.World
             }
         }
 
+        [ThreadStatic] static List<ObjectInstance> nearScratch;
+
         List<ObjectInstance> SitesNear(int cx, int cz)
         {
             if (siteChunks < 0) return null;
-            List<ObjectInstance> near = null;
+            var near = nearScratch ?? (nearScratch = new List<ObjectInstance>());
+            near.Clear();
             for (int z = Math.Max(0, cz - siteChunks); z <= Math.Min(across - 1, cz + siteChunks); z++)
                 for (int x = Math.Max(0, cx - siteChunks); x <= Math.Min(across - 1, cx + siteChunks); x++)
-                    foreach (var s in Sites(x, z)) (near ?? (near = new List<ObjectInstance>())).Add(s);
-            return near;
+                    near.AddRange(Sites(x, z));
+            return near.Count > 0 ? near : null;
         }
 
         public float SiteGap(ObjectInstance s, float x, float z)

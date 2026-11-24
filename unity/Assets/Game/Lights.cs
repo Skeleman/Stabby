@@ -37,6 +37,7 @@ namespace Stabby.Game
     struct EmitterSlots : LightBudget.ISlots
     {
         public NativeArray<LightEmitter> Items;
+        public NativeArray<int> Order;
 
         public int Count => Items.Length;
 
@@ -45,6 +46,9 @@ namespace Stabby.Game
             get => Items[i].Slot;
             set { var e = Items[i]; e.Slot = value; Items[i] = e; }
         }
+
+        public int GetOrder(int i) => Order[i];
+        public void SetOrder(int i, int v) => Order[i] = v;
     }
 
     [BurstCompile]
@@ -84,7 +88,7 @@ namespace Stabby.Game
                 e.Slot = s;
                 items[i] = e;
             }
-            var slots = new EmitterSlots { Items = items };
+            var slots = new EmitterSlots { Items = items, Order = new NativeArray<int>(items.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory) };
             if (budget.ValueRO.Budgeted) LightBudget.Rank(ref slots, budget.ValueRO.Caps);
             budget.ValueRW.Counts = LightBudget.Step(ref slots, SystemAPI.Time.DeltaTime);
             query.CopyFromComponentDataArray(items);

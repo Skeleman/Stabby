@@ -23,11 +23,18 @@ namespace Stabby.World
 
         public int Count => Items.Length;
 
+        [ThreadStatic] static List<ObjectInstance> objectScratch;
+        [ThreadStatic] static List<ObjectColumn> columnScratch;
+        [ThreadStatic] static List<ulong> ownerScratch;
+
         public static ColumnRegion Build(ObjectField field, int index)
         {
-            var objects = new List<ObjectInstance>();
-            var columns = new List<ObjectColumn>();
-            var owners = new List<ulong>();
+            var objects = objectScratch ??= new List<ObjectInstance>();
+            var columns = columnScratch ??= new List<ObjectColumn>();
+            var owners = ownerScratch ??= new List<ulong>();
+            objects.Clear();
+            columns.Clear();
+            owners.Clear();
             int across = field.ChunksAcross;
             field.SolidInto(index % across, index / across, objects);
             Collect(field, objects, columns, owners);

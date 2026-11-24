@@ -153,6 +153,7 @@ namespace Stabby.Game.Editor
             UnityEngine.Profiling.Profiler.enabled = false;
             UnityEngine.Profiling.Profiler.logFile = System.IO.Path.GetFullPath($"../out/unity/spike-walk-{segment:D3}.raw");
             UnityEngine.Profiling.Profiler.enableBinaryLog = true;
+            UnityEngine.Profiling.Profiler.enableAllocationCallstacks = true;
             UnityEngine.Profiling.Profiler.enabled = true;
         }
 
