@@ -145,6 +145,7 @@ namespace Stabby.World
 
         public int ChunksAcross => across;
         public ObjectLibrary Library => lib;
+        public PartShapes Shapes => shapes;
         public float Footprint(int def) => footprint[def];
         public float ChunkMeters => WorldChunks.Size * cm;
         public void ColumnsOf(ObjectInstance o, List<ObjectColumn> list) => AddColumns(lib, shapes, o, list);

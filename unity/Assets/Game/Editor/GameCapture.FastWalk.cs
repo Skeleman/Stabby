@@ -23,6 +23,17 @@ namespace Stabby.Game.Editor
 
         const float FastWalkMps = 30f, FastWalkM = 2000f, NormalWalkM = 360f;
 
+        static string ColumnsEqual(string label)
+        {
+            var parts = new List<string>();
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var sys = w.GetExistingSystemManaged<ObjectColumnsSystem>();
+                if (sys != null && sys.Field != null) parts.Add(sys.CompareManaged(out _, out _, out _));
+            }
+            return $"columns {label} equal managed build: {string.Join("; ", parts)}";
+        }
+
         static System.Collections.IEnumerator FastWalkTour(Camera cam)
         {
             var server = ServerWorld();
@@ -108,6 +119,7 @@ namespace Stabby.Game.Editor
                     lines.Add(ChurnReport(label, churn0, Churn(), Time.realtimeSinceStartup - churnT0));
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
+                    lines.Add(ColumnsEqual(label));
                 }
                 var end = start + d * (NormalWalkM + FastWalkM);
                 var jump = TeleportSpot(ground, end, d);
@@ -137,6 +149,7 @@ namespace Stabby.Game.Editor
                 lines.Add(WalkReport("teleport fill", 0, 0, fill));
                 for (var s = Settle(240); s.MoveNext();) yield return null;
                 lines.Add(Resident(view, "after teleport"));
+                lines.Add(ColumnsEqual("after teleport"));
                 var mem = new MemoryCounters { Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MemoryCounters>() };
                 GetProcessMemoryInfo(GetCurrentProcess(), ref mem, mem.Size);
                 lines.Add($"memory: process peak working set {(ulong)mem.PeakWorkingSetSize / 1e9:F2} GB, now {(ulong)mem.WorkingSetSize / 1e9:F2} GB, peak commit {(ulong)mem.PeakPagefileUsage / 1e9:F2} GB; Unity reserved {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1e9:F2} GB, allocated {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1e9:F2} GB, graphics driver {UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / 1e9:F2} GB");
