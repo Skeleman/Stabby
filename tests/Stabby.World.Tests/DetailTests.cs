@@ -248,7 +248,8 @@ public class DetailTests
     public void KindAndCreatureRulesComeFromContent()
     {
         var kind = new ObjectKind { Id = "animated", Lods = 3, LodPixels = new[] { 108f, 32.4f }, FadePixels = 6.48f, ShadowPixels = 43.2f, ShadowCascadePixels = 86.4f, Wind = true };
-        var r = kind.Rule();
+        var light = new LightKind { Id = "point" };
+        var r = kind.Rule(light);
         Assert.Equal(108f, r.Geometry.Near);
         Assert.Equal(32.4f, r.Geometry.Mid);
         Assert.Equal(6.48f, r.Geometry.Far);
@@ -256,8 +257,12 @@ public class DetailTests
         Assert.Equal(43.2f, r.ShadowPixels);
         Assert.Equal(kind.FlutterPixels, r.Animation.Near);
         Assert.Equal(kind.SwayPixels, r.Animation.Far);
+        Assert.Equal(432f, r.Light.Near);
+        Assert.Equal(108f, r.Light.Mid);
+        Assert.Equal(10.8f, r.Light.Far);
+        Assert.Equal(Detail.Never, kind.Rule(null).Light.Near);
         kind.Wind = false;
-        Assert.Equal(Detail.Never, kind.Rule().Animation.Far);
+        Assert.Equal(Detail.Never, kind.Rule(light).Animation.Far);
         var c = new CreatureDef().Rule();
         Assert.Equal(64.8f, c.ShadowCascadePixels);
         Assert.Equal(64.8f, c.Animation.Near);
@@ -280,7 +285,7 @@ public class DetailTests
         {
             float size = objects.CasterSize(d);
             if (size <= 0) continue;
-            var rule = objects.KindOf(d).Rule();
+            var rule = objects.RuleOf(objects.KindOf(d));
             float far = Detail.ShadowReach(size, rule, ppm, 1f);
             Assert.True(far / (1f - Detail.Hysteresis) <= span.Range * 1.0001f, d.Id);
             Assert.True(Detail.CascadeReach(size, rule, ppm, 1f) >= span.Near * 0.9999f, d.Id);

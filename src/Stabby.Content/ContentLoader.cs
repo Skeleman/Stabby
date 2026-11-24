@@ -10,8 +10,9 @@ namespace Stabby.Content
     {
         public const int BiomeSchemaVersion = 1;
         public const int MaterialSchemaVersion = 5;
-        public const int ObjectSchemaVersion = 4;
+        public const int ObjectSchemaVersion = 5;
         public const int CreatureSchemaVersion = 2;
+        public const int SkySchemaVersion = 1;
 
         public static string FindContentRoot(string start)
         {
@@ -43,6 +44,53 @@ namespace Stabby.Content
         {
             var path = Path.Combine(contentRoot, "creatures.json");
             return ParseCreatures(File.ReadAllText(path), biomeIds, path, LoadMaterials(contentRoot));
+        }
+
+        public static SkyDef LoadSky(string contentRoot)
+        {
+            var path = Path.Combine(contentRoot, "sky.json");
+            return ParseSky(File.ReadAllText(path), path);
+        }
+
+        public static SkyDef ParseSky(string json, string source)
+        {
+            var root = Root(json, source, SkySchemaVersion);
+            var d = new SkyDef
+            {
+                DayLengthS = root.Float("dayLengthS", 0), StartHour = root.Float("startHour", 0),
+                Sun = Orbit(root.Object("sun")), Moon = Orbit(root.Object("moon")),
+                MoonColor = Color(root, "moonColor", source), MoonIntensity = root.Float("moonIntensity", 0),
+                MoonSwitchHeight = root.Float("moonSwitchHeight", 0), MoonFadeHeight = root.Float("moonFadeHeight", 0),
+                MoonCycleDays = root.Float("moonCycleDays", 0), MoonStartPhase = root.Float("moonStartPhase", 0),
+                NewMoonLight = root.Float("newMoonLight", 0), NewMoonAmbient = root.Float("newMoonAmbient", 0),
+            };
+            foreach (var s in root.Objects("stops", true))
+            {
+                d.Stops.Add(new SkyStop
+                {
+                    SunHeight = s.Float("sunHeight", 0), Sky = Color(s, "sky", source), AmbientSky = Color(s, "ambientSky", source),
+                    AmbientGround = Color(s, "ambientGround", source), Sun = Color(s, "sun", source), SunIntensity = s.Float("sunIntensity", 0),
+                });
+                s.End();
+            }
+            root.End();
+            Check(SkyDef.Validate(d), source);
+            return d;
+        }
+
+        static Orbit Orbit(Json o)
+        {
+            if (o == null) return null;
+            var r = new Orbit { NoonElevationDeg = o.Float("noonElevationDeg", 0), NoonAzimuthDeg = o.Float("noonAzimuthDeg", 0), HourOffset = o.Float("hourOffset", 0) };
+            o.End();
+            return r;
+        }
+
+        static Rgb Color(Json j, string key, string source)
+        {
+            var f = j.Floats(key, null);
+            if (f == null || f.Length != 3) throw new InvalidDataException(source + ": " + key + " must be [r, g, b]");
+            return new Rgb(f[0], f[1], f[2]);
         }
 
         public static WorldSketch LoadSketch(string contentRoot, string relativePath, WorldConfig c) =>
@@ -246,13 +294,21 @@ namespace Stabby.Content
             var root = Root(json, source, ObjectSchemaVersion);
             var errors = new List<string>();
             var lib = new ObjectLibrary();
+            foreach (var l in root.Objects("lights"))
+            {
+                lib.Lights.Add(new LightKind
+                {
+                    Id = l.String("id", ""), ShadowedPixels = l.Float("shadowedPixels", 0), UnshadowedPixels = l.Float("unshadowedPixels", 0), GlowPixels = l.Float("glowPixels", 0),
+                });
+                l.End();
+            }
             foreach (var k in root.Objects("kinds"))
             {
                 lib.Kinds.Add(new ObjectKind
                 {
                     Id = k.String("id", ""), Lods = k.Int("lods", 0), LodPixels = k.Floats("lodPixels", Array.Empty<float>()),
                     FadePixels = k.Float("fadePixels", 0), Shadows = k.Bool("shadows", false), ShadowPixels = k.Float("shadowPixels", 0),
-                    ShadowCascadePixels = k.Float("shadowCascadePixels", 0), LightPixels = k.Floats("lightPixels", Array.Empty<float>()),
+                    ShadowCascadePixels = k.Float("shadowCascadePixels", 0), Light = k.String("light", ""),
                     Wind = k.Bool("wind", false), SwayPixels = k.Float("swayPixels", 16.2f), FlutterPixels = k.Float("flutterPixels", 54f),
                     ImpostorPixels = k.Float("impostorPixels", 0), Animated = k.Bool("animated", false), Solid = k.Bool("solid", false),
                 });
@@ -359,6 +415,7 @@ namespace Stabby.Content
                     def.ShadowPixels = detail.Float("shadowPixels", def.ShadowPixels);
                     def.ShadowCascadePixels = detail.Float("shadowCascadePixels", def.ShadowCascadePixels);
                     def.AnimPixels = detail.Float("animPixels", def.AnimPixels);
+                    def.ThinkPixels = detail.Float("thinkPixels", def.ThinkPixels);
                     def.IkPixels = detail.Float("ikPixels", def.IkPixels);
                     def.LowPixels = detail.Float("lowPixels", def.LowPixels);
                     detail.End();

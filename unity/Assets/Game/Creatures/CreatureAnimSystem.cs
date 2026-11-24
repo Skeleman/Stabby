@@ -299,8 +299,7 @@ namespace Stabby.Game
                 c.Visible = visible;
                 int half = links.Length / 2;
                 float low = rig.LowPx / q;
-                c.High = Detail.Holds(px, low, c.High);
-                float blend = c.High ? 1 - math.round(Detail.Crossfade(px, low, 1.5f * low) * 16f) / 16f : 1;
+                float blend = d.Geometry == 0 ? 1 - math.round(Detail.Crossfade(px, low, 1.5f * low) * 16f) / 16f : 1;
                 bool highOn = visible && blend < 1, lowOn = visible && blend > 0;
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }

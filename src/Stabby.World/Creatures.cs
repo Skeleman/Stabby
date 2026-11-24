@@ -44,7 +44,7 @@ namespace Stabby.World
         public int HerdMin = 1, HerdMax = 1;
         public float HerdChance;
         public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f, Dart;
-        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, LowPixels = 32.4f, ShadowCascadePixels = 64.8f;
+        public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, ThinkPixels = 10.8f, LowPixels = 32.4f, ShadowCascadePixels = 64.8f;
         public CreatureDrives Drives = new CreatureDrives { Hunger = DriveDef.Of(240, 0.6f, 30), Thirst = DriveDef.Of(600, 0.7f, 20), Rest = DriveDef.Of(900, 0.8f, 60) };
         public List<CreatureSlot> Slots = new List<CreatureSlot>();
 
@@ -133,6 +133,7 @@ namespace Stabby.World
                     errors.Add(b.Id + ": detail pixels must rise fade < anim < ik and fade < shadow");
                 if (!(b.ShadowCascadePixels >= b.ShadowPixels)) errors.Add(b.Id + ": shadowCascadePixels must not sit below shadowPixels");
                 if (!(b.LowPixels >= 2 * b.FadePixels)) errors.Add(b.Id + ": lowPixels must be at least twice fadePixels");
+                if (!(b.ThinkPixels > b.SpawnPixels)) errors.Add(b.Id + ": thinkPixels must stay above spawnPixels");
                 if (b.Haunch < 0 || b.Haunch > 0.5f || b.Waist < 0 || b.Waist > 0.5f || b.Hump < 0 || b.Hump > 0.5f) errors.Add(b.Id + ": haunch, waist and hump out of 0..0.5");
                 for (int d = 0; d < Drives.Count; d++)
                 {
@@ -344,11 +345,15 @@ namespace Stabby.World
         public HerdNeeds Needs;
     }
 
-    public struct WorldWet : IWetCells
+    public struct WorldWet : IWetCells, IHerdGround
     {
         public GeneratedWorld World;
 
         public bool WetCell(int cell) => CreaturePlan.Wet(World, cell);
+
+        public bool Blocked(float x, float z) => HerdMind.OffMap(World.Config.Size, World.Config.CellMeters, x, z, out int c) || CreaturePlan.Wet(World, c);
+
+        public bool Crosses(float x0, float z0, float x1, float z1) => HerdMind.CrossesWet(ref this, World.Config.Size, World.Config.CellMeters, x0, z0, x1, z1);
     }
 
     public static class CreaturePlan
@@ -359,6 +364,7 @@ namespace Stabby.World
         public static int CellsFor(float meters, float cellMeters) => Math.Max(1, (int)Math.Ceiling(meters / cellMeters));
 
         public static float SpawnReach(CreatureDef def) => Detail.SimulationReach(def.Length, def.SpawnPixels);
+        public static float ThinkReach(CreatureDef def) => Detail.SimulationReach(def.Length, def.ThinkPixels);
 
         public static float DespawnReach(CreatureDef def) => SpawnReach(def) / (1f - Detail.Hysteresis);
 
@@ -391,16 +397,21 @@ namespace Stabby.World
 
         public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib) => Build(w, new TerrainDetail(w).Cells, lib);
 
-        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib)
+        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib) => Build(w, cells, lib, out _);
+
+        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib, out DrinkSpotList drinks) => Build(w, new TerrainDetail(w).Cells, lib, out drinks);
+
+        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, out DrinkSpotList drinks)
         {
             var list = new List<CreatureSpawn>();
             ulong root = Root(w);
             int across = SitesAcross(w.Config.Size);
-            for (int s = 0; s < across * across; s++) Site(w, cells, lib, root, s, list);
+            drinks = Drinks(w, cells, lib);
+            for (int s = 0; s < across * across; s++) Site(w, cells, lib, root, s, drinks, list);
             return list;
         }
 
-        public static void Site(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, ulong root, int site, List<CreatureSpawn> list)
+        public static void Site(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, ulong root, int site, DrinkSpotList drinks, List<CreatureSpawn> list)
         {
             int n = w.Config.Size, across = SitesAcross(n);
             int sx = site % across * SiteCells, sz = site / across * SiteCells;
@@ -422,7 +433,7 @@ namespace Stabby.World
                 ulong herdSeed = HerdSeed(root, HerdOf(site << 8 | b << 4));
                 float heading = rng.Range(0f, 6.2831853f);
                 var route = Route(w, cells, def, herdSeed, cell, cx, cz);
-                var needs = Needs(w, cells, def, cell);
+                var needs = Needs(w, cells, def, cell, drinks);
                 float grade = Footing.Grade(def.MaxSlope);
                 for (int k = 0; k < count; k++)
                 {
@@ -474,6 +485,62 @@ namespace Stabby.World
             return route;
         }
 
+        public static float DrinkReach(float cellMeters) => (NeedM + cellMeters) * 1.4f;
+
+        public static DrinkSpotList Drinks(GeneratedWorld w, NearArrays cells, CreatureLibrary lib)
+        {
+            int n = w.Config.Size, across = SitesAcross(n);
+            float cm = w.Config.CellMeters, top = 0;
+            foreach (var def in lib.Bodies) top = Math.Max(top, Footing.Grade(def.MaxSlope));
+            float limit = 4 * Footing.FeelM * Footing.FeelM * top * top;
+            ulong key = Rng.Stream(w.Config.Seed, "drink-spots").NextU64();
+            var list = new DrinkSpotList { Start = new int[across * across + 1] };
+            var spots = new List<DrinkSpot>();
+            for (int site = 0; site < across * across; site++)
+            {
+                list.Start[site] = spots.Count;
+                var rng = new Rng(Rng.Mix(key ^ (ulong)(site + 1) * 0x9E3779B97F4A7C15UL));
+                int sx = site % across * SiteCells, sz = site / across * SiteCells;
+                for (int z = Math.Max(1, sz); z < Math.Min(n - 1, sz + SiteCells); z++)
+                    for (int x = Math.Max(1, sx); x < Math.Min(n - 1, sx + SiteCells); x++)
+                    {
+                        int i = z * n + x;
+                        if (Wet(w, i)) continue;
+                        float px = (x + 0.5f) * cm, pz = (z + 0.5f) * cm;
+                        for (int k = 0; k < 4; k++)
+                        {
+                            int ex = k == 0 ? 1 : k == 1 ? -1 : 0, ez = k == 2 ? 1 : k == 3 ? -1 : 0;
+                            int j = i + ez * n + ex;
+                            if (!Drinkable(w, j)) continue;
+                            float side = rng.Range(-0.3f, 0.3f) * cm, bx = px - ez * side, bz = pz + ex * side;
+                            float steep = float.MaxValue, qx = 0, qz = 0;
+                            for (float t = cm * 0.5f - 1; t >= cm * 0.5f - EdgeM && t > 0.01f - cm * 0.5f; t -= 0.5f)
+                            {
+                                float tx = bx + ex * t, tz = bz + ez * t, slope = Footing.SlopeSq(cells, tx, tz);
+                                if (slope < steep) { steep = slope; qx = tx; qz = tz; }
+                            }
+                            if (!(steep <= limit)) continue;
+                            float rise = Math.Max(0, NearField.Sample(cells, qx, qz) - w.Water.WaterSurface[j]);
+                            spots.Add(new DrinkSpot { X = qx, Z = qz, WaterX = ex, WaterZ = ez, Steep = steep, Cost = rise * 20 + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost) });
+                        }
+                    }
+            }
+            list.Start[across * across] = spots.Count;
+            list.Spots = spots.ToArray();
+            return list;
+        }
+
+        public static bool Bank(GeneratedWorld w, float x, float z, float waterX, float waterZ)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            if (HerdMind.OffMap(n, cm, x, z, out int c) || Wet(w, c)) return false;
+            int ex = (int)waterX, ez = (int)waterZ;
+            if (ex != waterX || ez != waterZ || Math.Abs(ex) + Math.Abs(ez) != 1 || !Drinkable(w, c + ez * n + ex)) return false;
+            float edge = ex != 0 ? (c % n + 0.5f + 0.5f * ex) * cm : (c / n + 0.5f + 0.5f * ez) * cm;
+            return Math.Abs((ex != 0 ? x : z) - edge) <= EdgeM + 0.01f;
+        }
+
         public static bool Drinkable(GeneratedWorld w, int i) => !w.Sea[i] && (w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i]);
 
         public static bool Cover(GeneratedWorld w, int i)
@@ -482,19 +549,19 @@ namespace Stabby.World
             return surface == null || w.Biome == null || surface.CoatOf(w.BiomeIds[w.Biome[i]]) == 0;
         }
 
-        public static HerdNeeds Needs(GeneratedWorld w, NearArrays cells, CreatureDef def, int cell)
+        public static HerdNeeds Needs(GeneratedWorld w, NearArrays cells, CreatureDef def, int cell, DrinkSpotList drinks)
         {
             int n = w.Config.Size, hx = cell % n, hz = cell / n;
             float cm = w.Config.CellMeters, cx = (hx + 0.5f) * cm, cz = (hz + 0.5f) * cm;
             float grade = Footing.Grade(def.MaxSlope);
             var wet = new WorldWet { World = w };
             var needs = new HerdNeeds();
-            float drink = float.MaxValue, graze = float.MaxValue, bed = float.MaxValue;
+            float graze = float.MaxValue, bed = float.MaxValue;
             int reachCells = CellsFor(NeedM, cm), bedCells = CellsFor(BedM, cm);
             var surface = w.Materials?.Surface;
             var cover = new bool[w.BiomeIds?.Length ?? 0];
             for (int b = 0; b < cover.Length; b++) cover[b] = surface == null || surface.CoatOf(w.BiomeIds[b]) == 0;
-            for (int ring = 0; ring <= reachCells && !(ring > bedCells && ring * cm * ring * cm > graze && (ring - 1) * cm > drink); ring++)
+            for (int ring = 0; ring <= reachCells && !(ring > bedCells && ring * cm * ring * cm > graze); ring++)
                 for (int dz = -ring; dz <= ring; dz++)
                     for (int dx = -ring; dx <= ring; dx += Math.Abs(dz) == ring ? 1 : 2 * ring)
                     {
@@ -517,39 +584,18 @@ namespace Stabby.World
                             if (grazeHere) { graze = far; needs.GrazeX = px; needs.GrazeZ = pz; needs.Has |= HerdNeeds.HasGraze; }
                             if (bedScore < bed) { bed = bedScore; needs.BedX = px; needs.BedZ = pz; needs.Has |= HerdNeeds.HasBed; }
                         }
-                        for (int k = 0; k < 4; k++)
-                        {
-                            int ex = k == 0 ? 1 : k == 1 ? -1 : 0, ez = k == 2 ? 1 : k == 3 ? -1 : 0;
-                            int j = i + ez * n + ex;
-                            if (!Drinkable(w, j) || (float)Math.Sqrt(far) - cm + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost) >= drink) continue;
-                            for (float t = cm * 0.5f - 1; t >= cm * 0.5f - EdgeM; t -= 0.5f)
-                            {
-                                float qx = px + ex * t, qz = pz + ez * t;
-                                if (Footing.SteepAt(cells, qx, qz, grade)) continue;
-                                float rise = Math.Max(0, NearField.Sample(cells, qx, qz) - w.Water.WaterSurface[j]);
-                                float score = (float)Math.Sqrt((qx - cx) * (qx - cx) + (qz - cz) * (qz - cz)) + rise * 20 + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost);
-                                if (score < drink && !HerdMind.CrossesWet(ref wet, n, cm, cx, cz, qx, qz))
-                                {
-                                    drink = score; needs.DrinkX = qx; needs.DrinkZ = qz; needs.WaterX = ex; needs.WaterZ = ez; needs.Has |= HerdNeeds.HasDrink;
-                                }
-                                break;
-                            }
-                        }
                     }
+            int found = DrinkSpotList.Nearest(ref drinks, ref wet, n, cm, cx, cz, grade, DrinkReach(cm));
+            if (found >= 0)
+            {
+                var d = drinks.Spots[found];
+                needs.DrinkX = d.X; needs.DrinkZ = d.Z; needs.WaterX = d.WaterX; needs.WaterZ = d.WaterZ; needs.Has |= HerdNeeds.HasDrink;
+            }
             return needs;
         }
 
-        public static bool AtShore(GeneratedWorld w, NearArrays cells, CreatureDef def, in HerdNeeds needs)
-        {
-            int n = w.Config.Size;
-            float cm = w.Config.CellMeters;
-            if (HerdMind.OffMap(n, cm, needs.DrinkX, needs.DrinkZ, out int c) || Wet(w, c)) return false;
-            int ex = (int)needs.WaterX, ez = (int)needs.WaterZ;
-            if (Math.Abs(ex) + Math.Abs(ez) != 1 || !Drinkable(w, c + ez * n + ex)) return false;
-            float edge = ex != 0 ? (c % n + 0.5f + 0.5f * ex) * cm : (c / n + 0.5f + 0.5f * ez) * cm;
-            float gap = Math.Abs((ex != 0 ? needs.DrinkX : needs.DrinkZ) - edge);
-            return gap <= EdgeM + 0.01f && !Footing.SteepAt(cells, needs.DrinkX, needs.DrinkZ, Footing.Grade(def.MaxSlope));
-        }
+        public static bool AtShore(GeneratedWorld w, NearArrays cells, CreatureDef def, in HerdNeeds needs) =>
+            Bank(w, needs.DrinkX, needs.DrinkZ, needs.WaterX, needs.WaterZ) && !Footing.SteepAt(cells, needs.DrinkX, needs.DrinkZ, Footing.Grade(def.MaxSlope));
 
         public static void MemberAt(in CreatureSpawn s, double t, out float x, out float z, out float heading)
         {

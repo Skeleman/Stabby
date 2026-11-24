@@ -2,7 +2,6 @@ using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
 using Unity.Entities;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -14,9 +13,6 @@ namespace Stabby.Game
     [UpdateBefore(typeof(ObjectViewSystem))]
     public partial class ShadowViewSystem : SystemBase
     {
-        public const float SunStepSeconds = 0.1f;
-        public static Quaternion? SunTarget;
-
         Task<(Detail.ShadowSpan, float)> spanTask;
         Detail.ShadowSpan unit;
         float texels;
@@ -24,14 +20,11 @@ namespace Stabby.Game
         public static float TexelScale = 1f;
         static readonly int SplitId = Shader.PropertyToID("_StabbyShadowSplit"), TexelId = Shader.PropertyToID("_StabbyShadowTexelM");
         bool ready;
-        Light sun;
-        float sunAt = float.MinValue;
         public float Range, Near;
         public Detail.Cascades Splits;
 
         protected override void OnCreate()
         {
-            SunTarget = null;
             Map = default;
             spanTask = Task.Run(() =>
             {
@@ -46,7 +39,6 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            StepSun();
             if (!ready)
             {
                 if (spanTask == null || !spanTask.IsCompleted) return;
@@ -89,18 +81,5 @@ namespace Stabby.Game
             return Detail.ShadowMap.Build(c, asset.shadowDistance, count > 1 ? res / 2 : res, ppm, cam.aspect, texels);
         }
 
-        void StepSun()
-        {
-            if (sun == null)
-            {
-                sun = RenderSettings.sun != null ? RenderSettings.sun : System.Array.Find(Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
-                if (sun == null) return;
-                if (SunTarget == null) SunTarget = sun.transform.rotation;
-            }
-            float now = UnityEngine.Time.time;
-            if (now - sunAt < SunStepSeconds) return;
-            sunAt = math.floor(now / SunStepSeconds) * SunStepSeconds;
-            if (SunTarget.HasValue && sun.transform.rotation != SunTarget.Value) sun.transform.rotation = SunTarget.Value;
-        }
     }
 }

@@ -19,7 +19,8 @@ CreaturePlanSystem plans herds from the managed map in a task and converts the p
 CreatureDrawSystem uploads instance buffers and issues indirect draws on managed GraphicsBuffers
 CreatureDrawSystem.Complete only after IsCompleted, or at teardown
 PlayerControls.Read clamps the unitless input vector to length 1, not a distance
-ShadowViewSystem sets the managed URP asset's shadow range and cascades and steps the managed sun light
+ShadowViewSystem sets the managed URP asset's shadow range and cascades
+DayNightSystem loads managed sky content in a task and steps the managed light, camera, fog and shader globals
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmRockRelief joint and bed noise runs in strata-aligned coordinates stretched along bedding
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmCragPlane joint-plane jitter runs in per-joint stretched coordinates
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmStrataWarp bed noise is stretched along strata and keyed by bed index

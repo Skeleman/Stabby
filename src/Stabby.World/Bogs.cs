@@ -89,7 +89,7 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < BogTownM * BogTownM) return;
             }
             if (RoadSide(x, z, out _, out _) < rout + BogRoadM) return;
-            var basin = Pool(BogPool, 0, x, z, rout, level, level - depth - BogHeadM, top + BogHeadM, BogEdit(x, z, r, level, level - depth, top + BogHeadM));
+            var basin = Pool(BogPool, 0, x, z, rout, level, level - depth - BogHeadM, top + BogHeadM, new[] { BogEdit(x, z, r, level, level - depth, top + BogHeadM) });
             if (basin.Leaks || basin.WetCount == 0 || !(basin.Level - basin.Floor >= PoolMinDepthM)) return;
             list.Add(x); list.Add(z); list.Add(r); list.Add(level); list.Add(level - depth); list.Add(top);
         }

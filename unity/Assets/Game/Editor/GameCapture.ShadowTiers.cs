@@ -134,7 +134,7 @@ namespace Stabby.Game.Editor
                 }
             }
             var side = Quaternion.Euler(0, 75f, 0) * d;
-            ShadowViewSystem.SunTarget = Quaternion.LookRotation(side * Mathf.Cos(14f * Mathf.Deg2Rad) + Vector3.down * Mathf.Sin(14f * Mathf.Deg2Rad));
+            DayNightSystem.LightOverride = Quaternion.LookRotation(side * Mathf.Cos(14f * Mathf.Deg2Rad) + Vector3.down * Mathf.Sin(14f * Mathf.Deg2Rad));
             float pitch = Mathf.Atan2(bestH, bestR) * Mathf.Rad2Deg - 6f;
             cam.transform.SetPositionAndRotation(new Vector3(stand.x, eyeY, stand.z), Quaternion.LookRotation(d) * Quaternion.Euler(-pitch, 0, 0));
             for (var w = Settle(360); w.MoveNext();) yield return null;
@@ -149,7 +149,7 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "farhills-nocast");
             TerrainViewSystem.Casting = true;
             for (int k = 0; k < 4; k++) yield return null;
-            ShadowViewSystem.SunTarget = null;
+            DayNightSystem.LightOverride = null;
             GameStatus.Lines["~farhills"] = string.Join("\n", lines);
         }
 
@@ -217,6 +217,54 @@ namespace Stabby.Game.Editor
             }
             lines.Add($"sun {sd.x:F2},{sd.y:F2},{sd.z:F2}");
             GameStatus.Lines["~sprayshadows"] = string.Join("\n", lines);
+        }
+
+        static System.Collections.IEnumerator GeyserPoolTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            cam.fieldOfView = 60f;
+            var lines = new List<string>();
+            Light sun = RenderSettings.sun != null ? RenderSettings.sun : System.Array.Find(Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
+            var sd = sun != null ? sun.transform.forward : Vector3.down;
+            var across = new Vector3(-sd.z, 0, sd.x).normalized;
+            if (across.sqrMagnitude < 0.5f) across = Vector3.right;
+            ObjectField field = null;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient) field = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+            var pick = default(ObjectInstance);
+            float best = float.MaxValue;
+            if (field != null)
+                foreach (var o in field.Discoveries())
+                {
+                    if (!field.IsVent(o) || field.VentKind(o) != ObjectField.Geyser) continue;
+                    float score = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                    if (score < best) { best = score; pick = o; }
+                }
+            if (best < float.MaxValue)
+            {
+                var pools = new List<float>();
+                field.SpringPoolsAt(pick, pools);
+                var c = new Vector3(pools[0], pools[4], pools[1]);
+                Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
+                TerrainViewSystem.ClockOverride = offset + duration + 0.5 * (interval - duration);
+                float[] dist = { 34f, 16f, 7f };
+                float[] rise = { 0.45f, 0.2f, 0.35f };
+                string[] names = { "geyserpool-far", "geyserpool-low", "geyserpool-near" };
+                for (int k = 0; k < names.Length; k++)
+                {
+                    var eye = c + across * dist[k] + Vector3.up * rise[k] * dist[k];
+                    eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + 2f);
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(c - eye));
+                    for (var e = Settle(240); e.MoveNext();) yield return null;
+                    for (int f = 0; f < 1200 && ObjectViewSystem.Pending > 0; f++) yield return null;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, names[k]);
+                }
+                TerrainViewSystem.ClockOverride = null;
+                lines.Add($"geyser at {c.x:F0},{c.y:F0},{c.z:F0}, pool level {pools[4]:F2} m");
+            }
+            else lines.Add("no geyser found");
+            GameStatus.Lines["~geyserpool"] = string.Join("\n", lines);
         }
 
         static System.Collections.IEnumerator SprayShot(Camera cam, string dir, string name, Vector3 target, Vector3 side, float dist)

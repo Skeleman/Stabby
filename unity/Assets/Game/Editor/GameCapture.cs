@@ -83,6 +83,7 @@ namespace Stabby.Game.Editor
         public static void Run()
         {
             BuildScene();
+            PinTime();
             int port = FreeUdpPort();
             System.Environment.SetEnvironmentVariable(GameSettings.PortVariable, port.ToString());
             Debug.Log($"GameCapture: using UDP port {port}");
@@ -161,7 +162,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : 1;
+                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -406,7 +407,9 @@ namespace Stabby.Game.Editor
                 Finish(0);
                 return;
             }
+            if (phase == 520) { if (job == null) job = NightTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 490) { if (job == null) job = FarHillsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 510) { if (job == null) job = GeyserPoolTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 480) { if (job == null) job = SprayShadowsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 470) { if (job == null) job = ShadowTiersTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 430) { if (job == null) job = DesireShots(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
@@ -2874,6 +2877,7 @@ namespace Stabby.Game.Editor
 
         static double BenchAt(Camera cam, int w, int h)
         {
+            RequirePinnedTime("bench");
             GameStatus.ToolFrame = Time.frameCount;
             var rt = new RenderTexture(w, h, 24);
             var px = new Texture2D(1, 1, TextureFormat.RGB24, false);
@@ -2921,6 +2925,7 @@ namespace Stabby.Game.Editor
 
         static void Shot(Camera cam, string dir, string name)
         {
+            RequirePinnedTime("capture " + name);
             GameStatus.ToolFrame = Time.frameCount;
             var rt = new RenderTexture(1600, 900, 24);
             cam.targetTexture = rt;

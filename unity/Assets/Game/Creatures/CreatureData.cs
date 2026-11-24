@@ -38,7 +38,7 @@ namespace Stabby.Game
         public Entity Ghost;
         public float3 Position;
         public float Heading, Pitch, Move, Alert, Down, WalkSpeed, Phase, Clock, Sink, Wake;
-        public bool Visible, Shadow, High, HighOn, LowOn;
+        public bool Visible, Shadow, HighOn, LowOn;
         public Detail.Decision Decision;
         public float4 Fade;
     }
@@ -60,7 +60,7 @@ namespace Stabby.Game
     public struct CreatureBrain : IComponentData
     {
         public float2 Home, Offset;
-        public float2 Push, Spot;
+        public float2 Push, Spot, Water;
         public float Timer, Turn, Debt, Seek;
         public int Herd;
         public Random Random;
@@ -98,15 +98,22 @@ namespace Stabby.Game
         public int Size;
         public float CellMeters;
         public BlobArray<byte> Wet;
+        public float DrinkReach;
+        public BlobArray<int> DrinkStart;
+        public BlobArray<DrinkSpot> Drinks;
     }
 
-    public struct CreatureGround : IHerdGround, IWetCells
+    public struct CreatureGround : IHerdGround, IWetCells, IDrinkSpots
     {
         public BlobAssetReference<CreaturePlanData> Plan;
         public Ground.NearCells Cells;
         public float Grade;
 
         public bool WetCell(int cell) => Plan.Value.Wet[cell] != 0;
+
+        public int First(int site) => Plan.Value.DrinkStart.Length == 0 ? 0 : Plan.Value.DrinkStart[site];
+
+        public DrinkSpot Spot(int k) => Plan.Value.Drinks[k];
 
         public bool Blocked(float x, float z)
         {
