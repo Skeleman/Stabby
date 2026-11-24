@@ -685,7 +685,7 @@ namespace Stabby.World
         {
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail, out var caves);
-            float cm = w.Config.CellMeters, s = LatticeStepM;
+            float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
             CheckChunkBounds(w, grid, e);
             if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, grid, e);
@@ -701,7 +701,6 @@ namespace Stabby.World
             if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             foreach (var x in edits)
                 if (x.Shape != FeatureEdit.Boulder && x.Shape != FeatureEdit.Spring && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
-            var cols = new DetailColumns { Detail = detail, StepM = s };
             var seen = new bool[FeatureEdit.Shapes];
             foreach (var x in edits)
             {
@@ -709,14 +708,18 @@ namespace Stabby.World
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
+                bool cave = x.Shape == FeatureEdit.Cave;
+                float s = cave ? NearField.NodeStep(0) : LatticeStepM;
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
-                    if ((y.Shape == x.Shape || (x.Shape == FeatureEdit.Bridge && (y.Shape == FeatureEdit.Cave || y.Shape == FeatureEdit.CaveRoom))) && Features.TileOf(y, cm) == tile)
+                    if ((y.Shape == x.Shape || (x.Shape == FeatureEdit.Bridge && (y.Shape == FeatureEdit.Cave || y.Shape == FeatureEdit.CaveRoom))) && Features.TileOf(y, cm) == tile
+                        && (!cave || (y.MinX < x.MaxX && y.MaxX > x.MinX && y.MinZ < x.MaxZ && y.MaxZ > x.MinZ)))
                     {
                         group.Add(y);
                         minX = Math.Min(minX, y.MinX); maxX = Math.Max(maxX, y.MaxX);
                         minZ = Math.Min(minZ, y.MinZ); maxZ = Math.Max(maxZ, y.MaxZ);
                     }
+                var cols = new DetailColumns { Detail = detail, StepM = s };
                 int x0 = (int)Math.Floor(minX / s) - 3, z0 = (int)Math.Floor(minZ / s) - 3;
                 int cells = Math.Max((int)Math.Ceiling(maxX / s) + 3 - x0, (int)Math.Ceiling(maxZ / s) + 3 - z0);
                 var c = new NetsChunk { X0 = x0, Z0 = z0, Cells = cells, StepM = s };
@@ -807,8 +810,12 @@ namespace Stabby.World
                     string fault = Underground.BridgeFault(detail, items, q);
                     if (fault != null) { e.Add(fault); return; }
                 }
+                string tight = null;
+                foreach (var edge in g.Edges) if ((tight = Underground.Cramped(detail, items, g, edge)) != null) break;
+                if (tight != null) e.Add(tight);
                 string why = Underground.Unreached(detail, items, g);
-                if (why != null) { e.Add(why); return; }
+                if (why != null) e.Add(why);
+                if (tight != null || why != null) return;
             }
         }
 
