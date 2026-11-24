@@ -36,6 +36,7 @@ namespace Stabby.Game
         public float4 Strata;
         public float4 Stitch;
         public half4 StitchNormal, StitchColor;
+        public half2 Dark;
     }
 
     [MaterialProperty("_StitchMask")]
@@ -315,6 +316,25 @@ namespace Stabby.Game
             at = end * s2;
         }
 
+        const float SkyReach = 1.4f, SkyFall = 0.7f;
+
+        static float Dark(NativeEdits edits, NativeList<float2> light, float3 p, float cover)
+        {
+            float inside = 0, lit = 0;
+            for (int q = 0; q < edits.Count; q++)
+            {
+                var e = edits.Items[q];
+                if (!CaveLight.Lit(e)) continue;
+                float3 a = new float3(e.Ax, e.Ay, e.Az), ab = new float3(e.Bx, e.By, e.Bz) - a, ap = p - a;
+                float ll = math.dot(ab, ab), t = ll > 0 ? math.saturate(math.dot(ap, ab) / ll) : 0;
+                float d = math.length(ap - t * ab) / e.R;
+                if (d >= SkyReach) continue;
+                inside = math.max(inside, 1 - math.smoothstep(1f, SkyReach, d));
+                lit = math.max(lit, math.exp(-math.lerp(light[q].x, light[q].y, t) / (SkyFall * e.R)));
+            }
+            return inside * math.smoothstep(0.5f, 3f, cover) * (1 - lit);
+        }
+
         static float Fraction(float a, float b, float t) => b != a ? math.saturate((t - a) / (b - a)) : 0.5f;
 
         static float Lift(float cover) => cover < 0 ? math.smoothstep(0.3f, 0.9f, -cover) : math.smoothstep(2f, 6f, cover);
@@ -391,11 +411,12 @@ namespace Stabby.Game
             var sink = new TerrainSink { Verts = Verts, Tris = Tris };
             var columns = new GroundColumns { Ground = Ground, StepM = s, Top = g.Top, Smooth = Smooth };
             var edits = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
+            var light = new NativeList<float2>(Allocator.Temp);
             float x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
             for (int f = 0; f < g.Edits.Length; f++)
             {
                 var e = g.Edits[f];
-                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) edits.Items.Add(e.AtStep(s));
+                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) { edits.Items.Add(e.AtStep(s)); light.Add(g.CaveLight[f]); }
             }
             var crusts = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             for (int f = 0; f < g.Edits.Length; f++)
@@ -412,10 +433,11 @@ namespace Stabby.Game
             bool stitch = Level < TerrainTree.Root;
             var coarse = new CachedColumns(new GroundColumns { Ground = Ground, StepM = 2 * s, Top = g.Top, Smooth = Smooth }, chunk.X0 / 2 - 3, chunk.Z0 / 2 - 3, stitch ? m / 2 + 8 : 0);
             var near = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
+            var nearLight = new NativeList<float2>(Allocator.Temp);
             for (int f = 0; stitch && f < g.Edits.Length; f++)
             {
                 var e = g.Edits[f];
-                if (e.MeshedIn(2 * s, x0m - m * s, z0m - m * s, x1m + m * s, z1m + m * s)) near.Items.Add(e.AtStep(2 * s));
+                if (e.MeshedIn(2 * s, x0m - m * s, z0m - m * s, x1m + m * s, z1m + m * s)) { near.Items.Add(e.AtStep(2 * s)); nearLight.Add(g.CaveLight[f]); }
             }
 
             int ringCount = 4 * m;
@@ -506,6 +528,8 @@ namespace Stabby.Game
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, crusts, p.Pos));
                 p.Stitch.w = math.floor(p.Stitch.w) + 0.5f * Peat(edits, p.Pos);
+                float dark = Dark(edits, light, p.Pos, cover);
+                p.Dark = new half2(new float2(dark, dark));
                 if (stitch)
                 {
                     float3 sn = new float4(p.StitchNormal).xyz;
@@ -515,6 +539,7 @@ namespace Stabby.Game
                     float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _), sLift = Lift(sCover);
                     p.StitchNormal = new half4(new float4(sn, math.max(sc.w, sLift)));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover) + sStone));
+                    p.Dark.y = (half)Dark(near, nearLight, p.Stitch.xyz, sCover);
                 }
                 Verts[v] = p;
                 lo = math.min(lo, p.Pos);
@@ -1201,6 +1226,7 @@ namespace Stabby.Game
             new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float16, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord3, VertexAttributeFormat.Float16, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord4, VertexAttributeFormat.Float16, 2),
         };
 
         Entity Spawn(BatchMeshID mesh, AABB box, BatchMaterialID mat, ShadowCastingMode shadows = ShadowCastingMode.Off)
