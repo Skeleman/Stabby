@@ -27,6 +27,19 @@ namespace Stabby.Game.Editor
         static GameCapture()
         {
             if (SessionState.GetBool(Key, false)) EditorApplication.update += Poll;
+            if (Application.isBatchMode) SkipSearchIndexing();
+        }
+
+        static void SkipSearchIndexing()
+        {
+            EditorApplication.update -= SkipSearchIndexing;
+            foreach (var d in EditorApplication.delayCall?.GetInvocationList() ?? System.Array.Empty<System.Delegate>())
+                if (d.Method.Name == "IndexationOnStartup")
+                {
+                    EditorApplication.delayCall -= (EditorApplication.CallbackFunction)d;
+                    return;
+                }
+            EditorApplication.update += SkipSearchIndexing;
         }
 
         [MenuItem("Stabby/Build Game Scene")]
