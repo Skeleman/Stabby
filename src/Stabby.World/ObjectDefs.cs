@@ -121,6 +121,9 @@ namespace Stabby.World
     {
         public string Id = "";
         public float Scale = 1f;
+
+        public float ScaleAt(float lines) =>
+            Scale <= 1f || lines <= Detail.ReferenceLines ? Scale : 1f + (Scale - 1f) * Detail.ReferenceLines / lines;
     }
 
     public sealed class QualityDef

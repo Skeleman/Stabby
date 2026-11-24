@@ -56,15 +56,22 @@ namespace Stabby.Game
         public const int PiecesPerTick = 256, BacklogBytes = 96 * 1024;
         public const int ReliableWindow = 128;
         public const float WalkSpeed = 6f, SprintSpeed = WalkSpeed * 1.8f, JumpSpeed = 7f, Gravity = 20f;
-        public static float GraphicsQuality = 1f;
+        public static float GraphicsQuality = 1f, GraphicsScale = 1f;
+        static Stabby.World.QualityLevel graphicsLevel;
         public static string GraphicsLevel = "";
         public const string QualityVariable = "STABBY_QUALITY";
 
         public static void UseQuality(Stabby.World.QualityDef def)
         {
             var level = def.Pick(System.Environment.GetEnvironmentVariable(QualityVariable));
+            graphicsLevel = level;
             GraphicsLevel = level.Id;
-            GraphicsQuality = level.Scale;
+            GraphicsQuality = GraphicsScale = level.Scale;
+        }
+
+        public static void UseLines(float lines)
+        {
+            if (graphicsLevel != null) GraphicsQuality = graphicsLevel.ScaleAt(lines);
         }
         public static readonly string[] Clients = { "Client1", "Client2" };
         public const string FullStreamClient = "Client2";

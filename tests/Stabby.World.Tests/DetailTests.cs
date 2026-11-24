@@ -75,6 +75,17 @@ public class DetailTests
     }
 
     [Fact]
+    public void HighQualityEasesAboveReferenceLines()
+    {
+        var high = new QualityLevel { Scale = 2f };
+        Assert.Equal(2f, high.ScaleAt(720f));
+        Assert.Equal(2f, high.ScaleAt(1080f));
+        Assert.Equal(1.5f, high.ScaleAt(2160f), 4);
+        Assert.Equal(1f, new QualityLevel { Scale = 1f }.ScaleAt(2160f));
+        Assert.Equal(0.5f, new QualityLevel { Scale = 0.5f }.ScaleAt(2160f));
+    }
+
+    [Fact]
     public void QualityShrinksTerrainError() =>
         Assert.True(new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 2f) < new TerrainViewDef().Allowed(Detail.ReferencePixelsPerMetre, 1f));
     static readonly Detail.Rule Tree = new Detail.Rule(new Detail.Thresholds(100f, 40f, 10f), 60f, 30f,
