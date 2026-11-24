@@ -40,6 +40,8 @@ namespace Stabby.World
         {
             int Count { get; }
             Slot this[int i] { get; set; }
+            int GetOrder(int i);
+            void SetOrder(int i, int v);
         }
 
         public static Counts Rank<T>(ref T slots, in Caps caps) where T : struct, ISlots
@@ -69,10 +71,23 @@ namespace Stabby.World
             var c = new Counts();
             for (int t = Detail.LightShadowed; t < Detail.LightEmissive; t++)
             {
-                while (true)
+                int m = 0;
+                for (int i = 0; i < n; i++)
                 {
-                    int best = Best(ref slots, Pending + t, t, false);
-                    if (best < 0) break;
+                    var s = slots[i];
+                    if (s.Tier == Pending + t && Score(s, t) > -1f) slots.SetOrder(m++, i);
+                }
+                for (int k = m / 2 - 1; k >= 0; k--) SiftDown(ref slots, k, m, t);
+                for (int end = m - 1; end > 0; end--)
+                {
+                    int worst = slots.GetOrder(0);
+                    slots.SetOrder(0, slots.GetOrder(end));
+                    slots.SetOrder(end, worst);
+                    SiftDown(ref slots, 0, end, t);
+                }
+                for (int j = 0; j < m; j++)
+                {
+                    int best = slots.GetOrder(j);
                     var b = slots[best];
                     bool needS = t == Detail.LightShadowed && b.Shadow <= 0f;
                     bool needR = t <= Detail.LightUnshadowed && b.Real <= 0f;
@@ -104,32 +119,62 @@ namespace Stabby.World
 
         static int Choose<T>(ref T slots, int tier, int picks) where T : struct, ISlots
         {
-            int taken = 0;
-            while (taken < picks)
-            {
-                int best = Best(ref slots, Unranked, tier, true);
-                if (best < 0) break;
-                var b = slots[best];
-                b.Target = (byte)tier;
-                slots[best] = b;
-                taken++;
-            }
-            return taken;
-        }
-
-        static int Best<T>(ref T slots, int mark, int tier, bool ranking) where T : struct, ISlots
-        {
-            int best = -1;
-            float top = -1f;
+            if (picks <= 0) return 0;
+            int size = 0;
             for (int i = 0; i < slots.Count; i++)
             {
                 var s = slots[i];
-                if (ranking ? s.Target != mark || s.Wanted > tier : s.Tier != mark) continue;
-                float score = s.Pixels * s.Importance * (s.Previous <= tier ? Stickiness : 1f);
-                if (score > top) { top = score; best = i; }
+                if (s.Target != Unranked || s.Wanted > tier || !(Score(s, tier) > -1f)) continue;
+                if (size < picks)
+                {
+                    int at = size++;
+                    while (at > 0)
+                    {
+                        int up = (at - 1) / 2;
+                        if (!Better(ref slots, slots.GetOrder(up), i, tier)) break;
+                        slots.SetOrder(at, slots.GetOrder(up));
+                        at = up;
+                    }
+                    slots.SetOrder(at, i);
+                }
+                else if (Better(ref slots, i, slots.GetOrder(0), tier))
+                {
+                    slots.SetOrder(0, i);
+                    SiftDown(ref slots, 0, size, tier);
+                }
             }
-            return best;
+            for (int j = 0; j < size; j++)
+            {
+                int i = slots.GetOrder(j);
+                var b = slots[i];
+                b.Target = (byte)tier;
+                slots[i] = b;
+            }
+            return size;
         }
+
+        static void SiftDown<T>(ref T slots, int at, int size, int tier) where T : struct, ISlots
+        {
+            int item = slots.GetOrder(at);
+            while (true)
+            {
+                int child = 2 * at + 1;
+                if (child >= size) break;
+                if (child + 1 < size && Better(ref slots, slots.GetOrder(child), slots.GetOrder(child + 1), tier)) child++;
+                if (!Better(ref slots, item, slots.GetOrder(child), tier)) break;
+                slots.SetOrder(at, slots.GetOrder(child));
+                at = child;
+            }
+            slots.SetOrder(at, item);
+        }
+
+        static bool Better<T>(ref T slots, int a, int b, int tier) where T : struct, ISlots
+        {
+            float sa = Score(slots[a], tier), sb = Score(slots[b], tier);
+            return sa > sb || (sa == sb && a < b);
+        }
+
+        static float Score(in Slot s, int tier) => s.Pixels * s.Importance * (s.Previous <= tier ? Stickiness : 1f);
 
         public static Counts Step<T>(ref T slots, float dt) where T : struct, ISlots
         {
