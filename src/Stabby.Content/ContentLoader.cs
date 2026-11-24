@@ -342,6 +342,18 @@ namespace Stabby.Content
                 };
                 terrain.End();
             }
+            var quality = root.Object("quality");
+            if (quality != null)
+            {
+                var q = new QualityDef { Default = quality.String("default", ""), Levels = new List<QualityLevel>() };
+                foreach (var l in quality.Objects("levels"))
+                {
+                    q.Levels.Add(new QualityLevel { Id = l.String("id", ""), Scale = l.Float("scale", 0) });
+                    l.End();
+                }
+                lib.Quality = q;
+                quality.End();
+            }
             var foliage = root.Object("foliage");
             if (foliage != null)
             {

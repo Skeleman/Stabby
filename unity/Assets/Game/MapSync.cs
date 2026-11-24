@@ -334,6 +334,7 @@ namespace Stabby.Game
             Defs = ContentFiles.Biomes();
             Materials = ContentFiles.Materials(ContentFiles.MaterialsPath);
             Objects = ContentFiles.Objects(Defs);
+            GameSettings.UseQuality(Objects.Quality);
         }
 
         protected override void OnDestroy()

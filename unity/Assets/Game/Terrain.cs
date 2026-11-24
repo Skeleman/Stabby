@@ -655,7 +655,7 @@ namespace Stabby.Game
         TerrainViewDef quads = new TerrainViewDef();
         const float MorphStart = 0.6f;
         const int LakeCells = 32;
-        public int ApplyVertices = 150000;
+        public int ApplyVertices = 300000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
         public static bool Casting = true, HideSunk = true, SprayShadows = true;
