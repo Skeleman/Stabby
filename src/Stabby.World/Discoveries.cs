@@ -8,7 +8,7 @@ namespace Stabby.World
         public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den" };
         static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den" };
         public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11;
-        public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 12;
+        public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
@@ -92,21 +92,23 @@ namespace Stabby.World
             var sites = new List<VentSite>();
             var usable = new List<VentSite>();
             var near = new List<VentSite>();
+            var dense = new List<VentSite>();
             var counts = new int[vents.Length];
+            var cluster = new int[vents.Length];
             ulong root = Rng.Stream(w.Config.Seed, "geothermal-fields").NextU64(), siteRoot = Rng.Stream(w.Config.Seed, "geothermal-field-sites").NextU64();
             for (int h = 0; h < hot.Count; h++)
             {
                 var rng = new Rng(Rng.Mix(root ^ ((ulong)(h + 1) * 0x9E3779B97F4A7C15UL)));
                 var pick = new Rng(Rng.Mix(siteRoot ^ ((ulong)(h + 1) * 0x9E3779B97F4A7C15UL)));
                 sites.Clear();
-                VentSites(hot.X[h], hot.Z[h], hot.R[h], sites);
+                VentSites(hot.X[h], hot.Z[h], hot.R[h], sites, int.MaxValue, cluster);
                 Array.Clear(counts, 0, counts.Length);
                 foreach (var s in sites) for (int k = 0; k < vents.Length; k++) if ((s.Mask & (1 << k)) != 0) counts[k]++;
                 int mask = 0, most = -1;
                 for (int k = 0; k < vents.Length; k++)
                 {
                     if (rng.NextFloat() < lib.Objects[vents[k]].Placement.Chance && counts[k] >= VentsMin) mask |= 1 << k;
-                    if (counts[k] >= VentsMin && (most < 0 || counts[k] > counts[most])) most = k;
+                    if (cluster[k] >= VentSitesMin && (most < 0 || cluster[k] > cluster[most])) most = k;
                 }
                 int target = VentsMin + (int)(rng.NextU32() % (uint)(VentsMax - VentsMin + 1)), first = (int)(rng.NextU32() % 64);
                 if (most < 0) continue;
@@ -118,10 +120,22 @@ namespace Stabby.World
                     present.Clear();
                     usable.Clear();
                     for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) present.Add(vents[k]);
+                    dense.Clear();
                     foreach (var s in sites) if ((s.Mask & mask) != 0) usable.Add(s);
+                    foreach (var s in usable)
+                    {
+                        int c = 0;
+                        foreach (var o in usable)
+                        {
+                            float dx = o.X - s.X, dz = o.Z - s.Z;
+                            if (dx * dx + dz * dz <= VentFieldRadiusM * VentFieldRadiusM) c++;
+                        }
+                        if (c >= VentSitesMin) dense.Add(s);
+                    }
+                    var centres = dense.Count > 0 ? dense : usable;
                     for (int c = 0; c < FieldTries && best.Count < target; c++)
                     {
-                        var site = usable[(int)(pick.NextU32() % (uint)usable.Count)];
+                        var site = centres[(int)(pick.NextU32() % (uint)centres.Count)];
                         near.Clear();
                         foreach (var s in usable)
                         {
@@ -449,12 +463,13 @@ namespace Stabby.World
             return false;
         }
 
-        public int VentSites(float hx, float hz, float radius, List<VentSite> sites = null, int stop = int.MaxValue)
+        public int VentSites(float hx, float hz, float radius, List<VentSite> sites = null, int stop = int.MaxValue, int[] cluster = null)
         {
             var vents = VentDefs;
             float reach = radius - VentFieldRadiusM;
-            int steps = (int)(reach / VentSiteStepM), found = 0;
-            var counts = new int[vents.Length];
+            int steps = (int)(reach / VentSiteStepM), found = 0, start = (sites ??= new List<VentSite>()).Count;
+            var nb = new List<int>();
+            if (cluster != null) Array.Clear(cluster, 0, cluster.Length);
             for (int a = -steps; a <= steps && found < stop; a++)
                 for (int b = -steps; b <= steps && found < stop; b++)
                 {
@@ -462,10 +477,29 @@ namespace Stabby.World
                     if (dx * dx + dz * dz > reach * reach) continue;
                     int mask = VentGround(hx + dx, hz + dz, vents);
                     if (mask == 0) continue;
-                    for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) found = Math.Max(found, ++counts[k]);
-                    if (sites != null) sites.Add(new VentSite { X = hx + dx, Z = hz + dz, Mask = mask });
+                    var site = new VentSite { X = hx + dx, Z = hz + dz, Mask = mask };
+                    int i = sites.Count - start;
+                    for (int k = 0; k < vents.Length; k++) nb.Add((mask & (1 << k)) != 0 ? 1 : 0);
+                    for (int j = 0; j < i; j++)
+                    {
+                        var o = sites[start + j];
+                        int shared = o.Mask & mask;
+                        float ox = o.X - site.X, oz = o.Z - site.Z;
+                        if (shared == 0 || ox * ox + oz * oz > VentFieldRadiusM * VentFieldRadiusM) continue;
+                        for (int k = 0; k < vents.Length; k++)
+                            if ((shared & (1 << k)) != 0) { Tally(nb, j * vents.Length + k, k, cluster, ref found); Tally(nb, i * vents.Length + k, k, cluster, ref found); }
+                    }
+                    sites.Add(site);
+                    for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) Tally(nb, i * vents.Length + k, k, cluster, ref found, 0);
                 }
             return found;
+        }
+
+        static void Tally(List<int> nb, int at, int k, int[] cluster, ref int found, int add = 1)
+        {
+            int c = nb[at] += add;
+            found = Math.Max(found, c);
+            if (cluster != null && c > cluster[k]) cluster[k] = c;
         }
 
         public int HotspotSites(int h) => VentSites(Hotspots.X[h], Hotspots.Z[h], Hotspots.R[h]);
@@ -486,11 +520,13 @@ namespace Stabby.World
                 relief = Math.Max(relief, Math.Abs(y - GroundAt(detail, cm, px, pz)));
             }
             if (relief > Math.Max(SpringReliefM, VentReliefM) || RiverGap(x, z) < SpringRiverM || UnderMesa(x, z, 0)) return 0;
+            float s = SlopeStepM, gxs = (GroundAt(detail, cm, x + s, z) - GroundAt(detail, cm, x - s, z)) / (2 * s), gzs = (GroundAt(detail, cm, x, z + s) - GroundAt(detail, cm, x, z - s)) / (2 * s);
+            float slope = (float)Math.Sqrt(gxs * gxs + gzs * gzs), hard = strata.Hardness(Cell(z) * n + Cell(x), y) / contrast;
             for (int k = 0; k < vents.Length; k++)
             {
                 if ((mask & (1 << k)) == 0) continue;
                 var pl = lib.Objects[vents[k]].Placement;
-                if (relief > (pl.Discovery == Spring ? SpringReliefM : VentReliefM) || !Open(vents[k], 0, pl.SizeMinM, x, z)) mask &= ~(1 << k);
+                if (relief > (pl.Discovery == Spring ? SpringReliefM : VentReliefM) || slope < pl.SlopeMin || slope > pl.SlopeMax || hard < pl.HardnessMin || hard > pl.HardnessMax || !Open(vents[k], 0, pl.SizeMinM, x, z)) mask &= ~(1 << k);
             }
             return mask;
         }
