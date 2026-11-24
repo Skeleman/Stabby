@@ -11,7 +11,7 @@ namespace Stabby.World
         public float PrecipMinMm, PrecipMaxMm;
         public uint Color;
         public float HeightMinM = float.NaN, HeightMaxM = float.NaN;
-        public float WaterWithinM = float.NaN, CoastWithinM = float.NaN;
+        public float WaterWithinM = float.NaN, WaterRiseM = float.NaN, CoastWithinM = float.NaN;
 
         public bool Conditional => !float.IsNaN(HeightMinM) || !float.IsNaN(HeightMaxM) || !float.IsNaN(WaterWithinM) || !float.IsNaN(CoastWithinM);
     }
@@ -23,12 +23,13 @@ namespace Stabby.World
             int count = climate.TemperatureC.Length;
             bool needWater = false, needCoast = false;
             foreach (var d in defs) { needWater |= !float.IsNaN(d.WaterWithinM); needCoast |= !float.IsNaN(d.CoastWithinM); }
-            float[] toWater = null, toCoast = null;
+            float[] toWater = null, toCoast = null, waterLevel = null;
             if (needWater)
             {
                 var src = new bool[count];
                 for (int i = 0; i < count; i++) src[i] = hy.IsRiver[i] || hy.LakeId[i] >= 0;
-                toWater = Distance(c.Size, src, c.CellMeters);
+                waterLevel = (float[])hy.WaterSurface.Clone();
+                toWater = Distance(c.Size, src, c.CellMeters, waterLevel);
             }
             if (needCoast) toCoast = Distance(c.Size, sea, c.CellMeters);
             var result = new int[count];
@@ -44,6 +45,7 @@ namespace Stabby.World
                     if (!float.IsNaN(d.HeightMinM) && height[i] < d.HeightMinM) continue;
                     if (!float.IsNaN(d.HeightMaxM) && height[i] > d.HeightMaxM) continue;
                     if (!float.IsNaN(d.WaterWithinM) && toWater[i] > d.WaterWithinM) continue;
+                    if (!float.IsNaN(d.WaterRiseM) && height[i] - waterLevel[i] > d.WaterRiseM) continue;
                     if (!float.IsNaN(d.CoastWithinM) && toCoast[i] > d.CoastWithinM) continue;
                     float score = Score(d, t, p);
                     if (score >= 0 && score > bestScore) { bestScore = score; best = b; }
@@ -67,36 +69,41 @@ namespace Stabby.World
             return Math.Min(st, sp);
         }
 
-        public static float[] Distance(int n, bool[] source, float cellMeters)
+        public static float[] Distance(int n, bool[] source, float cellMeters, float[] carry = null)
         {
             const float Diag = 1.41421356f;
             var d = new float[n * n];
             for (int i = 0; i < d.Length; i++) d[i] = source[i] ? 0 : float.MaxValue;
+            void Relax(int i, int j, float step)
+            {
+                float v = d[j] + step;
+                if (v >= d[i]) return;
+                d[i] = v;
+                if (carry != null) carry[i] = carry[j];
+            }
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {
-                    int i = y * n + x; float v = d[i];
-                    if (x > 0) v = Math.Min(v, d[i - 1] + 1);
+                    int i = y * n + x;
+                    if (x > 0) Relax(i, i - 1, 1);
                     if (y > 0)
                     {
-                        v = Math.Min(v, d[i - n] + 1);
-                        if (x > 0) v = Math.Min(v, d[i - n - 1] + Diag);
-                        if (x < n - 1) v = Math.Min(v, d[i - n + 1] + Diag);
+                        Relax(i, i - n, 1);
+                        if (x > 0) Relax(i, i - n - 1, Diag);
+                        if (x < n - 1) Relax(i, i - n + 1, Diag);
                     }
-                    d[i] = v;
                 }
             for (int y = n - 1; y >= 0; y--)
                 for (int x = n - 1; x >= 0; x--)
                 {
-                    int i = y * n + x; float v = d[i];
-                    if (x < n - 1) v = Math.Min(v, d[i + 1] + 1);
+                    int i = y * n + x;
+                    if (x < n - 1) Relax(i, i + 1, 1);
                     if (y < n - 1)
                     {
-                        v = Math.Min(v, d[i + n] + 1);
-                        if (x < n - 1) v = Math.Min(v, d[i + n + 1] + Diag);
-                        if (x > 0) v = Math.Min(v, d[i + n - 1] + Diag);
+                        Relax(i, i + n, 1);
+                        if (x < n - 1) Relax(i, i + n + 1, Diag);
+                        if (x > 0) Relax(i, i + n - 1, Diag);
                     }
-                    d[i] = v;
                 }
             for (int i = 0; i < d.Length; i++) d[i] = d[i] == float.MaxValue ? float.MaxValue : d[i] * cellMeters;
             return d;
@@ -146,6 +153,8 @@ namespace Stabby.World
                 if (d.PrecipMinMm < 0) errors.Add(d.Id + ": precipMinMm below 0");
                 if (d.HeightMaxM <= d.HeightMinM) errors.Add(d.Id + ": heightMaxM must exceed heightMinM");
                 if (d.WaterWithinM <= 0) errors.Add(d.Id + ": waterWithinM must be above 0");
+                if (d.WaterRiseM <= 0) errors.Add(d.Id + ": waterRiseM must be above 0");
+                if (!float.IsNaN(d.WaterRiseM) && float.IsNaN(d.WaterWithinM)) errors.Add(d.Id + ": waterRiseM needs waterWithinM");
                 if (d.CoastWithinM <= 0) errors.Add(d.Id + ": coastWithinM must be above 0");
             }
             return errors;
