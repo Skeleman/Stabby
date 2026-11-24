@@ -30,7 +30,7 @@ namespace Stabby.Game
         MaterialPropertyBlock[] blocks = new MaterialPropertyBlock[0];
         int[] counts = new int[0];
         readonly Plane[] planes = new Plane[6];
-        public int Drawn, Uploads;
+        public int Drawn, Uploads, Deferred;
 
         protected override void OnCreate()
         {
@@ -39,7 +39,7 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
-            pack.Complete();
+            JobPoll.Teardown(pack);
             instances.Release();
             fur.Release();
             args.Release();
@@ -71,7 +71,7 @@ namespace Stabby.Game
                 material = new Material(shader) { name = "Stabby creatures instanced" };
                 material.EnableKeyword("STABBY_CREATURE_BUFFER");
             }
-            if (anim.Pending && anim.Gpu.IsCompleted) Schedule(ref anim);
+            if (!packing && anim.Pending && anim.Gpu.IsCompleted) Schedule(ref anim);
             empty = !SystemAPI.TryGetSingleton<CreatureTally>(out var tally) || tally.Links == 0;
         }
 
@@ -120,8 +120,8 @@ namespace Stabby.Game
         void Flush()
         {
             if (!packing) return;
+            if (!JobPoll.Done(pack)) { Deferred++; return; }
             packing = false;
-            pack.Complete();
             int groups = counts.Length;
             instances.Unlock(packed[2 * groups]);
             fur.Unlock(furCount);

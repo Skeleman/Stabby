@@ -1146,7 +1146,7 @@ namespace Stabby.Game
                 if (!p.Handle.IsCompleted) continue;
                 bool stale = p.Generation != generation;
                 if (!stale && !Spend(TerrainTree.Vertices)) return;
-                p.Handle.Complete();
+                JobPoll.Done(p.Handle);
                 pending.RemoveAt(k--);
                 if (p.Verts.Capacity > p.VertCap) { NativeAllocs++; NativeBytes += (long)p.Verts.Capacity * UnsafeUtility.SizeOf<TerrainVertex>(); }
                 if (p.Tris.Capacity > p.TriCap) { NativeAllocs++; NativeBytes += p.Tris.Capacity * 4L; }
@@ -1446,8 +1446,7 @@ namespace Stabby.Game
             if (cam == null || !rootsReady) return;
             if (lodScheduled)
             {
-                if (!lodHandle.IsCompleted) return;
-                lodHandle.Complete();
+                if (!JobPoll.Done(lodHandle)) return;
                 lodScheduled = false;
                 selected = true;
                 splitSeen = split.Count;
@@ -1751,11 +1750,11 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (GameStatus.Live.Remove("terrain")) GameStatus.Lines["terrain"] = Status();
-            if (lodScheduled) lodHandle.Complete();
+            if (lodScheduled) JobPoll.Teardown(lodHandle);
             if (writes.IsCreated) writes.Dispose();
             foreach (var p in pending)
             {
-                p.Handle.Complete();
+                JobPoll.Teardown(p.Handle);
                 p.Dispose();
             }
             pending.Clear();
