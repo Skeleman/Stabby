@@ -221,6 +221,27 @@ public class ObjectTests
     }
 
     [Fact]
+    public void ConcurrentSitesComputeOnceAndAgree()
+    {
+        var w = Gen(4);
+        var detail = new TerrainDetail(w);
+        var edits = Features.Place(w, detail);
+        var serial = new ObjectField(w, detail, edits, Objects);
+        int n = serial.ChunksAcross, c = Enumerable.Range(0, n * n).First(i => serial.Sites(i % n, i / n).Length > 0);
+        var expect = serial.Sites(c % n, c / n);
+        var hammered = new ObjectField(w, detail, edits, Objects);
+        const int threads = 8;
+        var results = new ObjectInstance[threads][];
+        using var start = new Barrier(threads);
+        var workers = Enumerable.Range(0, threads).Select(t => new Thread(() => { start.SignalAndWait(); results[t] = hammered.Sites(c % n, c / n); })).ToList();
+        workers.ForEach(t => t.Start());
+        workers.ForEach(t => t.Join());
+        Assert.Equal(1, hammered.SiteComputes);
+        Assert.All(results, r => Assert.Same(results[0], r));
+        Assert.Equal(expect, results[0]);
+    }
+
+    [Fact]
     public void ObjectPlacementIsDeterministicAndVaried()
     {
         var w = Gen(4);
