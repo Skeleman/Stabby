@@ -98,7 +98,7 @@ Goals (Zach 11-24): caves from a single chamber to labyrinths; special caves wit
 
 | Step | Status |
 |---|---|
-| U0 contract draft for Zach's review: an underground stage after hydrology (own streams) emits cave graphs (nodes = chambers, edges = tunnels) expanded into sparse carve edits in the EditGrid; underground water joins the one drainage graph (springs and sinks link cave streams to surface flow); dungeon and mine kits snap to one grid and place as structure blueprints (rule 11) whose volumes are carve edits; road network as its own stage after sites | proposed |
+| U0 contract (Zach approved 11-24, CLAUDE.md rules 2 and 11): an underground stage after hydrology (own streams) emits cave graphs (nodes = chambers, edges = tunnels) expanded into sparse carve edits in the EditGrid; underground water joins the one drainage graph (springs and sinks link cave streams to surface flow); dungeon and mine kits snap to one grid and place as structure blueprints (rule 11) whose volumes are carve edits; road network as its own stage after sites | done |
 | U1 cave graph (b/caves-graph): size classes from data (single chamber, branching, labyrinth, grand hall with several entrances and rock bridges); chambers and tunnels as warped capsule and ellipsoid carves with organic noise; checks: every cave walkable from an entrance, bridges hold, no carve breaks into sea or lake; stream and collision bench on a labyrinth | next |
 | U2 speleothems (b/caves-detail): stalactites, stalagmites, flowstone and columns as instanced objects placed on cave ceilings and floors from their own stream (big columns as edits); screen-size LOD; rock walls from the material library | after U1 |
 | U3 cave water (b/caves-water): chamber pools on the shared water path (real water); underground streams fed by groundwater that resurface as springs on the drainage graph; waterfalls inside grand halls | after U1 |
@@ -111,6 +111,8 @@ Goals (Zach 11-24): caves from a single chamber to labyrinths; special caves wit
 | D3 interfaces: dungeon breaches into caves and cave links into dungeons through shared connector sockets; more architectures | after D2 + U1 |
 
 Zach 11-24: objects in caves and dungeons get the surface contact treatment (rule 11): vertices darken toward the contact colour where they meet rock, buried skirts and contact stamps apply on floors, walls and ceilings alike (hanging stalactites darken at their roots), and kit pieces darken seams, gaps and downward faces as structures do; the contact check covers underground placements. Applies to U2, U5 and D1.
+
+Zach 11-24 underground light: darkness gives light its value, so points of interest that glow in a truly dark cave matter more. Natural caves stay very dark with only an occasional natural source (glow fungus, crystal, lava, a skylight). Mines and tunnels carry man-made lights (torches, lanterns, lamps, magical lights) through the light budget, with unlit stretches allowed between them.
 
 Push-back notes: groves underground need a light source (skylight shafts or glow flora) to keep the darkness theme; tunnels wait for roads, roads for towns; obsidian lava waits for the lava liquid.
 
