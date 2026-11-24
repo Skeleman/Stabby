@@ -81,15 +81,18 @@ namespace Stabby.Game
             build = Task.Run(() => Make(field, gone, data, at.x, at.y, texel));
         }
 
+        [ThreadStatic] static List<ObjectInstance> objectScratch;
+        [ThreadStatic] static List<ObjectColumn> columnScratch, lushScratch;
+
         static Splat Make(ObjectField field, HashSet<ulong> gone, byte[] data, float cx, float cz, float texelM)
         {
             var sw = Stopwatch.StartNew();
             float span = Res * texelM;
             float x0 = Mathf.Floor((cx - 0.5f * span) / texelM) * texelM, z0 = Mathf.Floor((cz - 0.5f * span) / texelM) * texelM;
             Array.Clear(data, 0, data.Length);
-            var objects = new List<ObjectInstance>();
-            var columns = new List<ObjectColumn>();
-            var lush = new List<ObjectColumn>();
+            var objects = objectScratch ??= new List<ObjectInstance>();
+            var columns = columnScratch ??= new List<ObjectColumn>();
+            var lush = lushScratch ??= new List<ObjectColumn>();
             float cm = field.ChunkMeters;
             int n = field.ChunksAcross;
             int ax = Math.Max(0, (int)Math.Floor((x0 - 2f) / cm)), bx = Math.Min(n - 1, (int)Math.Floor((x0 + span + 2f) / cm));
