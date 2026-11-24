@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Stabby.World;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.NetCode;
 using Unity.Transforms;
@@ -73,24 +73,32 @@ namespace Stabby.Game
             public Entity From;
         }
 
-        sealed class Verdict
-        {
-            public Ask Ask;
-            public RemoveResult Outcome;
-            public ObjectInstance Found;
-        }
-
         readonly ObjectDeltas deltas = new ObjectDeltas();
-        readonly List<Ask> asks = new List<Ask>();
+        readonly List<Ask> asks = new List<Ask>(), batch = new List<Ask>();
         readonly List<ulong> fresh = new List<ulong>();
-        Task<List<Verdict>> check;
+        readonly List<int> need = new List<int>();
+        ReachTables tables;
+        NativeArray<RemoveAsk> asking;
+        NativeArray<byte> results;
+        JobSlot check;
         int accepted, rejected, killed;
 
         public ObjectDeltas Deltas => deltas;
+        public ReachTables Tables => tables;
         public int Accepted => accepted;
         public int Rejected => rejected;
 
         public void Submit(ulong id, float3 at) => asks.Add(new Ask { Id = id, At = at, From = Entity.Null });
+
+        protected override void OnCreate() => tables = new ReachTables();
+
+        protected override void OnDestroy()
+        {
+            check.Finish();
+            if (asking.IsCreated) asking.Dispose();
+            if (results.IsCreated) results.Dispose();
+            tables.Dispose();
+        }
 
         protected override void OnUpdate()
         {
@@ -119,49 +127,54 @@ namespace Stabby.Game
             players.Dispose();
 
             var field = World.GetExistingSystemManaged<ObjectColumnsSystem>().Field;
-            if (check != null && check.IsCompleted)
+            if (check.Done)
             {
-                if (check.IsFaulted) GameStatus.Failure = check.Exception.ToString();
-                else Apply(ecb, field, check.Result);
-                check = null;
+                check.Finish();
+                Apply(ecb);
             }
-            if (check == null && field != null && asks.Count > 0)
+            if (!check.Busy && field != null && asks.Count > 0)
             {
-                var batch = asks.ToArray();
-                asks.Clear();
-                var known = deltas;
-                check = Task.Run(() =>
-                {
-                    var list = new List<Verdict>(batch.Length);
-                    foreach (var a in batch)
-                    {
-                        var r = known.Check(field, a.Id, a.At.x, a.At.y, a.At.z, out var found);
-                        list.Add(new Verdict { Ask = a, Outcome = r, Found = found });
-                    }
-                    return list;
-                });
+                need.Clear();
+                foreach (var a in asks) need.Add(ObjectIds.Chunk(a.Id));
+                if (tables.Ready(field, need)) Schedule();
             }
             ecb.Playback(EntityManager);
             ecb.Dispose();
         }
 
-        void Apply(EntityCommandBuffer ecb, ObjectField field, List<Verdict> verdicts)
+        void Schedule()
+        {
+            batch.Clear();
+            batch.AddRange(asks);
+            asks.Clear();
+            asking = new NativeArray<RemoveAsk>(batch.Count, Allocator.Persistent);
+            results = new NativeArray<byte>(batch.Count, Allocator.Persistent);
+            for (int k = 0; k < batch.Count; k++) asking[k] = new RemoveAsk { Id = batch[k].Id, At = batch[k].At };
+            check.Start(new RemoveCheckJob { Chunks = tables.Chunks, Interactive = tables.Interactive, Removed = tables.Removed, Asks = asking, Results = results, Across = tables.Across }.Schedule());
+        }
+
+        void Apply(EntityCommandBuffer ecb)
         {
             bool cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc);
             fresh.Clear();
-            foreach (var v in verdicts)
+            for (int k = 0; k < batch.Count; k++)
             {
-                var r = v.Outcome;
-                if (r == RemoveResult.Ok && !deltas.Apply(v.Ask.Id)) r = RemoveResult.AlreadyRemoved;
+                var a = batch[k];
+                var r = (RemoveResult)results[k];
+                if (r == RemoveResult.Ok && !deltas.Apply(a.Id)) r = RemoveResult.AlreadyRemoved;
                 if (r == RemoveResult.Ok)
                 {
+                    tables.Remove(a.Id);
                     accepted++;
-                    fresh.Add(v.Ask.Id);
-                    if (cols) killed += oc.Kill(v.Ask.Id);
+                    fresh.Add(a.Id);
+                    if (cols) killed += oc.Kill(a.Id);
                 }
                 else rejected++;
-                if (v.Ask.From != Entity.Null) Rpc.Send(ecb, v.Ask.From, new ObjectReplyRpc { Id = v.Ask.Id, Code = (byte)r });
+                if (a.From != Entity.Null) Rpc.Send(ecb, a.From, new ObjectReplyRpc { Id = a.Id, Code = (byte)r });
             }
+            asking.Dispose();
+            results.Dispose();
+            batch.Clear();
             if (fresh.Count > 0) ObjectDeltaApply.Send(ecb, Entity.Null, fresh);
             GameStatus.Lines[World.Name + "~object deltas"] = $"{World.Name}: {deltas.Count} objects removed in {CountChunks()} chunks, {accepted} accepted, {rejected} rejected, {killed} columns cleared";
         }
@@ -180,30 +193,47 @@ namespace Stabby.Game
     {
         public const float PickSeconds = 0.25f;
 
-        sealed class Found
-        {
-            public ulong Id;
-            public bool Ok;
-            public ObjectInstance Instance;
-        }
-
         readonly ObjectDeltas deltas = new ObjectDeltas();
-        readonly List<ulong> pending = new List<ulong>();
-        readonly List<ulong> sendQueue = new List<ulong>();
-        Task<List<Found>> resolve;
-        Task<List<ulong>> pick;
-        List<ulong> inReach = new List<ulong>();
+        readonly List<ulong> pending = new List<ulong>(), resolving = new List<ulong>(), sendQueue = new List<ulong>(), inReach = new List<ulong>();
+        readonly List<int> need = new List<int>();
+        ReachTables tables;
+        NativeArray<ulong> resolveIds;
+        NativeArray<ObjectInstance> resolveFound;
+        NativeArray<byte> resolveOk;
+        NativeList<ulong> pickIds;
+        NativeList<float> pickDist;
+        JobSlot resolveSlot, pickSlot;
+        float3 pickAt;
+        bool pickWanted;
         float nextPick;
         int killed, unknown;
         string reply = "", prompt = "";
 
         public ObjectDeltas Deltas => deltas;
+        public ReachTables Tables => tables;
         public int Killed => killed;
         public string LastReply => reply;
 
         public void Request(ulong id) => sendQueue.Add(id);
 
         bool Viewing => World.Name == GameSettings.ViewClient && !Application.isBatchMode;
+
+        protected override void OnCreate()
+        {
+            tables = new ReachTables();
+            pickIds = new NativeList<ulong>(16, Allocator.Persistent);
+            pickDist = new NativeList<float>(16, Allocator.Persistent);
+        }
+
+        protected override void OnDestroy()
+        {
+            resolveSlot.Finish();
+            pickSlot.Finish();
+            ReleaseResolve();
+            pickIds.Dispose();
+            pickDist.Dispose();
+            tables.Dispose();
+        }
 
         protected override void OnUpdate()
         {
@@ -221,43 +251,28 @@ namespace Stabby.Game
                 Status();
             }
 
-            if (resolve != null && resolve.IsCompleted)
+            if (resolveSlot.Done)
             {
-                if (resolve.IsFaulted) GameStatus.Failure = resolve.Exception.ToString();
-                else Apply(field, resolve.Result);
-                resolve = null;
+                resolveSlot.Finish();
+                Apply();
             }
-            if (resolve == null && field != null && pending.Count > 0)
+            if (pickSlot.Done)
             {
-                var batch = pending.ToArray();
-                pending.Clear();
-                resolve = Task.Run(() =>
-                {
-                    var list = new List<Found>(batch.Length);
-                    foreach (ulong id in batch)
-                    {
-                        bool ok = ObjectDeltas.TryFind(field, id, out var o);
-                        list.Add(new Found { Id = id, Ok = ok, Instance = o });
-                    }
-                    return list;
-                });
+                pickSlot.Finish();
+                inReach.Clear();
+                for (int k = 0; k < pickIds.Length; k++) inReach.Add(pickIds[k]);
             }
+            if (Viewing && field != null) Prompt(field);
+            if (field != null && !resolveSlot.Busy && !pickSlot.Busy) Schedule(field);
 
-            if (Viewing && field != null) Pick(field);
             foreach (ulong id in sendQueue) Rpc.Send(ecb, Entity.Null, new ObjectRemoveRpc { Id = id });
             sendQueue.Clear();
             ecb.Playback(EntityManager);
             ecb.Dispose();
         }
 
-        void Pick(ObjectField field)
+        void Prompt(ObjectField field)
         {
-            if (pick != null && pick.IsCompleted)
-            {
-                if (pick.IsFaulted) GameStatus.Failure = pick.Exception.ToString();
-                else inReach = pick.Result;
-                pick = null;
-            }
             ulong target = 0;
             bool has = false;
             foreach (ulong id in inReach)
@@ -266,33 +281,67 @@ namespace Stabby.Game
             if (want != prompt) { prompt = want; Status(); }
             if (has && Input.GetKeyDown(KeyCode.E)) Request(target);
             float now = (float)SystemAPI.Time.ElapsedTime;
-            if (pick != null || now < nextPick) return;
+            if (pickWanted || pickSlot.Busy || now < nextPick) return;
             nextPick = now + PickSeconds;
             foreach (var t in SystemAPI.Query<RefRO<LocalTransform>>().WithAll<Player, GhostOwnerIsLocal>())
             {
-                var p = t.ValueRO.Position;
-                pick = Task.Run(() =>
-                {
-                    var ids = new List<ulong>();
-                    ObjectDeltas.InReach(field, p.x, p.y, p.z, ids);
-                    return ids;
-                });
+                pickAt = t.ValueRO.Position;
+                pickWanted = true;
                 break;
             }
         }
 
-        void Apply(ObjectField field, List<Found> found)
+        void Schedule(ObjectField field)
+        {
+            need.Clear();
+            foreach (ulong id in pending) need.Add(ObjectIds.Chunk(id));
+            var near = pickWanted ? InReachJob.Around(field, pickAt) : default;
+            if (pickWanted) near.Chunks9(need);
+            if (need.Count == 0 || !tables.Ready(field, need)) return;
+            if (pending.Count > 0)
+            {
+                resolving.Clear();
+                resolving.AddRange(pending);
+                pending.Clear();
+                resolveIds = new NativeArray<ulong>(resolving.Count, Allocator.Persistent);
+                resolveFound = new NativeArray<ObjectInstance>(resolving.Count, Allocator.Persistent);
+                resolveOk = new NativeArray<byte>(resolving.Count, Allocator.Persistent);
+                for (int k = 0; k < resolving.Count; k++) resolveIds[k] = resolving[k];
+                resolveSlot.Start(new ResolveJob { Chunks = tables.Chunks, Ids = resolveIds, Found = resolveFound, Ok = resolveOk, Across = tables.Across }.Schedule());
+            }
+            if (pickWanted)
+            {
+                pickWanted = false;
+                near.Chunks = tables.Chunks;
+                near.Ids = pickIds;
+                near.Dist = pickDist;
+                pickSlot.Start(near.Schedule());
+            }
+        }
+
+        void Apply()
         {
             bool cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc);
             var view = World.GetExistingSystemManaged<ObjectViewSystem>();
-            foreach (var f in found)
+            for (int k = 0; k < resolving.Count; k++)
             {
-                if (!f.Ok) { unknown++; continue; }
-                if (!deltas.Apply(f.Id)) continue;
-                if (cols) killed += oc.Kill(f.Id);
-                if (view != null && view.Enabled) view.Hide(f.Instance);
+                ulong id = resolving[k];
+                if (resolveOk[k] == 0) { unknown++; continue; }
+                if (!deltas.Apply(id)) continue;
+                tables.Remove(id);
+                if (cols) killed += oc.Kill(id);
+                if (view != null && view.Enabled) view.Hide(resolveFound[k]);
             }
+            ReleaseResolve();
+            resolving.Clear();
             Status();
+        }
+
+        void ReleaseResolve()
+        {
+            if (resolveIds.IsCreated) resolveIds.Dispose();
+            if (resolveFound.IsCreated) resolveFound.Dispose();
+            if (resolveOk.IsCreated) resolveOk.Dispose();
         }
 
         void Status()
