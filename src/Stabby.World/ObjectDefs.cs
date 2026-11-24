@@ -14,18 +14,25 @@ namespace Stabby.World
         public bool Wind, Animated;
         public float SwayPixels = 16.2f, FlutterPixels = 54f, ImpostorPixels;
         public float ShadowCascadePixels = 64.8f;
-        public float[] LightPixels = { 432f, 108f, 10.8f };
+        public string Light = "point";
         public bool Solid = true;
 
-        public Detail.Rule Rule()
+        public Detail.Rule Rule(LightKind light)
         {
             float near = LodPixels != null && LodPixels.Length > 0 ? LodPixels[0] : FadePixels;
             float mid = LodPixels != null && LodPixels.Length > 1 ? LodPixels[1] : FadePixels;
             var never = new Detail.Thresholds(Detail.Never, Detail.Never, Detail.Never);
-            var light = LightPixels != null && LightPixels.Length == 3 ? new Detail.Thresholds(LightPixels[0], LightPixels[1], LightPixels[2]) : never;
             return new Detail.Rule(new Detail.Thresholds(near, mid, FadePixels), ShadowCascadePixels, ShadowPixels,
-                Wind ? new Detail.Thresholds(FlutterPixels, FlutterPixels, SwayPixels) : never, light);
+                Wind ? new Detail.Thresholds(FlutterPixels, FlutterPixels, SwayPixels) : never, light != null ? light.Thresholds() : never);
         }
+    }
+
+    public sealed class LightKind
+    {
+        public string Id;
+        public float ShadowedPixels = 432f, UnshadowedPixels = 108f, GlowPixels = 10.8f;
+
+        public Detail.Thresholds Thresholds() => new Detail.Thresholds(ShadowedPixels, UnshadowedPixels, GlowPixels);
     }
 
     public sealed class ObjectPart
@@ -104,6 +111,7 @@ namespace Stabby.World
 
     public sealed class ObjectLibrary
     {
+        public List<LightKind> Lights = new List<LightKind>();
         public List<ObjectKind> Kinds = new List<ObjectKind>();
         public List<ObjectDef> Objects = new List<ObjectDef>();
         public TerrainViewDef Terrain = new TerrainViewDef();
@@ -114,6 +122,14 @@ namespace Stabby.World
             foreach (var k in Kinds) if (k.Id == d.Kind) return k;
             return null;
         }
+
+        public LightKind LightOf(ObjectKind k)
+        {
+            foreach (var l in Lights) if (l.Id == k.Light) return l;
+            return null;
+        }
+
+        public Detail.Rule RuleOf(ObjectKind k) => k.Rule(LightOf(k));
 
         public bool PartSolid(ObjectDef d, ObjectPart p) => p.Solid >= 0 ? p.Solid == 1 : KindOf(d).Solid;
         public bool PartShadows(ObjectDef d, ObjectPart p) => p.Shadows >= 0 ? p.Shadows == 1 : KindOf(d).Shadows;
@@ -131,7 +147,7 @@ namespace Stabby.World
             foreach (var d in Objects)
             {
                 float size = CasterSize(d);
-                if (size > 0) span.Add(size, KindOf(d).Rule(), pixelsPerMetre, quality);
+                if (size > 0) span.Add(size, RuleOf(KindOf(d)), pixelsPerMetre, quality);
             }
         }
 
@@ -145,6 +161,13 @@ namespace Stabby.World
         public static List<string> Validate(ObjectLibrary lib, IReadOnlyList<string> biomeIds = null)
         {
             var errors = new List<string>();
+            var lights = new HashSet<string>();
+            foreach (var l in lib.Lights)
+            {
+                if (string.IsNullOrEmpty(l.Id)) errors.Add("light without id");
+                else if (!lights.Add(l.Id)) errors.Add("duplicate light " + l.Id);
+                if (!(l.GlowPixels > 0 && l.UnshadowedPixels > l.GlowPixels && l.ShadowedPixels > l.UnshadowedPixels)) errors.Add("light " + l.Id + ": shadowedPixels > unshadowedPixels > glowPixels > 0");
+            }
             var kinds = new HashSet<string>();
             foreach (var k in lib.Kinds)
             {
@@ -158,7 +181,7 @@ namespace Stabby.World
                 if (k.ShadowPixels < 0) errors.Add(k.Id + ": shadowPixels below 0");
                 if (k.ShadowCascadePixels < k.ShadowPixels) errors.Add(k.Id + ": shadowCascadePixels must not sit below shadowPixels");
                 if (k.Wind && !(k.SwayPixels > 0 && k.FlutterPixels > k.SwayPixels)) errors.Add(k.Id + ": flutterPixels must sit above swayPixels above 0");
-                if (k.LightPixels == null || k.LightPixels.Length != 3 || !(k.LightPixels[2] > 0 && k.LightPixels[1] > k.LightPixels[2] && k.LightPixels[0] > k.LightPixels[1])) errors.Add(k.Id + ": lightPixels needs 3 falling numbers above 0");
+                if (!lights.Contains(k.Light ?? "")) errors.Add(k.Id + ": light " + k.Light + " is not defined");
                 if (k.ImpostorPixels != 0 && (k.ImpostorPixels <= k.FadePixels || k.LodPixels == null || k.LodPixels.Length == 0 || 1.5f * k.ImpostorPixels >= k.LodPixels[k.LodPixels.Length - 1])) errors.Add(k.Id + ": impostorPixels must sit above fadePixels and 1.5x below the last lodPixels");
             }
             var ids = new HashSet<string>();

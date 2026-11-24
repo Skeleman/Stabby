@@ -108,7 +108,7 @@ namespace Stabby.Game
             for (int i = 0; i < think.Length; i++)
             {
                 grade[i] = Footing.Grade(p.Lib.Bodies[i].MaxSlope);
-                think[i] = Detail.SimulationReach(p.Lib.Bodies[i].Length, p.Lib.Bodies[i].AnimPixels);
+                think[i] = CreaturePlan.ThinkReach(p.Lib.Bodies[i]);
                 length[i] = p.Lib.Bodies[i].Length;
             }
             var wary = b.Allocate(ref root.Wary, p.Lib.Bodies.Count);

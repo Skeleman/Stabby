@@ -91,6 +91,7 @@ public class ObjectTests
         Assert.Equal(ObjectPart.Log, log.Parts[0].Shape);
         Assert.Contains("wetland", log.Placement.Biomes);
         Assert.Empty(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()));
+        Assert.All(Objects.Kinds, k => Assert.True(Objects.RuleOf(k).Light.Near == 432f && Objects.RuleOf(k).Light.Mid == 108f && Objects.RuleOf(k).Light.Far == 10.8f, k.Id));
         var stone = Objects.Objects.First(o => o.Id == "loose-stone");
         Assert.Equal("take", stone.Verb);
         Assert.True(Objects.IsInteractive(Objects.Objects.IndexOf(stone)) && stone.ReachM > 0);
@@ -100,9 +101,18 @@ public class ObjectTests
         try { Assert.Contains(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()), e => e.Contains("unknown biome moon")); }
         finally { log.Placement.Biomes.Remove("moon"); }
         var bad = new ObjectLibrary();
+        bad.Lights.Add(new LightKind { Id = "point" });
         bad.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodPixels = RisingLods });
         bad.Objects.Add(new ObjectDef { Id = "x", Kind = "animated", Variants = 0 });
         Assert.Equal(4, ObjectLibrary.Validate(bad).Count);
+        bad.Kinds[0].Light = "torch";
+        bad.Lights.Add(new LightKind { Id = "point", GlowPixels = 200f });
+        var lights = ObjectLibrary.Validate(bad);
+        Assert.Contains(lights, e => e == "static: light torch is not defined");
+        Assert.Contains(lights, e => e == "duplicate light point");
+        Assert.Contains(lights, e => e.StartsWith("light point: shadowedPixels", StringComparison.Ordinal));
+        bad.Kinds[0].Light = "point";
+        bad.Lights.RemoveAt(1);
         bad.Kinds.Add(new ObjectKind { Id = "interactive", Lods = 3, LodPixels = RisingLods });
         bad.Objects.Clear();
         bad.Objects.Add(new ObjectDef { Id = "y", Kind = "interactive", Verb = "eat", ReachM = 2, Parts = { new ObjectPart() } });

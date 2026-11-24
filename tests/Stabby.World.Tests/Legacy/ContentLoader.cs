@@ -322,11 +322,12 @@ public static class ContentLoader
         return d;
     }
 
-    public const int ObjectSchemaVersion = 4;
+    public const int ObjectSchemaVersion = 5;
 
     sealed class ObjectFile
     {
         public int SchemaVersion { get; set; }
+        public List<LightEntry> Lights { get; set; } = new();
         public List<KindEntry> Kinds { get; set; } = new();
         public List<ObjectEntry> Objects { get; set; } = new();
         public TerrainEntry? Terrain { get; set; }
@@ -386,6 +387,14 @@ public static class ContentLoader
         public int MaxBlades { get; set; } = D.MaxBlades;
     }
 
+    sealed class LightEntry
+    {
+        public string Id { get; set; } = "";
+        public float ShadowedPixels { get; set; }
+        public float UnshadowedPixels { get; set; }
+        public float GlowPixels { get; set; }
+    }
+
     sealed class KindEntry
     {
         public string Id { get; set; } = "";
@@ -395,7 +404,7 @@ public static class ContentLoader
         public bool Shadows { get; set; }
         public float ShadowPixels { get; set; }
         public float ShadowCascadePixels { get; set; }
-        public float[] LightPixels { get; set; } = Array.Empty<float>();
+        public string Light { get; set; } = "";
         public bool Wind { get; set; }
         public float SwayPixels { get; set; } = 16.2f;
         public float FlutterPixels { get; set; } = 54f;
@@ -485,11 +494,13 @@ public static class ContentLoader
         var lib = new ObjectLibrary();
         var materials = LoadMaterials(contentRoot);
         uint Mat(string id) => materials.Find(id)?.Color ?? 0;
+        foreach (var l in file.Lights)
+            lib.Lights.Add(new LightKind { Id = l.Id, ShadowedPixels = l.ShadowedPixels, UnshadowedPixels = l.UnshadowedPixels, GlowPixels = l.GlowPixels });
         foreach (var k in file.Kinds)
             lib.Kinds.Add(new ObjectKind
             {
                 Id = k.Id, Lods = k.Lods, LodPixels = k.LodPixels, FadePixels = k.FadePixels,
-                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, ShadowCascadePixels = k.ShadowCascadePixels, LightPixels = k.LightPixels, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, ImpostorPixels = k.ImpostorPixels, Animated = k.Animated, Solid = k.Solid,
+                Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, ShadowCascadePixels = k.ShadowCascadePixels, Light = k.Light, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, ImpostorPixels = k.ImpostorPixels, Animated = k.Animated, Solid = k.Solid,
             });
         foreach (var o in file.Objects)
         {
