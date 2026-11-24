@@ -233,7 +233,7 @@ namespace Stabby.World
             float cm = c.CellMeters;
             int cx = (int)Math.Round(b.X / cm), cy = (int)Math.Round(b.Z / cm);
             float core = Core(b, rise);
-            int coast = (int)Math.Ceiling((CoastPadM + Extent(b) + rise / CliffGrade) / cm);
+            int coast = (int)Math.Ceiling((CoastPadM + core) / cm);
             int edge = Math.Max(coast, (int)Math.Ceiling(reach / cm));
             if (cx - edge < 1 || cy - edge < 1 || cx + edge >= n - 1 || cy + edge >= n - 1) return false;
             if (!Arid(s, climate, n, cx, cy)) return false;
