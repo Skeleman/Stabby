@@ -483,7 +483,7 @@ namespace Stabby.World
                 if (item < 0)
                 {
                     var f = edits[~item];
-                    if (site > 0 && (f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Boulder)) continue;
+                    if (site > 0 && (f.Shape == FeatureEdit.Spring || ((site == WolfDen || Pooled(site)) && f.Shape == FeatureEdit.Boulder))) continue;
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;
                     if (f.Crusts && CrustDraw(x, z) < CrustThin * f.Crust(x, z)) return false;
                     continue;
