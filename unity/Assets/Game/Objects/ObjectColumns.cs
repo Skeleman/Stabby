@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Unity.Profiling;
 using Stabby.Viewer;
 using Stabby.World;
 using Unity.Burst;
@@ -332,6 +333,15 @@ namespace Stabby.Game
         int lastColumns, columns, shown = -1, converted, baked;
         long lastMs, convertMs, convertBytes, bakeTicks;
         readonly MainCost cost = new MainCost();
+        readonly CostSplit split = new CostSplit("converted", "install", "singleton", "free", "schedule");
+        Baking warm;
+        long warmTicks, firstSchedule, maxSchedule, singletonTicks;
+        static readonly ProfilerMarker convertMarker = new ProfilerMarker("ObjectColumns.InstallConverted");
+        static readonly ProfilerMarker installMarker = new ProfilerMarker("ObjectColumns.InstallBakes");
+        static readonly ProfilerMarker singletonMarker = new ProfilerMarker("ObjectColumns.GetSingleton");
+        static readonly ProfilerMarker freeMarker = new ProfilerMarker("ObjectColumns.Free");
+        static readonly ProfilerMarker wantMarker = new ProfilerMarker("ObjectColumns.Schedule");
+        static readonly ProfilerMarker warmMarker = new ProfilerMarker("ObjectColumns.WarmUp");
 
         public ObjectField Field { get; private set; }
         public ObjectLibrary Library => lib;
@@ -345,7 +355,7 @@ namespace Stabby.Game
             freeReach = ObjectRegions.FreeReach(reach);
             var c = cost;
             string name = World.Name;
-            GameStatus.Live[name + "~objects cost"] = () => $"{name}: {c.Text("region arrivals")}; {converted} chunks converted to native once at {(converted == 0 ? 0 : (double)convertMs / converted):F1} ms and {(converted == 0 ? 0 : convertBytes / 1024.0 / converted):F0} KB GC each on workers; {baked} Burst region bakes, {(baked == 0 ? 0 : bakeTicks * 1000.0 / Stopwatch.Frequency / baked):F1} ms schedule to install";
+            GameStatus.Live[name + "~objects cost"] = () => $"{name}: {c.Text("region arrivals")}; {converted} chunks converted to native once at {(converted == 0 ? 0 : (double)convertMs / converted):F1} ms and {(converted == 0 ? 0 : convertBytes / 1024.0 / converted):F0} KB GC each on workers; {baked} Burst region bakes, {(baked == 0 ? 0 : bakeTicks * 1000.0 / Stopwatch.Frequency / baked):F1} ms schedule to install; {split.Text()}; warm-up schedule {Ms(warmTicks):F2} ms, first bake schedule {Ms(firstSchedule):F2} ms, later schedules max {Ms(maxSchedule):F2} ms";
         }
 
         protected override void OnDestroy()
@@ -357,6 +367,12 @@ namespace Stabby.Game
                 b.Out.Dispose();
             }
             baking.Clear();
+            if (warm.Out.IsCreated)
+            {
+                warm.Handle.Complete();
+                warm.Out.Value.Dispose();
+                warm.Out.Dispose();
+            }
             foreach (var t in converting.Values) Owned.Release(t, c => c.Objects.Dispose());
             converting.Clear();
             Owned.Release(shapesTask, s => s.Dispose());
@@ -415,6 +431,18 @@ namespace Stabby.Game
                 if (shapesTask.IsFaulted) { GameStatus.Failure = shapesTask.Exception.ToString(); Enabled = false; return; }
                 shapes = shapesTask.Result;
                 shapesTask = null;
+                warm.Out = new NativeReference<RegionColumns>(Allocator.Persistent);
+                long w0 = Stopwatch.GetTimestamp();
+                using (warmMarker.Auto()) warm.Handle = new RegionBakeJob { Shapes = shapes, Out = warm.Out }.Schedule();
+                warmTicks = Stopwatch.GetTimestamp() - w0;
+                JobHandle.ScheduleBatchedJobs();
+                return;
+            }
+            if (warm.Out.IsCreated && warm.Handle.IsCompleted)
+            {
+                warm.Handle.Complete();
+                warm.Out.Value.Dispose();
+                warm.Out.Dispose();
             }
 
             spots.Clear();
@@ -423,12 +451,24 @@ namespace Stabby.Game
             if (SystemAPI.TryGetSingleton<SpawnPoint>(out var spawn)) spots.Add(spawn.XZ);
 
             cost.Begin();
-            int installed = Install();
-            Free();
-            int started = Want();
+            long t0 = Stopwatch.GetTimestamp();
+            using (convertMarker.Auto()) InstallConverted();
+            long t1 = Stopwatch.GetTimestamp();
+            int installed;
+            using (installMarker.Auto()) installed = Install();
+            long t2 = Stopwatch.GetTimestamp();
+            using (freeMarker.Auto()) Free();
+            long t3 = Stopwatch.GetTimestamp();
+            int started;
+            using (wantMarker.Auto()) started = Want();
+            long t4 = Stopwatch.GetTimestamp();
             cost.End(installed + started > 0, installed);
+            if (installed + started > 0) split.Add(t1 - t0, t2 - t1 - singletonTicks, singletonTicks, t3 - t2, t4 - t3);
+            singletonTicks = 0;
             Status();
         }
+
+        static double Ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
 
         bool Near(int region, float within)
         {
@@ -439,35 +479,46 @@ namespace Stabby.Game
 
         ObjectDeltas Deltas => World.IsServer() ? World.GetExistingSystemManaged<ServerObjectDeltaSystem>()?.Deltas : World.GetExistingSystemManaged<ClientObjectDeltaSystem>()?.Deltas;
 
+        void InstallConverted()
+        {
+            if (converting.Count == 0) return;
+            done.Clear();
+            done.AddRange(converting.Keys);
+            foreach (int r in done)
+            {
+                var task = converting[r];
+                if (!task.IsCompleted) continue;
+                converting.Remove(r);
+                if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
+                var c = task.Result;
+                instances[r] = c.Objects;
+                converted++;
+                convertMs += c.Ms;
+                convertBytes += c.Bytes;
+            }
+        }
+
         int Install()
         {
             int installed = 0;
-            if (converting.Count > 0)
-            {
-                done.Clear();
-                done.AddRange(converting.Keys);
-                foreach (int r in done)
-                {
-                    var task = converting[r];
-                    if (!task.IsCompleted) continue;
-                    converting.Remove(r);
-                    if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
-                    var c = task.Result;
-                    instances[r] = c.Objects;
-                    converted++;
-                    convertMs += c.Ms;
-                    convertBytes += c.Bytes;
-                }
-            }
             if (baking.Count == 0) return 0;
             done.Clear();
             done.AddRange(baking.Keys);
-            var oc = SystemAPI.GetSingleton<ObjectColumns>();
-            var deltas = Deltas;
+            ObjectColumns oc = default;
+            bool haveColumns = false;
+            ObjectDeltas deltas = null;
             foreach (int r in done)
             {
                 var b = baking[r];
                 if (!b.Handle.IsCompleted) continue;
+                if (!haveColumns)
+                {
+                    long s0 = Stopwatch.GetTimestamp();
+                    using (singletonMarker.Auto()) oc = SystemAPI.GetSingleton<ObjectColumns>();
+                    singletonTicks = Stopwatch.GetTimestamp() - s0;
+                    deltas = Deltas;
+                    haveColumns = true;
+                }
                 b.Handle.Complete();
                 baking.Remove(r);
                 var region = b.Out.Value;
@@ -519,7 +570,12 @@ namespace Stabby.Game
                 }
                 var output = new NativeReference<RegionColumns>(Allocator.Persistent);
                 var job = new RegionBakeJob { Shapes = shapes, Objects = instances[r], Out = output };
-                baking[r] = new Baking { Handle = job.Schedule(), Out = output, Started = Stopwatch.GetTimestamp() };
+                long s0 = Stopwatch.GetTimestamp();
+                var handle = job.Schedule();
+                long scheduled = Stopwatch.GetTimestamp() - s0;
+                if (baked + baking.Count == 0) firstSchedule = scheduled;
+                else maxSchedule = System.Math.Max(maxSchedule, scheduled);
+                baking[r] = new Baking { Handle = handle, Out = output, Started = Stopwatch.GetTimestamp() };
             }
             if (baking.Count > 0) JobHandle.ScheduleBatchedJobs();
             return started;
