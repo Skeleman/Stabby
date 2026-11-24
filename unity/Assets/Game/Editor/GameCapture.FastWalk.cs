@@ -71,8 +71,10 @@ namespace Stabby.Game.Editor
                     float along = from;
                     bool first = true;
                     int gcRuns = System.GC.CollectionCount(0);
+                    bool profile = label == "fast" && System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE") == "1";
                     while (along < from + length)
                     {
+                        if (profile && frames.Count % 1000 == 0) WalkProfile(frames.Count / 1000);
                         if (!first)
                         {
                             var row = new float[WalkParts.Length + 5];
@@ -98,6 +100,7 @@ namespace Stabby.Game.Editor
                         cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(foot + fwd * 20f + Vector3.up * 1.2f - eye));
                         yield return null;
                     }
+                    if (profile) UnityEngine.Profiling.Profiler.enabled = false;
                     lines.Add(WalkReport(label, speed, length, frames));
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
@@ -130,8 +133,9 @@ namespace Stabby.Game.Editor
                 lines.Add(WalkReport("teleport fill", 0, 0, fill));
                 for (var s = Settle(240); s.MoveNext();) yield return null;
                 lines.Add(Resident(view, "after teleport"));
-                var proc = System.Diagnostics.Process.GetCurrentProcess();
-                lines.Add($"memory: process peak working set {proc.PeakWorkingSet64 / 1e9:F2} GB, now {proc.WorkingSet64 / 1e9:F2} GB; Unity reserved {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1e9:F2} GB, allocated {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1e9:F2} GB, graphics driver {UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / 1e9:F2} GB");
+                var mem = new MemoryCounters { Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MemoryCounters>() };
+                GetProcessMemoryInfo(GetCurrentProcess(), ref mem, mem.Size);
+                lines.Add($"memory: process peak working set {(ulong)mem.PeakWorkingSetSize / 1e9:F2} GB, now {(ulong)mem.WorkingSetSize / 1e9:F2} GB, peak commit {(ulong)mem.PeakPagefileUsage / 1e9:F2} GB; Unity reserved {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1e9:F2} GB, allocated {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1e9:F2} GB, graphics driver {UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / 1e9:F2} GB");
             }
             finally
             {
@@ -143,6 +147,27 @@ namespace Stabby.Game.Editor
             }
             GameStatus.Lines["~walk"] = string.Join("\n", lines);
         }
+
+        static void WalkProfile(int segment)
+        {
+            UnityEngine.Profiling.Profiler.enabled = false;
+            UnityEngine.Profiling.Profiler.logFile = System.IO.Path.GetFullPath($"../out/unity/spike-walk-{segment:D3}.raw");
+            UnityEngine.Profiling.Profiler.enableBinaryLog = true;
+            UnityEngine.Profiling.Profiler.enabled = true;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct MemoryCounters
+        {
+            public uint Size, PageFaultCount;
+            public System.UIntPtr PeakWorkingSetSize, WorkingSetSize, QuotaPeakPagedPoolUsage, QuotaPagedPoolUsage, QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage, PagefileUsage, PeakPagefileUsage;
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        static extern System.IntPtr GetCurrentProcess();
+
+        [System.Runtime.InteropServices.DllImport("psapi.dll")]
+        static extern bool GetProcessMemoryInfo(System.IntPtr process, ref MemoryCounters counters, uint size);
 
         static string Resident(Unity.Entities.World view, string label)
         {

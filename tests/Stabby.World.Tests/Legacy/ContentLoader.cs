@@ -334,6 +334,19 @@ public static class ContentLoader
         public List<ObjectEntry> Objects { get; set; } = new();
         public TerrainEntry? Terrain { get; set; }
         public FoliageEntry? Foliage { get; set; }
+        public QualityEntry? Quality { get; set; }
+    }
+
+    sealed class QualityEntry
+    {
+        public string Default { get; set; } = "";
+        public List<QualityLevelEntry> Levels { get; set; } = new();
+    }
+
+    sealed class QualityLevelEntry
+    {
+        public string Id { get; set; } = "";
+        public float Scale { get; set; }
     }
 
     sealed class TerrainEntry
@@ -568,6 +581,7 @@ public static class ContentLoader
                 },
             };
         }
+        if (file.Quality != null) lib.Quality = new QualityDef { Default = file.Quality.Default, Levels = file.Quality.Levels.Select(l => new QualityLevel { Id = l.Id, Scale = l.Scale }).ToList() };
         errors.AddRange(ObjectLibrary.Validate(lib, biomeIds));
         if (errors.Count > 0) throw new InvalidDataException(path + ": " + string.Join("; ", errors));
         return lib;
