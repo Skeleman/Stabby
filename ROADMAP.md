@@ -49,6 +49,9 @@ and converts once into native data.
   sun and moon on the shared clock, sky and ambient follow them, sun steps every 0.1 s
   as today. Tests, captures and benches pin the time of day unless they test shadow
   movement; a check fails any capture or bench that leaves time unpinned.
+  Zach 11-23: darkness is a core theme; nights and caves may be very dark. Moon phases on
+  the shared clock: full-moon nights clearly brighter, new-moon nights very dark.
+  In progress on b/day-night (cycle done; phases added before merge).
 - Water interaction: local wakes and bow waves around moving entities (Punchy had them).
   Separate lane from b/water-look so it benches on its own (audit 11-23).
 - Audit 11-23 follow-ups: (1) detail-tier review: confirm geometry, animation, shadow,
