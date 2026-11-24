@@ -117,7 +117,7 @@ namespace Stabby.Game
         NativeArray<quaternion> scratchRot, scratchEndRot;
         NativeArray<float> scratchFloor;
         float carry;
-        int skipped;
+        int skipped, capacity;
         const int SegCap = 64, PartCap = 32;
 
         public void OnCreate(ref SystemState state)
@@ -158,11 +158,11 @@ namespace Stabby.Game
             Counts.Dispose(dep);
         }
 
-        static void Fit<T>(ref NativeArray<T> a, int n) where T : struct
+        static void Fit<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
         {
             if (a.Length >= n) return;
             int size = math.max(n, a.Length + a.Length / 2);
-            a.Dispose();
+            a.Dispose(after);
             a = new NativeArray<T>(size, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
 
@@ -183,12 +183,12 @@ namespace Stabby.Game
             {
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
-                Instances.Clear();
-                if (Instances.Capacity < tally.Links) Instances.Capacity = tally.Links + tally.Links / 2;
-                Fit(ref Sorted, Instances.Capacity);
-                Fit(ref Fur, 3 * count);
-                Fit(ref Starts, tally.Groups);
-                Fit(ref Counts, tally.Groups);
+                if (capacity < tally.Links) capacity = tally.Links + tally.Links / 2;
+                Gpu = new Reset { Instances = Instances, Capacity = capacity }.Schedule(Gpu);
+                Fit(ref Sorted, capacity, Gpu);
+                Fit(ref Fur, 3 * count, Gpu);
+                Fit(ref Starts, tally.Groups, Gpu);
+                Fit(ref Counts, tally.Groups, Gpu);
                 FurCount = 3 * count;
             }
             state.Dependency = new AnimJob
@@ -204,6 +204,19 @@ namespace Stabby.Game
             state.Dependency = new Compact { Instances = Instances, Sorted = Sorted, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
             Gpu = state.Dependency;
             Pending = true;
+        }
+
+        [BurstCompile]
+        struct Reset : IJob
+        {
+            public NativeList<CreatureGpu> Instances;
+            public int Capacity;
+
+            public void Execute()
+            {
+                Instances.Clear();
+                if (Instances.Capacity < Capacity) Instances.Capacity = Capacity;
+            }
         }
 
         [BurstCompile]

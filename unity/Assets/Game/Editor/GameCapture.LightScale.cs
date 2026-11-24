@@ -53,7 +53,7 @@ namespace Stabby.Game.Editor
             int preexisting = emitterQuery.CalculateEntityCount();
             var lines = new List<string>
             {
-                $"light scale bench at {Screen.width}x{Screen.height}, night hour {DayNightSystem.Shown.Hour:F2}, caps shadowed {caps.Shadowed}, unshadowed {caps.Unshadowed}, glow {caps.Glow}; {preexisting} world emitters already present; emitters scattered over a {ScaleRadius:F0} m disc around the eye; LightEmitter {size} B; neither system schedules jobs",
+                $"light scale bench at {Screen.width}x{Screen.height}, night hour {DayNightSystem.Shown.Hour:F2}, caps shadowed {caps.Shadowed}, unshadowed {caps.Unshadowed}, glow {caps.Glow}; {preexisting} world emitters already present; emitters scattered over a {ScaleRadius:F0} m disc around the eye; LightEmitter {size} B; the budget runs on the main thread, the presenter fills its glow buffer in one Burst job",
             };
             for (var w = SetLights(stateQuery, presenter, false, true); w.MoveNext();) yield return null;
 
@@ -116,7 +116,7 @@ namespace Stabby.Game.Editor
                 int total = emitterQuery.CalculateEntityCount();
                 lines.Add($"N {n} ({total} emitters live): " + TierLine(stateQuery, presenter));
                 lines.Add($"  LightBudgetSystem main thread: frame marker median {Pct(bMs, 0.5):F3} ms, p99 {Pct(bMs, 0.99):F3} ms; direct update median {Pct(bDirect, 0.5):F3} ms, p99 {Pct(bDirect, 0.99):F3} ms; jobs 0 ms; GC {bGc / (double)ScaleDirect:F0} B per update; temp {total * size} B per update (1 Temp array, copied back in place)");
-                lines.Add($"  LightPresenterSystem main thread: frame marker median {Pct(pMs, 0.5):F3} ms, p99 {Pct(pMs, 0.99):F3} ms; direct update median {Pct(pDirect, 0.5):F3} ms, p99 {Pct(pDirect, 0.99):F3} ms; jobs 0 ms; GC {pGc / (double)ScaleDirect:F0} B per update; temp {total * size} B per update (1 Temp array); glow upload {(presenter.Cores + presenter.Glows) * 32} B per frame");
+                lines.Add($"  LightPresenterSystem main thread: frame marker median {Pct(pMs, 0.5):F3} ms, p99 {Pct(pMs, 0.99):F3} ms; direct update median {Pct(pDirect, 0.5):F3} ms, p99 {Pct(pDirect, 0.99):F3} ms; glow job written straight into a locked buffer; GC {pGc / (double)ScaleDirect:F0} B per update; glow buffer {(presenter.Cores + presenter.Glows) * 32} B per frame");
                 lines.Add($"  frame: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms; dt median {Pct(dt, 0.5):F2} ms, p99 {Pct(dt, 0.99):F2} ms over {ScaleFrames} frames");
                 em.DestroyEntity(spawned);
                 for (int k = 0; k < 10; k++) yield return null;
