@@ -80,7 +80,7 @@ Shader "Stabby/Water"
             static const float2x2 Spin = float2x2(-0.737, -0.675, 0.675, -0.737);
             static const int ChopOctaves = 6;
             static const float ChopLacunarity = 1.93, ChopGain = 0.78, ChopPxLo = 1.5, ChopPxHi = 4, ChopWarp = 0.35, ChopStrength = 1.5, ChopBroad = 0.45, ChopFloorA2 = 0.0015, ChopLostBlur = 0.15;
-            static const float SetBase = 1.25, SetGain = 2.2, GlitPx = 2, GlitExp = 300, GlitGain = 4, GlitRate = 0.7, GlitTilt = 0.08, GlitTiltMax = 0.35, LocalSpecMax = 300, RippleLit = 0.9, GrazeFlat = 0.2;
+            static const float SetBase = 1.25, SetGain = 2.2, GlitPx = 2, GlitExp = 300, GlitGain = 4, GlitRate = 0.7, GlitTilt = 0.08, GlitTiltMax = 0.35, LocalSpecMax = 300, LocalStretch = 5, RippleLit = 0.9, GrazeFlat = 0.2;
             static const float FarPx = 6, FarStep = 3, FarShare = 0.6, FarDrift = 0.08, GustLo = 0.8, GustHi = 1.2, GustDrift = 0.05;
             static const float2 SetDir[6] = { float2(0.82, 0.57), float2(-0.34, 0.94), float2(0.98, -0.21), float2(-0.71, -0.70), float2(0.26, -0.96), float2(-0.93, 0.36) };
             static const float SetFreq[6] = { 1, 1.37, 1.93, 2.71, 3.83, 5.29 };
@@ -265,7 +265,7 @@ Shader "Stabby/Water"
                 return (g + sw) * (gust * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x)));
             }
 
-            float Glitter(float2 xz, float fpr, float3 n, float3 h, float t, float tilt)
+            float Glitter(float2 xz, float fpr, float3 n, float3 h, float t, float tilt, float2 axis, float stretch)
             {
                 float lv = log2(max(fpr * GlitPx, 1e-4));
                 float l0 = floor(lv), bl = lv - l0;
@@ -278,6 +278,7 @@ Shader "Stabby/Water"
                     float ph = t * GlitRate * (0.6 + 0.8 * b.x) + b.y;
                     int life = (int)floor(ph);
                     float2 a = Grad(ci + int2(7919 * life, 31 * j + 913));
+                    a += (stretch - 1) * dot(a, axis) * axis;
                     float3 nf = normalize(n + float3(a.x, 0, a.y) * tilt);
                     s += (j == 0 ? 1 - bl : bl) * sin(PI * frac(ph)) * pow(saturate(dot(nf, h)), GlitExp);
                 }
@@ -334,7 +335,7 @@ Shader "Stabby/Water"
                 float3 n = normalize(nb + s3d * (0.5 * s1.y + 0.3 * s2.y + 0.2 * s3.y + 0.3 * warp.y) + tb * (0.15 * s1.z + 0.1 * s2.z + 0.2 * warp.z));
                 n = dot(n, v) < 0 ? -n : n;
                 Light l = GetMainLight();
-                LocalGlint lg = LocalLightsGlint(i.positionWS, n, v, 120, i.positionCS);
+                LocalGlint lg = LocalLightsGlint(i.positionWS, n, v, 120, 1, i.positionCS);
                 float3 sky = _StabbySky.rgb;
                 float ndv = saturate(dot(n, v));
                 float edge = smoothstep(1, 0.82, abs(i.chan.x) + 0.08 * warp.x);
@@ -610,14 +611,20 @@ Shader "Stabby/Water"
                     UNITY_BRANCH if (sun > 0.01)
                         under *= 1 + sun * 0.9 * Caustics(bed.xz * 0.9 + g * 0.4, _Time.y);
                 }
-                float3 c = under * trans + scatter * (1 - trans);
+                float sig = gs * (1 - visc);
+                float mss = max(L7.w * L7.w, ChopFloorA2) + ChopLostBlur * lost * sig * sig;
+                float e = clamp(2 / mss - 2, 8, 2000);
+                float eL = min(e, LocalSpecMax);
+                LocalGlint lg = LocalLightsGlint(i.positionWS, n, v, eL, LocalStretch, i.positionCS);
+                float localLit = dot(lg.diffuse, 1.0 / 3);
+                float ambientLum = dot(l.color * saturate(l.direction.y + 0.2) + sky, 1.0 / 3);
+                float3 transUnder = lerp(trans, dot(trans, 1.0 / 3), localLit / (localLit + ambientLum + 1e-4));
+                float3 c = under * transUnder + scatter * (1 - trans);
                 UNITY_FLATTEN if (look)
                     c *= 1 - RippleLit * clamp(dot(g, l.direction.xz), -0.3, 0.3);
                 float graze = GrazeFlat * saturate(1 - 2.5 * v.y);
                 float3 nf = river || look ? normalize(lerp(n, float3(0, 1, 0), graze)) : n;
                 float ndv = saturate(dot(nf, v));
-                float sig = gs * (1 - visc);
-                float mss = max(L7.w * L7.w, ChopFloorA2) + ChopLostBlur * lost * sig * sig;
                 float fres = 0.02 + (river ? 0.98 : 0.6) * pow(1 - ndv, 5);
                 float3 r = reflect(-v, nf);
                 float3 skyR = lerp(sky * (river ? 1.35 : 1.02), sky * (river ? float3(0.8, 0.88, 1.05) : float3(0.62, 0.76, 0.98)), sqrt(saturate(r.y))) + l.color * pow(saturate(dot(r, l.direction)), 6) * 0.25;
@@ -629,25 +636,24 @@ Shader "Stabby/Water"
                 }
                 c = lerp(c, refl, fres);
                 c = lerp(c, refl, slick * 0.2 * (1 - ndv));
-                float e = clamp(2 / mss - 2, 8, 2000);
                 float3 hv = l.direction + v;
                 float3 h = hv * rsqrt(max(dot(hv, hv), 1e-6));
                 c += l.color * pow(saturate(dot(n, h)), e) * ((e + 8) / 25.13 * 0.05);
-                float eL = min(e, LocalSpecMax);
-                LocalGlint lg = LocalLightsGlint(i.positionWS, n, v, eL, i.positionCS);
                 c += lg.spec * ((eL + 8) / 25.13 * 0.05) + LookColor(tint, 1.3) * lg.diffuse * (0.6 * (1 - dot(trans, 1.0 / 3)) * (1 - fres));
                 UNITY_BRANCH if (look && !river && opacity < 0.5 && dot(lg.color, 1) > 1e-3)
                 {
                     float fpr = fpa * _ScreenParams.y / 1080;
                     float tilt = clamp(GlitTilt + sig * sqrt(lost + 0.2), GlitTilt, GlitTiltMax);
                     float3 hl = normalize(lg.dir + v);
-                    c += lg.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick)) * Glitter(xz, fpr, n, hl, _Time.y, tilt);
+                    float2 road = v.xz - lg.dir.xz;
+                    road *= rsqrt(max(dot(road, road), 1e-8));
+                    c += lg.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick)) * Glitter(xz, fpr, n, hl, _Time.y, tilt, road, LocalStretch);
                 }
                 UNITY_BRANCH if (look && !river && opacity < 0.5 && l.direction.y > 0)
                 {
                     float fpr = fpa * _ScreenParams.y / 1080;
                     float tilt = clamp(GlitTilt + sig * sqrt(lost + 0.2), GlitTilt, GlitTiltMax);
-                    c += l.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * saturate(l.direction.y * 4)) * Glitter(xz, fpr, n, h, _Time.y, tilt);
+                    c += l.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * saturate(l.direction.y * 4)) * Glitter(xz, fpr, n, h, _Time.y, tilt, float2(1, 0), 1);
                 }
 
                 float shore = depth / max(slm, 0.03);
