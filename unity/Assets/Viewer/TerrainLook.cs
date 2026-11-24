@@ -57,6 +57,8 @@ namespace Stabby.Viewer
             return new float4(ToLinear(c), math.saturate((slope - 0.25f) / 0.35f) * (1 - shore));
         }
 
+        static Vector4 Swell(SwellParams p) => new Vector4(p.Height, p.Length, p.ShorePeriod, p.ShoreHeight);
+
         public static void ApplyStrata(StrataLook s)
         {
             foreach (string _ in StrataSteps(s)) { }
@@ -107,6 +109,8 @@ namespace Stabby.Viewer
             Shader.SetGlobalVectorArray("_StabbyCoatA", s.CoatA);
             Shader.SetGlobalVectorArray("_StabbyCoatB", s.CoatB);
             Shader.SetGlobalVectorArray("_StabbyLiquid", s.Liquids);
+            Shader.SetGlobalVector("_StabbySwellSea", Swell(WaterSwell.Sea));
+            Shader.SetGlobalVector("_StabbySwellLake", Swell(WaterSwell.Lake));
             Shader.SetGlobalVector("_StabbyTintSlot", s.Tints);
             Shader.SetGlobalVector("_StabbySinterA", s.Sinter[0]);
             Shader.SetGlobalVector("_StabbySinterB", s.Sinter[1]);
