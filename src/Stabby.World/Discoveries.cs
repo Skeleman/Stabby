@@ -473,10 +473,20 @@ namespace Stabby.World
         public string VentFault(ObjectInstance o)
         {
             string fault = PoolFault(o);
-            int kind = VentKind(o);
-            if (fault != null || kind == Spring) return fault;
+            if (fault != null) return fault;
+            int kind = VentKind(o), liquid = LiquidOf(o);
             var pools = new List<float>();
-            SpringPoolsAt(o, pools);
+            var own = new List<FeatureEdit>();
+            var carves = new List<FeatureEdit>();
+            VentEdits(o, pools, own, carves);
+            own.AddRange(carves);
+            var shape = own.ToArray();
+            for (int k = 0; k < pools.Count; k += SpringStride)
+            {
+                var basin = Pool(kind, liquid, pools[k], pools[k + 1], pools[k + 3], pools[k + 4], pools[k + 7], pools[k + 8], shape);
+                if (basin.Leaks || basin.WetCount == 0 || !(basin.Level - basin.Floor >= PoolMinDepthM)) return "pool holds no water";
+            }
+            if (kind == Spring) return null;
             for (int k = 0; k < pools.Count; k += SpringStride)
             {
                 float x = pools[k], z = pools[k + 1], rout = pools[k + 3], low = GroundAt(detail, cm, x, z), high = low;
@@ -507,56 +517,58 @@ namespace Stabby.World
             var carves = new List<FeatureEdit>();
             var pools = new List<float>();
             foreach (var o in Discoveries())
-            {
-                if (!IsVent(o)) continue;
-                SpringPoolsAt(o, pools);
-                int kind = VentKind(o);
-                float u = Structures.SpringU * o.Size, mud = kind == MudPot ? 1f : 0f;
-                for (int k = 0; k < pools.Count; k += SpringStride)
-                {
-                    float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], crest = pools[k + 5], floor = pools[k + 6], bottom = pools[k + 7], top = pools[k + 8];
-                    float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
-                    if (kind == Geyser)
-                    {
-                        Structures.GeyserShape(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), out float mound, out float mtop, out float cone, out float ctop);
-                        float low = GroundAt(detail, cm, x, z);
-                        for (int p = 0; p < 8; p++)
-                        {
-                            FanDir(p, 0.70710678f, out float ux, out float uz);
-                            low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
-                        }
-                        float baseY = crest - (mound + cone) * u, moundY = baseY + mound * u, foot = Math.Min(low, baseY) - GeyserFootU * u;
-                        float taper = (rout - mtop * u) / (moundY - foot);
-                        list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0).Finer());
-                        list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0).Finer());
-                        carves.Add(Disc(FeatureEdit.Carve, x, z, top + rc - hole, floor - rc + hole, r + rc - hole, rc, 0, 0, 0.06f * u, seed, 0, 0));
-                        continue;
-                    }
-                    if (kind == MudPot)
-                    {
-                        float level = pools[k + 4] - MudFillU * u, bank = MudBankU * u;
-                        list.Add(Disc(FeatureEdit.Add, x, z, crest, bottom, r + MudRimU * u, ra, MudRimSlope, -MudLobe, 0.1f * u, seed, mud, 0));
-                        carves.Add(Disc(FeatureEdit.Carve, x, z, top, floor, r + MudBank * (top - bank - level), bank, -MudBank, -MudLobe, 0.06f * u, seed, mud, 0));
-                        float shelf = MudShelfU * u, lip = level + MudShelfTopU * u;
-                        carves.Add(Disc(FeatureEdit.Carve, x, z, lip, level - 2f * shelf, r + MudShelf * (lip - shelf - level) + shelf * (float)Math.Sqrt(1f + MudShelf * MudShelf), shelf, -MudShelf, -MudLobe, 0.04f * u, seed, mud, 0));
-                        continue;
-                    }
-                    list.Add(new FeatureEdit
-                    {
-                        Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
-                        Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (crest + bottom), By = 0.5f * (crest + bottom),
-                        W = rout - ra, H = Math.Max(0f, 0.5f * (crest - bottom) - ra), P = 0.15f, N = 0.1f * u, S = seed,
-                    }.Finer());
-                    carves.Add(new FeatureEdit
-                    {
-                        Kind = FeatureEdit.Carve, Shape = FeatureEdit.Spring, R = rc,
-                        Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (top + floor), By = 0.5f * (top + floor),
-                        W = r - hole, H = Math.Max(0f, 0.5f * (top - floor) - hole), N = 0.08f * u, S = seed,
-                    }.Finer());
-                }
-            }
+                if (IsVent(o)) VentEdits(o, pools, list, carves);
             list.AddRange(carves);
             return list.ToArray();
+        }
+
+        void VentEdits(ObjectInstance o, List<float> pools, List<FeatureEdit> list, List<FeatureEdit> carves)
+        {
+            SpringPoolsAt(o, pools);
+            int kind = VentKind(o);
+            float u = Structures.SpringU * o.Size, mud = kind == MudPot ? 1f : 0f;
+            for (int k = 0; k < pools.Count; k += SpringStride)
+            {
+                float x = pools[k], z = pools[k + 1], r = pools[k + 2], rout = pools[k + 3], crest = pools[k + 5], floor = pools[k + 6], bottom = pools[k + 7], top = pools[k + 8];
+                float ra = 0.6f * u, rc = 0.8f * u, hole = (1f - 1.25f * FeatureEdit.Blend) * rc, seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ (ulong)k * 0x9E3779B97F4A7C15UL) >> 40) / 16777216.0);
+                if (kind == Geyser)
+                {
+                    Structures.GeyserShape(ObjectMeshes.Key(lib.Objects[o.Def].Id, 0, o.Variant), out float mound, out float mtop, out float cone, out float ctop);
+                    float low = GroundAt(detail, cm, x, z);
+                    for (int p = 0; p < 8; p++)
+                    {
+                        FanDir(p, 0.70710678f, out float ux, out float uz);
+                        low = Math.Min(low, GroundAt(detail, cm, x + ux * rout, z + uz * rout));
+                    }
+                    float baseY = crest - (mound + cone) * u, moundY = baseY + mound * u, foot = Math.Min(low, baseY) - GeyserFootU * u;
+                    float taper = (rout - mtop * u) / (moundY - foot);
+                    list.Add(Disc(FeatureEdit.Add, x, z, moundY, foot, mtop * u, 0.4f * u, taper, -GeyserLobe, 0, seed, 0, 0).Finer());
+                    list.Add(Disc(FeatureEdit.Add, x, z, crest, Math.Max(foot, crest - 0.8f * (rout - ctop * u) / GeyserTaper), ctop * u, 0.4f * u, GeyserTaper, -GeyserLobe, 0, seed, 0, 0).Finer());
+                    carves.Add(Disc(FeatureEdit.Carve, x, z, top + rc - hole, floor - rc + hole, r + rc - hole, rc, 0, 0, 0.06f * u, seed, 0, 0));
+                    continue;
+                }
+                if (kind == MudPot)
+                {
+                    float level = pools[k + 4] - MudFillU * u, bank = MudBankU * u;
+                    list.Add(Disc(FeatureEdit.Add, x, z, crest, bottom, r + MudRimU * u, ra, MudRimSlope, -MudLobe, 0.1f * u, seed, mud, 0));
+                    carves.Add(Disc(FeatureEdit.Carve, x, z, top, floor, r + MudBank * (top - bank - level), bank, -MudBank, -MudLobe, 0.06f * u, seed, mud, 0));
+                    float shelf = MudShelfU * u, lip = level + MudShelfTopU * u;
+                    carves.Add(Disc(FeatureEdit.Carve, x, z, lip, level - 2f * shelf, r + MudShelf * (lip - shelf - level) + shelf * (float)Math.Sqrt(1f + MudShelf * MudShelf), shelf, -MudShelf, -MudLobe, 0.04f * u, seed, mud, 0));
+                    continue;
+                }
+                list.Add(new FeatureEdit
+                {
+                    Kind = FeatureEdit.Add, Shape = FeatureEdit.Spring, R = ra,
+                    Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (crest + bottom), By = 0.5f * (crest + bottom),
+                    W = rout - ra, H = Math.Max(0f, 0.5f * (crest - bottom) - ra), P = 0.15f, N = 0.1f * u, S = seed,
+                }.Finer());
+                carves.Add(new FeatureEdit
+                {
+                    Kind = FeatureEdit.Carve, Shape = FeatureEdit.Spring, R = rc,
+                    Ax = x, Bx = x, Az = z, Bz = z, Ay = 0.5f * (top + floor), By = 0.5f * (top + floor),
+                    W = r - hole, H = Math.Max(0f, 0.5f * (top - floor) - hole), N = 0.08f * u, S = seed,
+                }.Finer());
+            }
         }
 
         bool ClearOfBuilt(ObjectInstance o)
