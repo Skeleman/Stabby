@@ -245,7 +245,7 @@ namespace Stabby.Game
                 }
                 kinds[d] = kind;
                 rules[d] = lib.RuleOf(kind);
-                reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
+                reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels / math.max(GameSettings.GraphicsQuality, 0.1f));
                 float t = span;
                 while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
                 tile[d] = t;

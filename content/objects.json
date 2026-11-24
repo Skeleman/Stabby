@@ -314,6 +314,7 @@
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
+  "quality": { "default": "high", "levels": [ { "id": "standard", "scale": 1 }, { "id": "high", "scale": 2 } ] },
   "foliage": {
     "wind": { "directionDeg": 60, "strength": 0.35, "gustStrength": 0.5, "gustScaleM": 24, "gustSpeed": 6, "swayHz": 0.9 },
     "grass": { "perM2": 160, "nearPixels": 112.24, "reachPixels": 7.015, "thinPow": 1.2, "widen": 0.9, "widthMaxM": 0.25, "lod1Pixels": 56.12, "lod2Pixels": 22.45, "heightMinM": 0.25, "heightMaxM": 0.6, "widthM": 0.035, "bend": 0.35, "tipLight": 0.45, "translucency": 0.35, "coatMin": 0.35, "slopeMax": 0.7, "maxBlades": 131072 }

@@ -109,6 +109,26 @@ namespace Stabby.World
         }
     }
 
+    public sealed class QualityLevel
+    {
+        public string Id = "";
+        public float Scale = 1f;
+    }
+
+    public sealed class QualityDef
+    {
+        public string Default = "standard";
+        public List<QualityLevel> Levels = new List<QualityLevel> { new QualityLevel { Id = "standard" } };
+
+        public QualityLevel Level(string id)
+        {
+            foreach (var l in Levels) if (l.Id == id) return l;
+            return null;
+        }
+
+        public QualityLevel Pick(string requested) => Level(requested ?? "") ?? Level(Default) ?? Levels[0];
+    }
+
     public sealed class ObjectLibrary
     {
         public List<LightKind> Lights = new List<LightKind>();
@@ -117,6 +137,7 @@ namespace Stabby.World
         public List<ObjectDef> Objects = new List<ObjectDef>();
         public TerrainViewDef Terrain = new TerrainViewDef();
         public FoliageDef Foliage = new FoliageDef();
+        public QualityDef Quality = new QualityDef();
 
         public ObjectKind KindOf(ObjectDef d)
         {
@@ -170,6 +191,15 @@ namespace Stabby.World
                 if (!(l.GlowPixels > 0 && l.UnshadowedPixels > l.GlowPixels && l.ShadowedPixels > l.UnshadowedPixels)) errors.Add("light " + l.Id + ": shadowedPixels > unshadowedPixels > glowPixels > 0");
                 if (!(l.Importance > 0)) errors.Add("light " + l.Id + ": importance > 0");
             }
+            var levels = new HashSet<string>();
+            if (lib.Quality.Levels.Count == 0) errors.Add("quality: needs a level");
+            foreach (var l in lib.Quality.Levels)
+            {
+                if (string.IsNullOrEmpty(l.Id)) errors.Add("quality level without id");
+                else if (!levels.Add(l.Id)) errors.Add("duplicate quality level " + l.Id);
+                if (!(l.Scale >= 0.1f && l.Scale <= 8f)) errors.Add("quality " + l.Id + ": scale must be 0.1-8");
+            }
+            if (!levels.Contains(lib.Quality.Default ?? "")) errors.Add("quality: default " + lib.Quality.Default + " is not a level");
             if (lib.LightCaps.Shadowed < 0 || lib.LightCaps.Unshadowed < 0 || lib.LightCaps.Glow < 0) errors.Add("lightBudget: caps >= 0");
             var kinds = new HashSet<string>();
             foreach (var k in lib.Kinds)
