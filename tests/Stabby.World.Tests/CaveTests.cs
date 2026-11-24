@@ -67,6 +67,25 @@ public class CaveTests
     }
 
     [Fact]
+    public void LabyrinthDarkensAwayFromMouths()
+    {
+        var (s, g) = Find(g => g.Class == "labyrinth");
+        var reach = CaveLight.Distances(s.Edits, s.Graphs);
+        float cm = s.W.Config.CellMeters, far = 0f, r = 0f;
+        bool mouth = false;
+        for (int q = 0; q < s.Edits.Length; q++)
+        {
+            var e = s.Edits[q];
+            if (!CaveLight.Lit(e) || Features.TileOf(e, cm) != g.Tile) { if (!CaveLight.Lit(e)) Assert.Equal(0f, reach[2 * q] + reach[2 * q + 1]); continue; }
+            Assert.True(reach[2 * q] < CaveLight.Unlit && reach[2 * q + 1] < CaveLight.Unlit);
+            mouth |= reach[2 * q] == 0f || reach[2 * q + 1] == 0f;
+            if (Math.Max(reach[2 * q], reach[2 * q + 1]) > far) { far = Math.Max(reach[2 * q], reach[2 * q + 1]); r = e.R; }
+        }
+        Assert.True(mouth);
+        Assert.True(far > 4f * r, $"deepest point {far:F0} m from a mouth, tunnel R {r:F0} m");
+    }
+
+    [Fact]
     public void FilledTunnelLeavesChambersUnreachable()
     {
         var (s, g) = Find(g => g.Edges.Count >= 2 && !g.Nodes.TrueForAll(n => n.Entrance));
