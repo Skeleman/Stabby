@@ -130,6 +130,11 @@ namespace Stabby.Game
         NativeParallelHashMap<long, int3> ranges;
         NativeParallelHashSet<long> spawned;
         NativeParallelMultiHashMap<long, Entity> tileEntities;
+        NativeArray<float> tileNative, reachNative;
+        NativeList<long> doomedKeys, wantKeys;
+        JobHandle scan;
+        bool scanned;
+        float3 scanAt;
         int liveEntities, chunksLoaded, chunksHeld, chunksUnloaded, partsHeld, peakParts, peakChunks;
         int[] liveByDef;
         ObjectKind[] kinds;
@@ -177,6 +182,11 @@ namespace Stabby.Game
             Owned.Release(meshTask, r => r.Dispose());
             meshSet?.Dispose();
             EntityManager.CompleteAllTrackedJobs();
+            scan.Complete();
+            if (tileNative.IsCreated) tileNative.Dispose();
+            if (reachNative.IsCreated) reachNative.Dispose();
+            if (doomedKeys.IsCreated) doomedKeys.Dispose();
+            if (wantKeys.IsCreated) wantKeys.Dispose();
             if (defLods.IsCreated) defLods.Dispose();
             if (meshIdsNative.IsCreated) meshIdsNative.Dispose();
             if (boundsNative.IsCreated) boundsNative.Dispose();
@@ -258,6 +268,10 @@ namespace Stabby.Game
                 while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
                 tile[d] = t;
             }
+            tileNative = new NativeArray<float>(tile, Allocator.Persistent);
+            reachNative = new NativeArray<float>(reach, Allocator.Persistent);
+            doomedKeys = new NativeList<long>(256, Allocator.Persistent);
+            wantKeys = new NativeList<long>(256, Allocator.Persistent);
             foliageMesh = new bool[shapes.Count];
             bool anyFoliage = false;
             for (int k = 0; k < shapes.Count; k++) anyFoliage |= foliageMesh[k] = ObjectPart.IsFoliage(shapes[k]);
@@ -557,7 +571,7 @@ namespace Stabby.Game
             return e;
         }
 
-        long Key(int def, int tx, int tz) => ((long)def << 40) | ((long)tx << 20) | (long)tz;
+        static long Key(int def, int tx, int tz) => ((long)def << 40) | ((long)tx << 20) | (long)tz;
 
         [System.ThreadStatic] static List<ObjectInstance> placedScratch;
         [System.ThreadStatic] static List<StructureLight> anchorScratch;
@@ -646,7 +660,7 @@ namespace Stabby.Game
             public int CompareTo(SortKey o) => Key != o.Key ? Key.CompareTo(o.Key) : Item.CompareTo(o.Item);
         }
 
-        float RectDistance(float3 cam, float x0, float z0, float size)
+        static float RectDistance(float3 cam, float x0, float z0, float size)
         {
             float dx = math.max(0, math.max(x0 - cam.x, cam.x - (x0 + size)));
             float dz = math.max(0, math.max(z0 - cam.z, cam.z - (z0 + size)));
@@ -722,14 +736,13 @@ namespace Stabby.Game
 
         static float Since(long t0) => (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000f / System.Diagnostics.Stopwatch.Frequency;
 
-        void Despawn(float3 cam)
+        void Despawn()
         {
-            var keys = spawned.ToNativeArray(Allocator.Temp);
             var doomed = new NativeList<Entity>(Allocator.Temp);
-            foreach (long key in keys)
+            foreach (long key in doomedKeys)
             {
-                int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
-                if (RectDistance(cam, tx * tile[d], tz * tile[d], tile[d]) <= reach[d] * DespawnReach) continue;
+                if (!spawned.Contains(key)) continue;
+                int d = (int)(key >> 40);
                 if (doomed.Length >= DespawnBudget) { Pending = 1; break; }
                 int count = doomed.Length;
                 if (tileEntities.TryGetFirstValue(key, out var e, out var it))
@@ -741,33 +754,25 @@ namespace Stabby.Game
             }
             if (doomed.Length > 0) EntityManager.DestroyEntity(doomed.AsArray());
             liveEntities -= doomed.Length;
-            keys.Dispose();
             doomed.Dispose();
         }
 
-        int Spawn(float3 cam, long t0)
+        int Spawn(long t0)
         {
             int budget = SpawnBudget, waiting = 0;
             writes = new NativeList<SpawnWrite>(256, Allocator.TempJob);
-            for (int d = 0; d < tile.Length; d++)
+            for (int i = 0; i < wantKeys.Length; i++)
             {
-                float t = tile[d], r = reach[d];
-                int tiles = (int)math.ceil(worldM / t);
-                int x0 = math.max(0, (int)((cam.x - r) / t)), x1 = math.min(tiles - 1, (int)((cam.x + r) / t));
-                int z0 = math.max(0, (int)((cam.z - r) / t)), z1 = math.min(tiles - 1, (int)((cam.z + r) / t));
-                for (int tz = z0; tz <= z1; tz++)
-                    for (int tx = x0; tx <= x1; tx++)
-                    {
-                        if (RectDistance(cam, tx * t, tz * t, t) > r) continue;
-                        long key = Key(d, tx, tz);
-                        if (spawned.Contains(key)) continue;
-                        int c = math.min(across - 1, (int)(tz * t / span)) * across + math.min(across - 1, (int)(tx * t / span));
-                        if (!loaded[c]) { waiting++; continue; }
-                        if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
-                        if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
-                        SpawnTile(key, chunkParts[range.z], range);
-                        budget -= range.y;
-                    }
+                long key = wantKeys[i];
+                if (spawned.Contains(key)) continue;
+                int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
+                float t = tile[d];
+                int c = math.min(across - 1, (int)(tz * t / span)) * across + math.min(across - 1, (int)(tx * t / span));
+                if (!loaded[c]) { waiting++; continue; }
+                if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
+                if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
+                SpawnTile(key, chunkParts[range.z], range);
+                budget -= range.y;
             }
             if (writes.Length > 0)
                 Dependency = new SpawnJob
@@ -806,6 +811,46 @@ namespace Stabby.Game
             spawned.Add(key);
             liveEntities += shown;
             foreach (var arr in made) arr.Dispose();
+        }
+
+        JobHandle Scan(float3 cam) => new ScanJob
+        {
+            Cam = cam, WorldM = worldM, Despawn = DespawnReach, Tile = tileNative, Reach = reachNative, Spawned = spawned, Doomed = doomedKeys, Want = wantKeys,
+        }.Schedule();
+
+        [BurstCompile]
+        struct ScanJob : IJob
+        {
+            public float3 Cam;
+            public float WorldM, Despawn;
+            [ReadOnly] public NativeArray<float> Tile, Reach;
+            [ReadOnly] public NativeParallelHashSet<long> Spawned;
+            public NativeList<long> Doomed, Want;
+
+            public void Execute()
+            {
+                Doomed.Clear();
+                Want.Clear();
+                foreach (long key in Spawned)
+                {
+                    int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
+                    if (RectDistance(Cam, tx * Tile[d], tz * Tile[d], Tile[d]) > Reach[d] * Despawn) Doomed.Add(key);
+                }
+                for (int d = 0; d < Tile.Length; d++)
+                {
+                    float t = Tile[d], r = Reach[d];
+                    int tiles = (int)math.ceil(WorldM / t);
+                    int x0 = math.max(0, (int)((Cam.x - r) / t)), x1 = math.min(tiles - 1, (int)((Cam.x + r) / t));
+                    int z0 = math.max(0, (int)((Cam.z - r) / t)), z1 = math.min(tiles - 1, (int)((Cam.z + r) / t));
+                    for (int tz = z0; tz <= z1; tz++)
+                        for (int tx = x0; tx <= x1; tx++)
+                        {
+                            if (RectDistance(Cam, tx * t, tz * t, t) > r) continue;
+                            long key = Key(d, tx, tz);
+                            if (!Spawned.Contains(key)) Want.Add(key);
+                        }
+                }
+            }
         }
 
         struct DefLod
@@ -881,6 +926,7 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
+            scan.Complete();
             if (!Warm()) return;
             if (field == null && !Prepare()) return;
             using (RegisterMarker.Auto()) if (!Register()) return;
@@ -892,16 +938,21 @@ namespace Stabby.Game
             if (view.Quality != reachQuality)
             {
                 reachQuality = view.Quality;
-                for (int d = 0; d < reach.Length; d++) reach[d] = baseReach[d] * reachQuality;
+                for (int d = 0; d < reach.Length; d++) reachNative[d] = reach[d] = baseReach[d] * reachQuality;
+                scanned = false;
             }
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
+            if (!scanned) { scanAt = pos; Scan(pos).Complete(); }
             using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
-            using (DespawnMarker.Auto()) Despawn(pos);
+            using (DespawnMarker.Auto()) Despawn();
             int waiting;
-            using (SpawnMarker.Auto()) waiting = Spawn(pos, t0);
+            using (SpawnMarker.Auto()) waiting = Spawn(t0);
             if (waiting > 0) Pending = 1;
-            if (Pending == 0) { readyAt = pos; readyFrame = UnityEngine.Time.frameCount; }
+            if (Pending == 0) { readyAt = scanAt; readyFrame = UnityEngine.Time.frameCount; }
+            scanAt = pos;
+            scan = Scan(pos);
+            scanned = true;
             LiveEntities = liveEntities;
             PartsHeld = partsHeld;
             ChunksHeld = chunksHeld;
