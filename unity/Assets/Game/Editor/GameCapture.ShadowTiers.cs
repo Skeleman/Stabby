@@ -46,25 +46,24 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "shadowtiers-forest");
             float dist = asset.shadowDistance;
             int cascades = asset.shadowCascadeCount;
-            var rows = new double[3, 3, 3, 2];
-            var casting = new string[3];
+            string[] labels = { "shadowtiers-forest", "shadowtiers-forest shadows forced to 60 m, 1 cascade", "shadowtiers-forest texel test off" };
+            var rows = new double[labels.Length, 3, 3, 2];
+            var casting = new string[labels.Length];
             for (int run = 0; run < 3; run++)
-                for (int cfg = 0; cfg < 3; cfg++)
+                for (int cfg = 0; cfg < labels.Length; cfg++)
                 {
                     asset.shadowDistance = cfg == 1 ? 60f : dist;
                     asset.shadowCascadeCount = cfg == 1 ? 1 : cascades;
-                    TerrainViewSystem.ShadowRule = TerrainViewSystem.SprayShadows = cfg != 2;
+                    ShadowViewSystem.TexelScale = cfg == 2 ? 0 : 1;
                     for (int k = 0; k < 4; k++) yield return null;
                     BenchRound(cam, rows, cfg, run);
                     if (GameStatus.Line("terrain", out var tl)) casting[cfg] = System.Text.RegularExpressions.Regex.Match(tl, @"\d+ casting \(\d+ vertices\)").Value;
                 }
             asset.shadowDistance = dist;
             asset.shadowCascadeCount = cascades;
-            TerrainViewSystem.ShadowRule = TerrainViewSystem.SprayShadows = true;
+            ShadowViewSystem.TexelScale = 1;
             for (int k = 0; k < 4; k++) yield return null;
-            lines.Add(MedianLine("shadowtiers-forest", rows, 0) + "; " + casting[0]);
-            lines.Add(MedianLine("shadowtiers-forest shadows forced to 60 m, 1 cascade", rows, 1) + "; " + casting[1]);
-            lines.Add(MedianLine("shadowtiers-forest terrain rule and spray shadows off", rows, 2) + "; " + casting[2]);
+            for (int cfg = 0; cfg < labels.Length; cfg++) lines.Add(MedianLine(labels[cfg], rows, cfg) + "; " + casting[cfg]);
             const int MoveFrames = 120;
             const float MoveMetres = 24f;
             var rt = new RenderTexture(ProbeW, ProbeH, 24);
@@ -107,6 +106,51 @@ namespace Stabby.Game.Editor
             GameStatus.Line("terrain", out var t);
             lines.Add(t);
             GameStatus.Lines["~shadowtiers"] = string.Join("\n", lines);
+        }
+
+        static System.Collections.IEnumerator FarHillsTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            cam.fieldOfView = 60f;
+            var lines = new List<string>();
+            var stand = home;
+            cam.transform.SetPositionAndRotation(stand + Vector3.up * 3f, Quaternion.identity);
+            for (var w = Settle(240); w.MoveNext();) yield return null;
+            var map = ShadowViewSystem.Map;
+            float last = map.Count > 3 ? map.Far2 : map.Count > 2 ? map.Far1 : map.Count > 1 ? map.Far0 : 0;
+            float eyeY = GroundHeight(stand.x, stand.z) + 3f;
+            var d = Vector3.forward;
+            float best = float.MinValue, bestR = 0, bestH = 0;
+            for (int a = 0; a < 48; a++)
+            {
+                var td = Quaternion.Euler(0, a * 7.5f, 0) * Vector3.forward;
+                float near = float.MinValue;
+                for (float r = 10f; r < last; r += 10f) near = Mathf.Max(near, (GroundHeight(stand.x + td.x * r, stand.z + td.z * r) - eyeY) / r);
+                for (float r = last + 0.1f * (map.Range - last); r <= map.Range; r += 10f)
+                {
+                    float h = GroundHeight(stand.x + td.x * r, stand.z + td.z * r) - eyeY;
+                    float score = h / r - Mathf.Max(near, 0);
+                    if (h > 0 && score > best) { best = score; bestR = r; bestH = h; d = td; }
+                }
+            }
+            var side = Quaternion.Euler(0, 75f, 0) * d;
+            ShadowViewSystem.SunTarget = Quaternion.LookRotation(side * Mathf.Cos(14f * Mathf.Deg2Rad) + Vector3.down * Mathf.Sin(14f * Mathf.Deg2Rad));
+            float pitch = Mathf.Atan2(bestH, bestR) * Mathf.Rad2Deg - 6f;
+            cam.transform.SetPositionAndRotation(new Vector3(stand.x, eyeY, stand.z), Quaternion.LookRotation(d) * Quaternion.Euler(-pitch, 0, 0));
+            for (var w = Settle(360); w.MoveNext();) yield return null;
+            for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
+            map = ShadowViewSystem.Map;
+            lines.Add($"eye {stand.x:F0},{eyeY:F0},{stand.z:F0} along {d.x:F2},{d.z:F2}, hill {bestR:F0} m out rising {bestH:F0} m, last cascade {last:F0}-{map.Range:F0} m, texels {map.Texel0:F3}/{map.Texel1:F3}/{map.Texel2:F3}/{map.Texel3:F3} m, sun 14 deg from 75 deg right");
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "farhills");
+            if (GameStatus.Line("terrain", out var on)) lines.Add("cast: " + on);
+            TerrainViewSystem.Casting = false;
+            for (int k = 0; k < 6; k++) yield return null;
+            Shot(cam, dir, "farhills-nocast");
+            TerrainViewSystem.Casting = true;
+            for (int k = 0; k < 4; k++) yield return null;
+            ShadowViewSystem.SunTarget = null;
+            GameStatus.Lines["~farhills"] = string.Join("\n", lines);
         }
 
         static System.Collections.IEnumerator SprayShadowsTour(Camera cam, string dir)

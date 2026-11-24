@@ -629,7 +629,7 @@ namespace Stabby.Game
         public int ApplyVertices = 150000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
-        public static bool Casting = true, HideSunk = true, ShadowRule = true, SprayShadows = true;
+        public static bool Casting = true, HideSunk = true, SprayShadows = true;
         float viewPpm = 1000, viewQuality = 1;
 
         sealed class Prepared
@@ -804,8 +804,7 @@ namespace Stabby.Game
             Shader.SetGlobalVector(ColumnPxId, new Vector4(columnFade, columnFull, 0, 0));
             viewPpm = view.PixelsPerMetre;
             viewQuality = view.Quality;
-            quads.MistShadowWindow(view.Quality, out float shadowFade, out float shadowFull);
-            Shader.SetGlobalVector(ShadowPxId, new Vector4(viewPpm, shadowFade, shadowFull, SprayShadows ? 1 : 0));
+            Shader.SetGlobalVector(ShadowPxId, new Vector4(viewPpm, 0, 0, SprayShadows ? 1 : 0));
             Shader.SetGlobalVector(ShadowEyeId, cam.transform.position);
             return quads.Allowed(view.PixelsPerMetre, view.Quality);
         }
@@ -1440,7 +1439,7 @@ namespace Stabby.Game
                     nd.Drawn = show ? 1 : 0;
                 }
                 MinMaxAABB nb = tree.Box(key);
-                int cast = show && CastsNear(nb, eye, reach, floor, upsun, tanE) && Large(nb, eye, nd.Cast != 0) ? 1 : 0;
+                int cast = show && CastsNear(nb, eye, reach, floor, upsun, tanE) && Resolved(nb, eye, nd.Cast != 0) ? 1 : 0;
                 if (cast != nd.Cast)
                 {
                     double tsh = frame.Elapsed.TotalMilliseconds;
@@ -1524,11 +1523,10 @@ namespace Stabby.Game
             return mask;
         }
 
-        bool Large(MinMaxAABB nb, float3 eye, bool was)
+        bool Resolved(MinMaxAABB nb, float3 eye, bool was)
         {
-            if (!ShadowRule) return true;
             float dist = math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max)));
-            return Detail.Holds(Detail.ScreenSize(nb.Max.y - nb.Min.y, dist, viewPpm), quads.ShadowBoundary(viewQuality), was);
+            return ShadowViewSystem.Map.Holds(math.cmax(nb.Max - nb.Min), dist, viewQuality, was);
         }
 
         static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float floor, float2 upsun, float tanE)

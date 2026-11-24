@@ -240,22 +240,69 @@ namespace Stabby.World
             public bool Casts => !IsFirst && Shadow < ShadowNone;
         }
 
-        public static Decision Decide(in Rule rule, float sizeM, float distanceM, float pixelsPerMetre, float quality, Decision previous)
+        public static Decision Decide(in Rule rule, float sizeM, float distanceM, float pixelsPerMetre, float quality, Decision previous) =>
+            Decide(rule, sizeM, distanceM, pixelsPerMetre, quality, default, previous);
+
+        public static Decision Decide(in Rule rule, float sizeM, float distanceM, float pixelsPerMetre, float quality, in ShadowMap map, Decision previous)
         {
             float px = ScreenSize(sizeM, distanceM, pixelsPerMetre);
             int geometry = Tier(px, rule.Geometry.Scaled(quality), previous.Geometry);
-            int shadow = geometry == GeometryGone ? ShadowNone : ShadowTier(px, rule, quality, previous.Shadow);
+            int shadow = geometry == GeometryGone ? ShadowNone : ShadowTier(px, sizeM, distanceM, rule, map, quality, previous.Shadow);
             int animation = Tier(px, rule.Animation.Scaled(quality), previous.Animation);
             int light = Tier(px, rule.Light.Scaled(quality), previous.Light);
             return new Decision(geometry, shadow, animation, light);
         }
 
-        static int ShadowTier(float px, in Rule rule, float quality, int previous)
+        static int ShadowTier(float px, float sizeM, float distanceM, in Rule rule, in ShadowMap map, float quality, int previous)
         {
-            var t = new Thresholds(rule.ShadowCascadePixels, rule.ShadowPixels, rule.ShadowPixels).Scaled(quality);
-            int was = previous == ShadowCascade ? 0 : previous == ShadowLow ? 1 : previous < 0 ? -1 : 3;
-            int tier = Tier(px, t, was);
-            return tier == 0 ? ShadowCascade : tier == 1 ? ShadowLow : ShadowNone;
+            if (rule.ShadowPixels >= Never) return ShadowNone;
+            if (!map.Holds(sizeM, distanceM, quality, previous == ShadowCascade || previous == ShadowLow)) return ShadowNone;
+            float q = Math.Max(quality, 0.1f);
+            return rule.ShadowCascadePixels < Never && Holds(px, rule.ShadowCascadePixels / q, previous == ShadowCascade) ? ShadowCascade : ShadowLow;
+        }
+
+        public struct ShadowMap
+        {
+            public int Count;
+            public float Range, Far0, Far1, Far2, Texel0, Texel1, Texel2, Texel3, Texels;
+
+            public static ShadowMap Build(in Cascades c, float rangeM, int tileTexels, float pixelsPerMetre, float aspect, float texels)
+            {
+                var m = new ShadowMap { Count = Math.Max(c.Count, 1), Range = rangeM, Texels = texels };
+                float tanY = 0.5f * ReferenceLines / Math.Max(pixelsPerMetre, 1e-3f);
+                float spread = (float)Math.Sqrt(tanY * tanY * (1f + aspect * aspect));
+                float res = Math.Max(tileTexels, 1);
+                m.Far0 = m.Count > 1 ? c.Split1 * rangeM : rangeM;
+                m.Far1 = m.Count > 2 ? c.Split2 * rangeM : rangeM;
+                m.Far2 = m.Count > 3 ? c.Split3 * rangeM : rangeM;
+                m.Texel0 = SliceTexel(0, m.Far0, spread, res);
+                m.Texel1 = SliceTexel(m.Far0, m.Far1, spread, res);
+                m.Texel2 = SliceTexel(m.Far1, m.Far2, spread, res);
+                m.Texel3 = SliceTexel(m.Far2, rangeM, spread, res);
+                return m;
+            }
+
+            static float SliceTexel(float near, float far, float spread, float res)
+            {
+                if (far <= near) return 0;
+                float a = near * spread, b = far * spread;
+                float z = Math.Min(Math.Max((b * b - a * a + far * far - near * near) / (2f * (far - near)), near), far);
+                float r = Math.Max((float)Math.Sqrt(a * a + (z - near) * (z - near)), (float)Math.Sqrt(b * b + (far - z) * (far - z)));
+                return 2f * r / res;
+            }
+
+            public float TexelAt(float distanceM) => Count <= 0 ? 0 : Slice(Math.Min(distanceM, Range));
+
+            float Slice(float distanceM) =>
+                distanceM <= Far0 ? Texel0 : distanceM <= Far1 ? Texel1 : distanceM <= Far2 ? Texel2 : Texel3;
+
+            public bool Holds(float sizeM, float distanceM, float quality, bool was)
+            {
+                if (Count <= 0 || Texels <= 0) return true;
+                float d = Math.Min(distanceM, Range);
+                float boundary = TexelAt(d) * Texels / Math.Max(quality, 0.1f);
+                return Detail.Holds(ScreenSize(sizeM, d, ReferencePixelsPerMetre), ScreenSize(boundary, d, ReferencePixelsPerMetre), was);
+            }
         }
 
         public static float ShadowReach(float sizeM, in Rule rule, float pixelsPerMetre, float quality) =>

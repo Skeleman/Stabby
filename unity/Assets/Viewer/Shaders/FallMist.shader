@@ -244,6 +244,7 @@ Shader "Stabby/FallMist"
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+            #include "Assets/Viewer/Shaders/ShadowTexel.hlsl"
 
             float3 _LightDirection;
 
@@ -264,7 +265,7 @@ Shader "Stabby/FallMist"
                 float focal = _StabbyShadowPx.x;
                 float3 eye = _StabbyShadowEye.xyz;
                 float3 wp = Place(i, eye, focal, UNITY_MATRIX_V[0].xyz, UNITY_MATRIX_V[1].xyz, puff);
-                float fade = smoothstep(_StabbyShadowPx.y, _StabbyShadowPx.z, ScreenPx(puff.z, length(eye - wp), focal));
+                float fade = ShadowTexelFade(puff.z, length(eye - wp));
                 float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, _LightDirection, _LightDirection));
                 #if UNITY_REVERSED_Z
                 cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);

@@ -274,7 +274,7 @@ namespace Stabby.Content
                     MistFadePixels = terrain.Float("mistFadePixels", t0.MistFadePixels), MistFullPixels = terrain.Float("mistFullPixels", t0.MistFullPixels),
                     SteamFadePixels = terrain.Float("steamFadePixels", t0.SteamFadePixels), SteamFullPixels = terrain.Float("steamFullPixels", t0.SteamFullPixels),
                     ColumnFadePixels = terrain.Float("columnFadePixels", t0.ColumnFadePixels), ColumnFullPixels = terrain.Float("columnFullPixels", t0.ColumnFullPixels),
-                    ShadowPixels = terrain.Float("shadowPixels", t0.ShadowPixels), MistShadowPixels = terrain.Float("mistShadowPixels", t0.MistShadowPixels),
+                    ShadowTexels = terrain.Float("shadowTexels", t0.ShadowTexels),
                 };
                 terrain.End();
             }
