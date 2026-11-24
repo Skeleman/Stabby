@@ -137,6 +137,8 @@ Shader "Stabby/Foliage"
             #pragma multi_compile_instancing
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ _CLUSTER_LIGHT_LOOP
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             float4 _StabbySky, _StabbyGround, _StabbySand, _StabbyFieldUV;
@@ -153,6 +155,7 @@ Shader "Stabby/Foliage"
             #include "Assets/Viewer/Shaders/TerrainMaterials.hlsl"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Bark.hlsl"
+            #include "Assets/Viewer/Shaders/LocalLights.hlsl"
 
             struct Varyings
             {
@@ -277,7 +280,7 @@ Shader "Stabby/Foliage"
                 float3 glow = l.color * lerp(0.25, 1, l.shadowAttenuation) * lerp(0.4, 1, ao) * self * self;
                 float leafy = imp ? trans : leaf ? 1 : 0;
                 float3 sun = lerp(1, float3(1.1, 1.04, 0.86), leafy * saturate(ndl) * (imp ? 0.35 : 1)), cool = lerp(1, lerp(float3(0.84, 0.93, 1.06), 1, ao * ao), leafy);
-                float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) * sun + ambient * cool * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.1, 1.2, 0.55) * 1.35 * glow * back * trans;
+                float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) * sun + (ambient * cool + LocalLights(wp, n, i.positionCS)) * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.1, 1.2, 0.55) * 1.35 * glow * back * trans;
                 return half4(MixFog(c, i.fog), alpha);
             }
             ENDHLSL
