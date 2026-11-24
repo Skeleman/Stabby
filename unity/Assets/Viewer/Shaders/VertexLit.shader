@@ -121,7 +121,7 @@ Shader "Stabby/VertexLit"
                     float4 wa = SinterN(q, ra.y * 0.45, 43.7, 1), wb = SinterN(q, ra.y * 0.45, 47.1, 1);
                     float4 ma = SinterN(q, rb.z, 51.3, 1), mb = SinterN(q, rb.z, 53.9, 1);
                     float3 qw = q + float3(wa.x, 0, wb.x) * (0.55 / ra.y), qm = q + float3(ma.x, 0, mb.x) * (0.5 / rb.z);
-                    float4 zone = SinterN(qm, ra.w * 0.3, 61.7, 1), chan = SinterN(qm, ra.w * 0.7, 67.3, 1), sect = SinterN(qm, ra.w * 0.15, 59.9, 1);
+                    float4 zone = SinterN(qm, ra.w * 0.3, 61.7, 1), chan = SinterN(qm, ra.w * 0.9, 67.3, 1), spot = SinterN(qm, ra.w * 0.5, 63.1, 1), sect = SinterN(qm, ra.w * 0.15, 59.9, 1);
                     float4 bump = OrgFbm3(qm + (qw - q), ra.w, 1, 3, fp);
                     float gw = OrgRungW(0, fp), fw2 = OrgRungW(1, fp), fw3 = OrgRungW(2, fp);
                     float4 grain = SinterN(qw, ra.y, 71.3, gw);
@@ -131,9 +131,9 @@ Shader "Stabby/VertexLit"
                     float bleach = smoothstep(0, 0.3, s * (1 + 0.6 * zone.x + 0.25 * bv));
                     float crust = smoothstep(0.42, 0.72, s + 0.22 * zone.x + 0.1 * bv + 0.05 * gw * grain.x);
                     float vent = smoothstep(0.7, 0.95, s + 0.12 * zone.x);
-                    float near = smoothstep(0.45, 0.85, s + 0.1 * zone.x), cwid = 0.05 + 0.09 * vent;
-                    float chv = abs(chan.x + 0.12 * gw * grain.x + 0.05 * fw2 * fine.x);
-                    float runoff = smoothstep(cwid, 0.35 * cwid, chv) * near * smoothstep(-0.15, 0.25, sect.x) * crust;
+                    float near = smoothstep(0.45, 0.85, s + 0.1 * zone.x), cwid = 0.09 + 0.1 * vent;
+                    float chv = abs(chan.x + 0.2 * gw * grain.x + 0.1 * fw2 * fine.x);
+                    float runoff = smoothstep(cwid, 0.35 * cwid, chv) * near * smoothstep(-0.15, 0.25, sect.x) * smoothstep(-0.4, 0.0, spot.x) * crust;
                     float core = smoothstep(0.6 * cwid, 0, chv), outlet = runoff * vent;
                     float tf = rb.x * 2, ftf = OrgFade(tf, fp), tr = smoothstep(0.15, 0.55, 1 - ng.y);
                     float w1 = (h + 0.06 * ma.x + 0.03 * wa.x + 0.01 * gw * grain.x) * tf;
