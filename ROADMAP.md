@@ -45,6 +45,10 @@ and converts once into native data.
   shadowed lights, then glow, far emissive and emissive-only fallbacks by screen
   size and importance. Before fires, torches or night effects. Lights are their own
   detail category (Zach 11-23), not thresholds copied per object kind.
+  b/light-budgets merged: engine-free LightBudget ranks lights by screen size x importance; caps 2 shadowed, 12
+  unshadowed, 48 glow, then emissive, with hysteresis and crossfade; URP additional-light shadows on.
+  1080p bench: tiers on 8.5 ms vs 20.1 ms off. Follow-ups: shadowResolution warning, no game emitters
+  yet, foliage, creatures, grass and water don't receive point lights.
 - Day/night cycle (Zach 11-23, before light budgets so night lighting can be judged):
   sun and moon on the shared clock, sky and ambient follow them, sun steps every 0.1 s
   as today. Tests, captures and benches pin the time of day unless they test shadow
