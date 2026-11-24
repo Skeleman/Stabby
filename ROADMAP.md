@@ -109,6 +109,8 @@ Goals (Zach 11-24): caves from a single chamber to labyrinths; special caves wit
 | D2 dungeon layouts: overworld structures and small entrances that expand underground, room graph from their own stream; ruins reuse the kit | after D1 |
 | D3 interfaces: dungeon breaches into caves and cave links into dungeons through shared connector sockets; more architectures | after D2 + U1 |
 
+Zach 11-24: objects in caves and dungeons get the surface contact treatment (rule 11): vertices darken toward the contact colour where they meet rock, buried skirts and contact stamps apply on floors, walls and ceilings alike (hanging stalactites darken at their roots), and kit pieces darken seams, gaps and downward faces as structures do; the contact check covers underground placements. Applies to U2, U5 and D1.
+
 Push-back notes: groves underground need a light source (skylight shafts or glow flora) to keep the darkness theme; tunnels wait for roads, roads for towns; obsidian lava waits for the lava liquid.
 
 ## Next: surface look and objects
