@@ -7,7 +7,7 @@ namespace Stabby.World.Tests.Legacy;
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
-    public const int MaterialSchemaVersion = 4;
+    public const int MaterialSchemaVersion = 5;
 
     sealed class MaterialFile
     {
@@ -38,6 +38,9 @@ public static class ContentLoader
         public float NoiseContrast { get; set; }
         public float AlbedoVar { get; set; }
         public float DetailWavelengthM { get; set; }
+        public float DetailLacunarity { get; set; }
+        public int DetailOctaves { get; set; }
+        public float DetailGain { get; set; }
         public float Saturation { get; set; }
         public float Roughness { get; set; }
         public float Specular { get; set; }
@@ -124,7 +127,6 @@ public static class ContentLoader
     sealed class RockEntry
     {
         public float GrainAmp { get; set; }
-        public float GrainWavelengthM { get; set; }
         public float BumpAmp { get; set; }
         public float BumpWavelengthM { get; set; }
         public float BedSpacingM { get; set; }
@@ -148,7 +150,6 @@ public static class ContentLoader
         public float BumpAmp { get; set; }
         public float BumpWavelengthM { get; set; }
         public float? GrainAmp { get; set; }
-        public float? GrainWavelengthM { get; set; }
         public float FeatureAmp { get; set; }
         public float FeatureWavelengthM { get; set; }
         public float Parallax { get; set; }
@@ -250,7 +251,7 @@ public static class ContentLoader
             },
             Look = file.Look == null ? null! : new LookDef
             {
-                NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM,
+                NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM, DetailLacunarity = file.Look.DetailLacunarity, DetailOctaves = file.Look.DetailOctaves, DetailGain = file.Look.DetailGain,
                 Saturation = file.Look.Saturation, Roughness = file.Look.Roughness, Specular = file.Look.Specular, RoughnessVar = file.Look.RoughnessVar,
             },
             Strata = file.Strata.Select(s => new StratumDef
@@ -299,7 +300,7 @@ public static class ContentLoader
             CoatPatchAmp = e.CoatPatchAmp, CoatPatchWavelengthM = e.CoatPatchWavelengthM,
             Rock = e.Rock == null ? null! : new RockSurface
             {
-                GrainAmp = e.Rock.GrainAmp, GrainWavelengthM = e.Rock.GrainWavelengthM,
+                GrainAmp = e.Rock.GrainAmp,
                 BumpAmp = e.Rock.BumpAmp, BumpWavelengthM = e.Rock.BumpWavelengthM,
                 BedSpacingM = e.Rock.BedSpacingM, BedDepthM = e.Rock.BedDepthM,
                 JointSpacingM = e.Rock.JointSpacingM, JointDepthM = e.Rock.JointDepthM,
@@ -314,7 +315,7 @@ public static class ContentLoader
             {
                 Id = SurfaceDetail.CoatKinds[k], Biomes = c.Biomes,
                 BumpAmp = c.BumpAmp, BumpWavelengthM = c.BumpWavelengthM,
-                GrainAmp = c.GrainAmp ?? float.NaN, GrainWavelengthM = c.GrainWavelengthM ?? float.NaN,
+                GrainAmp = c.GrainAmp ?? float.NaN,
                 FeatureAmp = c.FeatureAmp, FeatureWavelengthM = c.FeatureWavelengthM,
                 Parallax = c.Parallax, AlbedoVar = c.AlbedoVar ?? float.NaN, Roughness = c.Roughness ?? float.NaN,
             };

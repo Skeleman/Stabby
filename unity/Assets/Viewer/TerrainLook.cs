@@ -18,7 +18,7 @@ namespace Stabby.Viewer
         public float[] WaterLevel;
         public int N;
         public float CellM;
-        public Vector4 Surface, Wobble, RockA, RockB, RockC, Look, CoatRough;
+        public Vector4 Surface, Detail, Wobble, RockA, RockB, RockC, Look, CoatRough;
         public Vector4[] CoatA, CoatB;
         public Vector4[] Liquids;
         public Vector4 Tints;
@@ -97,6 +97,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalFloat("_StabbyStrataPeriod", s.PeriodM);
             Shader.SetGlobalVector("_StabbyCoatUV", new Vector4(1f / (s.CellM * s.N), 0.5f / s.N, 0, 0));
             Shader.SetGlobalVector("_StabbySurface", s.Surface);
+            Shader.SetGlobalVector("_StabbyDetail", s.Detail);
             Shader.SetGlobalVector("_StabbyStrataWobble", s.Wobble);
             Shader.SetGlobalVector("_StabbyRockA", s.RockA);
             Shader.SetGlobalVector("_StabbyRockB", s.RockB);
@@ -307,7 +308,7 @@ namespace Stabby.Viewer
             for (int k = 0; k < d.Coats.Length; k++)
             {
                 var c = d.Coats[k];
-                coatA[k] = new Vector4(c.BumpAmp, 1f / c.BumpWavelengthM, c.GrainAmp, 1f / c.GrainWavelengthM);
+                coatA[k] = new Vector4(c.BumpAmp, 1f / c.BumpWavelengthM, c.GrainAmp, 0);
                 coatB[k] = new Vector4(c.FeatureAmp, 1f / c.FeatureWavelengthM, c.Parallax, c.AlbedoVar);
                 coatR[k] = c.Roughness;
             }
@@ -316,8 +317,9 @@ namespace Stabby.Viewer
                 Offsets = offsets ?? lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
                 Coat = d.CoatWeights(w), Forest = SurfaceDetail.ForestWeights(w, w.Objects, defs), WaterLevel = WaterLevel(w), N = w.Config.Size, CellM = w.Config.CellMeters,
                 Surface = new Vector4(d.FadePixels, 1f / d.ParallaxFootprintM, math.sin(wind), math.cos(wind)),
+                Detail = new Vector4(1f / lib.Look.DetailWavelengthM, lib.Look.DetailLacunarity, lib.Look.DetailOctaves, lib.Look.DetailGain),
                 Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),
-                RockA = new Vector4(r.GrainAmp, 1f / r.GrainWavelengthM, r.BumpAmp, 1f / r.BumpWavelengthM),
+                RockA = new Vector4(r.GrainAmp, 0, r.BumpAmp, 1f / r.BumpWavelengthM),
                 RockB = new Vector4(1f / r.BedSpacingM, r.BedDepthM, 1f / r.JointSpacingM, r.JointDepthM),
                 RockC = new Vector4(r.Parallax, 1f / MaterialLibrary.RockTypePeriodM, 1, 0),
                 Look = new Vector4(lib.Look.Saturation, lib.Look.Roughness, lib.Look.Specular, lib.Look.RoughnessVar),
