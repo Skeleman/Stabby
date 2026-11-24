@@ -72,6 +72,35 @@ public class SurfaceNetsTests
     }
 
     [Fact]
+    public void EditedPathMatchesGeneralUnderDeepGround()
+    {
+        var cols = new HashColumns { Seed = 4, Scale = 8f };
+        var deep = new DeepColumns { Inner = cols };
+        var edits = new EditArray
+        {
+            Items = new[]
+            {
+                new FeatureEdit { Kind = FeatureEdit.Carve, Ax = 2, Ay = 4, Az = 4, Bx = 20, By = 8, Bz = 18, R = 4, P = 0.3f, N = 0.5f, S = 0.3f },
+                new FeatureEdit { Kind = FeatureEdit.Carve, Ax = 10, Ay = 20, Az = 0, Bx = 12, By = 52, Bz = 22, R = 3 },
+                new FeatureEdit { Kind = FeatureEdit.Add, Ax = 6, Ay = 6, Az = 6, Bx = 8, By = 7, Bz = 9, R = 2 },
+            },
+        };
+        var c = new NetsChunk { X0 = -2, Z0 = 1, Cells = 14, StepM = 1f };
+        SurfaceNets.HeightRange(deep, c, out _, out int jMax);
+        var g = new NetsBuffers();
+        SurfaceNets.General(new EditedSolid<DeepColumns, EditArray> { Columns = deep, Edits = edits, StepM = c.StepM }, c, -4, jMax, ref g);
+        var f = new NetsBuffers();
+        SurfaceNets.Edited(deep, edits, c, ref f);
+        Assert.True(f.SameSurfaceAs(g));
+    }
+
+    struct DeepColumns : IColumnField
+    {
+        public HashColumns Inner;
+        public float Height(int i, int k) => 60f + Inner.Height(i, k);
+    }
+
+    [Fact]
     public void FlatGroundFacesUp()
     {
         var f = new NetsBuffers();

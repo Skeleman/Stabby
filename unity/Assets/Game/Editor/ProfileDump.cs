@@ -49,6 +49,54 @@ namespace Stabby.Game.Editor
             System.IO.File.WriteAllText(System.IO.Path.GetFullPath("../out/unity/spike-stacks.txt"), sb.ToString());
         }
 
+        public static void Spikes()
+        {
+            var self = new Dictionary<string, double>();
+            var total = new Dictionary<string, double>();
+            var sb = new StringBuilder();
+            int slow = 0, all = 0;
+            double slowMs = 0;
+            float limit = float.TryParse(System.Environment.GetEnvironmentVariable("STABBY_SPIKE_MS"), out float l) ? l : 25f;
+            foreach (string raw in System.IO.Directory.GetFiles(System.IO.Path.GetFullPath("../out/unity"), "spike*.raw").OrderBy(f => f))
+            {
+                if (!ProfilerDriver.LoadProfile(raw, false)) { sb.AppendLine($"load failed {raw}"); continue; }
+                for (int f = ProfilerDriver.firstFrameIndex + 3; f <= ProfilerDriver.lastFrameIndex; f++)
+                    using (var v = ProfilerDriver.GetHierarchyFrameDataView(f, 0, HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName, HierarchyFrameDataView.columnTotalTime, false))
+                    {
+                        if (!v.valid) continue;
+                        all++;
+                        float ms = v.frameTimeMs;
+                        if (ms < limit || ms > 1000f) continue;
+                        slow++;
+                        slowMs += ms;
+                        Sum(v, v.GetRootItemID(), "", 0, self, total);
+                    }
+            }
+            sb.AppendLine($"{slow} of {all} frames between {limit} and 1000 ms, {slowMs / System.Math.Max(1, slow):F1} ms average");
+            sb.AppendLine("=== self ms per slow frame");
+            foreach (var kv in self.OrderByDescending(kv => kv.Value).Take(50)) sb.AppendLine($"{kv.Value / System.Math.Max(1, slow):F2} {kv.Key}");
+            sb.AppendLine("=== total ms per slow frame, path depth <= 7");
+            foreach (var kv in total.OrderByDescending(kv => kv.Value).Take(120)) sb.AppendLine($"{kv.Value / System.Math.Max(1, slow):F2} {kv.Key}");
+            System.IO.File.WriteAllText(System.IO.Path.GetFullPath("../out/unity/spike-sum.txt"), sb.ToString());
+            EditorApplication.Exit(0);
+        }
+
+        static void Sum(HierarchyFrameDataView v, int id, string path, int depth, Dictionary<string, double> self, Dictionary<string, double> total)
+        {
+            var kids = new List<int>();
+            v.GetItemChildren(id, kids);
+            foreach (int k in kids)
+            {
+                string name = v.GetItemName(k);
+                double t = v.GetItemColumnDataAsFloat(k, HierarchyFrameDataView.columnTotalTime);
+                double s = v.GetItemColumnDataAsFloat(k, HierarchyFrameDataView.columnSelfTime);
+                self[name] = (self.TryGetValue(name, out var o) ? o : 0) + s;
+                string here = depth == 0 ? name : path + " > " + name;
+                if (depth < 7 && t >= 0.2) total[here] = (total.TryGetValue(here, out var q) ? q : 0) + t;
+                if (t >= 0.2) Sum(v, k, here, depth + 1, self, total);
+            }
+        }
+
         static int Dump(StringBuilder sb, Dictionary<string, long> gc, Dictionary<string, int> seen)
         {
             var frames = new List<(int f, float ms)>();
