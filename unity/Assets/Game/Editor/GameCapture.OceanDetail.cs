@@ -29,7 +29,7 @@ namespace Stabby.Game.Editor
                 var d = new Vector2(pose.z, pose.w);
                 var eye = new Vector3(pose.x, OceanEyeM, pose.y);
                 var fwd = new Vector3(d.x, 0, d.y);
-                foreach (var (pitch, view) in new[] { (9f, "mid"), (1.5f, "far") })
+                foreach (var (pitch, view) in new[] { (30f, "near"), (9f, "mid"), (1.5f, "far"), (0.4f, "horizon") })
                 {
                     cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd) * Quaternion.Euler(pitch, 0, 0));
                     for (var s = Settle(240); s.MoveNext();) yield return null;
