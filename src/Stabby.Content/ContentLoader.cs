@@ -13,6 +13,7 @@ namespace Stabby.Content
         public const int ObjectSchemaVersion = 6;
         public const int CreatureSchemaVersion = 2;
         public const int SkySchemaVersion = 1;
+        public const int CaveSchemaVersion = 1;
 
         public static string FindContentRoot(string start)
         {
@@ -50,6 +51,49 @@ namespace Stabby.Content
         {
             var path = Path.Combine(contentRoot, "sky.json");
             return ParseSky(File.ReadAllText(path), path);
+        }
+
+        public static CaveLibrary LoadCaves(string contentRoot)
+        {
+            var path = Path.Combine(contentRoot, "caves.json");
+            return ParseCaves(File.ReadAllText(path), path);
+        }
+
+        public static CaveLibrary ParseCaves(string json, string source)
+        {
+            var root = Root(json, source, CaveSchemaVersion);
+            var l = new CaveLibrary { Chance = root.Float("chance", 0) };
+            foreach (var k in root.Objects("classes", true))
+            {
+                var nodes = Pair(k, "nodes", null, source);
+                var radius = Pair(k, "radius", null, source);
+                var edge = Pair(k, "edge", null, source);
+                var chamber = Pair(k, "chamber", DefaultChamber, source);
+                var hall = Pair(k, "hall", DefaultHall, source);
+                var bridge = Pair(k, "bridge", DefaultBridge, source);
+                l.Classes.Add(new CaveClass
+                {
+                    Id = k.String("id", ""), Fallback = k.String("fallback", ""), Weight = k.Float("weight", 0),
+                    MinNodes = (int)nodes[0], MaxNodes = (int)nodes[1], Loops = k.Int("loops", 0), Entrances = k.Int("entrances", 1), Bridges = k.Int("bridges", 0),
+                    RadiusMin = radius[0], RadiusMax = radius[1], EdgeMin = edge[0], EdgeMax = edge[1], Turn = k.Float("turn", 0),
+                    ChamberChance = k.Float("chamberChance", 0), ChamberMin = chamber[0], ChamberMax = chamber[1],
+                    HallMin = hall[0], HallMax = hall[1], BridgeMin = bridge[0], BridgeMax = bridge[1],
+                    Warp = k.Float("warp", 0), Lumps = k.Float("lumps", 0), RoomLumps = k.Float("roomLumps", 0),
+                });
+                k.End();
+            }
+            root.End();
+            Check(CaveLibrary.Validate(l), source);
+            return l;
+        }
+
+        static readonly float[] DefaultChamber = { 1.3f, 1.6f }, DefaultHall = { 0f, 0f }, DefaultBridge = { 9f, 12f };
+
+        static float[] Pair(Json j, string key, float[] fallback, string source)
+        {
+            var f = j.Floats(key, fallback);
+            if (f == null || f.Length != 2) throw new InvalidDataException(source + ": " + key + " must be [min, max]");
+            return f;
         }
 
         public static SkyDef ParseSky(string json, string source)

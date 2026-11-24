@@ -176,6 +176,7 @@ namespace Stabby.Game
                 var sw = Stopwatch.StartNew();
                 var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.ActiveSeed), defs, lib, true);
                 w.Objects = objects;
+                w.Caves = ContentFiles.Caves();
                 var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
                 p.Fill = Task.Run(() =>
                 {
@@ -438,6 +439,7 @@ namespace Stabby.Game
                 var (w, note) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
                 source = note;
                 w.Objects = objects;
+                w.Caves = ContentFiles.Caves();
                 return (w, WorldChunks.Checksums(w), null);
             });
         }
@@ -476,6 +478,7 @@ namespace Stabby.Game
                     for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
                     w = WorldFile.Empty(new WorldConfig { Seed = hs, Size = n, CellMeters = WorldConfig.CellMetersFor(n) }, ids, lib);
                     w.Objects = objects;
+                    w.Caves = ContentFiles.Caves();
                 }
                 Parallel.For(0, got.Count, () => pool.TryTake(out var spare) ? spare : new Buffers(), (j, _, u) =>
                 {

@@ -10,11 +10,12 @@ public class ObjectTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
+    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
     static readonly float[] RisingLods = { 10f, 50f };
 
     static GeneratedWorld Gen(ulong seed, int size = 256) =>
-        WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects);
+        WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects, Caves);
 
     [Fact]
     public void FirePitsCarryOneLightThatCampsAndHermitagesInherit()
