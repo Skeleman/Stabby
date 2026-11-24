@@ -134,7 +134,7 @@ namespace Stabby.Game.Editor
                 }
             }
             var side = Quaternion.Euler(0, 75f, 0) * d;
-            ShadowViewSystem.SunTarget = Quaternion.LookRotation(side * Mathf.Cos(14f * Mathf.Deg2Rad) + Vector3.down * Mathf.Sin(14f * Mathf.Deg2Rad));
+            DayNightSystem.LightOverride = Quaternion.LookRotation(side * Mathf.Cos(14f * Mathf.Deg2Rad) + Vector3.down * Mathf.Sin(14f * Mathf.Deg2Rad));
             float pitch = Mathf.Atan2(bestH, bestR) * Mathf.Rad2Deg - 6f;
             cam.transform.SetPositionAndRotation(new Vector3(stand.x, eyeY, stand.z), Quaternion.LookRotation(d) * Quaternion.Euler(-pitch, 0, 0));
             for (var w = Settle(360); w.MoveNext();) yield return null;
@@ -149,7 +149,7 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "farhills-nocast");
             TerrainViewSystem.Casting = true;
             for (int k = 0; k < 4; k++) yield return null;
-            ShadowViewSystem.SunTarget = null;
+            DayNightSystem.LightOverride = null;
             GameStatus.Lines["~farhills"] = string.Join("\n", lines);
         }
 
