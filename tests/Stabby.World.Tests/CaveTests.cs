@@ -76,6 +76,41 @@ public class CaveTests
     }
 
     [Fact]
+    public void TunnelsAreNarrowFineAndVaried()
+    {
+        var widths = new HashSet<float>();
+        for (ulong seed = 1; seed <= 8; seed++)
+            foreach (var g in At(seed).Graphs)
+                foreach (var edge in g.Edges)
+                {
+                    var c = Caves.Find(g.Class)!;
+                    Assert.InRange(edge.R, c.RadiusMin, c.RadiusMax);
+                    Assert.InRange(2f * edge.R * Features.CaveHollow, 4f, 6f);
+                    widths.Add(edge.R);
+                }
+        Assert.True(widths.Count > 10);
+        Assert.All(At(1).Edits.Where(x => x.Shape == FeatureEdit.Cave), x => Assert.True(x.Fine));
+    }
+
+    [Fact]
+    public void PinchedTunnelIsTooNarrow()
+    {
+        var (s, g) = Find(g => g.Edges.Count >= 2);
+        var edge = g.Edges[g.Edges.Count - 1];
+        var p = edge.Points;
+        int m = (p.Length / 6) * 3;
+        float mx = p[m], my = p[m + 1] + edge.R * 0.3f, mz = p[m + 2];
+        var pinched = s.Edits.Select(x => x.Shape == FeatureEdit.Cave && Near(x, mx, my, mz) ? Pinch(x) : x).ToArray();
+        Assert.Contains(Check(s, pinched, s.Graphs), v => v.Contains("too narrow"));
+    }
+
+    static FeatureEdit Pinch(FeatureEdit x)
+    {
+        x.R *= 0.3f;
+        return x;
+    }
+
+    [Fact]
     public void FilledTunnelLeavesChambersUnreachable()
     {
         var (s, g) = Find(g => g.Edges.Count >= 2 && !g.Nodes.TrueForAll(n => n.Entrance));

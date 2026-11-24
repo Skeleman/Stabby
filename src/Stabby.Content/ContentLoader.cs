@@ -87,7 +87,7 @@ namespace Stabby.Content
             return l;
         }
 
-        static readonly float[] DefaultChamber = { 1.3f, 1.6f }, DefaultHall = { 0f, 0f }, DefaultBridge = { 9f, 12f };
+        static readonly float[] DefaultChamber = { 39f, 60f }, DefaultHall = { 0f, 0f }, DefaultBridge = { 9f, 12f };
 
         static float[] Pair(Json j, string key, float[] fallback, string source)
         {
