@@ -9,6 +9,22 @@ namespace Stabby.World
         public float Lx, Lz, Ux, Uz, Fy, Fr, Fd, Fc, Ft, Fh, Fs, Fb, Fw, Ia, Ib, Ja, Jb, Iy;
     }
 
+    public struct PieceMask
+    {
+        ulong a, b, c, d;
+        bool all;
+
+        public PieceMask(int count) { a = b = c = d = 0; all = count > 256; }
+
+        public void Set(int i)
+        {
+            ulong bit = 1UL << (i & 63);
+            if (i < 64) a |= bit; else if (i < 128) b |= bit; else if (i < 192) c |= bit; else if (i < 256) d |= bit;
+        }
+
+        public bool Has(int i) => all || ((i < 64 ? a : i < 128 ? b : i < 192 ? c : d) >> (i & 63) & 1UL) != 0;
+    }
+
     public sealed class RiverLine
     {
         public float[] X, Z, S, W, D, K, P, R;
@@ -42,7 +58,7 @@ namespace Stabby.World
     public static class NearField
     {
         public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
-        public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f;
+        public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f, MaskPadM = 0.5f;
         public const float CoastWarpCells = 0.5f, CoastWaveCells = 2.5f, CoastBandM = 3f, CoastPin = 0.35f;
         public const float CragFrac = 0.5f, CragMaxM = 10f, CragSlopeLo = 0.35f, CragSlopeHi = 1.2f, CragGridLo = 0.1f, CragGridHi = 0.25f, CragAlongM = 50f, CragAcrossM = 18f, CragJutM = 24f, CragFloorM = 0.25f, CragWeightFloor = 0.25f;
         public const float CragWarpM = 9f, CragWarpWaveM = 40f, LedgePeriodM = 6.5f, LedgeWarpM = 1.5f, LedgeWarpWaveM = 35f, LedgeRagM = 0.15f, LedgeRagWaveM = 4f, LedgeStrikeM = 70f;
@@ -483,13 +499,18 @@ namespace Stabby.World
 
             int cell = CellOf(x, z, cm, n), s0 = c.PieceStart(cell), s1 = c.PieceStart(cell + 1);
             float fade = 1f, f = Fade(cm);
-            bool near = false;
+            bool near = false, falls = false, isles = false;
+            PieceMask mask = new PieceMask(s1 - s0), hold = mask;
             for (int k = s0; k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
                 Project(q, x, z, out float d, out float t);
+                falls |= q.Fr > 0;
+                isles |= q.Ja > 0;
                 if (q.Fr > 0 && PoolZone(q, x, z, f)) near = true;
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
+                if (d < wb + f + MaskPadM) mask.Set(k - s0);
+                if (d < wb + Math.Min(Bank(w), f) + MaskPadM) hold.Set(k - s0);
                 if (d >= wb + f) continue;
                 fade = Math.Min(fade, Grid.Smoothstep(wb, wb + f, d));
                 near = true;
@@ -501,12 +522,13 @@ namespace Stabby.World
                 float m = Noise.Fbm(c.Seed, x / MacroM, z / MacroM, MacroOctaves);
                 h += fade * (a * Math.Max(-1f, Math.Min(1f, m)) + Fine(c, x, z, b, a, tx, tz, ax, az, bx, bz));
             }
-            if (!near) return Isles(c, s0, s1, x, z, h);
-            h = Carve(c, s0, s1, x, z, h, f);
+            if (!near) return isles ? Isles(c, s0, s1, x, z, h) : h;
+            if (falls) h = Carve(c, s0, s1, x, z, h, f);
 
             float raised = h, sea = Grid.Smoothstep(0.75f, 1, Lerp2(SeaWeight(c.Height(i00)), SeaWeight(c.Height(i10)), SeaWeight(c.Height(i01)), SeaWeight(c.Height(i11)), tx, tz));
             for (int k = s0; k < s1; k++)
             {
+                if (!mask.Has(k - s0)) continue;
                 var q = c.Piece(c.PieceAt(k));
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
@@ -514,13 +536,15 @@ namespace Stabby.World
                 float s = q.Sa + (q.Sb - q.Sa) * t, top = SmoothMax(h, s + Rise(w), 1f);
                 float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, el = (float)Math.Sqrt(ex * ex + ez * ez), along = el > 1e-3f ? ((x - q.Ax) * ex + (z - q.Az) * ez) / el : 0;
                 float cap = Grid.Smoothstep(0, f, Math.Max(along - el, -along)) * sea;
-                raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (1 - Gorge(c, s0, s1, x, z, s, f)) * Grid.Smoothstep(0, Erosion.MinLandHeight, s) * (1 - cap) * (1 - sea * (1 - Grid.Smoothstep(2 * Erosion.MinLandHeight, 4 * Erosion.MinLandHeight, s))));
+                raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (falls ? 1 - Gorge(c, s0, s1, x, z, s, f) : 1) * Grid.Smoothstep(0, Erosion.MinLandHeight, s) * (1 - cap) * (1 - sea * (1 - Grid.Smoothstep(2 * Erosion.MinLandHeight, 4 * Erosion.MinLandHeight, s))));
             }
             float cut = float.MaxValue, pool = float.MaxValue, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
             for (int k = s0; k < s1; k++)
             {
+                if (!falls && !mask.Has(k - s0)) continue;
                 var q = c.Piece(c.PieceAt(k));
                 if (q.Fr > 0 && PoolZone(q, x, z, f)) low = Math.Min(low, Math.Max(FallFloorM, 0.5f * Math.Min(q.Fy, Erosion.MinLandHeight)));
+                if (!mask.Has(k - s0)) continue;
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
                 if (d >= wb + f) continue;
@@ -541,7 +565,7 @@ namespace Stabby.World
                 }
                 else
                 {
-                    top = Math.Max(top, Hold(c, s0, s1, x, z, h, s, f));
+                    top = Math.Max(top, Hold(c, s0, s1, hold, x, z, h, s, f));
                     float nb = 0.5f + 0.5f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed, x / BankNoiseM, z / BankNoiseM) + 0.5f * Noise.Gradient(c.RiverSeed + 1u, 2.3f * x / BankNoiseM, 2.3f * z / BankNoiseM)));
                     wb = w + Math.Max(Bank(w) * (1 - CutShrink * Math.Max(0, -inner)) * (1 - BankNoise * nb), Math.Min(Bank(w), (top - s - bar) / MaxBankSlope));
                     float r = Math.Min(WallRampM, 2f * (wb - w));
@@ -551,21 +575,23 @@ namespace Stabby.World
                 }
                 cut = Math.Min(cut, p + (1 - gate) * Math.Max(0, raised + FallClearM - p));
             }
-            for (int k = s0; k < s1; k++)
+            for (int k = s0; falls && k < s1; k++)
             {
                 var q = c.Piece(c.PieceAt(k));
                 if (q.Fr <= 0) continue;
                 float v = Pool(c, q, x, z, raised), reach = PoolReach(q.Fc, q.Fr), along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz;
                 pool = Math.Min(pool, cut < float.MaxValue ? v + Grid.Smoothstep(reach, reach + 0.5f * f, along) * Math.Max(0, cut - v) : v);
             }
-            return Isles(c, s0, s1, x, z, Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low));
+            float ground = Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low);
+            return isles ? Isles(c, s0, s1, x, z, ground) : ground;
         }
 
-        static float Hold<T>(T c, int s0, int s1, float x, float z, float h, float s, float f) where T : struct, INearCells
+        static float Hold<T>(T c, int s0, int s1, PieceMask mask, float x, float z, float h, float s, float f) where T : struct, INearCells
         {
             float top = h;
             for (int k = s0; k < s1; k++)
             {
+                if (!mask.Has(k - s0)) continue;
                 var q = c.Piece(c.PieceAt(k));
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w), reach = Math.Min(Bank(w), f);
