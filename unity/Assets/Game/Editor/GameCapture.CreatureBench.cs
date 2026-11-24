@@ -86,6 +86,40 @@ namespace Stabby.Game.Editor
             return (default, 1.6f, 0.9f, 0, 0, 0);
         }
 
+        static string BenchMemory(EntityManager em, int n)
+        {
+            using var rq = em.CreateEntityQuery(typeof(CreatureRoot));
+            using var roots = rq.ToComponentDataArray<CreatureRoot>(Allocator.Temp);
+            using var rootEntities = rq.ToEntityArray(Allocator.Temp);
+            var rigs = new HashSet<BlobAssetReference<CreatureRig>>();
+            long blob = 0, rootBytes = 0, renderBytes = 0;
+            int count = 0, render = 0;
+            for (int i = 0; i < roots.Length; i++)
+            {
+                var c = roots[i];
+                if (!em.HasComponent<CreatureState>(c.Ghost) || em.GetComponentData<CreatureState>(c.Ghost).Id >= 0) continue;
+                count++;
+                rootBytes += 16384 / em.GetChunk(rootEntities[i]).Capacity;
+                if (c.Rig.IsCreated)
+                {
+                    rigs.Add(c.Rig);
+                    ref var rig = ref c.Rig.Value;
+                    blob += 32 + UnsafeUtility.SizeOf<CreatureRig>() + rig.Segments.Length * UnsafeUtility.SizeOf<CreatureSegmentRig>() + rig.Parts.Length * UnsafeUtility.SizeOf<CreaturePartRig>() + rig.RestPos.Length * 12 + rig.RestRot.Length * 16;
+                }
+                if (!em.HasBuffer<CreatureLink>(rootEntities[i])) continue;
+                var links = em.GetBuffer<CreatureLink>(rootEntities[i]);
+                rootBytes += links.Length > TypeManager.GetTypeInfo<CreatureLink>().BufferCapacity ? links.Capacity * UnsafeUtility.SizeOf<CreatureLink>() : 0;
+                foreach (var l in links)
+                {
+                    if (l.Value == Entity.Null || !em.Exists(l.Value)) continue;
+                    render++;
+                    renderBytes += 16384 / em.GetChunk(l.Value).Capacity;
+                }
+            }
+            if (count == 0) return "no bench roots";
+            return $"bench roots {count}/{n}: 1 root + {render / (float)count:F1} render entities per creature, root chunk {rootBytes / (float)count:F0} B, render chunk {renderBytes / (float)count:F0} B, rig blob {blob / (float)count:F0} B incl. header and rest arrays, {rigs.Count} distinct rig blobs ({(rigs.Count == count ? "one per creature" : rigs.Count == 1 ? "shared" : "partly shared")})";
+        }
+
         static void AddBrainHerds(Unity.Entities.World server, SystemHandle host, int n, int r, float2 at, float reach)
         {
             var sem = server.EntityManager;
@@ -256,6 +290,7 @@ namespace Stabby.Game.Editor
                 lines.Add($"N {n}: built in {frames} frames, worst main thread {worstMain:F2} ms, worst build system {worstBuild:F2} ms, worst frame dt {worstDt:F1} ms; " +
                           $"{perEntities:F1} client entities per creature (ghost included), chunk memory {perKiB:F2} KiB per creature, rig blob {blobBytes} B; " +
                           $"anim temp {segs * 32 + parts * 28} B per visible creature in 5 allocations");
+                lines.Add($"  N {n} memory: " + BenchMemory(vem, n));
 
                 float q = math.max(DetailView.Current.Quality, 0.1f);
                 for (int t = 0; t < BenchTiers.Length; t++)
