@@ -10,31 +10,42 @@ namespace Stabby.Game
     public struct CreaturePartRig
     {
         public int Parent, Role, First, Count;
-        public float3 Socket, Foot;
         public quaternion Rest;
-        public float Phase, RunPhase, Side, Reach;
+        public float Phase, RunPhase, Side;
     }
 
     public struct CreatureSegmentRig
     {
-        public float Length;
         public float3 Idle, Forward, Back, Lift, RunForward, RunBack, RunLift, Alert, Graze;
     }
 
     public struct CreatureRig
     {
-        public float Length, Rear, Stand, Stride, RunStride, RunRatio, Fore, Hind, Track;
+        public float RunRatio;
         public float FadePx, ShadowPx, AnimPx, IkPx, LowPx;
         public Detail.Rule Rule;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
-        public BlobArray<float3> RestPos;
         public BlobArray<quaternion> RestRot;
+    }
+
+    public struct CreatureFit
+    {
+        public BlobArray<float> Lengths;
+        public BlobArray<float4> Sockets;
+        public BlobArray<float3> RestPos;
+    }
+
+    public struct CreatureScale
+    {
+        public float Length, Rear, Stand, Stride, RunStride, Fore, Hind, Track;
     }
 
     public struct CreatureRoot : IComponentData
     {
         public BlobAssetReference<CreatureRig> Rig;
+        public BlobAssetReference<CreatureFit> Fit;
+        public CreatureScale Scale;
         public Entity Ghost;
         public float3 Position;
         public float Heading, Pitch, Move, Alert, Down, WalkSpeed, Phase, Clock, Sink, Wake;
@@ -155,7 +166,7 @@ namespace Stabby.Game
     public struct CreaturePresented : ICleanupComponentData
     {
         public Entity Root;
-        public BlobAssetReference<CreatureRig> Rig;
+        public BlobAssetReference<CreatureFit> Fit;
     }
 
     public struct CreatureLink : IBufferElementData
