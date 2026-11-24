@@ -11,6 +11,7 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var seen = new int[n * n];
             var queue = new List<int>();
+            int wet = w.BiomeIds == null ? -1 : Array.IndexOf(w.BiomeIds, "wetland");
             for (int k = 0; k < w.Sketch.Mesas.Count; k++)
             {
                 var m = w.Sketch.Mesas[k];
@@ -23,11 +24,12 @@ namespace Stabby.World
                 if (w.Height[cz * n + cx] < floor) { e.Add(at + " lost its caprock"); continue; }
                 int lim = (int)Math.Ceiling(Mesas.Reach(m, m.Top - m.Base) / cm), x0 = cx, x1 = cx, z0 = cz, z1 = cz;
                 queue.Clear(); queue.Add(cz * n + cx); seen[cz * n + cx] = k + 1;
-                bool spill = false, peak = false;
+                bool spill = false, peak = false, marsh = false;
                 for (int q = 0; q < queue.Count; q++)
                 {
                     int i = queue[q], x = i % n, z = i / n;
                     if (w.Height[i] > roof) peak = true;
+                    if (wet >= 0 && w.Biome != null && w.Biome[i] == wet) marsh = true;
                     x0 = Math.Min(x0, x); x1 = Math.Max(x1, x); z0 = Math.Min(z0, z); z1 = Math.Max(z1, z);
                     for (int d = 0; d < 4; d++)
                     {
@@ -41,6 +43,7 @@ namespace Stabby.World
                 }
                 if (spill) { e.Add(at + " has no cap cliff on some side"); continue; }
                 if (peak) { e.Add(at + " has ground rising above its caprock"); continue; }
+                if (marsh) { e.Add(at + " has wetland on its caprock"); continue; }
                 float across = (Math.Max(x1 - x0, z1 - z0) + 1) * cm;
                 if (Math.Abs(across - sketched) > 2f * cm + 0.25f * sketched) e.Add(at + $" measures {across:F0} m across, sketched {sketched:F0} m");
             }
