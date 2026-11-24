@@ -46,6 +46,55 @@ namespace Stabby.World
         }
     }
 
+    public struct DrinkSpot
+    {
+        public float X, Z, WaterX, WaterZ, Steep, Cost;
+
+        public bool Fits(float grade) => Steep <= 4 * Footing.FeelM * Footing.FeelM * grade * grade;
+    }
+
+    public interface IDrinkSpots
+    {
+        int First(int site);
+        DrinkSpot Spot(int k);
+    }
+
+    public struct DrinkSpotList : IDrinkSpots
+    {
+        public int[] Start;
+        public DrinkSpot[] Spots;
+
+        public int First(int site) => Start[site];
+        public DrinkSpot Spot(int k) => Spots[k];
+        public int Count => Spots == null ? 0 : Spots.Length;
+
+        public static int Nearest<TS, TG>(ref TS spots, ref TG ground, int size, float cellMeters, float x, float z, float grade, float reach)
+            where TS : struct, IDrinkSpots where TG : struct, IHerdGround
+        {
+            int across = CreaturePlan.SitesAcross(size);
+            float siteM = CreaturePlan.SiteCells * cellMeters, best = float.MaxValue;
+            int x0 = Math.Max(0, (int)((x - reach) / siteM)), x1 = Math.Min(across - 1, (int)((x + reach) / siteM));
+            int z0 = Math.Max(0, (int)((z - reach) / siteM)), z1 = Math.Min(across - 1, (int)((z + reach) / siteM));
+            int found = -1;
+            for (int sz = z0; sz <= z1; sz++)
+                for (int sx = x0; sx <= x1; sx++)
+                {
+                    int site = sz * across + sx;
+                    for (int k = spots.First(site), end = spots.First(site + 1); k < end; k++)
+                    {
+                        var s = spots.Spot(k);
+                        float dx = s.X - x, dz = s.Z - z, d2 = dx * dx + dz * dz;
+                        if (d2 > reach * reach || d2 >= best * best || !s.Fits(grade)) continue;
+                        float score = (float)Math.Sqrt(d2) + s.Cost;
+                        if (score >= best || ground.Crosses(x, z, s.X, s.Z)) continue;
+                        best = score;
+                        found = k;
+                    }
+                }
+            return found;
+        }
+    }
+
     public static class Drives
     {
         public const byte None = 0, Graze = 1, Drink = 2, Bed = 3;
