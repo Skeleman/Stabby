@@ -126,7 +126,7 @@ public class CreatureTests
 
     static readonly GeneratedWorld PlanWorld = WorldGenerator.Generate(
         new WorldConfig { Seed = 5, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) },
-        ContentLoader.LoadBiomes(Root), ContentLoader.LoadMaterials(Root), null, null, ContentLoader.LoadObjects(Root, BiomeIds));
+        ContentLoader.LoadBiomes(Root), ContentLoader.LoadMaterials(Root), null, null, ContentLoader.LoadObjects(Root, BiomeIds), ContentLoader.LoadCaves(Root));
 
     [Fact]
     public void SpawnPlanPassesWorldChecks()
@@ -249,7 +249,7 @@ public class CreatureTests
     {
         var other = WorldGenerator.Generate(
             new WorldConfig { Seed = 6, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) },
-            ContentLoader.LoadBiomes(Root), ContentLoader.LoadMaterials(Root), null, null, ContentLoader.LoadObjects(Root, BiomeIds));
+            ContentLoader.LoadBiomes(Root), ContentLoader.LoadMaterials(Root), null, null, ContentLoader.LoadObjects(Root, BiomeIds), ContentLoader.LoadCaves(Root));
         var a = CreaturePlan.Build(PlanWorld, Lib);
         var b = CreaturePlan.Build(other, Lib);
         Assert.False(a.Count == b.Count && a.Zip(b).All(p => p.First.X == p.Second.X && p.First.BodySeed == p.Second.BodySeed));

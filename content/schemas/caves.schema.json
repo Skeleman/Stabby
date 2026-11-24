@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stabby cave graph classes",
+  "type": "object",
+  "required": ["schemaVersion", "chance", "classes"],
+  "additionalProperties": false,
+  "$defs": {
+    "range": { "type": "array", "items": { "type": "number", "minimum": 0 }, "minItems": 2, "maxItems": 2 },
+    "class": {
+      "type": "object",
+      "required": ["id", "weight", "nodes", "radius", "edge", "turn", "warp", "lumps", "roomLumps"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "fallback": { "type": "string", "minLength": 1 },
+        "weight": { "type": "number", "exclusiveMinimum": 0 },
+        "nodes": { "$ref": "#/$defs/range" },
+        "loops": { "type": "integer", "minimum": 0 },
+        "entrances": { "type": "integer", "minimum": 1 },
+        "bridges": { "type": "integer", "minimum": 0 },
+        "radius": { "$ref": "#/$defs/range" },
+        "edge": { "$ref": "#/$defs/range" },
+        "turn": { "type": "number", "minimum": 0, "maximum": 2 },
+        "chamberChance": { "type": "number", "minimum": 0, "maximum": 1 },
+        "chamber": { "$ref": "#/$defs/range" },
+        "hall": { "$ref": "#/$defs/range" },
+        "bridge": { "$ref": "#/$defs/range" },
+        "warp": { "type": "number", "minimum": 0, "maximum": 0.3 },
+        "lumps": { "type": "number", "minimum": 0, "maximum": 0.05 },
+        "roomLumps": { "type": "number", "minimum": 0, "maximum": 0.1 }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "chance": { "type": "number", "minimum": 0, "maximum": 1 },
+    "classes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/class" } }
+  }
+}
