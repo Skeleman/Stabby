@@ -5,6 +5,9 @@ namespace Stabby.World.Tests;
 public class WaterSwellTests
 {
     static readonly SwellParams[] Both = { WaterSwell.Sea, WaterSwell.Lake };
+    static readonly SwellParams[] ShoreOnly = { Calm(WaterSwell.Sea), Calm(WaterSwell.Lake) };
+
+    static SwellParams Calm(SwellParams p) => new SwellParams(0, p.Length, p.ShorePeriod, p.ShoreHeight);
 
     [Fact]
     public void DeterministicAndBounded()
@@ -16,26 +19,46 @@ public class WaterSwellTests
                 float a = WaterSwell.Height(p, x, z, t, d, s), b = WaterSwell.Height(p, x, z, t, d, s);
                 Assert.Equal(a, b);
                 Assert.False(float.IsNaN(a));
-                float open = p.Height * (1 + WaterSwell.CrossHeight) * (1 - WaterSwell.ShoreWeight(d));
+                float open = p.Height * WaterSwell.OpenPeak * WaterSwell.OpenScale(p, d);
                 Assert.True(Math.Abs(a) <= open + WaterSwell.ShoreAmplitude(p, d) + 1e-4f, $"|{a}| too high at depth {d}");
                 Assert.True(WaterSwell.ShoreAmplitude(p, d) <= WaterSwell.Breaking * d + 1e-6f);
             }
     }
 
     [Fact]
-    public void OpenSwellPartsSumToCrossHeight()
+    public void TrainsRunLongestFirstWithUnitHeadings()
     {
-        Assert.Equal(WaterSwell.CrossHeight, WaterSwell.CrossPart + WaterSwell.ThirdPart, 5);
-        Assert.True(WaterSwell.ThirdLength >= WaterSwell.CrossLength);
+        int n = WaterSwell.TrainLength.Length;
+        Assert.Equal(n, WaterSwell.TrainX.Length);
+        Assert.Equal(n, WaterSwell.TrainZ.Length);
+        Assert.Equal(n, WaterSwell.TrainPart.Length);
+        Assert.Equal(n, WaterSwell.TrainSharp.Length);
+        Assert.Equal(n, WaterSwell.TrainPhase.Length);
+        for (int i = 0; i < n; i++)
+        {
+            float x = WaterSwell.TrainX[i], z = WaterSwell.TrainZ[i];
+            Assert.InRange(x * x + z * z, 0.99f, 1.01f);
+            Assert.InRange(WaterSwell.TrainSharp[i], 0f, 1f);
+            if (i > 0)
+            {
+                Assert.True(WaterSwell.TrainLength[i] < WaterSwell.TrainLength[i - 1]);
+                Assert.True(WaterSwell.TrainPart[i] < WaterSwell.TrainPart[i - 1]);
+            }
+        }
+        Assert.InRange(WaterSwell.Sea.Length * WaterSwell.TrainLength[n - 1], 2f, 6f);
     }
 
     [Fact]
     public void OpenSwellHasNarrowCrestsAndBroadTroughs()
     {
-        int above = 0, n = 1000;
-        for (int k = 0; k < n; k++)
-            if (WaterSwell.Wave((k + 0.5f) / n, WaterSwell.MainSharp, out _) > 0) above++;
-        Assert.InRange(above, n / 4, n * 21 / 50);
+        int n = 1000;
+        foreach (float sharp in WaterSwell.TrainSharp)
+        {
+            int above = 0;
+            for (int k = 0; k < n; k++)
+                if (WaterSwell.Wave((k + 0.5f) / n, sharp, out _) > 0) above++;
+            Assert.InRange(above, n / 4, n * 21 / 50);
+        }
     }
 
     [Fact]
@@ -55,7 +78,7 @@ public class WaterSwellTests
     {
         foreach (var p in Both)
         {
-            float step = 0.01f, worst = 0;
+            float step = 0.002f, worst = 0;
             for (int k = 0; k < 20000; k++)
             {
                 float x = k * 0.05f, d = 0.3f + k * 0.0009f, s = d / 0.04f;
@@ -102,7 +125,7 @@ public class WaterSwellTests
     public void ShoreCrestsRunParallelToTheShore()
     {
         const float beach = 0.04f;
-        foreach (var p in Both)
+        foreach (var p in ShoreOnly)
             for (int k = 0; k < 300; k++)
             {
                 float off = 5 + k * 0.25f, d = off * beach, t = k * 0.07f;
@@ -116,7 +139,7 @@ public class WaterSwellTests
     [Fact]
     public void ShoreWavesMoveTowardTheShore()
     {
-        var p = WaterSwell.Sea;
+        var p = ShoreOnly[0];
         float d = 2, dt = 0.2f, shift = WaterSwell.ShoreWavelength(p, d) * dt / (2 * p.ShorePeriod);
         for (int k = 0; k < 200; k++)
         {
@@ -130,7 +153,7 @@ public class WaterSwellTests
     [Fact]
     public void ShoreSlopeMatchesFiniteDifferenceAcrossTheBand()
     {
-        foreach (var p in Both)
+        foreach (var p in ShoreOnly)
             for (int k = 0; k < 300; k++)
             {
                 float d = 1 + k * 0.01f, s = 30 + k * 0.29f, t = k * 0.21f, e = 1e-3f;
