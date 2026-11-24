@@ -25,6 +25,7 @@ namespace Stabby.Game
 
         Task<Splat> build;
         Texture2D texture;
+        byte[] splat;
         Vector2 center = new Vector2(float.MaxValue, float.MaxValue);
         float radius;
         int builds, removedSeen;
@@ -76,18 +77,22 @@ namespace Stabby.Game
             if (deltas != null)
                 foreach (int c in deltas.Chunks)
                     foreach (ulong id in deltas.InChunk(c)) gone.Add(id);
-            build = Task.Run(() => Make(field, gone, at.x, at.y, texel));
+            var data = splat ??= new byte[Res * Res * 2];
+            build = Task.Run(() => Make(field, gone, data, at.x, at.y, texel));
         }
 
-        static Splat Make(ObjectField field, HashSet<ulong> gone, float cx, float cz, float texelM)
+        [ThreadStatic] static List<ObjectInstance> objectScratch;
+        [ThreadStatic] static List<ObjectColumn> columnScratch, lushScratch;
+
+        static Splat Make(ObjectField field, HashSet<ulong> gone, byte[] data, float cx, float cz, float texelM)
         {
             var sw = Stopwatch.StartNew();
             float span = Res * texelM;
             float x0 = Mathf.Floor((cx - 0.5f * span) / texelM) * texelM, z0 = Mathf.Floor((cz - 0.5f * span) / texelM) * texelM;
-            var data = new byte[Res * Res * 2];
-            var objects = new List<ObjectInstance>();
-            var columns = new List<ObjectColumn>();
-            var lush = new List<ObjectColumn>();
+            Array.Clear(data, 0, data.Length);
+            var objects = objectScratch ??= new List<ObjectInstance>();
+            var columns = columnScratch ??= new List<ObjectColumn>();
+            var lush = lushScratch ??= new List<ObjectColumn>();
             float cm = field.ChunkMeters;
             int n = field.ChunksAcross;
             int ax = Math.Max(0, (int)Math.Floor((x0 - 2f) / cm)), bx = Math.Min(n - 1, (int)Math.Floor((x0 + span + 2f) / cm));

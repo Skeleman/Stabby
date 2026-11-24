@@ -17,12 +17,22 @@ namespace Stabby.Game.Editor
             var seen = new Dictionary<string, int>();
             var stacks = new Dictionary<string, long>();
             int counted = 0;
+            var managed = System.IO.File.ReadAllLines(System.IO.Path.GetFullPath("../lint-allow.txt")).Select(l => l.Split(' ')[0]).Where(n => n.EndsWith("System")).ToHashSet();
+            var systems = new Dictionary<string, List<(float ms, double gc)>>();
             foreach (string raw in System.IO.Directory.GetFiles(System.IO.Path.GetFullPath("../out/unity"), "spike*.raw").OrderBy(f => f))
             {
                 if (!ProfilerDriver.LoadProfile(raw, false)) { sb.AppendLine($"load failed {raw}"); continue; }
                 sb.AppendLine($"== {System.IO.Path.GetFileName(raw)}");
                 counted += Dump(sb, gc, seen);
                 Stacks(stacks);
+                Systems(managed, systems);
+            }
+            sb.AppendLine($"=== managed systems on the main thread over {counted} frames: ms mean, ms p99, ms max, KB per frame, frames over 0.1 ms, frames allocating");
+            foreach (var kv in systems.OrderByDescending(kv => kv.Value.Sum(x => x.ms)))
+            {
+                var ms = kv.Value.Select(x => x.ms).OrderBy(x => x).ToList();
+                while (ms.Count < counted) ms.Insert(0, 0f);
+                sb.AppendLine($"{ms.Average():F3} {ms[(int)(0.99 * (ms.Count - 1))]:F2} {ms[ms.Count - 1]:F1} {kv.Value.Sum(x => x.gc) / 1024 / System.Math.Max(1, counted):F2} {ms.Count(x => x > 0.1f)} {kv.Value.Count(x => x.gc > 0)} {kv.Key}");
             }
             sb.AppendLine($"=== GC by caller over {counted} frames, capture work left out (KB total)");
             foreach (var kv in gc.OrderByDescending(kv => kv.Value).Take(60)) sb.AppendLine($"{kv.Value / 1024} {kv.Key}");
@@ -134,6 +144,39 @@ namespace Stabby.Game.Editor
                 foreach (var kv in one) { gc[kv.Key] = (gc.TryGetValue(kv.Key, out var o) ? o : 0) + kv.Value; seen[kv.Key] = (seen.TryGetValue(kv.Key, out var n) ? n : 0) + 1; }
             }
             return counted;
+        }
+
+        static void Systems(HashSet<string> managed, Dictionary<string, List<(float ms, double gc)>> systems)
+        {
+            for (int f = ProfilerDriver.firstFrameIndex; f <= ProfilerDriver.lastFrameIndex; f++)
+                using (var v = ProfilerDriver.GetHierarchyFrameDataView(f, 0, HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName, HierarchyFrameDataView.columnTotalTime, false))
+                {
+                    if (!v.valid) continue;
+                    var here = new Dictionary<string, (float ms, double gc)>();
+                    void Visit(int id)
+                    {
+                        var kids = new List<int>();
+                        v.GetItemChildren(id, kids);
+                        foreach (int k in kids)
+                        {
+                            string name = v.GetItemName(k);
+                            int dot = name.LastIndexOf('.');
+                            if (dot >= 0 && managed.Contains(name.Substring(dot + 1)))
+                            {
+                                var o = here.TryGetValue(name, out var p) ? p : (0f, 0.0);
+                                here[name] = (o.Item1 + v.GetItemColumnDataAsFloat(k, HierarchyFrameDataView.columnTotalTime), o.Item2 + v.GetItemColumnDataAsDouble(k, HierarchyFrameDataView.columnGcMemory));
+                                continue;
+                            }
+                            Visit(k);
+                        }
+                    }
+                    Visit(v.GetRootItemID());
+                    foreach (var kv in here)
+                    {
+                        if (!systems.TryGetValue(kv.Key, out var list)) systems[kv.Key] = list = new List<(float, double)>();
+                        list.Add(kv.Value);
+                    }
+                }
         }
 
         static void Stacks(Dictionary<string, long> stacks)
