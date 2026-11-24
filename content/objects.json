@@ -244,6 +244,7 @@
     },
     {
       "id": "fire-pit", "name": "Fire pit", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
+      "light": { "category": "fire", "material": "firelight", "intensity": 6, "radiusM": 7, "importance": 1.6, "flicker": 0.22, "flickerHz": 2.4 },
       "parts": [ { "id": "pit", "shape": "fire-pit" } ],
       "placement": { "perHectare": 0, "sizeMinM": 1.8, "sizeMaxM": 1.8 }
     },

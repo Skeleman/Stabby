@@ -16,6 +16,46 @@ public class ObjectTests
     static GeneratedWorld Gen(ulong seed, int size = 256) =>
         WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects);
 
+    [Fact]
+    public void FirePitsCarryOneLightThatCampsAndHermitagesInherit()
+    {
+        var pit = Objects.Objects.First(o => o.Id == "fire-pit");
+        Assert.NotNull(pit.Light);
+        Assert.Equal("fire", pit.Light.Category);
+        Assert.NotNull(Objects.LightNamed("fire"));
+        Assert.True(pit.Light.Intensity > 0 && pit.Light.RangeM > 0 && pit.Light.Flicker is > 0 and <= 1 && pit.Light.FlickerHz > 0);
+        Assert.Equal(0xff9a4cu, pit.Light.Color);
+        Assert.Same(pit, Objects.EmitterFor(ObjectPart.FirePit));
+        Assert.Null(Objects.EmitterFor(ObjectPart.Rock));
+        foreach (int shape in new[] { ObjectPart.FirePit, ObjectPart.Campsite })
+            for (int v = 0; v < 4; v++)
+            {
+                var l = Structures.Layout(shape, ObjectMeshes.Key("structure", 0, v));
+                Assert.Single(l.Lights);
+                Assert.Equal(ObjectPart.FirePit, l.Lights[0].Shape);
+            }
+        var hermit = Enumerable.Range(0, 12).Select(v => Structures.Layout(ObjectPart.Hermitage, ObjectMeshes.Key("structure", 0, v)).Lights.Count).ToList();
+        Assert.All(hermit, n => Assert.InRange(n, 0, 1));
+        Assert.Contains(1, hermit);
+        var shapes = PartShapes.Of(Objects);
+        int camp = Objects.Objects.FindIndex(o => o.Parts.Count > 0 && o.Parts[0].Shape == ObjectPart.Campsite);
+        var inst = new ObjectInstance { Def = camp, X = 100, Y = 20, Z = 50, Qw = 1, Size = 1 };
+        var found = new List<StructureLight>();
+        ObjectField.AddLights(Objects, shapes, inst, found);
+        Assert.Single(found);
+        Assert.InRange(found[0].X, 90, 110);
+        Assert.InRange(found[0].Y, 20, 22);
+        var bad = new ObjectLibrary();
+        bad.Lights.Add(new LightKind { Id = "fire", Importance = 1 });
+        bad.Kinds.Add(new ObjectKind { Id = "static", Lods = 3, LodPixels = RisingLods });
+        bad.Objects.Add(new ObjectDef { Id = "pit", Kind = "static", Variants = 1, Parts = { new ObjectPart() }, Light = new ObjectLight { Category = "torch", Flicker = 2 } });
+        var errors = ObjectLibrary.Validate(bad);
+        Assert.Contains(errors, e => e == "pit: light category torch is not defined");
+        Assert.Contains(errors, e => e == "pit: light needs intensity and radiusM above 0");
+        Assert.Contains(errors, e => e.StartsWith("pit: light flicker", StringComparison.Ordinal));
+        Assert.Contains(errors, e => e == "pit: lights belong only to structure objects");
+    }
+
     static void Matches(JsonElement schema, JsonElement data)
     {
         var names = data.EnumerateObject().Select(p => p.Name).ToList();

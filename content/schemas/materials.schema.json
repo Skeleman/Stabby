@@ -184,7 +184,7 @@
     },
     "kit": {
       "type": "object",
-      "required": ["timber", "plank", "plaster", "thatch", "iron", "cloth", "ash", "fungus", "turf"],
+      "required": ["timber", "plank", "plaster", "thatch", "iron", "cloth", "ash", "fungus", "turf", "ember"],
       "additionalProperties": false,
       "properties": {
         "timber": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 6, "maxItems": 6 },
@@ -195,7 +195,8 @@
         "cloth": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 4, "maxItems": 4 },
         "ash": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 5, "maxItems": 5 },
         "fungus": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 10, "maxItems": 10 },
-        "turf": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 2, "maxItems": 2 }
+        "turf": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 2, "maxItems": 2 },
+        "ember": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 2, "maxItems": 2 }
       }
     },
     "strata": {

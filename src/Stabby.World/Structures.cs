@@ -17,7 +17,14 @@ namespace Stabby.World
         public readonly List<ObjectColumn> Columns = new List<ObjectColumn>();
         public readonly List<ObjectColumn> Contacts = new List<ObjectColumn>();
         public readonly List<ObjectColumn> Lush = new List<ObjectColumn>();
+        public readonly List<StructureLight> Lights = new List<StructureLight>();
         public float DoorX, DoorZ;
+    }
+
+    public struct StructureLight
+    {
+        public float X, Y, Z;
+        public int Shape;
     }
 
     public static partial class Structures

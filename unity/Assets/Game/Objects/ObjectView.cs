@@ -82,6 +82,7 @@ namespace Stabby.Game
             public NativeArray<long> Keys;
             public NativeArray<int3> Ranges;
             public NativeArray<ObjectSpawn> Parts;
+            public List<LightEmitter> Lights;
 
             public void Dispose()
             {
@@ -124,6 +125,7 @@ namespace Stabby.Game
         NativeArray<bool> loaded;
         NativeArray<ObjectSpawn>[] chunkParts;
         NativeArray<long>[] chunkKeys;
+        List<Entity>[] chunkLights;
         NativeParallelHashMap<long, int3> ranges;
         NativeParallelHashSet<long> spawned;
         NativeParallelMultiHashMap<long, Entity> tileEntities;
@@ -168,6 +170,7 @@ namespace Stabby.Game
             if (GameStatus.Live.Remove("~objects view")) GameStatus.Lines["~objects view"] = Status();
             if (chunkParts != null) foreach (var a in chunkParts) if (a.IsCreated) a.Dispose();
             if (chunkKeys != null) foreach (var a in chunkKeys) if (a.IsCreated) a.Dispose();
+            if (chunkLights != null) foreach (var a in chunkLights) DestroyLights(a);
             foreach (var t in chunkTasks) Owned.Release(t, r => r.Dispose());
             Owned.Release(meshTask, r => r.Dispose());
             meshSet?.Dispose();
@@ -215,6 +218,7 @@ namespace Stabby.Game
             loaded = new NativeArray<bool>(across * across, Allocator.Persistent);
             chunkParts = new NativeArray<ObjectSpawn>[across * across];
             chunkKeys = new NativeArray<long>[across * across];
+            chunkLights = new List<Entity>[across * across];
             collectingChunk = new bool[across * across];
             float minTile = cm * 0.5f;
             int defs = lib.Objects.Count, count = 0;
@@ -594,7 +598,38 @@ namespace Stabby.Game
                 };
             }
             order.Dispose();
-            return new ChunkParts { Chunk = c, Keys = keys, Ranges = spans, Parts = parts };
+            return new ChunkParts { Chunk = c, Keys = keys, Ranges = spans, Parts = parts, Lights = LightsIn(placed) };
+        }
+
+        List<LightEmitter> LightsIn(List<ObjectInstance> placed)
+        {
+            List<LightEmitter> lights = null;
+            var anchors = new List<StructureLight>();
+            foreach (var o in placed)
+            {
+                anchors.Clear();
+                field.LightsOf(o, anchors);
+                for (int k = 0; k < anchors.Count; k++)
+                {
+                    var a = anchors[k];
+                    var light = lib.EmitterFor(a.Shape)?.Light;
+                    var kind = light == null ? null : lib.LightNamed(light.Category);
+                    if (kind == null) continue;
+                    var e = LightEmitter.Of(kind, new float3(a.X, a.Y, a.Z), Decode(light.Color), light.RangeM, light.Intensity);
+                    if (light.Importance > 0) e.Importance = light.Importance;
+                    e.Flicker = light.Flicker;
+                    e.FlickerHz = light.FlickerHz;
+                    e.Phase = ((o.Id + (ulong)k) * 0x9E3779B97F4A7C15UL >> 40) / 16777216f;
+                    (lights ??= new List<LightEmitter>()).Add(e);
+                }
+            }
+            return lights;
+        }
+
+        void DestroyLights(List<Entity> lights)
+        {
+            if (lights == null) return;
+            foreach (var e in lights) if (EntityManager.Exists(e)) EntityManager.DestroyEntity(e);
         }
 
         struct SortKey : IComparable<SortKey>
@@ -627,6 +662,17 @@ namespace Stabby.Game
                 chunkParts[r.Chunk] = r.Parts;
                 chunkKeys[r.Chunk] = r.Keys;
                 loaded[r.Chunk] = true;
+                if (r.Lights != null)
+                {
+                    var made = new List<Entity>(r.Lights.Count);
+                    foreach (var light in r.Lights)
+                    {
+                        var e = EntityManager.CreateEntity();
+                        EntityManager.AddComponentData(e, light);
+                        made.Add(e);
+                    }
+                    chunkLights[r.Chunk] = made;
+                }
                 chunksLoaded++;
                 chunksHeld++;
                 partsHeld += r.Parts.Length;
@@ -640,6 +686,8 @@ namespace Stabby.Game
                 partsHeld -= chunkParts[c].Length;
                 chunkParts[c].Dispose();
                 chunkKeys[c].Dispose();
+                DestroyLights(chunkLights[c]);
+                chunkLights[c] = null;
                 loaded[c] = false;
                 chunksHeld--;
                 chunksUnloaded++;
