@@ -49,6 +49,7 @@ and converts once into native data.
   unshadowed, 48 glow, then emissive, with hysteresis and crossfade; URP additional-light shadows on.
   1080p bench: tiers on 8.5 ms vs 20.1 ms off. Follow-ups: shadowResolution warning, no game emitters
   yet, foliage, creatures, grass and water don't receive point lights.
+  b/fire-lights merged (GV 101): campsite fire pits are the first game emitters, with a flickering warm point light through the budget and an ember glow; new-moon shot hour 23; 1080p 7.45 ms off vs 7.38 ms on.
   b/capture-ready merged: every GameCapture phase waits for terrain, object regions and nearby objects; an unloaded pose fails after 300 s; 900 s timeout excludes load waits. River pose terrain takes ~175 s (perf card b/river-mesh-speed); a fresh full capture set takes ~1300 s.
   b/lights-receivers merged: foliage, creatures (shadowed) and grass (unshadowed) receive budgeted point lights; shadowResolution warning gone; capture phase 560 lightreceivers. Open: night cost check for grass and foliage under lights; water receiving point lights.
 - Day/night cycle (Zach 11-23, before light budgets so night lighting can be judged):
