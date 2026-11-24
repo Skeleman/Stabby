@@ -75,6 +75,34 @@ public class ObjectRegionTests
         Assert.Contains(2 * across + 2, Near(across, size, px, pz, free));
     }
 
+    [Fact]
+    public void RegionsMatchAStableCellSortWhateverWasBuiltBefore()
+    {
+        var rng = Rng.Stream(7, "region scratch");
+        foreach (int n in new[] { 400, 3, 0, 57, 1000, 1 })
+        {
+            var columns = new List<ObjectColumn>();
+            var owners = new List<ulong>();
+            for (int k = 0; k < n; k++)
+            {
+                columns.Add(new ObjectColumn { X = rng.NextU32() % 200 - 40f, Z = rng.NextU32() % 120 + 5f, R = rng.NextU32() % 4 + 0.5f, Bottom = 0, Top = 2 });
+                owners.Add((ulong)k);
+            }
+            var r = ColumnRegion.Of(n, columns, owners);
+            Assert.Equal(n, r.Count);
+            Assert.Equal(n, r.Owners.Length);
+            if (n == 0) { Assert.Single(r.Starts); continue; }
+            Assert.Equal(r.Grid.Cells + 1, r.Starts.Length);
+            int Cell(ObjectColumn c) => (ColumnRegion.CellOf(c.Z) - r.Grid.Z0) * r.Grid.W + ColumnRegion.CellOf(c.X) - r.Grid.X0;
+            var order = Enumerable.Range(0, n).OrderBy(k => Cell(columns[k])).ToList();
+            Assert.Equal(order.Select(k => (ulong)k), r.Owners);
+            Assert.Equal(order.Select(k => columns[k]), r.Items);
+            for (int c = 0; c < r.Grid.Cells; c++)
+                Assert.Equal(order.Count(k => Cell(columns[k]) < c), r.Starts[c]);
+            Assert.Equal(n, r.Starts[r.Grid.Cells]);
+        }
+    }
+
     static List<int> Near(int across, float size, float x, float z, float reach)
     {
         var list = new List<int>();
