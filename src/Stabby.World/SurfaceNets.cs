@@ -460,11 +460,23 @@ namespace Stabby.World
             Edge(d2, d6, 0, 1, 0, 2, ref sx, ref sy, ref sz, ref n);
             Edge(d3, d7, 1, 1, 0, 2, ref sx, ref sy, ref sz, ref n);
             float fx = sx / n, fy = sy / n, fz = sz / n;
-            if (field.Sharp(ci, j, ck)) Sharpen(field, ci, j, ck, s, d0, d1, d2, d3, d4, d5, d6, d7, ref fx, ref fy, ref fz);
-            float ux = 1 - fx, uy = 1 - fy, uz = 1 - fz;
-            float gx = uy * uz * (d1 - d0) + fy * uz * (d3 - d2) + uy * fz * (d5 - d4) + fy * fz * (d7 - d6);
-            float gy = ux * uz * (d2 - d0) + fx * uz * (d3 - d1) + ux * fz * (d6 - d4) + fx * fz * (d7 - d5);
-            float gz = ux * uy * (d4 - d0) + fx * uy * (d5 - d1) + ux * fy * (d6 - d2) + fx * fy * (d7 - d3);
+            float gx, gy, gz;
+            if (field.Sharp(ci, j, ck))
+            {
+                var f = Corners(field, ci, j, ck, s);
+                Sharpen(ref f, d0, d1, d2, d3, d4, d5, d6, d7, ref fx, ref fy, ref fz);
+                float e = QefStep;
+                gx = f.At(fx + e, fy, fz) - f.At(fx - e, fy, fz);
+                gy = f.At(fx, fy + e, fz) - f.At(fx, fy - e, fz);
+                gz = f.At(fx, fy, fz + e) - f.At(fx, fy, fz - e);
+            }
+            else
+            {
+                float ux = 1 - fx, uy = 1 - fy, uz = 1 - fz;
+                gx = uy * uz * (d1 - d0) + fy * uz * (d3 - d2) + uy * fz * (d5 - d4) + fy * fz * (d7 - d6);
+                gy = ux * uz * (d2 - d0) + fx * uz * (d3 - d1) + ux * fz * (d6 - d4) + fx * fz * (d7 - d5);
+                gz = ux * uy * (d4 - d0) + fx * uy * (d5 - d1) + ux * fy * (d6 - d2) + fx * fy * (d7 - d3);
+            }
             float len = (float)Math.Sqrt(gx * gx + gy * gy + gz * gz);
             float inv = len > 0 ? -1f / len : 0;
             return sink.AddVertex((ci + fx) * s, (j + fy) * s, (ck + fz) * s, gx * inv, gy * inv, gz * inv);
@@ -472,15 +484,17 @@ namespace Stabby.World
 
         const float QefStep = 0.05f, QefDrop = 0.1f;
 
-        static void Sharpen<TField>(TField field, int ci, int j, int ck, float s, float d0, float d1, float d2, float d3, float d4, float d5, float d6, float d7, ref float fx, ref float fy, ref float fz)
-            where TField : struct, ISolidField
-        {
-            var f = new CellField<TField>
+        static CellField<TField> Corners<TField>(TField field, int ci, int j, int ck, float s) where TField : struct, ISolidField
+            => new CellField<TField>
             {
                 F = field, S = s, I = ci, J = j, K = ck,
                 B0 = field.Base(ci, j, ck), B1 = field.Base(ci + 1, j, ck), B2 = field.Base(ci, j + 1, ck), B3 = field.Base(ci + 1, j + 1, ck),
                 B4 = field.Base(ci, j, ck + 1), B5 = field.Base(ci + 1, j, ck + 1), B6 = field.Base(ci, j + 1, ck + 1), B7 = field.Base(ci + 1, j + 1, ck + 1),
             };
+
+        static void Sharpen<TField>(ref CellField<TField> f, float d0, float d1, float d2, float d3, float d4, float d5, float d6, float d7, ref float fx, ref float fy, ref float fz)
+            where TField : struct, ISolidField
+        {
             var q = new Qef();
             Hermite(ref f, ref q, d0, d1, 0, 0, 0, 0);
             Hermite(ref f, ref q, d2, d3, 0, 1, 0, 0);
