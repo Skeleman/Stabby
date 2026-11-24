@@ -103,7 +103,6 @@ namespace Stabby.Game
                 var go = new GameObject("Stabby light " + pool.Count) { hideFlags = HideFlags.DontSave };
                 var l = go.AddComponent<Light>();
                 l.type = LightType.Point;
-                l.shadowResolution = LightShadowResolution.Low;
                 l.shadowBias = 0.05f;
                 l.shadowNormalBias = 0.4f;
                 pool.Add(l);
