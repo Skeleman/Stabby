@@ -5,7 +5,8 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float OceanNoon = 12f, OceanGlitter = 16.75f, OceanEyeM = 7f, OceanOpenM = 1500f, OceanCoastM = 250f;
+        const float OceanNoon = 12f, OceanGlitter = 16.75f, OceanEyeM = 7f;
+        static readonly Vector4 OceanNoonPose = new Vector4(12710, 13720, -0.77f, -0.64f), OceanGlitterPose = new Vector4(12720, 13740, -0.91f, -0.42f);
 
         static System.Collections.IEnumerator OceanDetailTour(Camera cam, string dir)
         {
@@ -18,42 +19,15 @@ namespace Stabby.Game.Editor
             if (map == null) { GameStatus.Lines["~ocean"] = "ocean: no map"; yield break; }
             GameStatus.HoldCamera = true;
             cam.fieldOfView = 60f;
-            int n = map.Config.Size;
-            float cm = map.Config.CellMeters;
-            bool SeaAt(Vector2 p)
-            {
-                int x = Mathf.RoundToInt(p.x / cm), y = Mathf.RoundToInt(p.y / cm);
-                return x < 0 || y < 0 || x >= n || y >= n || map.Sea[y * n + x];
-            }
-            bool Spot(Vector2 at, Vector2 d, out Vector2 eye)
-            {
-                eye = at;
-                for (float r = 0; r <= OceanOpenM; r += cm) if (!SeaAt(at + d * r)) return false;
-                for (float r = cm; r <= OceanCoastM; r += cm) if (!SeaAt(at - d * r)) return true;
-                return false;
-            }
-            Vector2 Find(Vector2 d)
-            {
-                var h = new Vector2(home.x, home.z);
-                for (float r = 0; r < n * cm; r += cm * 2)
-                    for (int a = 0; a < 64; a++)
-                    {
-                        var p = h + (Vector2)(Quaternion.Euler(0, 0, a * 5.625f) * Vector2.right) * r;
-                        if (Spot(p, d, out var e)) return e;
-                    }
-                return h;
-            }
             var shots = new System.Collections.Generic.List<string>();
             Vector3 benchEye = cam.transform.position;
             Quaternion benchRot = cam.transform.rotation;
             foreach (var (hour, tag) in new[] { (OceanNoon, "noon"), (OceanGlitter, "glitter") })
             {
                 for (var w = ShowHour(hour); w.MoveNext();) yield return null;
-                var sun = SunXZ();
-                var d = tag == "noon" ? new Vector2(-sun.y, sun.x) : sun;
-                var at = Find(d);
-                if (tag == "noon" && !Spot(at, d, out _)) { d = -d; at = Find(d); }
-                var eye = new Vector3(at.x, OceanEyeM, at.y);
+                var pose = tag == "noon" ? OceanNoonPose : OceanGlitterPose;
+                var d = new Vector2(pose.z, pose.w);
+                var eye = new Vector3(pose.x, OceanEyeM, pose.y);
                 var fwd = new Vector3(d.x, 0, d.y);
                 foreach (var (pitch, view) in new[] { (9f, "mid"), (1.5f, "far") })
                 {

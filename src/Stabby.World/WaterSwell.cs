@@ -18,6 +18,8 @@ namespace Stabby.World
     {
         public const float Gravity = 9.81f;
         public const float DirX = 0.8f, DirZ = 0.6f, CrossX = 0.96f, CrossZ = -0.28f, CrossLength = 0.61f, CrossHeight = 0.45f;
+        public const float ThirdX = 0.28f, ThirdZ = 0.96f, ThirdLength = 0.79f, CrossPart = 0.30f, ThirdPart = 0.15f;
+        public const float MainSharp = 0.6f, CrossSharp = 0.45f, ThirdSharp = 0.3f;
         public const float ShoreStart = 12f, ShoreFull = 4f, ShoreRef = 8f, Breaking = 0.39f, SharpDepth = 6f, MinDepth = 0.05f, MinSlope = 0.03f;
 
         public static readonly SwellParams Sea = new SwellParams(0.35f, 40f, 7f, 0.22f);
@@ -46,13 +48,14 @@ namespace Stabby.World
             float h = 0, open = 1 - ShoreWeight(depth);
             if (open > 0 && p.Height > 0)
             {
-                float l1 = p.Length, l2 = p.Length * CrossLength;
-                float t1 = p.Period, t2 = (float)Math.Sqrt(2 * Math.PI * l2 / Gravity);
-                float a1 = p.Height * open, a2 = p.Height * CrossHeight * open;
-                h += a1 * Wave((x * DirX + z * DirZ) / l1 - t / t1, 0, out float d1);
-                h += a2 * Wave((x * CrossX + z * CrossZ) / l2 - t / t2 + 0.37f, 0, out float d2);
-                dhdx += a1 * d1 * DirX / l1 + a2 * d2 * CrossX / l2;
-                dhdz += a1 * d1 * DirZ / l1 + a2 * d2 * CrossZ / l2;
+                float l1 = p.Length, l2 = p.Length * CrossLength, l3 = p.Length * ThirdLength;
+                float t1 = p.Period, t2 = (float)Math.Sqrt(2 * Math.PI * l2 / Gravity), t3 = (float)Math.Sqrt(2 * Math.PI * l3 / Gravity);
+                float a1 = p.Height * open, a2 = p.Height * CrossPart * open, a3 = p.Height * ThirdPart * open;
+                h += a1 * Wave((x * DirX + z * DirZ) / l1 - t / t1, MainSharp, out float d1);
+                h += a2 * Wave((x * CrossX + z * CrossZ) / l2 - t / t2 + 0.37f, CrossSharp, out float d2);
+                h += a3 * Wave((x * ThirdX + z * ThirdZ) / l3 - t / t3 + 0.71f, ThirdSharp, out float d3);
+                dhdx += a1 * d1 * DirX / l1 + a2 * d2 * CrossX / l2 + a3 * d3 * ThirdX / l3;
+                dhdz += a1 * d1 * DirZ / l1 + a2 * d2 * CrossZ / l2 + a3 * d3 * ThirdZ / l3;
             }
             float amp = ShoreAmplitude(p, depth);
             if (amp > 0)

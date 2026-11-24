@@ -23,6 +23,22 @@ public class WaterSwellTests
     }
 
     [Fact]
+    public void OpenSwellPartsSumToCrossHeight()
+    {
+        Assert.Equal(WaterSwell.CrossHeight, WaterSwell.CrossPart + WaterSwell.ThirdPart, 5);
+        Assert.True(WaterSwell.ThirdLength >= WaterSwell.CrossLength);
+    }
+
+    [Fact]
+    public void OpenSwellHasNarrowCrestsAndBroadTroughs()
+    {
+        int above = 0, n = 1000;
+        for (int k = 0; k < n; k++)
+            if (WaterSwell.Wave((k + 0.5f) / n, WaterSwell.MainSharp, out _) > 0) above++;
+        Assert.InRange(above, n / 4, n * 21 / 50);
+    }
+
+    [Fact]
     public void ZeroOnDryGround()
     {
         foreach (var p in Both)
