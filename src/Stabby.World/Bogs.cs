@@ -88,7 +88,7 @@ namespace Stabby.World
                 float dx = t.X * cm - x, dz = t.Y * cm - z;
                 if (dx * dx + dz * dz < BogTownM * BogTownM) return;
             }
-            if (RoadSide(x, z, out _, out _) < rout + BogRoadM) return;
+            if (RoadSide(x, z, out _, out _) < rout + BogRoadM || UnderMesa(x, z, rout)) return;
             var basin = Pool(BogPool, 0, x, z, rout, level, level - depth - BogHeadM, top + BogHeadM, new[] { BogEdit(x, z, r, level, level - depth, top + BogHeadM) });
             if (basin.Leaks || basin.WetCount == 0 || !(basin.Level - basin.Floor >= PoolMinDepthM)) return;
             list.Add(x); list.Add(z); list.Add(r); list.Add(level); list.Add(level - depth); list.Add(top);
