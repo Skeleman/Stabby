@@ -27,7 +27,7 @@ namespace Stabby.Game
         public static bool ShownPinned;
         public static SkyState Shown;
 
-        static readonly int SkyId = Shader.PropertyToID("_StabbySky"), GroundId = Shader.PropertyToID("_StabbyGround");
+        static readonly int SkyId = Shader.PropertyToID("_StabbySky"), GroundId = Shader.PropertyToID("_StabbyGround"), ClockId = Shader.PropertyToID("_StabbyClock");
         static readonly int ZenithId = Shader.PropertyToID("_StabbyZenith"), HorizonId = Shader.PropertyToID("_StabbyHorizon"), GlowId = Shader.PropertyToID("_StabbyGlow");
         static readonly int SunDirId = Shader.PropertyToID("_StabbySunDir"), SunTintId = Shader.PropertyToID("_StabbySunTint");
         static readonly int MoonDirId = Shader.PropertyToID("_StabbyMoonDir"), MoonTintId = Shader.PropertyToID("_StabbyMoonTint"), StarsId = Shader.PropertyToID("_StabbyStars");
@@ -54,6 +54,7 @@ namespace Stabby.Game
         protected override void OnUpdate()
         {
             Clock = SharedClock();
+            Shader.SetGlobalFloat(ClockId, (float)(Clock % 3600.0));
             if (sky == null)
             {
                 if (load == null || !load.IsCompleted) return;
