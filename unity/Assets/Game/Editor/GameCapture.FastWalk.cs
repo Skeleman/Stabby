@@ -43,6 +43,7 @@ namespace Stabby.Game.Editor
             int rows = resAt >= 0 && resAt + 1 < args.Length && int.TryParse(args[resAt + 1], out int r) ? r : 1080;
             var target = new RenderTexture(rows * 16 / 9, rows, 24);
             cam.targetTexture = target;
+            yield return null;
             var start = new Vector2(home.x, home.z);
             Vector2 d = WalkLine(ground, start, NormalWalkM + FastWalkM, out float land, out float relief);
             int to = System.Array.IndexOf(args, "-stabbyWalkTo");
@@ -61,7 +62,7 @@ namespace Stabby.Game.Editor
             var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
             var lines = new List<string>
             {
-                $"walk line from {start.x:F0},{start.y:F0} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {GameSettings.GraphicsQuality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
+                $"walk line from {start.x:F0},{start.y:F0} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
             };
             try
             {
