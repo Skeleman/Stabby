@@ -1,7 +1,10 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
+  "lightBudget": { "shadowed": 2, "unshadowed": 12, "glow": 48 },
   "lights": [
-    { "id": "point", "shadowedPixels": 432, "unshadowedPixels": 108, "glowPixels": 10.8 }
+    { "id": "point", "shadowedPixels": 432, "unshadowedPixels": 108, "glowPixels": 10.8, "importance": 1 },
+    { "id": "fire", "shadowedPixels": 324, "unshadowedPixels": 81, "glowPixels": 8.1, "importance": 1.6 },
+    { "id": "candle", "shadowedPixels": 648, "unshadowedPixels": 162, "glowPixels": 16.2, "importance": 0.5 }
   ],
   "kinds": [
     { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "shadowCascadePixels": 64.8, "light": "point", "wind": false, "animated": false, "solid": true },
