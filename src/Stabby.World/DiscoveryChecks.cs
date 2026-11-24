@@ -72,6 +72,14 @@ namespace Stabby.World
             CheckBogs(w, field, e);
             CheckPools(field, e);
             var found = field.Discoveries();
+            var hot = field.Hotspots;
+            for (int h = 0; h < hot.Count; h++)
+            {
+                int sites = field.HotspotSites(h), vents = 0;
+                if (sites < ObjectField.VentSitesMin) continue;
+                foreach (var o in found) if (field.IsVent(o) && hot.Index(o.X, o.Z) == h) vents++;
+                if (vents < ObjectField.VentsMin) e.Add($"geothermal hotspot at {hot.X[h]:F0},{hot.Z[h]:F0} has {sites} calm vent sites but {vents} vents");
+            }
             CheckMesaClearings(w, field, found, e);
             int n = w.Config.Size, across = field.ChunksAcross;
             float cm = w.Config.CellMeters, worldM = n * cm, span = field.ChunkMeters;
