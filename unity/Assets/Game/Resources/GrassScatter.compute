@@ -35,7 +35,7 @@ float4 _GrassC;
 float4 _GrassD;
 uint4 _Layout;
 
-float Rand(int3 cell, uint salt) { return TmHashU(uint3(cell.x, cell.y, cell.z * 16 + salt)) * (1.0 / 4294967296.0); }
+float Rand(int3 cell, uint salt) { return OrgHashU(uint3(cell.x, cell.y, cell.z * 16 + salt)) * (1.0 / 4294967296.0); }
 
 bool Outside(float3 p, float r)
 {
@@ -71,8 +71,8 @@ void Scatter(uint3 id : SV_DispatchThreadID)
     uint tries = min(count, (uint)ceil(keepTri * count) + 1);
     float4 ca = Attr(ix.x, _Layout.y), cb = Attr(ix.y, _Layout.y), cc = Attr(ix.z, _Layout.y);
     float4 sa = Attr(ix.x, _Layout.z), sb = Attr(ix.y, _Layout.z), sc = Attr(ix.z, _Layout.z);
-    float2 o2 = TmOrigin(_Eye.xyz);
-    tmO = float3(o2.x, 0, o2.y);
+    float2 o2 = OrgOrigin(_Eye.xyz);
+    orgO = float3(o2.x, 0, o2.y);
     int2 key = int2(round(ctr.xz * 16));
     float invCount = 1.0 / max(count, 1u);
     for (uint k = 0; k < tries; k++)
@@ -85,7 +85,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float w = 1 - u - v;
         float3 p = a * w + b * u + c * v;
         float sinter = sa.w * w + sb.w * u + sc.w * v;
-        if (sinter < -0.3 || TmHashU(uint3(cell.x, cell.y, cell.z ^ 0x5171u)) * (1.0 / 4294967296.0) < 1.15 * sinter - 0.1) continue;
+        if (sinter < -0.3 || OrgHashU(uint3(cell.x, cell.y, cell.z ^ 0x5171u)) * (1.0 / 4294967296.0) < 1.15 * sinter - 0.1) continue;
         float hw = p.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, p.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
         if (hw < 0.3) continue;
         float d = distance(p, _Eye.xyz);
@@ -106,7 +106,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
             mix = lerp(mix, saturate((slope - 0.25) / 0.35) * (1 - shoreF), f);
             n = normalize(lerp(n, gn, f));
         }
-        float jn = TmNoise2(xa * 0.27 + 41.7).x;
+        float jn = OrgNoise2(xa * 0.27 + 41.7).x;
         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
         float shore = smoothstep(5.5, 2.5, p.y);
         cw = lerp(cw, float4(0, 0, 1, 0), shore);
@@ -115,9 +115,9 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.12 * jn);
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
         float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
-        float3 lp = float3(p.x - tmO.x, p.y, p.z - tmO.z);
+        float3 lp = float3(p.x - orgO.x, p.y, p.z - orgO.z);
         float2 wd = hw < 4.8 ? TmWet(lp, hw, max(d * _Eye.w, 1e-4)) : 0;
-        float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - tmO.xz, fo, max(d * _Eye.w, 1e-4)).y) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));
+        float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - orgO.xz, fo, max(d * _Eye.w, 1e-4)).y) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));
         float2 ck = ContactAt(xa);
         float lush = ck.y * saturate(0.75 + 0.5 * jn), bare = smoothstep(0.35, 0.95, ck.x);
         gw = lerp(gw, max(gw, 0.95 * up), lush);
@@ -125,10 +125,10 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float cmin = _GrassB.w, gate = cmin + (1 - cmin) * Rand(cell, 3);
         if (gw * 1.2 <= gate) continue;
         float sw = _StabbyStrataWobble.w;
-        float hn = 0.65 * TmNoise2(xa * sw * 2.7 + 5.3).x + 0.35 * TmNoise2(xa * sw * 0.6 + 1.9).x;
+        float hn = 0.65 * OrgNoise2(xa * sw * 2.7 + 5.3).x + 0.35 * OrgNoise2(xa * sw * 0.6 + 1.9).x;
         float2 dw = mul(float2x2(0.8, -0.6, 0.6, 0.8), xa);
-        float dirt = smoothstep(0.35, 1.0, TmNoise2(dw * 0.035 + 31.3).x + 0.5 * TmNoise2(dw * 0.09 + 7.1).x);
-        float cl = TmL2(xa - tmO.xz, _StabbyCoatB[0].y, 3.7).x;
+        float dirt = smoothstep(0.35, 1.0, OrgNoise2(dw * 0.035 + 31.3).x + 0.5 * OrgNoise2(dw * 0.09 + 7.1).x);
+        float cl = OrgL2(xa - orgO.xz, _StabbyCoatB[0].y, 3.7).x;
         gw *= saturate(0.85 + 0.45 * cl + 0.04 * hn) * (1 - 0.05 * dirt) * 1.2;
         if (gw <= gate) continue;
         float2 cg = xa * (1.0 / 0.55), cf = frac(cg), bo = 0;
@@ -137,12 +137,12 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         [unroll] for (int j = 0; j < 9; j++)
         {
             int2 o = int2(j % 3 - 1, j / 3 - 1);
-            uint h = TmHashU(uint3((uint)(ci.x + o.x), (uint)(ci.y + o.y), 0x6c1du));
+            uint h = OrgHashU(uint3((uint)(ci.x + o.x), (uint)(ci.y + o.y), 0x6c1du));
             float2 dv = o + float2(h & 0xffff, h >> 16) * (1.0 / 65535) - cf;
             float dd = dot(dv, dv);
             if (dd < best) { best = dd; bo = dv; bc = ci + o; }
         }
-        uint ch = TmHashU(uint3((uint)bc.x, (uint)bc.y, 0x9e37u));
+        uint ch = OrgHashU(uint3((uint)bc.x, (uint)bc.y, 0x9e37u));
         float4 cr4 = float4(ch & 255, (ch >> 8) & 255, (ch >> 16) & 255, ch >> 24) * (1.0 / 255);
         float dr = saturate(sqrt(best) * 1.5);
         float faceA = atan2(-bo.y, -bo.x) * (1.0 / 6.2831853) + (Rand(cell, 5) - 0.5) * 0.3;

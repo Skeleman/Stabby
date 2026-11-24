@@ -58,4 +58,32 @@ public class LintTests
 
     [Fact]
     public void MissingKitFunctionIsAProblem() => Assert.Single(Linter.ColourProblems(Linter.KitShader, "float3 Other() { return 0; }"));
+
+    static List<string> Shader(string body, Dictionary<string, string>? allow = null) =>
+        Linter.ShaderProblems("S.shader", "float3 Surf(float3 wp, float fp)\n{\n" + body + "\n}\n", allow ?? new Dictionary<string, string>());
+
+    [Theory]
+    [InlineData("float g = OrgNoise3(wp * 29 + 3.1, int3(0, 0, 0)).x;")]
+    [InlineData("float w = OrgFade(73, fp);")]
+    [InlineData("float4 n = OrgLN3(wp, 20.8, 1.7, fp);")]
+    [InlineData("float s = frac(wp.x * 4);")]
+    [InlineData("float s = sin(wp.y * 12);")]
+    [InlineData("float s = floor(wp.y);")]
+    public void FlagsPrivateDetail(string body) => Assert.Single(Shader(body));
+
+    [Theory]
+    [InlineData("float4 g = OrgRL3(wp, OrgF(2), 3.1, 2);")]
+    [InlineData("float w = OrgRungW(3, fp);")]
+    [InlineData("float m = OrgNoise3(wp * 0.4 + 2, int3(0, 0, 0)).x;")]
+    [InlineData("float s = sin(wp.y * 12 + OrgNoise3(wp, int3(0, 0, 0)).x * 3);")]
+    [InlineData("float a = sin(_Time.y * 2);")]
+    public void IgnoresSharedLadderAndMacro(string body) => Assert.Empty(Shader(body));
+
+    [Fact]
+    public void AllowListSilencesAFunction() =>
+        Assert.Empty(Shader("float s = frac(wp.x * 4);", new Dictionary<string, string> { ["S.shader:Surf"] = "planks" }));
+
+    [Fact]
+    public void ShadowPassIsSkipped() =>
+        Assert.Empty(Linter.ShaderProblems("S.shader", "Pass { Name \"ShadowCaster\"\nfloat3 F(float3 wp) { return frac(wp); }\n}", new Dictionary<string, string>()));
 }

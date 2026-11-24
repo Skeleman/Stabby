@@ -15,7 +15,7 @@ namespace Stabby.World
 
     public sealed class RockSurface
     {
-        public float GrainAmp, GrainWavelengthM;
+        public float GrainAmp;
         public float BumpAmp, BumpWavelengthM;
         public float BedSpacingM, BedDepthM;
         public float JointSpacingM, JointDepthM;
@@ -27,7 +27,7 @@ namespace Stabby.World
         public string Id;
         public List<string> Biomes = new List<string>();
         public float BumpAmp, BumpWavelengthM;
-        public float GrainAmp, GrainWavelengthM;
+        public float GrainAmp;
         public float FeatureAmp, FeatureWavelengthM;
         public float Parallax, AlbedoVar, Roughness = float.NaN;
     }
@@ -52,13 +52,13 @@ namespace Stabby.World
 
     public sealed class LookDef
     {
-        public float NoiseContrast = 0.12f, AlbedoVar = 0.08f, DetailWavelengthM = 0.05f;
+        public float NoiseContrast = 0.12f, AlbedoVar = 0.08f, DetailWavelengthM = 0.35f, DetailLacunarity = 2.7f, DetailGain = 0.55f;
+        public int DetailOctaves = 5;
         public float Saturation = 0.65f, Roughness = 0.85f, Specular = 0.04f, RoughnessVar;
 
         public void Fill(CoatDef c)
         {
             if (float.IsNaN(c.GrainAmp)) c.GrainAmp = NoiseContrast;
-            if (float.IsNaN(c.GrainWavelengthM)) c.GrainWavelengthM = DetailWavelengthM;
             if (float.IsNaN(c.AlbedoVar)) c.AlbedoVar = AlbedoVar;
             if (float.IsNaN(c.Roughness)) c.Roughness = Roughness;
         }
@@ -317,6 +317,9 @@ namespace Stabby.World
                 Amp(errors, "look.noiseContrast", look.NoiseContrast);
                 Amp(errors, "look.albedoVar", look.AlbedoVar);
                 Len(errors, "look.detailWavelengthM", look.DetailWavelengthM);
+                if (!(look.DetailLacunarity >= 1.5f && look.DetailLacunarity <= 4)) errors.Add($"look.detailLacunarity {look.DetailLacunarity} outside 1.5..4");
+                if (look.DetailOctaves < 1 || look.DetailOctaves > 6) errors.Add($"look.detailOctaves {look.DetailOctaves} outside 1..6");
+                Amp(errors, "look.detailGain", look.DetailGain);
                 Amp(errors, "look.saturation", look.Saturation);
                 Amp(errors, "look.roughness", look.Roughness);
                 Amp(errors, "look.specular", look.Specular);
@@ -372,7 +375,6 @@ namespace Stabby.World
                 {
                     Amp(errors, "surface.rock.grainAmp", r.GrainAmp);
                     Amp(errors, "surface.rock.bumpAmp", r.BumpAmp);
-                    Len(errors, "surface.rock.grainWavelengthM", r.GrainWavelengthM);
                     Len(errors, "surface.rock.bumpWavelengthM", r.BumpWavelengthM);
                     Len(errors, "surface.rock.bedSpacingM", r.BedSpacingM);
                     Len(errors, "surface.rock.jointSpacingM", r.JointSpacingM);
@@ -394,7 +396,6 @@ namespace Stabby.World
                     Amp(errors, n + ".albedoVar", c.AlbedoVar);
                     Amp(errors, n + ".roughness", c.Roughness);
                     Len(errors, n + ".bumpWavelengthM", c.BumpWavelengthM);
-                    Len(errors, n + ".grainWavelengthM", c.GrainWavelengthM);
                     Len(errors, n + ".featureWavelengthM", c.FeatureWavelengthM);
                     if (!(c.Parallax >= 0 && c.Parallax <= 2)) errors.Add($"{n}.parallax {c.Parallax} outside 0..2");
                 }
