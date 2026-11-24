@@ -37,6 +37,7 @@ namespace Stabby.Game
         Light light;
         Material skyMaterial;
         float stepAt = float.MinValue;
+        bool linePinnedHour, linePinnedPhase;
 
         protected override void OnCreate()
         {
@@ -113,7 +114,19 @@ namespace Stabby.Game
             Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B));
             Shown = s;
             ShownHour = s.Hour;
-            GameStatus.Lines["sky"] = $"sky hour {s.Hour:F2}{(PinnedHour.HasValue ? " pinned" : "")}, moon phase {s.Phase:F2} lit {s.Illumination:F2}{(PinnedPhase.HasValue ? " pinned" : "")}, {(s.Moon ? "moon" : "sun")} {s.Intensity:F2}, sun height {s.SunHeight:F2}";
+            (linePinnedHour, linePinnedPhase) = (PinnedHour.HasValue, PinnedPhase.HasValue);
+            if (!GameStatus.Live.ContainsKey("sky")) GameStatus.Live["sky"] = Status;
+        }
+
+        string Status()
+        {
+            var s = Shown;
+            return $"sky hour {s.Hour:F2}{(linePinnedHour ? " pinned" : "")}, moon phase {s.Phase:F2} lit {s.Illumination:F2}{(linePinnedPhase ? " pinned" : "")}, {(s.Moon ? "moon" : "sun")} {s.Intensity:F2}, sun height {s.SunHeight:F2}";
+        }
+
+        protected override void OnDestroy()
+        {
+            if (sky != null && GameStatus.Live.Remove("sky")) GameStatus.Lines["sky"] = Status();
         }
 
         void Scrub()

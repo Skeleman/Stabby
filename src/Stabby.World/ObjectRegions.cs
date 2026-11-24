@@ -66,14 +66,15 @@ namespace Stabby.World
             }
             r.Grid = new RegionGrid { X0 = x0, Z0 = z0, W = x1 - x0 + 1, H = z1 - z0 + 1, Max = max };
             r.Starts = new int[r.Grid.Cells + 1];
-            var at = new int[columns.Count];
+            var at = Scratch(ref scratchAt, columns.Count);
             for (int k = 0; k < columns.Count; k++)
             {
                 at[k] = (CellOf(columns[k].Z) - z0) * r.Grid.W + CellOf(columns[k].X) - x0;
                 r.Starts[at[k] + 1]++;
             }
             for (int b = 0; b < r.Grid.Cells; b++) r.Starts[b + 1] += r.Starts[b];
-            var fill = (int[])r.Starts.Clone();
+            var fill = Scratch(ref scratchFill, r.Starts.Length);
+            Array.Copy(r.Starts, fill, r.Starts.Length);
             for (int k = 0; k < columns.Count; k++)
             {
                 int q = fill[at[k]]++;
@@ -81,6 +82,14 @@ namespace Stabby.World
                 r.Owners[q] = owners[k];
             }
             return r;
+        }
+
+        [ThreadStatic] static int[] scratchAt, scratchFill;
+
+        static int[] Scratch(ref int[] buffer, int n)
+        {
+            if (buffer == null || buffer.Length < n) buffer = new int[Math.Max(n, buffer == null ? 0 : buffer.Length * 2)];
+            return buffer;
         }
 
         public static int CellOf(float m) => (int)Math.Floor(m / CellM);
