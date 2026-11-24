@@ -54,6 +54,7 @@ Shader "Stabby/Water"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
+            #include "Assets/Viewer/Shaders/Sky.hlsl"
 
             float4 _StabbySky, _StabbyFieldUV;
             float4 _StabbyTintSlot;
@@ -178,7 +179,7 @@ Shader "Stabby/Water"
                 float glint = pow(saturate(dot(n, h3)), 400) * smoothstep(0.35, 0.75, s2.x + 0.5 * s3.x + 0.3 * warp.x);
                 c += l.color * (glint * 3 * detail + pow(saturate(dot(n, h3)), 120) * 0.3) * (1 - white);
                 float alpha = saturate(lerp(0.9, 1, white)) * edge * lerp(0.35, 1, gap) * lerp(0.6, 1, spill) * L7.y;
-                return half4(MixFog(c, i.fog), alpha);
+                return half4(StabbyMixFog(c, i.positionWS, i.fog), alpha);
             }
 
             Varyings vert(Attributes i)
@@ -441,7 +442,7 @@ Shader "Stabby/Water"
 
                 float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
-                return half4(lerp(MixFog(c, i.fog), c, clear), alpha);
+                return half4(lerp(StabbyMixFog(c, i.positionWS, i.fog), c, clear), alpha);
             }
 
             half4 frag(Varyings i) : SV_Target

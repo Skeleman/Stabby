@@ -39,11 +39,12 @@ Shader "Stabby/VertexLit"
 
             #include "TerrainMaterials.hlsl"
             #include "Look.hlsl"
+            #include "Sky.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float peat : TEXCOORD6; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float peat : TEXCOORD6; };
 
             Varyings vert(Attributes i)
             {
@@ -61,7 +62,7 @@ Shader "Stabby/VertexLit"
                 o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
                 o.sinter = i.strata.w;
                 o.peat = frac(i.stitch.w) * 2;
-                o.fog = ComputeFogFactor(p.positionCS.z);
+                o.fog = float4(StabbyFogColor(p.positionWS), ComputeFogFactor(p.positionCS.z));
                 return o;
             }
 
@@ -220,7 +221,7 @@ Shader "Stabby/VertexLit"
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float3 c = (LookColor(m.albedo, 1) * (l.color * saturate(dot(n, l.direction)) + ambient + LocalLights(float3(xv.x, h, xv.y), n, i.positionCS)) + LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
-                return half4(MixFog(c, i.fog), 1);
+                return half4(MixFogColor(c, i.fog.rgb, i.fog.w), 1);
             }
             ENDHLSL
         }
