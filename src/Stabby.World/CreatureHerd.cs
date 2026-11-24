@@ -43,11 +43,14 @@ namespace Stabby.World
 
         public static float Grade(float maxSlopeDegrees) => (float)Math.Tan(maxSlopeDegrees * Math.PI / 180);
 
-        public static bool SteepAt<T>(T cells, float x, float z, float grade) where T : struct, INearCells
+        public static bool SteepAt<T>(T cells, float x, float z, float grade) where T : struct, INearCells =>
+            SlopeSq(cells, x, z) > 4 * FeelM * FeelM * grade * grade;
+
+        public static float SlopeSq<T>(T cells, float x, float z) where T : struct, INearCells
         {
             float gx = NearField.Sample(cells, x + FeelM, z) - NearField.Sample(cells, x - FeelM, z);
             float gz = NearField.Sample(cells, x, z + FeelM) - NearField.Sample(cells, x, z - FeelM);
-            return gx * gx + gz * gz > 4 * FeelM * FeelM * grade * grade;
+            return gx * gx + gz * gz;
         }
 
         public static bool SteepStep<T>(T cells, float x0, float z0, float x1, float z1, float grade) where T : struct, INearCells

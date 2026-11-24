@@ -43,6 +43,7 @@ namespace Stabby.Game
             public int Across;
             public float SiteMeters;
             public WaterGround Ground;
+            public DrinkSpotList Drinks;
         }
 
         Task<Built> plan;
@@ -75,7 +76,8 @@ namespace Stabby.Game
                 plan = Task.Run(() =>
                 {
                     var lib = ContentFiles.Creatures(biomes);
-                    return new Built { Spawns = CreaturePlan.Build(map, lib), Lib = lib, Across = CreaturePlan.SitesAcross(map.Config.Size), SiteMeters = CreaturePlan.SiteCells * map.Config.CellMeters, Ground = CreaturePlan.Ground(map) };
+                    var spawns = CreaturePlan.Build(map, lib, out var drinks);
+                    return new Built { Spawns = spawns, Drinks = drinks, Lib = lib, Across = CreaturePlan.SitesAcross(map.Config.Size), SiteMeters = CreaturePlan.SiteCells * map.Config.CellMeters, Ground = CreaturePlan.Ground(map) };
                 });
                 return;
             }
@@ -119,6 +121,11 @@ namespace Stabby.Game
             root.CellMeters = p.Ground.CellMeters;
             var wet = b.Allocate(ref root.Wet, p.Ground.Wet.Length);
             for (int i = 0; i < wet.Length; i++) wet[i] = p.Ground.Wet[i];
+            root.DrinkReach = CreaturePlan.DrinkReach(p.Ground.CellMeters);
+            var drinkStart = b.Allocate(ref root.DrinkStart, p.Drinks.Start.Length);
+            for (int i = 0; i < drinkStart.Length; i++) drinkStart[i] = p.Drinks.Start[i];
+            var drinkSpots = b.Allocate(ref root.Drinks, p.Drinks.Count);
+            for (int i = 0; i < drinkSpots.Length; i++) drinkSpots[i] = p.Drinks.Spots[i];
             var start = b.Allocate(ref root.SiteStart, p.Across * p.Across + 1);
             var rows = b.Allocate(ref root.Spawns, p.Spawns.Count);
             int site = 0;
@@ -313,14 +320,14 @@ namespace Stabby.Game
             byte want = Drives.Choose(b.Levels, drives, needs, b.Want);
             if (want != b.Want) { b.Want = want; b.Placed = false; s.Act = Drives.None; }
             if (want == Drives.None) { s.Act = Drives.None; return false; }
-            if (!b.Placed) { b.Spot = Spot(s.Seed, b.Offset, want, needs, ref ground); b.Placed = true; b.Seek = Drives.GiveUp + 2 * math.distance(b.Spot, s.Position) / math.max(0.1f, s.WalkSpeed); }
+            if (!b.Placed) { b.Spot = Spot(s.Seed, s.Position, b.Offset, want, needs, ref ground, out b.Water); b.Placed = true; b.Seek = Drives.GiveUp + 2 * math.distance(b.Spot, s.Position) / math.max(0.1f, s.WalkSpeed); }
             float2 to = b.Spot - s.Position;
             float d = math.length(to);
             if (s.Act == want || d <= Drives.Arrive || d <= Drives.Reach && math.lengthsq(b.Push) > 0)
             {
                 s.Act = want;
                 s.Move = math.lerp(s.Move, 0, math.min(1, 3 * dt));
-                if (want == Drives.Drink) s.Heading = HerdMind.Toward(s.Heading, math.atan2(needs.WaterX, needs.WaterZ), 1.5f * dt);
+                if (want == Drives.Drink) s.Heading = HerdMind.Toward(s.Heading, math.atan2(b.Water.x, b.Water.y), 1.5f * dt);
                 return true;
             }
             b.Seek -= dt;
@@ -337,7 +344,7 @@ namespace Stabby.Game
             float feel = math.min(Footing.FeelM, d);
             if (s.Move > 0.05f && ground.Crosses(s.Position.x, s.Position.y, s.Position.x + fwd.x * feel, s.Position.y + fwd.y * feel))
             {
-                if (d <= Drives.Reach || want == Drives.Drink && NearWater(s.Position, needs, ref ground)) { s.Act = want; return true; }
+                if (d <= Drives.Reach || want == Drives.Drink && NearWater(s.Position, b.Water, ref ground)) { s.Act = want; return true; }
                 s.Move *= 0.5f;
                 s.Heading += (s.Seed & 1) == 0 ? 1.2f : -1.2f;
                 return true;
@@ -346,18 +353,30 @@ namespace Stabby.Game
             return true;
         }
 
-        static bool NearWater(float2 at, in HerdNeeds needs, ref CreatureGround ground)
+        static bool NearWater(float2 at, float2 water, ref CreatureGround ground)
         {
             for (float k = 1; k <= Drives.Shore; k += 1)
-                if (ground.Blocked(at.x + needs.WaterX * k, at.y + needs.WaterZ * k)) return true;
+                if (ground.Blocked(at.x + water.x * k, at.y + water.y * k)) return true;
             return false;
         }
 
-        static float2 Spot(uint seed, float2 offset, byte want, in HerdNeeds needs, ref CreatureGround ground)
+        static float2 Spot(uint seed, float2 at, float2 offset, byte want, in HerdNeeds needs, ref CreatureGround ground, out float2 water)
         {
             needs.Target(want, out float tx, out float tz);
             float2 target = new float2(tx, tz);
-            float2 side = want == Drives.Drink ? new float2(-needs.WaterZ, needs.WaterX) * (((seed >> 8) & 0xFFFF) / 65535f * 2 - 1) * 1.5f * CreaturePlan.HerdSpread : offset;
+            water = new float2(needs.WaterX, needs.WaterZ);
+            if (want == Drives.Drink)
+            {
+                ref var p = ref ground.Plan.Value;
+                int k = DrinkSpotList.Nearest(ref ground, ref ground, p.Size, p.CellMeters, at.x, at.y, ground.Grade, p.DrinkReach);
+                if (k >= 0)
+                {
+                    var d = ground.Spot(k);
+                    target = new float2(d.X, d.Z);
+                    water = new float2(d.WaterX, d.WaterZ);
+                }
+            }
+            float2 side = want == Drives.Drink ? new float2(-water.y, water.x) * (((seed >> 8) & 0xFFFF) / 65535f * 2 - 1) * 1.5f * CreaturePlan.HerdSpread : offset;
             float2 spot = target + side;
             return ground.Blocked(spot.x, spot.y) || ground.Crosses(target.x, target.y, spot.x, spot.y) ? target : spot;
         }
