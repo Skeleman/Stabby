@@ -14,8 +14,8 @@ namespace Stabby.World
     public static class Mesas
     {
         public static readonly string[] Biomes = { "desert", "cold-desert", "steppe", "shrubland" };
-        public const float SpacingM = 640f, GroupGapM = 3000f, AridRainMm = 700f, AridMinTempC = 0f, SmallScale = 0.6f;
-        public const int MaxGroups = 4, Tries = 6, Lobes = 3, MaxButtes = 3;
+        public const float SpacingM = 640f, GroupGapM = 1500f, AridRainMm = 700f, AridMinTempC = 0f, TrySpread = 0.5f, SmallScale = 0.6f;
+        public const int MaxGroups = 6, AnchorSteps = 4, Tries = 6, Lobes = 3, MaxButtes = 3;
         public const float MinHalfM = 95f, MaxHalfM = 190f, MinAcrossM = 150f, MaxAcrossM = 600f, MinRiseM = 75f, MaxRiseM = 130f, ReliefShare = 1.2f, HeadroomShare = 0.5f;
         public const float CapShare = 0.45f, CliffGrade = 4.5f, TalusSpread = 2.3f, OutlineNoise = 0.18f, NotchM = 7f, TopNoiseM = 1.2f, MaxTilt = 0.008f;
         public const float ButteMinHalfM = 26f, ButteMaxHalfM = 42f, ButteCapShare = 0.6f, ButteTalusSpread = 1.6f, ButteMinGapM = 50f, ButteMaxGapM = 200f, ButteSlack = 5f;
@@ -77,13 +77,12 @@ namespace Stabby.World
             {
                 if (placed.Count >= 2 * MaxGroups) break;
                 int gx = k % g, gz = k / g;
-                int ax = Math.Min(c.Size - 1, (int)((gx + 0.5f) * SpacingM / c.CellMeters)), az = Math.Min(c.Size - 1, (int)((gz + 0.5f) * SpacingM / c.CellMeters));
-                if (sea[az * c.Size + ax] || !Arid(s, climate, c.Size, ax, az)) continue;
+                if (!Anchor(c, s, sea, climate, gx, gz, out float fx, out float fz)) continue;
                 var r = new Rng(Rng.Mix(baseSeed + (ulong)k));
                 for (int q = 0; q < v.Length; q++) v[q] = r.NextFloat();
                 for (int t = 0; t < 2 * Tries; t++)
                 {
-                    float x = (gx + v[2 * (t % Tries)]) * SpacingM, z = (gz + v[2 * (t % Tries) + 1]) * SpacingM;
+                    float x = (fx + TrySpread * (v[2 * (t % Tries)] - 0.5f)) * SpacingM, z = (fz + TrySpread * (v[2 * (t % Tries) + 1] - 0.5f)) * SpacingM;
                     if (Near(placed, x, z)) continue;
                     var b = Main(x, z, v, 2 * Tries, t < Tries ? 1f : SmallScale);
                     float rise = Mix(MinRiseM, MaxRiseM, v[2 * Tries + 1]);
@@ -99,6 +98,18 @@ namespace Stabby.World
                     break;
                 }
             }
+        }
+
+        static bool Anchor(WorldConfig c, WorldSketch s, bool[] sea, ClimateField climate, int gx, int gz, out float fx, out float fz)
+        {
+            for (int q = 0; q < AnchorSteps * AnchorSteps; q++)
+            {
+                fx = gx + (q % AnchorSteps + 0.5f) / AnchorSteps; fz = gz + (q / AnchorSteps + 0.5f) / AnchorSteps;
+                int ax = Math.Min(c.Size - 1, (int)(fx * SpacingM / c.CellMeters)), az = Math.Min(c.Size - 1, (int)(fz * SpacingM / c.CellMeters));
+                if (!sea[az * c.Size + ax] && Arid(s, climate, c.Size, ax, az)) return true;
+            }
+            fx = fz = 0f;
+            return false;
         }
 
         static bool Near(List<float> placed, float x, float z)
@@ -222,7 +233,7 @@ namespace Stabby.World
             float cm = c.CellMeters;
             int cx = (int)Math.Round(b.X / cm), cy = (int)Math.Round(b.Z / cm);
             float core = Core(b, rise);
-            int coast = (int)Math.Ceiling((c.BeachMeters + CoastPadM + core) / cm);
+            int coast = (int)Math.Ceiling((CoastPadM + Extent(b) + rise / CliffGrade) / cm);
             int edge = Math.Max(coast, (int)Math.Ceiling(reach / cm));
             if (cx - edge < 1 || cy - edge < 1 || cx + edge >= n - 1 || cy + edge >= n - 1) return false;
             if (!Arid(s, climate, n, cx, cy)) return false;
@@ -248,6 +259,7 @@ namespace Stabby.World
                     int d2 = dx * dx + dy * dy;
                     if (d2 > rr * rr) continue;
                     int i = (cy + dy) * n + cx + dx;
+                    if (s.Beach[i] > 0f && s.Coast[i] * cm < c.BeachMeters) return false;
                     if (s.Landmark[i] || s.Plateau[i] > 0f || s.Cliff[i] > 0f || s.Valley[i] > ValleyMax) return false;
                     if (d2 > inner * inner) continue;
                     lo = Math.Min(lo, h[i]); hi = Math.Max(hi, h[i]);
