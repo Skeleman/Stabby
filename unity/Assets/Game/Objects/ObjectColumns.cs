@@ -110,6 +110,7 @@ namespace Stabby.Game
         public ObjectField Field { get; private set; }
         public ObjectLibrary Library => lib;
         public float Reach => reach;
+        public bool Settled => Field != null && building.Count == 0;
 
         protected override void OnCreate()
         {

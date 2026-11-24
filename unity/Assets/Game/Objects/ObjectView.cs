@@ -134,6 +134,9 @@ namespace Stabby.Game
         float worstUpdate;
 
         public static int Pending { get; private set; } = 1;
+        static float3 readyAt;
+        static int readyFrame = -1;
+        public static bool ReadyAround(float3 p, float within) => readyFrame >= UnityEngine.Time.frameCount - 2 && math.distance(readyAt, p) <= within;
         public static int LiveEntities { get; private set; }
         public static int PartsHeld { get; private set; }
         public static int ChunksHeld { get; private set; }
@@ -153,6 +156,8 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             if (World.Name != GameSettings.ViewClient) { Enabled = false; return; }
+            Pending = 1;
+            readyFrame = -1;
             ranges = new NativeParallelHashMap<long, int3>(1024, Allocator.Persistent);
             spawned = new NativeParallelHashSet<long>(1024, Allocator.Persistent);
             tileEntities = new NativeParallelMultiHashMap<long, Entity>(4096, Allocator.Persistent);
@@ -829,6 +834,7 @@ namespace Stabby.Game
             Despawn(pos);
             int waiting = Spawn(pos);
             if (waiting > 0) Pending = 1;
+            if (Pending == 0) { readyAt = pos; readyFrame = UnityEngine.Time.frameCount; }
             LiveEntities = liveEntities;
             PartsHeld = partsHeld;
             ChunksHeld = chunksHeld;

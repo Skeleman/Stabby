@@ -16,8 +16,8 @@ namespace Stabby.Game.Editor
     public static partial class GameCapture
     {
         const string Key = "Stabby.GameCapture", StartKey = "Stabby.GameCapture.Start", ScenePath = "Assets/Scenes/Game.unity";
-        const double TimeoutSeconds = 480;
-        static int settle = -1, phase, wait, smooth, chaseWait, impStep;
+        const double TimeoutSeconds = 900;
+        static int settle = -1, phase, wait, smooth, chaseWait, impStep, firstStep;
         static readonly string only = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_ONLY");
         static readonly string variantOnly = System.Environment.GetEnvironmentVariable("STABBY_CAPTURE_VARIANT");
         static bool bank, lake;
@@ -110,10 +110,11 @@ namespace Stabby.Game.Editor
         }
 
         static string dir;
+        static (Vector3 pos, Quaternion rot) farPose;
 
         static void PollBody()
         {
-            if (EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) > (only == "creaturefar" ? 2 * TimeoutSeconds : TimeoutSeconds))
+            if (EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) - LoadWaitTotal() > (only == "creaturefar" ? 2 * TimeoutSeconds : TimeoutSeconds))
             {
                 Debug.LogError("GameCapture: timed out\n" + Status());
                 Finish(2);
@@ -133,14 +134,14 @@ namespace Stabby.Game.Editor
             if (!ready) return;
             if (settle == -1) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
             if (settle > 0 && --settle > 0) return;
-            if (phase == 0 && GameStatus.TerrainBehind > 0 && chaseWait < 1800) { chaseWait++; return; }
+            if (phase == 0 && Loading()) { if (firstStep == 0) chaseWait++; return; }
 
             if (dir == null) { dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game")); Directory.CreateDirectory(dir); }
             var cam = Camera.main;
-            if (phase == 0)
+            if (phase == 0 && firstStep == 0)
             {
                 Shot(cam, null, "warmup");
-                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain";
+                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain and objects";
                 Shot(cam, dir, "chase");
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
@@ -154,9 +155,21 @@ namespace Stabby.Game.Editor
                 focus.y = GroundHeight(focus.x, focus.z);
                 var eye = focus - fwd * 300f + Vector3.up * 800f;
                 eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + 500f);
+                GameStatus.HoldCamera = true;
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(focus - eye));
+                farPose = (home + new Vector3(0, 90, 0), Quaternion.LookRotation(fwd - new Vector3(0, 0.25f, 0)));
+                firstStep = 1;
+                return;
+            }
+            if (phase == 0 && firstStep == 1)
+            {
                 Shot(cam, dir, "overhead");
-                cam.transform.SetPositionAndRotation(home + new Vector3(0, 90, 0), Quaternion.LookRotation(fwd - new Vector3(0, 0.25f, 0)));
+                cam.transform.SetPositionAndRotation(farPose.pos, farPose.rot);
+                firstStep = 2;
+                return;
+            }
+            if (phase == 0)
+            {
                 Shot(cam, dir, "far");
                 GameStatus.Lines["~bench far"] = Bench(cam, "far");
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
@@ -173,7 +186,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 161) GameStatus.Lines["~bench inn"] = Bench(cam, "inn mid");
@@ -189,7 +202,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 181) GameStatus.Lines["~bench ring"] = Bench(cam, "stone ring mid");
@@ -205,7 +218,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 191) GameStatus.Lines["~bench camp"] = Bench(cam, "campsite mid");
@@ -221,7 +234,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 231) GameStatus.Lines["~bench hermit"] = Bench(cam, "hermitage mid");
@@ -237,7 +250,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 241) GameStatus.Lines["~bench shrine"] = Bench(cam, "wayside mid");
@@ -253,7 +266,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 261) GameStatus.Lines["~bench ruin"] = Bench(cam, "ruin mid");
@@ -269,7 +282,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 271)
@@ -289,7 +302,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 301) GameStatus.Lines["~bench fairyring"] = Bench(cam, "fairyring mid");
@@ -305,7 +318,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 wait = 0;
@@ -321,7 +334,7 @@ namespace Stabby.Game.Editor
                 }
                 else
                 {
-                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    if (--wait > 0 || Loading()) return;
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, name);
                     if (phase == 320)
@@ -344,7 +357,7 @@ namespace Stabby.Game.Editor
                 }
                 else
                 {
-                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    if (--wait > 0 || Loading()) return;
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, name);
                     wait = 0;
@@ -361,7 +374,7 @@ namespace Stabby.Game.Editor
                 }
                 else
                 {
-                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    if (--wait > 0 || Loading()) return;
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, name);
                     wait = 0;
@@ -390,7 +403,7 @@ namespace Stabby.Game.Editor
                 }
                 if (name != "creature-client") AimCreature(cam, CreatureRange(name));
                 if (pair && CreatureCompare(false) > 0.02f && wait > -1800) { wait--; return; }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (name == "creature-client") CreatureCompare(true);
@@ -459,7 +472,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) { if (wait == 0) wait = -1; return; }
+                if (--wait > 0 || Loading()) { if (wait == 0) wait = -1; return; }
                 Shot(cam, null, "warmup");
                 if (wait < 0) GameStatus.Lines["~" + name + " wait"] = $"{name} waited {-wait} extra frames for terrain";
                 Shot(cam, dir, phase == 5 && lake ? "lake" : phase == 5 && bank ? "riverbank" : name);
@@ -479,7 +492,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 if (phase == 7 && smooth < 2)
                 {
                     if (smooth == 1)
@@ -571,7 +584,7 @@ namespace Stabby.Game.Editor
                 }
                 else
                 {
-                    if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                    if (--wait > 0 || Loading()) return;
                     Shot(cam, null, "warmup");
                     if (wait < 0) GameStatus.Lines["~objects wait"] = $"objects waited {-wait} extra frames";
                     Shot(cam, dir, "objects");
@@ -598,7 +611,7 @@ namespace Stabby.Game.Editor
                         wait = 30;
                         return;
                     }
-                    if (--wait > 0 || (ObjectViewSystem.Pending > 0 && wait > -300)) return;
+                    if (--wait > 0 || Loading()) return;
                     tourParts.Add(ObjectViewSystem.PartsHeld);
                     tourChunks.Add(ObjectViewSystem.ChunksHeld);
                     tourLive.Add(ObjectViewSystem.LiveEntities);
@@ -621,7 +634,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 14) GameStatus.Lines["~bench water"] = Bench(cam, "water coast");
@@ -645,7 +658,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || (GameStatus.TerrainBehind > 0 && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 16) lows.Add((name, cam.transform.position, cam.transform.rotation));
@@ -661,7 +674,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, phase == 21 && impStep > 0 ? (impStep == 1 ? "foliage-far-mesh" : "foliage-far-impostor") : name);
                 if (phase == 21 && impStep < 2)
@@ -694,7 +707,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (step == 1) GameStatus.Lines["~bench structure"] = Bench(cam, "structure mid");
@@ -718,7 +731,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 var cu = Shader.GetGlobalVector("_StabbyContactUV");
@@ -737,7 +750,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 wait = 0;
@@ -754,7 +767,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 wait = 0;
@@ -769,7 +782,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 wait = 0;
@@ -789,7 +802,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 if (phase == 140) GameStatus.Lines["~bench water coast"] = Bench(cam, "water coast low");
@@ -813,7 +826,7 @@ namespace Stabby.Game.Editor
                     wait = 180;
                     return;
                 }
-                if (--wait > 0 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && wait > -1800)) return;
+                if (--wait > 0 || Loading()) return;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 var cu = Shader.GetGlobalVector("_StabbyContactUV");
@@ -1328,8 +1341,7 @@ namespace Stabby.Game.Editor
             foreach (var (name, eye, target) in LandformShots(ground))
             {
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                var settle = System.Diagnostics.Stopwatch.StartNew();
-                for (int f = 0; f < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && settle.Elapsed.TotalSeconds < 120); f++) yield return null;
+                for (int f = 0; f < 180 || Loading(); f++) yield return null;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, name);
                 GameStatus.Lines["~" + name] = $"{name} from {eye.x:F0},{eye.y:F0},{eye.z:F0} at {target.x:F0},{target.y:F0},{target.z:F0}";
@@ -1473,7 +1485,7 @@ namespace Stabby.Game.Editor
             GameStatus.Lines["~scale pose"] = string.Format(System.Globalization.CultureInfo.InvariantCulture, "scale pose {0:F2},{1:F2},{2:F2},{3:F5},{4:F5},{5:F5},{6:F5}", at.position.x, at.position.y, at.position.z, at.rotation.x, at.rotation.y, at.rotation.z, at.rotation.w);
             var settle = System.Diagnostics.Stopwatch.StartNew();
             int frames = 0;
-            for (; frames < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && settle.Elapsed.TotalSeconds < 150); frames++) yield return null;
+            for (; frames < 180 || Loading(); frames++) yield return null;
             GameStatus.Lines["~scale settle"] = $"scale settle: {frames} frames, {settle.Elapsed.TotalSeconds:F1} s, objects pending {ObjectViewSystem.Pending}, terrain behind {GameStatus.TerrainBehind}";
             while (!ObjectScale.Sample("still forest")) yield return null;
             GameStatus.Lines["~scale lod"] = ObjectScale.Forced();
@@ -2574,7 +2586,7 @@ namespace Stabby.Game.Editor
                 var look = new Vector3(pick.X, pick.Y + (id == "reeds" ? 0.6f * pick.Size : 0.2f), pick.Z);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 GameStatus.Lines["~bank " + id] = $"{id} at {pick.X:F0},{pick.Y:F1},{pick.Z:F0}, {all.Count} near, cluster {best:F1}";
-                for (int k = 0; k < 180 || ((GameStatus.TerrainBehind > 0 || ObjectViewSystem.Pending > 0) && k < 1800); k++) yield return null;
+                for (int k = 0; k < 180 || Loading(); k++) yield return null;
                 Shot(cam, null, "warmup");
                 Shot(cam, dir, "bank-" + id);
             }
@@ -2786,7 +2798,34 @@ namespace Stabby.Game.Editor
 
         static System.Collections.IEnumerator Settle(int frames)
         {
-            for (int k = 0; k < frames || (GameStatus.TerrainBehind > 0 && k < 1800); k++) yield return null;
+            for (int k = 0; k < frames || Loading(); k++) yield return null;
+        }
+
+        const double LoadTimeoutSeconds = 300;
+        const float ReadyWithin = 2f;
+        static double loadSince = -1, loadWaited, loadTotal;
+        static readonly System.Text.StringBuilder loadWaits = new System.Text.StringBuilder();
+
+        static double LoadWaitTotal() => loadTotal + (loadSince >= 0 ? EditorApplication.timeSinceStartup - loadSince : 0);
+
+        static bool Loading()
+        {
+            var cam = Camera.main;
+            bool columns = true;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient) columns = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Settled ?? false;
+            bool busy = cam == null || GameStatus.TerrainBehind > 0 || !columns || !ObjectViewSystem.ReadyAround(cam.transform.position, ReadyWithin);
+            double now = EditorApplication.timeSinceStartup;
+            if (!busy)
+            {
+                if (loadSince >= 0) { loadWaited += now - loadSince; loadTotal += now - loadSince; }
+                loadSince = -1;
+                return false;
+            }
+            if (loadSince < 0) loadSince = now;
+            if (now - loadSince > LoadTimeoutSeconds && GameStatus.Failure == null)
+                GameStatus.Failure = $"capture regions not loaded after {LoadTimeoutSeconds:F0} s at {(cam == null ? "no camera" : cam.transform.position.ToString("F0"))}: terrain behind {GameStatus.TerrainBehind}, object regions {(columns ? "ready" : "building")}, objects pending {ObjectViewSystem.Pending}";
+            return true;
         }
 
         static System.Collections.IEnumerator CastTour(Camera cam, string dir)
@@ -2933,7 +2972,13 @@ namespace Stabby.Game.Editor
             var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
             tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
             tex.Apply();
-            if (dir != null) File.WriteAllBytes(Path.Combine(dir, name + ".png"), tex.EncodeToPNG());
+            if (dir != null)
+            {
+                File.WriteAllBytes(Path.Combine(dir, name + ".png"), tex.EncodeToPNG());
+                loadWaits.Append(loadWaits.Length == 0 ? "" : ", ").Append(name).Append(' ').Append(loadWaited.ToString("F1"));
+                GameStatus.Lines["~load waits"] = $"region load wait before each shot (s): {loadWaits}; {LoadWaitTotal():F0} s waiting, {EditorApplication.timeSinceStartup - SessionState.GetFloat(StartKey, 0) - LoadWaitTotal():F0} s counted toward the {TimeoutSeconds:F0} s timeout";
+                loadWaited = 0;
+            }
             RenderTexture.active = null;
             cam.targetTexture = null;
             Object.DestroyImmediate(rt);

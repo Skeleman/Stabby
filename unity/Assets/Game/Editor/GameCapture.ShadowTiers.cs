@@ -38,7 +38,6 @@ namespace Stabby.Game.Editor
             var look = Quaternion.LookRotation(d) * Quaternion.Euler(pitch, 0, 0);
             cam.transform.SetPositionAndRotation(Pose(0), look);
             for (var w = Settle(360); w.MoveNext();) yield return null;
-            for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             var asset = UniversalRenderPipeline.asset;
             lines.Add($"pose eye {start.x:F0},{Pose(0).y:F0},{start.z:F0} along {d.x:F2},{d.z:F2}, 14 m above ground, pitch {-pitch:F1} aimed at ground 200 m out, worst rise {open:F2}, FOV 60");
             lines.Add($"shadow distance {asset.shadowDistance:F1} m, {asset.shadowCascadeCount} cascades, splits2 {asset.cascade2Split:F4} splits3 {asset.cascade3Split} splits4 {asset.cascade4Split}");
@@ -138,7 +137,6 @@ namespace Stabby.Game.Editor
             float pitch = Mathf.Atan2(bestH, bestR) * Mathf.Rad2Deg - 6f;
             cam.transform.SetPositionAndRotation(new Vector3(stand.x, eyeY, stand.z), Quaternion.LookRotation(d) * Quaternion.Euler(-pitch, 0, 0));
             for (var w = Settle(360); w.MoveNext();) yield return null;
-            for (int k = 0; k < 1800 && ObjectViewSystem.Pending > 0; k++) yield return null;
             map = ShadowViewSystem.Map;
             lines.Add($"eye {stand.x:F0},{eyeY:F0},{stand.z:F0} along {d.x:F2},{d.z:F2}, hill {bestR:F0} m out rising {bestH:F0} m, last cascade {last:F0}-{map.Range:F0} m, texels {map.Texel0:F3}/{map.Texel1:F3}/{map.Texel2:F3}/{map.Texel3:F3} m, sun 14 deg from 75 deg right");
             Shot(cam, null, "warmup");
@@ -256,7 +254,6 @@ namespace Stabby.Game.Editor
                     eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + 2f);
                     cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(c - eye));
                     for (var e = Settle(240); e.MoveNext();) yield return null;
-                    for (int f = 0; f < 1200 && ObjectViewSystem.Pending > 0; f++) yield return null;
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, names[k]);
                 }
@@ -273,7 +270,6 @@ namespace Stabby.Game.Editor
             eye.y = Mathf.Max(eye.y, GroundHeight(eye.x, eye.z) + 2f);
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
             for (var w = Settle(240); w.MoveNext();) yield return null;
-            for (int k = 0; k < 1200 && ObjectViewSystem.Pending > 0; k++) yield return null;
             Shot(cam, null, "warmup");
             Shot(cam, dir, name);
             TerrainViewSystem.SprayShadows = false;
