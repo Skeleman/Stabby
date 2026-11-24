@@ -41,11 +41,14 @@
 9. This file is the architecture contract. Foundational changes to it need
    Zach's review; a PreToolUse hook asks before any edit. Stage outputs stay
    separable: sketch, terrain + hydrology (`--rain`), then climate and biomes.
-10. Unity code never blocks the main thread on heavy work. Generation, sync,
-    meshing and other bulk work run in tasks or jobs; the main thread only
-    applies finished results within a per-frame budget. `tools/Stabby.Lint`
-    rejects blocking waits and unchecked `Task.Result` in runtime Unity code
-    unless `lint-allow.txt` gives a reason. Runtime game data is unmanaged
+10. The main thread schedules jobs, owns engine resources and applies
+    finished results within a per-frame budget; it does not transform data.
+    Generation, sync, meshing and other data work run in jobs or tasks, and
+    main-thread engine calls (mesh upload, GPU buffers, lights, input) take
+    only data a job has already prepared. Work too small to schedule is
+    batched into a job once it grows. `tools/Stabby.Lint` rejects blocking
+    waits, unchecked `Task.Result`, job `Complete` calls and main-thread
+    query loops in runtime Unity code unless `lint-allow.txt` gives a reason. Runtime game data is unmanaged
     (ECS components, blobs, native containers) so Burst and jobs can use it;
     managed code stays at load and network boundaries and converts once.
 11. World objects have one definition in `content/objects.json`. Its kind
