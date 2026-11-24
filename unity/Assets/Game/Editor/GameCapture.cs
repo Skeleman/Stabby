@@ -30,9 +30,12 @@ namespace Stabby.Game.Editor
             if (Application.isBatchMode) SkipSearchIndexing();
         }
 
+        static int searchPolls;
+
         static void SkipSearchIndexing()
         {
             EditorApplication.update -= SkipSearchIndexing;
+            if (++searchPolls > 300) return;
             foreach (var d in EditorApplication.delayCall?.GetInvocationList() ?? System.Array.Empty<System.Delegate>())
                 if (d.Method.Name == "IndexationOnStartup")
                 {
