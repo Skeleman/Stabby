@@ -65,7 +65,7 @@ and converts once into native data.
   Capture follow-ups from b/day-night: captures must wait for object regions (with a
   cached map file they start about 14 s early and show no trees); the cliff-lows capture
   should steer the light via DayNightSystem.LightOverride.
-- Zach 11-24: the dev machine is strong, so streaming should be more aggressive. b/stream-aggressive: a high-end quality preset at about 2x reach through the screen-size thresholds (rule 12) and a bigger per-frame apply budget; target fastwalk p99 under 16.7 ms and no frame over 33 ms at 1080p.
+- Zach 11-24: the dev machine is strong, so streaming should be more aggressive. b/stream-aggressive: a high-end quality preset at about 2x reach through the screen-size thresholds (rule 12) and a bigger per-frame apply budget; target fastwalk p99 under 16.7 ms and no frame over 33 ms at 1080p. b/stream-aggressive merged: high preset doubles reach and apply budgets (quality levels in objects.json); 1080p frames over 33 ms 61 to 3; 2160p regressed 16 to 172 slow frames, so b/quality-4k scales high by resolution (1.5x at 2160p) and trims per-chunk garbage.
   b/river-mesh-speed merged: terrain chunk jobs cache lattice heights, river capture wait 175 s to 6.5 s, output bit-identical. b/coast-wait merged: NearField reach mask, coast-low wait about 63 s to 43 s, bit-identical. Open: delta chunks 27-28 s each in the editor (Mono about 10x slower than the CLI); first-chunk sites race in b/sites-once.
 - Water interaction: local wakes and bow waves around moving entities (Punchy had them).
   Separate lane from b/water-look so it benches on its own (audit 11-23).
