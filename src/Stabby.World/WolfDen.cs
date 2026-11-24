@@ -190,7 +190,7 @@ namespace Stabby.World
         public const float DenBackGapM = 4f, DenFaceRunM = 16f, DenFaceRiseM = 6f, DenFaceStepM = 0.5f;
 
         public const float DenScanStepM = 2f;
-        public const int DenRunSteps = (int)(DenFaceRunM / DenScanStepM);
+        public const int DenRunSteps = (int)(DenFaceRunM / DenScanStepM), DenClimbSteps = 2;
 
         public float DenRear(ObjectInstance o) => DenRear(o.Def, o.Variant, o.Size);
 
@@ -217,7 +217,13 @@ namespace Stabby.World
                     float px = x + ux * i * DenScanStepM, pz = z + uz * i * DenScanStepM;
                     if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) break;
                     g[i] = GroundAt(detail, cm, px, pz);
-                    if (i >= DenRunSteps && g[i] - g[i - DenRunSteps] >= rise) { foot = (i - DenRunSteps) * DenScanStepM; bx = ux; bz = uz; break; }
+                    if (i >= DenRunSteps && g[i] - g[i - DenRunSteps] >= rise)
+                    {
+                        int j = i - DenRunSteps;
+                        while (j < i && g[Math.Min(j + DenClimbSteps, i)] - g[j] < DenCoverRiseM) j++;
+                        if (j * DenScanStepM < foot) { foot = j * DenScanStepM; bx = ux; bz = uz; }
+                        break;
+                    }
                 }
             }
             if (foot == float.MaxValue) return false;
@@ -240,12 +246,29 @@ namespace Stabby.World
             return false;
         }
 
-        public string DenBackFault(ObjectInstance o)
+        void DenBack(ObjectInstance o, out float x, out float z, out float bx, out float bz)
         {
-            Rotate(o, 0, 0, -1, out float bx, out _, out float bz);
+            Rotate(o, 0, 0, -1, out bx, out _, out bz);
             float bl = (float)Math.Sqrt(bx * bx + bz * bz), rear = DenRear(o);
             bx /= bl; bz /= bl;
-            return FaceBehind(o.X + bx * rear, o.Z + bz * rear, bx, bz) ? null : "has no steep rock face at its back";
+            x = o.X + bx * rear; z = o.Z + bz * rear;
+        }
+
+        public string DenBackFault(ObjectInstance o)
+        {
+            DenBack(o, out float x, out float z, out float bx, out float bz);
+            return FaceBehind(x, z, bx, bz) ? null : "has no steep rock face at its back";
+        }
+
+        public const float DenCoverRunM = 8f, DenCoverRiseM = 1f;
+
+        public string DenCoverFault(ObjectInstance o)
+        {
+            DenBack(o, out float x, out float z, out float bx, out float bz);
+            float g0 = GroundAt(detail, cm, x, z);
+            for (float s = DenFaceStepM; s <= DenCoverRunM; s += DenFaceStepM)
+                if (GroundAt(detail, cm, x + bx * s, z + bz * s) - g0 >= DenCoverRiseM) return null;
+            return "stands out on open ground, its face too far behind";
         }
 
         public string DenFault(ObjectInstance o)
