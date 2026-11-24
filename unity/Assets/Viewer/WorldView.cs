@@ -103,6 +103,7 @@ namespace Stabby.Viewer
                 var defs = ContentFiles.Biomes();
                 var lib = ContentFiles.Materials(materials);
                 var (world, source) = path != null ? MapFile.LoadOrGenerate(path, c, defs, lib, true) : (WorldGenerator.Generate(c, defs, lib), $"generated in {sw.ElapsedMilliseconds} ms");
+                world.Caves = ContentFiles.Caves();
                 long genMs = sw.ElapsedMilliseconds;
                 var p = Prepare(world, defs, materials, cells, token);
                 p.GenMs = genMs;

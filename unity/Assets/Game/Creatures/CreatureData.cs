@@ -150,6 +150,14 @@ namespace Stabby.Game
         public int Index;
     }
 
+    public struct CreatureClaimed : IComponentData { }
+
+    public struct CreaturePresented : ICleanupComponentData
+    {
+        public Entity Root;
+        public BlobAssetReference<CreatureRig> Rig;
+    }
+
     public struct CreatureLink : IBufferElementData
     {
         public Entity Value;

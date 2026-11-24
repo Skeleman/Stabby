@@ -48,7 +48,7 @@ namespace Stabby.Game
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial class ObjectViewSystem : SystemBase
     {
-        public const int Lods = 3, Stride = Lods + 2, RegisterPerFrame = 24, SpawnBudget = 4000, Frames = 8, Cell = 64;
+        public const int Lods = 3, Stride = Lods + 2, RegisterPerFrame = 24, SpawnBudget = 8000, DespawnBudget = 8000, Frames = 8, Cell = 64;
         public const float DespawnReach = 1f / (1f - Detail.Hysteresis), UnloadReach = 1.5f;
 
         struct MeshSpan
@@ -249,7 +249,7 @@ namespace Stabby.Game
                 }
                 kinds[d] = kind;
                 rules[d] = lib.RuleOf(kind);
-                reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
+                reach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels / math.max(GameSettings.GraphicsQuality, 0.1f));
                 float t = span;
                 while (t > reach[d] / 3f && t * 0.5f >= minTile) t *= 0.5f;
                 tile[d] = t;
@@ -711,6 +711,10 @@ namespace Stabby.Game
             Pending = best >= 0 || chunkTasks.Count > 0 ? 1 : 0;
         }
 
+        public const float StreamMs = 2.5f;
+
+        static float Since(long t0) => (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000f / System.Diagnostics.Stopwatch.Frequency;
+
         void Despawn(float3 cam)
         {
             var keys = spawned.ToNativeArray(Allocator.Temp);
@@ -719,6 +723,7 @@ namespace Stabby.Game
             {
                 int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
                 if (RectDistance(cam, tx * tile[d], tz * tile[d], tile[d]) <= reach[d] * DespawnReach) continue;
+                if (doomed.Length >= DespawnBudget) { Pending = 1; break; }
                 int count = doomed.Length;
                 if (tileEntities.TryGetFirstValue(key, out var e, out var it))
                     do doomed.Add(e); while (tileEntities.TryGetNextValue(out e, ref it));
@@ -733,7 +738,7 @@ namespace Stabby.Game
             doomed.Dispose();
         }
 
-        int Spawn(float3 cam)
+        int Spawn(float3 cam, long t0)
         {
             int budget = SpawnBudget, waiting = 0;
             writes = new NativeList<SpawnWrite>(256, Allocator.TempJob);
@@ -752,7 +757,7 @@ namespace Stabby.Game
                         int c = math.min(across - 1, (int)(tz * t / span)) * across + math.min(across - 1, (int)(tx * t / span));
                         if (!loaded[c]) { waiting++; continue; }
                         if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
-                        if (budget <= 0) { waiting++; continue; }
+                        if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
                         SpawnTile(key, chunkParts[range.z], range);
                         budget -= range.y;
                     }
@@ -880,7 +885,7 @@ namespace Stabby.Game
             foreach (float r in reach) maxReach = math.max(maxReach, r);
             LoadChunks(pos, maxReach);
             Despawn(pos);
-            int waiting = Spawn(pos);
+            int waiting = Spawn(pos, t0);
             if (waiting > 0) Pending = 1;
             if (Pending == 0) { readyAt = pos; readyFrame = UnityEngine.Time.frameCount; }
             LiveEntities = liveEntities;
@@ -889,7 +894,7 @@ namespace Stabby.Game
             ChunksUnloaded = chunksUnloaded;
             liveByDefShared = liveByDef;
             libShared = lib;
-            LastMs = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000f / System.Diagnostics.Stopwatch.Frequency;
+            LastMs = Since(t0);
             if (GameStatus.TerrainBuilt && !GameStatus.AfterTool) worstUpdate = math.max(worstUpdate, LastMs);
             if (!GameStatus.Live.ContainsKey("~objects view")) GameStatus.Live["~objects view"] = Status;
         }
