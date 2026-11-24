@@ -91,7 +91,7 @@ namespace Stabby.Game.Editor
             {
                 $"creature memory path {path}, quality {DetailView.Current.Quality:F2}, {baseCount} plan creatures shown, {CreaturePlanSystem.Planned} planned",
                 $"live ghost entity: client {GhostBytes(view, false)}, server {GhostBytes(server, true)}; plan-only creature {UnsafeUtility.SizeOf<CreatureSpawnRow>()} B spawn row, no entities",
-                $"rig blob struct sizes: CreatureRig {UnsafeUtility.SizeOf<CreatureRig>()} B, segment {UnsafeUtility.SizeOf<CreatureSegmentRig>()} B, part {UnsafeUtility.SizeOf<CreaturePartRig>()} B; CreatureRoot {UnsafeUtility.SizeOf<CreatureRoot>()} B, CreatureLink {UnsafeUtility.SizeOf<CreatureLink>()} B, CreatureGpu {UnsafeUtility.SizeOf<CreatureGpu>()} B",
+                $"rig blob struct sizes: CreatureRig {UnsafeUtility.SizeOf<CreatureRig>()} B, segment {UnsafeUtility.SizeOf<CreatureSegmentRig>()} B, part {UnsafeUtility.SizeOf<CreaturePartRig>()} B, CreatureFit {UnsafeUtility.SizeOf<CreatureFit>()} B, CreatureScale {UnsafeUtility.SizeOf<CreatureScale>()} B; CreatureRoot {UnsafeUtility.SizeOf<CreatureRoot>()} B, CreatureLink {UnsafeUtility.SizeOf<CreatureLink>()} B, CreatureGpu {UnsafeUtility.SizeOf<CreatureGpu>()} B",
             };
 
             for (int r = 0; r < MemoryCounts.Length; r++)

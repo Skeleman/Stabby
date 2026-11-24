@@ -35,7 +35,7 @@ namespace Stabby.Game
 
         public static float Run(ref CreatureRig rig, float move) => math.saturate((move - 1) / math.max(rig.RunRatio - 1, 1e-3f));
 
-        public static void Solve(ref CreatureRig rig, float3 rootPos, quaternion rootRot, float phase, float move, float run, float alert, float down, float clock, float swayScale,
+        public static void Solve(ref CreatureRig rig, ref CreatureFit fit, float3 rootPos, quaternion rootRot, float phase, float move, float run, float alert, float down, float clock, float swayScale,
             NativeArray<float3> pos, NativeArray<quaternion> rot, NativeArray<float3> end, NativeArray<quaternion> endRot)
         {
             for (int i = 0; i < rig.Parts.Length; i++)
@@ -43,8 +43,8 @@ namespace Stabby.Game
                 ref var part = ref rig.Parts[i];
                 float3 start;
                 quaternion r;
-                if (part.Parent < 0) { start = rootPos + math.mul(rootRot, part.Socket); r = math.mul(rootRot, part.Rest); }
-                else { start = end[part.Parent] + math.mul(endRot[part.Parent], part.Socket); r = math.mul(endRot[part.Parent], part.Rest); }
+                if (part.Parent < 0) { start = rootPos + math.mul(rootRot, fit.Sockets[i].xyz); r = math.mul(rootRot, part.Rest); }
+                else { start = end[part.Parent] + math.mul(endRot[part.Parent], fit.Sockets[i].xyz); r = math.mul(endRot[part.Parent], part.Rest); }
                 float p = math.frac(phase + math.lerp(part.Phase, part.RunPhase, run));
                 float3 sway = Sway(part.Role, part.Side, clock) * ((1 - 0.8f * alert) * swayScale);
                 float gait = math.min(move, 1);
@@ -57,7 +57,7 @@ namespace Stabby.Game
                     r = math.mul(r, quaternion.EulerZXY(a));
                     pos[part.First + j] = start;
                     rot[part.First + j] = r;
-                    start += math.mul(r, new float3(0, 0, seg.Length));
+                    start += math.mul(r, new float3(0, 0, fit.Lengths[part.First + j]));
                 }
                 end[i] = start;
                 endRot[i] = r;
@@ -271,7 +271,7 @@ namespace Stabby.Game
                 c.Move = s.Move;
                 c.Alert = s.Alert;
                 c.Down = math.lerp(c.Down, s.Act == Drives.Graze || s.Act == Drives.Drink ? 1 : 0, math.min(1, 1.5f * Dt));
-                float stride = math.lerp(rig.Stride, rig.RunStride, CreaturePose.Run(ref rig, c.Move));
+                float stride = math.lerp(c.Scale.Stride, c.Scale.RunStride, CreaturePose.Run(ref rig, c.Move));
                 c.Phase = math.frac(c.Phase + c.Move * c.WalkSpeed / stride * Dt);
                 c.Clock += Dt;
             }
@@ -285,14 +285,16 @@ namespace Stabby.Game
             void Execute(Entity e, [EntityIndexInQuery] int index, ref CreatureRoot c, in DynamicBuffer<CreatureLink> links)
             {
                 ref var rig = ref c.Rig.Value;
+                ref var fit = ref c.Fit.Value;
+                var sc = c.Scale;
                 bool present = Present && States.HasComponent(c.Ghost);
                 if (present) Follow(ref c, ref rig, States[c.Ghost]);
                 c.Wake = math.min(1, c.Wake + Dt / Detail.CrossfadeSeconds);
                 float gy = Ground.HeightAt(c.Position.x, c.Position.z);
-                float3 centre = new float3(c.Position.x, gy + rig.Stand, c.Position.z);
+                float3 centre = new float3(c.Position.x, gy + sc.Stand, c.Position.z);
                 float q = math.max(View.Quality, 0.1f);
-                float px = View.ScreenSize(rig.Length, centre);
-                var d = View.Decide(rig.Rule, rig.Length, centre, c.Decision);
+                float px = View.ScreenSize(sc.Length, centre);
+                var d = View.Decide(rig.Rule, sc.Length, centre, c.Decision);
                 c.Decision = d;
                 float far = rig.FadePx / q;
                 bool visible = present && px >= far;
@@ -307,7 +309,7 @@ namespace Stabby.Game
                 c.Shadow = d.Casts;
                 if (Gpu)
                 {
-                    if (!c.Shadow && Frustum.Outside(centre, rig.Length)) return;
+                    if (!c.Shadow && Frustum.Outside(centre, sc.Length)) return;
                     var fur = Furs[e];
                     FurOut[3 * index] = fur.Base;
                     FurOut[3 * index + 1] = fur.Accent;
@@ -319,20 +321,20 @@ namespace Stabby.Game
                 float anim = d.Animation <= Detail.AnimDecimated ? Detail.Crossfade(px, rig.AnimPx / q, 1.5f * rig.AnimPx / q) : 0;
                 float ik = d.Animation == Detail.AnimFull ? Detail.Crossfade(px, rig.IkPx / q, 1.5f * rig.IkPx / q) : 0;
 
-                float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * rig.Track;
-                float2 at = c.Position.xz, fore = at + fw * rig.Fore, hind = at + fw * rig.Hind;
+                float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * sc.Track;
+                float2 at = c.Position.xz, fore = at + fw * sc.Fore, hind = at + fw * sc.Hind;
                 float fy = 0.5f * (Ground.HeightAt(fore.x + side.x, fore.y + side.y) + Ground.HeightAt(fore.x - side.x, fore.y - side.y));
                 float hy = 0.5f * (Ground.HeightAt(hind.x + side.x, hind.y + side.y) + Ground.HeightAt(hind.x - side.x, hind.y - side.y));
-                float span = math.max(rig.Fore - rig.Hind, 0.1f);
-                gy = hy + (fy - hy) * (-rig.Hind / span);
+                float span = math.max(sc.Fore - sc.Hind, 0.1f);
+                gy = hy + (fy - hy) * (-sc.Hind / span);
                 float pitch = math.clamp(math.atan2(fy - hy, span), -0.5f, 0.5f);
                 c.Pitch = Hold.Override != 0 ? pitch : math.lerp(c.Pitch, pitch, math.min(1, 4 * Dt));
 
                 float run = CreaturePose.Run(ref rig, c.Move) * anim;
                 float move = math.min(c.Move, 1) * anim;
-                float bob = rig.Stand * (move * 0.02f * math.cos(4 * math.PI * c.Phase) + run * 0.07f * math.sin(2 * math.PI * c.Phase));
+                float bob = sc.Stand * (move * 0.02f * math.cos(4 * math.PI * c.Phase) + run * 0.07f * math.sin(2 * math.PI * c.Phase));
                 float rock = run * 0.12f * math.cos(2 * math.PI * c.Phase);
-                float3 rootPos = new float3(c.Position.x, gy + rig.Stand - c.Sink + bob, c.Position.z);
+                float3 rootPos = new float3(c.Position.x, gy + sc.Stand - c.Sink + bob, c.Position.z);
                 quaternion rootRot = math.mul(quaternion.RotateY(c.Heading), quaternion.RotateX(-c.Pitch + rock));
 
                 int n = rig.Segments.Length, parts = rig.Parts.Length;
@@ -345,7 +347,7 @@ namespace Stabby.Game
                 {
                     for (int s = 0; s < n; s++)
                     {
-                        pos[s] = rootPos + math.mul(rootRot, rig.RestPos[s]);
+                        pos[s] = rootPos + math.mul(rootRot, fit.RestPos[s]);
                         rot[s] = math.mul(rootRot, rig.RestRot[s]);
                         floor[s] = gy;
                     }
@@ -354,13 +356,13 @@ namespace Stabby.Game
                 {
                     var end = Scratch(End, PartCap, parts, fits);
                     var endRot = Scratch(EndRot, PartCap, parts, fits);
-                    CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert * anim, c.Down * anim, c.Clock, anim, pos, rot, end, endRot);
-                    sink = Legs(ref rig, rootPos, rootRot, gy, c.Sink, ik, pos, rot, end, floor);
+                    CreaturePose.Solve(ref rig, ref fit, rootPos, rootRot, c.Phase, move, run, c.Alert * anim, c.Down * anim, c.Clock, anim, pos, rot, end, endRot);
+                    sink = Legs(ref rig, ref fit, sc.Stand, rootPos, rootRot, gy, c.Sink, ik, pos, rot, end, floor);
                 }
                 c.Sink = Hold.Override != 0 ? sink : math.lerp(c.Sink, sink, math.min(1, 3 * Dt));
 
-                float contact = 0.5f * rig.Stand;
-                var trunkAt = rootPos + math.mul(rootRot, new float3(0, 0, -0.5f * rig.Length + rig.Rear));
+                float contact = 0.5f * sc.Stand;
+                var trunkAt = rootPos + math.mul(rootRot, new float3(0, 0, -0.5f * sc.Length + sc.Rear));
                 float shadow = c.Shadow ? 1 : 0;
                 for (int tier = 0; tier < 2; tier++)
                 {
@@ -373,7 +375,7 @@ namespace Stabby.Game
                 }
             }
 
-            float Legs(ref CreatureRig rig, float3 rootPos, quaternion rootRot, float gy, float oldSink, float ik,
+            float Legs(ref CreatureRig rig, ref CreatureFit fit, float stand, float3 rootPos, quaternion rootRot, float gy, float oldSink, float ik,
                 NativeArray<float3> pos, NativeArray<quaternion> rot, NativeArray<float3> end, NativeArray<float> floor)
             {
                 if (ik <= 0)
@@ -389,15 +391,15 @@ namespace Stabby.Game
                     for (int j = 0; j < part.Count; j++) floor[part.First + j] = gy;
                     if (part.Role != CreaturePartDef.Leg || part.Count < 2) continue;
                     float3 foot = end[i];
-                    float lift = math.mul(unrot, foot - rootPos).y + rig.Stand;
+                    float lift = math.mul(unrot, foot - rootPos).y + stand;
                     float g = Ground.HeightAt(foot.x, foot.z);
                     drop = math.max(drop, foot.y + oldSink - lift - g);
-                    float shift = math.clamp(g + lift - foot.y, -0.45f * part.Reach, 0.45f * part.Reach) * ik;
+                    float shift = math.clamp(g + lift - foot.y, -0.45f * fit.Sockets[i].w, 0.45f * fit.Sockets[i].w) * ik;
                     if (math.abs(shift) > 1e-4f) CreaturePose.Reach(ref part, rootRot, foot + new float3(0, shift, 0), pos, rot, foot);
                     for (int j = 0; j < part.Count - 1; j++) floor[part.First + j] = Ground.HeightAt(pos[part.First + j].x, pos[part.First + j].z);
                     floor[part.First + part.Count - 1] = g;
                 }
-                return math.clamp(drop * ik, 0, 0.3f * rig.Stand);
+                return math.clamp(drop * ik, 0, 0.3f * stand);
             }
 
             void Write(CreatureLink link, float4x4 m, float4 f, int index)
