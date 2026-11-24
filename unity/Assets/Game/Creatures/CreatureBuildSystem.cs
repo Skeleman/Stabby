@@ -30,13 +30,22 @@ namespace Stabby.Game
             public List<float[]> LowVerts = new List<float[]>();
             public List<ushort[]> LowIndex = new List<ushort[]>();
             public int[] First;
+            public BlobAssetReference<CreatureRig>[] Rigs;
+
+            public void Dispose()
+            {
+                if (Rigs == null) return;
+                foreach (var r in Rigs) if (r.IsCreated) r.Dispose();
+                Rigs = null;
+            }
         }
 
         struct Arrival
         {
             public Entity Ghost;
             public CreatureState State;
-            public BlobAssetReference<CreatureRig> Rig;
+            public BlobAssetReference<CreatureFit> Fit;
+            public CreatureScale Fitted;
             public int[] Prefab;
             public float3[] Scale;
             public float4 Base, Accent, Dark;
@@ -86,13 +95,14 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
-            Owned.Release(kitTask, _ => { });
+            Owned.Release(kitTask, k => k.Dispose());
             Owned.Release(arriving, Drop);
             Drop(queue);
             queue.Clear();
             using (var ps = presented.ToComponentDataArray<CreaturePresented>(Allocator.Temp))
-                foreach (var s in ps) if (s.Rig.IsCreated) s.Rig.Dispose();
+                foreach (var s in ps) if (s.Fit.IsCreated) s.Fit.Dispose();
             EntityManager.RemoveComponent<CreaturePresented>(presented);
+            kit?.Dispose();
             live = 0;
             foreach (var m in meshes) if (m != null) Object.Destroy(m);
             meshes.Clear();
@@ -117,7 +127,7 @@ namespace Stabby.Game
 
         static void Drop(List<Arrival> list)
         {
-            foreach (var a in list) if (a.Rig.IsCreated) a.Rig.Dispose();
+            foreach (var a in list) if (a.Fit.IsCreated) a.Fit.Dispose();
         }
 
         bool Alive(Entity ghost) => EntityManager.Exists(ghost) && EntityManager.HasComponent<CreatureState>(ghost);
@@ -188,7 +198,7 @@ namespace Stabby.Game
                 dropped += links.Length;
                 for (int i = 0; i < links.Length; i++) if (links[i].Value != Entity.Null) doomed.Add(links[i].Value);
                 doomed.Add(s.Root);
-                s.Rig.Dispose();
+                s.Fit.Dispose();
             }
             live -= gone.Length;
             gone.Dispose();
@@ -243,7 +253,7 @@ namespace Stabby.Game
                 var a = queue[i];
                 if (!Alive(a.Ghost))
                 {
-                    if (a.Rig.IsCreated) a.Rig.Dispose();
+                    if (a.Fit.IsCreated) a.Fit.Dispose();
                     queue.RemoveAt(i);
                     continue;
                 }
@@ -279,11 +289,14 @@ namespace Stabby.Game
             for (int i = 0; i < m; i++)
             {
                 var a = queue[i];
-                a.Rig = Rig(a.Def, a.Body);
+                int body = a.State.Body;
+                if (!kit.Rigs[body].IsCreated) kit.Rigs[body] = Rig(kit.Lib.Bodies[body], CreatureBody.Assemble(kit.Lib.Bodies[body], kit.Lib, 0));
+                var rig = kit.Rigs[body];
+                a.Fit = Fit(ref rig.Value, a.Def, a.Body, false, out a.Fitted);
                 uint seed = a.State.Seed;
                 EntityManager.SetComponentData(roots[i], new CreatureRoot
                 {
-                    Rig = a.Rig, Ghost = a.Ghost, Position = new float3(a.State.Position.x, 0, a.State.Position.y), Heading = a.State.Heading, WalkSpeed = a.State.WalkSpeed,
+                    Rig = rig, Fit = a.Fit, Scale = a.Fitted, Ghost = a.Ghost, Position = new float3(a.State.Position.x, 0, a.State.Position.y), Heading = a.State.Heading, WalkSpeed = a.State.WalkSpeed,
                     Visible = true, Shadow = true, HighOn = true, LowOn = true,
                     Phase = (seed % 389) / 389f, Clock = (seed % 211) / 7f,
                 });
@@ -305,7 +318,7 @@ namespace Stabby.Game
                 fur[3 * i + 2] = a.Dark;
                 size[i] = a.Length;
                 ready[i] = a.Ghost;
-                marks[i] = new CreaturePresented { Root = roots[i], Rig = a.Rig };
+                marks[i] = new CreaturePresented { Root = roots[i], Fit = a.Fit };
             }
             EntityManager.AddComponent<CreaturePresented>(ready);
             for (int i = 0; i < m; i++) EntityManager.SetComponentData(ready[i], marks[i]);
@@ -369,6 +382,7 @@ namespace Stabby.Game
         {
             var k = new Kit { Lib = ContentFiles.Creatures(defs) };
             k.First = new int[k.Lib.Bodies.Count];
+            k.Rigs = new BlobAssetReference<CreatureRig>[k.Lib.Bodies.Count];
             var verts = new List<float>();
             var index = new List<ushort>();
             for (int b = 0; b < k.Lib.Bodies.Count; b++)
@@ -399,11 +413,6 @@ namespace Stabby.Game
         {
             var b = new BlobBuilder(Allocator.Persistent);
             ref var rig = ref b.ConstructRoot<CreatureRig>();
-            rig.Length = body.Length;
-            rig.Rear = body.RearRadius;
-            rig.Stand = 0;
-            rig.Stride = 1;
-            rig.RunStride = def.RunStride * body.Size;
             rig.RunRatio = def.RunSpeed / def.WalkSpeed;
             rig.FadePx = def.FadePixels;
             rig.ShadowPx = def.ShadowPixels;
@@ -415,13 +424,11 @@ namespace Stabby.Game
             for (int i = 0; i < body.Parts.Count; i++)
             {
                 var p = body.Parts[i];
-                float reach = 0;
-                for (int j = 0; j < p.SegmentCount; j++) reach += body.Segments[p.FirstSegment + j].Length;
                 parts[i] = new CreaturePartRig
                 {
                     Parent = p.Parent, Role = p.Role, First = p.FirstSegment, Count = p.SegmentCount,
-                    Socket = new float3(p.SocketX, p.SocketY, p.SocketZ), Rest = quaternion.EulerZXY(p.RestX, p.RestY, p.RestZ),
-                    Phase = p.Phase, RunPhase = p.RunPhase, Side = p.Side, Reach = reach,
+                    Rest = quaternion.EulerZXY(p.RestX, p.RestY, p.RestZ),
+                    Phase = p.Phase, RunPhase = p.RunPhase, Side = p.Side,
                 };
             }
             var segs = b.Allocate(ref rig.Segments, body.Segments.Count);
@@ -430,38 +437,58 @@ namespace Stabby.Game
                 var s = body.Segments[i];
                 segs[i] = new CreatureSegmentRig
                 {
-                    Length = s.Length, Idle = V(s.Idle), Forward = V(s.Reach), Back = V(s.Push), Lift = V(s.Lift),
+                    Idle = V(s.Idle), Forward = V(s.Reach), Back = V(s.Push), Lift = V(s.Lift),
                     RunForward = V(s.RunReach), RunBack = V(s.RunPush), RunLift = V(s.RunLift), Alert = V(s.Alert), Graze = V(s.Graze),
                 };
             }
-            b.Allocate(ref rig.RestPos, body.Segments.Count);
             b.Allocate(ref rig.RestRot, body.Segments.Count);
             var blob = b.CreateBlobAssetReference<CreatureRig>(Allocator.Persistent);
             b.Dispose();
-            Measure(ref blob.Value, body.Size);
+            Fit(ref blob.Value, def, body, true, out _).Dispose();
             return blob;
         }
 
-        static void Measure(ref CreatureRig rig, float size)
+        static BlobAssetReference<CreatureFit> Fit(ref CreatureRig rig, CreatureDef def, CreatureBody body, bool rest, out CreatureScale scale)
+        {
+            var b = new BlobBuilder(Allocator.Persistent);
+            ref var fit = ref b.ConstructRoot<CreatureFit>();
+            var lengths = b.Allocate(ref fit.Lengths, body.Segments.Count);
+            for (int i = 0; i < body.Segments.Count; i++) lengths[i] = body.Segments[i].Length;
+            var sockets = b.Allocate(ref fit.Sockets, body.Parts.Count);
+            for (int i = 0; i < body.Parts.Count; i++)
+            {
+                var p = body.Parts[i];
+                float reach = 0;
+                for (int j = 0; j < p.SegmentCount; j++) reach += body.Segments[p.FirstSegment + j].Length;
+                sockets[i] = new float4(p.SocketX, p.SocketY, p.SocketZ, reach);
+            }
+            b.Allocate(ref fit.RestPos, body.Segments.Count);
+            var blob = b.CreateBlobAssetReference<CreatureFit>(Allocator.Persistent);
+            b.Dispose();
+            scale = new CreatureScale { Length = body.Length, Rear = body.RearRadius, Stand = 0, Stride = 1, RunStride = def.RunStride * body.Size };
+            Measure(ref rig, ref blob.Value, ref scale, body.Size, rest);
+            return blob;
+        }
+
+        static void Measure(ref CreatureRig rig, ref CreatureFit fit, ref CreatureScale scale, float size, bool rest)
         {
             int n = rig.Segments.Length, parts = rig.Parts.Length;
             var pos = new NativeArray<float3>(n, Allocator.Persistent);
             var rot = new NativeArray<quaternion>(n, Allocator.Persistent);
             var end = new NativeArray<float3>(parts, Allocator.Persistent);
             var endRot = new NativeArray<quaternion>(parts, Allocator.Persistent);
-            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, 0, pos, rot, end, endRot);
+            CreaturePose.Solve(ref rig, ref fit, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, 0, pos, rot, end, endRot);
             for (int i = 0; i < n; i++)
             {
-                rig.RestPos[i] = pos[i];
-                rig.RestRot[i] = rot[i];
+                fit.RestPos[i] = pos[i];
+                if (rest) rig.RestRot[i] = rot[i];
             }
-            CreaturePose.Solve(ref rig, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, 1, pos, rot, end, endRot);
+            CreaturePose.Solve(ref rig, ref fit, 0, quaternion.identity, 0, 0, 0, 0, 0, 0, 1, pos, rot, end, endRot);
             float footY = 0, travel = 0, fore = 0, hind = 0, track = 0;
             int legs = 0, fores = 0;
             for (int i = 0; i < parts; i++)
             {
                 if (rig.Parts[i].Role != CreaturePartDef.Leg) continue;
-                rig.Parts[i].Foot = end[i];
                 footY += end[i].y;
                 track += math.abs(end[i].x);
                 if (end[i].z > 0) { fore += end[i].z; fores++; }
@@ -469,22 +496,22 @@ namespace Stabby.Game
                 legs++;
             }
             bool paired = fores > 0 && fores < legs;
-            rig.Fore = paired ? fore / fores : 0.5f * rig.Length;
-            rig.Hind = paired ? hind / (legs - fores) : -0.5f * rig.Length;
-            rig.Track = legs > 0 ? track / legs : 0;
+            scale.Fore = paired ? fore / fores : 0.5f * scale.Length;
+            scale.Hind = paired ? hind / (legs - fores) : -0.5f * scale.Length;
+            scale.Track = legs > 0 ? track / legs : 0;
             for (int i = 0; i < parts; i++)
             {
                 ref var part = ref rig.Parts[i];
                 if (part.Role != CreaturePartDef.Leg) continue;
-                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(-part.Phase), 1, 0, 0, 0, 0, 1, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, ref fit, 0, quaternion.identity, math.frac(-part.Phase), 1, 0, 0, 0, 0, 1, pos, rot, end, endRot);
                 float front = end[i].z;
-                CreaturePose.Solve(ref rig, 0, quaternion.identity, math.frac(0.5f - part.Phase), 1, 0, 0, 0, 0, 1, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, ref fit, 0, quaternion.identity, math.frac(0.5f - part.Phase), 1, 0, 0, 0, 0, 1, pos, rot, end, endRot);
                 travel += front - end[i].z;
             }
             if (legs > 0)
             {
-                rig.Stand = -footY / legs + 0.015f * size;
-                rig.Stride = math.max(0.1f, 2 * travel / legs);
+                scale.Stand = -footY / legs + 0.015f * size;
+                scale.Stride = math.max(0.1f, 2 * travel / legs);
             }
             pos.Dispose(); rot.Dispose(); end.Dispose(); endRot.Dispose();
         }

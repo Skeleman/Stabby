@@ -112,7 +112,7 @@ namespace Stabby.Game.Editor
                 lo = math.min(lo, c.Wake);
                 hi = math.max(hi, c.Wake);
                 ref var rig = ref c.Rig.Value;
-                length = rig.Length;
+                length = c.Scale.Length;
                 low = rig.LowPx;
                 fade = rig.FadePx;
             }
@@ -442,37 +442,39 @@ namespace Stabby.Game.Editor
         static float FootGap(CreatureRoot c, out float worstCentre)
         {
             ref var rig = ref c.Rig.Value;
+            ref var fit = ref c.Fit.Value;
+            var sc = c.Scale;
             int n = rig.Segments.Length, parts = rig.Parts.Length;
             using var pos = new NativeArray<float3>(n, Allocator.Temp);
             using var rot = new NativeArray<quaternion>(n, Allocator.Temp);
             using var end = new NativeArray<float3>(parts, Allocator.Temp);
             using var endRot = new NativeArray<quaternion>(parts, Allocator.Temp);
-            float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * rig.Track;
-            float2 at = c.Position.xz, fore = at + fw * rig.Fore, hind = at + fw * rig.Hind;
+            float2 fw = new float2(math.sin(c.Heading), math.cos(c.Heading)), side = new float2(fw.y, -fw.x) * sc.Track;
+            float2 at = c.Position.xz, fore = at + fw * sc.Fore, hind = at + fw * sc.Hind;
             float fy = 0.5f * (GroundHeight(fore.x + side.x, fore.y + side.y) + GroundHeight(fore.x - side.x, fore.y - side.y));
             float hy = 0.5f * (GroundHeight(hind.x + side.x, hind.y + side.y) + GroundHeight(hind.x - side.x, hind.y - side.y));
-            float span = math.max(rig.Fore - rig.Hind, 0.1f);
-            float gy = hy + (fy - hy) * (-rig.Hind / span), centre = GroundHeight(at.x, at.y);
+            float span = math.max(sc.Fore - sc.Hind, 0.1f);
+            float gy = hy + (fy - hy) * (-sc.Hind / span), centre = GroundHeight(at.x, at.y);
             float run = CreaturePose.Run(ref rig, c.Move), move = math.min(c.Move, 1);
-            float bob = rig.Stand * (move * 0.02f * math.cos(4 * math.PI * c.Phase) + run * 0.07f * math.sin(2 * math.PI * c.Phase));
+            float bob = sc.Stand * (move * 0.02f * math.cos(4 * math.PI * c.Phase) + run * 0.07f * math.sin(2 * math.PI * c.Phase));
             float rock = run * 0.12f * math.cos(2 * math.PI * c.Phase);
             float worst = 0;
             worstCentre = 0;
             for (int pass = 0; pass < 2; pass++)
             {
                 float baseY = pass == 0 ? gy : centre, pitch = pass == 0 ? c.Pitch : 0, sink = pass == 0 ? c.Sink : 0;
-                var rootPos = new float3(at.x, baseY + rig.Stand - sink + bob, at.y);
+                var rootPos = new float3(at.x, baseY + sc.Stand - sink + bob, at.y);
                 var rootRot = math.mul(quaternion.RotateY(c.Heading), quaternion.RotateX(-pitch + rock));
-                CreaturePose.Solve(ref rig, rootPos, rootRot, c.Phase, move, run, c.Alert, c.Down, c.Clock, 1, pos, rot, end, endRot);
+                CreaturePose.Solve(ref rig, ref fit, rootPos, rootRot, c.Phase, move, run, c.Alert, c.Down, c.Clock, 1, pos, rot, end, endRot);
                 var unrot = math.inverse(rootRot);
                 for (int i = 0; i < parts; i++)
                 {
                     ref var part = ref rig.Parts[i];
                     if (part.Role != CreaturePartDef.Leg || part.Count < 2) continue;
                     float3 foot = end[i];
-                    float lift = math.mul(unrot, foot - rootPos).y + rig.Stand;
+                    float lift = math.mul(unrot, foot - rootPos).y + sc.Stand;
                     float need = GroundHeight(foot.x, foot.z) + lift - foot.y;
-                    float miss = math.max(math.abs(need) - 0.45f * part.Reach, 0);
+                    float miss = math.max(math.abs(need) - 0.45f * fit.Sockets[i].w, 0);
                     if (pass == 0) worst = math.max(worst, miss); else worstCentre = math.max(worstCentre, math.abs(need));
                 }
             }
@@ -533,8 +535,8 @@ namespace Stabby.Game.Editor
                     steep = g;
                     pos = c.Position;
                     heading = c.Heading;
-                    stand3 = c.Rig.Value.Stand;
-                    length = c.Rig.Value.Length;
+                    stand3 = c.Scale.Stand;
+                    length = c.Scale.Length;
                 }
             if (steep < 0) { lines.Add($"slope shot: herd {herd} woke but no visible member"); FreezeCreatures(false); yield break; }
             float gapWorst = 0, gapCentre = 0;
