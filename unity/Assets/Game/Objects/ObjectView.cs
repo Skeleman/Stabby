@@ -926,6 +926,7 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
+            if (!scan.IsCompleted) return;
             scan.Complete();
             if (!Warm()) return;
             if (field == null && !Prepare()) return;
@@ -943,7 +944,7 @@ namespace Stabby.Game
             }
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
-            if (!scanned) { scanAt = pos; Scan(pos).Complete(); }
+            if (!scanned) { Pending = 1; scanAt = pos; scan = Scan(pos); scanned = true; return; }
             using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
             using (DespawnMarker.Auto()) Despawn();
             int waiting;
