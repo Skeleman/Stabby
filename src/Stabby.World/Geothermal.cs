@@ -3,6 +3,12 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
+    public struct VentSite
+    {
+        public float X, Z;
+        public int Mask;
+    }
+
     public sealed class Geothermal
     {
         public const float HotspotsPerKm2 = 0.012f, MinRadiusM = 450f, MaxRadiusM = 800f, ApartRadii = 3f, RangeReach = 2f, HighlandReach = 0.8f, VolcanicWeight = 2f;
@@ -11,7 +17,7 @@ namespace Stabby.World
 
         public int Count => X.Count;
 
-        public static Geothermal Build(GeneratedWorld w, WorldSketch sk)
+        public static Geothermal Build(GeneratedWorld w, WorldSketch sk, Func<float, float, float, bool> calm = null)
         {
             var g = new Geothermal();
             int n = w.Config.Size;
@@ -58,7 +64,7 @@ namespace Stabby.World
                     float dx = g.X[k] - x, dz = g.Z[k] - z, gap = ApartRadii * Math.Max(radius, g.R[k]);
                     apart = dx * dx + dz * dz >= gap * gap;
                 }
-                if (!apart) continue;
+                if (!apart || (calm != null && !calm(x, z, radius))) continue;
                 g.X.Add(x); g.Z.Add(z); g.R.Add(radius);
             }
             return g;

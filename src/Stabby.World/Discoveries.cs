@@ -8,7 +8,8 @@ namespace Stabby.World
         public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den" };
         static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den" };
         public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11;
-        public const int VentsMin = 2, VentsMax = 4, FieldTries = 12;
+        public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 12;
+        public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 4f, DenProbeM = 6f, DenSeekM = 50f, DenRiverM = 40f, DenWoods = 0.25f;
@@ -37,12 +38,11 @@ namespace Stabby.World
                 if (discoveries != null) return discoveries;
                 builtSites = new ObjectInstance[across * across][];
                 var list = new List<ObjectInstance>();
-                bool fields = false;
+                PlaceFields(list);
                 for (int d = 0; d < lib.Objects.Count; d++)
                 {
                     int kind = lib.Objects[d].Placement.Discovery;
-                    if (Pooled(kind)) { if (!fields) PlaceFields(list); fields = true; }
-                    else if (kind > 0) PlaceDiscoveries(d, Rng.Stream(w.Config.Seed, DiscoveryStreams[kind]).NextU64(), list);
+                    if (kind > 0 && !Pooled(kind)) PlaceDiscoveries(d, Rng.Stream(w.Config.Seed, DiscoveryStreams[kind]).NextU64(), list);
                 }
                 builtSites = null;
                 return discoveries = list.ToArray();
@@ -85,49 +85,76 @@ namespace Stabby.World
 
         void PlaceFields(List<ObjectInstance> list)
         {
-            var kinds = new List<int>();
-            for (int d = 0; d < lib.Objects.Count; d++) if (Pooled(lib.Objects[d].Placement.Discovery)) kinds.Add(d);
+            var vents = VentDefs;
             var hot = Hotspots;
             var present = new List<int>();
             var best = new List<ObjectInstance>();
-            ulong root = Rng.Stream(w.Config.Seed, "geothermal-fields").NextU64();
+            var sites = new List<VentSite>();
+            var usable = new List<VentSite>();
+            var near = new List<VentSite>();
+            var counts = new int[vents.Length];
+            ulong root = Rng.Stream(w.Config.Seed, "geothermal-fields").NextU64(), siteRoot = Rng.Stream(w.Config.Seed, "geothermal-field-sites").NextU64();
             for (int h = 0; h < hot.Count; h++)
             {
                 var rng = new Rng(Rng.Mix(root ^ ((ulong)(h + 1) * 0x9E3779B97F4A7C15UL)));
-                present.Clear();
-                foreach (int d in kinds) if (rng.NextFloat() < lib.Objects[d].Placement.Chance) present.Add(d);
-                int target = VentsMin + (int)(rng.NextU32() % (uint)(VentsMax - VentsMin + 1)), first = (int)(rng.NextU32() % 64);
-                if (present.Count == 0) continue;
-                best.Clear();
-                float reach = hot.R[h] - VentFieldRadiusM;
-                for (int c = 0; c < FieldTries && best.Count < target; c++)
+                var pick = new Rng(Rng.Mix(siteRoot ^ ((ulong)(h + 1) * 0x9E3779B97F4A7C15UL)));
+                sites.Clear();
+                VentSites(hot.X[h], hot.Z[h], hot.R[h], sites);
+                Array.Clear(counts, 0, counts.Length);
+                foreach (var s in sites) for (int k = 0; k < vents.Length; k++) if ((s.Mask & (1 << k)) != 0) counts[k]++;
+                int mask = 0, most = -1;
+                for (int k = 0; k < vents.Length; k++)
                 {
-                    float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), cx = hot.X[h] + ox * reach, cz = hot.Z[h] + oz * reach;
-                    if (ox * ox + oz * oz >= 1) continue;
-                    int start = list.Count;
-                    for (int v = 0; v < target; v++)
-                        for (int k = 0; k < present.Count; k++)
-                            if (PlaceVent(present[(first + v + k) % present.Count], cx, cz, ref rng, list)) break;
-                    if (list.Count - start > best.Count) { best.Clear(); for (int i = start; i < list.Count; i++) best.Add(list[i]); }
-                    list.RemoveRange(start, list.Count - start);
+                    if (rng.NextFloat() < lib.Objects[vents[k]].Placement.Chance && counts[k] >= VentsMin) mask |= 1 << k;
+                    if (counts[k] >= VentsMin && (most < 0 || counts[k] > counts[most])) most = k;
+                }
+                int target = VentsMin + (int)(rng.NextU32() % (uint)(VentsMax - VentsMin + 1)), first = (int)(rng.NextU32() % 64);
+                if (most < 0) continue;
+                if (mask == 0) mask = 1 << most;
+                best.Clear();
+                for (int pass = 0; pass < 2 && best.Count < VentsMin; pass++)
+                {
+                    if (pass == 1) { if (mask == 1 << most) break; mask = 1 << most; }
+                    present.Clear();
+                    usable.Clear();
+                    for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) present.Add(vents[k]);
+                    foreach (var s in sites) if ((s.Mask & mask) != 0) usable.Add(s);
+                    for (int c = 0; c < FieldTries && best.Count < target; c++)
+                    {
+                        var site = usable[(int)(pick.NextU32() % (uint)usable.Count)];
+                        near.Clear();
+                        foreach (var s in usable)
+                        {
+                            float dx = s.X - site.X, dz = s.Z - site.Z;
+                            if (dx * dx + dz * dz <= VentFieldRadiusM * VentFieldRadiusM) near.Add(s);
+                        }
+                        int start = list.Count;
+                        for (int v = 0; v < target; v++)
+                            for (int k = 0; k < present.Count; k++)
+                                if (PlaceVent(present[(first + v + k) % present.Count], near, ref rng, list)) break;
+                        if (list.Count - start > best.Count) { best.Clear(); for (int i = start; i < list.Count; i++) best.Add(list[i]); }
+                        list.RemoveRange(start, list.Count - start);
+                    }
                 }
                 if (best.Count >= VentsMin) list.AddRange(best);
             }
         }
 
-        bool PlaceVent(int d, float cx, float cz, ref Rng rng, List<ObjectInstance> list)
+        bool PlaceVent(int d, List<VentSite> near, ref Rng rng, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
             bool any = false;
             float best = float.MinValue;
             ObjectInstance pick = default;
+            int bit = 1 << Array.IndexOf(VentDefs, d);
             for (int t = 0; t < DiscoveryTries; t++)
             {
-                float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), px = cx + ox * VentFieldRadiusM, pz = cz + oz * VentFieldRadiusM;
+                var site = near[(int)(rng.NextU32() % (uint)near.Count)];
+                float jitter = (t & 1) * VentSiteStepM, px = site.X + rng.Range(-0.5f, 0.5f) * jitter, pz = site.Z + rng.Range(-0.5f, 0.5f) * jitter;
                 float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
-                if (ox * ox + oz * oz >= 1 || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
+                if ((site.Mask & bit) == 0 || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
                 FaceDownhill(px, pz, ref qa, ref qb);
                 any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
             }
@@ -395,7 +422,7 @@ namespace Stabby.World
             return best;
         }
 
-        public Geothermal Hotspots => hotspots ?? (hotspots = Geothermal.Build(w, w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)))));
+        public Geothermal Hotspots => hotspots ?? (hotspots = Geothermal.Build(w, w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config))), (x, z, r) => VentSites(x, z, r, null, VentSitesMin) >= VentSitesMin));
 
         void FaceDownhill(float x, float z, ref float qa, ref float qb)
         {
@@ -420,6 +447,71 @@ namespace Stabby.World
                 if (dx * dx + dz * dz <= VentFieldM * VentFieldM) return true;
             }
             return false;
+        }
+
+        public int VentSites(float hx, float hz, float radius, List<VentSite> sites = null, int stop = int.MaxValue)
+        {
+            var vents = VentDefs;
+            float reach = radius - VentFieldRadiusM;
+            int steps = (int)(reach / VentSiteStepM), found = 0;
+            var counts = new int[vents.Length];
+            for (int a = -steps; a <= steps && found < stop; a++)
+                for (int b = -steps; b <= steps && found < stop; b++)
+                {
+                    float dx = b * VentSiteStepM, dz = a * VentSiteStepM;
+                    if (dx * dx + dz * dz > reach * reach) continue;
+                    int mask = VentGround(hx + dx, hz + dz, vents);
+                    if (mask == 0) continue;
+                    for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) found = Math.Max(found, ++counts[k]);
+                    if (sites != null) sites.Add(new VentSite { X = hx + dx, Z = hz + dz, Mask = mask });
+                }
+            return found;
+        }
+
+        public int HotspotSites(int h) => VentSites(Hotspots.X[h], Hotspots.Z[h], Hotspots.R[h]);
+
+        int VentGround(float x, float z, int[] vents)
+        {
+            if (x < 0 || z < 0 || x >= worldM || z >= worldM) return 0;
+            int b = w.Biome[Cell(z) * n + Cell(x)], mask = 0;
+            if (b < 0) return 0;
+            for (int k = 0; k < vents.Length; k++) if (density[vents[k]][b] > 0) mask |= 1 << k;
+            if (mask == 0) return 0;
+            float y = GroundAt(detail, cm, x, z), relief = 0;
+            for (int k = 0; k < 8; k++)
+            {
+                FanDir(k, 0.70710678f, out float ux, out float uz);
+                float px = x + ux * DiscoveryProbeM, pz = z + uz * DiscoveryProbeM;
+                if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return 0;
+                relief = Math.Max(relief, Math.Abs(y - GroundAt(detail, cm, px, pz)));
+            }
+            if (relief > Math.Max(SpringReliefM, VentReliefM) || RiverGap(x, z) < SpringRiverM || UnderMesa(x, z, 0)) return 0;
+            for (int k = 0; k < vents.Length; k++)
+            {
+                if ((mask & (1 << k)) == 0) continue;
+                var pl = lib.Objects[vents[k]].Placement;
+                if (relief > (pl.Discovery == Spring ? SpringReliefM : VentReliefM) || !Open(vents[k], 0, pl.SizeMinM, x, z)) mask &= ~(1 << k);
+            }
+            return mask;
+        }
+
+        bool UnderMesa(float x, float z, float r)
+        {
+            if (w.Sketch == null) return false;
+            foreach (var m in w.Sketch.Mesas) if (Mesas.Dist(m, x, z) - r < Mesas.Toe(m, BogSteadyM)) return true;
+            return false;
+        }
+
+        int[] ventDefs;
+        int[] VentDefs
+        {
+            get
+            {
+                if (ventDefs != null) return ventDefs;
+                var v = new List<int>();
+                for (int d = 0; d < lib.Objects.Count; d++) if (Pooled(lib.Objects[d].Placement.Discovery)) v.Add(d);
+                return ventDefs = v.ToArray();
+            }
         }
 
         public bool IsVent(ObjectInstance o) => Pooled(lib.Objects[o.Def].Placement.Discovery);
@@ -510,6 +602,7 @@ namespace Stabby.World
         {
             string fault = PoolFault(o);
             if (fault != null) return fault;
+            if (UnderMesa(o.X, o.Z, SiteRadius(o))) return "vent sits under a mesa";
             int kind = VentKind(o), liquid = LiquidOf(o);
             var pools = new List<float>();
             var own = new List<FeatureEdit>();
