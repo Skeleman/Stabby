@@ -75,6 +75,18 @@ namespace Stabby.World
             return best;
         }
 
+        public int Index(float x, float z)
+        {
+            int best = -1;
+            float heat = 0;
+            for (int k = 0; k < X.Count; k++)
+            {
+                float dx = X[k] - x, dz = Z[k] - z, h = 1 - (float)Math.Sqrt(dx * dx + dz * dz) / R[k];
+                if (h > heat) { heat = h; best = k; }
+            }
+            return best;
+        }
+
         static float Length(float[] xs, float[] ys)
         {
             float total = 0;
