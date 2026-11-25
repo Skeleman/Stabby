@@ -13,12 +13,57 @@ namespace Stabby.Game
         static readonly bool VerifyNodes = Environment.GetEnvironmentVariable("STABBY_LOD_VERIFY") == "1";
         readonly Dictionary<int, (int drawn, int cast, int stitch, float end)> verifyNodes = new Dictionary<int, (int, int, int, float)>();
         readonly HashSet<int> verifyEvicts = new HashSet<int>();
+        readonly HashSet<int> verifyDrawn = new HashSet<int>();
         readonly List<string> verifyWrites = new List<string>();
         readonly int[] verifyStats = new int[TerrainNodesJob.StatCount];
         long verifyFrames, verifyKeys, verifyWriteCount, verifyMismatches;
         string verifyFirst = "";
 
         static string WriteKey(TerrainWrite w) => $"{w.Entity.Index}:{w.Entity.Version}:{w.Kind}:{w.Value}";
+
+        partial void Expect(TerrainDrawJob walk)
+        {
+            if (!VerifyNodes) return;
+            verifyDrawn.Clear();
+            for (int r = 0; r < roots.Length; r++) Draw(roots[r]);
+        }
+
+        bool Built(int key) => nodes.TryGetValue(key, out var v) && v.Built != 0;
+
+        bool Coverable(int key)
+        {
+            if (Built(key)) return true;
+            if (!split.Contains(key)) return false;
+            for (int q = 0; q < 4; q++)
+            {
+                int c = tree.Child(key, q);
+                if (c >= 0 && !Coverable(c)) return false;
+            }
+            return true;
+        }
+
+        void Draw(int key)
+        {
+            if (split.Contains(key))
+            {
+                bool all = true;
+                for (int q = 0; q < 4 && all; q++)
+                {
+                    int c = tree.Child(key, q);
+                    all = c < 0 || Coverable(c);
+                }
+                if (all)
+                {
+                    for (int q = 0; q < 4; q++)
+                    {
+                        int c = tree.Child(key, q);
+                        if (c >= 0) Draw(c);
+                    }
+                    return;
+                }
+            }
+            if (Built(key)) verifyDrawn.Add(key);
+        }
 
         partial void Expect(TerrainNodesJob job)
         {
@@ -38,7 +83,7 @@ namespace Stabby.Game
             foreach (int key in meshes.Keys)
             {
                 var nd = nodes[key];
-                bool want = drawn.Contains(key);
+                bool want = verifyDrawn.Contains(key);
                 if (!want && !InTree(key))
                 {
                     verifyEvicts.Add(key);
@@ -94,6 +139,10 @@ namespace Stabby.Game
                 if (nd.Drawn != x.drawn || nd.Cast != x.cast || nd.Stitch != x.stitch || nd.MorphEnd != x.end)
                     Miss($"node {kv.Key} job {nd.Drawn}/{nd.Cast}/{nd.Stitch}/{nd.MorphEnd} old {x.drawn}/{x.cast}/{x.stitch}/{x.end}");
             }
+            int walked = 0;
+            foreach (int key in drawn)
+                if (verifyDrawn.Contains(key)) walked++;
+            if (walked != verifyDrawn.Count || drawn.Count != verifyDrawn.Count) Miss($"drawn job {drawn.Count} old {verifyDrawn.Count} shared {walked}");
             var evicts = new HashSet<int>();
             for (int i = 0; i < nodeEvicts.Length; i++) evicts.Add(nodeEvicts[i]);
             if (!evicts.SetEquals(verifyEvicts)) Miss($"evicts job {evicts.Count} old {verifyEvicts.Count}");
@@ -118,7 +167,7 @@ namespace Stabby.Game
                 Miss($"writes job {got.Count} old {verifyWrites.Count} job-only [{extra}] old-only [{lost}]");
             }
             verifyFrames++;
-            verifyKeys += verifyNodes.Count + verifyEvicts.Count;
+            verifyKeys += verifyNodes.Count + verifyEvicts.Count + verifyDrawn.Count;
             verifyWriteCount += verifyWrites.Count;
             verifyMismatches += bad;
             GameStatus.Lines["terrain~verify"] = $"terrain nodes job verify: {verifyFrames} frames, {verifyKeys} node checks, {verifyWriteCount} writes, {verifyMismatches} mismatches{verifyFirst}";
@@ -142,7 +191,7 @@ namespace Stabby.Game
             {
                 int key = tree.At(x, z, l);
                 if (key < 0) return -1;
-                if (drawn.Contains(key)) return l;
+                if (verifyDrawn.Contains(key)) return l;
             }
             return -1;
         }
