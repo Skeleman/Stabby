@@ -110,8 +110,8 @@ namespace Stabby.Game
             Shader.SetGlobalVector(MoonDirId, new Vector4(s.MoonX, s.MoonY, s.MoonZ, s.MoonGlow));
             Shader.SetGlobalColor(MoonTintId, new Color(sky.MoonColor.R, sky.MoonColor.G, sky.MoonColor.B).linear);
             Shader.SetGlobalFloat(StarsId, s.Stars);
-            Shader.SetGlobalColor(SkyId, new Color(s.AmbientSky.R, s.AmbientSky.G, s.AmbientSky.B));
-            Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B));
+            Shader.SetGlobalColor(SkyId, new Color(s.AmbientSky.R, s.AmbientSky.G, s.AmbientSky.B).linear);
+            Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B).linear);
             Shown = s;
             ShownHour = s.Hour;
             (linePinnedHour, linePinnedPhase) = (PinnedHour.HasValue, PinnedPhase.HasValue);
