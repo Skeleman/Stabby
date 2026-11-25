@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public const float SurfaceTolerance = 1e-3f;
         public const float CorridorFollowShare = 0.7f;
-        public const float CliffMinRise = 30f, BeachMaxDepth = 4f;
+        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f;
 
         static int FirstUndrained(GeneratedWorld w)
         {
@@ -960,6 +960,7 @@ namespace Stabby.World
                 }
             }
             CheckShores(w, island, e);
+            CheckBeachShelf(w, e);
             if (s.Landmasses.Count > 1)
             {
                 int a = island[(int)s.Landmasses[0].Y * n + (int)s.Landmasses[0].X];
@@ -1063,6 +1064,36 @@ namespace Stabby.World
                 if (cliff < need) e.Add($"landmass {k} has {cliff} cliff cells");
                 if (beach < need) e.Add($"landmass {k} has {beach} beach cells");
             }
+        }
+
+        static void CheckBeachShelf(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size, pairs = 0, flat = 0;
+            for (int y = 2; y < n - 2; y++)
+                for (int x = 2; x < n - 2; x++)
+                {
+                    int i = y * n + x;
+                    if (!w.Sea[i] || TouchesLand(w, n, i, 0)) continue;
+                    for (int d = 0; d < 8; d++)
+                    {
+                        int j = i + Grid.DY[d] * n + Grid.DX[d];
+                        if (!w.Sea[j] || !TouchesLand(w, n, j, 0.5f)) continue;
+                        pairs++;
+                        if (w.Height[i] > w.Height[j] - BeachShelfStep) flat++;
+                        break;
+                    }
+                }
+            if (pairs > 0 && flat > pairs * BeachShelfShare) e.Add($"beach seabed is flat beside the shore at {flat} of {pairs} cells");
+        }
+
+        static bool TouchesLand(GeneratedWorld w, int n, int i, float beach)
+        {
+            for (int d = 0; d < 8; d++)
+            {
+                int j = i + Grid.DY[d] * n + Grid.DX[d];
+                if (!w.Sea[j] && w.Sketch.Beach[j] >= beach) return true;
+            }
+            return false;
         }
 
         static float Length(CorridorSketch c, int p)
