@@ -89,7 +89,7 @@ public static class Linter
     static readonly string[] CopyMembers = { "ToEntityArray", "ToEntityListAsync", "ToComponentDataArray", "ToComponentDataListAsync", "ToArchetypeChunkArray", "ToArchetypeChunkListAsync" };
     static readonly string[] StructuralMembers = { "CreateEntity", "DestroyEntity", "AddComponent", "AddComponentData", "AddBuffer", "AddSharedComponent", "AddSharedComponentManaged", "RemoveComponent", "Instantiate", "CreateSingleton", "SetSharedComponent", "SetSharedComponentManaged" };
     static readonly Regex Once = new(@"\bonce\b", RegexOptions.IgnoreCase);
-    static readonly Regex EngineApi = new(@"\b(Mesh|Light|GraphicsBuffer|URP|Input|GhostPrefabCreation|Camera|Entities Graphics|Texture|Texture2D)(es|s)?\b");
+    static readonly Regex EngineApi = new(@"\b(Mesh|Light|GraphicsBuffer|URP|Input|GhostPrefabCreation|Camera|Entities Graphics|Texture|Texture2D|SetGlobalColor)(es|s)?\b");
     public const string Debt = "debt:";
 
     public static bool IsRuntime(string file) =>
@@ -100,6 +100,9 @@ public static class Linter
 
     public static bool IsSystemReason(string reason) =>
         reason.StartsWith(Debt, StringComparison.Ordinal) || Once.IsMatch(reason) || EngineApi.IsMatch(reason);
+
+    static string Unpaced(string file, int line, string key) =>
+        $"{file}:{line}: {AllowFile} reason for {key} must say it runs once, name an engine API with no unmanaged form, or start with '{Debt}'";
 
     public static List<string> EcsProblems(string file, string text, Dictionary<string, string> allow)
     {
@@ -126,8 +129,8 @@ public static class Linter
             bool allowed = Allowed(name);
             if (type is ClassDeclarationSyntax && bases.Any(b => b is "SystemBase" or "MonoBehaviour") && !allowed)
                 yield return $"{file}:{line}: {name} is managed; make it a Burst ISystem or list it in {AllowFile} with a reason";
-            if (type is ClassDeclarationSyntax && bases.Contains("SystemBase") && allowed && !IsSystemReason(allow[name]))
-                yield return $"{file}:{line}: {AllowFile} reason for {name} must say it runs once, name an engine API with no unmanaged form, or start with '{Debt}'";
+            if (type is ClassDeclarationSyntax && bases.Any(b => b is "SystemBase" or "MonoBehaviour") && allowed && !IsSystemReason(allow[name]))
+                yield return Unpaced(file, line, name);
             if (type is StructDeclarationSyntax && bases.Contains("ISystem") && !allowed &&
                 !type.AttributeLists.SelectMany(a => a.Attributes).Any(a => a.Name.ToString() is "BurstCompile" or "BurstCompileAttribute"))
                 yield return $"{file}:{line}: ISystem {name} lacks [BurstCompile]";
@@ -153,7 +156,11 @@ public static class Linter
                 {
                     if (call.Expression is not MemberAccessExpressionSyntax m || !CopyMembers.Contains(m.Name.Identifier.Text)) continue;
                     string key = $"{owner}.{m.Name.Identifier.Text}";
-                    if (Allowed(key)) continue;
+                    if (Allowed(key))
+                    {
+                        if (!IsSystemReason(allow[key])) yield return Unpaced(file, LineOf(call), key);
+                        continue;
+                    }
                     yield return $"{file}:{LineOf(call)}: {m} copies a query every update; iterate with SystemAPI.Query or a job, or list {key} in {AllowFile} with a reason";
                 }
         }
@@ -164,7 +171,11 @@ public static class Linter
                 if (LastName(m.Expression.ToString()) != "EntityManager") continue;
                 string owner = call.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
                 string key = $"{owner}.{m.Name.Identifier.Text}";
-                if (Allowed(key)) continue;
+                if (Allowed(key))
+                {
+                    if (!IsSystemReason(allow[key])) yield return Unpaced(file, LineOf(call), key);
+                    continue;
+                }
                 yield return $"{file}:{LineOf(call)}: {m} is a structural change inside an entity loop; record it on an EntityCommandBuffer or list {key} in {AllowFile} with a reason";
             }
     }
@@ -254,8 +265,13 @@ public static class Linter
             var owner = SystemOf(loop);
             if (owner == null) continue;
             string key = $"{owner}.Query";
-            if (allow.ContainsKey(key)) { used.Add(key); continue; }
             int line = loop.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (allow.TryGetValue(key, out var why))
+            {
+                used.Add(key);
+                if (!IsSystemReason(why)) yield return Unpaced(file, line, key);
+                continue;
+            }
             yield return $"{file}:{line}: foreach over SystemAPI.Query runs on the main thread; schedule an IJobEntity or IJobChunk or list {key} in {AllowFile} with a reason";
         }
         foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
@@ -264,8 +280,13 @@ public static class Linter
             var owner = SystemOf(call);
             if (owner == null) continue;
             string key = $"{owner}.Run";
-            if (allow.ContainsKey(key)) { used.Add(key); continue; }
             int line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (allow.TryGetValue(key, out var why))
+            {
+                used.Add(key);
+                if (!IsSystemReason(why)) yield return Unpaced(file, line, key);
+                continue;
+            }
             yield return $"{file}:{line}: {m} runs a job on the main thread; schedule it or list {key} in {AllowFile} with a reason";
         }
     }
@@ -354,8 +375,13 @@ public static class Linter
             if (call.Expression is not MemberAccessExpressionSyntax m || !BlockingMembers.Contains(m.Name.Identifier.Text)) continue;
             string owner = call.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
             string key = $"{owner}.{m.Name.Identifier.Text}";
-            if (allow.ContainsKey(key)) { used.Add(key); continue; }
             int line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (allow.TryGetValue(key, out var why))
+            {
+                used.Add(key);
+                if (!IsSystemReason(why)) yield return Unpaced(file, line, key);
+                continue;
+            }
             yield return $"{file}:{line}: {m} blocks the main thread; poll IsCompleted instead or list {key} in {AllowFile} with a reason";
         }
         foreach (var acc in root.DescendantNodes().OfType<MemberAccessExpressionSyntax>())
@@ -364,8 +390,13 @@ public static class Linter
             if (IsGuarded(acc)) continue;
             string owner = acc.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
             string key = $"{owner}.Result";
-            if (allow.ContainsKey(key)) { used.Add(key); continue; }
             int line = acc.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (allow.TryGetValue(key, out var why))
+            {
+                used.Add(key);
+                if (!IsSystemReason(why)) yield return Unpaced(file, line, key);
+                continue;
+            }
             yield return $"{file}:{line}: {acc} may block; read Result only after an IsCompleted check in the same method";
         }
         foreach (var acc in root.DescendantNodes().OfType<MemberAccessExpressionSyntax>())
@@ -374,8 +405,13 @@ public static class Linter
             if (!NativeMembers.Contains(name)) continue;
             string owner = acc.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.Text ?? "";
             string key = $"{owner}.{name}";
-            if (allow.ContainsKey(key)) { used.Add(key); continue; }
             int line = acc.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            if (allow.TryGetValue(key, out var why))
+            {
+                used.Add(key);
+                if (!IsSystemReason(why)) yield return Unpaced(file, line, key);
+                continue;
+            }
             yield return $"{file}:{line}: {acc} calls native engine code, unsafe on worker threads; use a managed version or list {key} in {AllowFile} with a reason";
         }
     }

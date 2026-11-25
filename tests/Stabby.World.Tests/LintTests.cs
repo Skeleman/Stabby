@@ -126,7 +126,11 @@ public class LintTests
 
     [Fact]
     public void AllowListSilencesACopy() =>
-        Assert.Empty(Ecs(Copying, new Dictionary<string, string> { ["Sys.ToComponentDataArray"] = "reason" }));
+        Assert.Empty(Ecs(Copying, new Dictionary<string, string> { ["Sys.ToComponentDataArray"] = "copies each arrival once" }));
+
+    [Fact]
+    public void FlagsVagueCopyReasons() =>
+        Assert.Single(Ecs(Copying, new Dictionary<string, string> { ["Sys.ToComponentDataArray"] = "copies a few states" }));
 
     const string Structural = "[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) s.EntityManager.DestroyEntity(e); } }";
 
@@ -147,7 +151,7 @@ public class LintTests
 
     [Fact]
     public void AllowListSilencesAStructuralChange() =>
-        Assert.Empty(Ecs(Structural, new Dictionary<string, string> { ["Sys.DestroyEntity"] = "reason" }));
+        Assert.Empty(Ecs(Structural, new Dictionary<string, string> { ["Sys.DestroyEntity"] = "destroys each entity once" }));
 
     const string Managed = "partial class Sys : SystemBase { protected override void OnUpdate() { } }";
 
@@ -164,6 +168,10 @@ public class LintTests
     [InlineData("registers meshes with Entities Graphics")]
     [InlineData("debt: rebuilds a managed list every frame")]
     public void AcceptsHonestSystemReasons(string reason) => Assert.Empty(Ecs(Managed, new Dictionary<string, string> { ["Sys"] = reason }));
+
+    [Fact]
+    public void FlagsVagueMonoBehaviourReasons() =>
+        Assert.Single(Ecs("sealed class Scene : MonoBehaviour { }", new Dictionary<string, string> { ["Scene"] = "holds materials" }));
 
     static List<string> MainThread(string code, Dictionary<string, string>? allow = null) =>
         Linter.MainThreadProblems(GameFile, code, allow ?? new Dictionary<string, string>());
@@ -188,6 +196,18 @@ public class LintTests
     [Fact]
     public void AllowListSilencesAMainThreadLoop() =>
         Assert.Empty(MainThread(Looping, new Dictionary<string, string> { ["Sys.Query"] = "debt: b/sim-jobs" }));
+
+    [Theory]
+    [InlineData("reads a handful of entities")]
+    [InlineData("runs every frame")]
+    public void FlagsVagueMainThreadReasons(string reason) =>
+        Assert.Single(MainThread(Looping, new Dictionary<string, string> { ["Sys.Query"] = reason }));
+
+    [Theory]
+    [InlineData("completes each handle once, after IsCompleted", 0)]
+    [InlineData("only after IsCompleted", 1)]
+    public void CompleteReasonsMustSayHowOften(string reason, int problems) =>
+        Assert.Equal(problems, Linter.BlockingProblems(GameFile, "[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.Dependency.Complete(); } }", new Dictionary<string, string> { ["Sys.Complete"] = reason }).Count);
 
     [Theory]
     [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.Dependency.Complete(); } }")]
