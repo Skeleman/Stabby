@@ -2,7 +2,7 @@
 # Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full|--merge]
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
 # (--full forces all; --merge forces all but sweeps only 25+5 seeds, and only when the diff can change
-# generation; daily.sh sweeps all). One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
+# generation; daily.sh sweeps all). Without --full, sweeps run only the check groups sweep-impact.txt maps the diff to. One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
 args=" $* "; full=0; [[ "$args" == *" --full "* ]] && full=1
 merge=0; [[ "$args" == *" --merge "* ]] && merge=1
@@ -34,6 +34,22 @@ else
   has '^(unity/|src/)' && unity=1
 fi
 [ $nounity = 1 ] && unity=0
+sweep_groups() {
+  local f pat sel hit groups=core
+  while read -r f; do
+    [[ "$f" =~ ^(src/|content/|tools/Stabby\.Cli/) ]] || continue
+    hit=0
+    while read -r pat sel; do
+      [ -n "$pat" ] && [[ "$f" == $pat ]] || continue
+      hit=1; [ "$sel" = all ] && { echo all; return; }
+      groups="$groups,$sel"
+    done < tools/scripts/sweep-impact.txt
+    [ $hit = 0 ] && { echo all; return; }
+  done <<< "$changed"
+  tr ',' '\n' <<< "$groups" | sort -u | paste -sd, -
+}
+sg=all
+[ $full = 0 ] && ! has '^(Directory\.Build\.[a-z]+|[^/]+\.sln[x]?|global\.json|NuGet\.config|\.editorconfig|tools/scripts/)' && sg=$(sweep_groups)
 gamef="FullyQualifiedName~Lint|FullyQualifiedName~ChunkZip|FullyQualifiedName~RuntimeParity"
 if [ $full = 1 ] || [ $merge = 1 ]; then tf=""
 elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"
@@ -44,7 +60,7 @@ else
 fi
 parity=0
 if [ $unity = 1 ] && { [ -z "$tf" ] || [[ "$tf" == *RuntimeParity* ]]; }; then parity=1; tf="${tf:+($tf)&}FullyQualifiedName!~RuntimeParity"; fi
-say "phases: tests${tf:+ ($tf)}$([ $gen = 1 ] && echo ", sweeps")$([ $unity = 1 ] && echo ", unity")"
+say "phases: tests${tf:+ ($tf)}$([ $gen = 1 ] && echo ", sweeps ($sg)")$([ $unity = 1 ] && echo ", unity")"
 if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
 say "build: ok, $((SECONDS - t0)) s"
 if ! dotnet run --project tools/Stabby.Lint -c Release --no-build -- . > out/check/lint.log 2>&1; then say "lint: FAILED"; grep -v "^lint" out/check/lint.log | head -10; exit 1; fi
@@ -61,7 +77,7 @@ phase_tests() {
 }
 phase_sweep() {
   local s=$SECONDS rc=0 line
-  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 --low-while out/check/busy > out/check/sweep$2.log 2>&1 || rc=1
+  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 --groups $sg --low-while out/check/busy > out/check/sweep$2.log 2>&1 || rc=1
   line=$(grep -E "seeds at" out/check/sweep$2.log | tail -1); [[ "$line" == *" 0 violations"* ]] || rc=1
   echo "sweep $2: $line, $((SECONDS - s)) s" > out/check/sweep$2.sum; echo $rc > out/check/sweep$2.rc
 }
