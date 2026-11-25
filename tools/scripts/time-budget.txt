@@ -4,9 +4,13 @@ test FineGridTests.FourKCellsPlaceFeaturesOnTheGrid 55 places features over a 4K
 test ObjectTests.RiverBanksGrowReedsBarsDriftAndWetStones 50 places every bank object along all rivers of a world
 test DiscoveryTests.RuinsAppearOnSteadyGround 45 runs discovery placement on full worlds
 test ObjectTests.TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse 40 scans every cliff foot of a world for talus
+test CaveTests.CaveObjectsAreCommonAndPass 40 places cave objects over full worlds and runs their checks
+test CaveTests.SeedsGrowEveryClassAndPass 30 grows every cave class over several seeds and runs the cave checks
 test ObjectTests.ObjectPlacementIsDeterministicAndVaried 27 places objects for a world twice and compares
 test CaveTests.TunnelsAreNarrowFineAndVaried 24 carves and meshes cave tunnels on full worlds
 test ObjectTests.ObjectsStayInTheirBiomes 21 checks every placed object against its biome
+test CaveTests.HallsBuildAtFullSize 21 builds and meshes full-size cave halls
+test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places boulders over a world and splits large ones into solid edits
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
 test WorldFileTests.BakedWorldLoadsBackIdentical 14 bakes a world file and loads it back
@@ -17,3 +21,25 @@ test InnTests.InnsPlaceLevelInTheTestWorld 12 places and levels every inn site i
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
 sweep 256 checks 85000 390000 WorldChecks per seed at 256 while tests and the other sweep share the machine
 sweep 512 checks 265000 360000 WorldChecks per seed at 512 while tests and the other sweep share the machine
+sweep 256 features 3351 37540 shared feature, edit grid and object field setup per seed
+sweep 256 core 100 1780 border, sea level, drainage and receivers per seed
+sweep 256 hydrology 238 17122 river beds, lakes, mouths, outlets, falls and river shape per seed
+sweep 256 biomes 100 707 coverage, tint and lake cover per seed
+sweep 256 sketch 100 1229 sketch, shores and mesas per seed
+sweep 256 surface 11039 73197 detail, near field, geometry, chunk bounds, cliff foot per seed
+sweep 256 meshing 981 4721 mesher comparison per edit shape and cave roofs per seed
+sweep 256 caves 7451 26404 cave paths, caves, cave normals and cave objects per seed
+sweep 256 sites 6965 36673 site footprints, sites, structures and discoveries per seed
+sweep 256 objects 20291 50950 objects, landforms, arches and boulders per seed
+sweep 256 creatures 485 1969 creature checks per seed
+sweep 512 features 11747 19579 shared feature, edit grid and object field setup per seed
+sweep 512 core 100 150 border, sea level, drainage and receivers per seed
+sweep 512 hydrology 3291 5693 river beds, lakes, mouths, outlets, falls and river shape per seed
+sweep 512 biomes 100 100 coverage, tint and lake cover per seed
+sweep 512 sketch 279 992 sketch, shores and mesas per seed
+sweep 512 surface 27017 61597 detail, near field, geometry, chunk bounds, cliff foot per seed
+sweep 512 meshing 1808 4930 mesher comparison per edit shape and cave roofs per seed
+sweep 512 caves 19626 56979 cave paths, caves, cave normals and cave objects per seed
+sweep 512 sites 14831 21557 site footprints, sites, structures and discoveries per seed
+sweep 512 objects 23846 29431 objects, landforms, arches and boulders per seed
+sweep 512 creatures 1496 2213 creature checks per seed

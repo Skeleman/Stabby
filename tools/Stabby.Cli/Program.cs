@@ -20,7 +20,7 @@ switch (args.FirstOrDefault())
     case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--low-while file]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--groups a,b] [--low-while file]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
@@ -152,6 +152,15 @@ int Sweep()
     var perSeed = new System.Collections.Concurrent.ConcurrentDictionary<ulong, List<string>>();
     var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture) };
     bool checks = Opt("checks", "1") != "0";
+    var groupOpt = Opt("groups", "all");
+    HashSet<string>? groups = groupOpt == "all" ? null : new HashSet<string>(groupOpt.Split(',', StringSplitOptions.RemoveEmptyEntries));
+    if (groups != null)
+    {
+        var unknown = groups.Where(g => !WorldChecks.Groups.Contains(g)).ToArray();
+        if (unknown.Length > 0) { Console.WriteLine($"unknown check groups: {string.Join(",", unknown)} (known: {string.Join(",", WorldChecks.Groups)})"); return 2; }
+        groups.Add("core");
+    }
+    var groupTimes = new System.Collections.Concurrent.ConcurrentBag<(string, double)>();
     var lowWhile = Opt("low-while", "");
     if (lowWhile != "" && File.Exists(lowWhile))
     {
@@ -181,8 +190,15 @@ int Sweep()
         long genMs = sw.ElapsedMilliseconds;
         times.Add((genMs, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
-        var found = WorldChecks.Run(w);
-        found.AddRange(WorldChecks.Creatures(w, creatures));
+        var spent = new Dictionary<string, double>();
+        var found = WorldChecks.Run(w, groups, spent);
+        if (groups == null || groups.Contains("creatures"))
+        {
+            var cw = Stopwatch.StartNew();
+            found.AddRange(WorldChecks.Creatures(w, creatures));
+            spent["creatures"] = cw.Elapsed.TotalMilliseconds;
+        }
+        foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value));
         foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
         perSeed[c.Seed] = found;
         Mark("checks");
@@ -196,6 +212,12 @@ int Sweep()
     {
         var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();
         Console.WriteLine($"  {g.Key,-10} median {ms[ms.Length / 2],7:F1} ms, max {ms[^1],7:F1} ms, {g.Average(s => s.Item3) / 1048576,7:F1} MB allocated");
+    }
+    if (checks) Console.WriteLine($"  check groups: {(groups == null ? "all" : string.Join(",", WorldChecks.Groups.Where(groups.Contains)))}");
+    foreach (var g in groupTimes.GroupBy(s => s.Item1).OrderBy(g => g.Key == "features" ? -1 : Array.IndexOf(WorldChecks.Groups, g.Key)))
+    {
+        var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();
+        Console.WriteLine($"    {g.Key,-10} median {ms[ms.Length / 2],8:F1} ms, max {ms[^1],8:F1} ms");
     }
     foreach (var f in failures.OrderBy(x => x).Take(30)) Console.WriteLine("  " + f);
     var list = Opt("violations", "");

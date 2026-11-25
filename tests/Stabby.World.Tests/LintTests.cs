@@ -248,4 +248,30 @@ public class LintTests
         Assert.False(Linter.IsRuntime("unity/Assets/Game/Editor/GameCapture.cs"));
         Assert.False(Linter.IsRuntime("unity/Assets/Viewer/Viewer.cs"));
     }
+
+    [Fact]
+    public void SweepImpactCoversEveryWorldFile()
+    {
+        var repo = Linter.FindRepo(AppContext.BaseDirectory);
+        var lines = File.ReadAllLines(Path.Combine(repo, "tools", "scripts", "sweep-impact.txt"))
+            .Where(l => l.Trim().Length > 0)
+            .Select(l => l.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .ToList();
+        var problems = new List<string>();
+        foreach (var l in lines)
+        {
+            if (l.Length != 2) { problems.Add($"bad line: {string.Join(" ", l)}"); continue; }
+            foreach (var g in l[1].Split(','))
+                if (g != "all" && !WorldChecks.Groups.Contains(g)) problems.Add($"{l[0]} names unknown group {g}");
+        }
+        var globs = lines.Where(l => l.Length == 2)
+            .Select(l => new System.Text.RegularExpressions.Regex("^" + System.Text.RegularExpressions.Regex.Escape(l[0]).Replace(@"\*", ".*").Replace(@"\?", ".") + "$"))
+            .ToList();
+        foreach (var f in Directory.GetFiles(Path.Combine(repo, "src", "Stabby.World"), "*.cs"))
+        {
+            var rel = "src/Stabby.World/" + Path.GetFileName(f);
+            if (!globs.Any(g => g.IsMatch(rel))) problems.Add($"{rel} has no line in sweep-impact.txt");
+        }
+        Assert.Empty(problems);
+    }
 }
