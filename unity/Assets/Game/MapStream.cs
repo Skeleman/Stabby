@@ -189,7 +189,7 @@ namespace Stabby.Game
         }
 
         ComponentLookup<ChunkCounts> counts;
-        EntityQuery pieces;
+        EntityQuery sums, pieces;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -198,20 +198,23 @@ namespace Stabby.Game
             state.RequireForUpdate<ChunkCounts>();
             state.RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
             counts = state.GetComponentLookup<ChunkCounts>();
+            sums = SystemAPI.QueryBuilder().WithAll<ChunkSumRpc, ReceiveRpcCommandRequest>().Build();
             pieces = SystemAPI.QueryBuilder().WithAll<ChunkPieceRpc, ReceiveRpcCommandRequest>().Build();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            bool anySums = !sums.IsEmptyIgnoreFilter, anyPieces = !pieces.IsEmptyIgnoreFilter;
+            if (!anySums && !anyPieces) return;
             var box = SystemAPI.GetSingleton<ChunkInbox>();
             var e = SystemAPI.GetSingletonEntity<ChunkInbox>();
             var ecb = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(state.WorldUnmanaged);
             bool receiving = SystemAPI.GetComponent<ChunkCounts>(e).Remaining > 0;
-            if (!receiving) ecb.DestroyEntity(pieces, EntityQueryCaptureMode.AtRecord);
+            if (anyPieces && !receiving) ecb.DestroyEntity(pieces, EntityQueryCaptureMode.AtRecord);
             counts.Update(ref state);
-            state.Dependency = new SumJob { Counts = counts, Box = e, HostSums = box.HostSums, Ecb = ecb }.Schedule(state.Dependency);
-            if (receiving) state.Dependency = new PieceJob { Counts = counts, Box = e, Slots = box.Slots, Arena = box.Arena, Ecb = ecb }.Schedule(pieces, state.Dependency);
+            if (anySums) state.Dependency = new SumJob { Counts = counts, Box = e, HostSums = box.HostSums, Ecb = ecb }.Schedule(sums, state.Dependency);
+            if (anyPieces && receiving) state.Dependency = new PieceJob { Counts = counts, Box = e, Slots = box.Slots, Arena = box.Arena, Ecb = ecb }.Schedule(pieces, state.Dependency);
         }
     }
 }
