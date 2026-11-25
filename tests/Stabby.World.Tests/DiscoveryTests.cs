@@ -9,10 +9,11 @@ public class DiscoveryTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     readonly ITestOutputHelper output;
 
     public DiscoveryTests(ITestOutputHelper output) => this.output = output;
+
+    static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) World(ulong seed) => TestWorlds.Get(seed);
 
     [Fact]
     public void FeaturePassDiscoveriesMatchTheFinalEdits()
@@ -20,10 +21,10 @@ public class DiscoveryTests
         int seen = 0;
         for (ulong seed = 1; seed <= 8; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
+            var w = TestWorlds.World(seed);
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail, out _, out var shared);
-            var fresh = new ObjectField(w, detail, edits, Objects).Discoveries();
+            var fresh = new ObjectField(w, detail, edits, w.Objects).Discoveries();
             Assert.NotNull(shared);
             Assert.Equal(fresh.Length, shared.Length);
             for (int i = 0; i < fresh.Length; i++)
@@ -45,9 +46,7 @@ public class DiscoveryTests
         int d = Objects.Objects.FindIndex(o => o.Id == "stone-ring"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var rings = field.Discoveries().Where(o => o.Def == d).ToArray();
             output.WriteLine($"seed {seed}: {rings.Length} rings " + string.Join(" ", rings.Select(r => $"{r.X:F0},{r.Z:F0}")));
             foreach (var r in rings)
@@ -68,9 +67,7 @@ public class DiscoveryTests
         int camp = Objects.Objects.FindIndex(o => o.Id == "campsite"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var all = field.Discoveries();
             var camps = all.Where(o => o.Def == camp).ToArray();
             output.WriteLine($"seed {seed}: {camps.Length} camps " + string.Join(" ", camps.Select(c => $"{c.X:F0},{c.Z:F0}:{field.CampDraw(c.X, c.Z):F2}")));
@@ -94,9 +91,7 @@ public class DiscoveryTests
         int hermit = Objects.Objects.FindIndex(o => o.Id == "hermitage"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var all = field.Discoveries();
             var huts = all.Where(o => o.Def == hermit).ToArray();
             output.WriteLine($"seed {seed}: {huts.Length} hermitages " + string.Join(" ", huts.Select(c => $"{c.X:F0},{c.Z:F0}:{field.Woods(c.X, c.Z):F2}")));
@@ -120,9 +115,7 @@ public class DiscoveryTests
         int shrine = Objects.Objects.FindIndex(o => o.Id == "wayside-shrine"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var all = field.Discoveries();
             var shrines = all.Where(o => o.Def == shrine).ToArray();
             output.WriteLine($"seed {seed}: {field.Routes.Length / 4} routes, {shrines.Length} shrines " + string.Join(" ", shrines.Select(c => $"{c.X:F0},{c.Z:F0}:{field.RoadSide(c.X, c.Z, out _, out _):F1}")));
@@ -149,9 +142,7 @@ public class DiscoveryTests
         int ruin = Objects.Objects.FindIndex(o => o.Id == "ruin"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var all = field.Discoveries();
             var ruins = all.Where(o => o.Def == ruin).ToArray();
             output.WriteLine($"seed {seed}: {ruins.Length} ruins " + string.Join(" ", ruins.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
@@ -175,9 +166,7 @@ public class DiscoveryTests
         int ring = Objects.Objects.FindIndex(o => o.Id == "fairy-ring"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var all = field.Discoveries();
             var rings = all.Where(o => o.Def == ring).ToArray();
             output.WriteLine($"seed {seed}: {rings.Length} rings " + string.Join(" ", rings.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
@@ -201,10 +190,7 @@ public class DiscoveryTests
         int den = Objects.Objects.FindIndex(o => o.Id == "wolf-den"), total = 0, worlds = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail);
-            var field = new ObjectField(w, detail, edits, Objects);
+            var (w, detail, edits, field) = World(seed);
             var dens = field.Discoveries().Where(o => o.Def == den).ToArray();
             output.WriteLine($"seed {seed}: {dens.Length} dens " + string.Join(" ", dens.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
             var rocks = new List<FeatureEdit>();
@@ -230,9 +216,7 @@ public class DiscoveryTests
         var pools = new System.Collections.Generic.List<float>();
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var springs = field.Discoveries().Where(o => o.Def == spring).ToArray();
             output.WriteLine($"seed {seed}: {springs.Length} springs " + string.Join(" ", springs.Select(c => $"{c.X:F0},{c.Z:F0}:{field.Hotspots.Heat(c.X, c.Z):F2}")));
             foreach (var c in springs)
@@ -256,9 +240,7 @@ public class DiscoveryTests
         var pools = new System.Collections.Generic.List<float>();
         for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             foreach (var c in field.Discoveries().Where(o => o.Def == geyser || o.Def == mud))
             {
                 Assert.Null(field.VentFault(c));
@@ -281,9 +263,7 @@ public class DiscoveryTests
             if (o.Placement.Liquid != null) Assert.True(materials.Liquid(o.Placement.Liquid) >= 0, o.Id + " names an unknown liquid");
         for (ulong seed = 1; seed <= 6; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, materials, null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var bogs = field.BogPools();
             int wet = Array.IndexOf(w.BiomeIds, "wetland"), n = w.Config.Size;
             for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
@@ -301,13 +281,10 @@ public class DiscoveryTests
     [Fact]
     public void ObjectsKeepOutOfBogMargins()
     {
-        var materials = ContentLoader.LoadMaterials(Root);
         int pools = 0, near = 0;
         for (ulong seed = 1; seed <= 2; seed++)
         {
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, materials, null, null, Objects, Caves);
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var (w, detail, _, field) = World(seed);
             var bogs = field.BogPools();
             float span = field.ChunkMeters;
             var seen = new HashSet<int>();
@@ -350,16 +327,13 @@ public class DiscoveryTests
     public void LoadedWorldPlacesTheSameDiscoveries()
     {
         var materials = ContentLoader.LoadMaterials(Root);
-        var w = WorldGenerator.Generate(new WorldConfig { Seed = 1, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, materials, null, null, Objects, Caves);
+        var (w, _, _, field) = World(1);
         var loaded = WorldFile.Read(WorldFile.Write(w), materials);
         loaded.Objects = Objects;
-        string Rings(GeneratedWorld g)
-        {
-            var detail = new TerrainDetail(g);
-            return string.Join(" ", new ObjectField(g, detail, Features.Place(g, detail), Objects).Discoveries().Select(r => $"{r.X},{r.Z},{r.Size}"));
-        }
-        string expected = Rings(w);
+        string Rings(ObjectField f) => string.Join(" ", f.Discoveries().Select(r => $"{r.X},{r.Z},{r.Size}"));
+        var loadedDetail = new TerrainDetail(loaded);
+        string expected = Rings(field);
         Assert.NotEmpty(expected);
-        Assert.Equal(expected, Rings(loaded));
+        Assert.Equal(expected, Rings(new ObjectField(loaded, loadedDetail, Features.Place(loaded, loadedDetail), Objects)));
     }
 }

@@ -73,7 +73,7 @@ namespace Stabby.Game
         ComputeShader scatter;
         Material material;
         GrassPass pass;
-        GraphicsBuffer blades, args;
+        GraphicsBuffer blades, args, resetArgs;
         CommandBuffer cmd;
         TerrainViewSystem terrain;
         GrassDef grass;
@@ -117,7 +117,8 @@ namespace Stabby.Game
             Shader.SetGlobalVector("_StabbyGust", new Vector4(1f / wind.GustScaleM, wind.GustSpeed, wind.GustStrength, 0));
             kernel = scatter.FindKernel("Scatter");
             blades = new GraphicsBuffer(GraphicsBuffer.Target.Structured, grass.MaxBlades * LodTris.Length, 32) { name = "Grass blades" };
-            args = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Raw, reset.Length, 4) { name = "Grass args" };
+            args = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments | GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopyDestination, reset.Length, 4) { name = "Grass args" };
+            resetArgs = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, reset.Length, 4) { name = "Grass args reset" };
             for (int i = 0; i < LodTris.Length; i++)
             {
                 reset[i * 4] = (uint)(LodTris[i] * 3);
@@ -125,7 +126,8 @@ namespace Stabby.Game
                 lodBlocks[i].SetInteger("_GrassBase", i * grass.MaxBlades);
                 lodBlocks[i].SetInteger("_GrassTris", LodTris[i]);
             }
-            args.SetData(reset);
+            resetArgs.SetData(reset);
+            Graphics.CopyBuffer(resetArgs, args);
             material = new Material(shader) { name = "Grass blades" };
             material.SetBuffer(BladesId, blades);
             material.SetInteger("_GrassMax", grass.MaxBlades);
@@ -175,7 +177,7 @@ namespace Stabby.Game
             lastMeshes = meshKey;
             scattered = true;
             cmd.Clear();
-            cmd.SetBufferData(args, reset);
+            cmd.CopyBuffer(resetArgs, args);
             for (int i = 0; i < TextureIds.Length; i++) cmd.SetComputeTextureParam(scatter, kernel, TextureIds[i], Shader.GetGlobalTexture(TextureIds[i]));
             for (int i = 0; i < VectorIds.Length; i++) cmd.SetComputeVectorParam(scatter, VectorIds[i], Shader.GetGlobalVector(VectorIds[i]));
             var contact = Shader.GetGlobalTexture(ContactId);
@@ -268,6 +270,7 @@ namespace Stabby.Game
             cache.Clear();
             blades?.Dispose();
             args?.Dispose();
+            resetArgs?.Dispose();
             cmd?.Release();
             if (material != null) Object.Destroy(material);
         }

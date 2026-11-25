@@ -84,9 +84,8 @@ namespace Stabby.World
             }
         }
 
-        static void CheckDiscoveries(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckDiscoveries(GeneratedWorld w, ObjectField field, List<string> e)
         {
-            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             CheckBogs(w, field, e);
             CheckPools(field, e);
             var found = field.Discoveries();
