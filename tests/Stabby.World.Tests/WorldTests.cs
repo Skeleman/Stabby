@@ -157,6 +157,7 @@ public class WorldTests
     public void MountainsCastRainShadows()
     {
         double wind = 0, lee = 0; int nw = 0, nl = 0;
+        Parallel.For(1, 21, s => Gen((ulong)s));
         for (ulong s = 1; s <= 20; s++)
         {
             var w = Gen(s);
