@@ -106,7 +106,8 @@ namespace Stabby.Game
         ComponentLookup<CreatureFur> furs;
         EntityQuery roots;
         public NativeList<CreatureGpu> Instances;
-        public NativeArray<CreatureGpu> Sorted;
+        public NativeArray<float3x4> Bones;
+        public NativeArray<CreaturePart> Parts;
         public NativeArray<float4> Fur;
         public NativeArray<int> Starts, Counts;
         public JobHandle Gpu;
@@ -116,10 +117,11 @@ namespace Stabby.Game
         NativeArray<float3> scratchPos, scratchEnd;
         NativeArray<quaternion> scratchRot, scratchEndRot;
         NativeArray<float> scratchFloor;
+        NativeArray<CreatureGpu> scratchOut;
         float carry, slack;
         int skipped, capacity;
         public int Trims;
-        const int SegCap = 64, PartCap = 32;
+        const int SegCap = 64, PartCap = 32, OutCap = 2 * SegCap;
 
         public void OnCreate(ref SystemState state)
         {
@@ -129,6 +131,7 @@ namespace Stabby.Game
             scratchFloor = new NativeArray<float>(threads * SegCap, Allocator.Persistent);
             scratchEnd = new NativeArray<float3>(threads * PartCap, Allocator.Persistent);
             scratchEndRot = new NativeArray<quaternion>(threads * PartCap, Allocator.Persistent);
+            scratchOut = new NativeArray<CreatureGpu>(threads * OutCap, Allocator.Persistent);
             state.RequireForUpdate<CreatureRoot>();
             state.RequireForUpdate<Ground>();
             world = state.GetComponentLookup<LocalToWorld>();
@@ -138,7 +141,8 @@ namespace Stabby.Game
             furs = state.GetComponentLookup<CreatureFur>(true);
             roots = SystemAPI.QueryBuilder().WithAll<CreatureRoot, CreatureLink>().Build();
             Instances = new NativeList<CreatureGpu>(1, Allocator.Persistent);
-            Sorted = new NativeArray<CreatureGpu>(1, Allocator.Persistent);
+            Bones = new NativeArray<float3x4>(1, Allocator.Persistent);
+            Parts = new NativeArray<CreaturePart>(1, Allocator.Persistent);
             Fur = new NativeArray<float4>(3, Allocator.Persistent);
             Starts = new NativeArray<int>(1, Allocator.Persistent);
             Counts = new NativeArray<int>(1, Allocator.Persistent);
@@ -151,9 +155,11 @@ namespace Stabby.Game
             scratchFloor.Dispose(state.Dependency);
             scratchEnd.Dispose(state.Dependency);
             scratchEndRot.Dispose(state.Dependency);
+            scratchOut.Dispose(state.Dependency);
             var dep = JobHandle.CombineDependencies(state.Dependency, Gpu);
             Instances.Dispose(dep);
-            Sorted.Dispose(dep);
+            Bones.Dispose(dep);
+            Parts.Dispose(dep);
             Fur.Dispose(dep);
             Starts.Dispose(dep);
             Counts.Dispose(dep);
@@ -173,7 +179,8 @@ namespace Stabby.Game
             a = new NativeArray<T>(math.max(n, 1), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
 
-        public long HeldBytes => (long)capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Sorted.Length * UnsafeUtility.SizeOf<CreatureGpu>()
+        public long HeldBytes => (long)capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Bones.Length * UnsafeUtility.SizeOf<float3x4>()
+            + (long)Parts.Length * UnsafeUtility.SizeOf<CreaturePart>()
             + Fur.Length * 16L + (Starts.Length + Counts.Length) * 4L;
 
         [BurstCompile]
@@ -199,14 +206,16 @@ namespace Stabby.Game
                 if (trim)
                 {
                     capacity = math.max(want, 64);
-                    Shrink(ref Sorted, capacity, Gpu);
+                    Shrink(ref Bones, capacity, Gpu);
+                    Shrink(ref Parts, capacity, Gpu);
                     Shrink(ref Fur, 3 * count + 3 * count / 2, Gpu);
                     slack = 0;
                     Trims++;
                 }
                 if (capacity < tally.Links) capacity = tally.Links + tally.Links / 2;
                 Gpu = new Reset { Instances = Instances, Capacity = capacity, Trim = trim }.Schedule(Gpu);
-                Fit(ref Sorted, capacity, Gpu);
+                Fit(ref Bones, capacity, Gpu);
+                Fit(ref Parts, capacity, Gpu);
                 Fit(ref Fur, 3 * count, Gpu);
                 Fit(ref Starts, tally.Groups, Gpu);
                 Fit(ref Counts, tally.Groups, Gpu);
@@ -216,13 +225,13 @@ namespace Stabby.Game
             {
                 Ground = SystemAPI.GetSingleton<Ground>(), View = view, Hold = hold, Present = present, Dt = math.min(SystemAPI.Time.DeltaTime + carry, 0.1f * (1 + skipped)),
                 World = world, Fade = fade, Mmi = mmi, States = states,
-                Pos = scratchPos, Rot = scratchRot, Floor = scratchFloor, End = scratchEnd, EndRot = scratchEndRot,
+                Pos = scratchPos, Rot = scratchRot, Floor = scratchFloor, End = scratchEnd, EndRot = scratchEndRot, Records = scratchOut,
                 Gpu = gpu, Furs = furs, Out = Instances.AsParallelWriter(), FurOut = Fur, Frustum = Frustum,
             }.ScheduleParallel(JobHandle.CombineDependencies(state.Dependency, Gpu));
             carry = 0;
             skipped = 0;
             if (!gpu) return;
-            state.Dependency = new Compact { Instances = Instances, Sorted = Sorted, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
+            state.Dependency = new Compact { Instances = Instances, Bones = Bones, Parts = Parts, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
             Gpu = state.Dependency;
             Pending = true;
         }
@@ -245,7 +254,8 @@ namespace Stabby.Game
         struct Compact : IJob
         {
             [ReadOnly] public NativeList<CreatureGpu> Instances;
-            public NativeArray<CreatureGpu> Sorted;
+            public NativeArray<float3x4> Bones;
+            public NativeArray<CreaturePart> Parts;
             public NativeArray<int> Starts, Counts;
             public int Groups;
 
@@ -260,7 +270,8 @@ namespace Stabby.Game
                 for (int i = 0; i < Instances.Length; i++)
                 {
                     var x = Instances[i];
-                    Sorted[cursor[x.Group]++] = x;
+                    Bones[i] = x.Bone;
+                    Parts[cursor[x.Group]++] = new CreaturePart { Fade = x.Fade, Bone = i, Fur = x.Fur, Group = x.Group };
                 }
             }
         }
@@ -284,6 +295,7 @@ namespace Stabby.Game
             [NativeDisableParallelForRestriction, NativeDisableContainerSafetyRestriction] public NativeArray<float3> Pos, End;
             [NativeDisableParallelForRestriction, NativeDisableContainerSafetyRestriction] public NativeArray<quaternion> Rot, EndRot;
             [NativeDisableParallelForRestriction, NativeDisableContainerSafetyRestriction] public NativeArray<float> Floor;
+            [NativeDisableParallelForRestriction, NativeDisableContainerSafetyRestriction] public NativeArray<CreatureGpu> Records;
 
             NativeArray<T> Scratch<T>(NativeArray<T> pool, int cap, int n, bool fits) where T : struct =>
                 fits ? pool.GetSubArray(JobsUtility.ThreadIndex * cap, n) : new NativeArray<T>(n, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -413,15 +425,18 @@ namespace Stabby.Game
                 float contact = 0.5f * sc.Stand;
                 var trunkAt = rootPos + math.mul(rootRot, new float3(0, 0, -0.5f * sc.Length + sc.Rear));
                 float shadow = c.Shadow ? 1 : 0;
+                var records = Gpu ? Scratch(Records, OutCap, links.Length, links.Length <= OutCap) : default;
+                int k = 0;
                 for (int tier = 0; tier < 2; tier++)
                 {
                     if (tier == 0 ? !highOn : !lowOn) continue;
                     int b = tier * half;
                     float x = tier == 0 ? highX : lowX;
-                    Write(links[b], float4x4.TRS(trunkAt, rootRot, links[b].Scale), new float4(x, shadow, gy, contact), index);
+                    Write(links[b], float4x4.TRS(trunkAt, rootRot, links[b].Scale), new float4(x, shadow, gy, contact), index, records, ref k);
                     for (int s = 0; s < n && s + 1 < half; s++)
-                        Write(links[b + s + 1], float4x4.TRS(pos[s], rot[s], links[b + s + 1].Scale), new float4(x, shadow, floor[s], contact), index);
+                        Write(links[b + s + 1], float4x4.TRS(pos[s], rot[s], links[b + s + 1].Scale), new float4(x, shadow, floor[s], contact), index, records, ref k);
                 }
+                if (k > 0) Out.AddRangeNoResize(records.GetSubArray(0, k).AsReadOnlySpan());
             }
 
             float Legs(ref CreatureRig rig, ref CreatureFit fit, float stand, float3 rootPos, quaternion rootRot, float gy, float oldSink, float ik,
@@ -451,15 +466,15 @@ namespace Stabby.Game
                 return math.clamp(drop * ik, 0, 0.3f * stand);
             }
 
-            void Write(CreatureLink link, float4x4 m, float4 f, int index)
+            void Write(CreatureLink link, float4x4 m, float4 f, int index, NativeArray<CreatureGpu> records, ref int k)
             {
                 if (Gpu)
                 {
-                    Out.AddNoResize(new CreatureGpu
+                    records[k++] = new CreatureGpu
                     {
-                        R0 = new float4(m.c0.x, m.c1.x, m.c2.x, m.c3.x), R1 = new float4(m.c0.y, m.c1.y, m.c2.y, m.c3.y), R2 = new float4(m.c0.z, m.c1.z, m.c2.z, m.c3.z),
+                        Bone = new float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz),
                         Fade = f, Fur = index, Group = 2 * link.Mesh + (f.y > 0.5f ? 1 : 0),
-                    });
+                    };
                     return;
                 }
                 if (link.Value == Entity.Null) return;
