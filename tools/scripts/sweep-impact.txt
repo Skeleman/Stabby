@@ -28,6 +28,7 @@ src/Stabby.World/Walk.cs surface,caves
 src/Stabby.World/Chunks.cs surface
 src/Stabby.World/Underground.cs caves,surface,meshing
 src/Stabby.World/CaveLight.cs caves
+src/Stabby.World/CavePools.cs caves,sites
 content/caves.json caves,surface,meshing
 src/Stabby.World/Landforms.cs objects,surface,meshing
 src/Stabby.World/Object*.cs objects,sites,surface
