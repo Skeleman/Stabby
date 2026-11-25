@@ -129,7 +129,7 @@ namespace Stabby.Game.Editor
             if (hall == null)
                 for (int q = 0; q < edits.Length; q++)
                     if (edits[q].Shape == FeatureEdit.CaveRoom && (room < 0 || edits[q].R > edits[room].R)) room = q;
-            if (lab == null || hall == null && room < 0) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no " + (lab == null ? "labyrinth" : "hall or chamber") + " in this world"; yield break; }
+            if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
 
@@ -189,6 +189,7 @@ namespace Stabby.Game.Editor
                 GeometryShot(cam, dir, "caves-deep-tunnel-debug-unlit");
             }
             else lines.Add("deep tunnel: no labyrinth tunnel reachable from a mouth");
+            if (hall == null && room < 0) { lines.Add("hall: no hall or chamber in this world, hall shots skipped"); GameStatus.Lines["~caves"] = string.Join("\n", lines); yield break; }
 
             Vector3 hc, toward;
             float rh = 0f;

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full]
+# Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full|--merge]
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
-# (--full forces all). Tests follow tools/scripts/test-impact.txt; Category=Sweep tests skip when sweeps run.
-# One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
+# (--full forces all; --merge forces all but sweeps only 25+5 seeds, and only when the diff can change
+# generation; daily.sh sweeps all). Tests follow tools/scripts/test-impact.txt; Category=Sweep tests skip
+# when sweeps run. One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
 args=" $* "; full=0; [[ "$args" == *" --full "* ]] && full=1
+merge=0; [[ "$args" == *" --merge "* ]] && merge=1
 nounity=0; [[ "$args" == *" --no-unity "* ]] && nounity=1
 say() { echo "$*"; }
 common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"; lock="$common/stabby-check.lock"; passes="$common/stabby-check-pass"
@@ -25,6 +27,7 @@ changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standa
 has() { grep -q -E "$1" <<< "$changed"; }
 gen=0; game=0; unity=0
 if [ $full = 1 ] || has '^(Directory\.Build\.[a-z]+|[^/]+\.sln[x]?|global\.json|NuGet\.config|\.editorconfig|tools/scripts/(check|env)\.sh$)'; then gen=1; game=1; unity=1
+elif [ $merge = 1 ]; then game=1; unity=1; has '^(src/|content/|tools/Stabby\.Cli/)' && gen=1
 else
   has '^(src/|content/|tools/Stabby\.Cli/)' && gen=1
   has '^(unity/|tools/Stabby\.Lint/|lint-allow\.txt)' && game=1
@@ -46,7 +49,7 @@ impact() {
   echo "$out"
 }
 explicit=0
-if [ $full = 1 ]; then tf=""
+if [ $full = 1 ] || [ $merge = 1 ]; then tf=""
 elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"; explicit=1
 else
   terms="Lint$(impact)"
@@ -100,7 +103,8 @@ phase_unity() {
 }
 touch out/check/busy
 { phase_tests & [ $unity = 1 ] && phase_unity & wait; rm -f out/check/busy; } &
-[ $gen = 1 ] && { phase_sweep 100 256 & phase_sweep 20 512 & }
+n256=100; n512=20; [ $merge = 1 ] && { n256=25; n512=5; }
+[ $gen = 1 ] && { phase_sweep $n256 256 & phase_sweep $n512 512 & }
 wait
 fail=0
 for p in tests sweep256 sweep512 unity; do
@@ -113,7 +117,7 @@ bad=$(git diff --name-only "$base" | xargs -r git ls-files --eol 2> /dev/null | 
 nc=$(git diff "$base" -- '*.cs' '*.shader' '*.hlsl' '*.compute' | grep -c -E "^\+\s*(//|/\*)")
 say "new comment lines: $nc (reason lines only, rule 7)"
 say "total: $((SECONDS - t0)) s"
-if [ $fail = 0 ] && [ $full = 1 ] && [ $nounity = 0 ]; then
+if [ $fail = 0 ] && { [ $full = 1 ] || [ $merge = 1 ]; } && [ $nounity = 0 ]; then
   dirty=$(git status --porcelain --untracked-files=no | cut -c4- | grep -v -E '^unity/(Assets/Scenes/|ProjectSettings/|Assets/[^/]+\.asset$)')
   if [ -z "$dirty" ]; then
     mkdir -p "$passes"; find "$passes" -type f -mtime +7 -delete 2> /dev/null
