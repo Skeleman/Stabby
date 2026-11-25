@@ -636,7 +636,7 @@ Shader "Stabby/Object"
                 }
                 else
                 {
-                    float3 gw = ToLinear(_StabbyGround.rgb);
+                    float3 gw = _StabbyGround.rgb;
                     [branch] if (_StabbyFieldUV.z > 0) gw = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
                     Wood(i.local, n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, wp, gw, albedo, n);
                 }
