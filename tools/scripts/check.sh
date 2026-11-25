@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full]
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
-# (--full forces all). One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
+# (--full forces all). Tests follow tools/scripts/test-impact.txt; Category=Sweep tests skip when sweeps run.
+# One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
 args=" $* "; full=0; [[ "$args" == *" --full "* ]] && full=1
 nounity=0; [[ "$args" == *" --no-unity "* ]] && nounity=1
@@ -22,25 +23,39 @@ t0=$SECONDS
 base=$(git merge-base HEAD origin/main)
 changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
 has() { grep -q -E "$1" <<< "$changed"; }
-gen=0; world=0; game=0; unity=0
-if [ $full = 1 ] || has '^(Directory\.Build\.[a-z]+|[^/]+\.sln[x]?|global\.json|NuGet\.config|\.editorconfig|tools/scripts/)'; then gen=1; world=1; game=1; unity=1
+gen=0; game=0; unity=0
+if [ $full = 1 ] || has '^(Directory\.Build\.[a-z]+|[^/]+\.sln[x]?|global\.json|NuGet\.config|\.editorconfig|tools/scripts/(check|env)\.sh$)'; then gen=1; game=1; unity=1
 else
-  has '^(src/|content/|tools/Stabby\.Cli/)' && { gen=1; world=1; }
-  has '^tests/' && world=1
+  has '^(src/|content/|tools/Stabby\.Cli/)' && gen=1
   has '^(unity/|tools/Stabby\.Lint/|lint-allow\.txt)' && game=1
   has '^(unity/|src/)' && unity=1
 fi
 [ $nounity = 1 ] && unity=0
-gamef="FullyQualifiedName~Lint|FullyQualifiedName~ChunkZip|FullyQualifiedName~RuntimeParity"
+impact() {
+  local f g line hit fb="" out="" globs map=tools/scripts/test-impact.txt
+  while IFS= read -r line; do [ "${line%% -> *}" = fallback ] && fb="${line#* -> }"; done < $map
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue; hit=0; f=${f%.meta}
+    [[ $f =~ ^tests/.*/([A-Za-z]+Tests)\.cs$ ]] && { out="$out|${BASH_REMATCH[1]}"; hit=1; }
+    while IFS= read -r line; do
+      read -ra globs <<< "${line%% -> *}"
+      for g in "${globs[@]}"; do [[ $f == $g ]] && { out="$out|${line#* -> }"; hit=1; break; }; done
+    done < $map
+    [ $hit = 0 ] && [[ $f =~ ^(src/|content/|tests/|tools/Stabby\.(Cli|Lint)/|Directory\.Build|[^/]+\.slnx?$|global\.json|NuGet\.config|\.editorconfig) ]] && out="$out|$fb"
+  done <<< "$changed"
+  echo "$out"
+}
+explicit=0
 if [ $full = 1 ]; then tf=""
-elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"
+elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"; explicit=1
 else
-  tf="FullyQualifiedName~Lint"
-  [ $world = 1 ] && tf="FullyQualifiedName~Feature|FullyQualifiedName~Object|FullyQualifiedName~Discover|$tf"
-  { [ $game = 1 ] || [ $unity = 1 ]; } && { [ "$tf" = FullyQualifiedName~Lint ] && tf="$gamef" || tf="${tf%|FullyQualifiedName~Lint}|$gamef"; }
+  terms="Lint$(impact)"
+  { [ $game = 1 ] || [ $unity = 1 ]; } && terms="$terms|ChunkZip|RuntimeParity"
+  tf=$(tr '|' '\n' <<< "$terms" | grep -v '^$' | sort -u | sed 's/^/FullyQualifiedName~/' | paste -sd'|' -)
 fi
 parity=0
 if [ $unity = 1 ] && { [ -z "$tf" ] || [[ "$tf" == *RuntimeParity* ]]; }; then parity=1; tf="${tf:+($tf)&}FullyQualifiedName!~RuntimeParity"; fi
+[ $gen = 1 ] && [ $explicit = 0 ] && tf="${tf:+($tf)&}Category!=Sweep"
 say "phases: tests${tf:+ ($tf)}$([ $gen = 1 ] && echo ", sweeps")$([ $unity = 1 ] && echo ", unity")"
 if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
 say "build: ok, $((SECONDS - t0)) s"
