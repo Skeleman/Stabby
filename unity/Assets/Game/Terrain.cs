@@ -639,6 +639,7 @@ namespace Stabby.Game
             var used = new NativeArray<int>(Verts.Length, Allocator.Temp);
             for (int t = 0; t < Tris.Length; t++) used[Tris[t]] = 1;
             var rim = new NativeArray<int>(ringCount, Allocator.Temp);
+            float drop = s * 0.5f + 20f;
             var rimGap = new NativeArray<float>(ringCount, Allocator.Temp);
             for (int r = 0; r < ringCount; r++)
             {
@@ -655,6 +656,9 @@ namespace Stabby.Game
                 rim[r] = best;
                 rimGap[r] = gap;
                 used[best] = 1;
+                var crest = Verts[best].Pos;
+                for (int u = Ints[c + 2], e = u + Ints[c + 1] - Ints[c]; u < e; u++)
+                    if (used[u] != 0 && Verts[u].Normal.y < 0 && Verts[u].Pos.y < crest.y && Verts[u].Pos.y > crest.y - drop) rimGap[r] = float.MaxValue;
             }
 
             var meta = new NativeList<int3>(Verts.Length / 4 + 16, Allocator.Temp);
@@ -735,7 +739,6 @@ namespace Stabby.Game
                 hi = math.max(hi, p.Pos);
             }
 
-            float drop = s * 0.5f + 20f;
             int first = Verts.Length;
             for (int r = 0; r < ringCount; r++)
             {
