@@ -66,46 +66,55 @@ namespace Stabby.Game
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ServerChunkStreamSystem : ISystem
     {
-        BufferLookup<OutPiece> outboxes;
-        BufferLookup<OutgoingRpcDataStreamBuffer> backlogs;
-
         [BurstCompile]
-        public void OnCreate(ref SystemState state)
+        [WithAll(typeof(NetworkStreamInGame))]
+        [WithNone(typeof(MapInformed))]
+        partial struct InformJob : IJobEntity
         {
-            state.RequireForUpdate<ChunkStore>();
-            outboxes = state.GetBufferLookup<OutPiece>();
-            backlogs = state.GetBufferLookup<OutgoingRpcDataStreamBuffer>(true);
+            public BlobAssetReference<PackedChunks> Store;
+            public EntityCommandBuffer Ecb;
+
+            void Execute(Entity conn, in NetworkId _)
+            {
+                ref var store = ref Store.Value;
+                Ecb.AddComponent<MapInformed>(conn);
+                Ecb.AddBuffer<OutPiece>(conn);
+                Rpc.Send(Ecb, conn, new WorldInfoRpc { Seed = store.Seed, Version = Stabby.World.WorldConfig.GeneratorVersion, Size = store.Size, Chunks = store.Sums.Length });
+                for (int k = 0; k < store.Sums.Length; k++) Rpc.Send(Ecb, conn, new ChunkSumRpc { Index = k, Sum = store.Sums[k] });
+            }
         }
 
         [BurstCompile]
-        public void OnUpdate(ref SystemState state)
+        partial struct RequestJob : IJobEntity
         {
-            ref var store = ref SystemAPI.GetSingleton<ChunkStore>().Blob.Value;
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (_, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>().WithNone<MapInformed>().WithEntityAccess())
-            {
-                ecb.AddComponent<MapInformed>(conn);
-                ecb.AddBuffer<OutPiece>(conn);
-                Rpc.Send(ecb, conn, new WorldInfoRpc { Seed = store.Seed, Version = Stabby.World.WorldConfig.GeneratorVersion, Size = store.Size, Chunks = store.Sums.Length });
-                for (int k = 0; k < store.Sums.Length; k++) Rpc.Send(ecb, conn, new ChunkSumRpc { Index = k, Sum = store.Sums[k] });
-            }
+            public BlobAssetReference<PackedChunks> Store;
+            public BufferLookup<OutPiece> Outboxes;
+            public EntityCommandBuffer Ecb;
 
-            outboxes.Update(ref state);
-            foreach (var (req, rx, e) in SystemAPI.Query<RefRO<ChunkRequestRpc>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
+            void Execute(Entity e, in ChunkRequestRpc req, in ReceiveRpcCommandRequest rx)
             {
-                ecb.DestroyEntity(e);
-                int k = req.ValueRO.Index;
-                if (k < 0 || k >= store.Sums.Length || !outboxes.TryGetBuffer(rx.ValueRO.SourceConnection, out var q)) continue;
+                ref var store = ref Store.Value;
+                Ecb.DestroyEntity(e);
+                int k = req.Index;
+                if (k < 0 || k >= store.Sums.Length || !Outboxes.TryGetBuffer(rx.SourceConnection, out var q)) return;
                 int pieces = ChunkPieces.Count(store.Ranges[k].y);
                 for (int p = 0; p < pieces; p++) q.Add(new OutPiece { Chunk = k, Piece = p });
             }
+        }
 
-            backlogs.Update(ref state);
-            foreach (var (q, conn) in SystemAPI.Query<DynamicBuffer<OutPiece>>().WithEntityAccess())
+        [BurstCompile]
+        partial struct SendJob : IJobEntity
+        {
+            public BlobAssetReference<PackedChunks> Store;
+            [ReadOnly] public BufferLookup<OutgoingRpcDataStreamBuffer> Backlogs;
+            public EntityCommandBuffer Ecb;
+
+            void Execute(Entity conn, ref DynamicBuffer<OutPiece> q)
             {
-                int queued = backlogs.TryGetBuffer(conn, out var backlog) ? backlog.Length : 0;
+                ref var store = ref Store.Value;
+                int queued = Backlogs.TryGetBuffer(conn, out var backlog) ? backlog.Length : 0;
                 int send = math.min(math.min(GameSettings.PiecesPerTick, q.Length), math.max(0, (GameSettings.BacklogBytes - queued) / GameSettings.PieceBytes));
-                if (send == 0) continue;
+                if (send == 0) return;
                 for (int s = 0; s < send; s++)
                 {
                     var o = q[s];
@@ -113,11 +122,34 @@ namespace Stabby.Game
                     int from = range.x + o.Piece * GameSettings.PieceBytes, to = math.min(range.x + range.y, from + GameSettings.PieceBytes);
                     var rpc = new ChunkPieceRpc { Index = o.Chunk, Piece = o.Piece, Pieces = ChunkPieces.Count(range.y) };
                     for (int b = from; b < to; b++) rpc.Bytes.Add(store.Bytes[b]);
-                    Rpc.Send(ecb, conn, rpc);
+                    Rpc.Send(Ecb, conn, rpc);
                 }
                 q.RemoveRange(0, send);
             }
-            ecb.Playback(state.EntityManager);
+        }
+
+        BufferLookup<OutPiece> outboxes;
+        BufferLookup<OutgoingRpcDataStreamBuffer> backlogs;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<ChunkStore>();
+            state.RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
+            outboxes = state.GetBufferLookup<OutPiece>();
+            backlogs = state.GetBufferLookup<OutgoingRpcDataStreamBuffer>(true);
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            var store = SystemAPI.GetSingleton<ChunkStore>().Blob;
+            var ecb = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(state.WorldUnmanaged);
+            outboxes.Update(ref state);
+            backlogs.Update(ref state);
+            var dep = new InformJob { Store = store, Ecb = ecb }.Schedule(state.Dependency);
+            dep = new RequestJob { Store = store, Outboxes = outboxes, Ecb = ecb }.Schedule(dep);
+            state.Dependency = new SendJob { Store = store, Backlogs = backlogs, Ecb = ecb }.Schedule(dep);
         }
     }
 
