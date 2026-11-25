@@ -3,7 +3,8 @@
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
 # (--full forces all; --merge forces all but sweeps only 25+5 seeds, and only when the diff can change
 # generation; daily.sh sweeps all). Tests follow tools/scripts/test-impact.txt; Category=Sweep tests skip
-# when sweeps run. One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
+# when sweeps run. Time budgets (budget.sh) warn; only a runaway fails. One check per machine at a time.
+# Exit 1 if anything fails. Logs in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
 args=" $* "; full=0; [[ "$args" == *" --full "* ]] && full=1
 merge=0; [[ "$args" == *" --merge "* ]] && merge=1
@@ -67,7 +68,7 @@ say "lint: ok, $((SECONDS - t0)) s"
 rm -f out/check/*.sum out/check/*.rc
 phase_tests() {
   local s=$SECONDS rc=0 targs=(); [ -n "$tf" ] && targs=(--filter "$tf")
-  dotnet test -c Release --no-build "${targs[@]}" --logger "console;verbosity=normal" > out/check/test.log 2>&1 || rc=1
+  dotnet test -c Release --no-build "${targs[@]}" --blame-hang-timeout 10m --blame-hang-dump-type none --logger "console;verbosity=normal" > out/check/test.log 2>&1 || rc=1
   { echo "tests: $(grep -h -E "No test matches|^Test Run (Successful|Failed|Aborted)" out/check/test.log | head -1) $(sed -n -E 's/^ *(Total tests|Passed|Failed): ([0-9]+)/\1 \2/p' out/check/test.log | paste -sd, - | sed 's/,/, /g'), $((SECONDS - s)) s"
     grep -E "^\s+Failed " out/check/test.log | head -5
     echo "slowest: $(awk '$1 == "Passed" && $NF == "s]" { t = 0; n = $2; sub(/\(.*/, "", n); sub(/.*\./, "", n); for (i = 3; i < NF; i++) { v = $i; gsub(/\[/, "", v); if ($(i+1) == "m") t += v * 60; else if ($(i+1) == "s]") t += v } print t, n }' out/check/test.log | sort -rn | head -3 | awk '{ printf "%s%s %d s", (NR > 1 ? ", " : ""), $2, $1 }')"; } > out/check/tests.sum
@@ -112,11 +113,13 @@ for p in tests sweep256 sweep512 unity; do
   [ -f out/check/$p.rc ] && [ "$(cat out/check/$p.rc)" != 0 ] && fail=1
 done
 [ -f out/check/tests.rc ] || fail=1
+bash tools/scripts/budget.sh out/check || fail=1
 bad=$(git diff --name-only "$base" | xargs -r git ls-files --eol 2> /dev/null | grep -v -E "w/(lf|-text|none)" | grep -v "binary")
 [ -z "$bad" ] && say "eol: ok" || { say "eol: NOT LF"; echo "$bad"; fail=1; }
 nc=$(git diff "$base" -- '*.cs' '*.shader' '*.hlsl' '*.compute' | grep -c -E "^\+\s*(//|/\*)")
 say "new comment lines: $nc (reason lines only, rule 7)"
 say "total: $((SECONDS - t0)) s"
+[ $merge = 1 ] && [ $((SECONDS - t0)) -gt 720 ] && say "BUDGET merge check: $((SECONDS - t0)) s, budget 720 s"
 if [ $fail = 0 ] && { [ $full = 1 ] || [ $merge = 1 ]; } && [ $nounity = 0 ]; then
   dirty=$(git status --porcelain --untracked-files=no | cut -c4- | grep -v -E '^unity/(Assets/Scenes/|ProjectSettings/|Assets/[^/]+\.asset$)')
   if [ -z "$dirty" ]; then

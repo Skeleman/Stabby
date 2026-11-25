@@ -17,5 +17,6 @@ git merge -q --no-ff "origin/$br" -F "$msg" || { echo "merge failed"; git merge 
 rm -f "$msg"
 pass="$(cd "$(git rev-parse --git-common-dir)" && pwd)/stabby-check-pass/$(git rev-parse 'HEAD^{tree}')"
 if [ -f "$pass" ]; then echo "checks: skipped, this exact tree passed a full check ($(cat "$pass"))"; git push -q && echo "PUSHED $(git log --oneline -1)"
-elif bash tools/scripts/check.sh "" --merge; then git push -q && echo "PUSHED $(git log --oneline -1)"
-else echo "CHECKS FAILED: merge commit left local, not pushed (git reset --hard origin/main to undo)"; exit 1; fi
+elif bash tools/scripts/check.sh "" --merge | tee out/merge-check.txt; [ "${PIPESTATUS[0]}" = 0 ]; then
+  git push -q && echo "PUSHED $(git log --oneline -1)" && { grep '^BUDGET' out/merge-check.txt || true; }
+else echo "CHECKS FAILED: merge commit left local, not pushed (git reset --hard origin/main to undo)"; grep -E '^(BUDGET|RUNAWAY)' out/merge-check.txt; exit 1; fi
