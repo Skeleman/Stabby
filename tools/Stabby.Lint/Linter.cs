@@ -16,7 +16,7 @@ public static class Linter
     const string KitFunction = "float3 Built(";
     static readonly Regex Colour = new(@"float3\(\s*[0-9.]+f?\s*,\s*[0-9.]+f?\s*,\s*[0-9.]+f?\s*\)");
     static readonly Regex DotWeights = new(@"dot\([^()]*,\s*$");
-    static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete" };
+    static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete", "CompleteAll", "CompleteAllTrackedJobs", "CompleteDependency" };
     static readonly string[] NativeMembers = { "linear", "gamma", "GammaToLinearSpace", "LinearToGammaSpace", "PerlinNoise" };
     static readonly string[] WorldDetailFiles = { "src/Stabby.World/Detail.cs", "src/Stabby.World/FoliageDefs.cs", "src/Stabby.World/ObjectDefs.cs" };
     static readonly string[] DistanceCalls = { "distance", "distancesq", "Distance", "RectDistance", "length", "lengthsq", "magnitude", "sqrMagnitude" };
@@ -64,7 +64,10 @@ public static class Linter
             foreach (var c in Comments(root))
                 problems.Add($"{file}:{c.GetLocation().GetLineSpan().StartLinePosition.Line + 1}: comment (put reasons in the commit message)");
             if (IsRuntime(file))
+            {
                 foreach (var p in EcsProblems(file, root, allow, used, classes)) problems.Add(p);
+                foreach (var p in MainThreadProblems(file, root, allow, used)) problems.Add(p);
+            }
             if (file.StartsWith(UnityDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
                 foreach (var p in BlockingProblems(file, root, allow, used)) problems.Add(p);
             if (IsDetailCode(file))
@@ -224,6 +227,44 @@ public static class Linter
             if (!chain.StartsWith("Entities", StringComparison.Ordinal) || chain.Contains("WithStructuralChanges", StringComparison.Ordinal)) continue;
             foreach (var lambda in call.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>())
                 yield return lambda.Body;
+        }
+    }
+
+    public static List<string> MainThreadProblems(string file, string text, Dictionary<string, string> allow) =>
+        MainThreadProblems(file, Parse(text).GetRoot(), allow, new HashSet<string>(StringComparer.Ordinal)).ToList();
+
+    public static List<string> BlockingProblems(string file, string text, Dictionary<string, string> allow) =>
+        BlockingProblems(file, Parse(text).GetRoot(), allow, new HashSet<string>(StringComparer.Ordinal)).ToList();
+
+    static string? SystemOf(SyntaxNode node) =>
+        node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault(t => t.BaseList != null &&
+            t.BaseList.Types.Select(b => LastName(b.Type.ToString())).Any(b => b is "ISystem" or "SystemBase"))?.Identifier.Text;
+
+    static bool IsJobRun(InvocationExpressionSyntax call, MemberAccessExpressionSyntax m) =>
+        m.Name.Identifier.Text == "Run" && LastName(m.Expression.ToString()) != "Task" &&
+        call.ArgumentList.Arguments.Count <= 1 && call.ArgumentList.Arguments.All(a => a.RefKindKeyword.IsKind(SyntaxKind.None));
+
+    static IEnumerable<string> MainThreadProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used)
+    {
+        foreach (var loop in root.DescendantNodes().OfType<CommonForEachStatementSyntax>())
+        {
+            if (!loop.Expression.DescendantNodesAndSelf().OfType<MemberAccessExpressionSyntax>().Any(m => m.ToString().StartsWith("SystemAPI.Query", StringComparison.Ordinal))) continue;
+            var owner = SystemOf(loop);
+            if (owner == null) continue;
+            string key = $"{owner}.Query";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = loop.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: foreach over SystemAPI.Query runs on the main thread; schedule an IJobEntity or IJobChunk or list {key} in {AllowFile} with a reason";
+        }
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax m || !IsJobRun(call, m)) continue;
+            var owner = SystemOf(call);
+            if (owner == null) continue;
+            string key = $"{owner}.Run";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: {m} runs a job on the main thread; schedule it or list {key} in {AllowFile} with a reason";
         }
     }
 
