@@ -263,7 +263,7 @@ namespace Stabby.Game.Editor
                 GeometryShot(cam, dir, "caves-pool-debug-unlit");
             }
             else lines.Add("cave pool: none in this world");
-            var brooks = CaveBrooks.Build(map, edits, graphs);
+            var brooks = CaveBrooks.Build(map, new TerrainDetail(map), edits, graphs);
             CaveBrook brook = null;
             foreach (var b in brooks) if (brook == null || b.Rows > brook.Rows) brook = b;
             if (brook != null)
@@ -284,6 +284,25 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, "caves-brook");
                 ExposedShot(cam, dir, "caves-brook-debug-exposure", CaveDebugExposure);
                 GeometryShot(cam, dir, "caves-brook-debug-unlit");
+                CaveBrook spring = null;
+                foreach (var b in brooks) if (b.End == CaveBrook.Spring && (spring == null || b.Rows > spring.Rows)) spring = b;
+                if (spring != null)
+                {
+                    int sa = Mathf.Max(0, spring.Rows - 40), sb = spring.Rows - 1;
+                    var sq = spring.Points;
+                    var sp = new Vector3(sq[sa * st], sq[sa * st + 1], sq[sa * st + 2]);
+                    var se = new Vector3(sq[sb * st], sq[sb * st + 1], sq[sb * st + 2]);
+                    px = sp.x; py = sp.y + 0.5f; pz = sp.z;
+                    Walk.Step(ground, ground.EditsNear(px, pz, Walk.Radius), cols, ground.WalkStep, ref px, ref py, ref pz, 0, 0, Walk.Reach);
+                    eye = new Vector3(px, py + 1.7f, pz);
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(se - Vector3.up * 0.5f - eye));
+                    waited = LoadWaitTotal();
+                    for (var w = Settle(120); w.MoveNext();) yield return null;
+                    lines.Add($"spring brook in {graphs[spring.Graph].Class} graph {spring.Graph}, {spring.Rows} rows, mouth {se.x:F0},{se.y:F1},{se.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0} looking out: stream wait {LoadWaitTotal() - waited:F2} s");
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "caves-brook-spring");
+                    GeometryShot(cam, dir, "caves-brook-spring-debug-unlit");
+                }
             }
             else lines.Add("cave brooks: none in this world");
             var sky = DayNightSystem.Shown;

@@ -229,7 +229,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var s = At(seed);
-            var streams = CaveBrooks.Build(s.W, s.Edits, s.Graphs);
+            var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
             graphs += s.Graphs.Length;
             var e = new List<string>();
             WorldChecks.CheckCaveBrooks(s.W, s.Graphs, streams, null, e);
@@ -251,7 +251,7 @@ public class CaveTests
     public void UphillOrStrandedStreamFails()
     {
         var s = At(1);
-        var streams = CaveBrooks.Build(s.W, s.Edits, s.Graphs);
+        var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
         Assert.NotEmpty(streams);
         var x = streams[0];
         var up = new CaveBrook { Graph = x.Graph, End = x.End, Outlet = x.Outlet, Flow = x.Flow, Nodes = x.Nodes, Points = (float[])x.Points.Clone() };

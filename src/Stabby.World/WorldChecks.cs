@@ -962,7 +962,7 @@ namespace Stabby.World
             }
             if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
             var pools = CheckCaveObjects(w, detail, edits, e);
-            CheckCaveBrooks(w, caves, CaveBrooks.Build(w, edits, caves), pools, e);
+            CheckCaveBrooks(w, caves, CaveBrooks.Build(w, detail, edits, caves), pools, e);
         }
 
         public const float StreamSlackM = 1e-3f, StreamEndM = 1f, StreamPoolM = 0.05f;
