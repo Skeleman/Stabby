@@ -35,12 +35,18 @@ Shader "Stabby/Creature"
         #endif
 
         #ifdef STABBY_CREATURE_BUFFER
-        struct CreatureInstance { float4 r0, r1, r2, fade; uint fur, group, pad0, pad1; };
-        StructuredBuffer<CreatureInstance> _Creatures;
+        struct CreaturePart { float4 fade; uint bone, fur, group, pad; };
+        StructuredBuffer<CreaturePart> _Creatures;
+        ByteAddressBuffer _CreatureBones;
         StructuredBuffer<float4> _CreatureFur;
         int _CreatureStart;
-        CreatureInstance CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
-        float4x4 CreatureMatrix(CreatureInstance c) { return float4x4(c.r0, c.r1, c.r2, float4(0, 0, 0, 1)); }
+        CreaturePart CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
+        float4x4 CreatureMatrix(CreaturePart c)
+        {
+            uint o = c.bone * 48;
+            float4 p1 = asfloat(_CreatureBones.Load4(o)), p2 = asfloat(_CreatureBones.Load4(o + 16)), p3 = asfloat(_CreatureBones.Load4(o + 32));
+            return float4x4(p1.x, p1.w, p2.z, p3.y, p1.y, p2.x, p2.w, p3.z, p1.z, p2.y, p3.x, p3.w, 0, 0, 0, 1);
+        }
         float3 CreatureNormal(float4x4 m, float3 n)
         {
             float3 s2 = float3(dot(m._m00_m10_m20, m._m00_m10_m20), dot(m._m01_m11_m21, m._m01_m11_m21), dot(m._m02_m12_m22, m._m02_m12_m22));
@@ -143,7 +149,7 @@ Shader "Stabby/Creature"
             half4 frag(Varyings i) : SV_Target
             {
                 #ifdef STABBY_CREATURE_BUFFER
-                CreatureInstance ci = CreatureAt(i.creatureId);
+                CreaturePart ci = CreatureAt(i.creatureId);
                 float4 fade = ci.fade;
                 float4x4 mm = CreatureMatrix(ci);
                 float3 baseC = _CreatureFur[3 * ci.fur].rgb, accentC = _CreatureFur[3 * ci.fur + 1].rgb, darkC = _CreatureFur[3 * ci.fur + 2].rgb;

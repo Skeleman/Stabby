@@ -12,10 +12,11 @@ namespace Stabby.Game
     public partial class CreatureDrawSystem : SystemBase
     {
         static readonly int CreaturesId = Shader.PropertyToID("_Creatures");
+        static readonly int BonesId = Shader.PropertyToID("_CreatureBones");
         static readonly int FurId = Shader.PropertyToID("_CreatureFur");
         static readonly int StartId = Shader.PropertyToID("_CreatureStart");
         Material material;
-        GraphicsBuffer instances, fur, args;
+        GraphicsBuffer instances, bones, fur, args;
         GraphicsBuffer.IndirectDrawIndexedArgs[] commands = new GraphicsBuffer.IndirectDrawIndexedArgs[0];
         MaterialPropertyBlock[] blocks = new MaterialPropertyBlock[0];
         int[] counts = new int[0];
@@ -30,6 +31,7 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             instances?.Release();
+            bones?.Release();
             fur?.Release();
             args?.Release();
             if (material != null) Object.Destroy(material);
@@ -91,11 +93,17 @@ namespace Stabby.Game
                 args?.Release();
                 args = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, groups, GraphicsBuffer.IndirectDrawIndexedArgs.size);
             }
-            instances = Grow(instances, GraphicsBuffer.Target.Structured, math.max(n, 1), 80);
+            instances = Grow(instances, GraphicsBuffer.Target.Structured, math.max(n, 1), 32);
+            bones = Grow(bones, GraphicsBuffer.Target.Raw, math.max(n, 1), 48);
             fur = Grow(fur, GraphicsBuffer.Target.Structured, math.max(anim.FurCount, 3), 16);
-            if (n > 0) instances.SetData(anim.Sorted, 0, 0, n);
+            if (n > 0)
+            {
+                instances.SetData(anim.Parts, 0, 0, n);
+                bones.SetData(anim.Bones, 0, 0, n);
+            }
             if (anim.FurCount > 0) fur.SetData(anim.Fur, 0, 0, anim.FurCount);
             material.SetBuffer(CreaturesId, instances);
+            material.SetBuffer(BonesId, bones);
             material.SetBuffer(FurId, fur);
             for (int g = 0; g < groups; g++)
             {
