@@ -321,7 +321,7 @@ namespace Stabby.World
                 var e = edits.At(q);
                 if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
                 {
-                    if (e.Fine) return false;
+                    if (e.Fine && (e.Shape != FeatureEdit.Cave || s < NearField.NodeStep(0))) return false;
                     any = true;
                 }
             }
@@ -344,17 +344,21 @@ namespace Stabby.World
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail) => Place(w, detail, out _);
 
-        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves)
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves) => Place(w, detail, out caves, out _);
+
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries)
         {
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
+            discoveries = null;
             if (w.Objects == null || w.Biome == null) return terrain;
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
             var bogs = field.BogEdits();
             var dens = field.DenEdits();
+            discoveries = field.Discoveries();
             if (boulders.Length + springs.Length + bogs.Length + dens.Length == 0) return terrain;
             var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length];
             terrain.CopyTo(all, 0);
@@ -374,6 +378,7 @@ namespace Stabby.World
             int tiles = w.Config.Size / TileCells;
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "cave-graph").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
+            ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
             ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64();
             var lips = Landforms.BiomeMask(w, Mesas.Biomes);
@@ -395,7 +400,8 @@ namespace Stabby.World
                     Keep(w, tile, list);
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
-                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, tile, out var graph);
+                    var width = new Rng(Rng.Mix(rw + t));
+                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, list.GetRange(from, list.Count - from), tile, out var graph);
                     if (Keep(w, tile, list) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();

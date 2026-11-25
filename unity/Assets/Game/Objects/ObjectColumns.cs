@@ -407,7 +407,7 @@ namespace Stabby.Game
                     var (w, parts, entry) = MapReady();
                     if (w == null || parts == null) return;
                     var objects = lib;
-                    System.Func<ObjectField> make = () => new ObjectField(w, parts.Detail, parts.Edits, objects);
+                    System.Func<ObjectField> make = () => new ObjectField(w, parts.Detail, parts.Edits, objects, parts.Discoveries);
                     fieldTask = entry == null ? Task.Run(make) : WorldStore.Objects(entry, make);
                     return;
                 }
@@ -558,16 +558,13 @@ namespace Stabby.Game
             int started = 0;
             wanted.Clear();
             foreach (var p in spots) ObjectRegions.Near(Field.ChunksAcross, Field.ChunkMeters, p.x, p.y, reach, wanted);
-            var field = Field;
-            var table = shapes;
             foreach (int r in wanted)
             {
                 if (regions[r].IsCreated || baking.ContainsKey(r) || converting.ContainsKey(r)) continue;
                 started++;
                 if (!instances[r].IsCreated)
                 {
-                    int region = r;
-                    converting[r] = Task.Run(() => Convert(field, table, region));
+                    converting[r] = StartConvert(Field, shapes, r);
                     continue;
                 }
                 var output = new NativeReference<RegionColumns>(Allocator.Persistent);
@@ -583,20 +580,25 @@ namespace Stabby.Game
             return started;
         }
 
-        [System.ThreadStatic] static List<ObjectInstance> scratch;
+        static Task<Converted> StartConvert(ObjectField field, ColumnShapes table, int region) => Task.Run(() => Convert(field, table, region));
 
         static Converted Convert(ObjectField field, ColumnShapes table, int index)
         {
+            var list = ListPool.Rent<ObjectInstance>();
+            try { return Convert(field, table, index, list); }
+            finally { ListPool.Return(list); }
+        }
+
+        static Converted Convert(ObjectField field, ColumnShapes table, int index, List<ObjectInstance> list)
+        {
             var sw = Stopwatch.StartNew();
             long b0 = System.GC.GetAllocatedBytesForCurrentThread();
-            var list = scratch ??= new List<ObjectInstance>();
             int across = field.ChunksAcross;
             field.SolidInto(index % across, index / across, list);
             int solid = 0;
             foreach (var o in list) if (table.Solid(o.Def)) solid++;
             var native = new UnsafeList<ObjectInstance>(solid, Allocator.Persistent);
             foreach (var o in list) if (table.Solid(o.Def)) native.AddNoResize(o);
-            list.Clear();
             return new Converted { Objects = native, Ms = sw.ElapsedMilliseconds, Bytes = System.GC.GetAllocatedBytesForCurrentThread() - b0 };
         }
 
