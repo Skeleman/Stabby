@@ -30,10 +30,13 @@ namespace Stabby.Game
             public List<float[]> LowVerts = new List<float[]>();
             public List<ushort[]> LowIndex = new List<ushort[]>();
             public int[] First;
+            public MeshPack Pack;
             public BlobAssetReference<CreatureRig>[] Rigs;
 
             public void Dispose()
             {
+                Pack?.Dispose();
+                Pack = null;
                 if (Rigs == null) return;
                 foreach (var r in Rigs) if (r.IsCreated) r.Dispose();
                 Rigs = null;
@@ -76,6 +79,10 @@ namespace Stabby.Game
 
         Task<Kit> kitTask;
         Kit kit;
+        MeshBatch batch;
+        BatchMeshID[] meshIds;
+        readonly List<Mesh> pumped = new List<Mesh>();
+        readonly List<int> pumpedIds = new List<int>();
         Entity[] prefabs;
         Task<List<Arrival>> arriving;
         Material material;
@@ -107,6 +114,7 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             Owned.Release(kitTask, k => k.Dispose());
+            batch?.Dispose();
             Owned.Release(arriving, Drop);
             Drop(queue);
             queue.Clear();
@@ -145,8 +153,13 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            if (kit == null)
+            if (prefabs == null)
             {
+                if (kit != null)
+                {
+                    MakeMeshes();
+                    return;
+                }
                 if (kitTask == null)
                 {
                     var defs = World.GetExistingSystemManaged<ClientMapSystem>()?.Defs;
@@ -158,7 +171,9 @@ namespace Stabby.Game
                 if (kitTask.IsFaulted) { Debug.LogException(kitTask.Exception); Enabled = false; return; }
                 kit = kitTask.Result;
                 kitTask = null;
-                MakePrefabs();
+                meshIds = new BatchMeshID[kit.Pack.Count];
+                batch = new MeshBatch(kit.Pack);
+                MakeMeshes();
                 return;
             }
 
@@ -195,13 +210,14 @@ namespace Stabby.Game
             es.Dispose();
             states.Dispose();
             if (fresh == null) return;
-            var k = kit;
-            arriving = Task.Run(() =>
-            {
-                for (int i = 0; i < fresh.Count; i++) fresh[i] = Prepare(k, fresh[i]);
-                return fresh;
-            });
+            arriving = StartPrepare(kit, fresh);
         }
+
+        static Task<List<Arrival>> StartPrepare(Kit k, List<Arrival> fresh) => Task.Run(() =>
+        {
+            for (int i = 0; i < fresh.Count; i++) fresh[i] = Prepare(k, fresh[i]);
+            return fresh;
+        });
 
         void Vanish()
         {
@@ -563,7 +579,29 @@ namespace Stabby.Game
                     k.LowIndex.Add(index.ToArray());
                 }
             }
+            k.Pack = Pack(k);
             return k;
+        }
+
+        static MeshPack Pack(Kit k)
+        {
+            var pack = new MeshPack(1 << 16, 1 << 16);
+            try
+            {
+                int attr = pack.Layout(Layout), shapeCount = k.Shapes.Count;
+                for (int s = 0; s < 2 * shapeCount; s++)
+                {
+                    var vs = s < shapeCount ? k.Verts[s] : k.LowVerts[s - shapeCount];
+                    var ix = s < shapeCount ? k.Index[s] : k.LowIndex[s - shapeCount];
+                    pack.Add("Creature " + s, s, attr, Layout.Length, CreatureMesh.Stride, vs, ix);
+                }
+            }
+            catch
+            {
+                pack.Dispose();
+                throw;
+            }
+            return pack;
         }
 
         static float Linear(float c) => c <= 0.04045f ? c / 12.92f : math.pow((c + 0.055f) / 1.055f, 2.4f);
@@ -679,43 +717,65 @@ namespace Stabby.Game
             pos.Dispose(); rot.Dispose(); end.Dispose(); endRot.Dispose();
         }
 
-        void MakePrefabs()
+        void MakeMeshes()
         {
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            int shapeCount = kit.Shapes.Count;
-            var meshIds = new BatchMeshID[2 * shapeCount];
-            for (int s = 0; s < 2 * shapeCount; s++)
-            {
-                var vs = s < shapeCount ? kit.Verts[s] : kit.LowVerts[s - shapeCount];
-                var ix = s < shapeCount ? kit.Index[s] : kit.LowIndex[s - shapeCount];
-                var data = Mesh.AllocateWritableMeshData(1);
-                var d = data[0];
-                int vc = vs.Length / CreatureMesh.Stride;
-                d.SetVertexBufferParams(vc, Layout);
-                d.GetVertexData<float>().CopyFrom(vs);
-                d.SetIndexBufferParams(ix.Length, IndexFormat.UInt16);
-                d.GetIndexData<ushort>().CopyFrom(ix);
-                d.subMeshCount = 1;
-                d.SetSubMesh(0, new SubMeshDescriptor(0, ix.Length));
-                var mesh = new Mesh { name = "Creature " + s };
-                Mesh.ApplyAndDisposeWritableMeshData(data, mesh);
-                mesh.bounds = mesh.GetSubMesh(0).bounds;
-                meshes.Add(mesh);
-                if (!instanced) meshIds[s] = graphics.RegisterMesh(mesh);
-            }
-            prefabs = new Entity[2 * shapeCount];
-            EntityManager.SetComponentData(tally, new CreatureTally { Instanced = instanced, Groups = 4 * shapeCount });
+            if (batch.Pump(pumped, pumpedIds))
+                for (int i = 0; i < pumped.Count; i++)
+                {
+                    meshes.Add(pumped[i]);
+                    if (!instanced) meshIds[pumpedIds[i]] = graphics.RegisterMesh(pumped[i]);
+                }
+            if (!batch.Done) return;
+            batch.Dispose();
+            batch = null;
+            kit.Pack.Dispose();
+            kit.Pack = null;
+            MakePrefabs();
+        }
+
+        void MakePrefabs()
+        {
+            int n = meshIds.Length;
+            prefabs = new Entity[n];
+            EntityManager.SetComponentData(tally, new CreatureTally { Instanced = instanced, Groups = 2 * n });
             if (instanced) return;
-            for (int s = 0; s < 2 * shapeCount; s++)
+            var template = EntityManager.CreateEntity();
+            RenderMeshUtility.AddComponents(template, EntityManager, new RenderMeshDescription(ShadowCastingMode.On, true, MotionVectorGenerationMode.ForceNoMotion, 0), new MaterialMeshInfo(materialId, meshIds[0]));
+            EntityManager.AddComponentData(template, new ObjectFade { Value = new float4(1, 1, 0, 0.5f) });
+            EntityManager.AddComponent(template, new ComponentTypeSet(ComponentType.ReadWrite<CreatureFurBase>(), ComponentType.ReadWrite<CreatureFurAccent>(), ComponentType.ReadWrite<CreatureFurDark>(), ComponentType.ReadWrite<Prefab>()));
+            var all = new NativeArray<Entity>(n, Allocator.TempJob);
+            all[0] = template;
+            if (n > 1)
+                using (var copies = EntityManager.Instantiate(template, n - 1, Allocator.Temp))
+                    all.GetSubArray(1, n - 1).CopyFrom(copies);
+            all.CopyTo(prefabs);
+            var info = new NativeArray<MaterialMeshInfo>(n, Allocator.TempJob);
+            var box = new NativeArray<Unity.Mathematics.AABB>(n, Allocator.TempJob);
+            for (int s = 0; s < n; s++)
             {
-                var e = EntityManager.CreateEntity();
-                RenderMeshUtility.AddComponents(e, EntityManager, new RenderMeshDescription(ShadowCastingMode.On, true, MotionVectorGenerationMode.ForceNoMotion, 0), new MaterialMeshInfo(materialId, meshIds[s]));
-                EntityManager.AddComponentData(e, new ObjectFade { Value = new float4(1, 1, 0, 0.5f) });
-                EntityManager.AddComponentData(e, new CreatureFurBase());
-                EntityManager.AddComponentData(e, new CreatureFurAccent());
-                EntityManager.AddComponentData(e, new CreatureFurDark());
-                EntityManager.AddComponent<Prefab>(e);
-                prefabs[s] = e;
+                info[s] = new MaterialMeshInfo(materialId, meshIds[s]);
+                box[s] = new AABB { Center = meshes[s].bounds.center, Extents = meshes[s].bounds.extents };
+            }
+            Dependency = new Assign { Entities = all, Info = info, Box = box, Infos = GetComponentLookup<MaterialMeshInfo>(), Bounds = GetComponentLookup<RenderBounds>() }.Schedule(n, Dependency);
+            all.Dispose(Dependency);
+            info.Dispose(Dependency);
+            box.Dispose(Dependency);
+        }
+
+        [BurstCompile]
+        struct Assign : IJobFor
+        {
+            [ReadOnly] public NativeArray<Entity> Entities;
+            [ReadOnly] public NativeArray<MaterialMeshInfo> Info;
+            [ReadOnly] public NativeArray<Unity.Mathematics.AABB> Box;
+            public ComponentLookup<MaterialMeshInfo> Infos;
+            public ComponentLookup<RenderBounds> Bounds;
+
+            public void Execute(int i)
+            {
+                Infos[Entities[i]] = Info[i];
+                Bounds[Entities[i]] = new RenderBounds { Value = Box[i] };
             }
         }
     }
