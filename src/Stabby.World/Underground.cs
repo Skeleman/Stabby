@@ -585,6 +585,12 @@ namespace Stabby.World
             return false;
         }
 
+        public static float BasinTop(FeatureEdit e) => e.Ay + e.H + e.R;
+
+        public static float BasinLevel(FeatureEdit e) => BasinTop(e) - PoolTopM - PoolDipM;
+
+        public static float BasinReach(FeatureEdit e) => e.W - e.T * 2f * e.H + e.R * ((float)Math.Sqrt(1f + e.T * e.T) - 1f) + 2f * e.R;
+
         public static bool PoolBasin(IList<FeatureEdit> rooms, FeatureEdit e) => e.Kind == FeatureEdit.Carve && e.Shape == FeatureEdit.Spring && e.F == 0f && e.R == PoolRound && e.T == -PoolBank && InChamber(rooms, e.Ax, e.Ay + e.H + e.R, e.Az);
 
         static bool Drop(FeatureEdit e, List<FeatureEdit> made, List<FeatureEdit> output, DetailGround ground, EditArray rock, float s, float cm, int start, int end)
@@ -680,7 +686,7 @@ namespace Stabby.World
             hx /= l; hz /= l;
         }
 
-        static bool Same(float ax, float az, float bx, float bz) => Math.Abs(ax - bx) < 1e-2f && Math.Abs(az - bz) < 1e-2f;
+        internal static bool Same(float ax, float az, float bx, float bz) => Math.Abs(ax - bx) < 1e-2f && Math.Abs(az - bz) < 1e-2f;
 
         static bool Joined(FeatureEdit o, FeatureEdit e)
             => Same(o.Ax, o.Az, e.Ax, e.Az) || Same(o.Ax, o.Az, e.Bx, e.Bz) || Same(o.Bx, o.Bz, e.Ax, e.Az) || Same(o.Bx, o.Bz, e.Bx, e.Bz);

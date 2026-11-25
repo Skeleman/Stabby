@@ -1,4 +1,4 @@
-src/Stabby.World/Underground.cs src/Stabby.World/CaveLight.cs src/Stabby.World/CavePools.cs content/caves.json content/schemas/caves.schema.json -> CaveTests|CarvedMeshTests|FineGridTests
+src/Stabby.World/Underground.cs src/Stabby.World/CaveLight.cs src/Stabby.World/CavePools.cs src/Stabby.World/CaveBrooks.cs content/caves.json content/schemas/caves.schema.json -> CaveTests|CarvedMeshTests|FineGridTests
 src/Stabby.World/Features.cs src/Stabby.World/EditGrid.cs -> CaveTests|CarvedMeshTests|EditGridTests|SurfaceNetsTests|FineGridTests|DiscoveryTests|ObjectTests|StructureTests|InnTests
 src/Stabby.World/SurfaceNets.cs src/Stabby.World/NearField.cs -> SurfaceNetsTests|CarvedMeshTests|ChunkTests|FineGridTests
 src/Stabby.World/Chunks.cs src/Stabby.World/WorldFile.cs -> ChunkTests|ChunkZipTests|WorldFileTests|DiscoveryTests|ObjectTests

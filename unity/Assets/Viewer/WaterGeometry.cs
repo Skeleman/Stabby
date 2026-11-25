@@ -386,6 +386,24 @@ namespace Stabby.Viewer
                 Tris.Add(v - 1); Tris.Add(v); Tris.Add(v + 1);
             }
 
+            public void Row(Vector3 p, Vector3 dir, float half, float leftY, float rightY, float slope, Vector4 reach, Vector4 fall, bool join)
+            {
+                var side = new Vector3(dir.z, 0, -dir.x) * half;
+                var flow = new Color(dir.x * 0.5f + 0.5f, dir.z * 0.5f + 0.5f, slope, 0);
+                var l = p - side;
+                var r = p + side;
+                l.y = leftY;
+                r.y = rightY;
+                int v = Add(l, flow, new Vector2(-1, half), reach, fall, Vector4.zero);
+                Add(p, flow, new Vector2(0, half), reach, fall, Vector4.zero);
+                Add(r, flow, new Vector2(1, half), reach, fall, Vector4.zero);
+                if (!join) return;
+                Tris.Add(v - 3); Tris.Add(v); Tris.Add(v - 2);
+                Tris.Add(v - 2); Tris.Add(v); Tris.Add(v + 1);
+                Tris.Add(v - 2); Tris.Add(v + 1); Tris.Add(v - 1);
+                Tris.Add(v - 1); Tris.Add(v + 1); Tris.Add(v + 2);
+            }
+
             int Add(Vector3 p, Color col, Vector2 chan, Vector4 reach, Vector4 fall, Vector4 curt)
             {
                 Verts.Add(p);
@@ -725,6 +743,37 @@ namespace Stabby.Viewer
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Rivers {pieces.Count}"));
             if (mist != null && mist.Verts.Count > 0) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
+            return pieces;
+        }
+
+        public static List<MeshParts> CaveBrooks(GeneratedWorld world, CaveBrook[] brooks)
+        {
+            var pieces = new List<MeshParts>();
+            if (brooks == null || brooks.Length == 0) return pieces;
+            var buf = new RiverBuffers();
+            int liquid = world.Materials == null ? 0 : Mathf.Max(0, world.Materials.Liquid("water"));
+            foreach (var b in brooks)
+            {
+                if (buf.Verts.Count >= RiverPieceVertices)
+                {
+                    pieces.Add(buf.Piece($"Cave brooks {pieces.Count}"));
+                    buf.Clear();
+                }
+                var q = b.Points;
+                int rows = b.Rows, st = CaveBrook.Stride;
+                float s = 0;
+                for (int k = 0; k < rows; k++)
+                {
+                    int a = Mathf.Max(k - 1, 0) * st, z = Mathf.Min(k + 1, rows - 1) * st, o = k * st;
+                    float run = new Vector2(q[z] - q[a], q[z + 2] - q[a + 2]).magnitude, drop = q[a + 1] - q[z + 1];
+                    var dir = new Vector3(q[z] - q[a], 0, q[z + 2] - q[a + 2]).normalized;
+                    if (k > 0) s += new Vector2(q[o] - q[o - st], q[o + 2] - q[o - st + 2]).magnitude;
+                    float slope = run > 0 ? drop / run : 0, half = q[o + 3];
+                    buf.Tint = Flowing(Tint(default), Current(Stabby.World.CaveBrooks.DepthM, slope));
+                    buf.Row(new Vector3(q[o], q[o + 1], q[o + 2]), dir, half, q[o + 4], q[o + 5], Mathf.Clamp01(slope / SlopeRange), new Vector4(0, 0, s, liquid), NoPool, k > 0);
+                }
+            }
+            if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Cave brooks {pieces.Count}"));
             return pieces;
         }
 
