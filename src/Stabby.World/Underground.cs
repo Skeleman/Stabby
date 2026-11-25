@@ -538,9 +538,18 @@ namespace Stabby.World
         public static string Cramped(TerrainDetail detail, FeatureEdit[] edits, CaveGraph g, CaveEdge edge)
         {
             var ground = new DetailGround { Detail = detail };
-            var list = new EditArray { Items = edits };
             float s = Features.LatticeStepM;
             var p = edge.Points;
+            float x0 = float.MaxValue, z0 = float.MaxValue, x1 = float.MinValue, z1 = float.MinValue;
+            for (int q = 0; q + 2 < p.Length; q += 3)
+            {
+                x0 = Math.Min(x0, p[q]); x1 = Math.Max(x1, p[q]);
+                z0 = Math.Min(z0, p[q + 2]); z1 = Math.Max(z1, p[q + 2]);
+            }
+            x0 -= ClearSide + 1f; z0 -= ClearSide + 1f; x1 += ClearSide + 1f; z1 += ClearSide + 1f;
+            var near = new List<FeatureEdit>();
+            foreach (var f in edits) if (f.MaxX >= x0 && f.MinX <= x1 && f.MaxZ >= z0 && f.MinZ <= z1) near.Add(f);
+            var list = new EditArray { Items = near.ToArray() };
             for (int q = 3; q + 2 < p.Length; q += 3)
             {
                 float ex = p[q] - p[q - 3], ey = p[q + 1] - p[q - 2], ez = p[q + 2] - p[q - 1], run = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -551,11 +560,14 @@ namespace Stabby.World
                 {
                     float f = t / (float)steps, x = p[q - 3] + ex * f, af = p[q - 2] + ey * f, z = p[q - 1] + ez * f;
                     float floor = af, y = af + Walk.StepUp;
-                    if (Walk.Solid(ground, list, s, x, y, z) >= 0) return $"{g.Class} cave tunnel is too narrow for the player at {x:F0},{y:F0},{z:F0}";
+                    var c = Walk.At(ground, list, x, z, s);
+                    if (Walk.Density(list, c, y) >= 0) return $"{g.Class} cave tunnel is too narrow for the player at {x:F0},{y:F0},{z:F0}";
                     for (; y >= af - 2f; y -= ClearProbe)
-                        if (Walk.Solid(ground, list, s, x, y, z) >= 0) { floor = y + ClearProbe; break; }
+                        if (Walk.Density(list, c, y) >= 0) { floor = y + ClearProbe; break; }
+                    var l = Walk.At(ground, list, x + sx, z + sz, s);
+                    var r = Walk.At(ground, list, x - sx, z - sz, s);
                     for (float h = floor + ClearStep * 1.5f; h <= floor + Walk.Height + 0.2f + 1e-3f; h += ClearStep)
-                        if (Walk.Solid(ground, list, s, x, h, z) >= 0 || Walk.Solid(ground, list, s, x + sx, h, z + sz) >= 0 || Walk.Solid(ground, list, s, x - sx, h, z - sz) >= 0)
+                        if (Walk.Density(list, c, h) >= 0 || Walk.Density(list, l, h) >= 0 || Walk.Density(list, r, h) >= 0)
                             return $"{g.Class} cave tunnel is too narrow for the player at {x:F0},{h:F0},{z:F0}";
                 }
             }
