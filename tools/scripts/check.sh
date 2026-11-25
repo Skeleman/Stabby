@@ -44,6 +44,8 @@ if [ $unity = 1 ] && { [ -z "$tf" ] || [[ "$tf" == *RuntimeParity* ]]; }; then p
 say "phases: tests${tf:+ ($tf)}$([ $gen = 1 ] && echo ", sweeps")$([ $unity = 1 ] && echo ", unity")"
 if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
 say "build: ok, $((SECONDS - t0)) s"
+if ! dotnet run --project tools/Stabby.Lint -c Release --no-build -- . > out/check/lint.log 2>&1; then say "lint: FAILED"; grep -v "^lint" out/check/lint.log | head -10; exit 1; fi
+say "lint: ok, $((SECONDS - t0)) s"
 rm -f out/check/*.sum out/check/*.rc
 phase_tests() {
   local s=$SECONDS rc=0 targs=(); [ -n "$tf" ] && targs=(--filter "$tf")
