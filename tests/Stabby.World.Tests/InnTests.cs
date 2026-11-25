@@ -8,7 +8,6 @@ public class InnTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen };
 
     [Fact]
@@ -103,9 +102,7 @@ public class InnTests
     [Fact]
     public void InnsPlaceLevelInTheTestWorld()
     {
-        var w = WorldGenerator.Generate(new WorldConfig { Seed = 4, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-        var detail = new TerrainDetail(w);
-        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        var (w, detail, _, field) = TestWorlds.Get(4);
         int d = Objects.Objects.FindIndex(o => o.Id == "inn"), seen = 0;
         var seat = ObjectField.Seats(Objects.Objects[d]);
         for (int cz = 0; cz < field.ChunksAcross; cz++)

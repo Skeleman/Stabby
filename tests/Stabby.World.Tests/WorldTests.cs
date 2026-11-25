@@ -9,12 +9,11 @@ public class WorldTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(ContentLoader.FindContentRoot(AppContext.BaseDirectory), Biomes.Select(b => b.Id).ToList());
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
     static WorldConfig Cfg(ulong seed, int size = 256) =>
         new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) };
 
-    static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials, null, null, Objects, Caves);
+    static GeneratedWorld Gen(ulong seed, int size = 256) => TestWorlds.World(seed, size);
 
     [Fact]
     public void TwentySeedsPassEveryCheck()
@@ -57,14 +56,14 @@ public class WorldTests
     [Fact]
     public void SameSeedSameWorld()
     {
-        Assert.Equal(Gen(42).Fingerprint(), Gen(42).Fingerprint());
-        Assert.NotEqual(Gen(42).Fingerprint(), Gen(43).Fingerprint());
+        Assert.Equal(TestWorlds.Fresh(42, 256).Fingerprint(), TestWorlds.Fresh(42, 256).Fingerprint());
+        Assert.NotEqual(TestWorlds.Fresh(42, 256).Fingerprint(), TestWorlds.Fresh(43, 256).Fingerprint());
     }
 
     [Fact]
     public void FingerprintCoversSketchAndBiomeIds()
     {
-        var w = Gen(42);
+        var w = TestWorlds.Fresh(42, 256);
         ulong full = w.Fingerprint(), output = w.OutputFingerprint();
         w.Sketch.Regions.Add(new RegionSketch { Biome = "x", X = 1, Y = 1, Radius = 1 });
         Assert.NotEqual(full, w.Fingerprint());

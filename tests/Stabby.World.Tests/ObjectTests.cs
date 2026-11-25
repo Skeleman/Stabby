@@ -10,18 +10,15 @@ public class ObjectTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
 
     static readonly float[] RisingLods = { 10f, 50f };
 
-    static GeneratedWorld Gen(ulong seed, int size = 256) =>
-        WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects, Caves);
+    static GeneratedWorld Gen(ulong seed, int size = 256) => TestWorlds.World(seed, size);
 
     static readonly Lazy<(GeneratedWorld, ObjectField)> Big = new(() =>
     {
-        var w = Gen(5, 512);
-        var detail = new TerrainDetail(w);
-        return (w, new ObjectField(w, detail, Features.Place(w, detail), Objects));
+        var (w, _, _, field) = TestWorlds.Get(5, 512);
+        return (w, field);
     });
 
     [Fact]
@@ -189,9 +186,7 @@ public class ObjectTests
     [Fact]
     public void PlaceIntoMatchesCachedAndFreshPlacement()
     {
-        var w = Gen(4);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
+        var (w, detail, edits, _) = TestWorlds.Get(4);
         var cached = new ObjectField(w, detail, edits, Objects);
         var fresh = new ObjectField(w, detail, edits, Objects);
         var list = new List<ObjectInstance>();
@@ -210,9 +205,7 @@ public class ObjectTests
     [Fact]
     public void ConcurrentChunksComputeOnceAndAgree()
     {
-        var w = Gen(4);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
+        var (w, detail, edits, _) = TestWorlds.Get(4);
         var serial = new ObjectField(w, detail, edits, Objects);
         int n = serial.ChunksAcross, c = Enumerable.Range(0, n * n).First(i => serial.Chunk(i % n, i / n).Length > 0);
         var expect = serial.Chunk(c % n, c / n);
@@ -231,9 +224,7 @@ public class ObjectTests
     [Fact]
     public void ConcurrentSitesComputeOnceAndAgree()
     {
-        var w = Gen(4);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
+        var (w, detail, edits, _) = TestWorlds.Get(4);
         var serial = new ObjectField(w, detail, edits, Objects);
         int n = serial.ChunksAcross, c = Enumerable.Range(0, n * n).First(i => serial.Sites(i % n, i / n).Length > 0);
         var expect = serial.Sites(c % n, c / n);
@@ -252,9 +243,7 @@ public class ObjectTests
     [Fact]
     public void ObjectPlacementIsDeterministicAndVaried()
     {
-        var w = Gen(4);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
+        var (w, detail, edits, _) = TestWorlds.Get(4);
         var a = new ObjectField(w, detail, edits, Objects);
         var b = new ObjectField(w, detail, edits, Objects);
         var kinds = new HashSet<int>();
@@ -398,9 +387,7 @@ public class ObjectTests
     [Fact]
     public void InteractiveRemovalIsValidatedRecordedPerChunkAndClearsColumns()
     {
-        var w = Gen(4);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
+        var (w, detail, edits, _) = TestWorlds.Get(4);
         var host = new ObjectField(w, detail, edits, Objects);
         int stoneDef = Objects.Objects.FindIndex(d => d.Id == "loose-stone"), woodDef = Objects.Objects.FindIndex(d => d.Id == "brushwood");
         ObjectInstance stone = default, wood = default, plain = default;
@@ -505,9 +492,7 @@ public class ObjectTests
     [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
-        var w = Gen(4);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
+        var (w, detail, edits, _) = TestWorlds.Get(4);
         Assert.Contains(edits, e => e.Shape == FeatureEdit.Boulder && e.Kind == FeatureEdit.Add);
         var field = new ObjectField(w, detail, edits, Objects);
         int big = Objects.Objects.FindIndex(o => o.Id == "large-boulder");

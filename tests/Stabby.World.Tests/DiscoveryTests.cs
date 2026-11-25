@@ -9,20 +9,11 @@ public class DiscoveryTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     readonly ITestOutputHelper output;
 
     public DiscoveryTests(ITestOutputHelper output) => this.output = output;
 
-    static readonly Lazy<(GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField)>[] Worlds = Enumerable.Range(0, 7).Select(s => new Lazy<(GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField)>(() =>
-    {
-        var w = WorldGenerator.Generate(new WorldConfig { Seed = (ulong)s, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-        var detail = new TerrainDetail(w);
-        var edits = Features.Place(w, detail);
-        return (w, detail, edits, new ObjectField(w, detail, edits, Objects));
-    })).ToArray();
-
-    static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) World(ulong seed) => Worlds[seed].Value;
+    static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) World(ulong seed) => TestWorlds.Get(seed);
 
     [Fact]
     public void StoneRingsAppearAndReachTheirChunks()

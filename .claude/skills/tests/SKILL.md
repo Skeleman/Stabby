@@ -24,9 +24,13 @@ dotnet test -c Release --no-build --filter SameSeedSameWorld
 - **Architecture** - Stabby.World has no engine, file, console or JSON references.
 
 Rules:
-- Use the `Gen(seed)` / `Cfg(seed, size)` helpers: size 128, cells scaled
-  (`60 * 512 / size` m) so the world keeps its ~30 km span. Only go larger
-  when a test needs detail, and say why.
+- Read full worlds through `TestWorlds`: `World(seed, size)` and
+  `Get(seed, size)` (world, detail, edits, object field) are generated once
+  per (seed, size) and shared by every test class. Never mutate them; use
+  `TestWorlds.Fresh` for a world you change or a determinism check. Build a
+  new `ObjectField` from the shared parts when a test records deltas.
+- Smaller worlds: `Cfg(seed, size)` scales cells (`60 * 512 / size` m) so the
+  world keeps its ~30 km span. Only go larger when a test needs detail.
 - Invariants belong in `WorldChecks`, not in test asserts; tests call
   `WorldChecks.Run` so the CLI sweep checks the same thing.
 - Never pin a fingerprint value. Compare two runs instead; pinned hashes
