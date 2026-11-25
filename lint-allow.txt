@@ -25,6 +25,7 @@ PlayerControls.Read clamps the unitless input vector to length 1, not a distance
 ShadowViewSystem sets the managed URP asset's shadow range and cascades
 DayNightSystem loads managed sky content in a task and steps the UnityEngine Light, Camera, fog and shader globals
 DayNightSystem.linear converts sky colours on the main thread in Apply, because SetGlobalColor passes gamma values through raw
+WorldView.linear converts the Viewer ambient colours on the main thread in Begin, because SetGlobalColor passes gamma values through raw
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmRockRelief joint and bed noise runs in strata-aligned coordinates stretched along bedding
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmCragPlane joint-plane jitter runs in per-joint stretched coordinates
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmStrataWarp bed noise is stretched along strata and keyed by bed index
