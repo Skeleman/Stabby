@@ -7,7 +7,8 @@ namespace Stabby.World
     {
         public const float SurfaceTolerance = 1e-3f;
         public const float CorridorFollowShare = 0.7f;
-        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f;
+        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f, ShoreToeMaxBend = 3f;
+        public const int ShoreToeMinPairs = 20;
 
         static int FirstUndrained(GeneratedWorld w)
         {
@@ -153,6 +154,41 @@ namespace Stabby.World
                     if (x > 0 && y > 0 && x < n - 2 && y < n - 2 && OpenSea(w, i) && d.HeightAt(x + 0.5f, y + 0.5f) > 0 && !InFall(w, (x + 0.5f) * w.Config.CellMeters, (y + 0.5f) * w.Config.CellMeters, true))
                     { e.Add($"detail raises open sea above the water near cell {i}"); return; }
                 }
+            float toe = ShoreToeBend(w, d, out int pairs);
+            if (pairs >= ShoreToeMinPairs && toe > ShoreToeMaxBend) e.Add($"beach shore toe creases: median bend {toe:F2} over {pairs} coasts");
+        }
+
+        public static float ShoreToeBend(GeneratedWorld w, TerrainDetail d, out int pairs)
+        {
+            int n = w.Config.Size;
+            const int m = 16;
+            var bends = new List<float>();
+            for (int y = 4; y < n - 4; y++)
+                for (int x = 4; x < n - 4; x++)
+                {
+                    int l = y * n + x;
+                    if (w.Sea[l] || w.Sketch == null || w.Sketch.Beach[l] < 0.5f) continue;
+                    for (int k = 0; k < 8; k += 2)
+                    {
+                        int s = Grid.DY[k] * n + Grid.DX[k];
+                        if (w.Sea[l - s] || !w.Sea[l + s] || !w.Sea[l + 2 * s] || !w.Sea[l + 3 * s]) continue;
+                        float step = w.Height[l] - w.Height[l + s];
+                        if (step <= 0) continue;
+                        float bend = 0, prev = float.NaN, h0 = NearField.Base(d.Cells, x, y);
+                        for (int t = 1; t <= 2 * m; t++)
+                        {
+                            float h1 = NearField.Base(d.Cells, x + Grid.DX[k] * t / (float)m, y + Grid.DY[k] * t / (float)m);
+                            float slope = (h1 - h0) * m;
+                            if (!float.IsNaN(prev) && h0 < 0) bend = Math.Max(bend, Math.Abs(slope - prev) * m);
+                            prev = slope; h0 = h1;
+                        }
+                        bends.Add(bend / step);
+                    }
+                }
+            pairs = bends.Count;
+            if (pairs == 0) return 0;
+            bends.Sort();
+            return bends[pairs / 2];
         }
 
         static bool OpenSea(GeneratedWorld w, int i)
