@@ -123,6 +123,7 @@ namespace Stabby.Game.Editor
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
                     lines.Add(ColumnsEqual(label));
+                    yield return null;
                 }
                 var end = start + d * (NormalWalkM + FastWalkM);
                 var jump = TeleportSpot(ground, end, d);
