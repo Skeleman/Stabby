@@ -118,33 +118,44 @@ namespace Stabby.Game
         {
             var ground = SystemAPI.GetSingleton<Ground>();
             var cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc) ? oc : default;
-            float dt = SystemAPI.Time.DeltaTime, top = ground.Top, s = ground.WalkStep;
-            foreach (var (t, input, motion) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<PlayerInput>, RefRW<PlayerMotion>>().WithAll<Player, Simulate>())
+            state.Dependency = new MoveJob { Ground = ground, Cols = cols, Dt = SystemAPI.Time.DeltaTime }.Schedule(state.Dependency);
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(Player), typeof(Simulate))]
+        partial struct MoveJob : IJobEntity
+        {
+            public Ground Ground;
+            public ObjectColumns Cols;
+            public float Dt;
+
+            void Execute(ref LocalTransform t, in PlayerInput input, ref PlayerMotion motion)
             {
-                var d = input.ValueRO.Dir;
+                float dt = Dt, top = Ground.Top, s = Ground.WalkStep;
+                var d = input.Dir;
                 float l = math.length(d);
                 bool moving = l >= 1e-2f;
-                d = moving ? d * (math.min(l, 1f) / l * (input.ValueRO.Sprint ? GameSettings.SprintSpeed : GameSettings.WalkSpeed) * dt) : float2.zero;
-                var pos = t.ValueRO.Position;
+                d = moving ? d * (math.min(l, 1f) / l * (input.Sprint ? GameSettings.SprintSpeed : GameSettings.WalkSpeed) * dt) : float2.zero;
+                var pos = t.Position;
                 d.x = math.clamp(pos.x + d.x, 0, top) - pos.x;
                 d.y = math.clamp(pos.z + d.y, 0, top) - pos.z;
-                var edits = ground.EditsNear(pos.x, pos.z, math.length(d) + Walk.Radius);
-                var m = motion.ValueRO;
-                if (!m.Airborne && input.ValueRO.Jump.IsSet) { m.Airborne = true; m.VelY = GameSettings.JumpSpeed; }
+                var edits = Ground.EditsNear(pos.x, pos.z, math.length(d) + Walk.Radius);
+                var m = motion;
+                if (!m.Airborne && input.Jump.IsSet) { m.Airborne = true; m.VelY = GameSettings.JumpSpeed; }
                 float fall = Walk.FallSpeed * dt, air = pos.y;
                 if (m.Airborne)
                 {
                     air = pos.y + (m.VelY - 0.5f * GameSettings.Gravity * dt) * dt;
                     m.VelY -= GameSettings.Gravity * dt;
-                    if (air >= pos.y && Walk.Solid(ground, edits, s, pos.x, air + Walk.Height, pos.z) >= 0) { air = pos.y; m.VelY = math.min(m.VelY, 0); }
+                    if (air >= pos.y && Walk.Solid(Ground, edits, s, pos.x, air + Walk.Height, pos.z) >= 0) { air = pos.y; m.VelY = math.min(m.VelY, 0); }
                     if (air >= pos.y) { pos.y = air; fall = 0; }
                     else fall = pos.y - air;
                 }
-                Walk.Step(ground, edits, cols, s, ref pos.x, ref pos.y, ref pos.z, d.x, d.y, fall);
+                Walk.Step(Ground, edits, Cols, s, ref pos.x, ref pos.y, ref pos.z, d.x, d.y, fall);
                 if (m.Airborne && m.VelY <= 0 && pos.y > air + 1e-4f) { m.Airborne = false; m.VelY = 0; }
-                motion.ValueRW = m;
-                t.ValueRW.Position = pos;
-                if (moving) t.ValueRW.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());
+                motion = m;
+                t.Position = pos;
+                if (moving) t.Rotation = quaternion.LookRotationSafe(new float3(d.x, 0, d.y), math.up());
             }
         }
     }

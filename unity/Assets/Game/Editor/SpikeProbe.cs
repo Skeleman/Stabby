@@ -46,6 +46,7 @@ namespace Stabby.Game.Editor
 
         static readonly int[] LoadFrames = (Environment.GetEnvironmentVariable("STABBY_PROFILE_LOAD") ?? "").Split('-').Where(s => int.TryParse(s, out _)).Select(int.Parse).ToArray();
         static readonly bool Record =Array.IndexOf(Environment.GetCommandLineArgs(), "-stabbyProfile") >= 0;
+        static readonly Type MetricsCollector = Type.GetType("Unity.NetCode.ProfilerMetricsCollector, Unity.NetCode");
 
         public static void Tick()
         {
@@ -57,6 +58,9 @@ namespace Stabby.Game.Editor
                     Profiler.logFile = System.IO.Path.GetFullPath($"../out/unity/spike-{resumes++:D3}.raw");
                     Profiler.enableBinaryLog = true;
                     Profiler.enableAllocationCallstacks = true;
+                    if (MetricsCollector != null)
+                        foreach (var w in Unity.Entities.World.All)
+                            if (w.GetExistingSystemManaged(MetricsCollector) is { } sys) sys.Enabled = false;
                     Profiler.enabled = true;
                 }
                 else if (!play && Profiler.enabled) { Profiler.enabled = false; Profiler.logFile = ""; }

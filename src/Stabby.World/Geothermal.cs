@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -12,7 +13,7 @@ namespace Stabby.World
     public sealed class Geothermal
     {
         public const float HotspotsPerKm2 = 0.012f, MinRadiusM = 450f, MaxRadiusM = 800f, ApartRadii = 3f, RangeReach = 2f, HighlandReach = 0.8f, VolcanicWeight = 2f;
-        public const int TriesPerHotspot = 32;
+        public const int TriesPerHotspot = 32, CalmBatch = 16;
         public readonly List<float> X = new List<float>(), Z = new List<float>(), R = new List<float>();
 
         public int Count => X.Count;
@@ -38,36 +39,54 @@ namespace Stabby.World
             if (!(total > 0)) return g;
             var rng = Rng.Stream(w.Config.Seed, "geothermal");
             int target = Math.Max(1, (int)Math.Round(HotspotsPerKm2 * worldM * worldM * 1e-6f));
-            for (int t = 0; t < target * TriesPerHotspot && g.Count < target; t++)
+            var cand = new List<float>();
+            var ok = new bool[CalmBatch];
+            for (int t = 0, limit = target * TriesPerHotspot; t < limit && g.Count < target;)
             {
-                float pick = rng.NextFloat() * total, along = rng.NextFloat(), ja = rng.Range(-1f, 1f), jb = rng.Range(-1f, 1f), radius = rng.Range(MinRadiusM, MaxRadiusM);
-                int s = 0;
-                while (s < weight.Length - 1 && (weight[s] <= 0 || pick >= weight[s])) { pick -= weight[s]; s++; }
-                float px, pz;
-                if (s < sk.Ranges.Count)
+                cand.Clear();
+                for (; t < limit && cand.Count < 3 * CalmBatch; t++)
                 {
-                    var r = sk.Ranges[s];
-                    PointAlong(r.X, r.Y, along, out px, out pz);
-                    px += ja * RangeReach * r.Width; pz += jb * RangeReach * r.Width;
+                    float pick = rng.NextFloat() * total, along = rng.NextFloat(), ja = rng.Range(-1f, 1f), jb = rng.Range(-1f, 1f), radius = rng.Range(MinRadiusM, MaxRadiusM);
+                    int s = 0;
+                    while (s < weight.Length - 1 && (weight[s] <= 0 || pick >= weight[s])) { pick -= weight[s]; s++; }
+                    float px, pz;
+                    if (s < sk.Ranges.Count)
+                    {
+                        var r = sk.Ranges[s];
+                        PointAlong(r.X, r.Y, along, out px, out pz);
+                        px += ja * RangeReach * r.Width; pz += jb * RangeReach * r.Width;
+                    }
+                    else
+                    {
+                        var h = sk.Highlands[s - sk.Ranges.Count];
+                        px = h.X + ja * HighlandReach * h.Radius; pz = h.Y + jb * HighlandReach * h.Radius;
+                    }
+                    float x = px * cm, z = pz * cm;
+                    if (x < radius || z < radius || x > worldM - radius || z > worldM - radius) continue;
+                    if (w.Sea[Math.Min(n - 1, (int)(pz + 0.5f)) * n + Math.Min(n - 1, (int)(px + 0.5f))]) continue;
+                    if (!g.Apart(x, z, radius)) continue;
+                    cand.Add(x); cand.Add(z); cand.Add(radius);
                 }
-                else
+                int m = cand.Count / 3;
+                Parallel.For(0, m, q => ok[q] = calm == null || calm(cand[3 * q], cand[3 * q + 1], cand[3 * q + 2]));
+                for (int q = 0; q < m && g.Count < target; q++)
                 {
-                    var h = sk.Highlands[s - sk.Ranges.Count];
-                    px = h.X + ja * HighlandReach * h.Radius; pz = h.Y + jb * HighlandReach * h.Radius;
+                    float x = cand[3 * q], z = cand[3 * q + 1], radius = cand[3 * q + 2];
+                    if (!g.Apart(x, z, radius) || !ok[q]) continue;
+                    g.X.Add(x); g.Z.Add(z); g.R.Add(radius);
                 }
-                float x = px * cm, z = pz * cm;
-                if (x < radius || z < radius || x > worldM - radius || z > worldM - radius) continue;
-                if (w.Sea[Math.Min(n - 1, (int)(pz + 0.5f)) * n + Math.Min(n - 1, (int)(px + 0.5f))]) continue;
-                bool apart = true;
-                for (int k = 0; k < g.Count && apart; k++)
-                {
-                    float dx = g.X[k] - x, dz = g.Z[k] - z, gap = ApartRadii * Math.Max(radius, g.R[k]);
-                    apart = dx * dx + dz * dz >= gap * gap;
-                }
-                if (!apart || (calm != null && !calm(x, z, radius))) continue;
-                g.X.Add(x); g.Z.Add(z); g.R.Add(radius);
             }
             return g;
+        }
+
+        bool Apart(float x, float z, float radius)
+        {
+            for (int k = 0; k < Count; k++)
+            {
+                float dx = X[k] - x, dz = Z[k] - z, gap = ApartRadii * Math.Max(radius, R[k]);
+                if (dx * dx + dz * dz < gap * gap) return false;
+            }
+            return true;
         }
 
         public float Heat(float x, float z)

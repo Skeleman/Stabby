@@ -412,17 +412,21 @@ namespace Stabby.World
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail) => Place(w, detail, out _);
 
-        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves)
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves) => Place(w, detail, out caves, out _);
+
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries)
         {
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
+            discoveries = null;
             if (w.Objects == null || w.Biome == null) return terrain;
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
             var bogs = field.BogEdits();
             var dens = field.DenEdits();
+            discoveries = field.Discoveries();
             if (boulders.Length + springs.Length + bogs.Length + dens.Length == 0) return terrain;
             var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length];
             terrain.CopyTo(all, 0);

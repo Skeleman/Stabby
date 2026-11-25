@@ -57,7 +57,7 @@ namespace Stabby.World
 
     public static class NearField
     {
-        public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
+        public const float MacroM = 180f, GullyAlongM = 40f, GullyAcrossM = 14f, GullyDepthM = 2.5f, RockM = 10f, ShoreBlendM = 0.25f, ShoreTangentCap = 8f, CreaseSoft = 0.25f, WallSlope = 1f, WallLift = 1e4f, CutSoft = 1.5f, WallRampM = 4f;
         public const float BankMinM = 3f, BankPerWidth = 0.75f, BankRiseM = 1f, BankRisePerWidth = 0.05f, BankFadeMinM = 30f, BankFadeCells = 0.75f, MaskPadM = 0.5f;
         public const float CoastWarpCells = 0.5f, CoastWaveCells = 2.5f, CoastBandM = 3f, CoastPin = 0.35f;
         public const float CragFrac = 0.5f, CragMaxM = 10f, CragSlopeLo = 0.35f, CragSlopeHi = 1.2f, CragGridLo = 0.1f, CragGridHi = 0.25f, CragAlongM = 50f, CragAcrossM = 18f, CragJutM = 24f, CragFloorM = 0.25f, CragWeightFloor = 0.25f;
@@ -867,28 +867,8 @@ namespace Stabby.World
 
         static float BaseSlope<T>(T c, float gx, float gz, float dx, float dz) where T : struct, INearCells
         {
-            int n = c.N, x0 = (int)Math.Floor(gx), z0 = (int)Math.Floor(gz);
-            float tx = gx - x0, tz = gz - z0;
-            float r0 = RowSlope(c, n, z0 - 1, x0, tx, out float d0), r1 = RowSlope(c, n, z0, x0, tx, out float d1);
-            float r2 = RowSlope(c, n, z0 + 1, x0, tx, out float d2), r3 = RowSlope(c, n, z0 + 2, x0, tx, out float d3);
-            float a = r1 - r0, d = r2 - r1, e = r3 - r2, da = d1 - d0, dd = d2 - d1, de = d3 - d2;
-            float m1 = Tangent(a, d), m2 = Tangent(d, e);
-            float dm1 = a * d > 0 ? 2 * (d * d * da + a * a * dd) / ((a + d) * (a + d)) : 0;
-            float dm2 = d * e > 0 ? 2 * (e * e * dd + d * d * de) / ((d + e) * (d + e)) : 0;
-            float t2 = tz * tz, t3 = t2 * tz;
-            float sx = d1 + (t3 - 2 * t2 + tz) * dm1 + (3 * t2 - 2 * t3) * dd + (t3 - t2) * dm2;
-            float sz = (3 * t2 - 4 * tz + 1) * m1 + (6 * tz - 6 * t2) * d + (3 * t2 - 2 * tz) * m2;
-            return sx * dx + sz * dz;
-        }
-
-        static float RowSlope<T>(T c, int n, int z, int x0, float t, out float slope) where T : struct, INearCells
-        {
-            int r = Clamp(z, n) * n;
-            float p0 = c.Height(r + Clamp(x0 - 1, n)), p1 = c.Height(r + Clamp(x0, n)), p2 = c.Height(r + Clamp(x0 + 1, n)), p3 = c.Height(r + Clamp(x0 + 2, n));
-            float d = p2 - p1, m1 = Tangent(p1 - p0, d), m2 = Tangent(d, p3 - p2);
-            float t2 = t * t, t3 = t2 * t;
-            slope = (3 * t2 - 4 * t + 1) * m1 + (6 * t - 6 * t2) * d + (3 * t2 - 2 * t) * m2;
-            return p1 + (t3 - 2 * t2 + t) * m1 + (3 * t2 - 2 * t3) * d + (t3 - t2) * m2;
+            const float e = 1f / 64f;
+            return (Base(c, gx + e * dx, gz + e * dz) - Base(c, gx - e * dx, gz - e * dz)) / (2 * e);
         }
 
         static float Row<T>(T c, int n, int z, int x0, float t) where T : struct, INearCells
@@ -897,11 +877,21 @@ namespace Stabby.World
             return Hermite(c.Height(r + Clamp(x0 - 1, n)), c.Height(r + Clamp(x0, n)), c.Height(r + Clamp(x0 + 1, n)), c.Height(r + Clamp(x0 + 2, n)), t);
         }
 
-        static float Tangent(float d0, float d1) => d0 * d1 > 0 ? 2 * d0 * d1 / (d0 + d1) : 0;
+        static float Tangent(float p0, float p1, float p2)
+        {
+            float d0 = p1 - p0, d1 = p2 - p1;
+            if (d0 * d1 <= 0) return 0;
+            float harm = 2 * d0 * d1 / (d0 + d1);
+            float cross = Math.Min(Math.Max(p0, Math.Max(p1, p2)), -Math.Min(p0, Math.Min(p1, p2)));
+            if (cross <= 0) return harm;
+            float w = Math.Min(1f, cross / ShoreBlendM);
+            float lim = ShoreTangentCap * Math.Min(Math.Abs(d0), Math.Abs(d1)), mean = 0.5f * (d0 + d1);
+            return harm + w * (Math.Max(-lim, Math.Min(lim, mean)) - harm);
+        }
 
         static float Hermite(float p0, float p1, float p2, float p3, float t)
         {
-            float d = p2 - p1, m1 = Tangent(p1 - p0, d), m2 = Tangent(d, p3 - p2);
+            float d = p2 - p1, m1 = Tangent(p0, p1, p2), m2 = Tangent(p1, p2, p3);
             float t2 = t * t, t3 = t2 * t;
             return p1 + (t3 - 2 * t2 + t) * m1 + (3 * t2 - 2 * t3) * d + (t3 - t2) * m2;
         }

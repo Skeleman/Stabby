@@ -273,10 +273,26 @@ namespace Stabby.World
         public static void Edited<TCols, TEdits, TSink>(TCols columns, TEdits edits, NetsChunk c, ref TSink sink, bool skip)
             where TCols : struct, IColumnField where TEdits : struct, IEditList where TSink : struct, INetsSink
         {
+            int w = c.Cells + 1;
+            Layout(columns, edits, c, ref sink);
+            Vertices(columns, edits, c, ref sink, skip, 0, w);
+            Quads(edits, c, ref sink, skip, 1, w);
+        }
+
+        public static int LayoutInts(NetsChunk c) => 3 * (c.Cells + 1) * (c.Cells + 1);
+
+        public static int LayoutFloats(NetsChunk c)
+        {
+            int hw = c.Cells + 2, rw = hw + 2;
+            return rw * rw + hw * hw;
+        }
+
+        public static int Layout<TCols, TEdits, TSink>(TCols columns, TEdits edits, NetsChunk c, ref TSink sink)
+            where TCols : struct, IColumnField where TEdits : struct, IEditList where TSink : struct, INetsSink
+        {
             int w = c.Cells + 1, hw = w + 1, rw = hw + 2, bx = c.X0 - 1, bz = c.Z0 - 1, sl = rw * rw;
             float s = c.StepM;
-            var solid = new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s };
-            sink.Begin(3 * w * w, sl + hw * hw);
+            sink.Begin(LayoutInts(c), LayoutFloats(c));
             for (int k = 0; k < rw; k++)
                 for (int i = 0; i < rw; i++)
                     sink.SetFloat(k * rw + i, columns.Height(bx - 1 + i, bz - 1 + k));
@@ -290,23 +306,44 @@ namespace Stabby.World
             for (int k = 0; k < w; k++)
                 for (int i = 0; i < w; i++)
                 {
+                    int col = 3 * (k * w + i);
+                    Span(edits, H(ref sink, rw, i, k), H(ref sink, rw, i + 1, k), H(ref sink, rw, i, k + 1), H(ref sink, rw, i + 1, k + 1), s, bx + i, bz + k, out int j, out int end);
+                    sink.SetInt(col, j);
+                    sink.SetInt(col + 2, next);
+                    sink.SetInt(col + 1, end);
+                    next += end - j;
+                }
+            return next;
+        }
+
+        public static void Vertices<TCols, TEdits, TSink>(TCols columns, TEdits edits, NetsChunk c, ref TSink sink, bool skip, int k0, int k1)
+            where TCols : struct, IColumnField where TEdits : struct, IEditList where TSink : struct, INetsSink
+        {
+            int w = c.Cells + 1, hw = w + 1, rw = hw + 2, bx = c.X0 - 1, bz = c.Z0 - 1, sl = rw * rw;
+            float s = c.StepM;
+            var solid = new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s };
+            for (int k = k0; k < k1; k++)
+                for (int i = 0; i < w; i++)
+                {
                     int ci = bx + i, ck = bz + k, col = 3 * (k * w + i);
                     float h00 = H(ref sink, rw, i, k), h10 = H(ref sink, rw, i + 1, k);
                     float h01 = H(ref sink, rw, i, k + 1), h11 = H(ref sink, rw, i + 1, k + 1);
                     float l00 = sink.GetFloat(sl + k * hw + i), l10 = sink.GetFloat(sl + k * hw + i + 1);
                     float l01 = sink.GetFloat(sl + (k + 1) * hw + i), l11 = sink.GetFloat(sl + (k + 1) * hw + i + 1);
-                    Span(edits, h00, h10, h01, h11, s, ci, ck, out int j, out int end);
-                    sink.SetInt(col, j);
-                    sink.SetInt(col + 2, next);
-                    sink.SetInt(col + 1, end);
-                    for (; j < end; j++)
+                    for (int j = sink.GetInt(col), end = sink.GetInt(col + 1); j < end; j++)
                     {
                         if (skip && Plain(edits, h00, h10, h01, h11, l00, l10, l01, l11, s, ci, j, ck)) sink.AddVertex((ci + 0.5f) * s, (j + 0.5f) * s, (ck + 0.5f) * s, 0, 1, 0);
                         else Emit(ref sink, solid, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, true);
-                        next++;
                     }
                 }
-            for (int k = 1; k < w; k++)
+        }
+
+        public static void Quads<TEdits, TSink>(TEdits edits, NetsChunk c, ref TSink sink, bool skip, int k0, int k1)
+            where TEdits : struct, IEditList where TSink : struct, INetsSink
+        {
+            int w = c.Cells + 1, hw = w + 1, rw = hw + 2, bx = c.X0 - 1, bz = c.Z0 - 1, sl = rw * rw;
+            float s = c.StepM;
+            for (int k = Math.Max(k0, 1); k < k1; k++)
                 for (int i = 1; i < w; i++)
                 {
                     int ci = bx + i, ck = bz + k;
