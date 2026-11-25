@@ -110,7 +110,7 @@ public class InnTests
         var seat = ObjectField.Seats(Objects.Objects[d]);
         for (int cz = 0; cz < field.ChunksAcross; cz++)
             for (int cx = 0; cx < field.ChunksAcross; cx++)
-                foreach (var o in field.Chunk(cx, cz))
+                foreach (var o in field.Place(cx, cz, true))
                 {
                     if (o.Def != d) continue;
                     seen++;

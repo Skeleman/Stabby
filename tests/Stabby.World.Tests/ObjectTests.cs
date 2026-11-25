@@ -17,6 +17,13 @@ public class ObjectTests
     static GeneratedWorld Gen(ulong seed, int size = 256) =>
         WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects, Caves);
 
+    static readonly Lazy<(GeneratedWorld, ObjectField)> Big = new(() =>
+    {
+        var w = Gen(5, 512);
+        var detail = new TerrainDetail(w);
+        return (w, new ObjectField(w, detail, Features.Place(w, detail), Objects));
+    });
+
     [Fact]
     public void FirePitsCarryOneLightThatCampsAndHermitagesInherit()
     {
@@ -517,7 +524,6 @@ public class ObjectTests
     public void ObjectsStayInTheirBiomes()
     {
         var w = Gen(5);
-        Assert.Empty(WorldChecks.Run(w));
         var c = Objects.Objects.First(o => o.Id == "small-rock");
         var keep = c.Placement.Biomes;
         c.Placement.Biomes = new List<string> { "boreal" };
@@ -540,9 +546,7 @@ public class ObjectTests
     [Fact]
     public void TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse()
     {
-        var w = Gen(5, 512);
-        var detail = new TerrainDetail(w);
-        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        var (w, field) = Big.Value;
         int n = w.Config.Size, talus = Objects.Objects.FindIndex(o => o.Id == "talus"), rock = Objects.Objects.FindIndex(o => o.Id == "small-rock");
         var pl = Objects.Objects[talus].Placement;
         var perDef = new int[Objects.Objects.Count];
@@ -573,9 +577,7 @@ public class ObjectTests
     [Fact]
     public void RiverBanksGrowReedsBarsDriftAndWetStones()
     {
-        var w = Gen(5, 512);
-        var detail = new TerrainDetail(w);
-        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        var (w, field) = Big.Value;
         var ids = new[] { "reeds", "driftwood", "drift-root", "river-gravel", "river-cobble", "wet-stone" };
         var perDef = new int[Objects.Objects.Count];
         foreach (var o in Enumerable.Range(0, field.ChunksAcross * field.ChunksAcross).SelectMany(c => field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross)))

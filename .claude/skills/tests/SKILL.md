@@ -13,7 +13,8 @@ dotnet test -c Release --no-build --filter SameSeedSameWorld
 ```
 
 `tests/Stabby.World.Tests/WorldTests.cs` covers:
-- **Seed sweep** - 100 seeds pass every `WorldChecks` invariant.
+- **Seed sweep** - seeds 1-20 pass every `WorldChecks` invariant; `check.sh`
+  sweeps seeds 1-100 at 256 and 1-20 at 512 with the same checks.
 - **Determinism** - same seed gives the same `Fingerprint()`, different seeds
   differ; an edited sketch saved and reloaded gives the same world.
 - **Authored edits** honoured; `--rain` terrain stage skips climate and biomes.

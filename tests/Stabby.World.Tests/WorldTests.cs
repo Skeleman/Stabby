@@ -17,10 +17,10 @@ public class WorldTests
     static GeneratedWorld Gen(ulong seed, int size = 256) => WorldGenerator.Generate(Cfg(seed, size), Biomes, Materials, null, null, Objects, Caves);
 
     [Fact]
-    public void HundredSeedsPassEveryCheck()
+    public void TwentySeedsPassEveryCheck()
     {
         var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
-        Parallel.For(1, 101, s =>
+        Parallel.For(1, 21, s =>
         {
             foreach (var v in WorldChecks.Run(Gen((ulong)s))) failures.Add($"seed {s}: {v}");
         });
