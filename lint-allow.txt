@@ -15,7 +15,7 @@ ClientObjectDeltaSystem converts each chunk's interactive objects to native reac
 ContactFieldSystem converts each chunk's contact stamps to native tables once, splats them in a Burst job, and uploads the result to a managed Texture2D
 JobSlot.Complete completes each handle once, after IsCompleted or at teardown
 CreatureBuildSystem applies creature Meshes filled in Burst jobs and registers them with Entities Graphics
-CreatureBuildSystem.ToEntityArray debt: copies each pending arrival once, claimed on copy, but recopies retier asks each frame until the creature budget settles them
+CreatureBuildSystem.ToEntityArray copies each pending arrival once, claimed on copy; STABBY_RETIER_VERIFY copies retier asks for its check only
 CreatureBuildSystem.ToComponentDataArray reads each pending arrival's state once, claimed on copy, and each vanished ghost's rig once before its rig is released
 CreaturePrefabSystem GhostPrefabCreation is managed and runs once
 CreaturePlanSystem plans herds from the managed map in a task and converts the plan to a blob once
@@ -45,8 +45,6 @@ ClientMapSystem.CompleteAllTrackedJobs once, in OnDestroy, before releasing the 
 ObjectViewSystem.CompleteAllTrackedJobs once, in OnDestroy, before disposing tile containers jobs read
 TerrainViewSystem.CompleteAllTrackedJobs once per Audit call, a diagnostic only the capture tools make
 TerrainViewSystem.Complete once per Audit or Seam call, diagnostics only the capture tools make
-CreatureHostSystem.Query debt: reads player positions and in-game connection ids every frame, tens of entities, to feed the scheduled herd jobs
-ServerChunkStreamSystem.Query debt: walks per-connection chunk requests and send queues every frame, a handful of connection and RPC entities
 ClientMapSystem.Query reads the one WorldInfoRpc once per join
 ObjectColumnsSystem.Query debt: reads player positions every frame, one per player, to pick collision regions
 ServerObjectDeltaSystem.Query debt: reads new connections, player positions and removal RPCs every frame, a few entities
