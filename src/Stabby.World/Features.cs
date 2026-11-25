@@ -6,7 +6,13 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, Shapes = 11;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Shapes = 12;
+
+        public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell;
+
+        public static bool IsRoom(int shape) => shape == CaveRoom || shape == CrystalCell;
+
+        public bool CaveCarve => Kind == Carve && IsCaveCarve(Shape);
 
         public const float Blend = 0.5f;
 
@@ -20,7 +26,7 @@ namespace Stabby.World
 
         public FeatureEdit AtStep(float stepM)
         {
-            if (Kind == Carve && (Shape == Cave || Shape == CaveRoom))
+            if (CaveCarve)
             {
                 var c = this;
                 c.Coarse = Math.Max(0f, Math.Min(1f, (stepM - RockFineM) / RockFineM));
@@ -84,7 +90,7 @@ namespace Stabby.World
             float ll = ex * ex + ey * ey + ez * ez;
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
-            if (Kind == Carve && (Shape == Cave || Shape == CaveRoom))
+            if (CaveCarve)
             {
                 if (qx * qx + qy * qy + qz * qz >= R * R) return false;
                 dist = Rock(x, y, z, qx, qy, qz, out floor);
@@ -114,7 +120,7 @@ namespace Stabby.World
         public void RockSpan(out float lo, out float hi)
         {
             lo = hi = 0f;
-            if (Kind != Carve || (Shape != Cave && Shape != CaveRoom)) return;
+            if (!CaveCarve) return;
             float h = HoleR, k = Math.Min(1f, h / RockRefM);
             lo = 2f * Fill * h + k * ReliefLo;
             hi = k * ReliefHi;
@@ -125,13 +131,48 @@ namespace Stabby.World
         float Rock(float x, float y, float z, float qx, float qy, float qz, out float floor)
         {
             float hole = HoleR, sy = qy + Fill * hole;
-            float wall = (float)Math.Sqrt(qx * qx + sy * sy + qz * qz) - Fill * hole;
+            bool cell = Shape == CrystalCell;
+            float wall = (cell ? Facets(qx, sy, qz) : (float)Math.Sqrt(qx * qx + sy * sy + qz * qz)) - Fill * hole;
             if (N > 0f) wall += N * Lump(x, y, z);
             float k = Math.Min(1f, hole / RockRefM), band = Math.Abs(wall - hole);
-            if (band < RockBand * k) wall += k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
+            if (band < RockBand * k) wall += (cell ? CellRelief : 1f) * k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
             floor = -qy;
             if (Math.Abs(floor - hole) < DebrisBand * k) floor += k * Debris(x, z);
             return Math.Max(wall, floor);
+        }
+
+        public const float CellRelief = 0.3f, FacetJitter = 0.2f;
+
+        static readonly float[] Faces = FaceNormals();
+
+        static float[] FaceNormals()
+        {
+            float p = 1.618034f, l = (float)Math.Sqrt(1f + p * p);
+            float a = 1f / l, b = p / l;
+            var f = new float[36];
+            int i = 0;
+            for (int s = 0; s < 4; s++)
+            {
+                float u = (s & 1) == 0 ? a : -a, v = (s & 2) == 0 ? b : -b;
+                f[i++] = 0f; f[i++] = u; f[i++] = v;
+                f[i++] = u; f[i++] = v; f[i++] = 0f;
+                f[i++] = v; f[i++] = 0f; f[i++] = u;
+            }
+            return f;
+        }
+
+        float Facets(float x, float y, float z)
+        {
+            uint seed = RockSeed ^ 0x2545F491u;
+            float ca = Unit(Hash(seed, 1, 0, 0)) - 0.5f, sa = Unit(Hash(seed, 2, 0, 0)) - 0.5f, n = (float)Math.Sqrt(ca * ca + sa * sa);
+            if (n < 1e-3f) { ca = 1f; sa = 0f; } else { ca /= n; sa /= n; }
+            float rx = ca * x - sa * z, rz = sa * x + ca * z, best = float.MinValue;
+            for (int k = 0; k < 12; k++)
+            {
+                float d = (rx * Faces[3 * k] + y * Faces[3 * k + 1] + rz * Faces[3 * k + 2]) * (1f + FacetJitter * Unit(Hash(seed, k, 3, 5)));
+                if (d > best) best = d;
+            }
+            return best;
         }
 
         float Relief(float x, float y, float z)
@@ -447,7 +488,7 @@ namespace Stabby.World
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "cave-graph").NextU64();
             ulong rk = Rng.Stream(w.Config.Seed, "cave-rock").NextU64(), rd = Rng.Stream(w.Config.Seed, "cave-speleothems").NextU64(), rf = Rng.Stream(w.Config.Seed, "cave-flowstone").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
-            ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64();
+            ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64(), rg = Rng.Stream(w.Config.Seed, "cave-crystal").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
             ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64();
             var lips = Landforms.BiomeMask(w, Mesas.Biomes);
@@ -470,7 +511,7 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
                     var width = new Rng(Rng.Mix(rw + t));
-                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), list.GetRange(from, list.Count - from), tile, out var graph);
+                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), Rng.Mix(rg + t), list.GetRange(from, list.Count - from), tile, out var graph);
                     if (Keep(w, tile, list) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();

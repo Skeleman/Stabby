@@ -18,7 +18,7 @@ namespace Stabby.World
 
     public sealed class CaveLibrary
     {
-        public float Chance = 0.35f;
+        public float Chance = 0.35f, CrystalChance;
         public List<CaveClass> Classes = new List<CaveClass>();
 
         public CaveClass Find(string id)
@@ -31,6 +31,7 @@ namespace Stabby.World
         {
             var e = new List<string>();
             if (!(l.Chance >= 0f && l.Chance <= 1f)) e.Add("chance must be within 0..1");
+            if (!(l.CrystalChance >= 0f && l.CrystalChance <= 1f)) e.Add("crystalChance must be within 0..1");
             if (l.Classes.Count == 0) e.Add("classes must not be empty");
             var ids = new HashSet<string>();
             foreach (var c in l.Classes)
@@ -74,6 +75,7 @@ namespace Stabby.World
     {
         public string Class;
         public int Tile;
+        public bool Crystal;
         public List<CaveNode> Nodes = new List<CaveNode>();
         public List<CaveEdge> Edges = new List<CaveEdge>();
     }
@@ -83,7 +85,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -102,11 +104,12 @@ namespace Stabby.World
             if (mouths.Count == 0) return;
             int start = output.Count;
             float grain = new Rng(rock).NextFloat();
+            bool gem = new Rng(crystal).NextFloat() < lib.CrystalChance;
             while (cls != null)
             {
                 for (int a = cls.Fallback.Length > 0 ? Tries : 1; a > 0; a--)
                 {
-                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths, Grain = grain };
+                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths, Grain = grain, RoomShape = gem ? FeatureEdit.CrystalCell : FeatureEdit.CaveRoom };
                     b.G = new CaveGraph { Class = cls.Id, Tile = ty * 65536 + tx };
                     bool ok = b.Build() && Sound(detail, Near(prior, output, start), b.G);
                     r = b.R;
@@ -114,6 +117,7 @@ namespace Stabby.World
                     if (ok)
                     {
                         graph = b.G;
+                        for (int j = start; j < output.Count && gem; j++) if (output[j].Shape == FeatureEdit.CrystalCell) { graph.Crystal = true; break; }
                         var q = new Rng(pools);
                         Pools(detail, graph, ref q, output, start);
                         var d = new Rng(drip);
@@ -159,6 +163,7 @@ namespace Stabby.World
             public List<int> Mouths;
             public CaveGraph G;
             public float Grain;
+            public int RoomShape;
             readonly List<int> parents = new List<int>();
 
             float Ground(float x, float z) => Detail.HeightAt(x / Cm, z / Cm);
@@ -264,7 +269,7 @@ namespace Stabby.World
             bool Entrance(bool hall)
             {
                 float rh = 0f;
-                if (hall) for (int q = Start; q < Out.Count; q++) if (Out[q].Shape == FeatureEdit.CaveRoom) rh = Math.Max(rh, Out[q].R);
+                if (hall) for (int q = Start; q < Out.Count; q++) if (FeatureEdit.IsRoom(Out[q].Shape)) rh = Math.Max(rh, Out[q].R);
                 var fit = new List<int>();
                 for (int q = 0; q < Mouths.Count; q++)
                     if (Aim(Mouths[q], hall, rh, out _, out _, out _)) fit.Add(q);
@@ -406,7 +411,7 @@ namespace Stabby.World
 
             bool Room(CaveNode at, float hx, float hz, float reach, float r)
             {
-                var e = Carve(FeatureEdit.CaveRoom, r, at.X, at.Y, at.Z, at.X + hx * reach, at.Y, at.Z + hz * reach, C.RoomLumps * r);
+                var e = Carve(RoomShape, r, at.X, at.Y, at.Z, at.X + hx * reach, at.Y, at.Z + hz * reach, C.RoomLumps * r);
                 if (!Covered(at.X, e.Ay, at.Z, r) || !Fits(e, 0f, 0f)) return false;
                 Out.Add(e);
                 return true;
@@ -456,7 +461,7 @@ namespace Stabby.World
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
                 if (len < 1f) continue;
                 float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;
-                int tries = Math.Max(1, (int)((len + (c.Shape == FeatureEdit.CaveRoom ? 2f * c.R : 0f)) * DripPerM));
+                int tries = Math.Max(1, (int)((len + (FeatureEdit.IsRoom(c.Shape) ? 2f * c.R : 0f)) * DripPerM));
                 for (int k = 0; k < tries; k++)
                 {
                     float t = r.NextFloat(), u = r.Range(-0.9f, 0.9f) * wf, kind = r.NextFloat(), girth = r.NextFloat(), seed = r.NextFloat();
@@ -480,7 +485,7 @@ namespace Stabby.World
                 var c = output[q];
                 if (c.Kind != FeatureEdit.Carve) continue;
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez), hole = c.HoleR;
-                int tries = Math.Max(1, (int)((len + (c.Shape == FeatureEdit.CaveRoom ? 2f * c.R : 0f)) * FlowPerM));
+                int tries = Math.Max(1, (int)((len + (FeatureEdit.IsRoom(c.Shape) ? 2f * c.R : 0f)) * FlowPerM));
                 for (int k = 0; k < tries; k++)
                 {
                     float t = f.NextFloat(), dx = f.Range(-1f, 1f), dz = f.Range(-1f, 1f), girth = f.NextFloat(), tall = f.NextFloat(), pinch = f.NextFloat(), seed = f.NextFloat();
@@ -529,7 +534,7 @@ namespace Stabby.World
                 if (n.Entrance || roll >= (n.Hall ? PoolHallChance : PoolChamberChance)) continue;
                 rooms.Clear();
                 for (int q = start; q < output.Count; q++)
-                    if (output[q].Shape == FeatureEdit.CaveRoom && Same(output[q].Ax, output[q].Az, n.X, n.Z)) rooms.Add(output[q]);
+                    if (FeatureEdit.IsRoom(output[q].Shape) && Same(output[q].Ax, output[q].Az, n.X, n.Z)) rooms.Add(output[q]);
                 if (rooms.Count == 0) continue;
                 var t = new Rng(tries);
                 int placed = 0, most = n.Hall ? PoolHallMost : 1;
@@ -581,7 +586,7 @@ namespace Stabby.World
         public static bool InChamber(IList<FeatureEdit> near, float x, float y, float z)
         {
             foreach (var c in near)
-                if (c.Kind == FeatureEdit.Carve && c.Shape == FeatureEdit.CaveRoom && c.Reach(x, y, z, out float dist) && c.Hole(dist) < 0f) return true;
+                if (c.Kind == FeatureEdit.Carve && FeatureEdit.IsRoom(c.Shape) && c.Reach(x, y, z, out float dist) && c.Hole(dist) < 0f) return true;
             return false;
         }
 

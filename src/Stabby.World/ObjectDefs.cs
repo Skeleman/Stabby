@@ -51,6 +51,7 @@ namespace Stabby.World
         public float ScaleX = 1, ScaleY = 1, ScaleZ = 1;
         public int Solid = -1, Shadows = -1;
         public uint Color;
+        public float Glow;
         public bool HasColor;
         public uint LeafColor;
         public bool HasLeafColor;
@@ -99,6 +100,7 @@ namespace Stabby.World
     {
         public string Id, Name, Kind;
         public uint Color;
+        public float Glow;
         public int Variants = 1;
         public string Verb;
         public float ReachM;

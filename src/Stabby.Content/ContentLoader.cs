@@ -62,7 +62,7 @@ namespace Stabby.Content
         public static CaveLibrary ParseCaves(string json, string source)
         {
             var root = Root(json, source, CaveSchemaVersion);
-            var l = new CaveLibrary { Chance = root.Float("chance", 0) };
+            var l = new CaveLibrary { Chance = root.Float("chance", 0), CrystalChance = root.Float("crystalChance", 0) };
             foreach (var k in root.Objects("classes", true))
             {
                 var nodes = Pair(k, "nodes", null, source);
@@ -242,7 +242,7 @@ namespace Stabby.Content
             lib.Strata = strata;
             foreach (var m in root.Objects("materials"))
             {
-                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")) });
+                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0) });
                 m.End();
             }
             var kit = root.Object("kit");
@@ -549,6 +549,8 @@ namespace Stabby.Content
             return m.Color;
         }
 
+        static float Glow(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.Glow ?? 0f;
+
         static void InlineColor(Json j, string field, string where, List<string> errors)
         {
             if (j.String(field, null) != null) errors.Add(where + ": inline \"" + field + "\"; name a materials.json material instead");
@@ -561,7 +563,7 @@ namespace Stabby.Content
             var def = new ObjectDef
             {
                 Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""),
-                Color = Material(o, "material", id, materials, errors), Variants = o.Int("variants", 1),
+                Color = Material(o, "material", id, materials, errors), Glow = Glow(o, "material", materials), Variants = o.Int("variants", 1),
             };
             var interact = o.Object("interact");
             if (interact != null)
@@ -596,6 +598,7 @@ namespace Stabby.Content
                     Id = pid, Shape = ObjectLibrary.ShapeOf(p.String("shape", "")),
                     Solid = ObjectLibrary.Tri(p.String("solid", "")), Shadows = ObjectLibrary.Tri(p.String("shadows", "")),
                     HasColor = color, Color = color ? Material(p, "material", id + ".parts." + pid, materials, errors) : def.Color,
+                    Glow = color ? Glow(p, "material", materials) : def.Glow,
                     HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0,
                 };
                 string ends = p.String("ends", "auto");
