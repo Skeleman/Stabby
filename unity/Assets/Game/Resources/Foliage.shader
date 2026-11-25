@@ -156,6 +156,7 @@ Shader "Stabby/Foliage"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Bark.hlsl"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
+            #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
             struct Varyings
             {
@@ -210,6 +211,8 @@ Shader "Stabby/Foliage"
                 float2 m = i.uv.xy * size, dm1 = ddx(m), dm2 = ddy(m);
                 float3 dp1 = ddx(wp), dp2 = ddy(wp);
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
+                float sky = CaveSky(wp);
+                l.color *= sky;
                 float above = max(wp.y - fade.z, 0);
                 [branch] if (imp)
                 {
@@ -272,7 +275,7 @@ Shader "Stabby/Foliage"
                 ao *= groundAo;
                 float ndl = dot(n, l.direction);
                 float diffuse = lerp(saturate(ndl), saturate((ndl + 0.6) / 1.6), imp ? trans : leaf ? 1 : 0);
-                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
+                float3 ambient = (_StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5)) * sky;
                 float vl = saturate(dot(-v, l.direction));
                 float back = vl * vl * vl * 0.8 + saturate(-ndl) * 0.35;
                 float self = imp ? lerp(0.45, 1, ao * ao) : 1;
@@ -281,7 +284,7 @@ Shader "Stabby/Foliage"
                 float leafy = imp ? trans : leaf ? 1 : 0;
                 float3 sun = lerp(1, float3(1.1, 1.04, 0.86), leafy * saturate(ndl) * (imp ? 0.35 : 1)), cool = lerp(1, lerp(float3(0.84, 0.93, 1.06), 1, ao * ao), leafy);
                 float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) * sun + (ambient * cool + LocalLights(wp, n, i.positionCS)) * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.1, 1.2, 0.55) * 1.35 * glow * back * trans;
-                return half4(MixFog(c, i.fog), alpha);
+                return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.fog), alpha);
             }
             ENDHLSL
         }
