@@ -21,3 +21,11 @@ description: How a Stabby lane agent works a card cheaply - ids, checks, shots a
 5. Commit resumable WIP, push the branch, then hand back with: what changed,
    check.sh summary lines, sweep numbers, GeneratorVersion, shot paths, open
    issues. No narration.
+
+## Time budgets
+
+New tests and checks fit `tools/scripts/time-budget.txt` (CLAUDE.md rule 14;
+the tests skill has the format). If check.sh prints a BUDGET line for your
+change, speed it up or raise the budget with the reason in the commit message,
+and name the line in the hand-back. BUDGET lines never block a merge; RUNAWAY
+(5x or 10 min) fails the check.
