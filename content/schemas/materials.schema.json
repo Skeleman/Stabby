@@ -178,7 +178,8 @@
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
           "name": { "type": "string" },
-          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "glow": { "type": "number", "minimum": 0, "maximum": 1 }
         }
       }
     },

@@ -73,6 +73,57 @@ namespace Stabby.Game
             public float Size;
         }
 
+        struct RetierCall
+        {
+            public Entity Root;
+            public int Want, Build, Drop, Settled;
+            public float4 Base, Accent, Dark;
+            public float Size;
+        }
+
+        [BurstCompile]
+        partial struct RetierJob : IJobEntity
+        {
+            [ReadOnly] public ComponentLookup<CreatureFurBase> Base;
+            [ReadOnly] public ComponentLookup<CreatureFurAccent> Accent;
+            [ReadOnly] public ComponentLookup<CreatureFurDark> Dark;
+            public NativeReference<FrameBudget> Budget;
+            public NativeList<RetierCall> Calls;
+
+            void Execute(Entity r, in CreatureRoot c, in DynamicBuffer<CreatureLink> links)
+            {
+                var budget = Budget.Value;
+                int half = links.Length / 2;
+                bool hasHigh = links[0].Value != Entity.Null, hasLow = links[half].Value != Entity.Null, waiting = false;
+                var donor = hasHigh ? links[0].Value : links[half].Value;
+                bool buildHigh = c.WantHigh && !hasHigh, buildLow = c.WantLow && !hasLow;
+                var call = new RetierCall { Root = r, Want = (c.WantHigh ? 1 : 0) | (c.WantLow ? 2 : 0), Size = c.Scale.Length };
+                if (donor != Entity.Null && (buildHigh || buildLow))
+                {
+                    if (buildHigh && budget.Take(half)) { call.Build |= 1; hasHigh = true; }
+                    else waiting |= buildHigh;
+                    if (buildLow && budget.Take(half)) { call.Build |= 2; hasLow = true; }
+                    else waiting |= buildLow;
+                    if (call.Build != 0)
+                    {
+                        call.Base = Base[donor].Value;
+                        call.Accent = Accent[donor].Value;
+                        call.Dark = Dark[donor].Value;
+                    }
+                }
+                for (int tier = 0; tier < 2; tier++)
+                {
+                    bool want = tier == 0 ? c.WantHigh : c.WantLow, other = tier == 0 ? hasLow : hasHigh;
+                    if (want || links[tier * half].Value == Entity.Null) continue;
+                    if (!other) { waiting = true; continue; }
+                    call.Drop |= 1 << tier;
+                }
+                call.Settled = waiting ? 0 : 1;
+                Budget.Value = budget;
+                Calls.Add(call);
+            }
+        }
+
         public static int Count { get; private set; }
         public static int PeakSpend, TierBuilds, TierDrops;
         public IReadOnlyList<Mesh> Meshes => meshes;
@@ -94,6 +145,12 @@ namespace Stabby.Game
         bool counts, instanced;
         int live;
         Entity tally;
+        JobSlot retierSlot;
+        NativeList<RetierCall> retierCalls;
+        NativeReference<FrameBudget> retierBudget;
+
+        partial void ExpectRetier();
+        partial void CheckRetier();
 
         protected override void OnCreate()
         {
@@ -109,10 +166,15 @@ namespace Stabby.Game
             rootType = instanced
                 ? EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink), typeof(CreatureRetier), typeof(CreatureFur))
                 : EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink), typeof(CreatureRetier));
+            retierCalls = new NativeList<RetierCall>(64, Allocator.Persistent);
+            retierBudget = new NativeReference<FrameBudget>(Allocator.Persistent);
         }
 
         protected override void OnDestroy()
         {
+            retierSlot.Finish();
+            retierCalls.Dispose();
+            retierBudget.Dispose();
             Owned.Release(kitTask, k => k.Dispose());
             batch?.Dispose();
             Owned.Release(arriving, Drop);
@@ -187,15 +249,19 @@ namespace Stabby.Game
             }
 
             var budget = new FrameBudget(FrameBudget.CreatureEntities);
-            Retier(ref budget);
+            ApplyRetier(ref budget);
             if (queue.Count > 0) Arrive(ref budget);
             if (counts)
             {
                 Count = live;
                 PeakSpend = Math.Max(PeakSpend, budget.Spent);
             }
-            if (arriving != null || pending.IsEmpty) return;
+            if (arriving == null && !pending.IsEmpty) Claim();
+            ScheduleRetier();
+        }
 
+        void Claim()
+        {
             var es = pending.ToEntityArray(Allocator.Temp);
             var states = pending.ToComponentDataArray<CreatureState>(Allocator.Temp);
             EntityManager.AddComponent<CreatureClaimed>(pending);
@@ -283,57 +349,65 @@ namespace Stabby.Game
             return a;
         }
 
-        void Retier(ref FrameBudget budget)
+        void ScheduleRetier()
         {
-            if (instanced || asking.IsEmpty) return;
-            var asks = asking.ToEntityArray(Allocator.Temp);
+            if (instanced || retierSlot.Busy || asking.IsEmpty) return;
+            ExpectRetier();
+            retierCalls.Clear();
+            retierBudget.Value = new FrameBudget(FrameBudget.CreatureEntities);
+            Dependency = new RetierJob
+            {
+                Base = GetComponentLookup<CreatureFurBase>(true), Accent = GetComponentLookup<CreatureFurAccent>(true), Dark = GetComponentLookup<CreatureFurDark>(true),
+                Budget = retierBudget, Calls = retierCalls,
+            }.Schedule(asking, Dependency);
+            retierSlot.Start(Dependency);
+        }
+
+        void ApplyRetier(ref FrameBudget budget)
+        {
+            if (!retierSlot.Done) return;
+            retierSlot.Finish();
+            CheckRetier();
             var plans = new List<Plan>();
             var doomed = new NativeList<Entity>(Allocator.Temp);
-            var settled = new NativeList<Entity>(Allocator.Temp);
             int delta = 0;
-            foreach (var r in asks)
+            foreach (var call in retierCalls)
             {
+                var r = call.Root;
+                if (!EntityManager.Exists(r) || !EntityManager.HasComponent<CreatureRoot>(r)) continue;
                 var c = EntityManager.GetComponentData<CreatureRoot>(r);
-                var links = EntityManager.GetBuffer<CreatureLink>(r);
-                int half = links.Length / 2;
-                bool hasHigh = links[0].Value != Entity.Null, hasLow = links[half].Value != Entity.Null, waiting = false;
-                var donor = hasHigh ? links[0].Value : links[half].Value;
-                bool buildHigh = c.WantHigh && !hasHigh, buildLow = c.WantLow && !hasLow;
-                if (donor != Entity.Null && (buildHigh || buildLow))
+                if (call.Want != ((c.WantHigh ? 1 : 0) | (c.WantLow ? 2 : 0))) continue;
+                if ((call.Build | call.Drop) != 0)
                 {
-                    var plan = new Plan
+                    var links = EntityManager.GetBuffer<CreatureLink>(r);
+                    int half = links.Length / 2;
+                    for (int tier = 0; tier < 2; tier++)
                     {
-                        Root = r, Size = c.Scale.Length, Base = EntityManager.GetComponentData<CreatureFurBase>(donor).Value,
-                        Accent = EntityManager.GetComponentData<CreatureFurAccent>(donor).Value, Dark = EntityManager.GetComponentData<CreatureFurDark>(donor).Value,
-                    };
-                    if (buildHigh && budget.Take(half)) { plan.Tier = 0; plans.Add(plan); hasHigh = c.HighOn = true; delta += half; }
-                    else waiting |= buildHigh;
-                    if (buildLow && budget.Take(half)) { plan.Tier = 1; plans.Add(plan); hasLow = c.LowOn = true; delta += half; }
-                    else waiting |= buildLow;
-                }
-                for (int tier = 0; tier < 2; tier++)
-                {
-                    int b = tier * half;
-                    bool want = tier == 0 ? c.WantHigh : c.WantLow, other = tier == 0 ? hasLow : hasHigh;
-                    if (want || links[b].Value == Entity.Null) continue;
-                    if (!other) { waiting = true; continue; }
-                    for (int j = b; j < b + half; j++)
-                    {
-                        var l = links[j];
-                        doomed.Add(l.Value);
-                        l.Value = Entity.Null;
-                        links[j] = l;
+                        if ((call.Build & (1 << tier)) == 0) continue;
+                        plans.Add(new Plan { Root = r, Tier = tier, Base = call.Base, Accent = call.Accent, Dark = call.Dark, Size = call.Size });
+                        if (tier == 0) c.HighOn = true;
+                        else c.LowOn = true;
+                        budget.Spent += half;
+                        delta += half;
                     }
-                    if (tier == 0) c.HighOn = false;
-                    else c.LowOn = false;
-                    delta -= half;
+                    for (int tier = 0; tier < 2; tier++)
+                    {
+                        if ((call.Drop & (1 << tier)) == 0) continue;
+                        for (int j = tier * half; j < (tier + 1) * half; j++)
+                        {
+                            var l = links[j];
+                            doomed.Add(l.Value);
+                            l.Value = Entity.Null;
+                            links[j] = l;
+                        }
+                        if (tier == 0) c.HighOn = false;
+                        else c.LowOn = false;
+                        delta -= half;
+                    }
+                    EntityManager.SetComponentData(r, c);
                 }
-                EntityManager.SetComponentData(r, c);
-                if (!waiting) settled.Add(r);
+                if (call.Settled != 0) EntityManager.SetComponentEnabled<CreatureRetier>(r, false);
             }
-            asks.Dispose();
-            foreach (var r in settled) EntityManager.SetComponentEnabled<CreatureRetier>(r, false);
-            settled.Dispose();
             if (counts) TierDrops += doomed.Length;
             if (doomed.Length > 0) EntityManager.DestroyEntity(doomed.AsArray());
             doomed.Dispose();

@@ -569,6 +569,11 @@ namespace Stabby.World
         public static int StampNeeds(ObjectLibrary lib, ObjectInstance o)
         {
             int cave = lib.Objects[o.Def].Placement.Cave;
+            if (cave == CaveCrystal)
+            {
+                Rotate(o, 0, 1, 0, out _, out float up, out _);
+                return up < 0 ? StampCeiling : StampFloor;
+            }
             return cave == CaveStalactite ? StampCeiling : cave == CaveColumn ? StampFloor | StampCeiling : StampFloor;
         }
 

@@ -565,7 +565,19 @@ Shader "Stabby/Object"
                 float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
                 float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
                 float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.01, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
-                [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
+                [branch] if (base.a > 0.025 && base.a < 0.5)
+                {
+                    float3 q = wp - i.origin;
+                    float bf = OrgRungW(0, fp);
+                    float4 lump = OrgNoise3(q * 1.3 + i.seed * 17.1, int3(0, 0, 0)), nub = OrgRP3(q, OrgF(0), 3.7, 0);
+                    float3 g = 0.12 * lump.yzw + 0.06 * bf * nub.yzw;
+                    g -= n * dot(g, n);
+                    n = normalize(n - g);
+                    albedo = base.rgb * (0.8 + 0.25 * lump.x + 0.1 * bf * nub.x);
+                    tmRough = 0.35 * LookRough();
+                    emberGlow = base.rgb * ((base.a - 0.05) / 0.25) * (0.06 + 0.03 * lump.x);
+                }
+                else if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
                 else if (base.a < 0.5)
                 {
                     float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).a;
