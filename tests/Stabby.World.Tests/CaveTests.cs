@@ -10,6 +10,7 @@ public class CaveTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
     static readonly CaveLibrary Caves = ContentLoader.LoadCaves(Root);
+    static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
 
     sealed class Sample
     {
@@ -26,7 +27,7 @@ public class CaveTests
         lock (Cache)
         {
             if (Cache.TryGetValue(seed, out var s)) return s;
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 512, CellMeters = WorldConfig.CellMetersFor(512) }, Biomes, Materials, null, null, null, Caves);
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 512, CellMeters = WorldConfig.CellMetersFor(512) }, Biomes, Materials, null, null, Objects, Caves);
             var d = new TerrainDetail(w);
             var edits = Features.Place(w, d, out var graphs);
             return Cache[seed] = new Sample { W = w, Detail = d, Edits = edits, Graphs = graphs };
@@ -174,6 +175,102 @@ public class CaveTests
         edits[k].Ax = x;
         edits[k].Az = z;
         Assert.Contains(Check(s, edits, s.Graphs), v => v.Contains("breaks into the sea or a lake"));
+    }
+
+    static List<ObjectInstance> CaveObjects(Sample s, ObjectField field)
+    {
+        float span = field.ChunkMeters;
+        int across = field.ChunksAcross;
+        var seen = new HashSet<int>();
+        var found = new List<ObjectInstance>();
+        foreach (var x in s.Edits)
+        {
+            if (x.Kind != FeatureEdit.Carve || (x.Shape != FeatureEdit.Cave && x.Shape != FeatureEdit.CaveRoom)) continue;
+            for (float t = 0f; t <= 1f; t += 0.25f)
+            {
+                float px = x.Ax + (x.Bx - x.Ax) * t, pz = x.Az + (x.Bz - x.Az) * t;
+                int c = Math.Min(across - 1, Math.Max(0, (int)(pz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(px / span)));
+                if (!seen.Add(c)) continue;
+                foreach (var o in field.Chunk(c % across, c / across)) if (ObjectField.IsCave(s.W.Objects.Objects[o.Def])) found.Add(o);
+            }
+        }
+        return found;
+    }
+
+    static (Sample, ObjectField, ObjectInstance) FindCave(int kind)
+    {
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var s = At(seed);
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            foreach (var o in CaveObjects(s, field)) if (s.W.Objects.Objects[o.Def].Placement.Cave == kind) return (s, field, o);
+        }
+        throw new Xunit.Sdk.XunitException("no cave object of kind " + kind);
+    }
+
+    [Fact]
+    public void CaveObjectsAreCommonAndPass()
+    {
+        int tiles = 0, drips = 0, mites = 0, rubble = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var s = At(seed);
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            tiles += s.Graphs.Length;
+            foreach (var o in CaveObjects(s, field))
+            {
+                int kind = s.W.Objects.Objects[o.Def].Placement.Cave;
+                if (kind == ObjectField.CaveStalactite) drips++;
+                else if (kind == ObjectField.CaveStalagmite) mites++;
+                else rubble++;
+                string fault = field.CaveFault(o);
+                Assert.True(fault == null, fault);
+            }
+        }
+        Assert.True(drips >= 8 * tiles, $"{drips} stalactites over {tiles} cave tiles");
+        Assert.True(mites >= drips / 4, $"{mites} stalagmites for {drips} stalactites");
+        Assert.True(rubble >= drips, $"{rubble} rubble stones for {drips} stalactites");
+    }
+
+    [Fact]
+    public void CaveObjectsMatchAcrossRuns()
+    {
+        var (s, field, _) = FindCave(ObjectField.CaveStalactite);
+        var again = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        var a = CaveObjects(s, field);
+        var b = CaveObjects(s, again);
+        Assert.Equal(a.Count, b.Count);
+        for (int k = 0; k < a.Count; k++) Assert.True(a[k].Id == b[k].Id && a[k].X == b[k].X && a[k].Y == b[k].Y && a[k].Size == b[k].Size);
+    }
+
+    [Fact]
+    public void StalagmiteInAPassageFails()
+    {
+        var (s, field, o) = FindCave(ObjectField.CaveStalagmite);
+        var p = s.Edits.Where(x => x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.Cave).OrderBy(x => (0.5f * (x.Ax + x.Bx) - o.X) * (0.5f * (x.Ax + x.Bx) - o.X) + (0.5f * (x.Az + x.Bz) - o.Z) * (0.5f * (x.Az + x.Bz) - o.Z)).First();
+        o.X = 0.5f * (p.Ax + p.Bx); o.Z = 0.5f * (p.Az + p.Bz);
+        var rock = new EditArray { Items = s.Edits };
+        float ay = 0.5f * (p.Ay + p.By);
+        o.Y = Walk.Surface(new DetailGround { Detail = s.Detail }, rock, Features.LatticeStepM, o.X, o.Z, ay, ay - 20f) - 0.1f * o.Size;
+        Assert.Contains("blocks a cave passage", field.CaveFault(o) ?? "");
+    }
+
+    [Fact]
+    public void LowStalactiteFails()
+    {
+        var (s, field, o) = FindCave(ObjectField.CaveStalactite);
+        var rock = new EditArray { Items = s.Edits };
+        float floor = Walk.Surface(new DetailGround { Detail = s.Detail }, rock, Features.LatticeStepM, o.X, o.Z, o.Y - o.Size, o.Y - o.Size - 40f);
+        o.Size = o.Y - floor - 1f;
+        Assert.Contains("hangs into the walking headroom", field.CaveFault(o) ?? "");
+    }
+
+    [Fact]
+    public void FloatingStalactiteFails()
+    {
+        var (_, field, o) = FindCave(ObjectField.CaveStalactite);
+        o.Y -= 0.6f * o.Size;
+        Assert.Contains("floats free of the ceiling", field.CaveFault(o) ?? "");
     }
 
     [Fact]

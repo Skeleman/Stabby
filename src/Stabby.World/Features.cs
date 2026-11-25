@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Shapes = 10;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, Shapes = 11;
 
         public const float Blend = 0.5f;
 
@@ -20,6 +20,12 @@ namespace Stabby.World
 
         public FeatureEdit AtStep(float stepM)
         {
+            if (Kind == Carve && (Shape == Cave || Shape == CaveRoom))
+            {
+                var c = this;
+                c.Coarse = Math.Max(0f, Math.Min(1f, (stepM - RockFineM) / RockFineM));
+                return c;
+            }
             if (Shape != Boulder || R >= MinMeshSteps * stepM || R < FadeSteps * stepM) return this;
             var e = this;
             float grow = MinMeshSteps * stepM - R;
@@ -33,6 +39,7 @@ namespace Stabby.World
         public float Ax, Ay, Az, Bx, By, Bz, R;
         public float W, H, P, T;
         public float D, F, N, S;
+        public float Coarse;
 
         public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f;
 
@@ -64,9 +71,12 @@ namespace Stabby.World
             return Kind == Add ? Math.Max(d, R - dist) : Cut(d, Hole(dist), R * Blend);
         }
 
-        public bool Reach(float x, float y, float z, out float dist)
+        public bool Reach(float x, float y, float z, out float dist) => Reach(x, y, z, out dist, out _);
+
+        public bool Reach(float x, float y, float z, out float dist, out float floor)
         {
             dist = R;
+            floor = float.MaxValue;
             if (!Contains(x, y, z)) return false;
             if (Shape == Spring) return Basin(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
@@ -74,11 +84,68 @@ namespace Stabby.World
             float ll = ex * ex + ey * ey + ez * ez;
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
+            if (Kind == Carve && (Shape == Cave || Shape == CaveRoom))
+            {
+                if (qx * qx + qy * qy + qz * qz >= R * R) return false;
+                dist = Rock(x, y, z, qx, qy, qz, out floor);
+                return dist < R;
+            }
             dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
             if (P > 0f) dist += R * Profile(t);
             if (N > 0f) dist += N * Lump(x, y, z);
             return dist < R;
         }
+
+        public const float Fill = 0.35f, RockBand = 6f, RockFade = 3f, DebrisBand = 4.5f, RockRefM = 10f, RockFineM = 2f;
+
+        public float HoleR => R - 1.25f * R * Blend;
+
+        public float FloorHalf
+        {
+            get
+            {
+                float h = HoleR, r = h + Fill * h, c = h - Fill * h;
+                return (float)Math.Sqrt(r * r - c * c);
+            }
+        }
+
+        public const float ReliefLo = 2.2f, ReliefHi = 2.6f;
+
+        public void RockSpan(out float lo, out float hi)
+        {
+            lo = hi = 0f;
+            if (Kind != Carve || (Shape != Cave && Shape != CaveRoom)) return;
+            float h = HoleR, k = Math.Min(1f, h / RockRefM);
+            lo = 2f * Fill * h + k * ReliefLo;
+            hi = k * ReliefHi;
+        }
+
+        uint RockSeed => (uint)(F * 16777216f) * 0x9E3779B1u + 0x7F4A7C15u;
+
+        float Rock(float x, float y, float z, float qx, float qy, float qz, out float floor)
+        {
+            float hole = HoleR, sy = qy + Fill * hole;
+            float wall = (float)Math.Sqrt(qx * qx + sy * sy + qz * qz) - Fill * hole;
+            if (N > 0f) wall += N * Lump(x, y, z);
+            float k = Math.Min(1f, hole / RockRefM), band = Math.Abs(wall - hole);
+            if (band < RockBand * k) wall += k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
+            floor = -qy;
+            if (Math.Abs(floor - hole) < DebrisBand * k) floor += k * Debris(x, z);
+            return Math.Max(wall, floor);
+        }
+
+        float Relief(float x, float y, float z)
+        {
+            uint seed = RockSeed;
+            float w = 3f * (Value(seed ^ 0x1B56C4E9u, x / 9f, y / 9f, z / 9f) - 0.5f);
+            float wx = x + w, wy = y + 0.5f * w, wz = z - w;
+            float lump = Value(seed, wx / 6f, wy / 5f, wz / 6f);
+            float facet = 1f - Math.Abs(2f * Value(seed ^ 0x5851F42Du, wx / 2.6f, wy / 2.2f, wz / 2.6f) - 1f);
+            float s = wy / 1.8f + 1.5f * lump, f = s - (float)Math.Floor(s);
+            return 2.6f * (lump - 0.5f) + (1f - Coarse) * (1.2f * (facet - 0.5f) + 0.9f * (f * f * f - 0.25f));
+        }
+
+        float Debris(float x, float z) => 0.35f * Value(RockSeed ^ 0x9E3779B9u, x / 8f, 0f, z / 8f);
 
         float Profile(float t)
         {
@@ -284,24 +351,25 @@ namespace Stabby.World
 
         public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z) where TEdits : struct, IEditList
         {
-            float hole = float.MaxValue, k = 0f;
+            float hole = float.MaxValue, low = float.MaxValue, k = 0f;
             for (int q = 0, n = edits.Count; q < n; q++)
             {
                 var e = edits.At(q);
-                if (!e.Reach(x, y, z, out float dist)) continue;
+                if (!e.Reach(x, y, z, out float dist, out float floor)) continue;
                 if (e.Kind == FeatureEdit.Add)
                 {
-                    if (hole < float.MaxValue) { d = FeatureEdit.Cut(d, hole, k); hole = float.MaxValue; k = 0f; }
+                    if (hole < float.MaxValue) { d = FeatureEdit.Cut(d, Math.Max(hole, low), k); hole = low = float.MaxValue; k = 0f; }
                     d = Math.Max(d, e.R - dist);
                 }
                 else
                 {
                     float c = e.Hole(dist), kc = e.R * FeatureEdit.Blend;
                     hole = hole < float.MaxValue ? FeatureEdit.Cut(hole, c, JoinBlend * Math.Min(k, kc)) : c;
+                    low = Math.Min(low, floor < float.MaxValue ? e.Hole(floor) : c);
                     k = Math.Max(k, kc);
                 }
             }
-            return hole < float.MaxValue ? FeatureEdit.Cut(d, hole, k) : d;
+            return hole < float.MaxValue ? FeatureEdit.Cut(d, Math.Max(hole, low), k) : d;
         }
 
         public static float Level<TCols>(TCols columns, float d, int i, int k, float s) where TCols : struct, IColumnField
@@ -373,6 +441,7 @@ namespace Stabby.World
             var strata = new StrataField(w.Config, w.Materials);
             int tiles = w.Config.Size / TileCells;
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "cave-graph").NextU64();
+            ulong rk = Rng.Stream(w.Config.Seed, "cave-rock").NextU64(), rd = Rng.Stream(w.Config.Seed, "cave-speleothems").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
             ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
@@ -397,7 +466,7 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
                     var width = new Rng(Rng.Mix(rw + t));
-                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, list.GetRange(from, list.Count - from), tile, out var graph);
+                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), list.GetRange(from, list.Count - from), tile, out var graph);
                     if (Keep(w, tile, list) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();

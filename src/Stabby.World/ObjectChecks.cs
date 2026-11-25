@@ -35,20 +35,22 @@ namespace Stabby.World
                     float r = field.Footprint(o.Def) * o.Size;
                     string at = $"{def.Id} at {o.X:F0},{o.Z:F0}";
                     if (o.X < cx * span || o.X >= (cx + 1) * span || o.Z < cz * span || o.Z >= (cz + 1) * span) Fail(0, at + " lies outside its chunk");
-                    int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
-                    float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
-                    if (w.Sea[i]) Fail(1, at + " stands in the sea");
-                    int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
-                    if (site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, at + $" stands in lake {lake}");
-                    if (site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
-                    if (site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, at + " is off its river or lake bank");
-                    grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
-                    if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
-                    if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
-                    for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+                    if (!ObjectField.IsCave(def))
                     {
-                        float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
-                        if (bx * bx + bz * bz < reach * reach) Fail(11, at + $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
+                        int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
+                        float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
+                        if (w.Sea[i]) Fail(1, at + " stands in the sea");
+                        int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
+                        if (site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, at + $" stands in lake {lake}");
+                        if (site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
+                        if (site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, at + " is off its river or lake bank");
+                        grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
+                        if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
+                        if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
+                        for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
+                        {
+                            float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
+                            if (bx * bx + bz * bz < reach * reach) Fail(11, at + $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
                     }
                     if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
                     float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
@@ -58,6 +60,7 @@ namespace Stabby.World
                     if (seat != null) Fail(7, at + seat);
                     var biomes = def.Placement.Biomes;
                     if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
+                    }
                     for (int pi = 0; pi < def.Parts.Count; pi++)
                     {
                         contacts.Clear();

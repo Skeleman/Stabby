@@ -37,11 +37,11 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Shapes = 35;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, Shapes = 36;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
         public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen;
-        public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || IsStructure(shape);
+        public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || IsStructure(shape);
         public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5;
         public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn" };
 
@@ -76,6 +76,7 @@ namespace Stabby.World
         public string Bank;
         public float PerHundredM;
         public int Discovery;
+        public int Cave;
         public string Liquid;
         public float SpacingM, Chance = 1f;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
@@ -298,7 +299,9 @@ namespace Stabby.World
                     errors.Add(d.Id + ": editMinSizeM is too small for boulder edits to mesh at the finest step");
                 if (pl.Bank != null && (BankSites.Of(pl.Bank) < 0 || pl.PerHectare > 0 || pl.PerHundredM <= 0 || pl.PerHundredM > 800 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0 || pl.ChainMax > 1 || d.Kind == Structure || pl.Biomes.Count > 0))
                     errors.Add(d.Id + ": bank placement needs a known bank site, perHundredM 0-800, no perHectare, biomes, foot, edits, chains or structures");
-                if (pl.Bank == null && pl.PerHundredM != 0) errors.Add(d.Id + ": perHundredM belongs only to bank placement");
+                if (pl.Bank == null && pl.Cave == 0 && pl.PerHundredM != 0) errors.Add(d.Id + ": perHundredM belongs only to bank and cave placement");
+                if (pl.Cave < 0 || (pl.Cave > 0 && (pl.PerHundredM <= 0 || pl.PerHundredM > 200 || pl.PerHectare > 0 || pl.Bank != null || pl.Discovery > 0 || pl.Biomes.Count > 0 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0 || pl.ChainMax > 1 || d.Kind == Structure)))
+                    errors.Add(d.Id + ": cave placement needs a known cave spot, perHundredM 0-200, no perHectare, bank, discovery, biomes, foot, edits, chains or structures");
                 if (pl.Discovery < 0 || (pl.Discovery > 0 && (d.Kind != Structure || pl.PerHectare > 0 || pl.Bank != null || pl.SpacingM < 200 || pl.SpacingM > 5000 || pl.Chance <= 0 || pl.Chance > 1)))
                     errors.Add(d.Id + ": discovery placement needs a known discovery, a structure, no perHectare or bank, spacingM 200-5000 and chance above 0, at most 1");
                 if (pl.Liquid != null && !ObjectField.Pooled(pl.Discovery)) errors.Add(d.Id + ": liquid belongs only to spring, geyser and mud-pot discoveries");

@@ -31,7 +31,8 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream;
+        readonly int[] caveCarves;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
@@ -63,6 +64,8 @@ namespace Stabby.World
             bankStream = Rng.Stream(w.Config.Seed, "objects-bank").NextU64();
             lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
             sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
+            caveStream = Rng.Stream(w.Config.Seed, "objects-cave").NextU64();
+            caveCarves = CaveCarves(this.edits);
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -231,6 +234,11 @@ namespace Stabby.World
                 if (pl.Discovery > 0)
                 {
                     if (!builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitDiscoveries(d, chunk, x0, z0, sx, sz, list);
+                    continue;
+                }
+                if (pl.Cave > 0)
+                {
+                    if (!builtOnly && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitCave(d, chunk, x0, z0, sx, sz, list, ref ordinal);
                     continue;
                 }
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
@@ -631,7 +639,9 @@ namespace Stabby.World
                 {
                     Rotate(o, p.OffsetX * o.Size, p.OffsetY * o.Size, p.OffsetZ * o.Size, out float cx, out float cy, out float cz);
                     float rad = ObjectPart.IsFoliage(p.Shape) ? ObjectFoliage.TrunkRadius * 1.25f * Math.Min(p.ScaleX, p.ScaleZ) * o.Size : 0.5f * Math.Min(p.ScaleX, p.ScaleZ) * o.Size * 0.85f;
-                    list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = rad, Bottom = cy + o.Y, Top = cy + o.Y + tall });
+                    Rotate(o, 0, 1, 0, out _, out float up, out _);
+                    float foot = cy + o.Y;
+                    list.Add(new ObjectColumn { X = cx + o.X, Z = cz + o.Z, R = rad, Bottom = up < 0 ? foot - tall : foot, Top = up < 0 ? foot : foot + tall });
                 }
             }
         }

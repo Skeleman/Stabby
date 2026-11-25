@@ -117,7 +117,7 @@ namespace Stabby.Game.Editor
             lines.Add($"caves: {graphs.Length} graphs ({string.Join(", ", graphs.GroupBy(g => g.Class).Select(g => g.Key + " " + g.Count()))}) placed in {placeMs} ms after a {genMs} ms full regeneration, both in a task, GV {WorldConfig.GeneratorVersion}");
             var hall = Nearest(graphs, "hall");
             var lab = Nearest(graphs, "labyrinth");
-            if (hall == null || lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no " + (hall == null ? "hall" : "labyrinth") + " in this world"; yield break; }
+            if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
 
@@ -178,30 +178,34 @@ namespace Stabby.Game.Editor
             }
             else lines.Add("deep tunnel: no labyrinth tunnel reachable from a mouth");
 
-            var hn = hall.Nodes.Find(n => n.Hall);
-            var hc = new Vector3(hn.X, hn.Y, hn.Z);
-            float rh = 0f;
-            var bridge = Vector3.zero;
-            int bridges = 0;
-            foreach (var e in edits)
+            if (hall == null) lines.Add("hall: none in this world");
+            else
             {
-                if (Features.TileOf(e, map.Config.CellMeters) != hall.Tile) continue;
-                if (e.Shape == FeatureEdit.CaveRoom && new Vector2(e.Ax - hc.x, e.Az - hc.z).magnitude < 4f) rh = Mathf.Max(rh, e.R);
-                if (e.Shape == FeatureEdit.Bridge && bridges++ == 0) bridge = new Vector3((e.Ax + e.Bx) * 0.5f, (e.Ay + e.By) * 0.5f, (e.Az + e.Bz) * 0.5f);
+                var hn = hall.Nodes.Find(n => n.Hall);
+                var hc = new Vector3(hn.X, hn.Y, hn.Z);
+                float rh = 0f;
+                var bridge = Vector3.zero;
+                int bridges = 0;
+                foreach (var e in edits)
+                {
+                    if (Features.TileOf(e, map.Config.CellMeters) != hall.Tile) continue;
+                    if (e.Shape == FeatureEdit.CaveRoom && new Vector2(e.Ax - hc.x, e.Az - hc.z).magnitude < 4f) rh = Mathf.Max(rh, e.R);
+                    if (e.Shape == FeatureEdit.Bridge && bridges++ == 0) bridge = new Vector3((e.Ax + e.Bx) * 0.5f, (e.Ay + e.By) * 0.5f, (e.Az + e.Bz) * 0.5f);
+                }
+                var toward = bridges > 0 ? new Vector3(bridge.x - hc.x, 0, bridge.z - hc.z).normalized : Vector3.forward;
+                float fx = hc.x - toward.x * rh * 0.3f, fy = hc.y, fz = hc.z - toward.z * rh * 0.3f;
+                Walk.Step(ground, ground.EditsNear(fx, fz, Walk.Radius), cols, ground.WalkStep, ref fx, ref fy, ref fz, 0, 0, Walk.Reach);
+                eye = new Vector3(fx, fy + 1.7f, fz);
+                var look = bridges > 0 ? bridge : hc + toward * rh;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                waited = LoadWaitTotal();
+                for (var w = Settle(120); w.MoveNext();) yield return null;
+                lines.Add($"hall {hall.Nodes.Count(n => n.Entrance)} entrances, {bridges} rock bridges, hollow R {rh * Features.CaveHollow:F0} m, centre {hc.x:F0},{hc.y:F0},{hc.z:F0}, floor at eye {fy:F1}: stream wait {LoadWaitTotal() - waited:F2} s");
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "caves-hall");
+                ExposedShot(cam, dir, "caves-hall-debug-exposure", CaveDebugExposure);
+                GeometryShot(cam, dir, "caves-hall-debug-unlit");
             }
-            var toward = bridges > 0 ? new Vector3(bridge.x - hc.x, 0, bridge.z - hc.z).normalized : Vector3.forward;
-            float fx = hc.x - toward.x * rh * 0.3f, fy = hc.y, fz = hc.z - toward.z * rh * 0.3f;
-            Walk.Step(ground, ground.EditsNear(fx, fz, Walk.Radius), cols, ground.WalkStep, ref fx, ref fy, ref fz, 0, 0, Walk.Reach);
-            eye = new Vector3(fx, fy + 1.7f, fz);
-            var look = bridges > 0 ? bridge : hc + toward * rh;
-            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
-            waited = LoadWaitTotal();
-            for (var w = Settle(120); w.MoveNext();) yield return null;
-            lines.Add($"hall {hall.Nodes.Count(n => n.Entrance)} entrances, {bridges} rock bridges, hollow R {rh * Features.CaveHollow:F0} m, centre {hc.x:F0},{hc.y:F0},{hc.z:F0}, floor at eye {fy:F1}: stream wait {LoadWaitTotal() - waited:F2} s");
-            Shot(cam, null, "warmup");
-            Shot(cam, dir, "caves-hall");
-            ExposedShot(cam, dir, "caves-hall-debug-exposure", CaveDebugExposure);
-            GeometryShot(cam, dir, "caves-hall-debug-unlit");
             var sky = DayNightSystem.Shown;
             lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
             GameStatus.Lines["~caves"] = string.Join("\n", lines);

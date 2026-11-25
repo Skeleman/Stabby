@@ -108,6 +108,7 @@ namespace Stabby.Game
             var chunk = new ContactChunk { Stamps = new UnsafeList<ContactStamp>(objects.Count, Allocator.Persistent), Rings = new UnsafeList<ContactRing>(0, Allocator.Persistent) };
             foreach (var o in objects)
             {
+                if (ObjectField.IsCave(field.Library.Objects[o.Def])) continue;
                 columns.Clear();
                 field.ContactsOf(o, columns);
                 bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;

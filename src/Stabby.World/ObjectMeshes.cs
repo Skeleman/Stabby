@@ -34,6 +34,7 @@ namespace Stabby.World
             float aspect = 0;
             if (p.Shape == ObjectPart.Log && p.ScaleX > 0) aspect = 0.5f * (p.ScaleY + p.ScaleZ) / p.ScaleX;
             if (p.Shape == ObjectPart.Stump && p.ScaleY > 0) aspect = 0.5f * (p.ScaleX + p.ScaleZ) / p.ScaleY;
+            if (p.Shape == ObjectPart.Dripstone && p.ScaleY > 0) aspect = 0.5f * (p.ScaleX + p.ScaleZ) / p.ScaleY;
             return Build(p.Shape, key, lod, aspect, p.Ends);
         }
 
@@ -49,6 +50,7 @@ namespace Stabby.World
             if (shape == ObjectPart.Stump) return Stump(key, lod, aspect > 0 ? aspect : 1.11f, ends);
             if (shape == ObjectPart.BasaltColumns) return Columns(key, lod);
             if (shape == ObjectPart.Crystals) return Crystals(key, lod);
+            if (shape == ObjectPart.Dripstone) return Dripstone(key, lod, aspect > 0 ? aspect : 0.3f);
             return Rock(key, RockLevels[lod]);
         }
 
@@ -218,6 +220,73 @@ namespace Stabby.World
                 Shaft(ref b, p, lod, -(PrismSkirt * len + r * side) / p.Ay, len, 1f, true, len + r * tip);
             }
             return Normalised(b);
+        }
+
+        static readonly int[] DripSegments = { 10, 7, 5, 5 };
+        static readonly int[] DripRings = { 8, 5, 3, 3 };
+        public const float DripSkirt = 0.12f;
+
+        static void Turn(int n, out float c, out float s)
+        {
+            float a = 6.2831853f / n, a2 = a * a;
+            c = 1f - a2 / 2f * (1f - a2 / 12f * (1f - a2 / 30f * (1f - a2 / 56f)));
+            s = a * (1f - a2 / 6f * (1f - a2 / 20f * (1f - a2 / 42f * (1f - a2 / 72f))));
+        }
+
+        static void Lobe(ref Rng rng, out float x, out float z)
+        {
+            Unit(ref rng, out x, out _, out z);
+            float l = (float)Math.Sqrt(x * x + z * z);
+            if (l < 1e-3f) { x = 1f; z = 0f; } else { x /= l; z /= l; }
+        }
+
+        internal static ObjectMesh Dripstone(ulong key, int lod, float aspect)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0xD81B57011E5EEDUL));
+            int n = DripSegments[lod], rings = DripRings[lod];
+            float baseR = rng.Range(0.3f, 0.62f), bulge = Math.Max(-0.4f, Math.Min(0.8f, 2f * (aspect - 0.3f) - 0.3f)), flare = rng.Range(0.35f, 0.9f);
+            Lobe(ref rng, out float l1x, out float l1z);
+            Lobe(ref rng, out float l2x, out float l2z);
+            float a1 = rng.Range(0.14f, 0.26f), a2 = rng.Range(0.1f, 0.2f), b1 = rng.Range(0.04f, 0.12f), b2 = rng.Range(0.03f, 0.09f);
+            float dx = rng.Range(-0.12f, 0.12f), dz = rng.Range(-0.12f, 0.12f);
+            Turn(n, out float tc, out float ts);
+            var dirX = new float[n];
+            var dirZ = new float[n];
+            float cx = 1f, cz = 0f;
+            for (int k = 0; k < n; k++)
+            {
+                dirX[k] = cx; dirZ[k] = cz;
+                float nx = cx * tc - cz * ts;
+                cz = cx * ts + cz * tc;
+                cx = nx;
+            }
+            var b = Builder.New();
+            int first = 0;
+            for (int j = 0; j <= rings; j++)
+            {
+                float u = j == 0 ? 0f : (j - 1f) / rings, t = u * (0.55f + 0.45f * u), y = j == 0 ? -DripSkirt : t, low = (1f - t) * (1f - t) * (1f - t);
+                float r = j == 0 ? baseR * (1f + flare) * 1.1f : baseR * ((1f - t) * (1f + bulge * t) + flare * low);
+                float ox = dx * t * t + rng.Range(-0.03f, 0.03f) * baseR, oz = dz * t * t + rng.Range(-0.03f, 0.03f) * baseR;
+                float w1 = b1 + (a1 - b1) * low, w2 = b2 + (a2 - b2) * low;
+                int ring = b.P.Count / 3;
+                if (j == 0) first = ring;
+                for (int k = 0; k < n; k++)
+                {
+                    float c1 = dirX[k] * l1x + dirZ[k] * l1z, c2 = dirX[k] * l2x + dirZ[k] * l2z;
+                    float m = 1f + w1 * c1 + w2 * (2f * c2 * c2 - 1f) + rng.Range(-0.05f, 0.05f);
+                    b.Add(ox + dirX[k] * r * m, y, oz + dirZ[k] * r * m);
+                }
+                if (j == 0) continue;
+                int lo = ring - n;
+                for (int k = 0; k < n; k++)
+                {
+                    int q = (k + 1) % n;
+                    b.Quad(lo + k, ring + k, ring + q, lo + q);
+                }
+            }
+            int top = first + rings * n, apex = b.Add(dx + rng.Range(-0.02f, 0.02f), 1f, dz + rng.Range(-0.02f, 0.02f));
+            for (int k = 0; k < n; k++) b.Tri(apex, top + (k + 1) % n, top + k);
+            return b.Finish();
         }
 
         internal static ObjectMesh Rock(ulong key, int levels)
