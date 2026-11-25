@@ -16,7 +16,7 @@ public static class Linter
     const string KitFunction = "float3 Built(";
     static readonly Regex Colour = new(@"float3\(\s*[0-9.]+f?\s*,\s*[0-9.]+f?\s*,\s*[0-9.]+f?\s*\)");
     static readonly Regex DotWeights = new(@"dot\([^()]*,\s*$");
-    static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete" };
+    static readonly string[] BlockingMembers = { "Wait", "WaitAll", "WaitAny", "GetResult", "Sleep", "Complete", "CompleteAll", "CompleteAllTrackedJobs", "CompleteDependency" };
     static readonly string[] NativeMembers = { "linear", "gamma", "GammaToLinearSpace", "LinearToGammaSpace", "PerlinNoise" };
     static readonly string[] WorldDetailFiles = { "src/Stabby.World/Detail.cs", "src/Stabby.World/FoliageDefs.cs", "src/Stabby.World/ObjectDefs.cs" };
     static readonly string[] DistanceCalls = { "distance", "distancesq", "Distance", "RectDistance", "length", "lengthsq", "magnitude", "sqrMagnitude" };
@@ -59,12 +59,17 @@ public static class Linter
         var used = new HashSet<string>(StringComparer.Ordinal);
         var trees = SourceFiles(repo).Select(f => (File: f, Root: Parse(File.ReadAllText(Path.Combine(repo, f))).GetRoot())).ToList();
         var classes = ClassNames(trees.Select(t => t.Root));
+        var handles = HandleTypes(trees.Where(t => IsRuntime(t.File)).Select(t => t.Root));
         foreach (var (file, root) in trees)
         {
             foreach (var c in Comments(root))
                 problems.Add($"{file}:{c.GetLocation().GetLineSpan().StartLinePosition.Line + 1}: comment (put reasons in the commit message)");
             if (IsRuntime(file))
+            {
                 foreach (var p in EcsProblems(file, root, allow, used, classes)) problems.Add(p);
+                foreach (var p in MainThreadProblems(file, root, allow, used)) problems.Add(p);
+                foreach (var p in TeardownProblems(file, root, allow, used, handles)) problems.Add(p);
+            }
             if (file.StartsWith(UnityDir, StringComparison.Ordinal) && !file.Contains("/Editor/", StringComparison.Ordinal))
                 foreach (var p in BlockingProblems(file, root, allow, used)) problems.Add(p);
             if (IsDetailCode(file))
@@ -225,6 +230,121 @@ public static class Linter
             foreach (var lambda in call.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>())
                 yield return lambda.Body;
         }
+    }
+
+    public static List<string> MainThreadProblems(string file, string text, Dictionary<string, string> allow) =>
+        MainThreadProblems(file, Parse(text).GetRoot(), allow, new HashSet<string>(StringComparer.Ordinal)).ToList();
+
+    public static List<string> BlockingProblems(string file, string text, Dictionary<string, string> allow) =>
+        BlockingProblems(file, Parse(text).GetRoot(), allow, new HashSet<string>(StringComparer.Ordinal)).ToList();
+
+    static string? SystemOf(SyntaxNode node) =>
+        node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault(t => t.BaseList != null &&
+            t.BaseList.Types.Select(b => LastName(b.Type.ToString())).Any(b => b is "ISystem" or "SystemBase"))?.Identifier.Text;
+
+    static bool IsJobRun(InvocationExpressionSyntax call, MemberAccessExpressionSyntax m) =>
+        m.Name.Identifier.Text == "Run" && LastName(m.Expression.ToString()) != "Task" &&
+        call.ArgumentList.Arguments.Count <= 1 && call.ArgumentList.Arguments.All(a => a.RefKindKeyword.IsKind(SyntaxKind.None));
+
+    static IEnumerable<string> MainThreadProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used)
+    {
+        foreach (var loop in root.DescendantNodes().OfType<CommonForEachStatementSyntax>())
+        {
+            if (!loop.Expression.DescendantNodesAndSelf().OfType<MemberAccessExpressionSyntax>().Any(m => m.ToString().StartsWith("SystemAPI.Query", StringComparison.Ordinal))) continue;
+            var owner = SystemOf(loop);
+            if (owner == null) continue;
+            string key = $"{owner}.Query";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = loop.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: foreach over SystemAPI.Query runs on the main thread; schedule an IJobEntity or IJobChunk or list {key} in {AllowFile} with a reason";
+        }
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax m || !IsJobRun(call, m)) continue;
+            var owner = SystemOf(call);
+            if (owner == null) continue;
+            string key = $"{owner}.Run";
+            if (allow.ContainsKey(key)) { used.Add(key); continue; }
+            int line = call.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+            yield return $"{file}:{line}: {m} runs a job on the main thread; schedule it or list {key} in {AllowFile} with a reason";
+        }
+    }
+
+    public static HashSet<string> HandleTypes(IEnumerable<SyntaxNode> roots) =>
+        Grow(new HashSet<string>(StringComparer.Ordinal) { "JobHandle", "Task" }, roots.SelectMany(r => r.DescendantNodes().OfType<TypeDeclarationSyntax>()).Where(t => !IsHidden(t)));
+
+    static HashSet<string> LocalHandles(SyntaxNode root, HashSet<string> shared) =>
+        Grow(new HashSet<string>(shared, StringComparer.Ordinal), root.DescendantNodes().OfType<TypeDeclarationSyntax>());
+
+    static bool IsHidden(TypeDeclarationSyntax t) =>
+        t.Parent is TypeDeclarationSyntax && !t.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword) || m.IsKind(SyntaxKind.InternalKeyword));
+
+    static HashSet<string> Grow(HashSet<string> handles, IEnumerable<TypeDeclarationSyntax> candidates)
+    {
+        var types = candidates.Where(t => !IsSystem(t)).ToList();
+        bool grew = true;
+        while (grew)
+        {
+            grew = false;
+            foreach (var t in types)
+                if (!handles.Contains(t.Identifier.Text) && InstanceMembers(t).Any(m => HoldsHandle(m.Type, handles)))
+                    grew |= handles.Add(t.Identifier.Text);
+        }
+        return handles;
+    }
+
+    static bool IsSystem(TypeDeclarationSyntax t) =>
+        t.BaseList != null && t.BaseList.Types.Select(b => LastName(b.Type.ToString())).Any(b => b is "ISystem" or "SystemBase");
+
+    static bool HoldsHandle(TypeSyntax type, HashSet<string> handles) =>
+        type.DescendantNodesAndSelf().OfType<SimpleNameSyntax>().Any(n => handles.Contains(n.Identifier.Text));
+
+    public static List<string> TeardownProblems(string file, string text, Dictionary<string, string> allow)
+    {
+        var root = Parse(text).GetRoot();
+        return TeardownProblems(file, root, allow, new HashSet<string>(StringComparer.Ordinal), HandleTypes(new[] { root })).ToList();
+    }
+
+    static IEnumerable<string> TeardownProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used, HashSet<string> shared)
+    {
+        var handles = LocalHandles(root, shared);
+        foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>().Where(IsSystem))
+        {
+            var destroy = type.Members.OfType<MethodDeclarationSyntax>().FirstOrDefault(m => m.Identifier.Text == "OnDestroy");
+            var named = destroy == null ? new HashSet<string>(StringComparer.Ordinal) : TornDown(Reached(type, destroy));
+            foreach (var (member, typeSyntax, at) in InstanceMembers(type))
+            {
+                if (!HoldsHandle(typeSyntax, handles) || named.Contains(member)) continue;
+                string key = $"{type.Identifier.Text}.{member}";
+                if (allow.ContainsKey(key)) { used.Add(key); continue; }
+                int line = at.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                yield return $"{file}:{line}: {key} holds a pending job or task that OnDestroy never tears down; call JobPoll.Teardown or Owned.Release on it in OnDestroy or list {key} in {AllowFile} with a reason";
+            }
+        }
+    }
+
+    static readonly string[] TeardownMembers = { "Teardown", "Complete", "Dispose", "Release", "Finish" };
+
+    static bool IsTeardown(InvocationExpressionSyntax call) => TeardownMembers.Contains(CalledName(call.Expression));
+
+    static HashSet<string> TornDown(IEnumerable<MethodDeclarationSyntax> methods)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Add(SyntaxNode n) { foreach (var i in n.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()) names.Add(i.Identifier.Text); }
+        foreach (var m in methods)
+        {
+            foreach (var call in m.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(IsTeardown))
+            {
+                if (call.Expression is MemberAccessExpressionSyntax acc) Add(acc.Expression);
+                else if (call.Expression is MemberBindingExpressionSyntax && call.Parent is ConditionalAccessExpressionSyntax cond) Add(cond.Expression);
+                Add(call.ArgumentList);
+            }
+            foreach (var loop in m.DescendantNodes().OfType<CommonForEachStatementSyntax>())
+                if (loop.Statement.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(IsTeardown)) Add(loop.Expression);
+            foreach (var local in m.DescendantNodes().OfType<VariableDeclaratorSyntax>().Reverse())
+                if (local.Initializer != null && names.Contains(local.Identifier.Text)) Add(local.Initializer.Value);
+        }
+        return names;
     }
 
     static IEnumerable<string> BlockingProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used)
@@ -424,6 +544,7 @@ public static class Linter
     static string CalledName(ExpressionSyntax e) => e switch
     {
         MemberAccessExpressionSyntax m => m.Name.Identifier.Text,
+        MemberBindingExpressionSyntax b => b.Name.Identifier.Text,
         IdentifierNameSyntax i => i.Identifier.Text,
         _ => "",
     };

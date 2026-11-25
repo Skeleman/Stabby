@@ -155,7 +155,8 @@ namespace Stabby.Game
 
         void Apply(EntityCommandBuffer ecb)
         {
-            bool cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc);
+            bool cols = SystemAPI.TryGetSingletonRW<ObjectColumns>(out var ocRef);
+            var oc = cols ? ocRef.ValueRO : default;
             fresh.Clear();
             for (int k = 0; k < batch.Count; k++)
             {
@@ -321,7 +322,8 @@ namespace Stabby.Game
 
         void Apply()
         {
-            bool cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc);
+            bool cols = SystemAPI.TryGetSingletonRW<ObjectColumns>(out var ocRef);
+            var oc = cols ? ocRef.ValueRO : default;
             var view = World.GetExistingSystemManaged<ObjectViewSystem>();
             for (int k = 0; k < resolving.Count; k++)
             {
