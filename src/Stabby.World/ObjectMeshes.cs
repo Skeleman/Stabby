@@ -222,8 +222,8 @@ namespace Stabby.World
             return Normalised(b);
         }
 
-        static readonly int[] DripSegments = { 10, 7, 5, 5 };
-        static readonly int[] DripRings = { 8, 5, 3, 3 };
+        static readonly int[] DripSegments = { 18, 12, 8, 6 };
+        static readonly int[] DripRings = { 12, 7, 4, 3 };
         public const float DripSkirt = 0.12f;
 
         static void Turn(int n, out float c, out float s)
@@ -265,7 +265,7 @@ namespace Stabby.World
             for (int j = 0; j <= rings; j++)
             {
                 float u = j == 0 ? 0f : (j - 1f) / rings, t = u * (0.55f + 0.45f * u), y = j == 0 ? -DripSkirt : t, low = (1f - t) * (1f - t) * (1f - t);
-                float r = j == 0 ? baseR * (1f + flare) * 1.1f : baseR * ((1f - t) * (1f + bulge * t) + flare * low);
+                float sl = 1f - t, taper = sl + 0.35f * ((float)Math.Sqrt(sl) - sl), r = j == 0 ? baseR * (1f + flare) * 1.1f : baseR * (taper * (1f + bulge * t) + flare * low);
                 float ox = dx * t * t + rng.Range(-0.03f, 0.03f) * baseR, oz = dz * t * t + rng.Range(-0.03f, 0.03f) * baseR;
                 float w1 = b1 + (a1 - b1) * low, w2 = b2 + (a2 - b2) * low;
                 int ring = b.P.Count / 3;
@@ -273,7 +273,7 @@ namespace Stabby.World
                 for (int k = 0; k < n; k++)
                 {
                     float c1 = dirX[k] * l1x + dirZ[k] * l1z, c2 = dirX[k] * l2x + dirZ[k] * l2z;
-                    float m = 1f + w1 * c1 + w2 * (2f * c2 * c2 - 1f) + rng.Range(-0.05f, 0.05f);
+                    float m = 1f + w1 * c1 + w2 * (2f * c2 * c2 - 1f) + rng.Range(-0.015f, 0.015f);
                     b.Add(ox + dirX[k] * r * m, y, oz + dirZ[k] * r * m);
                 }
                 if (j == 0) continue;
