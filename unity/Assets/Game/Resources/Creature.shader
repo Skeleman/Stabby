@@ -35,12 +35,18 @@ Shader "Stabby/Creature"
         #endif
 
         #ifdef STABBY_CREATURE_BUFFER
-        struct CreatureInstance { float4 r0, r1, r2, fade; uint fur, group, pad0, pad1; };
-        StructuredBuffer<CreatureInstance> _Creatures;
+        struct CreaturePart { float4 fade; uint bone, fur, group, pad; };
+        StructuredBuffer<CreaturePart> _Creatures;
+        ByteAddressBuffer _CreatureBones;
         StructuredBuffer<float4> _CreatureFur;
         int _CreatureStart;
-        CreatureInstance CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
-        float4x4 CreatureMatrix(CreatureInstance c) { return float4x4(c.r0, c.r1, c.r2, float4(0, 0, 0, 1)); }
+        CreaturePart CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
+        float4x4 CreatureMatrix(CreaturePart c)
+        {
+            uint o = c.bone * 48;
+            float4 p1 = asfloat(_CreatureBones.Load4(o)), p2 = asfloat(_CreatureBones.Load4(o + 16)), p3 = asfloat(_CreatureBones.Load4(o + 32));
+            return float4x4(p1.x, p1.w, p2.z, p3.y, p1.y, p2.x, p2.w, p3.z, p1.z, p2.y, p3.x, p3.w, 0, 0, 0, 1);
+        }
         float3 CreatureNormal(float4x4 m, float3 n)
         {
             float3 s2 = float3(dot(m._m00_m10_m20, m._m00_m10_m20), dot(m._m01_m11_m21, m._m01_m11_m21), dot(m._m02_m12_m22, m._m02_m12_m22));
@@ -102,6 +108,7 @@ Shader "Stabby/Creature"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
+            #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; CREATURE_INPUT };
             struct Varyings
@@ -143,7 +150,7 @@ Shader "Stabby/Creature"
             half4 frag(Varyings i) : SV_Target
             {
                 #ifdef STABBY_CREATURE_BUFFER
-                CreatureInstance ci = CreatureAt(i.creatureId);
+                CreaturePart ci = CreatureAt(i.creatureId);
                 float4 fade = ci.fade;
                 float4x4 mm = CreatureMatrix(ci);
                 float3 baseC = _CreatureFur[3 * ci.fur].rgb, accentC = _CreatureFur[3 * ci.fur + 1].rgb, darkC = _CreatureFur[3 * ci.fur + 2].rgb;
@@ -196,6 +203,8 @@ Shader "Stabby/Creature"
                 float above = max(wp.y - ground, 0);
                 float ao = lerp(0.8, 1, smoothstep(0, min(0.6 * size, 0.5), above)) * lerp(1, 0.6, saturate(-n.y));
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
+                float sky = CaveSky(wp);
+                l.color *= sky;
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)
                 {
@@ -204,13 +213,13 @@ Shader "Stabby/Creature"
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
                     bounce = lerp(_StabbyGround.rgb, lerp(_StabbyGround.rgb, lit, 0.5), smoothstep(2.5 * size + 2, 0, above));
                 }
-                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
+                float3 ambient = (_StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5)) * sky;
                 float3 v = normalize(_WorldSpaceCameraPos - wp);
                 float wrap = eye ? saturate(dot(n, l.direction)) : saturate((dot(n, l.direction) + 0.35) / 1.35);
                 float rim = eye ? 0 : pow(1 - saturate(dot(n, v)), 4) * 0.25 * saturate(dot(-v, l.direction) + 0.3);
                 float3 c = LookColor(albedo, 1) * (l.color * (wrap + rim) * l.shadowAttenuation + (ambient + LocalLights(wp, n, i.positionCS)) * ao);
                 c += eye ? l.color * l.shadowAttenuation * 0.6 * pow(saturate(dot(n, normalize(l.direction + v))), 120) + ambient * 0.05 * pow(1 - saturate(dot(n, v)), 2) : LookSheen(n, v, l.direction, l.color * l.shadowAttenuation, tmRough) * ao * 0.5;
-                return half4(MixFog(c, i.local.w), 1);
+                return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.local.w), 1);
             }
             ENDHLSL
         }

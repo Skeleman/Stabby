@@ -93,6 +93,7 @@ namespace Stabby.Game.Editor
                     float d = HomeD(i);
                     if (d < best) { best = d; coast = i; }
                 }
+            if (int.TryParse(System.Environment.GetEnvironmentVariable("STABBY_SHORE_CELL"), out int pinned) && pinned >= 0 && pinned < n * n) coast = pinned;
             Vector3 benchEye = cam.transform.position;
             Quaternion benchRot = cam.transform.rotation;
             if (coast >= 0)
@@ -109,7 +110,7 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(ground.HeightAt(eye.x, eye.z), 0) + 6f;
                 target = new Vector3(c.x - inland.x * 40f - side.x * 10f, 0, c.y - inland.y * 40f - side.y * 10f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-                GameStatus.Lines["~waterlook shore"] = $"coast {c.x:F0},{c.y:F0}, inland {inland.x:F2},{inland.y:F2}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}";
+                GameStatus.Lines["~waterlook shore"] = $"coast cell {coast} at {c.x:F0},{c.y:F0}, inland {inland.x:F2},{inland.y:F2}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}";
                 for (var e = LookPair(cam, dir, "waterlook-shore"); e.MoveNext();) yield return null;
                 var high = new Vector3(c.x + inland.x * 70f, 0, c.y + inland.y * 70f);
                 high.y = Mathf.Max(ground.HeightAt(high.x, high.z), 0) + 35f;

@@ -111,6 +111,7 @@ namespace Stabby.World
             stage?.Invoke("erosion");
             var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             stage?.Invoke("climate");
+            Erosion.DeepenNearShore(c, sea, h);
             var water = Hydrology.Build(c, h, sea, climate.PrecipitationMm, sketch.Landmark);
             stage?.Invoke("hydrology");
 

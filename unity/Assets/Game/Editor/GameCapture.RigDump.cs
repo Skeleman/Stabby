@@ -57,7 +57,8 @@ namespace Stabby.Game.Editor
             for (int i = 0; i < instances.Length; i++)
             {
                 var x = instances[i];
-                rows.Add($"{F(x.R0.x)} {F(x.R0.y)} {F(x.R0.z)} {F(x.R0.w)} {F(x.R1.x)} {F(x.R1.y)} {F(x.R1.z)} {F(x.R1.w)} {F(x.R2.x)} {F(x.R2.y)} {F(x.R2.z)} {F(x.R2.w)} group {x.Group}");
+                var b = x.Bone;
+                rows.Add($"{F(b.c0.x)} {F(b.c1.x)} {F(b.c2.x)} {F(b.c3.x)} {F(b.c0.y)} {F(b.c1.y)} {F(b.c2.y)} {F(b.c3.y)} {F(b.c0.z)} {F(b.c1.z)} {F(b.c2.z)} {F(b.c3.z)} group {x.Group}");
             }
             rows.Sort(System.StringComparer.Ordinal);
             foreach (var r in rows) lines.Add($"{label} gpu {r}");
