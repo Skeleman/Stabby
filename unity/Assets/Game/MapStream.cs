@@ -38,8 +38,6 @@ namespace Stabby.Game
         public NativeArray<ulong> HostSums;
         public NativeArray<ChunkSlot> Slots;
         public NativeList<byte> Arena;
-        public int SumsIn, Remaining, Streamed, PiecesIn;
-        public long BytesIn;
 
         public int Length(int k) => Length(Slots[k]);
 
@@ -51,6 +49,12 @@ namespace Stabby.Game
             Slots.Dispose();
             Arena.Dispose();
         }
+    }
+
+    public struct ChunkCounts : IComponentData
+    {
+        public int SumsIn, Remaining, Streamed, PiecesIn;
+        public long BytesIn;
     }
 
     public static class ChunkPieces
@@ -126,7 +130,7 @@ namespace Stabby.Game
         [WithAll(typeof(ReceiveRpcCommandRequest))]
         partial struct SumJob : IJobEntity
         {
-            public ComponentLookup<ChunkInbox> Inbox;
+            public ComponentLookup<ChunkCounts> Counts;
             public Entity Box;
             public NativeArray<ulong> HostSums;
             public EntityCommandBuffer Ecb;
@@ -137,9 +141,9 @@ namespace Stabby.Game
                 int k = sum.Index;
                 if (k < 0 || k >= HostSums.Length) return;
                 HostSums[k] = sum.Sum;
-                var box = Inbox[Box];
-                box.SumsIn++;
-                Inbox[Box] = box;
+                var c = Counts[Box];
+                c.SumsIn++;
+                Counts[Box] = c;
             }
         }
 
@@ -147,7 +151,7 @@ namespace Stabby.Game
         [WithAll(typeof(ReceiveRpcCommandRequest))]
         partial struct PieceJob : IJobEntity
         {
-            public ComponentLookup<ChunkInbox> Inbox;
+            public ComponentLookup<ChunkCounts> Counts;
             public Entity Box;
             public NativeArray<ChunkSlot> Slots;
             public NativeList<byte> Arena;
@@ -170,29 +174,30 @@ namespace Stabby.Game
                 for (int j = 0; j < p.Bytes.Length; j++) Arena[at + j] = p.Bytes[j];
                 if (p.Piece == p.Pieces - 1) slot.Last = p.Bytes.Length;
                 slot.Got++;
-                var box = Inbox[Box];
-                box.PiecesIn++;
-                box.BytesIn += p.Bytes.Length;
+                var c = Counts[Box];
+                c.PiecesIn++;
+                c.BytesIn += p.Bytes.Length;
                 if (slot.Got == slot.Pieces)
                 {
                     slot.Wanted = false;
-                    box.Remaining--;
-                    box.Streamed++;
+                    c.Remaining--;
+                    c.Streamed++;
                 }
-                Inbox[Box] = box;
+                Counts[Box] = c;
                 Slots[k] = slot;
             }
         }
 
-        ComponentLookup<ChunkInbox> inbox;
+        ComponentLookup<ChunkCounts> counts;
         EntityQuery pieces;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<ChunkInbox>();
+            state.RequireForUpdate<ChunkCounts>();
             state.RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
-            inbox = state.GetComponentLookup<ChunkInbox>();
+            counts = state.GetComponentLookup<ChunkCounts>();
             pieces = SystemAPI.QueryBuilder().WithAll<ChunkPieceRpc, ReceiveRpcCommandRequest>().Build();
         }
 
@@ -202,11 +207,11 @@ namespace Stabby.Game
             var box = SystemAPI.GetSingleton<ChunkInbox>();
             var e = SystemAPI.GetSingletonEntity<ChunkInbox>();
             var ecb = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(state.WorldUnmanaged);
-            bool receiving = box.Remaining > 0;
+            bool receiving = SystemAPI.GetComponent<ChunkCounts>(e).Remaining > 0;
             if (!receiving) ecb.DestroyEntity(pieces, EntityQueryCaptureMode.AtRecord);
-            inbox.Update(ref state);
-            state.Dependency = new SumJob { Inbox = inbox, Box = e, HostSums = box.HostSums, Ecb = ecb }.Schedule(state.Dependency);
-            if (receiving) state.Dependency = new PieceJob { Inbox = inbox, Box = e, Slots = box.Slots, Arena = box.Arena, Ecb = ecb }.Schedule(pieces, state.Dependency);
+            counts.Update(ref state);
+            state.Dependency = new SumJob { Counts = counts, Box = e, HostSums = box.HostSums, Ecb = ecb }.Schedule(state.Dependency);
+            if (receiving) state.Dependency = new PieceJob { Counts = counts, Box = e, Slots = box.Slots, Arena = box.Arena, Ecb = ecb }.Schedule(pieces, state.Dependency);
         }
     }
 }
