@@ -16,7 +16,7 @@ namespace Stabby.World
         public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column" };
         public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4;
         public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
-        public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 12f, CaveDripSurveyM = 80f;
+        public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 10f, CaveDripSurveyM = 150f;
 
         [ThreadStatic] static List<float> caveSeenX, caveSeenZ;
         [ThreadStatic] static FeatureEdit[] caveRock;

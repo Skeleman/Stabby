@@ -6,6 +6,7 @@ test DiscoveryTests.RuinsAppearOnSteadyGround 45 runs discovery placement on ful
 test ObjectTests.TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse 40 scans every cliff foot of a world for talus
 test ObjectTests.ObjectPlacementIsDeterministicAndVaried 27 places objects for a world twice and compares
 test CaveTests.TunnelsAreNarrowFineAndVaried 24 carves and meshes cave tunnels on full worlds
+test CaveTests.CaveObjectsAreCommonAndPass 30 places and checks every cave object on four worlds
 test ObjectTests.ObjectsStayInTheirBiomes 21 checks every placed object against its biome
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
