@@ -16,6 +16,7 @@ public class WorldTests
     static GeneratedWorld Gen(ulong seed, int size = 256) => TestWorlds.World(seed, size);
 
     [Fact]
+    [Trait("Category", "Sweep")]
     public void TwentySeedsPassEveryCheck()
     {
         var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
