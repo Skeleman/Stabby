@@ -46,9 +46,6 @@ ObjectViewSystem.CompleteAllTrackedJobs once, in OnDestroy, before disposing til
 TerrainViewSystem.CompleteAllTrackedJobs once per Audit call, a diagnostic only the capture tools make
 TerrainViewSystem.Complete once per Audit or Seam call, diagnostics only the capture tools make
 ClientMapSystem.Query reads the one WorldInfoRpc once per join
-ObjectColumnsSystem.Query debt: reads player positions every frame, one per player, to pick collision regions
-ServerObjectDeltaSystem.Query debt: reads new connections, player positions and removal RPCs every frame, a few entities
-ClientObjectDeltaSystem.Query debt: reads replicated delta and reply RPCs and the one local player every frame
 ClientGoInGameSystem.Query sends the one connection in game once per join
 ServerGoInGameSystem.Query handles each go-in-game RPC once, one per join
 ServerPlayerSystem.Query spawns a player for each connection newly in game, once per join
