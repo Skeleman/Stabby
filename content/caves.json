@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "chance": 0.35,
   "classes": [
-    { "id": "chamber", "weight": 0.35, "nodes": [1, 1], "radius": [30, 38], "edge": [70, 120], "turn": 0.5, "chamberChance": 1, "chamber": [1.3, 1.6], "warp": 0.12, "lumps": 0.03, "roomLumps": 0.06 },
-    { "id": "branching", "weight": 0.4, "nodes": [3, 5], "radius": [30, 38], "edge": [70, 120], "turn": 0.5, "chamberChance": 0.35, "chamber": [1.3, 1.6], "warp": 0.12, "lumps": 0.03, "roomLumps": 0.06 },
-    { "id": "labyrinth", "fallback": "branching", "weight": 0.15, "nodes": [8, 14], "loops": 3, "entrances": 2, "radius": [30, 34], "edge": [60, 100], "turn": 0.7, "chamberChance": 0.2, "chamber": [1.2, 1.4], "warp": 0.15, "lumps": 0.03, "roomLumps": 0.06 },
-    { "id": "hall", "fallback": "branching", "weight": 0.1, "nodes": [2, 2], "entrances": 3, "bridges": 2, "radius": [30, 32], "edge": [50, 60], "turn": 0.4, "hall": [40, 48], "bridge": [9, 11], "warp": 0.1, "lumps": 0.03, "roomLumps": 0.06 }
+    { "id": "chamber", "weight": 0.35, "nodes": [1, 1], "radius": [5.4, 8], "edge": [70, 120], "turn": 0.5, "chamberChance": 1, "chamber": [39, 60], "warp": 0.12, "lumps": 0.03, "roomLumps": 0.06 },
+    { "id": "branching", "weight": 0.4, "nodes": [3, 5], "radius": [5.4, 8], "edge": [70, 120], "turn": 0.5, "chamberChance": 0.35, "chamber": [39, 60], "warp": 0.12, "lumps": 0.03, "roomLumps": 0.06 },
+    { "id": "labyrinth", "fallback": "branching", "weight": 0.15, "nodes": [8, 14], "loops": 3, "entrances": 2, "radius": [5.4, 7], "edge": [60, 100], "turn": 0.7, "chamberChance": 0.2, "chamber": [36, 48], "warp": 0.15, "lumps": 0.03, "roomLumps": 0.06 },
+    { "id": "hall", "fallback": "branching", "weight": 0.1, "nodes": [2, 2], "entrances": 3, "bridges": 2, "radius": [5.4, 6.5], "edge": [50, 60], "turn": 0.4, "hall": [40, 48], "bridge": [9, 11], "warp": 0.1, "lumps": 0.03, "roomLumps": 0.06 }
   ]
 }

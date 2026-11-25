@@ -16,7 +16,7 @@ namespace Stabby.Game.Editor
     {
         static readonly int[] BenchCounts = { 10, 50, 100, 250, 500 };
         static readonly string[] BenchTiers = { "close", "mid", "far", "still", "hidden" };
-        const int BenchSamples = 30;
+        const int BenchSamples = 30, BenchFrames = 120;
         const string BenchFlag = "STABBY_CREATURE_PATH";
 
         static float BenchPixels(BlobAssetReference<CreatureRig> rigRef, int tier, float q)
@@ -266,6 +266,11 @@ namespace Stabby.Game.Editor
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
             using var buildRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureBuildSystem)), 4);
             using var animRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureAnimSystem)), 4);
+            using var drawRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureDrawSystem)), 4);
+            using var submitRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, $"{view.Name} Stabby.Game.DrawSubmitSystem", 4);
+            using var lightRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(LightPresenterSystem)), 4);
+            using var terrainRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(TerrainViewSystem)), 4);
+            using var objectRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(ObjectViewSystem)), 4);
 
             for (int r = 0; r < BenchCounts.Length; r++)
             {
@@ -310,7 +315,50 @@ namespace Stabby.Game.Editor
                     var times = TimeBoth(view, anim);
                     double steadyBuild = TimeSystems(view, build, BenchSamples);
                     double per = n > 0 ? (times.Par - baseline.Par) * 1000.0 / n : 0;
-                    lines.Add($"  N {n} {BenchTiers[t]} ({px:F1} px): anim {times.Par:F3} ms parallel ({per:F2} us per creature over baseline) / {times.Single:F3} ms one thread; build steady {steadyBuild:F3} ms; frame anim marker {animRec.LastValue / 1e6:F3} ms; {counts}{(CreaturePath.Instanced && draw != null ? $", instances drawn {draw.Drawn}" : "")}");
+                    lines.Add($"  N {n} {BenchTiers[t]} ({px:F1} px): anim {times.Par:F3} ms parallel ({per:F2} us per creature over baseline) / {times.Single:F3} ms one thread; build steady {steadyBuild:F3} ms; frame anim marker {animRec.LastValue / 1e6:F3} ms; {counts}{(CreaturePath.Instanced && draw != null ? $", instances drawn {draw.Drawn}, deferred flushes {draw.Deferred}" : "")}");
+                    if (n >= 100 && t < 3)
+                    {
+                        var hd = new RenderTexture(1920, 1080, 24);
+                        var main = new List<double>(BenchFrames);
+                        var drawMs = new List<double>(BenchFrames);
+                        var lightMs = new List<double>(BenchFrames);
+                        var renderMs = new List<double>(BenchFrames);
+                        var animMs = new List<double>(BenchFrames);
+                        var terrainMs = new List<double>(BenchFrames);
+                        var objectMs = new List<double>(BenchFrames);
+                        for (int k = 0; k < BenchFrames + 5; k++)
+                        {
+                            yield return null;
+                            cam.targetTexture = hd;
+                            long r0 = Stopwatch.GetTimestamp();
+                            cam.Render();
+                            long r1 = Stopwatch.GetTimestamp();
+                            cam.targetTexture = null;
+                            if (k < 5) continue;
+                            main.Add(mainRec.LastValue / 1e6);
+                            drawMs.Add(drawRec.LastValue / 1e6 + submitRec.LastValue / 1e6);
+                            lightMs.Add(lightRec.LastValue / 1e6);
+                            animMs.Add(animRec.LastValue / 1e6);
+                            terrainMs.Add(terrainRec.LastValue / 1e6);
+                            objectMs.Add(objectRec.LastValue / 1e6);
+                            renderMs.Add((r1 - r0) * 1000.0 / Stopwatch.Frequency);
+                        }
+                        lines.Add($"  N {n} {BenchTiers[t]} 1080p frames: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms; creature draw markers median {Pct(drawMs, 0.5):F3} ms, p99 {Pct(drawMs, 0.99):F3} ms; light presenter marker median {Pct(lightMs, 0.5):F3} ms, p99 {Pct(lightMs, 0.99):F3} ms; 1080p camera render median {Pct(renderMs, 0.5):F2} ms over {BenchFrames} frames");
+                        lines.Add($"  N {n} {BenchTiers[t]} 1080p markers: creature anim median {Pct(animMs, 0.5):F3} ms, p99 {Pct(animMs, 0.99):F3} ms; terrain view median {Pct(terrainMs, 0.5):F3} ms, p99 {Pct(terrainMs, 0.99):F3} ms; object view median {Pct(objectMs, 0.5):F3} ms, p99 {Pct(objectMs, 0.99):F3} ms");
+                        if (n == BenchCounts[BenchCounts.Length - 1] && t == 0)
+                        {
+                            cam.targetTexture = hd;
+                            cam.Render();
+                            RenderTexture.active = hd;
+                            var tex = new Texture2D(1920, 1080, TextureFormat.RGB24, false);
+                            tex.ReadPixels(new Rect(0, 0, 1920, 1080), 0, 0);
+                            System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, $"creature-bench-{path}-{n}-close.png"), tex.EncodeToPNG());
+                            RenderTexture.active = null;
+                            cam.targetTexture = null;
+                            Object.DestroyImmediate(tex);
+                        }
+                        Object.DestroyImmediate(hd);
+                    }
                 }
 
                 int left = CreatureBuildSystem.Count - n;
