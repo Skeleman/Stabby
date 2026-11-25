@@ -46,6 +46,7 @@ namespace Stabby.World
                 float top = b[k + 5] + BogHeadM;
                 list.Add(Pool(BogPool, peat, b[k], b[k + 1], BogReach(b[k + 2], b[k + 3], top), b[k + 3], b[k + 4] - BogHeadM, top));
             }
+            list.AddRange(CavePools());
             return list.ToArray();
         }
 

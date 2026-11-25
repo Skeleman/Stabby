@@ -239,6 +239,30 @@ namespace Stabby.Game.Editor
             UndimmedShot(cam, dir, shotName + "-debug-probe-undimmed", CaveDebugExposure);
             Object.DestroyImmediate(probe);
             Object.DestroyImmediate(probeMat);
+            var rooms = edits.Where(e => e.Shape == FeatureEdit.CaveRoom).ToList();
+            int pool = -1;
+            for (int q = 0; q < edits.Length; q++)
+                if (Underground.PoolBasin(rooms, edits[q]) && (pool < 0 || edits[q].W > edits[pool].W)) pool = q;
+            if (pool >= 0)
+            {
+                var pe = edits[pool];
+                var pc = new Vector3(pe.Ax, pe.Ay + pe.H + pe.R - Underground.PoolTopM, pe.Az);
+                var near = rooms.OrderBy(e => new Vector2(e.Ax - pc.x, e.Az - pc.z).sqrMagnitude).First();
+                var back = new Vector3(near.Ax - pc.x, 0, near.Az - pc.z);
+                back = back.sqrMagnitude > 1f ? back.normalized : Vector3.forward;
+                float px = pc.x + back.x * (pe.W + 3f), py = pc.y + 1f, pz = pc.z + back.z * (pe.W + 3f);
+                Walk.Step(ground, ground.EditsNear(px, pz, Walk.Radius), cols, ground.WalkStep, ref px, ref py, ref pz, 0, 0, Walk.Reach);
+                eye = new Vector3(px, py + 1.7f, pz);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(pc - back * pe.W * 0.3f - eye));
+                waited = LoadWaitTotal();
+                for (var w = Settle(120); w.MoveNext();) yield return null;
+                lines.Add($"cave pool {pool}: reach {pe.W:F1} m, floor {pc.y:F1}, centre {pc.x:F0},{pc.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}: stream wait {LoadWaitTotal() - waited:F2} s");
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "caves-pool");
+                ExposedShot(cam, dir, "caves-pool-debug-exposure", CaveDebugExposure);
+                GeometryShot(cam, dir, "caves-pool-debug-unlit");
+            }
+            else lines.Add("cave pool: none in this world");
             var sky = DayNightSystem.Shown;
             lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; the debug-probe pair adds a 1.5 m Stabby/Object sphere 4 m ahead in the hall or chamber, dimmed by the cave volume and then undimmed; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
             GameStatus.Lines["~caves"] = string.Join("\n", lines);

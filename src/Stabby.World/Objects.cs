@@ -420,7 +420,7 @@ namespace Stabby.World
             return gully ? 1.6f * pl.FanM : pl.FanM;
         }
 
-        static void FanDir(int k, float diag, out float ux, out float uz)
+        internal static void FanDir(int k, float diag, out float ux, out float uz)
         {
             int a = k & 7;
             ux = a == 0 ? 1 : a == 4 ? -1 : a == 2 || a == 6 ? 0 : a < 2 || a > 6 ? diag : -diag;

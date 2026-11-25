@@ -782,7 +782,7 @@ namespace Stabby.World
             return null;
         }
 
-        static FeatureEdit Disc(int kind, float x, float z, float top, float bottom, float r, float round, float taper, float p, float n, float seed, float mud, float d)
+        internal static FeatureEdit Disc(int kind, float x, float z, float top, float bottom, float r, float round, float taper, float p, float n, float seed, float mud, float d)
         {
             float y0 = bottom + round, y1 = top - round, w = r + (taper != 0f ? taper * (y1 - y0) - round * ((float)Math.Sqrt(1f + taper * taper) - 1f) : 0f) - round;
             return new FeatureEdit
