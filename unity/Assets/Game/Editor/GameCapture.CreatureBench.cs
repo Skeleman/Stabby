@@ -169,7 +169,7 @@ namespace Stabby.Game.Editor
                 foreach (var h in handles)
                 {
                     var d = Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle.GetDescription(h);
-                    if (d.Name != name || d.Category.Name == ProfilerCategory.Scripts.Name || d.UnitType != Unity.Profiling.LowLevel.ProfilerMarkerDataUnit.TimeNanoseconds) continue;
+                    if (d.Name != name || d.Category.Name == ProfilerCategory.Scripts.Name || d.UnitType != ProfilerMarkerDataUnit.TimeNanoseconds) continue;
                     var rec = new ProfilerRecorder(h, capacity, ProfilerRecorderOptions.Default);
                     rec.Start();
                     recs.Add(rec);
