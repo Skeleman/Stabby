@@ -21,8 +21,8 @@ description: How a Stabby lane agent works a card cheaply - ids, checks, shots a
    in stabby-checks.csv beside the git dir). WIP commits need no check. Optionally,
    before hand-back, `check.sh "" --full` on the merged-up branch records the tree,
    so merge.sh skips its rerun. It finds the user-profile .NET SDK itself (or set DOTNET_HOME).
-4. Shots: capture once on final code with `-force-d3d11` (d3d12 fence
-   timeouts crash captures), view each at <= 1280 px, once. Kill a hung or
+4. Shots: capture once on final code (the project runs D3D11 only; d3d12
+   fence timeouts crashed captures), view each at <= 1280 px, once. Kill a hung or
    crashed capture editor by its PID.
 5. Commit resumable WIP, push the branch, then hand back with: what changed,
    check.sh summary lines, sweep numbers, GeneratorVersion, shot paths, open
