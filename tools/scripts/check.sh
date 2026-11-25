@@ -48,7 +48,7 @@ rm -f out/check/*.sum out/check/*.rc
 phase_tests() {
   local s=$SECONDS rc=0 targs=(); [ -n "$tf" ] && targs=(--filter "$tf")
   dotnet test -c Release --no-build "${targs[@]}" --logger "console;verbosity=normal" > out/check/test.log 2>&1 || rc=1
-  { echo "tests: $(grep -E "Passed!|Failed!|No test matches" out/check/test.log | sed -E 's/ - Stabby.*//' | tr -s ' '), $((SECONDS - s)) s"
+  { echo "tests: $(grep -h -E "No test matches|^Test Run (Successful|Failed|Aborted)" out/check/test.log | head -1) $(sed -n -E 's/^ *(Total tests|Passed|Failed): ([0-9]+)/\1 \2/p' out/check/test.log | paste -sd, - | sed 's/,/, /g'), $((SECONDS - s)) s"
     grep -E "^\s+Failed " out/check/test.log | head -5
     echo "slowest: $(awk '$1 == "Passed" && $NF == "s]" { t = 0; n = $2; sub(/\(.*/, "", n); sub(/.*\./, "", n); for (i = 3; i < NF; i++) { v = $i; gsub(/\[/, "", v); if ($(i+1) == "m") t += v * 60; else if ($(i+1) == "s]") t += v } print t, n }' out/check/test.log | sort -rn | head -3 | awk '{ printf "%s%s %d s", (NR > 1 ? ", " : ""), $2, $1 }')"; } > out/check/tests.sum
   grep -q "No test matches" out/check/test.log && rc=0
@@ -56,7 +56,7 @@ phase_tests() {
 }
 phase_sweep() {
   local s=$SECONDS rc=0 line
-  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 > out/check/sweep$2.log 2>&1 || rc=1
+  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 --low 1 > out/check/sweep$2.log 2>&1 || rc=1
   line=$(grep -E "seeds at" out/check/sweep$2.log | tail -1); [[ "$line" == *" 0 violations"* ]] || rc=1
   echo "sweep $2: $line, $((SECONDS - s)) s" > out/check/sweep$2.sum; echo $rc > out/check/sweep$2.rc
 }
@@ -67,12 +67,12 @@ phase_unity() {
   while kill -0 $up 2> /dev/null; do
     [ $done_at = 0 ] && grep -q "CodeReloadManager destroyed" out/check/unity.log 2> /dev/null && done_at=$SECONDS
     if { [ $done_at != 0 ] && [ $((SECONDS - done_at)) -ge 30 ]; } || [ $((SECONDS - s)) -ge 1800 ]; then
-      stuck=", stopped after $((SECONDS - s)) s stuck in shutdown"; taskkill //F //PID "$(cat /proc/$up/winpid)" > /dev/null 2>&1; break
+      stuck=$([ $done_at = 0 ] && echo ", timed out" || echo ", killed $((SECONDS - done_at)) s into a shutdown hang"); taskkill //F //PID "$(cat /proc/$up/winpid)" > /dev/null 2>&1; break
     fi
     sleep 2
   done
   wait $up 2> /dev/null
-  [ $done_at = 0 ] && [ -n "$stuck" ] && { stuck=", timed out"; rc=1; }
+  [ "$stuck" = ", timed out" ] && rc=1
   n=$(grep -c "error CS" out/check/unity.log); [ "$n" = 0 ] || rc=1
   { echo "unity: $n CS errors, $((SECONDS - s)) s$stuck"; grep "error CS" out/check/unity.log | sort -u | head -5; } > out/check/unity.sum
   if [ $rc = 0 ] && [ $parity = 1 ]; then
