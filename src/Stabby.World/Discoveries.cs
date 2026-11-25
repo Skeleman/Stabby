@@ -53,6 +53,15 @@ namespace Stabby.World
             }
         }
 
+        public ObjectField Fresh()
+        {
+            var f = new ObjectField(w, detail, edits, lib);
+            f.discoveries = Discoveries();
+            f.bogPools = BogPools();
+            f.sketch = sketch; f.towns = towns; f.hotspots = hotspots; f.treeCover = treeCover; f.routes = routes;
+            return f;
+        }
+
         struct DiscoveryTry
         {
             public float Fit, X, Z, Size, Qa, Qb;

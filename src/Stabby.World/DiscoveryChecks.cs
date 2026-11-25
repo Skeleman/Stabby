@@ -66,6 +66,24 @@ namespace Stabby.World
             return false;
         }
 
+        static void CheckSiteFootprints(GeneratedWorld w, EditGrid grid, ObjectInstance[] sites, List<string> e)
+        {
+            var ids = new List<int>();
+            foreach (var o in sites)
+            {
+                var def = w.Objects.Objects[o.Def];
+                int kind = def.Placement.Discovery;
+                float r = def.FootprintRadius() * o.Size;
+                grid.Near(o.X - r, o.Z - r, o.X + r, o.Z + r, ids);
+                foreach (int q in ids)
+                {
+                    var f = grid.Edits[q];
+                    if (f.Shape == FeatureEdit.Spring || ((kind == ObjectField.WolfDen || ObjectField.Pooled(kind)) && f.Shape == FeatureEdit.Boulder)) continue;
+                    if (o.X + r >= f.MinX && o.X - r <= f.MaxX && o.Z + r >= f.MinZ && o.Z - r <= f.MaxZ) { e.Add($"{def.Id} at {o.X:F0},{o.Z:F0} has feature edit {f.Shape} at {f.Ax:F0},{f.Az:F0} inside its footprint"); return; }
+                }
+            }
+        }
+
         static void CheckDiscoveries(GeneratedWorld w, ObjectField field, List<string> e)
         {
             CheckBogs(w, field, e);
