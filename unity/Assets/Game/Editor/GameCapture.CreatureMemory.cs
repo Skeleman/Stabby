@@ -24,7 +24,9 @@ namespace Stabby.Game.Editor
         {
             if (draw == null) return 0;
             var f = typeof(CreatureDrawSystem).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic);
-            return f?.GetValue(draw) is GraphicsBuffer b && b.IsValid() ? (long)b.count * b.stride : 0;
+            var v = f?.GetValue(draw);
+            if (v is GraphicsBuffer b) return b.IsValid() ? (long)b.count * b.stride : 0;
+            return v?.GetType().GetProperty("Bytes")?.GetValue(v) is long n ? n : 0;
         }
 
         static MemSample SampleMemory(EntityManager em, CreatureDrawSystem draw)
@@ -36,7 +38,7 @@ namespace Stabby.Game.Editor
             return new MemSample
             {
                 Native = Profiler.GetTotalAllocatedMemoryLong(), Managed = managed, Mono = Profiler.GetMonoUsedSizeLong(),
-                Driver = Profiler.GetAllocatedMemoryForGraphicsDriver(), Gpu = BufferBytes(draw, "instances") + BufferBytes(draw, "fur"),
+                Driver = Profiler.GetAllocatedMemoryForGraphicsDriver(), Gpu = BufferBytes(draw, "instances") + BufferBytes(draw, "bones") + BufferBytes(draw, "fur") + BufferBytes(draw, "args"),
                 Entities = em.UniversalQuery.CalculateEntityCount(), Chunks = em.UniversalQuery.CalculateChunkCount(),
             };
         }

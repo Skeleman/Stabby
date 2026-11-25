@@ -15,6 +15,17 @@ namespace Stabby.Game
         public GraphicsBuffer Current { get; private set; }
         public bool Locked { get; private set; }
 
+        public long Bytes
+        {
+            get
+            {
+                long total = 0;
+                foreach (var b in slots)
+                    if (b != null && b.IsValid()) total += (long)b.count * b.stride;
+                return total;
+            }
+        }
+
         public UploadRing(GraphicsBuffer.Target target, int stride, string name)
         {
             this.target = target;
