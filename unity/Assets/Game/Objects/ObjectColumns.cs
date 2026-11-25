@@ -582,13 +582,20 @@ namespace Stabby.Game
 
         static Task<Converted> StartConvert(ObjectField field, ColumnShapes table, int region) => Task.Run(() => Convert(field, table, region));
 
-        [System.ThreadStatic] static List<ObjectInstance> scratch;
+        static readonly Stack<List<ObjectInstance>> objectLists = new Stack<List<ObjectInstance>>();
 
         static Converted Convert(ObjectField field, ColumnShapes table, int index)
         {
+            List<ObjectInstance> list;
+            lock (objectLists) list = objectLists.Count > 0 ? objectLists.Pop() : new List<ObjectInstance>();
+            try { return Convert(field, table, index, list); }
+            finally { lock (objectLists) objectLists.Push(list); }
+        }
+
+        static Converted Convert(ObjectField field, ColumnShapes table, int index, List<ObjectInstance> list)
+        {
             var sw = Stopwatch.StartNew();
             long b0 = System.GC.GetAllocatedBytesForCurrentThread();
-            var list = scratch ??= new List<ObjectInstance>();
             int across = field.ChunksAcross;
             field.SolidInto(index % across, index / across, list);
             int solid = 0;

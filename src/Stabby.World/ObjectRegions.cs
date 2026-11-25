@@ -23,15 +23,29 @@ namespace Stabby.World
 
         public int Count => Items.Length;
 
-        [ThreadStatic] static List<ObjectInstance> objectScratch;
-        [ThreadStatic] static List<ObjectColumn> columnScratch;
-        [ThreadStatic] static List<ulong> ownerScratch;
+        static readonly Stack<List<ObjectInstance>> objectLists = new Stack<List<ObjectInstance>>();
+        static readonly Stack<List<ObjectColumn>> columnLists = new Stack<List<ObjectColumn>>();
+        static readonly Stack<List<ulong>> ownerLists = new Stack<List<ulong>>();
 
         public static ColumnRegion Build(ObjectField field, int index)
         {
-            var objects = objectScratch ??= new List<ObjectInstance>();
-            var columns = columnScratch ??= new List<ObjectColumn>();
-            var owners = ownerScratch ??= new List<ulong>();
+            List<ObjectInstance> objects;
+            List<ObjectColumn> columns;
+            List<ulong> owners;
+            lock (objectLists) objects = objectLists.Count > 0 ? objectLists.Pop() : new List<ObjectInstance>();
+            lock (columnLists) columns = columnLists.Count > 0 ? columnLists.Pop() : new List<ObjectColumn>();
+            lock (ownerLists) owners = ownerLists.Count > 0 ? ownerLists.Pop() : new List<ulong>();
+            try { return Build(field, index, objects, columns, owners); }
+            finally
+            {
+                lock (objectLists) objectLists.Push(objects);
+                lock (columnLists) columnLists.Push(columns);
+                lock (ownerLists) ownerLists.Push(owners);
+            }
+        }
+
+        static ColumnRegion Build(ObjectField field, int index, List<ObjectInstance> objects, List<ObjectColumn> columns, List<ulong> owners)
+        {
             objects.Clear();
             columns.Clear();
             owners.Clear();
