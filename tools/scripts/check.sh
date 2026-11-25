@@ -145,4 +145,6 @@ if [ $fail = 0 ] && { [ $full = 1 ] || [ $merge = 1 ]; } && [ $nounity = 0 ]; th
     say "cache: full pass recorded for tree $(git rev-parse --short 'HEAD^{tree}')"
   fi
 fi
+mode=scoped; [ $merge = 1 ] && mode=merge; [ $full = 1 ] && mode=full
+echo "$(date '+%F %T'),$(git branch --show-current),$mode,$gen,$((t0 - t_wait)),$((SECONDS - t0)),$fail" >> "$common/stabby-checks.csv"
 exit $fail
