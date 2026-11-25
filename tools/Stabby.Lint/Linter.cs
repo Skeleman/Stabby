@@ -270,17 +270,25 @@ public static class Linter
         }
     }
 
-    public static HashSet<string> HandleTypes(IEnumerable<SyntaxNode> roots)
+    public static HashSet<string> HandleTypes(IEnumerable<SyntaxNode> roots) =>
+        Grow(new HashSet<string>(StringComparer.Ordinal) { "JobHandle", "Task" }, roots.SelectMany(r => r.DescendantNodes().OfType<TypeDeclarationSyntax>()).Where(t => !IsHidden(t)));
+
+    static HashSet<string> LocalHandles(SyntaxNode root, HashSet<string> shared) =>
+        Grow(new HashSet<string>(shared, StringComparer.Ordinal), root.DescendantNodes().OfType<TypeDeclarationSyntax>());
+
+    static bool IsHidden(TypeDeclarationSyntax t) =>
+        t.Parent is TypeDeclarationSyntax && !t.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword) || m.IsKind(SyntaxKind.InternalKeyword));
+
+    static HashSet<string> Grow(HashSet<string> handles, IEnumerable<TypeDeclarationSyntax> candidates)
     {
-        var types = roots.SelectMany(r => r.DescendantNodes().OfType<TypeDeclarationSyntax>()).Where(t => !IsSystem(t)).ToList();
-        var handles = new HashSet<string>(StringComparer.Ordinal) { "JobHandle" };
+        var types = candidates.Where(t => !IsSystem(t)).ToList();
         bool grew = true;
         while (grew)
         {
             grew = false;
             foreach (var t in types)
                 if (!handles.Contains(t.Identifier.Text) && InstanceMembers(t).Any(m => HoldsHandle(m.Type, handles)))
-                    grew = handles.Add(t.Identifier.Text);
+                    grew |= handles.Add(t.Identifier.Text);
         }
         return handles;
     }
@@ -297,8 +305,9 @@ public static class Linter
         return TeardownProblems(file, root, allow, new HashSet<string>(StringComparer.Ordinal), HandleTypes(new[] { root })).ToList();
     }
 
-    static IEnumerable<string> TeardownProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used, HashSet<string> handles)
+    static IEnumerable<string> TeardownProblems(string file, SyntaxNode root, Dictionary<string, string> allow, HashSet<string> used, HashSet<string> shared)
     {
+        var handles = LocalHandles(root, shared);
         foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>().Where(IsSystem))
         {
             var destroy = type.Members.OfType<MethodDeclarationSyntax>().FirstOrDefault(m => m.Identifier.Text == "OnDestroy");
@@ -309,7 +318,7 @@ public static class Linter
                 string key = $"{type.Identifier.Text}.{member}";
                 if (allow.ContainsKey(key)) { used.Add(key); continue; }
                 int line = at.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                yield return $"{file}:{line}: {key} holds a pending job that OnDestroy never tears down; call JobPoll.Teardown on it in OnDestroy or list {key} in {AllowFile} with a reason";
+                yield return $"{file}:{line}: {key} holds a pending job or task that OnDestroy never tears down; call JobPoll.Teardown or Owned.Release on it in OnDestroy or list {key} in {AllowFile} with a reason";
             }
         }
     }
