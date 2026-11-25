@@ -165,6 +165,82 @@ public class LintTests
     [InlineData("debt: rebuilds a managed list every frame")]
     public void AcceptsHonestSystemReasons(string reason) => Assert.Empty(Ecs(Managed, new Dictionary<string, string> { ["Sys"] = reason }));
 
+    static List<string> MainThread(string code, Dictionary<string, string>? allow = null) =>
+        Linter.MainThreadProblems(GameFile, code, allow ?? new Dictionary<string, string>());
+
+    const string Looping = "[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { foreach (var t in SystemAPI.Query<RefRW<Tag>>()) t.ValueRW.A++; } }";
+
+    [Theory]
+    [InlineData(Looping)]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) { } } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { new StepJob().Run(); } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { Entities.ForEach((ref Tag t) => t.A++).Run(); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { EntityQuery q; public void OnUpdate(ref SystemState s) { new StepJob().Run(q); } }")]
+    public void FlagsMainThreadLoops(string code) => Assert.Single(MainThread(code));
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.Dependency = new StepJob().ScheduleParallel(s.Dependency); } }")]
+    [InlineData("partial class Sys : SystemBase { Task<int> t; protected override void OnUpdate() { t = Task.Run(() => 1); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { float r = Pose.Run(ref s, 1f); } }")]
+    [InlineData("static class Tools { static void Each() { foreach (var t in SystemAPI.Query<RefRO<Tag>>()) { } new StepJob().Run(); } }")]
+    public void IgnoresScheduledOrNonSystemWork(string code) => Assert.Empty(MainThread(code));
+
+    [Fact]
+    public void AllowListSilencesAMainThreadLoop() =>
+        Assert.Empty(MainThread(Looping, new Dictionary<string, string> { ["Sys.Query"] = "debt: b/sim-jobs" }));
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.Dependency.Complete(); } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { EntityManager.CompleteAllTrackedJobs(); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.CompleteDependency(); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { NativeArray<JobHandle> h; public void OnUpdate(ref SystemState s) { JobHandle.CompleteAll(h); } }")]
+    public void FlagsJobCompletes(string code) => Assert.Single(Linter.BlockingProblems(GameFile, code, new Dictionary<string, string>()));
+
+    static List<string> Teardown(string code, Dictionary<string, string>? allow = null) =>
+        Linter.TeardownProblems(GameFile, code, allow ?? new Dictionary<string, string>());
+
+    const string Leaking = "partial class Sys : SystemBase { JobHandle scan; protected override void OnUpdate() { if (JobPoll.Done(scan)) scan = default; } protected override void OnDestroy() { } }";
+
+    [Theory]
+    [InlineData(Leaking)]
+    [InlineData("partial class Sys : SystemBase { JobHandle scan; protected override void OnUpdate() { } }")]
+    [InlineData("public struct Slot { JobHandle h; } [BurstCompile] partial struct Sys : ISystem { Slot slot; public void OnDestroy(ref SystemState s) { slot = default; } }")]
+    [InlineData("sealed class Batch { public JobHandle Handle; public void Dispose() { } } partial class Sys : SystemBase { List<Batch> pending; protected override void OnUpdate() { } protected override void OnDestroy() { pending.Clear(); } }")]
+    public void FlagsPendingJobsLeftAtTeardown(string code) => Assert.Single(Teardown(code));
+
+    [Theory]
+    [InlineData("partial class Sys : SystemBase { JobHandle scan; protected override void OnUpdate() { } protected override void OnDestroy() { JobPoll.Teardown(scan); } }")]
+    [InlineData("sealed class Batch { public JobHandle Handle; public void Dispose() { } } partial class Sys : SystemBase { Batch batch; protected override void OnUpdate() { } protected override void OnDestroy() { batch?.Dispose(); } }")]
+    [InlineData("partial class Sys : SystemBase { JobHandle scan; protected override void OnUpdate() { } protected override void OnDestroy() { Stop(); } void Stop() { scan.Complete(); } }")]
+    [InlineData("public struct Slot { JobHandle h; public void Finish() { h.Complete(); } } [BurstCompile] partial struct Sys : ISystem { Slot slot; public void OnDestroy(ref SystemState s) { slot.Finish(); } }")]
+    [InlineData("sealed class Batch { public JobHandle Handle; public void Dispose() { } } partial class Sys : SystemBase { List<Batch> pending; protected override void OnUpdate() { } protected override void OnDestroy() { foreach (var p in pending) { JobPoll.Teardown(p.Handle); p.Dispose(); } } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public JobHandle Gpu; NativeArray<int> a; public void OnDestroy(ref SystemState s) { var dep = JobHandle.CombineDependencies(s.Dependency, Gpu); a.Dispose(dep); } }")]
+    [InlineData("static class Tools { static JobHandle h; } struct Plain { JobHandle h; }")]
+    public void AcceptsPendingJobsTornDown(string code) => Assert.Empty(Teardown(code));
+
+    const string LeakingTask = "partial class Sys : SystemBase { Task<Mesh> build; protected override void OnUpdate() { build ??= Task.Run(() => new Mesh()); } protected override void OnDestroy() { } }";
+
+    [Theory]
+    [InlineData(LeakingTask)]
+    [InlineData("partial class Sys : SystemBase { Task warm; protected override void OnUpdate() { } }")]
+    [InlineData("partial class Sys : SystemBase { sealed class Gen { public Task<Blob> Fill; } Gen gen; protected override void OnUpdate() { } protected override void OnDestroy() { gen = null; } }")]
+    [InlineData("partial class Sys : SystemBase { List<Task<Blob>> chunks; protected override void OnUpdate() { } protected override void OnDestroy() { chunks.Clear(); } }")]
+    public void FlagsPendingTasksLeftAtTeardown(string code) => Assert.Single(Teardown(code));
+
+    [Theory]
+    [InlineData("partial class Sys : SystemBase { Task<Mesh> build; protected override void OnUpdate() { } protected override void OnDestroy() { Owned.Release(build, m => m.Dispose()); } }")]
+    [InlineData("partial class Sys : SystemBase { sealed class Gen { public Task<Blob> Fill; } Gen gen; protected override void OnUpdate() { } protected override void OnDestroy() { if (gen != null) Owned.Release(gen.Fill, b => b.Dispose()); } }")]
+    [InlineData("partial class Sys : SystemBase { List<Task<Blob>> chunks; protected override void OnUpdate() { } protected override void OnDestroy() { foreach (var t in chunks) Owned.Release(t, b => b.Dispose()); } }")]
+    public void AcceptsPendingTasksReleased(string code) => Assert.Empty(Teardown(code));
+
+    [Fact]
+    public void AllowListSilencesALeftTask() =>
+        Assert.Empty(Teardown(LeakingTask, new Dictionary<string, string> { ["Sys.build"] = "yields managed data the GC frees" }));
+
+    [Fact]
+    public void AllowListSilencesALeftJob() =>
+        Assert.Empty(Teardown(Leaking, new Dictionary<string, string> { ["Sys.scan"] = "the job writes nothing the system owns" }));
+
     [Fact]
     public void OnlyRuntimeCodeGetsEcsChecks()
     {

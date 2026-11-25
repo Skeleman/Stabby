@@ -166,24 +166,54 @@ namespace Stabby.World
 
         public const float DenRockM = 90f, DenFaceDropM = 40f, DenRockRiseM = 6f;
 
+        float[] rockHeight;
+        byte[] rockFace;
+
         public bool BesideRock(float x, float z)
         {
-            float reach = Math.Max(DenRockM, 2 * cm), run = Math.Max(cm, Features.ReferenceCellM), drop = Math.Min(DenFaceDropM, DenFaceDropM / Features.ReferenceCellM * cm), ground = GroundAt(detail, cm, x, z);
+            float reach = Math.Max(DenRockM, 2 * cm), ground = GroundAt(detail, cm, x, z);
+            var heights = System.Threading.Volatile.Read(ref rockHeight) ?? RockGrid();
+            var faces = rockFace;
             int r = (int)Math.Ceiling(reach / cm), cx = (int)Math.Round(x / cm), cz = (int)Math.Round(z / cm);
             for (int gz = Math.Max(0, cz - r); gz <= Math.Min(n - 1, cz + r); gz++)
                 for (int gx = Math.Max(0, cx - r); gx <= Math.Min(n - 1, cx + r); gx++)
                 {
                     float ox = gx * cm - x, oz = gz * cm - z;
                     if (ox * ox + oz * oz > reach * reach) continue;
-                    float h = detail.HeightAt(gx, gz);
+                    int i = gz * n + gx;
+                    float h = heights[i];
+                    if (float.IsNaN(h)) heights[i] = h = detail.HeightAt(gx, gz);
                     if (h < ground + DenRockRiseM) continue;
-                    for (int k = 0; k < 8; k++)
-                    {
-                        float d = run / Grid.Dist[k], fx = gx * cm + Grid.DX[k] * d, fz = gz * cm + Grid.DY[k] * d;
-                        if (fx < 0 || fz < 0 || fx > worldM || fz > worldM) continue;
-                        if (h - detail.Sample(fx, fz) >= drop) return true;
-                    }
+                    if (faces[i] == 0) faces[i] = RockFace(gx, gz, h) ? (byte)1 : (byte)2;
+                    if (faces[i] == 1) return true;
                 }
+            return false;
+        }
+
+        float[] RockGrid()
+        {
+            lock (rockLock)
+            {
+                if (rockHeight != null) return rockHeight;
+                var heights = new float[n * n];
+                for (int i = 0; i < heights.Length; i++) heights[i] = float.NaN;
+                rockFace = new byte[n * n];
+                System.Threading.Volatile.Write(ref rockHeight, heights);
+                return heights;
+            }
+        }
+
+        readonly object rockLock = new object();
+
+        bool RockFace(int gx, int gz, float h)
+        {
+            float run = Math.Max(cm, Features.ReferenceCellM), drop = Math.Min(DenFaceDropM, DenFaceDropM / Features.ReferenceCellM * cm);
+            for (int k = 0; k < 8; k++)
+            {
+                float d = run / Grid.Dist[k], fx = gx * cm + Grid.DX[k] * d, fz = gz * cm + Grid.DY[k] * d;
+                if (fx < 0 || fz < 0 || fx > worldM || fz > worldM) continue;
+                if (h - detail.Sample(fx, fz) >= drop) return true;
+            }
             return false;
         }
 

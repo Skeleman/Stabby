@@ -18,13 +18,13 @@ namespace Stabby.World
     {
         public const float StepUp = 1.2f, Height = 1.8f, Radius = 0.4f, FallSpeed = 25f, Probe = 0.2f, Reach = 64f;
 
-        struct Column
+        internal struct Column
         {
             public float X, Z, H, Slope;
             public bool Edited;
         }
 
-        static Column At<TG, TE>(TG g, TE e, float x, float z, float s) where TG : struct, IGroundHeight where TE : struct, IEditList
+        internal static Column At<TG, TE>(TG g, TE e, float x, float z, float s) where TG : struct, IGroundHeight where TE : struct, IEditList
         {
             var c = new Column { X = x, Z = z, H = g.HeightAt(x, z) };
             c.Slope = Features.Slope(g.HeightAt(x + s, z), g.HeightAt(x - s, z), g.HeightAt(x, z + s), g.HeightAt(x, z - s), s);
@@ -36,7 +36,7 @@ namespace Stabby.World
             return c;
         }
 
-        static float Density<TE>(TE e, Column c, float y) where TE : struct, IEditList
+        internal static float Density<TE>(TE e, Column c, float y) where TE : struct, IEditList
         {
             float d = (c.H - y) / c.Slope;
             return c.Edited ? Features.Edit(e, d, c.X, y, c.Z) : d;
