@@ -1,0 +1,213 @@
+using System;
+using System.Collections.Generic;
+
+namespace Stabby.World
+{
+    public struct EditSlice : IEditList
+    {
+        public FeatureEdit[] Items;
+        public int N;
+        public int Count => N;
+        public FeatureEdit At(int k) => Items[k];
+    }
+
+    public sealed partial class ObjectField
+    {
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3;
+        public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
+
+        [ThreadStatic] static List<float> caveSeenX, caveSeenZ;
+        [ThreadStatic] static FeatureEdit[] caveRock;
+
+        public static bool IsCave(ObjectDef def) => def.Placement.Cave > 0;
+
+        static int[] CaveCarves(FeatureEdit[] edits)
+        {
+            var list = new List<int>();
+            for (int e = 0; e < edits.Length; e++)
+            {
+                var c = edits[e];
+                if (c.Kind == FeatureEdit.Carve && (c.Shape == FeatureEdit.Cave || c.Shape == FeatureEdit.CaveRoom)) list.Add(e);
+            }
+            return list.ToArray();
+        }
+
+        static ulong CarveKey(FeatureEdit c)
+        {
+            ulong a = (uint)(int)Math.Floor(c.Ax * 4f), b = (uint)(int)Math.Floor(c.Az * 4f), y = (uint)(int)Math.Floor(c.Ay * 4f);
+            return Rng.Mix(a ^ (b << 21) ^ (y << 42) ^ 0xCA7E5EEDUL);
+        }
+
+        EditSlice RockAt(float x, float z)
+        {
+            int gx = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(x / cm))), gz = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(z / cm)));
+            int i = gz * n + gx, from = blockStart[i], to = blockStart[i + 1];
+            var buf = caveRock;
+            if (buf == null || buf.Length < to - from) caveRock = buf = new FeatureEdit[Math.Max(64, to - from)];
+            int count = 0;
+            for (int k = from; k < to; k++)
+                if (blockItems[k] < 0) buf[count++] = edits[~blockItems[k]];
+            return new EditSlice { Items = buf, N = count };
+        }
+
+        static float Reach3(FeatureEdit c, float x, float y, float z)
+        {
+            float ex = c.Bx - c.Ax, ey = c.By - c.Ay, ez = c.Bz - c.Az, ll = ex * ex + ey * ey + ez * ez;
+            float px = x - c.Ax, py = y - c.Ay, pz = z - c.Az;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
+            float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
+            return (float)Math.Sqrt(qx * qx + qy * qy + qz * qz) - c.HoleR;
+        }
+
+        static bool Owns(EditSlice rock, FeatureEdit c, float x, float y, float z)
+        {
+            float own = Reach3(c, x, y, z);
+            for (int q = 0; q < rock.N; q++)
+            {
+                var o = rock.Items[q];
+                if (o.Kind != FeatureEdit.Carve || (o.Shape != FeatureEdit.Cave && o.Shape != FeatureEdit.CaveRoom)) continue;
+                if (o.Ax == c.Ax && o.Az == c.Az && o.Ay == c.Ay && o.Bx == c.Bx && o.Bz == c.Bz && o.By == c.By) continue;
+                if (Reach3(o, x, y, z) < own) return false;
+            }
+            return true;
+        }
+
+        static string Crowded(EditSlice rock, float x, float z, float reach, bool hangs)
+        {
+            for (int q = 0; q < rock.N; q++)
+            {
+                var o = rock.Items[q];
+                if (o.Shape == FeatureEdit.Bridge && Underground.Plan(o, x, z) < reach + o.R + Underground.BridgeKeepM) return "crowds a rock bridge";
+                if (!hangs && o.Kind == FeatureEdit.Carve && o.Shape == FeatureEdit.Cave && Underground.Plan(o, x, z) < reach + Underground.PassM) return "blocks a cave passage";
+                if (o.Shape == FeatureEdit.Speleothem && o.Kind == FeatureEdit.Add)
+                {
+                    float dx = o.Ax - x, dz = o.Az - z, keep = o.R + o.N + reach + CaveColumnKeepM;
+                    if (dx * dx + dz * dz < keep * keep) return "crowds a column";
+                }
+            }
+            return null;
+        }
+
+        static void Yaw(float qa, float qb, bool flip, ref ObjectInstance o)
+        {
+            float l = (float)Math.Sqrt(qa * qa + qb * qb);
+            float cy = l > 1e-4f ? qa / l : 1f, sy = l > 1e-4f ? qb / l : 0f;
+            if (flip) { o.Qx = cy; o.Qy = 0f; o.Qz = -sy; o.Qw = 0f; }
+            else { o.Qx = 0f; o.Qy = sy; o.Qz = 0f; o.Qw = cy; }
+        }
+
+        void EmitCave(int d, int chunk, float x0, float z0, float sx, float sz, List<ObjectInstance> list, ref int ordinal)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            int kind = pl.Cave;
+            var ground = new DetailGround { Detail = detail };
+            float s = Features.LatticeStepM, foot = footprint[d];
+            var seenX = caveSeenX ?? (caveSeenX = new List<float>());
+            var seenZ = caveSeenZ ?? (caveSeenZ = new List<float>());
+            foreach (int e in caveCarves)
+            {
+                var c = edits[e];
+                if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
+                float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (len < 1f) continue;
+                float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;
+                int tries = Math.Max(1, (int)((len + (c.Shape == FeatureEdit.CaveRoom ? 2f * c.R : 0f)) * pl.PerHundredM / 100f));
+                float keep = CaveKeepShare * foot * pl.SizeMaxM + pl.ClusterRadiusM;
+                var rng = new Rng(Rng.Mix(caveStream ^ key[d] ^ CarveKey(c)));
+                seenX.Clear(); seenZ.Clear();
+                for (int k = 0; k < tries; k++)
+                {
+                    float t = rng.NextFloat(), u = rng.Range(-0.9f, 0.9f) * wf;
+                    float x = c.Ax + ex * t + px * u, z = c.Az + ez * t + pz * u, ay = c.Ay + (c.By - c.Ay) * t;
+                    bool near = false;
+                    for (int j = 0; j < seenX.Count && !near; j++)
+                    {
+                        float dx = seenX[j] - x, dz = seenZ[j] - z;
+                        near = dx * dx + dz * dz < keep * keep;
+                    }
+                    seenX.Add(x); seenZ.Add(z);
+                    for (int m = 0; m < pl.ClusterCount; m++)
+                    {
+                        float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f), grow = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f), pair = rng.NextFloat();
+                        int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                        if (near) continue;
+                        if (m > 0 && kind != CaveRubble && pair > CavePairShare) continue;
+                        float mx = m == 0 ? x : x + ox * pl.ClusterRadiusM, mz = m == 0 ? z : z + oz * pl.ClusterRadiusM;
+                        if (mx < x0 || mz < z0 || mx >= x0 + sx || mz >= z0 + sz) continue;
+                        var rock = RockAt(mx, mz);
+                        if (!Owns(rock, c, mx, ay, mz)) continue;
+                        if (Walk.Solid(ground, rock, s, mx, ay - 0.2f * hole, mz) >= 0) continue;
+                        float floor = Walk.Surface(ground, rock, s, mx, mz, ay - 0.2f * hole, ay - hole - 6f);
+                        if (floor <= ay - hole - 6f) continue;
+                        float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * grow, reach = foot * size;
+                        var o = new ObjectInstance { Def = d, Variant = variant, X = mx, Z = mz, Size = size };
+                        if (kind == CaveRubble)
+                        {
+                            float lateral = Math.Abs((mx - c.Ax) * px + (mz - c.Az) * pz);
+                            if (lateral < CaveWalkLineM + reach) continue;
+                            o.Y = floor - pl.Sink * size;
+                            Yaw(qa, qb, false, ref o);
+                        }
+                        else
+                        {
+                            float ceil = Underground.Ceiling(ground, rock, s, mx, floor + 1f, mz, floor + 3f * hole);
+                            if (float.IsNaN(ceil)) continue;
+                            float gap = ceil - floor;
+                            if (gap < Underground.DripGapM) continue;
+                            bool hangs = kind == CaveStalactite;
+                            if (hangs)
+                            {
+                                size = Math.Max(pl.SizeMinM, Math.Min(pl.SizeMaxM, gap * (0.15f + 0.3f * grow)));
+                                if (gap - size < Walk.Height + CaveTipHeadroomM) continue;
+                                o.Size = size;
+                                o.Y = ceil + pl.Sink * size;
+                                if (Walk.Solid(ground, rock, s, mx, o.Y + 0.05f * size, mz) < 0) continue;
+                            }
+                            else
+                            {
+                                size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * grow * grow * grow;
+                                if (m > 0) size = Math.Max(pl.SizeMinM, size * CaveTwinScale);
+                                o.Size = size;
+                                if (gap - size < Walk.Height + CaveMiteHeadM) continue;
+                                o.Y = floor - pl.Sink * size;
+                            }
+                            if (Crowded(rock, mx, mz, foot * size, hangs) != null) continue;
+                            Yaw(qa, qb, hangs, ref o);
+                        }
+                        if (kind != CaveStalactite && (Walk.Solid(ground, rock, s, mx, o.Y, mz) < 0 || Walk.Solid(ground, rock, s, mx, o.Y + 0.5f * o.Size + 0.3f, mz) >= 0)) continue;
+                        if (kind == CaveStalactite && Walk.Solid(ground, rock, s, mx, o.Y - o.Size, mz) >= 0) continue;
+                        o.Id = ObjectIds.Make(chunk, d, ordinal++);
+                        list.Add(o);
+                    }
+                }
+            }
+        }
+
+        public string CaveFault(ObjectInstance o)
+        {
+            var def = lib.Objects[o.Def];
+            int kind = def.Placement.Cave;
+            var ground = new DetailGround { Detail = detail };
+            float s = Features.LatticeStepM, reach = footprint[o.Def] * o.Size;
+            var rock = RockAt(o.X, o.Z);
+            string at = $"{def.Id} at {o.X:F0},{o.Z:F0}";
+            if (kind == CaveStalactite)
+            {
+                if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.05f * o.Size, o.Z) < 0) return at + " floats free of the ceiling";
+                float tip = o.Y - o.Size;
+                if (Walk.Solid(ground, rock, s, o.X, tip, o.Z) >= 0) return at + " is buried in rock";
+                if (tip - Walk.Surface(ground, rock, s, o.X, o.Z, tip, tip - 40f) < Walk.Height + Underground.HeadroomM) return at + " hangs into the walking headroom";
+            }
+            else
+            {
+                if (Walk.Solid(ground, rock, s, o.X, o.Y, o.Z) < 0) return at + " floats above the cave floor";
+                if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.5f * o.Size + 0.3f, o.Z) >= 0) return at + " is buried in rock";
+            }
+            if (kind == CaveRubble) return null;
+            string crowd = Crowded(rock, o.X, o.Z, reach, kind == CaveStalactite);
+            return crowd == null ? null : at + " " + crowd;
+        }
+    }
+}

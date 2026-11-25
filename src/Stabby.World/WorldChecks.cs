@@ -8,7 +8,8 @@ namespace Stabby.World
     {
         public const float SurfaceTolerance = 1e-3f;
         public const float CorridorFollowShare = 0.7f;
-        public const float CliffMinRise = 30f, BeachMaxDepth = 4f;
+        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f, ShoreToeMaxBend = 3f;
+        public const int ShoreToeMinPairs = 20;
 
         static int FirstUndrained(GeneratedWorld w)
         {
@@ -209,6 +210,41 @@ namespace Stabby.World
                     if (x > 0 && y > 0 && x < n - 2 && y < n - 2 && OpenSea(w, i) && d.HeightAt(x + 0.5f, y + 0.5f) > 0 && !InFall(w, (x + 0.5f) * w.Config.CellMeters, (y + 0.5f) * w.Config.CellMeters, true))
                     { e.Add($"detail raises open sea above the water near cell {i}"); return; }
                 }
+            float toe = ShoreToeBend(w, d, out int pairs);
+            if (pairs >= ShoreToeMinPairs && toe > ShoreToeMaxBend) e.Add($"beach shore toe creases: median bend {toe:F2} over {pairs} coasts");
+        }
+
+        public static float ShoreToeBend(GeneratedWorld w, TerrainDetail d, out int pairs)
+        {
+            int n = w.Config.Size;
+            const int m = 16;
+            var bends = new List<float>();
+            for (int y = 4; y < n - 4; y++)
+                for (int x = 4; x < n - 4; x++)
+                {
+                    int l = y * n + x;
+                    if (w.Sea[l] || w.Sketch == null || w.Sketch.Beach[l] < 0.5f) continue;
+                    for (int k = 0; k < 8; k += 2)
+                    {
+                        int s = Grid.DY[k] * n + Grid.DX[k];
+                        if (w.Sea[l - s] || !w.Sea[l + s] || !w.Sea[l + 2 * s] || !w.Sea[l + 3 * s]) continue;
+                        float step = w.Height[l] - w.Height[l + s];
+                        if (step <= 0) continue;
+                        float bend = 0, prev = float.NaN, h0 = NearField.Base(d.Cells, x, y);
+                        for (int t = 1; t <= 2 * m; t++)
+                        {
+                            float h1 = NearField.Base(d.Cells, x + Grid.DX[k] * t / (float)m, y + Grid.DY[k] * t / (float)m);
+                            float slope = (h1 - h0) * m;
+                            if (!float.IsNaN(prev) && h0 < 0) bend = Math.Max(bend, Math.Abs(slope - prev) * m);
+                            prev = slope; h0 = h1;
+                        }
+                        bends.Add(bend / step);
+                    }
+                }
+            pairs = bends.Count;
+            if (pairs == 0) return 0;
+            bends.Sort();
+            return bends[pairs / 2];
         }
 
         static bool OpenSea(GeneratedWorld w, int i)
@@ -776,7 +812,7 @@ namespace Stabby.World
             var seen = new bool[FeatureEdit.Shapes];
             foreach (var x in edits)
             {
-                if (x.Shape == FeatureEdit.Boulder || x.Shape == FeatureEdit.Spring || seen[x.Shape]) continue;
+                if (x.Shape == FeatureEdit.Boulder || x.Shape == FeatureEdit.Spring || x.Shape == FeatureEdit.Speleothem || seen[x.Shape]) continue;
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
@@ -871,6 +907,8 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             foreach (var x in edits)
                 if ((x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.CaveRoom) && Underground.Wet(w, x)) { e.Add($"cave at {x.Ax:F0},{x.Az:F0} breaks into the sea or a lake"); return; }
+            var ground = new DetailGround { Detail = detail };
+            int probes = 0, settled = 0;
             foreach (var g in caves)
             {
                 var near = new List<FeatureEdit>();
@@ -888,7 +926,46 @@ namespace Stabby.World
                 string why = Underground.Unreached(detail, items, g);
                 if (why != null) e.Add(why);
                 if (tight != null || why != null) return;
+                var rock = new List<FeatureEdit>();
+                foreach (var q in items) if (q.Shape != FeatureEdit.Speleothem) rock.Add(q);
+                var bare = rock.ToArray();
+                var field = new EditArray { Items = bare };
+                foreach (var q in items)
+                {
+                    if (q.Shape != FeatureEdit.Speleothem) continue;
+                    string fault = Underground.DripFault(ground, field, LatticeStepM, q, bare, 0, bare.Length, Underground.PassM);
+                    if (fault != null) { e.Add(fault); return; }
+                }
+                Underground.SettledFloor(detail, bare, ref probes, ref settled);
             }
+            if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
+            CheckCaveObjects(w, detail, edits, e);
+        }
+
+        public const int CaveObjectChunks = 6;
+
+        public static void CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        {
+            if (w.Objects == null) return;
+            var field = new ObjectField(w, detail, edits, w.Objects);
+            float span = field.ChunkMeters;
+            int across = field.ChunksAcross;
+            var picked = new List<int>();
+            foreach (var x in edits)
+            {
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave) continue;
+                float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz);
+                int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
+                if (!picked.Contains(c)) picked.Add(c);
+                if (picked.Count >= CaveObjectChunks) break;
+            }
+            foreach (int c in picked)
+                foreach (var o in field.Chunk(c % across, c / across))
+                {
+                    if (!ObjectField.IsCave(w.Objects.Objects[o.Def])) continue;
+                    string fault = field.CaveFault(o);
+                    if (fault != null) { e.Add(fault); return; }
+                }
         }
 
         public const float CaveNormalDeg = 1.5f;
@@ -1032,6 +1109,7 @@ namespace Stabby.World
                 }
             }
             CheckShores(w, island, e);
+            CheckBeachShelf(w, e);
             if (s.Landmasses.Count > 1)
             {
                 int a = island[(int)s.Landmasses[0].Y * n + (int)s.Landmasses[0].X];
@@ -1135,6 +1213,36 @@ namespace Stabby.World
                 if (cliff < need) e.Add($"landmass {k} has {cliff} cliff cells");
                 if (beach < need) e.Add($"landmass {k} has {beach} beach cells");
             }
+        }
+
+        static void CheckBeachShelf(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size, pairs = 0, flat = 0;
+            for (int y = 2; y < n - 2; y++)
+                for (int x = 2; x < n - 2; x++)
+                {
+                    int i = y * n + x;
+                    if (!w.Sea[i] || TouchesLand(w, n, i, 0)) continue;
+                    for (int d = 0; d < 8; d++)
+                    {
+                        int j = i + Grid.DY[d] * n + Grid.DX[d];
+                        if (!w.Sea[j] || !TouchesLand(w, n, j, 0.5f)) continue;
+                        pairs++;
+                        if (w.Height[i] > w.Height[j] - BeachShelfStep) flat++;
+                        break;
+                    }
+                }
+            if (pairs > 0 && flat > pairs * BeachShelfShare) e.Add($"beach seabed is flat beside the shore at {flat} of {pairs} cells");
+        }
+
+        static bool TouchesLand(GeneratedWorld w, int n, int i, float beach)
+        {
+            for (int d = 0; d < 8; d++)
+            {
+                int j = i + Grid.DY[d] * n + Grid.DX[d];
+                if (!w.Sea[j] && w.Sketch.Beach[j] >= beach) return true;
+            }
+            return false;
         }
 
         static float Length(CorridorSketch c, int p)

@@ -38,6 +38,26 @@ public class TestImpactTests
         Assert.True(gone.Count == 0, "test-impact names missing files: " + string.Join(", ", gone));
     }
 
+    [Fact]
+    public void TimeBudgetNamesRealTestsWithReasons()
+    {
+        var tests = typeof(TestImpactTests).Assembly.GetTypes()
+            .SelectMany(t => t.GetMethods().Where(m => m.GetCustomAttribute<FactAttribute>() != null).Select(m => $"{t.Name}.{m.Name}")).ToHashSet();
+        var bad = new List<string>();
+        foreach (var l in File.ReadAllLines(Path.Combine(Root, "tools", "scripts", "time-budget.txt")).Where(l => l.Trim().Length > 0))
+        {
+            var f = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            bool ok = f[0] switch
+            {
+                "test" => f.Length > 3 && tests.Contains(f[1]) && double.TryParse(f[2], out _),
+                "sweep" => f.Length > 5 && (f[1] == "256" || f[1] == "512") && double.TryParse(f[3], out _) && double.TryParse(f[4], out _),
+                _ => false,
+            };
+            if (!ok) bad.Add(l);
+        }
+        Assert.True(bad.Count == 0, "bad time-budget lines: " + string.Join(" | ", bad));
+    }
+
     static bool Matches(string glob)
     {
         var dir = Path.Combine(Root, Path.GetDirectoryName(glob) ?? "");

@@ -210,6 +210,7 @@ Shader "Stabby/Creature"
                 {
                     float3 gc = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
                     gc = lerp(gc, ToLinear(_StabbySand.rgb), smoothstep(6, 2, fade.z));
+                    [branch] if (_StabbyFieldUV.x > 0) gc = BounceGround(gc, wp.xz, fade.z);
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
                     bounce = lerp(_StabbyGround.rgb, lerp(_StabbyGround.rgb, lit, 0.5), smoothstep(2.5 * size + 2, 0, above));
                 }

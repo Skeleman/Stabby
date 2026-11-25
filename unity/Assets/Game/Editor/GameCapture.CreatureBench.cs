@@ -157,6 +157,42 @@ namespace Stabby.Game.Editor
 
         static string MarkerName(Unity.Entities.World w, System.Type t) => $"{w.Name} {TypeManager.GetSystemName(t)}";
 
+        sealed class SystemMarker : System.IDisposable
+        {
+            readonly List<ProfilerRecorder> recs = new List<ProfilerRecorder>();
+
+            public SystemMarker(string name, int capacity)
+            {
+                recs.Add(ProfilerRecorder.StartNew(ProfilerCategory.Scripts, name, capacity));
+                var handles = new List<Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle>();
+                Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle.GetAvailable(handles);
+                foreach (var h in handles)
+                {
+                    var d = Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle.GetDescription(h);
+                    if (d.Name != name || d.Category.Name == ProfilerCategory.Scripts.Name || d.UnitType != ProfilerMarkerDataUnit.TimeNanoseconds) continue;
+                    var rec = new ProfilerRecorder(h, capacity, ProfilerRecorderOptions.Default);
+                    rec.Start();
+                    recs.Add(rec);
+                }
+            }
+
+            public long LastValue
+            {
+                get
+                {
+                    long sum = 0;
+                    foreach (var r in recs) sum += r.LastValue;
+                    return sum;
+                }
+            }
+
+            public void Dispose()
+            {
+                foreach (var r in recs) r.Dispose();
+                recs.Clear();
+            }
+        }
+
         static void PlaceBench(Unity.Entities.World w, NativeArray<Entity> bench, Camera cam, float length, float stand, float px, in Ground ground)
         {
             var em = w.EntityManager;
@@ -264,13 +300,13 @@ namespace Stabby.Game.Editor
             };
 
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
-            using var buildRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureBuildSystem)), 4);
-            using var animRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureAnimSystem)), 4);
-            using var drawRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureDrawSystem)), 4);
-            using var submitRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, $"{view.Name} Stabby.Game.DrawSubmitSystem", 4);
-            using var lightRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(LightPresenterSystem)), 4);
-            using var terrainRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(TerrainViewSystem)), 4);
-            using var objectRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(ObjectViewSystem)), 4);
+            using var buildRec = new SystemMarker(MarkerName(view, typeof(CreatureBuildSystem)), 4);
+            using var animRec = new SystemMarker(MarkerName(view, typeof(CreatureAnimSystem)), 4);
+            using var drawRec = new SystemMarker(MarkerName(view, typeof(CreatureDrawSystem)), 4);
+            using var submitRec = new SystemMarker($"{view.Name} Stabby.Game.DrawSubmitSystem", 4);
+            using var lightRec = new SystemMarker(MarkerName(view, typeof(LightPresenterSystem)), 4);
+            using var terrainRec = new SystemMarker(MarkerName(view, typeof(TerrainViewSystem)), 4);
+            using var objectRec = new SystemMarker(MarkerName(view, typeof(ObjectViewSystem)), 4);
             using var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 4);
             using var allocCountRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocation In Frame Count", 4);
 
@@ -522,7 +558,7 @@ namespace Stabby.Game.Editor
             yield return null;
             double baseMs = TimeSystems(server, systems, BenchSamples);
             brainLines.Add($"brain baseline (plan creatures only): host {baseMs:F3} ms");
-            using var brainRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(server, typeof(CreatureHostSystem)), 4);
+            using var brainRec = new SystemMarker(MarkerName(server, typeof(CreatureHostSystem)), 4);
             int[] counts = { 10, 50, 100, 250, 500, 2000, 5000 };
             for (int r = 0; r < counts.Length; r++)
             {
@@ -531,8 +567,9 @@ namespace Stabby.Game.Editor
                 yield return null;
                 yield return null;
                 var (ms, single) = TimeBoth(server, systems);
+                yield return null;
                 double frame = 0;
-                for (int k = 0; k < 10; k++) { yield return null; frame = math.max(frame, brainRec.LastValue / 1e6); }
+                for (int k = 0; k < 30; k++) { yield return null; frame = math.max(frame, brainRec.LastValue / 1e6); }
                 brainLines.Add($"brain N {n}: host {ms:F3} ms ({(ms - baseMs) * 1000.0 / n:F2} us per creature over baseline) / {single:F3} ms one thread, worst in-frame marker {frame:F3} ms");
                 DestroyBrainBench(sem);
                 yield return null;

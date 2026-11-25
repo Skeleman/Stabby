@@ -37,3 +37,14 @@ Rules:
   break on every intended GeneratorVersion bump.
 - No `System.Random`, wall clock or file order dependence in tests.
 - Keep the suite under about a minute; a slow test is a bug.
+
+## Time budgets
+
+Every test has a budget (CLAUDE.md rule 14): 10 s, or the ceiling its line in
+`tools/scripts/time-budget.txt` gives (`test Class.Method seconds reason`).
+Sweep check groups have a per-seed median and max in ms there too
+(`sweep size group median max reason`). `check.sh` runs `budget.sh`: a BUDGET
+line at 1.5x a budget (unlisted tests: over 10 s) only warns; a RUNAWAY line
+at 5x or over 10 min fails the check. A new test or check must fit its budget,
+or the change adds or raises its line and says why in the commit message.
+Expensive invariants go in sweep check groups, not per-seed tests.

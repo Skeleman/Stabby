@@ -312,6 +312,21 @@
       "id": "wolf-den", "name": "Wolf den", "kind": "structure", "material": "lichen-grey", "variants": 6,
       "parts": [ { "id": "site", "shape": "wolf-den" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra"], "perHectare": 0, "discovery": "wolf-den", "spacingM": 800, "chance": 0.6, "slopeMax": 0.3, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
+    },
+    {
+      "id": "stalactite", "name": "Stalactite", "kind": "static", "material": "dripstone", "variants": 8,
+      "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.3, 1, 0.3], "solid": "off" } ],
+      "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 20, "sizeMinM": 1.5, "sizeMaxM": 8, "sink": 0.1 }
+    },
+    {
+      "id": "stalagmite", "name": "Stalagmite", "kind": "static", "material": "dripstone", "variants": 8,
+      "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.55, 1, 0.55] } ],
+      "placement": { "perHectare": 0, "cave": "stalagmite", "perHundredM": 18, "sizeMinM": 0.5, "sizeMaxM": 3.2, "clusterCount": 3, "clusterRadiusM": 0.9, "sink": 0.1 }
+    },
+    {
+      "id": "cave-rubble", "name": "Cave rubble", "kind": "static", "material": "talus-grey", "variants": 8,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
+      "placement": { "perHectare": 0, "cave": "rubble", "perHundredM": 40, "sizeMinM": 0.25, "sizeMaxM": 0.9, "clusterCount": 3, "clusterRadiusM": 1.2, "sink": 0.25 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

@@ -125,8 +125,7 @@ namespace Stabby.World
             if (pl.Discovery == Hilltop) Climb(ref px, ref pz, x0, z0, x1, z1);
             if (pl.Discovery == WolfDen)
             {
-                SeekDen(ref px, ref pz, x0, z0, x1, z1);
-                if (!ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
+                if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
             }
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
             float fit = Fitness(pl.Discovery, px, pz);
@@ -203,7 +202,7 @@ namespace Stabby.World
                         int start = list.Count;
                         for (int v = 0; v < target; v++)
                             for (int k = 0; k < present.Count; k++)
-                                if (PlaceVent(present[want ? VentOrder(v, k, first, lead, present.Count) : (first + v + k) % present.Count], near, ref rng, list)) break;
+                                if (PlaceVent(present[want ? VentOrder(v, k, first, lead, present.Count) : (first + v + k) % present.Count], site, near, ref rng, list)) break;
                         int got = list.Count - start, score = got;
                         if (want && got >= VentsMin) for (int i = start; i < list.Count; i++) if (list[i].Def == vents[gk]) { score += VentsMax + 1; break; }
                         if (score > bestScore) { bestScore = score; best.Clear(); for (int i = start; i < list.Count; i++) best.Add(list[i]); }
@@ -221,7 +220,7 @@ namespace Stabby.World
             return (lead + 1 + (first + v + k) % (count - 1)) % count;
         }
 
-        bool PlaceVent(int d, List<VentSite> near, ref Rng rng, List<ObjectInstance> list)
+        bool PlaceVent(int d, VentSite centre, List<VentSite> near, ref Rng rng, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
@@ -237,7 +236,8 @@ namespace Stabby.World
                 float jitter = (t & 1) * VentSiteStepM, px = site.X + rng.Range(-0.5f, 0.5f) * jitter, pz = site.Z + rng.Range(-0.5f, 0.5f) * jitter;
                 float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
-                if ((site.Mask & bit) == 0 || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
+                float cx = px - centre.X, cz = pz - centre.Z;
+                if ((site.Mask & bit) == 0 || cx * cx + cz * cz > VentFieldRadiusM * VentFieldRadiusM || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
                 tries[count++] = new DiscoveryTry { X = px, Z = pz, Size = size, Qa = qa, Qb = qb, Variant = variant };
             }
             Parallel.For(0, count, q =>
@@ -894,7 +894,7 @@ namespace Stabby.World
                 }
         }
 
-        void SeekDen(ref float x, ref float z, float x0, float z0, float x1, float z1)
+        bool SeekDen(ref float x, ref float z, float x0, float z0, float x1, float z1)
         {
             float best = Fitness(WolfDen, x, z), bx = x, bz = z;
             for (int ring = 1; ring <= DenSeekRings; ring++)
@@ -906,10 +906,13 @@ namespace Stabby.World
                     if (fit > best) { best = fit; bx = px; bz = pz; }
                 }
             x = bx; z = bz;
+            return best > float.MinValue;
         }
 
         public float Fitness(int kind, float x, float z)
         {
+            float denWoods = kind == WolfDen ? Woods(x, z) : 0;
+            if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
             for (int k = 0; k < 8; k++)
             {
@@ -919,6 +922,7 @@ namespace Stabby.World
                 float dy = y - GroundAt(detail, cm, px, pz);
                 rise += dy;
                 relief = Math.Max(relief, Math.Abs(dy));
+                if (kind == WolfDen && relief > DenReliefM) return float.MinValue;
             }
             rise *= 0.125f;
             if (kind == Camp)
@@ -949,8 +953,7 @@ namespace Stabby.World
             if (kind == FairyRing) return relief <= FairyReliefM ? -0.2f * relief - Math.Abs(Woods(x, z) - FairyWoods) : float.MinValue;
             if (kind == WolfDen)
             {
-                float woods = Woods(x, z);
-                return relief <= DenReliefM && woods >= DenWoods && RiverGap(x, z) >= DenRiverM && BesideRock(x, z) ? 0.1f * rise - 0.1f * relief + woods : float.MinValue;
+                return RiverGap(x, z) >= DenRiverM && BesideRock(x, z) ? 0.1f * rise - 0.1f * relief + denWoods : float.MinValue;
             }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;

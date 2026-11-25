@@ -20,7 +20,7 @@ public class WorldTests
     public void TwentySeedsPassEveryCheck()
     {
         var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
-        Parallel.For(1, 21, s =>
+        Parallel.For(101, 121, s =>
         {
             foreach (var v in WorldChecks.Run(Gen((ulong)s))) failures.Add($"seed {s}: {v}");
         });

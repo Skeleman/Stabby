@@ -588,6 +588,9 @@ Shader "Stabby/Object"
                         orgO = float3(o2.x, 0, o2.y);
                         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wp.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
                         float4 cwn = cw / max(dot(cw, 1), 1e-3);
+                        float surf = 1;
+                        [branch] if (_StabbyFieldUV.x > 0) surf = smoothstep(6, 2, ContactBed(wp.xz) - wp.y);
+                        cwn *= surf;
                         [branch] if (i.tone.x > 0.25)
                         {
                             bool course = i.tone.w > 1.5;
@@ -609,7 +612,7 @@ Shader "Stabby/Object"
                             float3 sb = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us, 0.5), 0).rgb, sm = sb;
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
                             TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, lerp(sb, sm * 0.1667, 0.5), tone, fp);
-                            TmStoneCover(m, wp - orgO, n, mossy ? float4(saturate(cwn.x + 0.55 * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
+                            TmStoneCover(m, wp - orgO, n, mossy ? float4(saturate(cwn.x + 0.55 * surf * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
                             float3 g = m.grad + cg;
                             g -= n * dot(g, n);
                             n = normalize(n - g);
@@ -645,7 +648,8 @@ Shader "Stabby/Object"
                 float thick = flat ? 0.05 : abs(mm._m10) + abs(mm._m11) + abs(mm._m12);
                 [branch] if (_StabbyFieldUV.x > 0)
                 {
-                    ground += ContactBed(wp.xz) - ContactBed(i.origin.xz);
+                    float bed = ContactBed(i.origin.xz);
+                    ground += (ContactBed(wp.xz) - bed) * smoothstep(6, 2, bed - fade.z);
                     albedo = ContactObject(albedo, wp, ground, size, thick);
                 }
                 float above = max(wp.y - ground, 0);
@@ -658,6 +662,7 @@ Shader "Stabby/Object"
                 {
                     float3 gc = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
                     gc = lerp(gc, ToLinear(_StabbySand.rgb), smoothstep(6, 2, fade.z));
+                    [branch] if (_StabbyFieldUV.x > 0) gc = BounceGround(gc, wp.xz, fade.z);
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
                     bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
                 }
