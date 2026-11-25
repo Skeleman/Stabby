@@ -304,7 +304,14 @@ namespace Stabby.Game.Editor
                     GeometryShot(cam, dir, "caves-brook-spring-debug-unlit");
                 }
                 CaveBrook sink = null;
-                foreach (var b in brooks) if (b.End == CaveBrook.Sink && (sink == null || b.Rows > sink.Rows)) sink = b;
+                foreach (var b in brooks)
+                {
+                    if (b.End != CaveBrook.Sink || (sink != null && b.Rows <= sink.Rows)) continue;
+                    int ba = Mathf.Max(0, b.Rows - 7) * st, bb = (b.Rows - 1) * st;
+                    var bq = b.Points;
+                    if (ground.HeightAt(bq[ba], bq[ba + 2]) < Mathf.Max(20f, bq[ba + 1] + 8f) || ground.HeightAt(bq[bb], bq[bb + 2]) < Mathf.Max(20f, bq[bb + 1] + 8f)) continue;
+                    sink = b;
+                }
                 if (sink != null)
                 {
                     int ka = Mathf.Max(0, sink.Rows - 7), kb = sink.Rows - 1;
