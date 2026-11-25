@@ -96,12 +96,19 @@ namespace Stabby.Game
 
     public static class ObjectChunks
     {
-        [ThreadStatic] static List<ObjectInstance> objectScratch;
+        static readonly Stack<List<ObjectInstance>> objectLists = new Stack<List<ObjectInstance>>();
         [ThreadStatic] static List<ObjectColumn> columnScratch, lushScratch;
 
         public static ContactChunk Contacts(ObjectField field, int cx, int cz)
         {
-            var objects = objectScratch ??= new List<ObjectInstance>();
+            List<ObjectInstance> objects;
+            lock (objectLists) objects = objectLists.Count > 0 ? objectLists.Pop() : new List<ObjectInstance>();
+            try { return Contacts(field, cx, cz, objects); }
+            finally { lock (objectLists) objectLists.Push(objects); }
+        }
+
+        static ContactChunk Contacts(ObjectField field, int cx, int cz, List<ObjectInstance> objects)
+        {
             var columns = columnScratch ??= new List<ObjectColumn>();
             var lush = lushScratch ??= new List<ObjectColumn>();
             field.PlaceInto(cx, cz, objects);
