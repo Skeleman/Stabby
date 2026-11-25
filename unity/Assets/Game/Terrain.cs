@@ -210,6 +210,61 @@ namespace Stabby.Game
         public float Height(int i, int k) => At(i * StepM, k * StepM);
     }
 
+    struct RowEdits : IEditList
+    {
+        [ReadOnly] public NativeArray<FeatureEdit> Items;
+        public int Count => Items.Length;
+        public FeatureEdit At(int k) => Items[k];
+    }
+
+    struct ReadColumns : IColumnField
+    {
+        public GroundColumns Columns;
+        [ReadOnly] public NativeArray<float> Cells;
+        public int I0, K0, W;
+
+        public void Fill(NativeArray<float> cells)
+        {
+            for (int v = 0; v < W; v++)
+                for (int u = 0; u < W; u++) cells[v * W + u] = Columns.Height(I0 + u, K0 + v);
+        }
+
+        public float At(float x, float z) => Columns.At(x, z);
+
+        public float Height(int i, int k)
+        {
+            int u = i - I0, v = k - K0;
+            if ((uint)u >= (uint)W || (uint)v >= (uint)W) return Columns.Height(i, k);
+            return Cells[v * W + u];
+        }
+    }
+
+    struct RowSink : INetsSink
+    {
+        [ReadOnly] public NativeArray<int> Ints;
+        [ReadOnly] public NativeArray<float> Floats;
+        [NativeDisableParallelForRestriction] public NativeArray<TerrainVertex> Verts;
+        public NativeStream.Writer Tris;
+        public int Cursor;
+
+        public void Begin(int ints, int floats) { }
+        public int GetInt(int k) => Ints[k];
+        public void SetInt(int k, int v) { }
+        public float GetFloat(int k) => Floats[k];
+        public void SetFloat(int k, float v) { }
+
+        public int AddVertex(float x, float y, float z, float nx, float ny, float nz)
+        {
+            Verts[Cursor] = new TerrainVertex { Pos = new float3(x, y, z), Normal = new float3(nx, ny, nz) };
+            return Cursor++;
+        }
+
+        public void AddTriangle(int a, int b, int c)
+        {
+            Tris.Write(a); Tris.Write(b); Tris.Write(c);
+        }
+    }
+
     struct CachedColumns : IColumnField
     {
         public GroundColumns Columns;
@@ -250,8 +305,6 @@ namespace Stabby.Game
         {
             Verts.Clear();
             Tris.Clear();
-            Ints = new NativeArray<int>(ints, Allocator.Temp);
-            Floats = new NativeArray<float>(floats, Allocator.Temp);
         }
 
         public int GetInt(int k) => Ints[k];
@@ -271,13 +324,131 @@ namespace Stabby.Game
         }
     }
 
+    struct TerrainChunk
+    {
+        public Ground Ground;
+        public int Ix, Iz, Level;
+        public bool Smooth, Fine;
+
+        public int Cells => Fine ? 2 * TerrainTree.Quads : TerrainTree.Quads;
+        public float StepM => Fine ? TerrainTree.FineStep : TerrainTree.Step(Level);
+        public NetsChunk Nets => new NetsChunk { X0 = Ix * Cells, Z0 = Iz * Cells, Cells = Cells, StepM = StepM };
+        public int Window => Cells + 6;
+        public GroundColumns Columns => new GroundColumns { Ground = Ground, StepM = StepM, Top = Ground.Blob.Value.Top, Smooth = Smooth };
+        public ReadColumns Read(NativeArray<float> cells) => new ReadColumns { Columns = Columns, Cells = cells, I0 = Ix * Cells - 3, K0 = Iz * Cells - 3, W = Window };
+    }
+
+    struct TerrainBuild
+    {
+        public NativeList<FeatureEdit> Edits;
+        public NativeList<float2> Light;
+        public NativeArray<float> Cells, Floats;
+        public NativeArray<int> Ints;
+        public NativeList<int> Slabs;
+        public NativeStream Rows;
+
+        public static TerrainBuild Make(TerrainChunk c)
+        {
+            var nets = c.Nets;
+            return new TerrainBuild
+            {
+                Edits = new NativeList<FeatureEdit>(16, Allocator.Persistent),
+                Light = new NativeList<float2>(16, Allocator.Persistent),
+                Cells = new NativeArray<float>(c.Window * c.Window, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
+                Floats = new NativeArray<float>(SurfaceNets.LayoutFloats(nets), Allocator.Persistent),
+                Ints = new NativeArray<int>(SurfaceNets.LayoutInts(nets), Allocator.Persistent),
+                Slabs = new NativeList<int>(c.Cells + 1, Allocator.Persistent),
+            };
+        }
+
+        public static JobHandle Schedule(TerrainChunk c, BlobAssetReference<TerrainLookData> look, int rows, NativeList<TerrainVertex> verts, NativeList<int> tris, NativeArray<float3> bounds, JobHandle after = default)
+        {
+            var b = Make(c);
+            var layout = new TerrainLayoutJob { Chunk = c, Rows = rows, Edits = b.Edits, Light = b.Light, Cells = b.Cells, Ints = b.Ints, Floats = b.Floats, Slabs = b.Slabs, Verts = verts, Tris = tris }.Schedule(after);
+            var made = NativeStream.ScheduleConstruct(out b.Rows, b.Slabs, layout, Allocator.Persistent);
+            var slabs = new TerrainRowsJob
+            {
+                Columns = c.Read(b.Cells), Edits = new RowEdits { Items = b.Edits.AsDeferredJobArray() }, Chunk = c.Nets, Rows = rows,
+                Ints = b.Ints, Floats = b.Floats, Verts = verts.AsDeferredJobArray(), Tris = b.Rows.AsWriter(), Slabs = b.Slabs.AsDeferredJobArray(),
+            }.Schedule(b.Slabs, 1, made);
+            var mesh = new TerrainMeshJob { Chunk = c, Look = look, Edits = b.Edits, Light = b.Light, Ints = b.Ints, Rows = b.Rows.AsReader(), Verts = verts, Tris = tris, Bounds = bounds }.Schedule(slabs);
+            return b.Dispose(mesh);
+        }
+
+        JobHandle Dispose(JobHandle after) =>
+            JobHandle.CombineDependencies(
+                JobHandle.CombineDependencies(Edits.Dispose(after), Light.Dispose(after), Cells.Dispose(after)),
+                JobHandle.CombineDependencies(Floats.Dispose(after), Ints.Dispose(after), Slabs.Dispose(after)),
+                Rows.Dispose(after));
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainLayoutJob : IJob
+    {
+        public TerrainChunk Chunk;
+        public int Rows;
+        public NativeList<FeatureEdit> Edits;
+        public NativeList<float2> Light;
+        public NativeArray<float> Cells, Floats;
+        public NativeArray<int> Ints;
+        public NativeList<int> Slabs;
+        public NativeList<TerrainVertex> Verts;
+        public NativeList<int> Tris;
+
+        public void Execute()
+        {
+            ref var g = ref Chunk.Ground.Blob.Value;
+            var chunk = Chunk.Nets;
+            int m = chunk.Cells, w = m + 1;
+            float s = chunk.StepM, x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
+            for (int f = 0; f < g.Edits.Length; f++)
+            {
+                var e = g.Edits[f];
+                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) { Edits.Add(e.AtStep(s)); Light.Add(g.CaveLight[f]); }
+            }
+            var cached = Chunk.Read(Cells);
+            cached.Fill(Cells);
+            var sink = new TerrainSink { Verts = Verts, Tris = Tris, Ints = Ints, Floats = Floats };
+            if (Edits.Length == 0) { SurfaceNets.Heightfield(cached, chunk, ref sink); return; }
+            int count = SurfaceNets.Layout(cached, new NativeEdits { Items = Edits }, chunk, ref sink);
+            Verts.ResizeUninitialized(count);
+            Slabs.ResizeUninitialized((w + Rows - 1) / Rows);
+        }
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainRowsJob : IJobParallelForDefer
+    {
+        [ReadOnly] public NativeArray<int> Slabs;
+        public ReadColumns Columns;
+        public RowEdits Edits;
+        public NetsChunk Chunk;
+        public int Rows;
+        [ReadOnly] public NativeArray<int> Ints;
+        [ReadOnly] public NativeArray<float> Floats;
+        [NativeDisableParallelForRestriction] public NativeArray<TerrainVertex> Verts;
+        public NativeStream.Writer Tris;
+
+        public void Execute(int p)
+        {
+            int w = Chunk.Cells + 1, k0 = p * Rows, k1 = math.min(k0 + Rows, w);
+            var sink = new RowSink { Ints = Ints, Floats = Floats, Verts = Verts, Tris = Tris, Cursor = Ints[3 * k0 * w + 2] };
+            sink.Tris.BeginForEachIndex(p);
+            SurfaceNets.Vertices(Columns, Edits, Chunk, ref sink, true, k0, k1);
+            SurfaceNets.Quads(Edits, Chunk, ref sink, true, k0, k1);
+            sink.Tris.EndForEachIndex();
+        }
+    }
+
     [BurstCompile(CompileSynchronously = true)]
     struct TerrainMeshJob : IJob
     {
-        public Ground Ground;
+        public TerrainChunk Chunk;
         public BlobAssetReference<TerrainLookData> Look;
-        public int Ix, Iz, Level;
-        public bool Smooth, Fine;
+        [ReadOnly] public NativeList<FeatureEdit> Edits;
+        [ReadOnly] public NativeList<float2> Light;
+        [ReadOnly] public NativeArray<int> Ints;
+        [ReadOnly] public NativeStream.Reader Rows;
         public NativeList<TerrainVertex> Verts;
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
@@ -404,20 +575,20 @@ namespace Stabby.Game
 
         public void Execute()
         {
-            ref var g = ref Ground.Blob.Value;
+            ref var g = ref Chunk.Ground.Blob.Value;
             ref var look = ref Look.Value;
-            int n = look.N, m = Fine ? 2 * TerrainTree.Quads : TerrainTree.Quads, w = m + 1;
-            float cm = g.CellMeters, top = n - 1, s = Fine ? TerrainTree.FineStep : TerrainTree.Step(Level);
-            var chunk = new NetsChunk { X0 = Ix * m, Z0 = Iz * m, Cells = m, StepM = s };
-            var sink = new TerrainSink { Verts = Verts, Tris = Tris };
-            var columns = new GroundColumns { Ground = Ground, StepM = s, Top = g.Top, Smooth = Smooth };
-            var edits = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
-            var light = new NativeList<float2>(Allocator.Temp);
+            var chunk = Chunk.Nets;
+            int n = look.N, m = chunk.Cells, w = m + 1;
+            float cm = g.CellMeters, top = n - 1, s = chunk.StepM;
+            var columns = Chunk.Columns;
+            var edits = new NativeEdits { Items = Edits };
+            var light = Light;
             float x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
-            for (int f = 0; f < g.Edits.Length; f++)
+            for (int p = 0; p < Rows.ForEachCount; p++)
             {
-                var e = g.Edits[f];
-                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) { edits.Items.Add(e.AtStep(s)); light.Add(g.CaveLight[f]); }
+                int count = Rows.BeginForEachIndex(p);
+                for (int t = 0; t < count; t++) Tris.Add(Rows.Read<int>());
+                Rows.EndForEachIndex();
             }
             var crusts = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             for (int f = 0; f < g.Edits.Length; f++)
@@ -427,12 +598,9 @@ namespace Stabby.Game
                 float ext = e.CrustExtent;
                 if (e.Ax + ext > x0m && e.Ax - ext < x1m && e.Az + ext > z0m && e.Az - ext < z1m) crusts.Items.Add(e);
             }
-            var cached = new CachedColumns(columns, chunk.X0 - 3, chunk.Z0 - 3, m + 6);
-            if (edits.Count > 0) SurfaceNets.Edited(cached, edits, chunk, ref sink);
-            else SurfaceNets.Heightfield(cached, chunk, ref sink);
 
-            bool stitch = Level < TerrainTree.Root;
-            var coarse = new CachedColumns(new GroundColumns { Ground = Ground, StepM = 2 * s, Top = g.Top, Smooth = Smooth }, chunk.X0 / 2 - 3, chunk.Z0 / 2 - 3, stitch ? m / 2 + 8 : 0);
+            bool stitch = Chunk.Level < TerrainTree.Root;
+            var coarse = new CachedColumns(new GroundColumns { Ground = Chunk.Ground, StepM = 2 * s, Top = g.Top, Smooth = Chunk.Smooth }, chunk.X0 / 2 - 3, chunk.Z0 / 2 - 3, stitch ? m / 2 + 8 : 0);
             var near = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             var nearLight = new NativeList<float2>(Allocator.Temp);
             for (int f = 0; stitch && f < g.Edits.Length; f++)
@@ -457,7 +625,7 @@ namespace Stabby.Game
                 int c = 3 * ring[r], best = -1;
                 float gap = float.MaxValue;
                 for (int pass = 0; pass < 2 && best < 0; pass++)
-                    for (int u = sink.Ints[c + 2], e = u + sink.Ints[c + 1] - sink.Ints[c]; u < e; u++)
+                    for (int u = Ints[c + 2], e = u + Ints[c + 1] - Ints[c]; u < e; u++)
                     {
                         if (pass == 0 && used[u] == 0) continue;
                         var t = Verts[u].Pos;
@@ -475,7 +643,7 @@ namespace Stabby.Game
                 for (int i = 0; i < w; i++)
                 {
                     int col = 3 * (k * w + i);
-                    for (int v = sink.Ints[col + 2], j = sink.Ints[col], e = v + sink.Ints[col + 1] - j; v < e; v++, j++)
+                    for (int v = Ints[col + 2], j = Ints[col], e = v + Ints[col + 1] - j; v < e; v++, j++)
                     {
                         if (used[v] == 0) { used[v] = -1; continue; }
                         used[v] = kept;
@@ -863,6 +1031,7 @@ namespace Stabby.Game
         }
 
         static int BuildBudget => math.max(1, JobsUtility.JobWorkerCount / 2);
+        const int SlabRows = 2;
         string stage => !look.IsCreated ? "load" : !ready ? "initial" : "lod";
 
         void Begin()
@@ -1105,7 +1274,8 @@ namespace Stabby.Game
             b.Generation = generation;
             b.VertCap = b.Verts.Capacity;
             b.TriCap = b.Tris.Capacity;
-            b.Handle = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth, Verts = b.Verts, Tris = b.Tris, Bounds = b.Bounds }.Schedule();
+            var chunk = new TerrainChunk { Ground = ground, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth };
+            b.Handle = TerrainBuild.Schedule(chunk, look, SlabRows, b.Verts, b.Tris, b.Bounds);
             pending.Add(b);
             nd.Pending = 1;
             nodes[key] = nd;
