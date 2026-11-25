@@ -108,6 +108,7 @@ Shader "Stabby/Creature"
             #include "Assets/Viewer/Shaders/Contact.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
+            #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; CREATURE_INPUT };
             struct Varyings
@@ -202,6 +203,8 @@ Shader "Stabby/Creature"
                 float above = max(wp.y - ground, 0);
                 float ao = lerp(0.8, 1, smoothstep(0, min(0.6 * size, 0.5), above)) * lerp(1, 0.6, saturate(-n.y));
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
+                float sky = CaveSky(wp);
+                l.color *= sky;
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)
                 {
@@ -210,13 +213,13 @@ Shader "Stabby/Creature"
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
                     bounce = lerp(_StabbyGround.rgb, lerp(_StabbyGround.rgb, lit, 0.5), smoothstep(2.5 * size + 2, 0, above));
                 }
-                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
+                float3 ambient = (_StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5)) * sky;
                 float3 v = normalize(_WorldSpaceCameraPos - wp);
                 float wrap = eye ? saturate(dot(n, l.direction)) : saturate((dot(n, l.direction) + 0.35) / 1.35);
                 float rim = eye ? 0 : pow(1 - saturate(dot(n, v)), 4) * 0.25 * saturate(dot(-v, l.direction) + 0.3);
                 float3 c = LookColor(albedo, 1) * (l.color * (wrap + rim) * l.shadowAttenuation + (ambient + LocalLights(wp, n, i.positionCS)) * ao);
                 c += eye ? l.color * l.shadowAttenuation * 0.6 * pow(saturate(dot(n, normalize(l.direction + v))), 120) + ambient * 0.05 * pow(1 - saturate(dot(n, v)), 2) : LookSheen(n, v, l.direction, l.color * l.shadowAttenuation, tmRough) * ao * 0.5;
-                return half4(MixFog(c, i.local.w), 1);
+                return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.local.w), 1);
             }
             ENDHLSL
         }

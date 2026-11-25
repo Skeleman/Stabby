@@ -317,23 +317,15 @@ namespace Stabby.Game
             at = end * s2;
         }
 
-        const float SkyReach = 1.4f, SkyFall = 0.7f;
-
         static float Dark(NativeEdits edits, NativeList<float2> light, float3 p, float cover)
         {
             float inside = 0, lit = 0;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
-                if (!CaveLight.Lit(e)) continue;
-                float3 a = new float3(e.Ax, e.Ay, e.Az), ab = new float3(e.Bx, e.By, e.Bz) - a, ap = p - a;
-                float ll = math.dot(ab, ab), t = ll > 0 ? math.saturate(math.dot(ap, ab) / ll) : 0;
-                float d = math.length(ap - t * ab) / e.R;
-                if (d >= SkyReach) continue;
-                inside = math.max(inside, 1 - math.smoothstep(1f, SkyReach, d));
-                lit = math.max(lit, math.exp(-math.lerp(light[q].x, light[q].y, t) / (SkyFall * e.R)));
+                if (CaveLight.Lit(e)) CaveDark.Add(e, light[q], p, ref inside, ref lit);
             }
-            return inside * math.smoothstep(0.5f, 3f, cover) * (1 - lit);
+            return CaveDark.Of(inside, lit, cover);
         }
 
         static float Fraction(float a, float b, float t) => b != a ? math.saturate((t - a) / (b - a)) : 0.5f;
@@ -1146,7 +1138,7 @@ namespace Stabby.Game
                 if (!p.Handle.IsCompleted) continue;
                 bool stale = p.Generation != generation;
                 if (!stale && !Spend(TerrainTree.Vertices)) return;
-                p.Handle.Complete();
+                JobPoll.Done(p.Handle);
                 pending.RemoveAt(k--);
                 if (p.Verts.Capacity > p.VertCap) { NativeAllocs++; NativeBytes += (long)p.Verts.Capacity * UnsafeUtility.SizeOf<TerrainVertex>(); }
                 if (p.Tris.Capacity > p.TriCap) { NativeAllocs++; NativeBytes += p.Tris.Capacity * 4L; }
@@ -1446,8 +1438,7 @@ namespace Stabby.Game
             if (cam == null || !rootsReady) return;
             if (lodScheduled)
             {
-                if (!lodHandle.IsCompleted) return;
-                lodHandle.Complete();
+                if (!JobPoll.Done(lodHandle)) return;
                 lodScheduled = false;
                 selected = true;
                 splitSeen = split.Count;
@@ -1751,11 +1742,11 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (GameStatus.Live.Remove("terrain")) GameStatus.Lines["terrain"] = Status();
-            if (lodScheduled) lodHandle.Complete();
+            if (lodScheduled) JobPoll.Teardown(lodHandle);
             if (writes.IsCreated) writes.Dispose();
             foreach (var p in pending)
             {
-                p.Handle.Complete();
+                JobPoll.Teardown(p.Handle);
                 p.Dispose();
             }
             pending.Clear();

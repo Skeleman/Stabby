@@ -51,9 +51,11 @@ namespace Stabby.Game.Editor
             var caps = stateQuery.GetSingleton<LightBudgetState>().Caps;
             int size = UnsafeUtility.SizeOf<LightEmitter>();
             int preexisting = emitterQuery.CalculateEntityCount();
+            var target = new RenderTexture(1920, 1080, 24);
+            cam.targetTexture = target;
             var lines = new List<string>
             {
-                $"light scale bench at {Screen.width}x{Screen.height}, night hour {DayNightSystem.Shown.Hour:F2}, caps shadowed {caps.Shadowed}, unshadowed {caps.Unshadowed}, glow {caps.Glow}; {preexisting} world emitters already present; emitters scattered over a {ScaleRadius:F0} m disc around the eye; LightEmitter {size} B; neither system schedules jobs",
+                $"light scale bench at {target.width}x{target.height} (camera target), night hour {DayNightSystem.Shown.Hour:F2}, caps shadowed {caps.Shadowed}, unshadowed {caps.Unshadowed}, glow {caps.Glow}; {preexisting} world emitters already present; emitters scattered over a {ScaleRadius:F0} m disc around the eye; LightEmitter {size} B; the budget gathers changed chunks and ranks in Burst jobs, the presenter writes only the ranked set",
             };
             for (var w = SetLights(stateQuery, presenter, false, true); w.MoveNext();) yield return null;
 
@@ -63,7 +65,7 @@ namespace Stabby.Game.Editor
 
             foreach (int n in ScaleLights)
             {
-                using var spawned = em.CreateEntity(em.CreateArchetype(typeof(LightEmitter)), n, Allocator.Temp);
+                using var spawned = em.CreateEntity(em.CreateArchetype(typeof(LightEmitter)), n, Allocator.Persistent);
                 for (int i = 0; i < n; i++)
                 {
                     uint h = math.hash(new uint2((uint)i, 0x11D7u));
@@ -115,8 +117,8 @@ namespace Stabby.Game.Editor
                 }
                 int total = emitterQuery.CalculateEntityCount();
                 lines.Add($"N {n} ({total} emitters live): " + TierLine(stateQuery, presenter));
-                lines.Add($"  LightBudgetSystem main thread: frame marker median {Pct(bMs, 0.5):F3} ms, p99 {Pct(bMs, 0.99):F3} ms; direct update median {Pct(bDirect, 0.5):F3} ms, p99 {Pct(bDirect, 0.99):F3} ms; jobs 0 ms; GC {bGc / (double)ScaleDirect:F0} B per update; temp {total * size} B per update (1 Temp array, copied back in place)");
-                lines.Add($"  LightPresenterSystem main thread: frame marker median {Pct(pMs, 0.5):F3} ms, p99 {Pct(pMs, 0.99):F3} ms; direct update median {Pct(pDirect, 0.5):F3} ms, p99 {Pct(pDirect, 0.99):F3} ms; jobs 0 ms; GC {pGc / (double)ScaleDirect:F0} B per update; temp {total * size} B per update (1 Temp array); glow upload {(presenter.Cores + presenter.Glows) * 32} B per frame");
+                lines.Add($"  LightBudgetSystem main thread: frame marker median {Pct(bMs, 0.5):F3} ms, p99 {Pct(bMs, 0.99):F3} ms; direct update median {Pct(bDirect, 0.5):F3} ms, p99 {Pct(bDirect, 0.99):F3} ms; main thread excludes the scheduled gather and rank jobs; GC {bGc / (double)ScaleDirect:F0} B per update; no per-update copy of the {total * size} B emitter set");
+                lines.Add($"  LightPresenterSystem main thread: frame marker median {Pct(pMs, 0.5):F3} ms, p99 {Pct(pMs, 0.99):F3} ms; direct update median {Pct(pDirect, 0.5):F3} ms, p99 {Pct(pDirect, 0.99):F3} ms; GC {pGc / (double)ScaleDirect:F0} B per update; no emitter copy; glow upload {(presenter.Cores + presenter.Glows) * 32} B per finished rank");
                 lines.Add($"  frame: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms; dt median {Pct(dt, 0.5):F2} ms, p99 {Pct(dt, 0.99):F2} ms over {ScaleFrames} frames");
                 em.DestroyEntity(spawned);
                 for (int k = 0; k < 10; k++) yield return null;

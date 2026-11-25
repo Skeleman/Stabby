@@ -42,7 +42,7 @@ namespace Stabby.World
                 if (c.Entrances < 1 || c.Loops < 0 || c.Bridges < 0) e.Add($"{at} needs entrances >= 1 and loops, bridges >= 0");
                 if (!(c.RadiusMin >= Underground.MinRadius && c.RadiusMax >= c.RadiusMin)) e.Add($"{at} radius must be {Underground.MinRadius} <= min <= max");
                 if (!(c.EdgeMin > 0f && c.EdgeMax >= c.EdgeMin)) e.Add($"{at} edge length must be 0 < min <= max");
-                if (!(c.ChamberChance >= 0f && c.ChamberChance <= 1f && c.ChamberMin >= 1f && c.ChamberMax >= c.ChamberMin)) e.Add($"{at} chamber needs chance 0..1 and 1 <= min <= max");
+                if (!(c.ChamberChance >= 0f && c.ChamberChance <= 1f && c.ChamberMin > c.RadiusMax && c.ChamberMax >= c.ChamberMin)) e.Add($"{at} chamber needs chance 0..1 and tunnel radius < min <= max");
                 if (c.Hall && !(c.HallMin > c.RadiusMax && c.HallMax >= c.HallMin)) e.Add($"{at} hall radius must exceed the tunnel radius and min <= max");
                 if (c.Bridges > 0 && (!c.Hall || !(c.BridgeMin > 0f && c.BridgeMax >= c.BridgeMin))) e.Add($"{at} bridges need a hall and 0 < bridge min <= max");
                 if (!(c.Warp >= 0f && c.Warp <= 0.3f && c.Lumps >= 0f && c.Lumps <= 0.05f && c.RoomLumps >= 0f && c.RoomLumps <= 0.1f)) e.Add($"{at} warp must be 0..0.3, lumps 0..0.05, room lumps 0..0.1");
@@ -80,10 +80,10 @@ namespace Stabby.World
 
     public static class Underground
     {
-        public const float MinRadius = 30f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
+        public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -105,15 +105,23 @@ namespace Stabby.World
             {
                 for (int a = cls.Fallback.Length > 0 ? Tries : 1; a > 0; a--)
                 {
-                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Mouths = mouths };
+                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths };
                     b.G = new CaveGraph { Class = cls.Id, Tile = ty * 65536 + tx };
-                    bool ok = b.Build() && Sound(detail, output.GetRange(start, output.Count - start).ToArray(), b.G);
+                    bool ok = b.Build() && Sound(detail, Near(prior, output, start), b.G);
                     r = b.R;
+                    width = b.Width;
                     if (ok) { graph = b.G; return; }
                     output.RemoveRange(start, output.Count - start);
                 }
                 cls = cls.Fallback.Length > 0 ? lib.Find(cls.Fallback) : null;
             }
+        }
+
+        static FeatureEdit[] Near(List<FeatureEdit> prior, List<FeatureEdit> output, int start)
+        {
+            var all = new List<FeatureEdit>(prior);
+            all.AddRange(output.GetRange(start, output.Count - start));
+            return all.ToArray();
         }
 
         static List<int> Mouths(GeneratedWorld w, int tx, int ty)
@@ -137,11 +145,10 @@ namespace Stabby.World
             public List<FeatureEdit> Out;
             public int Start;
             public CaveClass C;
-            public Rng R;
+            public Rng R, Width;
             public List<int> Mouths;
             public CaveGraph G;
             readonly List<int> parents = new List<int>();
-            float tunnel;
 
             float Ground(float x, float z) => Detail.HeightAt(x / Cm, z / Cm);
 
@@ -150,13 +157,12 @@ namespace Stabby.World
             public bool Build()
             {
                 if (Mouths.Count == 0) return false;
-                tunnel = R.Range(C.RadiusMin, C.RadiusMax);
                 int first = (int)(R.NextFloat() * Mouths.Count);
                 if (!Mouth(Mouths[first], out var m)) return false;
                 Mouths.RemoveAt(first);
                 G.Nodes.Add(m);
                 float len = R.Range(C.EdgeMin, C.EdgeMax), grade = R.Range(-0.3f, 1f) * Grade;
-                len = Math.Max(len, tunnel + Features.CaveRoof + MouthM + PieceM * 0.5f);
+                len = Math.Max(len, (C.Hall ? C.HallMin : C.RadiusMax) + Features.CaveRoof + MouthM + PieceM * 0.5f);
                 var n1 = new CaveNode { X = m.X + m.Hx * len, Z = m.Z + m.Hz * len, Y = m.Y - len * grade, Hx = m.Hx, Hz = m.Hz };
                 if (!Link(0, n1, true)) return false;
                 if (C.Hall) return BuildHall();
@@ -318,7 +324,7 @@ namespace Stabby.World
                 float inv = 1f / Grid.Dist[dir], hx = -Grid.DX[dir] * inv, hz = -Grid.DY[dir] * inv;
                 float back = Math.Max(0.5f, 0.5f * Features.ReferenceCellM / Cm);
                 float x = (i % n - back * hx) * Cm, z = (i / n - back * hz) * Cm;
-                m = new CaveNode { X = x, Z = z, Y = Ground(x, z) - 0.1f * tunnel * Features.CaveHollow, Hx = hx, Hz = hz, Entrance = true };
+                m = new CaveNode { X = x, Z = z, Y = Ground(x, z) - 0.05f * (C.RadiusMin + C.RadiusMax) * Features.CaveHollow, Hx = hx, Hz = hz, Entrance = true };
                 return true;
             }
 
@@ -351,7 +357,7 @@ namespace Stabby.World
                 var b = G.Nodes[ib];
                 float dx = b.X - a.X, dz = b.Z - a.Z, len = (float)Math.Sqrt(dx * dx + dz * dz);
                 if (len <= 1f || Math.Abs(b.Y - a.Y) > Grade * len) return false;
-                float px = -dz / len, pz = dx / len, open = tunnel + Features.CaveRoof, ground = mouth ? Ground(a.X, a.Z) : 0f;
+                float r = Width.Range(C.RadiusMin, C.RadiusMax), px = -dz / len, pz = dx / len, open = r + Features.CaveRoof, ground = mouth ? Ground(a.X, a.Z) : 0f;
                 var ts = new List<float> { 0f };
                 float t0 = 0f;
                 if (mouth)
@@ -373,17 +379,17 @@ namespace Stabby.World
                 int mark = Out.Count;
                 for (int s = 0; s + 1 < ts.Count; s++)
                 {
-                    var e = Carve(FeatureEdit.Cave, tunnel, pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2], pts[s * 3 + 3], pts[s * 3 + 4], pts[s * 3 + 5], C.Lumps * tunnel);
+                    var e = Carve(FeatureEdit.Cave, r, pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2], pts[s * 3 + 3], pts[s * 3 + 4], pts[s * 3 + 5], C.Lumps * r).Finer();
                     if (!Fits(e, mouth && s == 0 ? open : 0f, ground)) { Out.RemoveRange(mark, Out.Count - mark); return false; }
                     Out.Add(e);
                 }
-                G.Edges.Add(new CaveEdge { A = ia, B = ib, R = tunnel, Points = pts });
+                G.Edges.Add(new CaveEdge { A = ia, B = ib, R = r, Points = pts });
                 return true;
             }
 
             void Chamber(CaveNode at)
             {
-                float big = tunnel * R.Range(C.ChamberMin, C.ChamberMax), reach = big * 0.6f;
+                float big = R.Range(C.ChamberMin, C.ChamberMax), reach = big * 0.6f;
                 Room(at, at.Hx, at.Hz, reach, big);
             }
 
@@ -486,12 +492,13 @@ namespace Stabby.World
         static bool Sound(TerrainDetail detail, FeatureEdit[] edits, CaveGraph g)
         {
             foreach (var p in edits) if (p.Shape == FeatureEdit.Cave && PathFault(detail, edits, p) != null) return false;
+            foreach (var edge in g.Edges) if (Cramped(detail, edits, g, edge) != null) return false;
             return Unreached(detail, edits, g) == null;
         }
 
         public static string PathFault(TerrainDetail detail, FeatureEdit[] near, FeatureEdit p)
         {
-            float s = Features.LatticeStepM;
+            float s = NearField.NodeStep(1);
             var cols = new DetailColumns { Detail = detail, StepM = s };
             float run = (float)Math.Sqrt((p.Bx - p.Ax) * (p.Bx - p.Ax) + (p.Bz - p.Az) * (p.Bz - p.Az));
             var solid = new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = new EditArray { Items = near }, StepM = s };
@@ -526,7 +533,34 @@ namespace Stabby.World
             return float.NaN;
         }
 
-        public const float WalkStride = 0.5f;
+        public const float WalkStride = 0.5f, ClearSide = 0.75f, ClearStep = 0.4f, ClearProbe = 0.25f;
+
+        public static string Cramped(TerrainDetail detail, FeatureEdit[] edits, CaveGraph g, CaveEdge edge)
+        {
+            var ground = new DetailGround { Detail = detail };
+            var list = new EditArray { Items = edits };
+            float s = Features.LatticeStepM;
+            var p = edge.Points;
+            for (int q = 3; q + 2 < p.Length; q += 3)
+            {
+                float ex = p[q] - p[q - 3], ey = p[q + 1] - p[q - 2], ez = p[q + 2] - p[q - 1], run = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (run <= 0f) continue;
+                float sx = -ez / run * ClearSide, sz = ex / run * ClearSide;
+                int steps = Math.Max(1, (int)Math.Ceiling(run));
+                for (int t = q == 3 ? 0 : 1; t <= steps; t++)
+                {
+                    float f = t / (float)steps, x = p[q - 3] + ex * f, af = p[q - 2] + ey * f, z = p[q - 1] + ez * f;
+                    float floor = af, y = af + Walk.StepUp;
+                    if (Walk.Solid(ground, list, s, x, y, z) >= 0) return $"{g.Class} cave tunnel is too narrow for the player at {x:F0},{y:F0},{z:F0}";
+                    for (; y >= af - 2f; y -= ClearProbe)
+                        if (Walk.Solid(ground, list, s, x, y, z) >= 0) { floor = y + ClearProbe; break; }
+                    for (float h = floor + ClearStep * 1.5f; h <= floor + Walk.Height + 0.2f + 1e-3f; h += ClearStep)
+                        if (Walk.Solid(ground, list, s, x, h, z) >= 0 || Walk.Solid(ground, list, s, x + sx, h, z + sz) >= 0 || Walk.Solid(ground, list, s, x - sx, h, z - sz) >= 0)
+                            return $"{g.Class} cave tunnel is too narrow for the player at {x:F0},{h:F0},{z:F0}";
+                }
+            }
+            return null;
+        }
 
         public static string Unreached(TerrainDetail detail, FeatureEdit[] edits, CaveGraph g)
         {
@@ -574,7 +608,7 @@ namespace Stabby.World
                 }
             }
             float floor = p[p.Length - 2];
-            return Math.Abs(y - floor) > 0.25f * edge.R ? $"walker ends at height {y:F1}, floor is {floor:F1}" : null;
+            return Math.Abs(y - floor) > Math.Max(0.25f * edge.R, Walk.Height) ? $"walker ends at height {y:F1}, floor is {floor:F1}" : null;
         }
 
         public static string BridgeFault(TerrainDetail detail, FeatureEdit[] edits, FeatureEdit b)

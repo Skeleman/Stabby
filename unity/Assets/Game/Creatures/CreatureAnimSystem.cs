@@ -119,7 +119,7 @@ namespace Stabby.Game
         NativeArray<float> scratchFloor;
         NativeArray<CreatureGpu> scratchOut;
         float carry, slack;
-        int skipped;
+        int skipped, capacity;
         public int Trims;
         const int SegCap = 64, PartCap = 32, OutCap = 2 * SegCap;
 
@@ -165,21 +165,21 @@ namespace Stabby.Game
             Counts.Dispose(dep);
         }
 
-        static void Fit<T>(ref NativeArray<T> a, int n) where T : struct
+        static void Fit<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
         {
             if (a.Length >= n) return;
             int size = math.max(n, a.Length + a.Length / 2);
-            a.Dispose();
+            a.Dispose(after);
             a = new NativeArray<T>(size, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
 
-        static void Shrink<T>(ref NativeArray<T> a, int n) where T : struct
+        static void Shrink<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
         {
-            a.Dispose();
+            a.Dispose(after);
             a = new NativeArray<T>(math.max(n, 1), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
 
-        public long HeldBytes => (long)Instances.Capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Bones.Length * UnsafeUtility.SizeOf<float3x4>()
+        public long HeldBytes => (long)capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Bones.Length * UnsafeUtility.SizeOf<float3x4>()
             + (long)Parts.Length * UnsafeUtility.SizeOf<CreaturePart>()
             + Fur.Length * 16L + (Starts.Length + Counts.Length) * 4L;
 
@@ -200,24 +200,25 @@ namespace Stabby.Game
             {
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
-                Instances.Clear();
                 int want = tally.Links + tally.Links / 2;
-                slack = Instances.Capacity > 2 * want + 1024 ? slack + SystemAPI.Time.DeltaTime : 0;
-                if (slack > 2f)
+                slack = capacity > 2 * want + 1024 ? slack + SystemAPI.Time.DeltaTime : 0;
+                bool trim = slack > 2f;
+                if (trim)
                 {
-                    Instances.Capacity = math.max(want, 64);
-                    Shrink(ref Bones, Instances.Capacity);
-                    Shrink(ref Parts, Instances.Capacity);
-                    Shrink(ref Fur, 3 * count + 3 * count / 2);
+                    capacity = math.max(want, 64);
+                    Shrink(ref Bones, capacity, Gpu);
+                    Shrink(ref Parts, capacity, Gpu);
+                    Shrink(ref Fur, 3 * count + 3 * count / 2, Gpu);
                     slack = 0;
                     Trims++;
                 }
-                if (Instances.Capacity < tally.Links) Instances.Capacity = tally.Links + tally.Links / 2;
-                Fit(ref Bones, Instances.Capacity);
-                Fit(ref Parts, Instances.Capacity);
-                Fit(ref Fur, 3 * count);
-                Fit(ref Starts, tally.Groups);
-                Fit(ref Counts, tally.Groups);
+                if (capacity < tally.Links) capacity = tally.Links + tally.Links / 2;
+                Gpu = new Reset { Instances = Instances, Capacity = capacity, Trim = trim }.Schedule(Gpu);
+                Fit(ref Bones, capacity, Gpu);
+                Fit(ref Parts, capacity, Gpu);
+                Fit(ref Fur, 3 * count, Gpu);
+                Fit(ref Starts, tally.Groups, Gpu);
+                Fit(ref Counts, tally.Groups, Gpu);
                 FurCount = 3 * count;
             }
             state.Dependency = new AnimJob
@@ -233,6 +234,20 @@ namespace Stabby.Game
             state.Dependency = new Compact { Instances = Instances, Bones = Bones, Parts = Parts, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
             Gpu = state.Dependency;
             Pending = true;
+        }
+
+        [BurstCompile]
+        struct Reset : IJob
+        {
+            public NativeList<CreatureGpu> Instances;
+            public int Capacity;
+            public bool Trim;
+
+            public void Execute()
+            {
+                Instances.Clear();
+                if (Instances.Capacity < Capacity || Trim) Instances.Capacity = Capacity;
+            }
         }
 
         [BurstCompile]
