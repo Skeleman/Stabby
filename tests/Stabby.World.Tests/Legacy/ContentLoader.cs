@@ -460,6 +460,9 @@ public static class ContentLoader
         public float Importance { get; set; }
         public float Flicker { get; set; }
         public float FlickerHz { get; set; }
+        public float LiftM { get; set; }
+        public bool Daylight { get; set; }
+        public bool Core { get; set; } = true;
     }
 
     sealed class InteractEntry
@@ -546,7 +549,7 @@ public static class ContentLoader
         {
             var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Glow = Glow(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
             if (o.Light != null)
-                def.Light = new ObjectLight { Category = o.Light.Category, Color = Mat(o.Light.Material), Intensity = o.Light.Intensity, RangeM = o.Light.RadiusM, Importance = o.Light.Importance, Flicker = o.Light.Flicker, FlickerHz = o.Light.FlickerHz };
+                def.Light = new ObjectLight { Category = o.Light.Category, Color = Mat(o.Light.Material), Intensity = o.Light.Intensity, RangeM = o.Light.RadiusM, Importance = o.Light.Importance, Flicker = o.Light.Flicker, FlickerHz = o.Light.FlickerHz, LiftM = o.Light.LiftM, Daylight = o.Light.Daylight, Core = o.Light.Core };
             foreach (var p in o.Parts)
             {
                 if ((p.Offset != null && p.Offset.Length != 3) || (p.Scale != null && p.Scale.Length != 3))

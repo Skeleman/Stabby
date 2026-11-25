@@ -19,6 +19,8 @@ namespace Stabby.World
     public sealed class CaveLibrary
     {
         public float Chance = 0.35f, CrystalChance, CellMin = 14f, CellMax = 22f;
+        public float LightChance, SkylightChance, SkylightDepthM = 48f, SkylightRadiusM = 2.5f;
+        public int LightMost;
         public List<CaveClass> Classes = new List<CaveClass>();
 
         public CaveClass Find(string id)
@@ -34,6 +36,9 @@ namespace Stabby.World
             if (!(l.CrystalChance >= 0f && l.CrystalChance <= 1f)) e.Add("crystalChance must be within 0..1");
             if (!(l.CellMax >= l.CellMin) || l.Classes.Exists(c => !(l.CellMin > c.RadiusMax))) e.Add("crystalCell needs tunnel radius < min <= max");
             if (l.Classes.Count == 0) e.Add("classes must not be empty");
+            if (!(l.LightChance >= 0f && l.LightChance <= 1f && l.SkylightChance >= 0f && l.SkylightChance <= 1f)) e.Add("lights chance and skylightChance must be within 0..1");
+            if (l.LightMost < 0 || l.LightMost > 8) e.Add("lights most must be within 0..8");
+            if (!(l.SkylightDepthM >= Underground.SkylightMinRockM && l.SkylightDepthM <= 80f && l.SkylightRadiusM >= 1f && l.SkylightRadiusM <= 6f)) e.Add($"lights skylightDepthM must be {Underground.SkylightMinRockM}..80 and skylightRadiusM 1..6");
             var ids = new HashSet<string>();
             foreach (var c in l.Classes)
             {
@@ -86,7 +91,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, ulong sky, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -121,6 +126,8 @@ namespace Stabby.World
                         for (int j = start; j < output.Count && gem; j++) if (output[j].Shape == FeatureEdit.CrystalCell) { graph.Crystal = true; break; }
                         var q = new Rng(pools);
                         Pools(detail, graph, ref q, output, start);
+                        var k = new Rng(sky);
+                        Skylight(w, detail, lib, graph, ref k, output, start);
                         var d = new Rng(drip);
                         var f = new Rng(flow);
                         Speleothems(detail, w.Config.CellMeters, ref d, ref f, output, start);
@@ -521,6 +528,53 @@ namespace Stabby.World
         public const float PoolMinDepthM = 0.5f, PoolMaxDepthM = 1f, PoolDipM = 0.06f, PoolTopM = 1f, PoolBank = 1.5f, PoolRound = 0.3f, PoolFlatM = 0.6f, PoolSealM = 1f, PoolKeepM = 2f;
 
         public static float PoolReach(float r, float level, float top) => r + PoolBank * (top - PoolRound - level) + PoolRound;
+
+        public const float SkylightMinRockM = 3f, SkylightLump = 0.05f, SkylightSinkM = 1f;
+        public const int SkylightProbes = 10;
+
+        public static float ShaftR(float open) => open / Features.CaveHollow;
+
+        static void Skylight(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, CaveGraph g, ref Rng r, List<FeatureEdit> output, int start)
+        {
+            float roll = r.NextFloat(), seed = r.NextFloat();
+            if (roll >= lib.SkylightChance) return;
+            var ground = new DetailGround { Detail = detail };
+            var items = output.GetRange(start, output.Count - start).ToArray();
+            var rock = new EditArray { Items = items };
+            float s = Features.LatticeStepM, cm = w.Config.CellMeters, R = ShaftR(lib.SkylightRadiusM), best = float.MaxValue;
+            FeatureEdit pick = default;
+            foreach (var n in g.Nodes)
+            {
+                if (n.Entrance) continue;
+                foreach (var c in items)
+                {
+                    if (!FeatureEdit.IsRoom(c.Shape) || !Same(c.Ax, c.Az, n.X, n.Z)) continue;
+                    float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                    if (len < 1f) continue;
+                    for (int k = 0; k < SkylightProbes; k++)
+                    {
+                        float along = r.Range(0.1f, 0.9f), side = r.Range(-0.5f, 0.5f) * c.FloorHalf;
+                        float x = c.Ax + ex * along - ez / len * side, z = c.Az + ez * along + ex / len * side;
+                        float surface = ObjectField.GroundAt(detail, cm, x, z);
+                        if (Walk.Solid(ground, rock, s, x, c.Ay, z) >= 0) continue;
+                        float roof = Ceiling(ground, rock, s, x, c.Ay, z, surface + 1f), depth = surface - roof;
+                        if (float.IsNaN(roof) || depth < SkylightMinRockM || depth > lib.SkylightDepthM || depth >= best) continue;
+                        var e = new FeatureEdit { Kind = FeatureEdit.Carve, Shape = FeatureEdit.Shaft, R = R, Ax = x, Ay = roof - SkylightSinkM, Az = z, Bx = x, By = surface + R, Bz = z, N = SkylightLump * R, S = seed }.Finer();
+                        if (!Features.Inside(e, cm) || !Features.DryAt(w, x / cm, z / cm) || !Features.DryAt(w, (x + R) / cm, z / cm) || !Features.DryAt(w, (x - R) / cm, z / cm)
+                            || !Features.DryAt(w, x / cm, (z + R) / cm) || !Features.DryAt(w, x / cm, (z - R) / cm) || !InChamber(items, x, e.Ay, z)) continue;
+                        best = depth;
+                        pick = e;
+                    }
+                }
+            }
+            if (best < float.MaxValue) output.Add(pick);
+        }
+
+        public static bool SkylightOpen(GeneratedWorld w, TerrainDetail detail, FeatureEdit e, float depthM)
+        {
+            float cm = w.Config.CellMeters, surface = ObjectField.GroundAt(detail, cm, e.Ax, e.Az);
+            return e.Shape == FeatureEdit.Shaft && e.By - e.R >= surface - 0.01f && surface - e.Ay <= depthM + SkylightSinkM + 0.01f && Features.DryAt(w, e.Ax / cm, e.Az / cm);
+        }
 
         static void Pools(TerrainDetail detail, CaveGraph g, ref Rng r, List<FeatureEdit> output, int start)
         {

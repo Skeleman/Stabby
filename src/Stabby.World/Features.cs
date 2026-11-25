@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shapes = 13;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Shapes = 15;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell;
 
@@ -507,7 +507,7 @@ namespace Stabby.World
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
             ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64(), rg = Rng.Stream(w.Config.Seed, "cave-crystal").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
-            ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64();
+            ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64(), rs = Rng.Stream(w.Config.Seed, "cave-skylights").NextU64();
             var lips = Landforms.BiomeMask(w, Mesas.Biomes);
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
@@ -528,7 +528,7 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
                     var width = new Rng(Rng.Mix(rw + t));
-                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), Rng.Mix(rg + t), list.GetRange(from, list.Count - from), tile, out var graph);
+                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), Rng.Mix(rg + t), Rng.Mix(rs + t), list.GetRange(from, list.Count - from), tile, out var graph);
                     if (Keep(w, tile, list) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();
@@ -684,7 +684,7 @@ namespace Stabby.World
             return true;
         }
 
-        static bool DryAt(GeneratedWorld w, float x, float z)
+        internal static bool DryAt(GeneratedWorld w, float x, float z)
         {
             int n = w.Config.Size, ix = (int)Math.Round(x), iz = (int)Math.Round(z);
             return ix >= 0 && iz >= 0 && ix < n && iz < n && Dry(w, iz * n + ix);

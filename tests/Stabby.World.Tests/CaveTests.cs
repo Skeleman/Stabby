@@ -1,3 +1,4 @@
+using Xunit.Abstractions;
 using System.Text.Json;
 using Stabby.Content;
 using Stabby.World;
@@ -6,6 +7,10 @@ namespace Stabby.World.Tests;
 
 public class CaveTests
 {
+    readonly ITestOutputHelper output;
+
+    public CaveTests(ITestOutputHelper output) => this.output = output;
+
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
@@ -394,6 +399,58 @@ public class CaveTests
         Assert.True(rubble >= drips, $"{rubble} rubble stones for {drips} stalactites");
         Assert.True(columns >= tiles, $"{columns} columns over {tiles} cave tiles");
         Assert.True(flows >= tiles, $"{flows} flowstones over {tiles} cave tiles");
+    }
+
+    [Fact]
+    public void CaveLightsAreSporadicAndPass()
+    {
+        int tiles = 0, lit = 0, lights = 0, placed = 0, sky = 0, emitted = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var s = At(seed);
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            tiles += s.Graphs.Length;
+            var e = new List<string>();
+            WorldChecks.CheckCaveLights(s.W, s.Edits, field, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
+            var litTiles = new HashSet<int>();
+            for (int i = 0; i < field.CaveLightCount; i++)
+            {
+                var p = field.CaveLight(i);
+                lights++;
+                litTiles.Add(p.Tile);
+                if (p.Kind == ObjectField.CaveSkylight) sky++;
+                if (!field.CaveLightAt(i, out var o)) continue;
+                if (placed++ > 0) continue;
+                int cx = Math.Min(field.ChunksAcross - 1, (int)(o.X / field.ChunkMeters)), cz = Math.Min(field.ChunksAcross - 1, (int)(o.Z / field.ChunkMeters));
+                foreach (var c in field.Place(cx, cz)) if (ObjectField.IsCaveLight(s.W.Objects.Objects[c.Def].Placement.Cave)) emitted++;
+            }
+            lit += litTiles.Count;
+        }
+        output.WriteLine($"cave lights: {lights} over {tiles} caves, {lit} lit ({100f * lit / Math.Max(1, tiles):F0}%), {sky} skylights, {placed} placed, {emitted} emitted near carves");
+        Assert.True(lights <= Caves.LightMost * Math.Max(1, lit), $"{lights} lights over {lit} lit caves");
+        Assert.True(lit > 0 && lit < tiles, $"{lit} of {tiles} caves lit");
+        Assert.True(placed * 2 >= lights, $"{placed} of {lights} cave lights found a floor");
+        Assert.True(emitted > 0, "no cave light reached a chunk");
+    }
+
+    [Fact]
+    public void CaveLightOffTheFloorFails()
+    {
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            for (int i = 0; i < field.CaveLightCount; i++)
+            {
+                if (!field.CaveLightAt(i, out var o)) continue;
+                Assert.Null(field.CaveFault(o));
+                o.Y += 1.5f;
+                Assert.Contains("floats above the cave floor", field.CaveFault(o) ?? "");
+                return;
+            }
+        }
+        throw new Xunit.Sdk.XunitException("no cave light placed");
     }
 
     [Fact]
