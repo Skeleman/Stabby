@@ -684,10 +684,11 @@ namespace Stabby.World
         static void CheckFeatures(GeneratedWorld w, List<string> e)
         {
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var caves);
+            var edits = Features.Place(w, detail, out var caves, out var sites);
             float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
             CheckChunkBounds(w, grid, e);
+            if (sites != null) CheckSiteFootprints(w, grid, sites, e);
             var field = w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects) : null;
             if (field != null) CheckObjects(w, detail, grid, field, e);
             if (field != null) CheckSites(w, detail, grid, field, e);
