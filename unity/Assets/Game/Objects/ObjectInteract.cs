@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Stabby.World;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -80,7 +81,11 @@ namespace Stabby.Game
         ReachTables tables;
         NativeArray<RemoveAsk> asking;
         NativeArray<byte> results;
-        JobSlot check;
+        NativeList<ulong> informIds;
+        NativeHashMap<int, float3> players;
+        NativeList<Ask> incoming;
+        NativeReference<int> refused;
+        JobSlot check, gather;
         int accepted, rejected, killed;
 
         public ObjectDeltas Deltas => deltas;
@@ -90,44 +95,44 @@ namespace Stabby.Game
 
         public void Submit(ulong id, float3 at) => asks.Add(new Ask { Id = id, At = at, From = Entity.Null });
 
-        protected override void OnCreate() => tables = new ReachTables();
+        protected override void OnCreate()
+        {
+            tables = new ReachTables();
+            informIds = new NativeList<ulong>(64, Allocator.Persistent);
+            players = new NativeHashMap<int, float3>(8, Allocator.Persistent);
+            incoming = new NativeList<Ask>(8, Allocator.Persistent);
+            refused = new NativeReference<int>(Allocator.Persistent);
+            RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
+        }
 
         protected override void OnDestroy()
         {
             check.Finish();
+            gather.Finish();
             if (asking.IsCreated) asking.Dispose();
             if (results.IsCreated) results.Dispose();
+            informIds.Dispose();
+            players.Dispose();
+            incoming.Dispose();
+            refused.Dispose();
             tables.Dispose();
         }
 
         protected override void OnUpdate()
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (_, conn) in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>().WithNone<ObjectsInformed>().WithEntityAccess())
+            if (gather.Done)
             {
-                ecb.AddComponent<ObjectsInformed>(conn);
-                foreach (int chunk in deltas.Chunks) ObjectDeltaApply.Send(ecb, conn, deltas.InChunk(chunk));
+                gather.Finish();
+                for (int k = 0; k < incoming.Length; k++) asks.Add(incoming[k]);
+                incoming.Clear();
+                players.Clear();
+                rejected += refused.Value;
+                refused.Value = 0;
             }
-
-            var players = new NativeHashMap<int, float3>(8, Allocator.Temp);
-            foreach (var (t, owner) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
-                players[owner.ValueRO.NetworkId] = t.ValueRO.Position;
-            foreach (var (req, rx, e) in SystemAPI.Query<RefRO<ObjectRemoveRpc>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
-            {
-                ecb.DestroyEntity(e);
-                var from = rx.ValueRO.SourceConnection;
-                if (!SystemAPI.HasComponent<NetworkId>(from) || !players.TryGetValue(SystemAPI.GetComponent<NetworkId>(from).Value, out var at))
-                {
-                    Rpc.Send(ecb, from, new ObjectReplyRpc { Id = req.ValueRO.Id, Code = (byte)RemoveResult.OutOfReach });
-                    rejected++;
-                    continue;
-                }
-                asks.Add(new Ask { Id = req.ValueRO.Id, At = at, From = from });
-            }
-            players.Dispose();
 
             var field = World.GetExistingSystemManaged<ObjectColumnsSystem>().Field;
-            if (check.Done)
+            if (check.Done && !gather.Busy)
             {
                 check.Finish();
                 Apply(ecb);
@@ -140,6 +145,68 @@ namespace Stabby.Game
             }
             ecb.Playback(EntityManager);
             ecb.Dispose();
+            if (gather.Busy) return;
+            var end = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(World.Unmanaged);
+            var dep = new InformJob { Ids = informIds, Ecb = end }.Schedule(Dependency);
+            dep = new GatherPlayers { Players = players }.Schedule(dep);
+            dep = new AskJob { Players = players, Ids = SystemAPI.GetComponentLookup<NetworkId>(true), Incoming = incoming, Refused = refused, Ecb = end }.Schedule(dep);
+            Dependency = dep;
+            gather.Start(dep);
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(NetworkStreamInGame))]
+        [WithNone(typeof(ObjectsInformed))]
+        partial struct InformJob : IJobEntity
+        {
+            [ReadOnly] public NativeList<ulong> Ids;
+            public EntityCommandBuffer Ecb;
+
+            void Execute(Entity conn, in NetworkId _)
+            {
+                Ecb.AddComponent<ObjectsInformed>(conn);
+                var rpc = new ObjectDeltaRpc();
+                for (int k = 0; k < Ids.Length; k++)
+                {
+                    rpc.Ids.Add(Ids[k]);
+                    if (rpc.Ids.Length < ObjectDeltaApply.PerRpc) continue;
+                    Rpc.Send(Ecb, conn, rpc);
+                    rpc.Ids.Clear();
+                }
+                if (rpc.Ids.Length > 0) Rpc.Send(Ecb, conn, rpc);
+            }
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(Player))]
+        partial struct GatherPlayers : IJobEntity
+        {
+            public NativeHashMap<int, float3> Players;
+
+            void Execute(in LocalTransform t, in GhostOwner owner) => Players[owner.NetworkId] = t.Position;
+        }
+
+        [BurstCompile]
+        partial struct AskJob : IJobEntity
+        {
+            [ReadOnly] public NativeHashMap<int, float3> Players;
+            [ReadOnly] public ComponentLookup<NetworkId> Ids;
+            public NativeList<Ask> Incoming;
+            public NativeReference<int> Refused;
+            public EntityCommandBuffer Ecb;
+
+            void Execute(Entity e, in ObjectRemoveRpc req, in ReceiveRpcCommandRequest rx)
+            {
+                Ecb.DestroyEntity(e);
+                var from = rx.SourceConnection;
+                if (!Ids.HasComponent(from) || !Players.TryGetValue(Ids[from].Value, out var at))
+                {
+                    Rpc.Send(Ecb, from, new ObjectReplyRpc { Id = req.Id, Code = (byte)RemoveResult.OutOfReach });
+                    Refused.Value++;
+                    return;
+                }
+                Incoming.Add(new Ask { Id = req.Id, At = at, From = from });
+            }
         }
 
         void Schedule()
@@ -168,6 +235,7 @@ namespace Stabby.Game
                     tables.Remove(a.Id);
                     accepted++;
                     fresh.Add(a.Id);
+                    informIds.Add(a.Id);
                     if (cols) killed += oc.Kill(a.Id);
                 }
                 else rejected++;
@@ -203,7 +271,10 @@ namespace Stabby.Game
         NativeArray<byte> resolveOk;
         NativeList<ulong> pickIds;
         NativeList<float> pickDist;
-        JobSlot resolveSlot, pickSlot;
+        NativeList<ulong> arrived;
+        NativeList<ObjectReplyRpc> replies;
+        NativeReference<float4> local;
+        JobSlot resolveSlot, pickSlot, gather;
         float3 pickAt;
         bool pickWanted;
         float nextPick;
@@ -224,15 +295,23 @@ namespace Stabby.Game
             tables = new ReachTables();
             pickIds = new NativeList<ulong>(16, Allocator.Persistent);
             pickDist = new NativeList<float>(16, Allocator.Persistent);
+            arrived = new NativeList<ulong>(64, Allocator.Persistent);
+            replies = new NativeList<ObjectReplyRpc>(4, Allocator.Persistent);
+            local = new NativeReference<float4>(Allocator.Persistent);
+            RequireForUpdate<EndSimulationEntityCommandBufferSystem.Singleton>();
         }
 
         protected override void OnDestroy()
         {
             resolveSlot.Finish();
             pickSlot.Finish();
+            gather.Finish();
             ReleaseResolve();
             pickIds.Dispose();
             pickDist.Dispose();
+            arrived.Dispose();
+            replies.Dispose();
+            local.Dispose();
             tables.Dispose();
         }
 
@@ -240,16 +319,18 @@ namespace Stabby.Game
         {
             var field = World.GetExistingSystemManaged<ObjectColumnsSystem>().Field;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            foreach (var (rpc, e) in SystemAPI.Query<RefRO<ObjectDeltaRpc>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            if (gather.Done)
             {
-                ecb.DestroyEntity(e);
-                foreach (ulong id in rpc.ValueRO.Ids) pending.Add(id);
-            }
-            foreach (var (rpc, e) in SystemAPI.Query<RefRO<ObjectReplyRpc>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
-            {
-                ecb.DestroyEntity(e);
-                reply = $"{ObjectDeltaApply.Name(field, rpc.ValueRO.Id)} {ObjectDeltaApply.Words((RemoveResult)rpc.ValueRO.Code)}";
-                Status();
+                gather.Finish();
+                for (int k = 0; k < arrived.Length; k++) pending.Add(arrived[k]);
+                arrived.Clear();
+                if (replies.Length > 0)
+                {
+                    var last = replies[replies.Length - 1];
+                    reply = $"{ObjectDeltaApply.Name(field, last.Id)} {ObjectDeltaApply.Words((RemoveResult)last.Code)}";
+                    replies.Clear();
+                    Status();
+                }
             }
 
             if (resolveSlot.Done)
@@ -270,6 +351,51 @@ namespace Stabby.Game
             sendQueue.Clear();
             ecb.Playback(EntityManager);
             ecb.Dispose();
+            if (gather.Busy) return;
+            var end = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(World.Unmanaged);
+            local.Value = default;
+            var dep = new DeltaJob { Arrived = arrived, Ecb = end }.Schedule(Dependency);
+            dep = new ReplyJob { Replies = replies, Ecb = end }.Schedule(dep);
+            dep = new LocalJob { Local = local }.Schedule(dep);
+            Dependency = dep;
+            gather.Start(dep);
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(ReceiveRpcCommandRequest))]
+        partial struct DeltaJob : IJobEntity
+        {
+            public NativeList<ulong> Arrived;
+            public EntityCommandBuffer Ecb;
+
+            void Execute(Entity e, in ObjectDeltaRpc rpc)
+            {
+                Ecb.DestroyEntity(e);
+                for (int k = 0; k < rpc.Ids.Length; k++) Arrived.Add(rpc.Ids[k]);
+            }
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(ReceiveRpcCommandRequest))]
+        partial struct ReplyJob : IJobEntity
+        {
+            public NativeList<ObjectReplyRpc> Replies;
+            public EntityCommandBuffer Ecb;
+
+            void Execute(Entity e, in ObjectReplyRpc rpc)
+            {
+                Ecb.DestroyEntity(e);
+                Replies.Add(rpc);
+            }
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(Player), typeof(GhostOwnerIsLocal))]
+        partial struct LocalJob : IJobEntity
+        {
+            public NativeReference<float4> Local;
+
+            void Execute(in LocalTransform t) => Local.Value = new float4(t.Position, 1);
         }
 
         void Prompt(ObjectField field)
@@ -282,14 +408,11 @@ namespace Stabby.Game
             if (want != prompt) { prompt = want; Status(); }
             if (has && Input.GetKeyDown(KeyCode.E)) Request(target);
             float now = (float)SystemAPI.Time.ElapsedTime;
-            if (pickWanted || pickSlot.Busy || now < nextPick) return;
+            if (pickWanted || pickSlot.Busy || gather.Busy || now < nextPick) return;
             nextPick = now + PickSeconds;
-            foreach (var t in SystemAPI.Query<RefRO<LocalTransform>>().WithAll<Player, GhostOwnerIsLocal>())
-            {
-                pickAt = t.ValueRO.Position;
-                pickWanted = true;
-                break;
-            }
+            if (local.Value.w == 0) return;
+            pickAt = local.Value.xyz;
+            pickWanted = true;
         }
 
         void Schedule(ObjectField field)

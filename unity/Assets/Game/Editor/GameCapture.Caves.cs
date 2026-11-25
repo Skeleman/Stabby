@@ -128,7 +128,7 @@ namespace Stabby.Game.Editor
             int room = -1;
             if (hall == null)
                 for (int q = 0; q < edits.Length; q++)
-                    if (FeatureEdit.IsRoom(edits[q].Shape) && (room < 0 || edits[q].R > edits[room].R)) room = q;
+                    if (edits[q].Shape == FeatureEdit.CaveRoom && (room < 0 || edits[q].R > edits[room].R)) room = q;
             if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;

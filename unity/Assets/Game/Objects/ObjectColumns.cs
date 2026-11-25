@@ -301,6 +301,15 @@ namespace Stabby.Game
         }
     }
 
+    [BurstCompile]
+    [WithAll(typeof(Player))]
+    partial struct GatherSpots : IJobEntity
+    {
+        public NativeList<float2> Spots;
+
+        void Execute(in LocalTransform t) => Spots.Add(t.Position.xz);
+    }
+
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation)]
     public partial class ObjectColumnsSystem : SystemBase
     {
@@ -327,7 +336,8 @@ namespace Stabby.Game
         readonly List<int> resident = new List<int>();
         readonly List<int> wanted = new List<int>();
         readonly List<int> done = new List<int>();
-        readonly List<float2> spots = new List<float2>();
+        NativeList<float2> spots, gathered;
+        JobSlot gather;
         ObjectLibrary lib;
         float reach, freeReach;
         int lastColumns, columns, shown = -1, converted, baked;
@@ -351,6 +361,8 @@ namespace Stabby.Game
         protected override void OnCreate()
         {
             lib = ContentFiles.Objects(ContentFiles.Biomes());
+            spots = new NativeList<float2>(4, Allocator.Persistent);
+            gathered = new NativeList<float2>(4, Allocator.Persistent);
             reach = ObjectRegions.Reach(lib);
             freeReach = ObjectRegions.FreeReach(reach);
             var c = cost;
@@ -360,6 +372,9 @@ namespace Stabby.Game
 
         protected override void OnDestroy()
         {
+            gather.Finish();
+            spots.Dispose();
+            gathered.Dispose();
             foreach (var b in baking.Values)
             {
                 b.Handle.Complete();
@@ -445,10 +460,13 @@ namespace Stabby.Game
                 warm.Out.Dispose();
             }
 
-            spots.Clear();
-            foreach (var t in SystemAPI.Query<RefRO<LocalTransform>>().WithAll<Player>())
-                spots.Add(t.ValueRO.Position.xz);
-            if (SystemAPI.TryGetSingleton<SpawnPoint>(out var spawn)) spots.Add(spawn.XZ);
+            if (gather.Done)
+            {
+                gather.Finish();
+                spots.Clear();
+                spots.AddRange(gathered.AsArray());
+                if (SystemAPI.TryGetSingleton<SpawnPoint>(out var spawn)) spots.Add(spawn.XZ);
+            }
 
             cost.Begin();
             long t0 = Stopwatch.GetTimestamp();
@@ -466,6 +484,10 @@ namespace Stabby.Game
             if (installed + started > 0) split.Add(t1 - t0, t2 - t1 - singletonTicks, singletonTicks, t3 - t2, t4 - t3);
             singletonTicks = 0;
             Status();
+            if (gather.Busy) return;
+            gathered.Clear();
+            Dependency = new GatherSpots { Spots = gathered }.Schedule(Dependency);
+            gather.Start(Dependency);
         }
 
         static double Ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
