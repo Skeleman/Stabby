@@ -11,16 +11,19 @@ float3 ContactTint(float3 g)
     return max(0, lerp(l.xxx, g, 1.2)) * 0.36;
 }
 
+float ContactBed(float2 xz)
+{
+    return SAMPLE_TEXTURE2D_LOD(_StabbyBed, sampler_StabbyBed, xz * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).r;
+}
+
 float3 ContactColor(float2 xz, float h)
 {
     float3 g = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
     g = lerp(g, ToLinear(_StabbySand.rgb), smoothstep(6, 2, h));
+    float3 sm = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(0.5, 0.5), 12).rgb;
+    float3 rock = lerp(sm, dot(sm, float3(0.2126, 0.7152, 0.0722)) * float3(1.02, 1, 0.97), 0.85);
+    g = lerp(g, rock, smoothstep(2, 6, ContactBed(xz) - h));
     return ContactTint(g);
-}
-
-float ContactBed(float2 xz)
-{
-    return SAMPLE_TEXTURE2D_LOD(_StabbyBed, sampler_StabbyBed, xz * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).r;
 }
 
 float2 ContactAt(float2 xz)
