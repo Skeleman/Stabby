@@ -128,7 +128,7 @@ namespace Stabby.Game.Editor
             int room = -1;
             if (hall == null)
                 for (int q = 0; q < edits.Length; q++)
-                    if (FeatureEdit.IsRoom(edits[q].Shape) && (room < 0 || edits[q].R > edits[room].R)) room = q;
+                    if (edits[q].Shape == FeatureEdit.CaveRoom && (room < 0 || edits[q].R > edits[room].R)) room = q;
             if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
@@ -324,6 +324,30 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, "caves-brook-spring");
                     GeometryShot(cam, dir, "caves-brook-spring-debug-unlit");
+                }
+                CaveBrook sink = null;
+                foreach (var b in brooks)
+                {
+                    if (b.End != CaveBrook.Sink || (sink != null && b.Rows <= sink.Rows)) continue;
+                    int ba = Mathf.Max(0, b.Rows - 30) * st, bb = (b.Rows - 1) * st;
+                    var bq = b.Points;
+                    if (ground.HeightAt(bq[ba], bq[ba + 2]) < Mathf.Max(20f, bq[ba + 1] + 8f) || ground.HeightAt(bq[bb], bq[bb + 2]) < Mathf.Max(20f, bq[bb + 1] + 8f)) continue;
+                    sink = b;
+                }
+                if (sink != null)
+                {
+                    int ka = Mathf.Max(0, sink.Rows - 30), kb = sink.Rows - 1;
+                    var kq = sink.Points;
+                    var kp = new Vector3(kq[ka * st], kq[ka * st + 1], kq[ka * st + 2]);
+                    var ke = new Vector3(kq[kb * st], kq[kb * st + 1], kq[kb * st + 2]);
+                    eye = kp + Vector3.up * 1.7f;
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(ke - eye));
+                    waited = LoadWaitTotal();
+                    for (var w = Settle(120); w.MoveNext();) yield return null;
+                    lines.Add($"sink brook in {graphs[sink.Graph].Class} graph {sink.Graph}, {sink.Rows} rows, drops to {ke.y:F1} at {ke.x:F0},{ke.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}: stream wait {LoadWaitTotal() - waited:F2} s");
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "caves-brook-sink");
+                    GeometryShot(cam, dir, "caves-brook-sink-debug-unlit");
                 }
             }
             else lines.Add("cave brooks: none in this world");

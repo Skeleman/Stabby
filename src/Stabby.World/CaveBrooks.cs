@@ -22,11 +22,50 @@ namespace Stabby.World
         const int Raw = 5, Shrinks = 3;
         const float SecondsPerYear = 31557600f;
 
+        public const float SinkHoleM = 0.75f, SinkOffM = 1.7f, SinkNarrow = 0.6f, SinkClearM = Underground.ClearSide + SinkHoleM + 0.15f, SinkTopM = 0.15f, SinkLeanM = 1f, SinkDeepM = 3f, SinkLumps = 0.08f, SinkProbeM = 0.5f;
+
         public static CaveBrook[] Build(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
         {
-            var list = new List<CaveBrook>();
-            if (caves == null || w.Climate == null) return list.ToArray();
+            var list = Traces(w, edits, caves);
+            if (list.Count == 0) return list.ToArray();
             var floor = new Floor { Ground = new DetailGround { Detail = detail }, Grid = new EditGrid(edits, w.Config.Size * w.Config.CellMeters) };
+            foreach (var s in list)
+            {
+                var r = Rng.Stream(w.Config.Seed ^ Rng.Mix((ulong)s.Graph), "cave-brooks");
+                s.Points = Shape(s.Points, s.End, floor, ref r);
+            }
+            return list.ToArray();
+        }
+
+        public static FeatureEdit[] Sinks(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves)
+        {
+            var holes = new List<FeatureEdit>();
+            float cm = w.Config.CellMeters;
+            foreach (var s in Traces(w, edits, caves))
+            {
+                if (s.End != CaveBrook.Sink) continue;
+                var end = caves[s.Graph].Nodes[s.Nodes[s.Nodes.Length - 1]];
+                int last = s.Points.Length - Raw;
+                float x = s.Points[last], z = s.Points[last + 2], tx = x - end.X, tz = z - end.Z, tl = (float)Math.Sqrt(tx * tx + tz * tz);
+                if (tl < 1e-3f) continue;
+                tx /= tl; tz /= tl;
+                float r = SinkHoleM / Features.CaveHollow;
+                var hole = new FeatureEdit
+                {
+                    Kind = FeatureEdit.Carve, Shape = FeatureEdit.Sink, R = r, N = SinkLumps * r,
+                    Ax = x, Ay = end.Y - SinkTopM, Az = z,
+                    Bx = x + tx * SinkLeanM, By = end.Y - SinkDeepM, Bz = z + tz * SinkLeanM,
+                    S = Rng.Stream(w.Config.Seed ^ Rng.Mix((ulong)s.Graph), "cave-sinks").NextFloat(),
+                }.Finer();
+                if (Features.Inside(hole, cm)) holes.Add(hole);
+            }
+            return holes.ToArray();
+        }
+
+        static List<CaveBrook> Traces(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves)
+        {
+            var list = new List<CaveBrook>();
+            if (caves == null || w.Climate == null) return list;
             for (int gi = 0; gi < caves.Length; gi++)
             {
                 var g = caves[gi];
@@ -37,13 +76,11 @@ namespace Stabby.World
                 {
                     var s = Trace(w, edits, g, gi, src);
                     if (s == null) continue;
-                    var r = Rng.Stream(w.Config.Seed ^ Rng.Mix((ulong)gi), "cave-brooks");
-                    s.Points = Shape(s.Points, s.End, floor, ref r);
                     list.Add(s);
                     break;
                 }
             }
-            return list.ToArray();
+            return list;
         }
 
         public static int CellOf(GeneratedWorld w, float x, float z)
@@ -95,6 +132,7 @@ namespace Stabby.World
             }
             if (run < MinRunM || pts.Count < 2 * Raw) return null;
             if (pooled) Inlet(pts, basin, ref surface);
+            if (end == CaveBrook.Sink && !Drain(pts, g, g.Nodes[at], ref surface)) return null;
             return new CaveBrook
             {
                 Graph = gi, End = end, Flow = flow, Points = pts.ToArray(), Nodes = nodes.ToArray(),
@@ -174,6 +212,58 @@ namespace Stabby.World
             }
         }
 
+        static bool Drain(List<float> pts, CaveGraph g, CaveNode n, ref float surface)
+        {
+            int last = pts.Count - Raw, prev = Math.Max(0, last - 2 * Raw);
+            float tx = pts[last] - pts[prev], tz = pts[last + 2] - pts[prev + 2], tl = (float)Math.Sqrt(tx * tx + tz * tz);
+            if (tl < 1e-3f) return false;
+            tx /= tl; tz /= tl;
+            const float Diag = 0.70710678f;
+            float[] ways = { tx, tz, Diag * (tx - tz), Diag * (tz + tx), Diag * (tx + tz), Diag * (tz - tx), -tz, tx, tz, -tx };
+            for (int k = 0; k < ways.Length; k += 2)
+            {
+                float hx = n.X + ways[k] * SinkOffM, hz = n.Z + ways[k + 1] * SinkOffM;
+                if (Clearance(g, hx, hz) < SinkClearM) continue;
+                float x0 = pts[last], z0 = pts[last + 2], half = pts[last + 3], room = pts[last + 4];
+                int steps = Math.Max(1, (int)Math.Ceiling(SinkOffM / RowM));
+                for (int t = 1; t <= steps; t++)
+                {
+                    float f = (float)t / steps;
+                    Row(pts, x0 + (hx - x0) * f, n.Y + DepthM, z0 + (hz - z0) * f, half + (Math.Min(half, SinkNarrow * SinkHoleM) - half) * f, room, ref surface);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        static float Clearance(CaveGraph g, float x, float z)
+        {
+            float best = float.MaxValue;
+            foreach (var e in g.Edges)
+            {
+                var a = g.Nodes[e.A];
+                var b = g.Nodes[e.B];
+                float px = a.X, pz = a.Z;
+                var q = e.Points;
+                int m = q == null ? 0 : q.Length / 3;
+                for (int k = 0; k <= m; k++)
+                {
+                    float nx = k < m ? q[3 * k] : b.X, nz = k < m ? q[3 * k + 2] : b.Z;
+                    best = Math.Min(best, Segment(x, z, px, pz, nx, nz));
+                    px = nx; pz = nz;
+                }
+            }
+            return best;
+        }
+
+        static float Segment(float x, float z, float ax, float az, float bx, float bz)
+        {
+            float ex = bx - ax, ez = bz - az, ll = ex * ex + ez * ez;
+            float t = ll > 0f ? Math.Max(0f, Math.Min(1f, ((x - ax) * ex + (z - az) * ez) / ll)) : 0f;
+            float dx = x - ax - t * ex, dz = z - az - t * ez;
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
         struct Floor
         {
             public DetailGround Ground;
@@ -230,7 +320,7 @@ namespace Stabby.World
                 float ease = Ease(Math.Min(head, tail)), still = Ease(Math.Min(head, total - along[k]));
                 float surface = raw[o + 1], room = raw[o + 4];
                 float bed = floor.At(raw[o], raw[o + 2], surface, HugM);
-                if (bed < surface - DepthM - BuryMaxM && end == CaveBrook.Spring) surface = bed + DepthM;
+                if (bed < surface - DepthM - BuryMaxM && (end == CaveBrook.Spring || (end == CaveBrook.Sink && total - along[k] < SinkHoleM))) surface = bed + DepthM;
                 if (k > 0) surface = Math.Min(surface, pts[(k - 1) * CaveBrook.Stride + 1]);
                 float half = Spread * raw[o + 3] * (TaperFloor + (1f - TaperFloor) * ease) * (1f + WidthSwing * Smooth(width, along[k]));
                 float shift = WanderShare * Math.Max(0f, room - raw[o + 3]) * Smooth(wander, along[k]) * still;

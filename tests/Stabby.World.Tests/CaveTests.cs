@@ -271,8 +271,8 @@ public class CaveTests
             var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
             graphs += s.Graphs.Length;
             var e = new List<string>();
-            WorldChecks.CheckCaveBrooks(s.W, s.Graphs, streams, null, e);
-            Assert.Empty(e);
+            WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, streams, null, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
             foreach (var x in streams)
             {
                 ends[x.End]++;
@@ -294,14 +294,33 @@ public class CaveTests
         Assert.NotEmpty(streams);
         var x = streams[0];
         var up = new CaveBrook { Graph = x.Graph, End = x.End, Outlet = x.Outlet, Flow = x.Flow, Nodes = x.Nodes, Points = (float[])x.Points.Clone() };
-        up.Points[up.Points.Length - CaveBrook.Stride + 1] += 1f;
+        up.Points[up.Points.Length - CaveBrook.Stride + 1] = up.Points[1] + 1f;
         var e = new List<string>();
-        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, new[] { up }, null, e);
+        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, new[] { up }, null, e);
         Assert.Contains(e, m => m.Contains("flows uphill"));
         var lost = new CaveBrook { Graph = x.Graph, End = 7, Outlet = -1, Flow = x.Flow, Nodes = x.Nodes, Points = x.Points };
         e.Clear();
-        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, new[] { lost }, null, e);
+        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, new[] { lost }, null, e);
         Assert.Contains(e, m => m.Contains("no spring, pool or sink"));
+    }
+
+    [Fact]
+    public void SinkWithoutItsHoleFails()
+    {
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            foreach (var x in CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs))
+            {
+                if (x.End != CaveBrook.Sink) continue;
+                var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
+                var e = new List<string>();
+                WorldChecks.CheckCaveBrooks(s.W, s.Graphs, bare, new[] { x }, null, e);
+                Assert.Contains(e, m => m.Contains("into no hole"));
+                return;
+            }
+        }
+        throw new Xunit.Sdk.XunitException("no sink brook in seeds 1-8");
     }
 
     [Fact]

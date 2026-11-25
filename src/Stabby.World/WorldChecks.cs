@@ -838,7 +838,7 @@ namespace Stabby.World
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
-                bool cave = x.Shape == FeatureEdit.Cave;
+                bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink;
                 float s = cave || x.Shape == FeatureEdit.Shaft ? NearField.NodeStep(0) : LatticeStepM;
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
@@ -866,7 +866,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -970,12 +970,12 @@ namespace Stabby.World
             }
             if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
             var pools = CheckCaveObjects(w, detail, edits, e);
-            CheckCaveBrooks(w, caves, CaveBrooks.Build(w, detail, edits, caves), pools, e);
+            CheckCaveBrooks(w, caves, edits, CaveBrooks.Build(w, detail, edits, caves), pools, e);
         }
 
         public const float StreamSlackM = 1e-3f, StreamEndM = 1f, StreamPoolM = 0.05f;
 
-        public static void CheckCaveBrooks(GeneratedWorld w, CaveGraph[] caves, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
+        public static void CheckCaveBrooks(GeneratedWorld w, CaveGraph[] caves, FeatureEdit[] edits, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
         {
             foreach (var s in streams)
             {
@@ -1004,6 +1004,11 @@ namespace Stabby.World
                 else if (s.End == CaveBrook.Sink)
                 {
                     if (end.Entrance || CaveBrooks.Lower(w, g, s.Nodes[s.Nodes.Length - 1], s.Nodes, out _) >= 0) { e.Add(at + " sinks where it could still run downhill"); return; }
+                    bool hole = false;
+                    foreach (var x in edits)
+                        if (x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.Sink && x.Reach(ex, end.Y - CaveBrooks.SinkProbeM, ez, out float d) && x.Hole(d) < 0f
+                            && (ex - end.X) * (ex - end.X) + (ez - end.Z) * (ez - end.Z) <= (CaveBrooks.SinkOffM + StreamEndM) * (CaveBrooks.SinkOffM + StreamEndM) && ey < end.Y) hole = true;
+                    if (!hole) { e.Add(at + $" sinks at {ex:F0},{ez:F0} into no hole"); return; }
                 }
                 else { e.Add(at + " ends at no spring, pool or sink"); return; }
             }
