@@ -275,7 +275,7 @@ namespace Stabby.Game.Editor
                 Roots = RootCount(view);
             }
 
-            public void Add(EntityManager em, EntityManager view, ProfilerRecorder host, ProfilerRecorder build, ProfilerRecorder main)
+            public void Add(EntityManager em, EntityManager view, SystemMarker host, SystemMarker build, ProfilerRecorder main)
             {
                 Host = math.max(Host, host.LastValue / 1e6);
                 double b = build.LastValue / 1e6;
@@ -622,8 +622,8 @@ namespace Stabby.Game.Editor
             lines.Add($"far herd {herd}: {members} members, plan centre {p0.x:F1},{p0.y:F1}, {math.distance(p0, home):F0} m from spawn; spawn reach {spawn:F0} m, despawn reach {despawn:F0} m, route reach {routeReach:F0} m; live while the player waited {math.distance(stage, p0):F0} m out: {liveBefore}");
             lines.Add($"camera {math.distance(p0, eyeFlat):F1} m from the herd; player walks in at {WalkSpeed:F0} m/s and stops {standDist:F0} m out (calm {wary.Calm:F0} m, alert {wary.Alert:F0} m)");
 
-            using var hostRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(server, typeof(CreatureHostSystem)), 4);
-            using var buildRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(CreatureBuildSystem)), 4);
+            using var hostRec = new SystemMarker(MarkerName(server, typeof(CreatureHostSystem)), 4);
+            using var buildRec = new SystemMarker(MarkerName(view, typeof(CreatureBuildSystem)), 4);
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
             var fr = new FarFrames();
             for (int k = 0; k < 4; k++) yield return null;
