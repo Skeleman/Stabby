@@ -18,7 +18,7 @@ namespace Stabby.World
 
     public sealed class CaveLibrary
     {
-        public float Chance = 0.35f, CrystalChance;
+        public float Chance = 0.35f, CrystalChance, CellMin = 14f, CellMax = 22f;
         public List<CaveClass> Classes = new List<CaveClass>();
 
         public CaveClass Find(string id)
@@ -32,6 +32,7 @@ namespace Stabby.World
             var e = new List<string>();
             if (!(l.Chance >= 0f && l.Chance <= 1f)) e.Add("chance must be within 0..1");
             if (!(l.CrystalChance >= 0f && l.CrystalChance <= 1f)) e.Add("crystalChance must be within 0..1");
+            if (!(l.CellMax >= l.CellMin) || l.Classes.Exists(c => !(l.CellMin > c.RadiusMax))) e.Add("crystalCell needs tunnel radius < min <= max");
             if (l.Classes.Count == 0) e.Add("classes must not be empty");
             var ids = new HashSet<string>();
             foreach (var c in l.Classes)
@@ -109,7 +110,7 @@ namespace Stabby.World
             {
                 for (int a = cls.Fallback.Length > 0 ? Tries : 1; a > 0; a--)
                 {
-                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths, Grain = grain, RoomShape = gem ? FeatureEdit.CrystalCell : FeatureEdit.CaveRoom };
+                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths, Grain = grain, CellMin = lib.CellMin, CellMax = lib.CellMax, RoomShape = gem ? FeatureEdit.CrystalCell : FeatureEdit.CaveRoom };
                     b.G = new CaveGraph { Class = cls.Id, Tile = ty * 65536 + tx };
                     bool ok = b.Build() && Sound(detail, Near(prior, output, start), b.G);
                     r = b.R;
@@ -164,6 +165,7 @@ namespace Stabby.World
             public CaveGraph G;
             public float Grain;
             public int RoomShape;
+            public float CellMin, CellMax;
             readonly List<int> parents = new List<int>();
 
             float Ground(float x, float z) => Detail.HeightAt(x / Cm, z / Cm);
@@ -405,7 +407,7 @@ namespace Stabby.World
 
             void Chamber(CaveNode at)
             {
-                float big = R.Range(C.ChamberMin, C.ChamberMax), reach = big * 0.6f;
+                float big = RoomShape == FeatureEdit.CrystalCell ? R.Range(CellMin, CellMax) : R.Range(C.ChamberMin, C.ChamberMax), reach = big * 0.6f;
                 Room(at, at.Hx, at.Hz, reach, big);
             }
 

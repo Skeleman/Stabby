@@ -63,6 +63,9 @@ namespace Stabby.Content
         {
             var root = Root(json, source, CaveSchemaVersion);
             var l = new CaveLibrary { Chance = root.Float("chance", 0), CrystalChance = root.Float("crystalChance", 0) };
+            var cell = Pair(root, "crystalCell", DefaultCell, source);
+            l.CellMin = cell[0];
+            l.CellMax = cell[1];
             foreach (var k in root.Objects("classes", true))
             {
                 var nodes = Pair(k, "nodes", null, source);
@@ -87,7 +90,7 @@ namespace Stabby.Content
             return l;
         }
 
-        static readonly float[] DefaultChamber = { 39f, 60f }, DefaultHall = { 0f, 0f }, DefaultBridge = { 9f, 12f };
+        static readonly float[] DefaultChamber = { 39f, 60f }, DefaultHall = { 0f, 0f }, DefaultBridge = { 9f, 12f }, DefaultCell = { 14f, 22f };
 
         static float[] Pair(Json j, string key, float[] fallback, string source)
         {
