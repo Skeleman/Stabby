@@ -556,16 +556,13 @@ namespace Stabby.Game
             int started = 0;
             wanted.Clear();
             foreach (var p in spots) ObjectRegions.Near(Field.ChunksAcross, Field.ChunkMeters, p.x, p.y, reach, wanted);
-            var field = Field;
-            var table = shapes;
             foreach (int r in wanted)
             {
                 if (regions[r].IsCreated || baking.ContainsKey(r) || converting.ContainsKey(r)) continue;
                 started++;
                 if (!instances[r].IsCreated)
                 {
-                    int region = r;
-                    converting[r] = Task.Run(() => Convert(field, table, region));
+                    converting[r] = StartConvert(Field, shapes, r);
                     continue;
                 }
                 var output = new NativeReference<RegionColumns>(Allocator.Persistent);
@@ -580,6 +577,8 @@ namespace Stabby.Game
             if (baking.Count > 0) JobHandle.ScheduleBatchedJobs();
             return started;
         }
+
+        static Task<Converted> StartConvert(ObjectField field, ColumnShapes table, int region) => Task.Run(() => Convert(field, table, region));
 
         [System.ThreadStatic] static List<ObjectInstance> scratch;
 
