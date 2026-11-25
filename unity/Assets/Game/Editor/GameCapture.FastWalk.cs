@@ -56,6 +56,8 @@ namespace Stabby.Game.Editor
             cam.targetTexture = target;
             yield return null;
             var start = new Vector2(home.x, home.z);
+            using (var sq = server.EntityManager.CreateEntityQuery(typeof(SpawnPoint)))
+                if (sq.CalculateEntityCount() == 1) start = sq.GetSingleton<SpawnPoint>().XZ;
             Vector2 d = WalkLine(ground, start, NormalWalkM + FastWalkM, out float land, out float relief);
             int to = System.Array.IndexOf(args, "-stabbyWalkTo");
             if (to >= 0 && to + 2 < args.Length && float.TryParse(args[to + 1], out float tx) && float.TryParse(args[to + 2], out float tz))
@@ -71,9 +73,10 @@ namespace Stabby.Game.Editor
                         recs.Add((part, new SystemMarker(MarkerName(w, type), 1)));
             var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 1);
             var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
+            var allocCountRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocation In Frame Count", 1);
             var lines = new List<string>
             {
-                $"walk line from {start.x:F0},{start.y:F0} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
+                $"walk line from {start.x:F1},{start.y:F1} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
             };
             try
             {
@@ -83,7 +86,8 @@ namespace Stabby.Game.Editor
                     float along = from;
                     bool first = true;
                     int gcRuns = System.GC.CollectionCount(0);
-                    bool profile = label == "fast" && System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE") == "1";
+                    string profileAt = System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE");
+                    bool profile = profileAt == label || label == "fast" && profileAt == "1";
                     var churn0 = Churn();
                     float churnT0 = Time.realtimeSinceStartup;
                     while (along < from + length)
@@ -91,10 +95,11 @@ namespace Stabby.Game.Editor
                         if (profile && frames.Count % 1000 == 0) WalkProfile(frames.Count / 1000);
                         if (!first)
                         {
-                            var row = new float[WalkParts.Length + 5];
+                            var row = new float[WalkParts.Length + 6];
                             int runs = System.GC.CollectionCount(0);
                             row[WalkParts.Length + 3] = runs - gcRuns;
                             row[WalkParts.Length + 4] = allocRec.LastValue / 1024f;
+                            row[WalkParts.Length + 5] = allocCountRec.LastValue;
                             gcRuns = runs;
                             row[0] = Time.unscaledDeltaTime * 1000f;
                             row[1] = mainRec.LastValue / 1e6f;
@@ -120,6 +125,7 @@ namespace Stabby.Game.Editor
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
                     lines.Add(ColumnsEqual(label));
+                    yield return null;
                 }
                 var end = start + d * (NormalWalkM + FastWalkM);
                 var jump = TeleportSpot(ground, end, d);
@@ -132,10 +138,16 @@ namespace Stabby.Game.Editor
                 float t0 = Time.realtimeSinceStartup;
                 var fill = new List<float[]>();
                 int settled = 0;
+                int fillRuns = System.GC.CollectionCount(0);
                 while (settled < 3 && Time.realtimeSinceStartup - t0 < 120f)
                 {
                     yield return null;
-                    var row = new float[WalkParts.Length + 5];
+                    var row = new float[WalkParts.Length + 6];
+                    int runs = System.GC.CollectionCount(0);
+                    row[WalkParts.Length + 3] = runs - fillRuns;
+                    row[WalkParts.Length + 4] = allocRec.LastValue / 1024f;
+                    row[WalkParts.Length + 5] = allocCountRec.LastValue;
+                    fillRuns = runs;
                     row[0] = Time.unscaledDeltaTime * 1000f;
                     row[1] = mainRec.LastValue / 1e6f;
                     float sum = 0;
@@ -148,6 +160,28 @@ namespace Stabby.Game.Editor
                 lines.Add($"teleport {Vector2.Distance(end, jump):F0} m to {jump.x:F0},{jump.y:F0}: view filled in {filled:F2} s ({fill.Count} frames{(settled < 3 ? ", timed out" : "")})");
                 lines.Add(WalkReport("teleport fill", 0, 0, fill));
                 for (var s = Settle(240); s.MoveNext();) yield return null;
+                var still = new List<float[]>();
+                bool profileStill = System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE") == "still";
+                if (profileStill) WalkProfile(0);
+                int stillRuns = System.GC.CollectionCount(0);
+                for (int k = 0; k < 600; k++)
+                {
+                    yield return null;
+                    var row = new float[WalkParts.Length + 6];
+                    int runs = System.GC.CollectionCount(0);
+                    row[WalkParts.Length + 3] = runs - stillRuns;
+                    row[WalkParts.Length + 4] = allocRec.LastValue / 1024f;
+                    row[WalkParts.Length + 5] = allocCountRec.LastValue;
+                    stillRuns = runs;
+                    row[0] = Time.unscaledDeltaTime * 1000f;
+                    row[1] = mainRec.LastValue / 1e6f;
+                    float sum = 0;
+                    foreach (var (part, rec) in recs) { float ms = rec.LastValue / 1e6f; row[3 + part] += ms; sum += ms; }
+                    row[2] = Mathf.Max(0, row[1] - sum);
+                    still.Add(row);
+                }
+                if (profileStill) UnityEngine.Profiling.Profiler.enabled = false;
+                lines.Add(WalkReport("standing after teleport", 0, 0, still));
                 lines.Add(Resident(view, "after teleport"));
                 lines.Add(ColumnsEqual("after teleport"));
                 var mem = new MemoryCounters { Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MemoryCounters>() };
@@ -161,6 +195,7 @@ namespace Stabby.Game.Editor
                 foreach (var (_, rec) in recs) rec.Dispose();
                 mainRec.Dispose();
                 allocRec.Dispose();
+                allocCountRec.Dispose();
             }
             GameStatus.Lines["~walk"] = string.Join("\n", lines);
         }
@@ -247,6 +282,13 @@ namespace Stabby.Game.Editor
             return best;
         }
 
+        static string GcStats(IEnumerable<float> kb, IEnumerable<float> count)
+        {
+            var k = kb.OrderBy(x => x).ToList();
+            var c = count.OrderBy(x => x).ToList();
+            return $"GC alloc KB/frame p50 {Pct(k, 0.5f):F1} p99 {Pct(k, 0.99f):F1} max {(k.Count > 0 ? k[k.Count - 1] : 0):F1}, allocs/frame p50 {Pct(c, 0.5f):F0} p99 {Pct(c, 0.99f):F0} max {(c.Count > 0 ? c[c.Count - 1] : 0):F0}, {c.Count(x => x > 0)} of {c.Count} frames allocating";
+        }
+
         static float Pct(List<float> sorted, float p) => sorted.Count == 0 ? 0 : sorted[Mathf.Min(sorted.Count - 1, (int)(sorted.Count * p))];
 
         static string WalkReport(string label, float speed, float length, List<float[]> frames)
@@ -262,10 +304,9 @@ namespace Stabby.Game.Editor
             int over = frames.Count(f => f[1] > 33f), overDt = frames.Count(f => f[0] > 33f);
             int streaming = frames.Count(f => f[3] + f[4] + f[5] + f[6] + f[7] > 33f);
             int collections = frames.Count(f => f[gcAt] > 0), slowCollections = frames.Count(f => f[gcAt] > 0 && f[1] > 15f), slowOthers = frames.Count(f => f[gcAt] == 0 && f[1] > 15f);
-            var allocs = frames.Select(f => f[gcAt + 1]).OrderBy(x => x).ToList();
             var worst = frames.Select((f, i) => (f, i)).OrderByDescending(x => x.f[1]).Take(8)
                 .Select(x => $"#{x.i} {x.f[1]:F0} ms (" + string.Join(", ", Enumerable.Range(2, names.Length - 2).Where(c => x.f[c] >= 0.5f).Select(c => $"{names[c]} {x.f[c]:F1}")) + (x.f[gcAt] > 0 ? ", GC" : "") + $", alloc {x.f[gcAt + 1]:F0} KB)");
-            return $"walk {label} {speed:F0} m/s over {length:F0} m, {frames.Count} frames: {over} main-thread frames over 33 ms ({overDt} by dt), {streaming} with streaming systems over 33 ms; {collections} GC frames ({slowCollections} over 15 ms, {slowOthers} non-GC over 15 ms), alloc KB/frame p50 {Pct(allocs, 0.5f):F0} p99 {Pct(allocs, 0.99f):F0}\n  " +
+            return $"walk {label} {speed:F0} m/s over {length:F0} m, {frames.Count} frames: {over} main-thread frames over 33 ms ({overDt} by dt), {streaming} with streaming systems over 33 ms; {collections} GC frames ({slowCollections} over 15 ms, {slowOthers} non-GC over 15 ms), {GcStats(frames.Select(f => f[gcAt + 1]), frames.Select(f => f[gcAt + 2]))}\n  " +
                    string.Join("\n  ", parts) + "\n  worst: " + string.Join("; ", worst);
         }
     }
