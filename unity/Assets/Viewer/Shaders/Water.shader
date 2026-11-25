@@ -84,7 +84,7 @@ Shader "Stabby/Water"
             static const float2 SwGroupDir = float2(0.8, 0.6), SwWarpA = float2(0.6, 0.8), SwWarpB = float2(-0.8, 0.6);
             static const float SwGroupDepth = 0.3, SwGroupL = 260, SwGroupSpeed = 4, SwWarpGain = 0.25, SwWarpAL = 3100, SwWarpBL = 2700, SwPeak = 3.3 * 1.3;
             static const float SwStart = 12, SwFull = 4, SwRef = 8, SwBreaking = 0.39, SwSharp = 2.5, SwMinDepth = 0.05, SwShoreSlope = 0.05, SwG = 9.81, SwShoreFade = 0.3, SwPeakShare = 0.5;
-            static const float SeaSnap = 2, SwellPxLo = 0.75, SwellPxHi = 2.5;
+            static const float SeaSnap = 2, SwellPxLo = 0.75, SwellPxHi = 2.5, CrestShare = 0.06, CrestPxLo = 1, CrestPxHi = 3;
             static const float2x2 Spin = float2x2(-0.737, -0.675, 0.675, -0.737);
             static const int ChopOctaves = 6;
             static const float ChopLacunarity = 1.93, ChopGain = 0.78, ChopPxLo = 1.5, ChopPxHi = 4, ChopWarp = 0.35, ChopStrength = 0.5, ChopBroad = 0.45, ChopFloorA2 = 0.0015, ChopLostBlur = 0.15;
@@ -487,7 +487,10 @@ Shader "Stabby/Water"
                 UNITY_BRANCH if (look && !river && i.color.a > 0.25)
                 {
                     swp.x *= i.swell.x;
-                    swH = Swell(swp, xz, _Time.y, swDepth, swDepth / SwShoreSlope, sdir, max(fpa * _ScreenParams.y / 1080, 1e-3), 3, swGrad, crest);
+                    float spx = max(fpa * _ScreenParams.y / 1080, 1e-3);
+                    swH = Swell(swp, xz, _Time.y, swDepth, swDepth / SwShoreSlope, sdir, spx, 3, swGrad, crest);
+                    float cb = CrestShare * 0.5 * SwShoreLength(swp, swDepth) * SwShoreSlope / max(slm, 1e-3);
+                    crest *= smoothstep(CrestPxLo, CrestPxHi, cb / spx);
                 }
                 float2 g, wg = 0;
                 float wl = 0, lost = 1.5 * (1 - ripple);
