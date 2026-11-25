@@ -41,7 +41,7 @@ namespace Stabby.Game
         {
             chunks = new NativeHashMap<int, ContactChunk>(64, Allocator.Persistent);
             gone = new NativeHashSet<ulong>(64, Allocator.Persistent);
-            data = new NativeArray<byte>(Res * Res * 2, Allocator.Persistent);
+            data = new NativeArray<byte>(Res * Res * 4, Allocator.Persistent);
             columnCount = new NativeReference<int>(Allocator.Persistent);
         }
 
@@ -138,7 +138,7 @@ namespace Stabby.Game
             var sw = Stopwatch.StartNew();
             if (texture == null)
             {
-                texture = new Texture2D(Res, Res, TextureFormat.RG16, false, true) { name = "Contact", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                texture = new Texture2D(Res, Res, TextureFormat.RGBA32, false, true) { name = "Contact", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
                 Shader.SetGlobalTexture("_StabbyContact", texture);
             }
             texture.LoadRawTextureData(data);

@@ -982,11 +982,13 @@ namespace Stabby.World
                 if (!picked.Contains(c)) picked.Add(c);
                 if (picked.Count >= CaveObjectChunks) break;
             }
+            var contacts = new List<ObjectColumn>();
             foreach (int c in picked)
                 foreach (var o in field.Chunk(c % across, c / across))
                 {
                     if (!ObjectField.IsCave(w.Objects.Objects[o.Def])) continue;
-                    string fault = field.CaveFault(o);
+                    string loose = field.ContactFault(o, contacts);
+                    string fault = field.CaveFault(o) ?? (loose == null ? null : $"{w.Objects.Objects[o.Def].Id} at {o.X:F0},{o.Z:F0}{loose}");
                     if (fault != null) { e.Add(fault); return; }
                 }
         }

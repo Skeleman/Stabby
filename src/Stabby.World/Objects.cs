@@ -562,7 +562,51 @@ namespace Stabby.World
 
         public const float ContactReach = 0.35f, ContactReachPerM = 0.1f;
 
+        public const int StampFloor = 1, StampCeiling = 2;
+
         public static bool Stamps(ObjectLibrary lib, ObjectInstance o, ObjectColumn c) => c.Bottom <= o.Y + (lib.Objects[o.Def].Placement.Sink + ContactReachPerM) * o.Size + ContactReach;
+
+        public static int StampNeeds(ObjectLibrary lib, ObjectInstance o)
+        {
+            int cave = lib.Objects[o.Def].Placement.Cave;
+            return cave == CaveStalactite ? StampCeiling : StampFloor;
+        }
+
+        public static void ContactEnds(ObjectLibrary lib, ObjectInstance o, out float floor, out float ceiling)
+        {
+            float sink = lib.Objects[o.Def].Placement.Sink * o.Size;
+            int needs = StampNeeds(lib, o);
+            floor = (needs & StampFloor) != 0 ? o.Y + sink : float.NaN;
+            ceiling = (needs & StampCeiling) != 0 ? o.Y - sink : float.NaN;
+        }
+
+        public static int StampSides(ObjectLibrary lib, ObjectInstance o, ObjectColumn c)
+        {
+            int needs = StampNeeds(lib, o), sides = 0;
+            if ((needs & StampFloor) != 0 && Stamps(lib, o, c)) sides |= StampFloor;
+            if ((needs & StampCeiling) != 0)
+            {
+                ContactEnds(lib, o, out _, out float ceiling);
+                if (c.Top >= ceiling - ContactReachPerM * o.Size - ContactReach) sides |= StampCeiling;
+            }
+            return sides;
+        }
+
+        public string ContactFault(ObjectInstance o, List<ObjectColumn> scratch)
+        {
+            var def = lib.Objects[o.Def];
+            int needs = StampNeeds(lib, o);
+            for (int pi = 0; pi < def.Parts.Count; pi++)
+            {
+                scratch.Clear();
+                PartContactsOf(o, pi, scratch);
+                int sides = 0;
+                foreach (var c in scratch) sides |= StampSides(lib, o, c);
+                if ((needs & ~sides & StampFloor) != 0) return $" part {def.Parts[pi].Id} leaves no contact stamp";
+                if ((needs & ~sides & StampCeiling) != 0) return $" part {def.Parts[pi].Id} leaves no ceiling contact stamp";
+            }
+            return null;
+        }
 
         public static void AddLush(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<ObjectColumn> list)
         {
