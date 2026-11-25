@@ -82,8 +82,7 @@ namespace Stabby.World
                         if (pl.Discovery == WolfDen)
                         {
                             float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
-                            SeekDen(ref px, ref pz, x0, z0, x1, z1);
-                            if (!ToFace(ref px, ref pz, DenRear(d, variant, size), x0, z0, x1, z1, out qa, out qb)) continue;
+                            if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, variant, size), x0, z0, x1, z1, out qa, out qb)) continue;
                         }
                         if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
                         any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
@@ -810,7 +809,7 @@ namespace Stabby.World
                 }
         }
 
-        void SeekDen(ref float x, ref float z, float x0, float z0, float x1, float z1)
+        bool SeekDen(ref float x, ref float z, float x0, float z0, float x1, float z1)
         {
             float best = Fitness(WolfDen, x, z), bx = x, bz = z;
             for (int ring = 1; ring <= DenSeekRings; ring++)
@@ -822,10 +821,13 @@ namespace Stabby.World
                     if (fit > best) { best = fit; bx = px; bz = pz; }
                 }
             x = bx; z = bz;
+            return best > float.MinValue;
         }
 
         public float Fitness(int kind, float x, float z)
         {
+            float denWoods = kind == WolfDen ? Woods(x, z) : 0;
+            if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
             for (int k = 0; k < 8; k++)
             {
@@ -835,6 +837,7 @@ namespace Stabby.World
                 float dy = y - GroundAt(detail, cm, px, pz);
                 rise += dy;
                 relief = Math.Max(relief, Math.Abs(dy));
+                if (kind == WolfDen && relief > DenReliefM) return float.MinValue;
             }
             rise *= 0.125f;
             if (kind == Camp)
@@ -865,8 +868,7 @@ namespace Stabby.World
             if (kind == FairyRing) return relief <= FairyReliefM ? -0.2f * relief - Math.Abs(Woods(x, z) - FairyWoods) : float.MinValue;
             if (kind == WolfDen)
             {
-                float woods = Woods(x, z);
-                return relief <= DenReliefM && woods >= DenWoods && RiverGap(x, z) >= DenRiverM && BesideRock(x, z) ? 0.1f * rise - 0.1f * relief + woods : float.MinValue;
+                return RiverGap(x, z) >= DenRiverM && BesideRock(x, z) ? 0.1f * rise - 0.1f * relief + denWoods : float.MinValue;
             }
             if (kind == Hilltop) return rise >= HilltopRiseM ? rise : float.MinValue;
             return relief <= ClearingReliefM ? -relief : float.MinValue;
