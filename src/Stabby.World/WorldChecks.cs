@@ -889,13 +889,26 @@ namespace Stabby.World
                 if (!picked.Contains(c)) picked.Add(c);
                 if (picked.Count >= CaveObjectChunks) break;
             }
+            float length = 0f;
+            foreach (var x in edits)
+            {
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave) continue;
+                float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz), ex = x.Bx - x.Ax, ez = x.Bz - x.Az;
+                int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
+                if (picked.Contains(c)) length += (float)Math.Sqrt(ex * ex + ez * ez);
+            }
+            int drips = 0;
             foreach (int c in picked)
                 foreach (var o in field.Chunk(c % across, c / across))
                 {
-                    if (!ObjectField.IsCave(w.Objects.Objects[o.Def])) continue;
+                    var def = w.Objects.Objects[o.Def];
+                    if (!ObjectField.IsCave(def)) continue;
+                    if (def.Placement.Cave == ObjectField.CaveStalactite) drips++;
                     string fault = field.CaveFault(o);
                     if (fault != null) { e.Add(fault); return; }
                 }
+            if (length >= ObjectField.CaveDripSurveyM && drips * 100f < ObjectField.CaveDripPerHundredM * length)
+                e.Add($"caves: {drips} stalactites over {length:F0} m of passage, under {ObjectField.CaveDripPerHundredM} per 100 m");
         }
 
         public const float CaveNormalDeg = 1.5f;

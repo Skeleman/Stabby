@@ -37,11 +37,11 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, Shapes = 36;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, Shapes = 37;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
         public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen;
-        public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || IsStructure(shape);
+        public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || shape == DripColumn || IsStructure(shape);
         public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5;
         public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn" };
 
