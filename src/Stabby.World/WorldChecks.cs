@@ -878,6 +878,7 @@ namespace Stabby.World
         {
             if (w.Objects == null) return;
             var field = new ObjectField(w, detail, edits, w.Objects);
+            CheckCavePools(w, detail, edits, field.CavePools(), e);
             float span = field.ChunkMeters;
             int across = field.ChunksAcross;
             var picked = new List<int>();
@@ -896,6 +897,32 @@ namespace Stabby.World
                     string fault = field.CaveFault(o);
                     if (fault != null) { e.Add(fault); return; }
                 }
+        }
+
+        public const float CavePoolHeadM = 1f, CavePoolSealM = 0.3f;
+
+        public static void CheckCavePools(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, LiquidPool[] pools, List<string> e)
+        {
+            var ground = new DetailGround { Detail = detail };
+            float s = LatticeStepM;
+            foreach (var p in pools)
+            {
+                if (p.Kind != ObjectField.CavePool) continue;
+                if (p.Leaks) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} leaks out through its chamber"); return; }
+                if (p.WetCount == 0 || !(p.Level - p.Floor >= ObjectField.PoolMinDepthM)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} holds no water"); return; }
+                float x0 = p.NodeX(0), z0 = p.NodeZ(0), x1 = p.NodeX(p.Nx - 1), z1 = p.NodeZ(p.Nz - 1);
+                var near = new List<FeatureEdit>();
+                foreach (var f in edits)
+                    if (f.MaxX >= x0 - s && f.MinX <= x1 + s && f.MaxZ >= z0 - s && f.MinZ <= z1 + s) near.Add(f);
+                var list = new EditArray { Items = near.ToArray() };
+                for (int k = 0; k < p.Wet.Length; k++)
+                {
+                    if (!p.Wet[k]) continue;
+                    float x = p.NodeX(k % p.Nx), z = p.NodeZ(k / p.Nx), head = p.Level + CavePoolHeadM;
+                    if (Walk.Solid(ground, list, s, x, p.Ground[k] - CavePoolSealM, z) < 0) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} drains through its floor at {x:F1},{z:F1}"); return; }
+                    if (Walk.Solid(ground, list, s, x, head, z) >= 0 || !Underground.InChamber(near, x, head, z)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} spills outside its carved chamber at {x:F1},{z:F1}"); return; }
+                }
+            }
         }
 
         public const float CaveNormalDeg = 1.5f;
