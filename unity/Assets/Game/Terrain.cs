@@ -719,9 +719,33 @@ namespace Stabby.Game
         }
 
         Task<Prepared> preparing;
-        Task<(List<MeshParts>, List<MeshParts>)> steaming;
-        List<MeshParts> steam, pools;
-        int steamApplied;
+        sealed class StaticPack : IDisposable
+        {
+            public readonly MeshPack Pack = new MeshPack();
+            public readonly List<(BatchMaterialID Mat, float Pad, bool Cast)> Kinds = new List<(BatchMaterialID, float, bool)>();
+            public MeshBatch Batch;
+            public int Steam, Pools;
+
+            public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast)
+            {
+                if (part == null) return;
+                Pack.Add(part, Kinds.Count);
+                Kinds.Add((mat, pad, cast));
+            }
+
+            public void Dispose()
+            {
+                Batch?.Dispose();
+                Pack.Dispose();
+            }
+        }
+
+        Task<StaticPack> packing, steaming;
+        StaticPack water, springs;
+        bool steamDone;
+        readonly Dictionary<(BatchMaterialID, bool), Entity> staticPrototypes = new Dictionary<(BatchMaterialID, bool), Entity>();
+        readonly List<Mesh> pumped = new List<Mesh>();
+        readonly List<int> pumpedIds = new List<int>();
         bool hasMist;
         Light sun;
         IEnumerator<string> loading;
@@ -765,7 +789,7 @@ namespace Stabby.Game
         EntitiesGraphicsSystem graphics;
         BatchMaterialID material, waterMaterial, mistMaterial;
         Ground ground;
-        int waterApplied, frameVertices, built, evicted, generation, poolMisses, oddBuilt;
+        int frameVertices, built, evicted, generation, poolMisses, oddBuilt;
         bool ready, rootsReady, builtSmooth;
         float worstMs, worstLoadMs, worstLodsMs, worstCollectMs;
         string loadPart = "";
@@ -1324,17 +1348,29 @@ namespace Stabby.Game
         void Statics()
         {
             if (ready || !rootsReady) return;
-            var lakes = prepared.Lakes;
-            int water = lakes.Count + prepared.Rivers.Count, total = water + prepared.Mist.Count;
-            while (waterApplied < total)
+            if (water == null)
             {
-                var part = waterApplied < lakes.Count ? lakes[waterApplied] : waterApplied < water ? prepared.Rivers[waterApplied - lakes.Count] : prepared.Mist[waterApplied - water];
-                if (part != null && !Spend(part.Verts.Length)) return;
-                if (part != null && waterApplied < water) AddStatic(part, waterMaterial, 0);
-                else if (part != null) AddStatic(part, mistMaterial, WaterGeometry.MistPad);
-                waterApplied++;
+                if (packing == null)
+                {
+                    var p = prepared;
+                    BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+                    packing = Task.Run(() => Pack(sp =>
+                    {
+                        foreach (var part in p.Lakes) sp.Add(part, wm, 0, Casts(part));
+                        foreach (var part in p.Rivers) sp.Add(part, wm, 0, Casts(part));
+                        foreach (var part in p.Mist) sp.Add(part, mm, WaterGeometry.MistPad, true);
+                        sp.Add(p.Sea, wm, 0, Casts(p.Sea));
+                    }));
+                    return;
+                }
+                if (!packing.IsCompleted) return;
+                if (packing.IsFaulted) { GameStatus.Failure = packing.Exception.ToString(); return; }
+                water = packing.Result;
+                packing = null;
             }
-            AddStatic(prepared.Sea, waterMaterial, 0);
+            if (!PumpStatics(water)) return;
+            water.Dispose();
+            water = null;
             GameStatus.Lines["terrain~ready"] = $"terrain ready at {since.ElapsedMilliseconds} ms";
             prepared = null;
             ready = true;
@@ -1343,49 +1379,99 @@ namespace Stabby.Game
 
         void Steam()
         {
-            if (!ready || (steam != null && steamApplied >= steam.Count + pools.Count)) return;
-            if (steam == null)
+            if (!ready || steamDone) return;
+            if (springs == null)
             {
                 if (steaming == null)
                 {
                     var field = World.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
                     if (field == null) return;
-                    steaming = Task.Run(() => { var l = new List<MeshParts>(); var w = new List<MeshParts>(); WaterGeometry.Springs(field, l, w); return (l, w); });
+                    bool mist = hasMist;
+                    BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+                    steaming = Task.Run(() => Pack(sp =>
+                    {
+                        var l = new List<MeshParts>();
+                        var w = new List<MeshParts>();
+                        WaterGeometry.Springs(field, l, w);
+                        if (!mist) l.Clear();
+                        (sp.Steam, sp.Pools) = (l.Count, w.Count);
+                        foreach (var part in l) sp.Add(part, mm, WaterGeometry.MistPad, true);
+                        foreach (var part in w) sp.Add(part, wm, 0, Casts(part));
+                    }));
                     return;
                 }
                 if (!steaming.IsCompleted) return;
-                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); steam = pools = new List<MeshParts>(); return; }
-                (steam, pools) = steaming.Result;
-                if (!hasMist) steam.Clear();
+                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); steaming = null; steamDone = true; return; }
+                springs = steaming.Result;
                 steaming = null;
             }
-            while (steamApplied < steam.Count + pools.Count)
-            {
-                bool water = steamApplied >= steam.Count;
-                var part = water ? pools[steamApplied - steam.Count] : steam[steamApplied];
-                if (!Spend(part.Verts.Length)) return;
-                AddStatic(part, water ? waterMaterial : mistMaterial, water ? 0 : WaterGeometry.MistPad);
-                steamApplied++;
-            }
-            GameStatus.Lines["terrain~steam"] = $"spring steam {steam.Count} pieces, {pools.Count} pool pieces";
+            if (!PumpStatics(springs)) return;
+            GameStatus.Lines["terrain~steam"] = $"spring steam {springs.Steam} pieces, {springs.Pools} pool pieces";
+            springs.Dispose();
+            springs = null;
+            steamDone = true;
         }
 
-        bool Casts(MeshParts part, BatchMaterialID mat)
+        static StaticPack Pack(Action<StaticPack> fill)
         {
-            if (mat == mistMaterial) return true;
-            if (part.Uv4 == null) return false;
+            var sp = new StaticPack();
+            try
+            {
+                fill(sp);
+                sp.Batch = new MeshBatch(sp.Pack);
+            }
+            catch
+            {
+                sp.Dispose();
+                throw;
+            }
+            return sp;
+        }
+
+        static bool Casts(MeshParts part)
+        {
+            if (part?.Uv4 == null) return false;
             for (int i = 0; i < part.Uv4.Length; i++)
                 if (part.Uv4[i].x > 0.5f) return true;
             return false;
         }
 
-        void AddStatic(MeshParts part, BatchMaterialID mat, float pad)
+        bool PumpStatics(StaticPack sp)
         {
-            var mesh = WaterGeometry.ToMesh(part);
-            var id = graphics.RegisterMesh(mesh);
-            statics.Add(mesh);
-            var b = mesh.bounds;
-            Spawn(id, new AABB { Center = b.center, Extents = (float3)b.extents + pad }, mat, Casts(part, mat) ? ShadowCastingMode.On : ShadowCastingMode.Off);
+            if (!sp.Batch.Pump(pumped, pumpedIds)) return sp.Batch.Done;
+            var em = EntityManager;
+            var protos = new Entity[pumped.Count];
+            var infos = new MaterialMeshInfo[pumped.Count];
+            var boxes = new AABB[pumped.Count];
+            for (int i = 0; i < pumped.Count; i++)
+            {
+                var mesh = pumped[i];
+                var kind = sp.Kinds[pumpedIds[i]];
+                var id = graphics.RegisterMesh(mesh);
+                statics.Add(mesh);
+                frameVertices += mesh.vertexCount;
+                var key = (kind.Mat, kind.Cast);
+                if (!staticPrototypes.TryGetValue(key, out var proto))
+                {
+                    proto = Spawn(id, default, kind.Mat, kind.Cast ? ShadowCastingMode.On : ShadowCastingMode.Off);
+                    em.AddComponent<Prefab>(proto);
+                    staticPrototypes[key] = proto;
+                }
+                var b = mesh.bounds;
+                protos[i] = proto;
+                infos[i] = new MaterialMeshInfo(kind.Mat, id);
+                boxes[i] = new AABB { Center = b.center, Extents = (float3)b.extents + kind.Pad };
+            }
+            foreach (var proto in staticPrototypes.Values)
+            {
+                int n = 0;
+                foreach (var e in protos) if (e == proto) n++;
+                if (n == 0) continue;
+                using var made = em.Instantiate(proto, n, Allocator.Temp);
+                for (int i = 0, k = 0; i < protos.Length; i++)
+                    if (protos[i] == proto) Queue(new TerrainWrite { Entity = made[k++], Kind = 2, Mesh = infos[i], Box = boxes[i] });
+            }
+            return sp.Batch.Done;
         }
 
         bool Coverable(int key)
@@ -1767,6 +1853,10 @@ namespace Stabby.Game
             if (zeros.IsCreated) zeros.Dispose();
             foreach (var free in pool)
                 foreach (var mesh in free) UnityEngine.Object.Destroy(mesh);
+            Owned.Release(packing, sp => sp.Dispose());
+            Owned.Release(steaming, sp => sp.Dispose());
+            water?.Dispose();
+            springs?.Dispose();
             foreach (var mesh in statics) UnityEngine.Object.Destroy(mesh);
             if (tree.Offset.IsCreated) { tree.Offset.Dispose(); tree.Dim.Dispose(); tree.Range.Dispose(); }
             if (nodes.IsCreated) nodes.Dispose();
