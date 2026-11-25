@@ -573,13 +573,18 @@ namespace Stabby.Game
 
         static long Key(int def, int tx, int tz) => ((long)def << 40) | ((long)tx << 20) | (long)tz;
 
-        [System.ThreadStatic] static List<ObjectInstance> placedScratch;
         [System.ThreadStatic] static List<StructureLight> anchorScratch;
 
         ChunkParts Collect(int c)
         {
+            var placed = ListPool.Rent<ObjectInstance>();
+            try { return Collect(c, placed); }
+            finally { ListPool.Return(placed); }
+        }
+
+        ChunkParts Collect(int c, List<ObjectInstance> placed)
+        {
             int cx = c % across, cz = c / across;
-            var placed = placedScratch ??= new List<ObjectInstance>();
             field.PlaceInto(cx, cz, placed);
             int n = 0;
             for (int i = 0; i < placed.Count; i++) n += lib.Objects[placed[i].Def].Parts.Count;

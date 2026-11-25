@@ -580,14 +580,11 @@ namespace Stabby.Game
 
         static Task<Converted> StartConvert(ObjectField field, ColumnShapes table, int region) => Task.Run(() => Convert(field, table, region));
 
-        static readonly Stack<List<ObjectInstance>> objectLists = new Stack<List<ObjectInstance>>();
-
         static Converted Convert(ObjectField field, ColumnShapes table, int index)
         {
-            List<ObjectInstance> list;
-            lock (objectLists) list = objectLists.Count > 0 ? objectLists.Pop() : new List<ObjectInstance>();
+            var list = ListPool.Rent<ObjectInstance>();
             try { return Convert(field, table, index, list); }
-            finally { lock (objectLists) objectLists.Push(list); }
+            finally { ListPool.Return(list); }
         }
 
         static Converted Convert(ObjectField field, ColumnShapes table, int index, List<ObjectInstance> list)
@@ -600,7 +597,6 @@ namespace Stabby.Game
             foreach (var o in list) if (table.Solid(o.Def)) solid++;
             var native = new UnsafeList<ObjectInstance>(solid, Allocator.Persistent);
             foreach (var o in list) if (table.Solid(o.Def)) native.AddNoResize(o);
-            list.Clear();
             return new Converted { Objects = native, Ms = sw.ElapsedMilliseconds, Bytes = System.GC.GetAllocatedBytesForCurrentThread() - b0 };
         }
 
