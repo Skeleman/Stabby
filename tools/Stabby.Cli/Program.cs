@@ -20,7 +20,7 @@ switch (args.FirstOrDefault())
     case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--low 1]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--low-while file]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
@@ -151,7 +151,16 @@ int Sweep()
     var checkTimes = new System.Collections.Concurrent.ConcurrentBag<long>();
     var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture) };
     bool checks = Opt("checks", "1") != "0";
-    if (Opt("low", "0") != "0") Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
+    var lowWhile = Opt("low-while", "");
+    if (lowWhile != "" && File.Exists(lowWhile))
+    {
+        Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
+        _ = Task.Run(async () =>
+        {
+            while (File.Exists(lowWhile)) await Task.Delay(2000);
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Normal;
+        });
+    }
     Parallel.For(0, count, par, k =>
     {
         var c = Config(from + (ulong)k, size);

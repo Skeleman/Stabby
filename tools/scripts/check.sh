@@ -16,7 +16,7 @@ until mkdir "$lock" 2> /dev/null; do
   [ $((SECONDS - t_wait)) -ge 5400 ] && { say "lock: gave up after 90 min"; exit 1; }
   sleep 5
 done
-echo "$$ $(date +%s) $ROOT" > "$lock/owner"; trap 'rm -rf "$lock"' EXIT; trap 'exit 130' INT TERM
+echo "$$ $(date +%s) $ROOT" > "$lock/owner"; trap 'rm -rf "$lock" out/check/busy' EXIT; trap 'exit 130' INT TERM
 [ $told = 1 ] && say "lock: waited $((SECONDS - t_wait)) s"
 t0=$SECONDS
 base=$(git merge-base HEAD origin/main)
@@ -56,7 +56,7 @@ phase_tests() {
 }
 phase_sweep() {
   local s=$SECONDS rc=0 line
-  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 --low 1 > out/check/sweep$2.log 2>&1 || rc=1
+  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 --low-while out/check/busy > out/check/sweep$2.log 2>&1 || rc=1
   line=$(grep -E "seeds at" out/check/sweep$2.log | tail -1); [[ "$line" == *" 0 violations"* ]] || rc=1
   echo "sweep $2: $line, $((SECONDS - s)) s" > out/check/sweep$2.sum; echo $rc > out/check/sweep$2.rc
 }
@@ -81,9 +81,9 @@ phase_unity() {
   fi
   echo $rc > out/check/unity.rc
 }
-phase_tests &
+touch out/check/busy
+{ phase_tests & [ $unity = 1 ] && phase_unity & wait; rm -f out/check/busy; } &
 [ $gen = 1 ] && { phase_sweep 100 256 & phase_sweep 20 512 & }
-[ $unity = 1 ] && phase_unity &
 wait
 fail=0
 for p in tests sweep256 sweep512 unity; do
