@@ -43,6 +43,7 @@ ServerMapSystem.CompleteAllTrackedJobs only in OnDestroy, before releasing the m
 ClientMapSystem.CompleteAllTrackedJobs only in OnDestroy, before releasing the ground blob and chunk inbox jobs read
 ObjectViewSystem.CompleteAllTrackedJobs only in OnDestroy, before disposing tile containers jobs read
 TerrainViewSystem.CompleteAllTrackedJobs only in Audit, a diagnostic the capture tools call
+TerrainViewSystem.Complete only in the Audit and Seam diagnostics the capture tools call
 CreatureHostSystem.Query reads player positions and in-game connection ids, tens of entities, to feed the scheduled herd jobs
 ServerChunkStreamSystem.Query per-connection chunk requests and send queues, a handful of connection and RPC entities
 ClientMapSystem.Query the one WorldInfoRpc per join
