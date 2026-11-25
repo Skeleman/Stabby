@@ -336,6 +336,7 @@ public static class Linter
             foreach (var call in m.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(IsTeardown))
             {
                 if (call.Expression is MemberAccessExpressionSyntax acc) Add(acc.Expression);
+                else if (call.Expression is MemberBindingExpressionSyntax && call.Parent is ConditionalAccessExpressionSyntax cond) Add(cond.Expression);
                 Add(call.ArgumentList);
             }
             foreach (var loop in m.DescendantNodes().OfType<CommonForEachStatementSyntax>())
@@ -543,6 +544,7 @@ public static class Linter
     static string CalledName(ExpressionSyntax e) => e switch
     {
         MemberAccessExpressionSyntax m => m.Name.Identifier.Text,
+        MemberBindingExpressionSyntax b => b.Name.Identifier.Text,
         IdentifierNameSyntax i => i.Identifier.Text,
         _ => "",
     };

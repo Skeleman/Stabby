@@ -116,15 +116,15 @@ namespace Stabby.Game
                 return;
             }
             pending = next;
-            var list = missing.ToArray();
-            int n = across;
-            converting = Task.Run(() =>
-            {
-                var made = new List<(int, ContactChunk)>(list.Length);
-                foreach (int c in list) made.Add((c, ObjectChunks.Contacts(field, c % n, c / n)));
-                return made;
-            });
+            converting = StartConvert(field, missing.ToArray(), across);
         }
+
+        static Task<List<(int chunk, ContactChunk table)>> StartConvert(ObjectField field, int[] list, int n) => Task.Run(() =>
+        {
+            var made = new List<(int chunk, ContactChunk table)>(list.Length);
+            foreach (int c in list) made.Add((c, ObjectChunks.Contacts(field, c % n, c / n)));
+            return made;
+        });
 
         void Schedule(ContactWindow w)
         {

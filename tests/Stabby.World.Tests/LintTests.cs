@@ -210,6 +210,7 @@ public class LintTests
 
     [Theory]
     [InlineData("partial class Sys : SystemBase { JobHandle scan; protected override void OnUpdate() { } protected override void OnDestroy() { JobPoll.Teardown(scan); } }")]
+    [InlineData("sealed class Batch { public JobHandle Handle; public void Dispose() { } } partial class Sys : SystemBase { Batch batch; protected override void OnUpdate() { } protected override void OnDestroy() { batch?.Dispose(); } }")]
     [InlineData("partial class Sys : SystemBase { JobHandle scan; protected override void OnUpdate() { } protected override void OnDestroy() { Stop(); } void Stop() { scan.Complete(); } }")]
     [InlineData("public struct Slot { JobHandle h; public void Finish() { h.Complete(); } } [BurstCompile] partial struct Sys : ISystem { Slot slot; public void OnDestroy(ref SystemState s) { slot.Finish(); } }")]
     [InlineData("sealed class Batch { public JobHandle Handle; public void Dispose() { } } partial class Sys : SystemBase { List<Batch> pending; protected override void OnUpdate() { } protected override void OnDestroy() { foreach (var p in pending) { JobPoll.Teardown(p.Handle); p.Dispose(); } } }")]
