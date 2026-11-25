@@ -217,7 +217,7 @@ Shader "Stabby/VertexLit"
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
                 float2 xv = i.xz + OrgOrigin(_WorldSpaceCameraPos);
-                m.albedo = ContactGround(m.albedo, xv, h);
+                m.albedo = ContactGround(m.albedo, xv, h, n.y);
                 float2 sj = 0.08 * float2(OrgL2(xv, 0.9, 113.1).x, OrgL2(xv, 0.9, 117.9).x) + 0.03 * float2(OrgL2(xv, OrgF(0), 121.3).x, OrgL2(xv, OrgF(0), 125.7).x);
                 Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)), float3(xv.x, h, xv.y), half4(1, 1, 1, 1));
                 l.color *= l.shadowAttenuation;

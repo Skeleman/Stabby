@@ -91,11 +91,10 @@ namespace Stabby.World
                     var biomes = def.Placement.Biomes;
                     if (!seen[6] && biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, " is outside its biomes");
                 }
-                for (int pi = 0; pi < def.Parts.Count && !seen[10]; pi++)
+                if (!seen[10])
                 {
-                    contacts.Clear();
-                    field.PartContactsOf(o, pi, contacts);
-                    if (!contacts.Exists(q => ObjectField.Stamps(w.Objects, o, q))) Fail(10, $" part {def.Parts[pi].Id} leaves no contact stamp");
+                    string loose = field.ContactFault(o, contacts);
+                    if (loose != null) Fail(10, loose);
                 }
             }
             return found;

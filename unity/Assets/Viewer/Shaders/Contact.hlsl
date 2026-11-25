@@ -38,12 +38,17 @@ float3 BounceGround(float3 g, float2 xz, float h)
     return lerp(g, rock, smoothstep(2, 6, ContactBed(xz) - h));
 }
 
-float2 ContactAt(float2 xz)
+float4 ContactAll(float2 xz)
 {
     [branch] if (_StabbyContactUV.w <= 0) return 0;
     float2 uv = xz * _StabbyContactUV.x + _StabbyContactUV.yz;
     float edge = saturate(min(min(uv.x, uv.y), min(1 - uv.x, 1 - uv.y)) * 10);
-    return SAMPLE_TEXTURE2D_LOD(_StabbyContact, sampler_StabbyContact, uv, 0).rg * edge;
+    return SAMPLE_TEXTURE2D_LOD(_StabbyContact, sampler_StabbyContact, uv, 0) * edge;
+}
+
+float2 ContactAt(float2 xz)
+{
+    return ContactAll(xz).rg;
 }
 
 float3 LushTint(float3 g)
@@ -52,9 +57,12 @@ float3 LushTint(float3 g)
     return max(0, lerp(l.xxx, g, 1.25)) * float3(0.6, 0.76, 0.52);
 }
 
-float3 ContactGround(float3 albedo, float2 xz, float h)
+float3 ContactGround(float3 albedo, float2 xz, float h, float ny)
 {
-    float2 kg = ContactAt(xz);
+    float4 ka = ContactAll(xz);
+    [branch] if (max(max(ka.x, ka.y), max(ka.z, ka.w)) < 0.004) return albedo;
+    float cave = _StabbyFieldUV.x > 0 ? smoothstep(2, 6, ContactBed(xz) - h) : 0;
+    float2 kg = float2(lerp(ka.x, lerp(ka.w, ka.z, smoothstep(-0.3, 0.3, ny)), cave), ka.y * (1 - cave));
     [branch] if (max(kg.x, kg.y) < 0.004) return albedo;
     float n = OrgNoise2(xz * 1.9 + 3.7).x + 0.5 * OrgNoise2(xz * 6.3 - 11.2).x;
     float g = saturate(kg.y * (0.8 + 0.5 * n));
@@ -68,9 +76,9 @@ float ContactBand(float size, float thick)
     return min(min(0.5, 0.14 + 0.22 * size), 0.8 * thick);
 }
 
-float3 ContactObject(float3 albedo, float3 wp, float ground, float size, float thick)
+float3 ContactObject(float3 albedo, float3 wp, float ground, float size, float thick, float dir)
 {
-    float above = wp.y - ground;
+    float above = dir * (wp.y - ground);
     [branch] if (above > 0.8) return albedo;
     float n = OrgNoise2(wp.xz * 2.3 + wp.y * 1.7).x + 0.5 * OrgNoise2(float2(wp.x - wp.z, wp.y) * 7.1 + 5.3).x;
     float band = ContactBand(size, thick) * (1 + 0.4 * n);
@@ -78,6 +86,11 @@ float3 ContactObject(float3 albedo, float3 wp, float ground, float size, float t
     float3 c = ContactColor(wp.xz, ground), lw = float3(0.2126, 0.7152, 0.0722);
     c *= min(1, 0.45 * dot(albedo, lw) / max(dot(c, lw), 1e-4));
     return lerp(albedo, c, 0.8 * k * k);
+}
+
+float3 ContactObject(float3 albedo, float3 wp, float ground, float size, float thick)
+{
+    return ContactObject(albedo, wp, ground, size, thick, 1);
 }
 
 float3 ContactObject(float3 albedo, float3 wp, float ground, float size)

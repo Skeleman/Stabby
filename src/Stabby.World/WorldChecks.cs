@@ -1029,13 +1029,15 @@ namespace Stabby.World
                 if (picked.Contains(c)) length += (float)Math.Sqrt(ex * ex + ez * ez);
             }
             int drips = 0;
+            var contacts = new List<ObjectColumn>();
             foreach (int c in picked)
                 foreach (var o in field.Chunk(c % across, c / across))
                 {
                     var def = w.Objects.Objects[o.Def];
                     if (!ObjectField.IsCave(def)) continue;
                     if (def.Placement.Cave == ObjectField.CaveStalactite) drips++;
-                    string fault = field.CaveFault(o);
+                    string loose = field.ContactFault(o, contacts);
+                    string fault = field.CaveFault(o) ?? (loose == null ? null : $"{def.Id} at {o.X:F0},{o.Z:F0}{loose}");
                     if (fault != null) { e.Add(fault); return pools; }
                 }
             if (length >= ObjectField.CaveDripSurveyM && drips * 100f < ObjectField.CaveDripPerHundredM * length)

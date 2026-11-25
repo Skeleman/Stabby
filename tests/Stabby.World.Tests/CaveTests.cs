@@ -318,6 +318,7 @@ public class CaveTests
     public void CaveObjectsAreCommonAndPass()
     {
         int tiles = 0, drips = 0, mites = 0, rubble = 0, columns = 0, flows = 0;
+        var contacts = new List<ObjectColumn>();
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var s = At(seed);
@@ -331,7 +332,7 @@ public class CaveTests
                 else if (kind == ObjectField.CaveStalagmite) mites++;
                 else if (kind == ObjectField.CaveColumn) columns++;
                 else rubble++;
-                string fault = field.CaveFault(o);
+                string fault = field.CaveFault(o) ?? field.ContactFault(o, contacts);
                 Assert.True(fault == null, fault);
             }
         }
@@ -373,6 +374,19 @@ public class CaveTests
         float floor = Walk.Surface(new DetailGround { Detail = s.Detail }, rock, Features.LatticeStepM, o.X, o.Z, o.Y - o.Size, o.Y - o.Size - 40f);
         o.Size = o.Y - floor - 1f;
         Assert.Contains("hangs into the walking headroom", field.CaveFault(o) ?? "");
+    }
+
+    [Fact]
+    public void CaveObjectsOffTheirRockLeaveNoStamp()
+    {
+        foreach (int kind in new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite, ObjectField.CaveColumn })
+        {
+            var (s, _, o) = FindCave(kind);
+            var lib = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
+            lib.Objects[o.Def].Parts[0].OffsetY = 1.5f;
+            var moved = new ObjectField(s.W, s.Detail, s.Edits, lib);
+            Assert.EndsWith(kind == ObjectField.CaveStalactite ? "leaves no ceiling contact stamp" : "leaves no contact stamp", moved.ContactFault(o, new List<ObjectColumn>()) ?? "");
+        }
     }
 
     [Fact]
