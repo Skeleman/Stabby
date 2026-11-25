@@ -70,7 +70,7 @@ Shader "Stabby/Water"
             static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
             static const float SlopeRange = 0.1;
-            static const float MudFeather = 4;
+            static const float MudFeather = 4, PoolFeather = 0.5, PoolShore = 1.2;
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
             static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05;
             static const int SwTrains = 7;
@@ -719,7 +719,7 @@ Shader "Stabby/Water"
                     float churned = smoothstep(0.05, 0.55, poolBoil + 0.6 * pool - 0.35);
                     float core = smoothstep(0.6, 0.95, pool) * (0.6 + 0.4 * churned);
                     float ring = smoothstep(0.1, 0.6, pool) * churned * 0.55;
-                    foam = max(foam, max(core, ring));
+                    foam = max(foam, max(core, ring) * saturate(depth / PoolFeather));
                 }
                 foam *= 1 - max(visc, 0.9 * opacity);
                 c = lerp(c, l.color * 0.9 + sky * 0.2 + lg.diffuse * 0.9, foam * 0.7);
@@ -744,6 +744,7 @@ Shader "Stabby/Water"
                 c += Mixed(i, 8).rgb;
 
                 float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
+                if (river && i.fall.y > 0) alpha *= smoothstep(0, PoolShore, depth);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
                 return half4(lerp(StabbyMixFog(c, i.positionWS, i.fog), c, clear), alpha);
             }

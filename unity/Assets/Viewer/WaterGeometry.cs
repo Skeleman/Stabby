@@ -707,7 +707,12 @@ namespace Stabby.Viewer
                         foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
                         ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
                         pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);
-                        foreach (int v in foot) buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
+                        foreach (int v in foot)
+                        {
+                            buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
+                            buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, slopes[k], 0);
+                            buf.Curt[v] = Vector4.zero;
+                        }
                         var footRow = Vector3.Lerp(prev, new Vector3(p.x, 0, p.z), ft);
                         footRow.y = f.BaseY;
                         buf.Tint = Flowing(Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], ft)), currents[k]);
