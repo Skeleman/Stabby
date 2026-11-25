@@ -15,6 +15,9 @@ msg=$(mktemp); { echo "Merge $br"; [ -n "$sum" ] && { echo; echo "$sum"; }; echo
   echo "Claude-Session: https://claude.ai/code/session_01No8Ts9XNFMeBwqC9oEsoTi"; } > "$msg"
 git merge -q --no-ff "origin/$br" -F "$msg" || { echo "merge failed"; git merge --abort; exit 1; }
 rm -f "$msg"
+busy() { powershell -NoProfile -Command "@(Get-CimInstance Win32_Process | ? { \$_.Name -eq 'Stabby.Cli.exe' -or \$_.Name -eq 'Unity.exe' -or (\$_.Name -eq 'dotnet.exe' -and \$_.CommandLine -match ' test |vstest') }).Count" 2>/dev/null | tr -d '\r'; }
+t_quiet=$SECONDS; while [ "$(busy)" != 0 ] && [ $((SECONDS - t_quiet)) -lt 3600 ]; do sleep 30; done
+echo "quiet wait: $((SECONDS - t_quiet)) s"
 pass="$(cd "$(git rev-parse --git-common-dir)" && pwd)/stabby-check-pass/$(git rev-parse 'HEAD^{tree}')"
 if [ -f "$pass" ]; then echo "checks: skipped, this exact tree passed a full check ($(cat "$pass"))"; git push -q && echo "PUSHED $(git log --oneline -1)"
 elif bash tools/scripts/check.sh "" --merge | tee out/merge-check.txt; [ "${PIPESTATUS[0]}" = 0 ]; then
