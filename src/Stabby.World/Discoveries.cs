@@ -151,7 +151,7 @@ namespace Stabby.World
                         int start = list.Count;
                         for (int v = 0; v < target; v++)
                             for (int k = 0; k < present.Count; k++)
-                                if (PlaceVent(present[want ? VentOrder(v, k, first, lead, present.Count) : (first + v + k) % present.Count], near, ref rng, list)) break;
+                                if (PlaceVent(present[want ? VentOrder(v, k, first, lead, present.Count) : (first + v + k) % present.Count], site, near, ref rng, list)) break;
                         int got = list.Count - start, score = got;
                         if (want && got >= VentsMin) for (int i = start; i < list.Count; i++) if (list[i].Def == vents[gk]) { score += VentsMax + 1; break; }
                         if (score > bestScore) { bestScore = score; best.Clear(); for (int i = start; i < list.Count; i++) best.Add(list[i]); }
@@ -169,7 +169,7 @@ namespace Stabby.World
             return (lead + 1 + (first + v + k) % (count - 1)) % count;
         }
 
-        bool PlaceVent(int d, List<VentSite> near, ref Rng rng, List<ObjectInstance> list)
+        bool PlaceVent(int d, VentSite centre, List<VentSite> near, ref Rng rng, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
@@ -183,7 +183,8 @@ namespace Stabby.World
                 float jitter = (t & 1) * VentSiteStepM, px = site.X + rng.Range(-0.5f, 0.5f) * jitter, pz = site.Z + rng.Range(-0.5f, 0.5f) * jitter;
                 float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
-                if ((site.Mask & bit) == 0 || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
+                float cx = px - centre.X, cz = pz - centre.Z;
+                if ((site.Mask & bit) == 0 || cx * cx + cz * cz > VentFieldRadiusM * VentFieldRadiusM || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
                 FaceDownhill(px, pz, ref qa, ref qb);
                 any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
             }
