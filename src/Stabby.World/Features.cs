@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Shapes = 12;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shapes = 13;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell;
 
@@ -460,6 +460,7 @@ namespace Stabby.World
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
+            terrain = Sunk(terrain, CaveBrooks.Sinks(w, terrain, caves));
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return terrain;
             var field = new ObjectField(w, detail, terrain, w.Objects);
@@ -476,6 +477,22 @@ namespace Stabby.World
             bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             dens.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length);
             return all;
+        }
+
+        static FeatureEdit[] Sunk(FeatureEdit[] terrain, FeatureEdit[] holes)
+        {
+            if (holes.Length == 0) return terrain;
+            var kept = new List<FeatureEdit>(terrain.Length + holes.Length);
+            foreach (var e in terrain)
+            {
+                bool drop = false;
+                if (e.Shape == FeatureEdit.Speleothem)
+                    foreach (var h in holes)
+                        if (e.MinX < h.MaxX && e.MaxX > h.MinX && e.MinZ < h.MaxZ && e.MaxZ > h.MinZ && e.MinY < h.MaxY && e.MaxY > h.MinY) drop = true;
+                if (!drop) kept.Add(e);
+            }
+            kept.AddRange(holes);
+            return kept.ToArray();
         }
 
         static FeatureEdit[] Terrain(GeneratedWorld w, TerrainDetail detail, List<CaveGraph> caves)
