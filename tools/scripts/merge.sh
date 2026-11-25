@@ -15,5 +15,7 @@ msg=$(mktemp); { echo "Merge $br"; [ -n "$sum" ] && { echo; echo "$sum"; }; echo
   echo "Claude-Session: https://claude.ai/code/session_01No8Ts9XNFMeBwqC9oEsoTi"; } > "$msg"
 git merge -q --no-ff "origin/$br" -F "$msg" || { echo "merge failed"; git merge --abort; exit 1; }
 rm -f "$msg"
-if bash tools/scripts/check.sh "" --full; then git push -q && echo "PUSHED $(git log --oneline -1)"
+pass="$(cd "$(git rev-parse --git-common-dir)" && pwd)/stabby-check-pass/$(git rev-parse 'HEAD^{tree}')"
+if [ -f "$pass" ]; then echo "checks: skipped, this exact tree passed a full check ($(cat "$pass"))"; git push -q && echo "PUSHED $(git log --oneline -1)"
+elif bash tools/scripts/check.sh "" --full; then git push -q && echo "PUSHED $(git log --oneline -1)"
 else echo "CHECKS FAILED: merge commit left local, not pushed (git reset --hard origin/main to undo)"; exit 1; fi

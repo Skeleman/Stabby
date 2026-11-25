@@ -8,7 +8,6 @@ public class StructureTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(ContentLoader.FindContentRoot(AppContext.BaseDirectory));
     static readonly int[] Shapes = { ObjectPart.Wall, ObjectPart.Cairn };
 
     [Fact]
@@ -144,9 +143,7 @@ public class StructureTests
     [Fact]
     public void PlacedStructuresSitLevelOnTheirSeats()
     {
-        var w = WorldGenerator.Generate(new WorldConfig { Seed = 4, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
-        var detail = new TerrainDetail(w);
-        var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+        var (w, detail, _, field) = TestWorlds.Get(4);
         int seen = 0;
         var walls = new List<ObjectInstance>();
         for (int cz = 0; cz < field.ChunksAcross; cz++)

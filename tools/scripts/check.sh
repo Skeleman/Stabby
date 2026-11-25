@@ -1,28 +1,107 @@
 #!/usr/bin/env bash
 # Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full]
-# Exit 1 if anything fails. Full logs stay in out/check/.
+# Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
+# (--full forces all). One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
-filter="${1:-FullyQualifiedName~Feature|FullyQualifiedName~Object|FullyQualifiedName~Discover|FullyQualifiedName~Lint}"
-fail=0; args=" $* "
+args=" $* "; full=0; [[ "$args" == *" --full "* ]] && full=1
+nounity=0; [[ "$args" == *" --no-unity "* ]] && nounity=1
 say() { echo "$*"; }
-if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
-say "build: ok"
-if [[ "$args" == *" --full "* ]]; then targs=(); else targs=(--filter "$filter"); fi
-dotnet test -c Release --no-build "${targs[@]}" > out/check/test.log 2>&1 || fail=1
-say "tests: $(grep -E "Passed!|Failed!" out/check/test.log | sed -E 's/ - Stabby.*//' | tr -s ' ')"
-grep -E "^\s+Failed " out/check/test.log | head -5
-for spec in "100 256" "20 512"; do set -- $spec
-  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 > out/check/sweep$2.log 2>&1 || fail=1
-  line=$(grep -E "seeds at" out/check/sweep$2.log | tail -1); say "sweep $2: $line"
-  [[ "$line" == *" 0 violations"* ]] || fail=1
+common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"; lock="$common/stabby-check.lock"; passes="$common/stabby-check-pass"
+t_wait=$SECONDS; told=0
+until mkdir "$lock" 2> /dev/null; do
+  opid=""; ostart=""; otree=""; read -r opid ostart otree < "$lock/owner" 2> /dev/null
+  [ -z "$ostart" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +2 2> /dev/null)" ] && { rm -rf "$lock"; continue; }
+  if [ -n "$ostart" ] && { ! kill -0 "$opid" 2> /dev/null || [ $(( $(date +%s) - ostart )) -gt 7200 ]; }; then rm -rf "$lock"; continue; fi
+  [ $told = 0 ] && { say "lock: waiting for the check in ${otree:-another tree}"; told=1; }
+  [ $((SECONDS - t_wait)) -ge 5400 ] && { say "lock: gave up after 90 min"; exit 1; }
+  sleep 5
 done
-if [[ "$args" != *" --no-unity "* ]]; then
-  "$UNITY_EXE" -batchmode -quit -projectPath unity -logFile out/check/unity.log > /dev/null 2>&1
-  n=$(grep -c "error CS" out/check/unity.log); say "unity: $n CS errors"; [ "$n" = 0 ] || { fail=1; grep "error CS" out/check/unity.log | sort -u | head -5; }
-fi
+echo "$$ $(date +%s) $ROOT" > "$lock/owner"; trap 'rm -rf "$lock" out/check/busy' EXIT; trap 'exit 130' INT TERM
+[ $told = 1 ] && say "lock: waited $((SECONDS - t_wait)) s"
+t0=$SECONDS
 base=$(git merge-base HEAD origin/main)
-bad=$(git diff --name-only "$base" | xargs -r git ls-files --eol 2>/dev/null | grep -v -E "w/(lf|-text|none)" | grep -v "binary")
+changed=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
+has() { grep -q -E "$1" <<< "$changed"; }
+gen=0; world=0; game=0; unity=0
+if [ $full = 1 ] || has '^(Directory\.Build\.[a-z]+|[^/]+\.sln[x]?|global\.json|NuGet\.config|\.editorconfig|tools/scripts/)'; then gen=1; world=1; game=1; unity=1
+else
+  has '^(src/|content/|tools/Stabby\.Cli/)' && { gen=1; world=1; }
+  has '^tests/' && world=1
+  has '^(unity/|tools/Stabby\.Lint/|lint-allow\.txt)' && game=1
+  has '^(unity/|src/)' && unity=1
+fi
+[ $nounity = 1 ] && unity=0
+gamef="FullyQualifiedName~Lint|FullyQualifiedName~ChunkZip|FullyQualifiedName~RuntimeParity"
+if [ $full = 1 ]; then tf=""
+elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"
+else
+  tf="FullyQualifiedName~Lint"
+  [ $world = 1 ] && tf="FullyQualifiedName~Feature|FullyQualifiedName~Object|FullyQualifiedName~Discover|$tf"
+  { [ $game = 1 ] || [ $unity = 1 ]; } && { [ "$tf" = FullyQualifiedName~Lint ] && tf="$gamef" || tf="${tf%|FullyQualifiedName~Lint}|$gamef"; }
+fi
+parity=0
+if [ $unity = 1 ] && { [ -z "$tf" ] || [[ "$tf" == *RuntimeParity* ]]; }; then parity=1; tf="${tf:+($tf)&}FullyQualifiedName!~RuntimeParity"; fi
+say "phases: tests${tf:+ ($tf)}$([ $gen = 1 ] && echo ", sweeps")$([ $unity = 1 ] && echo ", unity")"
+if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
+say "build: ok, $((SECONDS - t0)) s"
+rm -f out/check/*.sum out/check/*.rc
+phase_tests() {
+  local s=$SECONDS rc=0 targs=(); [ -n "$tf" ] && targs=(--filter "$tf")
+  dotnet test -c Release --no-build "${targs[@]}" --logger "console;verbosity=normal" > out/check/test.log 2>&1 || rc=1
+  { echo "tests: $(grep -h -E "No test matches|^Test Run (Successful|Failed|Aborted)" out/check/test.log | head -1) $(sed -n -E 's/^ *(Total tests|Passed|Failed): ([0-9]+)/\1 \2/p' out/check/test.log | paste -sd, - | sed 's/,/, /g'), $((SECONDS - s)) s"
+    grep -E "^\s+Failed " out/check/test.log | head -5
+    echo "slowest: $(awk '$1 == "Passed" && $NF == "s]" { t = 0; n = $2; sub(/\(.*/, "", n); sub(/.*\./, "", n); for (i = 3; i < NF; i++) { v = $i; gsub(/\[/, "", v); if ($(i+1) == "m") t += v * 60; else if ($(i+1) == "s]") t += v } print t, n }' out/check/test.log | sort -rn | head -3 | awk '{ printf "%s%s %d s", (NR > 1 ? ", " : ""), $2, $1 }')"; } > out/check/tests.sum
+  grep -q "No test matches" out/check/test.log && rc=0
+  echo $rc > out/check/tests.rc
+}
+phase_sweep() {
+  local s=$SECONDS rc=0 line
+  dotnet run --project tools/Stabby.Cli -c Release --no-build -- sweep --count $1 --size $2 --low-while out/check/busy > out/check/sweep$2.log 2>&1 || rc=1
+  line=$(grep -E "seeds at" out/check/sweep$2.log | tail -1); [[ "$line" == *" 0 violations"* ]] || rc=1
+  echo "sweep $2: $line, $((SECONDS - s)) s" > out/check/sweep$2.sum; echo $rc > out/check/sweep$2.rc
+}
+phase_unity() {
+  local s=$SECONDS done_at=0 stuck="" rc=0 up n
+  rm -f out/check/unity.log
+  "$UNITY_EXE" -batchmode -nographics -timestamps -quit -projectPath unity -logFile out/check/unity.log > /dev/null 2>&1 & up=$!
+  while kill -0 $up 2> /dev/null; do
+    [ $done_at = 0 ] && grep -q "CodeReloadManager destroyed" out/check/unity.log 2> /dev/null && done_at=$SECONDS
+    if { [ $done_at != 0 ] && [ $((SECONDS - done_at)) -ge 30 ]; } || [ $((SECONDS - s)) -ge 1800 ]; then
+      stuck=$([ $done_at = 0 ] && echo ", timed out" || echo ", killed $((SECONDS - done_at)) s into a shutdown hang"); taskkill //F //PID "$(cat /proc/$up/winpid)" > /dev/null 2>&1; break
+    fi
+    sleep 2
+  done
+  wait $up 2> /dev/null
+  [ "$stuck" = ", timed out" ] && rc=1
+  n=$(grep -c "error CS" out/check/unity.log); [ "$n" = 0 ] || rc=1
+  { echo "unity: $n CS errors, $((SECONDS - s)) s$stuck"; grep "error CS" out/check/unity.log | sort -u | head -5; } > out/check/unity.sum
+  if [ $rc = 0 ] && [ $parity = 1 ]; then
+    dotnet test -c Release --no-build --filter "FullyQualifiedName~RuntimeParity" > out/check/parity.log 2>&1 || rc=1
+    echo "parity: $(grep -E "Passed!|Failed!" out/check/parity.log | sed -E 's/ - Stabby.*//' | tr -s ' ')" >> out/check/unity.sum
+  fi
+  echo $rc > out/check/unity.rc
+}
+touch out/check/busy
+{ phase_tests & [ $unity = 1 ] && phase_unity & wait; rm -f out/check/busy; } &
+[ $gen = 1 ] && { phase_sweep 100 256 & phase_sweep 20 512 & }
+wait
+fail=0
+for p in tests sweep256 sweep512 unity; do
+  [ -f out/check/$p.sum ] && cat out/check/$p.sum
+  [ -f out/check/$p.rc ] && [ "$(cat out/check/$p.rc)" != 0 ] && fail=1
+done
+[ -f out/check/tests.rc ] || fail=1
+bad=$(git diff --name-only "$base" | xargs -r git ls-files --eol 2> /dev/null | grep -v -E "w/(lf|-text|none)" | grep -v "binary")
 [ -z "$bad" ] && say "eol: ok" || { say "eol: NOT LF"; echo "$bad"; fail=1; }
 nc=$(git diff "$base" -- '*.cs' '*.shader' '*.hlsl' '*.compute' | grep -c -E "^\+\s*(//|/\*)")
 say "new comment lines: $nc (reason lines only, rule 7)"
+say "total: $((SECONDS - t0)) s"
+if [ $fail = 0 ] && [ $full = 1 ] && [ $nounity = 0 ]; then
+  dirty=$(git status --porcelain --untracked-files=no | cut -c4- | grep -v -E '^unity/(Assets/Scenes/|ProjectSettings/|Assets/[^/]+\.asset$)')
+  if [ -z "$dirty" ]; then
+    mkdir -p "$passes"; find "$passes" -type f -mtime +7 -delete 2> /dev/null
+    echo "$(date '+%F %T') $(git branch --show-current) $(git rev-parse --short HEAD)" > "$passes/$(git rev-parse 'HEAD^{tree}')"
+    say "cache: full pass recorded for tree $(git rev-parse --short 'HEAD^{tree}')"
+  fi
+fi
 exit $fail
