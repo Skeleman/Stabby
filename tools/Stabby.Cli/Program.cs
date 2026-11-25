@@ -149,6 +149,7 @@ int Sweep()
     var times = new System.Collections.Concurrent.ConcurrentBag<(long, ulong, string)>();
     var stages = new System.Collections.Concurrent.ConcurrentBag<(string, double, long)>();
     var checkTimes = new System.Collections.Concurrent.ConcurrentBag<long>();
+    var perSeed = new System.Collections.Concurrent.ConcurrentDictionary<ulong, List<string>>();
     var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture) };
     bool checks = Opt("checks", "1") != "0";
     var lowWhile = Opt("low-while", "");
@@ -180,8 +181,10 @@ int Sweep()
         long genMs = sw.ElapsedMilliseconds;
         times.Add((genMs, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
-        foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
-        foreach (var v in WorldChecks.Creatures(w, creatures)) failures.Add($"seed {c.Seed}: {v}");
+        var found = WorldChecks.Run(w);
+        found.AddRange(WorldChecks.Creatures(w, creatures));
+        foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
+        perSeed[c.Seed] = found;
         Mark("checks");
         checkTimes.Add(sw.ElapsedMilliseconds - genMs);
     });
@@ -195,6 +198,8 @@ int Sweep()
         Console.WriteLine($"  {g.Key,-10} median {ms[ms.Length / 2],7:F1} ms, max {ms[^1],7:F1} ms, {g.Average(s => s.Item3) / 1048576,7:F1} MB allocated");
     }
     foreach (var f in failures.OrderBy(x => x).Take(30)) Console.WriteLine("  " + f);
+    var list = Opt("violations", "");
+    if (list != "") File.WriteAllLines(list, perSeed.OrderBy(p => p.Key).SelectMany(p => p.Value.Select(v => $"seed {p.Key}: {v}")));
     return failures.IsEmpty ? 0 : 1;
 }
 
