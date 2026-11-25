@@ -961,16 +961,54 @@ namespace Stabby.World
                 Underground.SettledFloor(detail, bare, ref probes, ref settled);
             }
             if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
-            CheckCaveObjects(w, detail, edits, e);
+            var pools = CheckCaveObjects(w, detail, edits, e);
+            CheckCaveBrooks(w, caves, CaveBrooks.Build(w, detail, edits, caves), pools, e);
+        }
+
+        public const float StreamSlackM = 1e-3f, StreamEndM = 1f, StreamPoolM = 0.05f;
+
+        public static void CheckCaveBrooks(GeneratedWorld w, CaveGraph[] caves, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
+        {
+            foreach (var s in streams)
+            {
+                var g = caves[s.Graph];
+                int rows = s.Rows, last = (rows - 1) * CaveBrook.Stride;
+                string at = $"cave stream in {g.Class} graph {s.Graph}";
+                if (rows < 2 || s.Nodes.Length < 2) { e.Add(at + " has no run"); return; }
+                for (int k = 1; k < rows; k++)
+                    if (s.Points[k * CaveBrook.Stride + 1] > s.Points[(k - 1) * CaveBrook.Stride + 1] + StreamSlackM) { e.Add(at + $" flows uphill at {s.Points[k * CaveBrook.Stride]:F0},{s.Points[k * CaveBrook.Stride + 2]:F0}"); return; }
+                float ex = s.Points[last], ey = s.Points[last + 1], ez = s.Points[last + 2];
+                var end = g.Nodes[s.Nodes[s.Nodes.Length - 1]];
+                if (s.End == CaveBrook.Spring)
+                {
+                    float d = (float)Math.Sqrt((ex - end.X) * (ex - end.X) + (ez - end.Z) * (ez - end.Z));
+                    if (!end.Entrance || d > StreamEndM) { e.Add(at + " springs away from a cave mouth"); return; }
+                    if (s.Outlet != CaveBrooks.CellOf(w, end.X, end.Z) || w.Sea[s.Outlet]) { e.Add(at + " springs onto no drainage cell"); return; }
+                }
+                else if (s.End == CaveBrook.Pool)
+                {
+                    if (pools == null) continue;
+                    bool fed = false;
+                    foreach (var p in pools)
+                        if (p.Kind == ObjectField.CavePool && (ex - p.X) * (ex - p.X) + (ez - p.Z) * (ez - p.Z) <= (p.Reach + StreamEndM) * (p.Reach + StreamEndM) && ey >= p.Level - StreamPoolM) fed = true;
+                    if (!fed) { e.Add(at + $" ends at {ex:F0},{ez:F0} with no cave pool to fill"); return; }
+                }
+                else if (s.End == CaveBrook.Sink)
+                {
+                    if (end.Entrance || CaveBrooks.Lower(w, g, s.Nodes[s.Nodes.Length - 1], s.Nodes, out _) >= 0) { e.Add(at + " sinks where it could still run downhill"); return; }
+                }
+                else { e.Add(at + " ends at no spring, pool or sink"); return; }
+            }
         }
 
         public const int CaveObjectChunks = 6;
 
-        public static void CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        public static LiquidPool[] CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
         {
-            if (w.Objects == null) return;
+            if (w.Objects == null) return null;
             var field = new ObjectField(w, detail, edits, w.Objects);
-            CheckCavePools(w, detail, edits, field.CavePools(), e);
+            var pools = field.CavePools();
+            CheckCavePools(w, detail, edits, pools, e);
             float span = field.ChunkMeters;
             int across = field.ChunksAcross;
             var picked = new List<int>();
@@ -987,8 +1025,9 @@ namespace Stabby.World
                 {
                     if (!ObjectField.IsCave(w.Objects.Objects[o.Def])) continue;
                     string fault = field.CaveFault(o);
-                    if (fault != null) { e.Add(fault); return; }
+                    if (fault != null) { e.Add(fault); return pools; }
                 }
+            return pools;
         }
 
         public const float CavePoolHeadM = 1f, CavePoolSealM = 0.3f;

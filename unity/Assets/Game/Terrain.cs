@@ -1274,10 +1274,10 @@ namespace Stabby.Game
             quads = map.Objects?.Terrain ?? quads;
             string materials = ContentFiles.MaterialsPath;
             since.Restart();
-            preparing = Task.Run(() => Prepare(world, parts.Detail, defs, materials, parts.Edits));
+            preparing = Task.Run(() => Prepare(world, parts.Detail, defs, materials, parts.Edits, parts.Brooks));
         }
 
-        static Prepared Prepare(GeneratedWorld world, TerrainDetail detail, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits)
+        static Prepared Prepare(GeneratedWorld world, TerrainDetail detail, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits, CaveBrook[] brooks)
         {
             int n = world.Config.Size;
             float cm = world.Config.CellMeters;
@@ -1287,6 +1287,7 @@ namespace Stabby.Game
                 for (int cx = 0; cx < n; cx += LakeCells)
                     if (HasLand(world, cx, cy)) p.Lakes.Add(WaterGeometry.Lakes(world, cx, cy, LakeCells));
             p.Rivers = WaterGeometry.Rivers(world, detail, p.Mist);
+            p.Rivers.AddRange(WaterGeometry.CaveBrooks(world, brooks));
             p.Sea = WaterGeometry.Sea(n, cm);
             var colors = TerrainLook.BaseColors(world, defs);
             p.Look = new BlobBuilder(Allocator.Persistent);
