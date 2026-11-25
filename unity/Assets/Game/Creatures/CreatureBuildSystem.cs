@@ -51,6 +51,7 @@ namespace Stabby.Game
             public CreatureScale Fitted;
             public int[] Prefab;
             public float3[] Scale;
+            public bool High, Low;
             public float4 Base, Accent, Dark;
             public float Length, Distance;
             public CreatureDef Def;
@@ -64,7 +65,16 @@ namespace Stabby.Game
             new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 4),
         };
 
+        struct Plan
+        {
+            public Entity Root;
+            public int Tier;
+            public float4 Base, Accent, Dark;
+            public float Size;
+        }
+
         public static int Count { get; private set; }
+        public static int PeakSpend, TierBuilds, TierDrops;
         public IReadOnlyList<Mesh> Meshes => meshes;
 
         Task<Kit> kitTask;
@@ -79,7 +89,7 @@ namespace Stabby.Game
         BatchMaterialID materialId;
         readonly List<Mesh> meshes = new List<Mesh>();
         readonly List<Arrival> queue = new List<Arrival>();
-        EntityQuery pending, vanished, presented;
+        EntityQuery pending, vanished, presented, asking;
         EntityArchetype rootType;
         bool counts, instanced;
         int live;
@@ -95,9 +105,10 @@ namespace Stabby.Game
             pending = SystemAPI.QueryBuilder().WithAll<CreatureState>().WithNone<CreatureClaimed>().Build();
             vanished = SystemAPI.QueryBuilder().WithAll<CreaturePresented>().WithNone<CreatureState>().Build();
             presented = SystemAPI.QueryBuilder().WithAll<CreaturePresented>().Build();
+            asking = SystemAPI.QueryBuilder().WithAll<CreatureRoot, CreatureLink, CreatureRetier>().Build();
             rootType = instanced
-                ? EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink), typeof(CreatureFur))
-                : EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink));
+                ? EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink), typeof(CreatureRetier), typeof(CreatureFur))
+                : EntityManager.CreateArchetype(typeof(CreatureRoot), typeof(CreatureLink), typeof(CreatureRetier));
         }
 
         protected override void OnDestroy()
@@ -175,8 +186,14 @@ namespace Stabby.Game
                 arriving = null;
             }
 
-            if (queue.Count > 0) Arrive();
-            if (counts) Count = live;
+            var budget = new FrameBudget(FrameBudget.CreatureEntities);
+            Retier(ref budget);
+            if (queue.Count > 0) Arrive(ref budget);
+            if (counts)
+            {
+                Count = live;
+                PeakSpend = Math.Max(PeakSpend, budget.Spent);
+            }
             if (arriving != null || pending.IsEmpty) return;
 
             var es = pending.ToEntityArray(Allocator.Temp);
@@ -210,8 +227,13 @@ namespace Stabby.Game
             foreach (var s in gone)
             {
                 var links = EntityManager.GetBuffer<CreatureLink>(s.Root, true);
-                dropped += links.Length;
-                for (int i = 0; i < links.Length; i++) if (links[i].Value != Entity.Null) doomed.Add(links[i].Value);
+                if (instanced) dropped += links.Length;
+                for (int i = 0; i < links.Length; i++)
+                    if (links[i].Value != Entity.Null)
+                    {
+                        doomed.Add(links[i].Value);
+                        dropped++;
+                    }
                 doomed.Add(s.Root);
                 s.Fit.Dispose();
             }
@@ -260,7 +282,141 @@ namespace Stabby.Game
             return a;
         }
 
-        void Arrive()
+        void Retier(ref FrameBudget budget)
+        {
+            if (instanced || asking.IsEmpty) return;
+            var asks = asking.ToEntityArray(Allocator.Temp);
+            var plans = new List<Plan>();
+            var doomed = new NativeList<Entity>(Allocator.Temp);
+            var settled = new NativeList<Entity>(Allocator.Temp);
+            int delta = 0;
+            foreach (var r in asks)
+            {
+                var c = EntityManager.GetComponentData<CreatureRoot>(r);
+                var links = EntityManager.GetBuffer<CreatureLink>(r);
+                int half = links.Length / 2;
+                bool hasHigh = links[0].Value != Entity.Null, hasLow = links[half].Value != Entity.Null, waiting = false;
+                var donor = hasHigh ? links[0].Value : links[half].Value;
+                bool buildHigh = c.WantHigh && !hasHigh, buildLow = c.WantLow && !hasLow;
+                if (donor != Entity.Null && (buildHigh || buildLow))
+                {
+                    var plan = new Plan
+                    {
+                        Root = r, Size = c.Scale.Length, Base = EntityManager.GetComponentData<CreatureFurBase>(donor).Value,
+                        Accent = EntityManager.GetComponentData<CreatureFurAccent>(donor).Value, Dark = EntityManager.GetComponentData<CreatureFurDark>(donor).Value,
+                    };
+                    if (buildHigh && budget.Take(half)) { plan.Tier = 0; plans.Add(plan); hasHigh = c.HighOn = true; delta += half; }
+                    else waiting |= buildHigh;
+                    if (buildLow && budget.Take(half)) { plan.Tier = 1; plans.Add(plan); hasLow = c.LowOn = true; delta += half; }
+                    else waiting |= buildLow;
+                }
+                for (int tier = 0; tier < 2; tier++)
+                {
+                    int b = tier * half;
+                    bool want = tier == 0 ? c.WantHigh : c.WantLow, other = tier == 0 ? hasLow : hasHigh;
+                    if (want || links[b].Value == Entity.Null) continue;
+                    if (!other) { waiting = true; continue; }
+                    for (int j = b; j < b + half; j++)
+                    {
+                        var l = links[j];
+                        doomed.Add(l.Value);
+                        l.Value = Entity.Null;
+                        links[j] = l;
+                    }
+                    if (tier == 0) c.HighOn = false;
+                    else c.LowOn = false;
+                    delta -= half;
+                }
+                EntityManager.SetComponentData(r, c);
+                if (!waiting) settled.Add(r);
+            }
+            asks.Dispose();
+            foreach (var r in settled) EntityManager.SetComponentEnabled<CreatureRetier>(r, false);
+            settled.Dispose();
+            if (counts) TierDrops += doomed.Length;
+            if (doomed.Length > 0) EntityManager.DestroyEntity(doomed.AsArray());
+            doomed.Dispose();
+            AddLinks(delta);
+            if (plans.Count > 0) Build(plans);
+        }
+
+        void Build(List<Plan> plans)
+        {
+            var perPrefab = new int[prefabs.Length];
+            int total = 0;
+            foreach (var plan in plans)
+            {
+                var links = EntityManager.GetBuffer<CreatureLink>(plan.Root, true);
+                int half = links.Length / 2;
+                for (int j = plan.Tier * half; j < (plan.Tier + 1) * half; j++) perPrefab[links[j].Mesh]++;
+                total += half;
+            }
+            var made = new NativeArray<Entity>[prefabs.Length];
+            for (int p = 0; p < prefabs.Length; p++)
+                if (perPrefab[p] > 0) made[p] = EntityManager.Instantiate(prefabs[p], perPrefab[p], Allocator.Temp);
+            Array.Clear(perPrefab, 0, perPrefab.Length);
+            var linkEntity = new NativeArray<Entity>(total, Allocator.TempJob);
+            var linkScale = new NativeArray<float3>(total, Allocator.TempJob);
+            var linkOwner = new NativeArray<int>(total, Allocator.TempJob);
+            var fur = new NativeArray<float4>(3 * plans.Count, Allocator.TempJob);
+            var size = new NativeArray<float>(plans.Count, Allocator.TempJob);
+            int at = 0;
+            for (int i = 0; i < plans.Count; i++)
+            {
+                var plan = plans[i];
+                var links = EntityManager.GetBuffer<CreatureLink>(plan.Root);
+                int half = links.Length / 2;
+                for (int j = plan.Tier * half; j < (plan.Tier + 1) * half; j++)
+                {
+                    var l = links[j];
+                    l.Value = made[l.Mesh][perPrefab[l.Mesh]++];
+                    links[j] = l;
+                    linkEntity[at] = l.Value;
+                    linkScale[at] = l.Scale;
+                    linkOwner[at] = i;
+                    at++;
+                }
+                fur[3 * i] = plan.Base;
+                fur[3 * i + 1] = plan.Accent;
+                fur[3 * i + 2] = plan.Dark;
+                size[i] = plan.Size;
+            }
+            foreach (var arr in made) if (arr.IsCreated) arr.Dispose();
+            if (counts) TierBuilds += plans.Count;
+            Dress(linkEntity, linkScale, linkOwner, fur, size);
+        }
+
+        void Dress(NativeArray<Entity> linkEntity, NativeArray<float3> linkScale, NativeArray<int> linkOwner, NativeArray<float4> fur, NativeArray<float> size)
+        {
+            Dependency = new DressJob
+            {
+                Links = linkEntity, Scales = linkScale, Owner = linkOwner, Fur = fur, Size = size,
+                Ltw = GetComponentLookup<LocalToWorld>(), Base = GetComponentLookup<CreatureFurBase>(), Accent = GetComponentLookup<CreatureFurAccent>(),
+                Dark = GetComponentLookup<CreatureFurDark>(), Bounds = GetComponentLookup<RenderBounds>(),
+            }.Schedule(linkEntity.Length, 64, Dependency);
+            linkEntity.Dispose(Dependency);
+            linkScale.Dispose(Dependency);
+            linkOwner.Dispose(Dependency);
+            fur.Dispose(Dependency);
+            size.Dispose(Dependency);
+        }
+
+        void Tiers(ref Arrival a, float3 cam, bool hasGround, in Ground ground)
+        {
+            if (instanced)
+            {
+                a.High = a.Low = true;
+                return;
+            }
+            var view = DetailView.Current;
+            float y = hasGround ? ground.HeightAt(a.State.Position.x, a.State.Position.y) : cam.y;
+            float px = view.ScreenSize(a.Length, new float3(a.State.Position.x, y, a.State.Position.y));
+            float low = a.Def.LowPixels / math.max(view.Quality, 0.1f);
+            a.High = CreatureTier.NeedHigh(px, low, false);
+            a.Low = CreatureTier.NeedLow(px, low, false) || !a.High;
+        }
+
+        void Arrive(ref FrameBudget budget)
         {
             float3 cam = DetailView.Current.Camera;
             for (int i = queue.Count - 1; i >= 0; i--)
@@ -281,12 +437,25 @@ namespace Stabby.Game
             if (queue.Count == 0) return;
             queue.Sort((x, y) => x.Distance.CompareTo(y.Distance));
 
-            var budget = new FrameBudget(FrameBudget.CreatureEntities);
             int m = 0, links = 0;
-            while (m < queue.Count && budget.Take(1 + queue[m].Prefab.Length)) links += queue[m++].Prefab.Length;
+            bool hasGround = SystemAPI.TryGetSingleton<Ground>(out var ground);
+            while (m < queue.Count)
+            {
+                var a = queue[m];
+                Tiers(ref a, cam, hasGround, ground);
+                int per = a.Prefab.Length / 2, built = instanced ? 2 * per : (a.High ? per : 0) + (a.Low ? per : 0);
+                if (!budget.Take(1 + built)) break;
+                queue[m++] = a;
+                links += built;
+            }
 
             var perPrefab = new int[prefabs.Length];
-            for (int i = 0; i < m; i++) foreach (int p in queue[i].Prefab) perPrefab[p]++;
+            for (int i = 0; i < m; i++)
+            {
+                var a = queue[i];
+                int per = a.Prefab.Length / 2;
+                for (int j = 0; j < a.Prefab.Length; j++) if (j < per ? a.High : a.Low) perPrefab[a.Prefab[j]]++;
+            }
             var made = new NativeArray<Entity>[prefabs.Length];
             for (int p = 0; p < prefabs.Length; p++)
                 if (perPrefab[p] > 0 && !instanced) made[p] = EntityManager.Instantiate(prefabs[p], perPrefab[p], Allocator.Temp);
@@ -312,17 +481,21 @@ namespace Stabby.Game
                 EntityManager.SetComponentData(roots[i], new CreatureRoot
                 {
                     Rig = rig, Fit = a.Fit, Scale = a.Fitted, Ghost = a.Ghost, Position = new float3(a.State.Position.x, 0, a.State.Position.y), Heading = a.State.Heading, WalkSpeed = a.State.WalkSpeed,
-                    Visible = true, Shadow = true, HighOn = true, LowOn = true,
+                    Visible = true, Shadow = true, HighOn = a.High, LowOn = a.Low, WantHigh = a.High, WantLow = a.Low,
                     Phase = (seed % 389) / 389f, Clock = (seed % 211) / 7f,
                 });
                 var buffer = EntityManager.GetBuffer<CreatureLink>(roots[i]);
                 buffer.ResizeUninitialized(a.Prefab.Length);
                 if (instanced) EntityManager.SetComponentData(roots[i], new CreatureFur { Base = a.Base, Accent = a.Accent, Dark = a.Dark });
+                EntityManager.SetComponentEnabled<CreatureRetier>(roots[i], false);
+                int half = a.Prefab.Length / 2;
                 for (int j = 0; j < a.Prefab.Length; j++)
                 {
                     int p = a.Prefab[j];
-                    var e = instanced ? Entity.Null : made[p][perPrefab[p]++];
+                    bool built = j < half ? a.High : a.Low;
+                    var e = instanced || !built ? Entity.Null : made[p][perPrefab[p]++];
                     buffer[j] = new CreatureLink { Value = e, Scale = a.Scale[j], Mesh = p };
+                    if (!built) continue;
                     linkEntity[at] = e;
                     linkScale[at] = a.Scale[j];
                     linkOwner[at] = i;
@@ -354,21 +527,11 @@ namespace Stabby.Game
                 return;
             }
 
-            Dependency = new Dress
-            {
-                Links = linkEntity, Scales = linkScale, Owner = linkOwner, Fur = fur, Size = size,
-                Ltw = GetComponentLookup<LocalToWorld>(), Base = GetComponentLookup<CreatureFurBase>(), Accent = GetComponentLookup<CreatureFurAccent>(),
-                Dark = GetComponentLookup<CreatureFurDark>(), Bounds = GetComponentLookup<RenderBounds>(),
-            }.Schedule(links, 64, Dependency);
-            linkEntity.Dispose(Dependency);
-            linkScale.Dispose(Dependency);
-            linkOwner.Dispose(Dependency);
-            fur.Dispose(Dependency);
-            size.Dispose(Dependency);
+            Dress(linkEntity, linkScale, linkOwner, fur, size);
         }
 
         [BurstCompile]
-        struct Dress : IJobParallelFor
+        struct DressJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<Entity> Links;
             [ReadOnly] public NativeArray<float3> Scales;

@@ -192,7 +192,7 @@ namespace Stabby.Game
             meshBatch?.Dispose();
             meshSet?.Dispose();
             EntityManager.CompleteAllTrackedJobs();
-            scan.Complete();
+            JobPoll.Teardown(scan);
             if (tileNative.IsCreated) tileNative.Dispose();
             if (reachNative.IsCreated) reachNative.Dispose();
             if (doomedKeys.IsCreated) doomedKeys.Dispose();
@@ -932,8 +932,8 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            if (!scan.IsCompleted) return;
-            scan.Complete();
+            if (!JobPoll.Done(scan)) return;
+            DespawnHidden();
             if (!Warm()) return;
             if (field == null && !Prepare()) return;
             using (RegisterMarker.Auto()) if (!Register()) return;

@@ -56,6 +56,95 @@ namespace Stabby.Game.Editor
             return "no live plan creature";
         }
 
+        static void AimClear(Camera cam, in Ground ground, float reach, float stand)
+        {
+            var eye = cam.transform.position;
+            eye.y = ground.HeightAt(eye.x, eye.z) + 4f;
+            float baseYaw = math.atan2(cam.transform.forward.x, cam.transform.forward.z);
+            float best = baseYaw, bestClear = float.MinValue;
+            for (int a = 0; a < 24; a++)
+            {
+                float yaw = baseYaw + math.radians(15f * a);
+                float clear = float.MaxValue;
+                for (int side = -1; side <= 1; side++)
+                {
+                    float y2 = yaw + math.radians(25f) * side;
+                    float2 dir = new float2(math.sin(y2), math.cos(y2));
+                    float2 end = new float2(eye.x, eye.z) + dir * reach;
+                    float endY = ground.HeightAt(end.x, end.y) + stand;
+                    for (int k = 1; k < 24; k++)
+                    {
+                        float t = k / 24f;
+                        float2 at = new float2(eye.x, eye.z) + dir * reach * t;
+                        clear = math.min(clear, math.lerp(eye.y, endY, t) - ground.HeightAt(at.x, at.y));
+                    }
+                }
+                if (clear > bestClear) { bestClear = clear; best = yaw; }
+                if (clear > 0.6f) break;
+            }
+            float2 mid = new float2(eye.x, eye.z) + new float2(math.sin(best), math.cos(best)) * reach;
+            var target = new Vector3(mid.x, ground.HeightAt(mid.x, mid.y) + stand, mid.y);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
+        }
+
+        static System.Collections.IEnumerator Approach(Unity.Entities.World view, Camera cam, string dir, Ground ground, int baseCount, List<string> lines, bool tiered)
+        {
+            var vem = view.EntityManager;
+            var walk = SpawnBench(view, 5, 9);
+            PlaceBench(view, walk, cam, 1.6f, 0.9f, 40f, ground);
+            int frames = 0;
+            while (CreatureBuildSystem.Count < baseCount + walk.Length && frames < 1200) { yield return null; frames++; }
+            var (rigRef, length, stand, _, _, _) = BenchRig(vem);
+            float q = math.max(DetailView.Current.Quality, 0.1f);
+            float low = rigRef.IsCreated ? rigRef.Value.LowPx / q : 40f;
+            AimClear(cam, ground, Detail.Reach(length, 1.25f * low, DetailView.Current.PixelsPerMetre), stand);
+            PlaceBench(view, walk, cam, length, stand, 0.5f * low, ground);
+            for (int k = 0; k < 30; k++) yield return null;
+            CreatureBuildSystem.PeakSpend = CreatureBuildSystem.TierBuilds = CreatureBuildSystem.TierDrops = 0;
+            int gaps = 0, late = 0, seen = 0, steps = 120;
+            bool shot = false;
+            using var rq = vem.CreateEntityQuery(typeof(CreatureRoot), typeof(CreatureLink));
+            for (int k = 0; k <= 2 * steps; k++)
+            {
+                float t = k <= steps ? k / (float)steps : 2 - k / (float)steps;
+                float px = low * math.lerp(0.5f, 2.1f, t);
+                PlaceBench(view, walk, cam, length, stand, px, ground);
+                yield return null;
+                vem.CompleteAllTrackedJobs();
+                using (var es = rq.ToEntityArray(Allocator.Temp))
+                    foreach (var e in es)
+                    {
+                        var c = vem.GetComponentData<CreatureRoot>(e);
+                        if (!vem.HasComponent<CreatureState>(c.Ghost) || vem.GetComponentData<CreatureState>(c.Ghost).Id > -900000) continue;
+                        var links = vem.GetBuffer<CreatureLink>(e, true);
+                        seen++;
+                        if (c.Visible && !c.HighOn && !c.LowOn) gaps++;
+                        float rpx = DetailView.Current.ScreenSize(c.Scale.Length, new float3(c.Position.x, ground.HeightAt(c.Position.x, c.Position.z) + c.Scale.Stand, c.Position.z));
+                        if (tiered && rpx > 1.05f * low && links[0].Value == Entity.Null) late++;
+                    }
+                if (!shot && k < steps && px >= 1.25f * low)
+                {
+                    Shot(cam, dir, "tier-fade-a");
+                    yield return null;
+                    Shot(cam, dir, "tier-fade-b");
+                    shot = true;
+                }
+            }
+            lines.Add($"approach and retreat 0.5x to 2.1x low px over {2 * steps} frames, {walk.Length} creatures ({seen} creature-frames seen): {gaps} creature-frames with no tier shown, {late} creature-frames past the crossfade start without the high tier, {CreatureBuildSystem.TierBuilds} tier builds, {CreatureBuildSystem.TierDrops} tier entities released, peak {CreatureBuildSystem.PeakSpend} entities in one frame");
+            vem.DestroyEntity(walk);
+            walk.Dispose();
+            for (int k = 0; k < 30; k++) yield return null;
+        }
+
+        static (long held, int trims) AnimHeld(Unity.Entities.World view)
+        {
+            var h = view.GetExistingSystem<CreatureAnimSystem>();
+            if (h == SystemHandle.Null) return (0, 0);
+            view.EntityManager.CompleteAllTrackedJobs();
+            ref var anim = ref view.Unmanaged.GetUnsafeSystemRef<CreatureAnimSystem>(h);
+            return (anim.HeldBytes, anim.Trims);
+        }
+
         static string Per(long bytes, int n) => $"{bytes / (double)n / 1024.0:F2} KiB";
 
         static System.Collections.IEnumerator CreatureMemory(Camera cam, string dir)
@@ -99,6 +188,7 @@ namespace Stabby.Game.Editor
                 int n = MemoryCounts[r];
                 for (int k = 0; k < 30; k++) yield return null;
                 var s0 = SampleMemory(vem, draw);
+                CreatureBuildSystem.PeakSpend = CreatureBuildSystem.TierBuilds = CreatureBuildSystem.TierDrops = 0;
                 var bench = SpawnBench(view, n, 50 + r);
                 PlaceBench(view, bench, cam, 1.6f, 0.9f, 40f, ground);
                 int frames = 0;
@@ -107,6 +197,9 @@ namespace Stabby.Game.Editor
                 float q = math.max(DetailView.Current.Quality, 0.1f);
                 PlaceBench(view, bench, cam, length, stand, rigRef.IsCreated ? BenchPixels(rigRef, 1, q) : 40f, ground);
                 for (int k = 0; k < 30; k++) yield return null;
+                int retier = 0;
+                using (var asking = vem.CreateEntityQuery(typeof(CreatureRetier)))
+                    while (asking.CalculateEntityCount() > 0 && retier < 1200) { yield return null; retier++; }
                 var counts = TierCounts(view, ground);
                 var s1 = SampleMemory(vem, draw);
                 string mem = BenchMemory(vem, n);
@@ -117,14 +210,24 @@ namespace Stabby.Game.Editor
                 int gone = 0;
                 while (CreatureBuildSystem.Count > left && gone < 1200) { yield return null; gone++; }
                 for (int k = 0; k < 30; k++) yield return null;
+                var (heldAfter, trims0) = AnimHeld(view);
                 var s2 = SampleMemory(vem, draw);
+                int waited = 0;
+                while (path == "instanced" && AnimHeld(view).trims == trims0 && waited < 600) { yield return null; waited++; }
+                var (heldTrim, trims1) = AnimHeld(view);
+                var s3 = SampleMemory(vem, draw);
 
-                lines.Add($"N {n}: built in {frames} frames, {CreatureBuildSystem.Count - left + n} live after build; {counts}");
+                lines.Add($"N {n}: built in {frames} frames, retiered after the move in {30 + retier} frames, {CreatureBuildSystem.Count - left + n} live after build; {counts}");
                 lines.Add($"  N {n} entities: {(s1.Entities - s0.Entities) / (float)n:F2} client entities per creature (bench ghost stand-in included), chunks {(s1.Chunks - s0.Chunks) * 16f / n:F2} KiB per creature");
                 lines.Add($"  N {n} {mem}");
                 lines.Add($"  N {n} memory per creature: native {Per(s1.Native - s0.Native, n)}, managed GC {Per(s1.Managed - s0.Managed, n)}, mono heap {Per(s1.Mono - s0.Mono, n)}, instance GPU buffers {Per(s1.Gpu - s0.Gpu, n)}, graphics driver {Per(s1.Driver - s0.Driver, n)}");
-                lines.Add($"  N {n} after removal ({gone} frames): native {(s2.Native - s0.Native) / 1024.0:F0} KiB, managed {(s2.Managed - s0.Managed) / 1024.0:F0} KiB, entities {s2.Entities - s0.Entities}, chunks {s2.Chunks - s0.Chunks}");
+                lines.Add($"  N {n} after removal ({gone} frames): native {(s2.Native - s0.Native) / 1024.0:F0} KiB, managed {(s2.Managed - s0.Managed) / 1024.0:F0} KiB, entities {s2.Entities - s0.Entities}, chunks {s2.Chunks - s0.Chunks}; anim containers hold {heldAfter / 1024.0:F0} KiB");
+                lines.Add($"  N {n} after trim ({waited} more frames, {(trims1 > trims0 ? "trimmed" : "no trim")}): native {(s3.Native - s0.Native) / 1024.0:F0} KiB, anim containers hold {heldTrim / 1024.0:F0} KiB");
+                lines.Add($"  N {n} build budget: peak {CreatureBuildSystem.PeakSpend}/{FrameBudget.CreatureEntities} entities in one frame, {CreatureBuildSystem.TierBuilds} tier builds, {CreatureBuildSystem.TierDrops} tier entities released");
             }
+
+            var walk = Approach(view, cam, dir, ground, baseCount, lines, path == "entity");
+            while (walk.MoveNext()) yield return null;
 
             CreatureView.Current = default;
             FreezeCreatures(false);

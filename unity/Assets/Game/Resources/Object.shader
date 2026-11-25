@@ -71,6 +71,7 @@ Shader "Stabby/Object"
             #include "Assets/Viewer/Shaders/Bark.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
+            #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings
@@ -650,6 +651,8 @@ Shader "Stabby/Object"
                 float above = max(wp.y - ground, 0);
                 float ao = lerp(0.85, 1, smoothstep(0, min(min(0.9, 0.6 * size), thick), above)) * lerp(1, 0.5, saturate(-n.y)) * (1 - 0.4 * occ);
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
+                float sky = CaveSky(wp);
+                l.color *= sky;
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)
                 {
@@ -658,9 +661,9 @@ Shader "Stabby/Object"
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
                     bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
                 }
-                float3 ambient = _StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5);
+                float3 ambient = (_StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5)) * sky;
                 float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLights(wp, n, i.positionCS)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao + emberGlow;
-                return half4(MixFog(c, i.pof.w), 1);
+                return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.pof.w), 1);
             }
             ENDHLSL
         }
