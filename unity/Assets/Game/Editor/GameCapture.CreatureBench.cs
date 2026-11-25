@@ -509,8 +509,9 @@ namespace Stabby.Game.Editor
                 yield return null;
                 yield return null;
                 var (ms, single) = TimeBoth(server, systems);
+                yield return null;
                 double frame = 0;
-                for (int k = 0; k < 10; k++) { yield return null; frame = math.max(frame, brainRec.LastValue / 1e6); }
+                for (int k = 0; k < 30; k++) { yield return null; frame = math.max(frame, brainRec.LastValue / 1e6); }
                 brainLines.Add($"brain N {n}: host {ms:F3} ms ({(ms - baseMs) * 1000.0 / n:F2} us per creature over baseline) / {single:F3} ms one thread, worst in-frame marker {frame:F3} ms");
                 DestroyBrainBench(sem);
                 yield return null;
