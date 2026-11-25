@@ -725,12 +725,13 @@ namespace Stabby.Game
                     if (d < bestD) { bestD = d; best = c; }
                 }
                 if (best < 0) break;
-                int pick = best;
-                collectingChunk[pick] = true;
-                chunkTasks.Add(Task.Run(() => Collect(pick)));
+                collectingChunk[best] = true;
+                chunkTasks.Add(StartCollect(best));
             }
             Pending = best >= 0 || chunkTasks.Count > 0 ? 1 : 0;
         }
+
+        Task<ChunkParts> StartCollect(int c) => Task.Run(() => Collect(c));
 
         public const float StreamMs = 2.5f;
 
