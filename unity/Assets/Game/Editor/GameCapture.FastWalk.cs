@@ -56,6 +56,8 @@ namespace Stabby.Game.Editor
             cam.targetTexture = target;
             yield return null;
             var start = new Vector2(home.x, home.z);
+            using (var sq = server.EntityManager.CreateEntityQuery(typeof(SpawnPoint)))
+                if (sq.CalculateEntityCount() == 1) start = sq.GetSingleton<SpawnPoint>().XZ;
             Vector2 d = WalkLine(ground, start, NormalWalkM + FastWalkM, out float land, out float relief);
             int to = System.Array.IndexOf(args, "-stabbyWalkTo");
             if (to >= 0 && to + 2 < args.Length && float.TryParse(args[to + 1], out float tx) && float.TryParse(args[to + 2], out float tz))
@@ -73,7 +75,7 @@ namespace Stabby.Game.Editor
             var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
             var lines = new List<string>
             {
-                $"walk line from {start.x:F0},{start.y:F0} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
+                $"walk line from {start.x:F1},{start.y:F1} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
             };
             try
             {
