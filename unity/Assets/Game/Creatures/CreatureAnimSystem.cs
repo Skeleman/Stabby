@@ -116,8 +116,9 @@ namespace Stabby.Game
         NativeArray<float3> scratchPos, scratchEnd;
         NativeArray<quaternion> scratchRot, scratchEndRot;
         NativeArray<float> scratchFloor;
-        float carry;
+        float carry, slack;
         int skipped, capacity;
+        public int Trims;
         const int SegCap = 64, PartCap = 32;
 
         public void OnCreate(ref SystemState state)
@@ -166,6 +167,15 @@ namespace Stabby.Game
             a = new NativeArray<T>(size, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
 
+        static void Shrink<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
+        {
+            a.Dispose(after);
+            a = new NativeArray<T>(math.max(n, 1), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        }
+
+        public long HeldBytes => (long)capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Sorted.Length * UnsafeUtility.SizeOf<CreatureGpu>()
+            + Fur.Length * 16L + (Starts.Length + Counts.Length) * 4L;
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
@@ -183,8 +193,19 @@ namespace Stabby.Game
             {
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
+                int want = tally.Links + tally.Links / 2;
+                slack = capacity > 2 * want + 1024 ? slack + SystemAPI.Time.DeltaTime : 0;
+                bool trim = slack > 2f;
+                if (trim)
+                {
+                    capacity = math.max(want, 64);
+                    Shrink(ref Sorted, capacity, Gpu);
+                    Shrink(ref Fur, 3 * count + 3 * count / 2, Gpu);
+                    slack = 0;
+                    Trims++;
+                }
                 if (capacity < tally.Links) capacity = tally.Links + tally.Links / 2;
-                Gpu = new Reset { Instances = Instances, Capacity = capacity }.Schedule(Gpu);
+                Gpu = new Reset { Instances = Instances, Capacity = capacity, Trim = trim }.Schedule(Gpu);
                 Fit(ref Sorted, capacity, Gpu);
                 Fit(ref Fur, 3 * count, Gpu);
                 Fit(ref Starts, tally.Groups, Gpu);
@@ -211,11 +232,12 @@ namespace Stabby.Game
         {
             public NativeList<CreatureGpu> Instances;
             public int Capacity;
+            public bool Trim;
 
             public void Execute()
             {
                 Instances.Clear();
-                if (Instances.Capacity < Capacity) Instances.Capacity = Capacity;
+                if (Instances.Capacity < Capacity || Trim) Instances.Capacity = Capacity;
             }
         }
 
