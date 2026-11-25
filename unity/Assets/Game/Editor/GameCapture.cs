@@ -124,6 +124,7 @@ namespace Stabby.Game.Editor
             if (playAt < 0) playAt = EditorApplication.timeSinceStartup;
             if (!quiet) quiet = QuietBatchWarning();
             SpikeProbe.Tick();
+            SystemCost.Tick();
             if (GameStatus.Failure != null)
             {
                 Debug.LogError("GameCapture: " + GameStatus.Failure + "\n" + Status());
@@ -931,6 +932,7 @@ namespace Stabby.Game.Editor
         static string Status()
         {
             GameStatus.PutFrames();
+            if (SystemCost.On) GameStatus.Lines["~syscost"] = SystemCost.Report();
             return string.Join("\n", GameStatus.Lines.OrderBy(kv => kv.Key).Select(kv => kv.Value)) +
             $"\ncapsules {GameStatus.Capsules}, terrain {(GameStatus.TerrainBuilt ? "built" : "missing")}\n";
         }
@@ -939,6 +941,7 @@ namespace Stabby.Game.Editor
         {
             EditorApplication.update -= Poll;
             SpikeProbe.Stop();
+            SystemCost.Stop();
             SessionState.EraseBool(Key);
             EditorApplication.Exit(code);
         }
