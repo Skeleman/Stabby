@@ -569,15 +569,16 @@ namespace Stabby.World
         public static int StampNeeds(ObjectLibrary lib, ObjectInstance o)
         {
             int cave = lib.Objects[o.Def].Placement.Cave;
-            return cave == CaveStalactite ? StampCeiling : StampFloor;
+            return cave == CaveStalactite ? StampCeiling : cave == CaveColumn ? StampFloor | StampCeiling : StampFloor;
         }
 
         public static void ContactEnds(ObjectLibrary lib, ObjectInstance o, out float floor, out float ceiling)
         {
             float sink = lib.Objects[o.Def].Placement.Sink * o.Size;
             int needs = StampNeeds(lib, o);
-            floor = (needs & StampFloor) != 0 ? o.Y + sink : float.NaN;
-            ceiling = (needs & StampCeiling) != 0 ? o.Y - sink : float.NaN;
+            bool spans = needs == (StampFloor | StampCeiling);
+            floor = (needs & StampFloor) != 0 ? o.Y + (spans ? CaveColumnEmbedM : sink) : float.NaN;
+            ceiling = (needs & StampCeiling) != 0 ? (spans ? o.Y + o.Size - CaveColumnEmbedM : o.Y - sink) : float.NaN;
         }
 
         public static int StampSides(ObjectLibrary lib, ObjectInstance o, ObjectColumn c)

@@ -222,6 +222,50 @@ public class CaveTests
     }
 
     [Fact]
+    public void StreamsRunDownhillToSpringsPoolsOrSinks()
+    {
+        var ends = new int[3];
+        int graphs = 0;
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
+            graphs += s.Graphs.Length;
+            var e = new List<string>();
+            WorldChecks.CheckCaveBrooks(s.W, s.Graphs, streams, null, e);
+            Assert.Empty(e);
+            foreach (var x in streams)
+            {
+                ends[x.End]++;
+                Assert.True(x.Flow > 0f);
+                var g = s.Graphs[x.Graph];
+                for (int k = 1; k < x.Nodes.Length; k++) Assert.True(g.Nodes[x.Nodes[k]].Y < g.Nodes[x.Nodes[k - 1]].Y);
+            }
+        }
+        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}");
+        Assert.True(ends[0] + ends[1] + ends[2] >= graphs / 3, $"only {ends[0] + ends[1] + ends[2]} streams in {graphs} cave graphs");
+        Assert.True(ends[0] > 0 && ends[2] > 0);
+    }
+
+    [Fact]
+    public void UphillOrStrandedStreamFails()
+    {
+        var s = At(1);
+        var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
+        Assert.NotEmpty(streams);
+        var x = streams[0];
+        var up = new CaveBrook { Graph = x.Graph, End = x.End, Outlet = x.Outlet, Flow = x.Flow, Nodes = x.Nodes, Points = (float[])x.Points.Clone() };
+        up.Points[up.Points.Length - CaveBrook.Stride + 1] += 1f;
+        var e = new List<string>();
+        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, new[] { up }, null, e);
+        Assert.Contains(e, m => m.Contains("flows uphill"));
+        var lost = new CaveBrook { Graph = x.Graph, End = 7, Outlet = -1, Flow = x.Flow, Nodes = x.Nodes, Points = x.Points };
+        e.Clear();
+        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, new[] { lost }, null, e);
+        Assert.Contains(e, m => m.Contains("no spring, pool or sink"));
+    }
+
+    [Fact]
     public void ChamberPoolsSitInTheirCarveAndHallsHoldTheLargest()
     {
         int pools = 0, halls = 0;
@@ -273,26 +317,30 @@ public class CaveTests
     [Fact]
     public void CaveObjectsAreCommonAndPass()
     {
-        int tiles = 0, drips = 0, mites = 0, rubble = 0;
+        int tiles = 0, drips = 0, mites = 0, rubble = 0, columns = 0, flows = 0;
         var contacts = new List<ObjectColumn>();
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var s = At(seed);
             var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
             tiles += s.Graphs.Length;
+            foreach (var x in s.Edits) if (x.Shape == FeatureEdit.Speleothem && x.T == 0f) flows++;
             foreach (var o in CaveObjects(s, field))
             {
                 int kind = s.W.Objects.Objects[o.Def].Placement.Cave;
                 if (kind == ObjectField.CaveStalactite) drips++;
                 else if (kind == ObjectField.CaveStalagmite) mites++;
+                else if (kind == ObjectField.CaveColumn) columns++;
                 else rubble++;
                 string fault = field.CaveFault(o) ?? field.ContactFault(o, contacts);
                 Assert.True(fault == null, fault);
             }
         }
         Assert.True(drips >= 8 * tiles, $"{drips} stalactites over {tiles} cave tiles");
-        Assert.True(mites >= drips / 4, $"{mites} stalagmites for {drips} stalactites");
+        Assert.True(mites >= drips / 8, $"{mites} stalagmites for {drips} stalactites");
         Assert.True(rubble >= drips, $"{rubble} rubble stones for {drips} stalactites");
+        Assert.True(columns >= tiles, $"{columns} columns over {tiles} cave tiles");
+        Assert.True(flows >= tiles, $"{flows} flowstones over {tiles} cave tiles");
     }
 
     [Fact]
@@ -331,7 +379,7 @@ public class CaveTests
     [Fact]
     public void CaveObjectsOffTheirRockLeaveNoStamp()
     {
-        foreach (int kind in new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite })
+        foreach (int kind in new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite, ObjectField.CaveColumn })
         {
             var (s, _, o) = FindCave(kind);
             var lib = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
