@@ -61,3 +61,9 @@ LightBudgetSystem.Complete only after IsCompleted, or at teardown
 JobPoll.Complete Done completes a handle only after IsCompleted; Teardown is for OnDestroy, before releasing what the job wrote
 CaveDarkSystem follows Camera.main and uploads a Burst-built cave darkness volume to a managed Texture3D (Texture API, no unmanaged form)
 CaveDarkSystem.Complete only after IsCompleted, or at teardown
+DayNightSystem.load yields a managed SkyDef the GC frees; nothing to release
+LightPresenterSystem.capsTask yields a LightBudget.Caps value; nothing to release
+ObjectColumnsSystem.fieldTask yields the managed ObjectField the GC frees; nothing to release
+ObjectViewSystem.atlasTask yields managed Color32 mips the GC frees; nothing to release
+ShadowViewSystem.spanTask yields a ShadowSpan value and a float; nothing to release
+TerrainViewSystem.steaming yields managed MeshParts lists the GC frees; nothing to release

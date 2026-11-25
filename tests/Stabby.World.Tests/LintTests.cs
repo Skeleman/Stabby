@@ -217,6 +217,25 @@ public class LintTests
     [InlineData("static class Tools { static JobHandle h; } struct Plain { JobHandle h; }")]
     public void AcceptsPendingJobsTornDown(string code) => Assert.Empty(Teardown(code));
 
+    const string LeakingTask = "partial class Sys : SystemBase { Task<Mesh> build; protected override void OnUpdate() { build ??= Task.Run(() => new Mesh()); } protected override void OnDestroy() { } }";
+
+    [Theory]
+    [InlineData(LeakingTask)]
+    [InlineData("partial class Sys : SystemBase { Task warm; protected override void OnUpdate() { } }")]
+    [InlineData("partial class Sys : SystemBase { sealed class Gen { public Task<Blob> Fill; } Gen gen; protected override void OnUpdate() { } protected override void OnDestroy() { gen = null; } }")]
+    [InlineData("partial class Sys : SystemBase { List<Task<Blob>> chunks; protected override void OnUpdate() { } protected override void OnDestroy() { chunks.Clear(); } }")]
+    public void FlagsPendingTasksLeftAtTeardown(string code) => Assert.Single(Teardown(code));
+
+    [Theory]
+    [InlineData("partial class Sys : SystemBase { Task<Mesh> build; protected override void OnUpdate() { } protected override void OnDestroy() { Owned.Release(build, m => m.Dispose()); } }")]
+    [InlineData("partial class Sys : SystemBase { sealed class Gen { public Task<Blob> Fill; } Gen gen; protected override void OnUpdate() { } protected override void OnDestroy() { if (gen != null) Owned.Release(gen.Fill, b => b.Dispose()); } }")]
+    [InlineData("partial class Sys : SystemBase { List<Task<Blob>> chunks; protected override void OnUpdate() { } protected override void OnDestroy() { foreach (var t in chunks) Owned.Release(t, b => b.Dispose()); } }")]
+    public void AcceptsPendingTasksReleased(string code) => Assert.Empty(Teardown(code));
+
+    [Fact]
+    public void AllowListSilencesALeftTask() =>
+        Assert.Empty(Teardown(LeakingTask, new Dictionary<string, string> { ["Sys.build"] = "yields managed data the GC frees" }));
+
     [Fact]
     public void AllowListSilencesALeftJob() =>
         Assert.Empty(Teardown(Leaking, new Dictionary<string, string> { ["Sys.scan"] = "the job writes nothing the system owns" }));
