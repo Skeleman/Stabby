@@ -122,8 +122,8 @@ namespace Stabby.Viewer
         void Begin(Func<CancellationToken, Prepared> work)
         {
             Clear();
-            Shader.SetGlobalColor("_StabbySky", Sky * 0.45f);
-            Shader.SetGlobalColor("_StabbyGround", new Color(0.14f, 0.14f, 0.13f));
+            Shader.SetGlobalColor("_StabbySky", (Sky * 0.45f).linear);
+            Shader.SetGlobalColor("_StabbyGround", new Color(0.14f, 0.14f, 0.13f).linear);
             if (Blocking) { prepared = work(cancel.Token); Pump(); }
             else preparing = Run(work);
         }

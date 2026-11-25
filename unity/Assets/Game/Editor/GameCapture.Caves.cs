@@ -125,7 +125,7 @@ namespace Stabby.Game.Editor
             lines.Add($"caves: {graphs.Length} graphs ({string.Join(", ", graphs.GroupBy(g => g.Class).Select(g => g.Key + " " + g.Count()))}) placed in {placeMs} ms after a {genMs} ms full regeneration, both in a task, GV {WorldConfig.GeneratorVersion}");
             var hall = Nearest(graphs, "hall");
             var lab = Nearest(graphs, "labyrinth");
-            if (hall == null || lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no " + (hall == null ? "hall" : "labyrinth") + " in this world"; yield break; }
+            if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
 
@@ -185,6 +185,7 @@ namespace Stabby.Game.Editor
                 GeometryShot(cam, dir, "caves-deep-tunnel-debug-unlit");
             }
             else lines.Add("deep tunnel: no labyrinth tunnel reachable from a mouth");
+            if (hall == null) { lines.Add("hall: none in this world, hall shots skipped"); GameStatus.Lines["~caves"] = string.Join("\n", lines); yield break; }
 
             var hn = hall.Nodes.Find(n => n.Hall);
             var hc = new Vector3(hn.X, hn.Y, hn.Z);
