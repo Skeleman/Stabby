@@ -742,7 +742,7 @@ namespace Stabby.World
             var seen = new bool[FeatureEdit.Shapes];
             foreach (var x in edits)
             {
-                if (x.Shape == FeatureEdit.Boulder || x.Shape == FeatureEdit.Spring || seen[x.Shape]) continue;
+                if (x.Shape == FeatureEdit.Boulder || x.Shape == FeatureEdit.Spring || x.Shape == FeatureEdit.Speleothem || seen[x.Shape]) continue;
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
@@ -837,6 +837,8 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             foreach (var x in edits)
                 if ((x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.CaveRoom) && Underground.Wet(w, x)) { e.Add($"cave at {x.Ax:F0},{x.Az:F0} breaks into the sea or a lake"); return; }
+            var ground = new DetailGround { Detail = detail };
+            int probes = 0, settled = 0;
             foreach (var g in caves)
             {
                 var near = new List<FeatureEdit>();
@@ -854,7 +856,46 @@ namespace Stabby.World
                 string why = Underground.Unreached(detail, items, g);
                 if (why != null) e.Add(why);
                 if (tight != null || why != null) return;
+                var rock = new List<FeatureEdit>();
+                foreach (var q in items) if (q.Shape != FeatureEdit.Speleothem) rock.Add(q);
+                var bare = rock.ToArray();
+                var field = new EditArray { Items = bare };
+                foreach (var q in items)
+                {
+                    if (q.Shape != FeatureEdit.Speleothem) continue;
+                    string fault = Underground.DripFault(ground, field, LatticeStepM, q, bare, 0, bare.Length, Underground.PassM);
+                    if (fault != null) { e.Add(fault); return; }
+                }
+                Underground.SettledFloor(detail, bare, ref probes, ref settled);
             }
+            if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
+            CheckCaveObjects(w, detail, edits, e);
+        }
+
+        public const int CaveObjectChunks = 6;
+
+        public static void CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
+        {
+            if (w.Objects == null) return;
+            var field = new ObjectField(w, detail, edits, w.Objects);
+            float span = field.ChunkMeters;
+            int across = field.ChunksAcross;
+            var picked = new List<int>();
+            foreach (var x in edits)
+            {
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave) continue;
+                float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz);
+                int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
+                if (!picked.Contains(c)) picked.Add(c);
+                if (picked.Count >= CaveObjectChunks) break;
+            }
+            foreach (int c in picked)
+                foreach (var o in field.Chunk(c % across, c / across))
+                {
+                    if (!ObjectField.IsCave(w.Objects.Objects[o.Def])) continue;
+                    string fault = field.CaveFault(o);
+                    if (fault != null) { e.Add(fault); return; }
+                }
         }
 
         public const float CaveNormalDeg = 1.5f;

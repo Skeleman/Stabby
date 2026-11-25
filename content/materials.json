@@ -200,7 +200,8 @@
     { "id": "turf-sprout",      "name": "Turf sprout",      "color": "#668529" },
     { "id": "ember-glow",       "name": "Ember glow",       "color": "#ff5a12" },
     { "id": "ember-core",       "name": "Ember core",       "color": "#ffb04a" },
-    { "id": "firelight",        "name": "Firelight",        "color": "#ff9a4c" }
+    { "id": "firelight",        "name": "Firelight",        "color": "#ff9a4c" },
+    { "id": "dripstone",        "name": "Dripstone",        "color": "#a3967c" }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],

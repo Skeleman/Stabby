@@ -83,7 +83,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -101,16 +101,23 @@ namespace Stabby.World
             var mouths = Mouths(w, tx, ty);
             if (mouths.Count == 0) return;
             int start = output.Count;
+            float grain = new Rng(rock).NextFloat();
             while (cls != null)
             {
                 for (int a = cls.Fallback.Length > 0 ? Tries : 1; a > 0; a--)
                 {
-                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths };
+                    var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = start, C = cls, R = r, Width = width, Mouths = mouths, Grain = grain };
                     b.G = new CaveGraph { Class = cls.Id, Tile = ty * 65536 + tx };
                     bool ok = b.Build() && Sound(detail, Near(prior, output, start), b.G);
                     r = b.R;
                     width = b.Width;
-                    if (ok) { graph = b.G; return; }
+                    if (ok)
+                    {
+                        graph = b.G;
+                        var d = new Rng(drip);
+                        Speleothems(detail, w.Config.CellMeters, ref d, output, start);
+                        return;
+                    }
                     output.RemoveRange(start, output.Count - start);
                 }
                 cls = cls.Fallback.Length > 0 ? lib.Find(cls.Fallback) : null;
@@ -148,6 +155,7 @@ namespace Stabby.World
             public Rng R, Width;
             public List<int> Mouths;
             public CaveGraph G;
+            public float Grain;
             readonly List<int> parents = new List<int>();
 
             float Ground(float x, float z) => Detail.HeightAt(x / Cm, z / Cm);
@@ -404,7 +412,7 @@ namespace Stabby.World
             FeatureEdit Carve(int shape, float r, float ax, float af, float az, float bx, float bf, float bz, float lumps)
             {
                 float lift = r * Features.CaveHollow;
-                return new FeatureEdit { Kind = FeatureEdit.Carve, Shape = shape, R = r, Ax = ax, Ay = af + lift, Az = az, Bx = bx, By = bf + lift, Bz = bz, N = lumps, S = R.NextFloat() };
+                return new FeatureEdit { Kind = FeatureEdit.Carve, Shape = shape, R = r, Ax = ax, Ay = af + lift, Az = az, Bx = bx, By = bf + lift, Bz = bz, N = lumps, S = R.NextFloat(), F = Grain };
             }
 
             bool Fits(FeatureEdit e, float open, float ground)
@@ -425,6 +433,129 @@ namespace Stabby.World
                     if (Over(o, e) || Over(e, o)) return false;
                 }
                 return true;
+            }
+        }
+
+        public const float DripPerM = 1f / 5f, DripClearM = 2.5f, PassM = 1.5f, BridgeKeepM = 6f, DripGapM = 4f, ColumnGapM = 14f, HeadroomM = 0.7f;
+        public const float ColumnChance = 0.12f;
+
+        static void Speleothems(TerrainDetail detail, float cm, ref Rng r, List<FeatureEdit> output, int start)
+        {
+            var ground = new DetailGround { Detail = detail };
+            var rock = new EditArray { Items = output.GetRange(start, output.Count - start).ToArray() };
+            float s = Features.LatticeStepM;
+            int end = output.Count;
+            var made = new List<FeatureEdit>();
+            for (int q = start; q < end; q++)
+            {
+                var c = output[q];
+                if (c.Kind != FeatureEdit.Carve) continue;
+                float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (len < 1f) continue;
+                float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;
+                int tries = Math.Max(1, (int)((len + (c.Shape == FeatureEdit.CaveRoom ? 2f * c.R : 0f)) * DripPerM));
+                for (int k = 0; k < tries; k++)
+                {
+                    float t = r.NextFloat(), u = r.Range(-0.9f, 0.9f) * wf, kind = r.NextFloat(), girth = r.NextFloat(), seed = r.NextFloat();
+                    if (kind >= ColumnChance) continue;
+                    float x = c.Ax + ex * t + px * u, z = c.Az + ez * t + pz * u, ay = c.Ay + (c.By - c.Ay) * t;
+                    if (Walk.Solid(ground, rock, s, x, ay - 0.2f * hole, z) >= 0) continue;
+                    float floor = Walk.Surface(ground, rock, s, x, z, ay - 0.2f * hole, ay - hole - 6f);
+                    if (floor <= ay - hole - 6f) continue;
+                    float ceil = Ceiling(ground, rock, s, x, floor + 1f, z, floor + 3f * hole);
+                    if (float.IsNaN(ceil)) continue;
+                    float gap = ceil - floor;
+                    if (gap < DripGapM || gap >= ColumnGapM) continue;
+                    var e = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Speleothem, Ax = x, Az = z, Bx = x, Bz = z, S = seed };
+                    e.R = 1.4f + 1.2f * girth;
+                    e.Ay = ceil + 1.5f; e.By = floor - 1f; e.T = 0.5f; e.P = 0.55f; e.N = 0.15f * e.R;
+                    Drop(e, made, output, ground, rock, s, cm, start, end);
+                }
+            }
+            output.AddRange(made);
+        }
+
+        static bool Drop(FeatureEdit e, List<FeatureEdit> made, List<FeatureEdit> output, DetailGround ground, EditArray rock, float s, float cm, int start, int end)
+        {
+            if (!Features.Inside(e, cm) || DripFault(ground, rock, s, e, output, start, end, DripClearM) != null) return false;
+            foreach (var o in made)
+            {
+                float dx = o.Ax - e.Ax, dz = o.Az - e.Az, keep = o.R + e.R;
+                if (dx * dx + dz * dz < keep * keep) return false;
+            }
+            made.Add(e);
+            return true;
+        }
+
+        internal static float Ceiling<TE>(DetailGround g, TE list, float s, float x, float y, float z, float top) where TE : struct, IEditList
+        {
+            const float probe = 0.5f;
+            for (; y < top; y += probe)
+            {
+                if (Walk.Solid(g, list, s, x, y + probe, z) < 0) continue;
+                float lo = y, hi = y + probe;
+                for (int i = 0; i < 6; i++)
+                {
+                    float mid = 0.5f * (lo + hi);
+                    if (Walk.Solid(g, list, s, x, mid, z) < 0) lo = mid; else hi = mid;
+                }
+                return hi;
+            }
+            return float.NaN;
+        }
+
+        public static string DripFault(DetailGround g, EditArray rock, float s, FeatureEdit e, IList<FeatureEdit> items, int from, int to, float clear)
+        {
+            string at = $"speleothem at {e.Ax:F0},{e.Az:F0}";
+            if (Walk.Solid(g, rock, s, e.Ax, e.Ay, e.Az) < 0) return at + " floats free of the rock";
+            if (e.T == 1f && Walk.Solid(g, rock, s, e.Bx, e.By, e.Bz) >= 0) return at + " is buried in rock";
+            bool hangs = e.T == 1f && e.Ay > e.By;
+            if (hangs && e.By - Walk.Surface(g, rock, s, e.Bx, e.Bz, e.By, e.By - 40f) < Walk.Height + HeadroomM) return at + " hangs into the walking headroom";
+            float reach = e.R + e.N;
+            for (int q = from; q < to; q++)
+            {
+                var c = items[q];
+                if (!hangs && c.Shape == FeatureEdit.Cave && Plan(c, e.Ax, e.Az) < reach + clear) return at + " blocks a cave passage";
+                if (c.Shape == FeatureEdit.Bridge && Plan(c, e.Ax, e.Az) < reach + c.R + BridgeKeepM) return at + " crowds a rock bridge";
+            }
+            return null;
+        }
+
+        internal static float Plan(FeatureEdit c, float x, float z)
+        {
+            float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, ll = ex * ex + ez * ez, px = x - c.Ax, pz = z - c.Az;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + pz * ez) / ll)) : 0f;
+            float qx = px - t * ex, qz = pz - t * ez;
+            return (float)Math.Sqrt(qx * qx + qz * qz);
+        }
+
+        public const float SettledM = 0.5f, SettledShare = 0.5f, SettledLateral = 0.5f;
+
+        public static void SettledFloor(TerrainDetail detail, FeatureEdit[] rock, ref int probes, ref int settled)
+        {
+            var g = new DetailGround { Detail = detail };
+            var list = new EditArray { Items = rock };
+            float s = Features.LatticeStepM;
+            foreach (var c in rock)
+            {
+                if (c.Shape != FeatureEdit.Cave) continue;
+                float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (len < 1f) continue;
+                float px = -ez / len, pz = ex / len, hole = c.HoleR;
+                for (int i = 1; i <= 3; i++)
+                {
+                    float t = 0.25f * i, cx = c.Ax + ex * t, cz = c.Az + ez * t;
+                    float ay = c.Ay + (c.By - c.Ay) * t, top = ay - 0.5f * hole, bottom = ay - hole - 6f;
+                    if (Walk.Solid(g, list, s, cx, top, cz) >= 0) continue;
+                    float mid = Walk.Surface(g, list, s, cx, cz, top, bottom);
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        float x = cx + px * side * SettledLateral * hole, z = cz + pz * side * SettledLateral * hole;
+                        probes++;
+                        if (Walk.Solid(g, list, s, x, top, z) >= 0) continue;
+                        if (Math.Abs(Walk.Surface(g, list, s, x, z, top, bottom) - mid) < SettledM) settled++;
+                    }
+                }
             }
         }
 

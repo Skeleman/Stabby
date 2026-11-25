@@ -505,6 +505,7 @@ public static class ContentLoader
         public string? Bank { get; set; }
         public float PerHundredM { get; set; }
         public string? Discovery { get; set; }
+        public string? Cave { get; set; }
         public string? Liquid { get; set; }
         public float SpacingM { get; set; }
         public float Chance { get; set; } = 1f;
@@ -570,7 +571,7 @@ public static class ContentLoader
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
                 FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
                 ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
-                Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), Liquid = pl.Liquid, SpacingM = pl.SpacingM, Chance = pl.Chance,
+                Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), Cave = Array.IndexOf(ObjectField.CaveNames, pl.Cave ?? ""), Liquid = pl.Liquid, SpacingM = pl.SpacingM, Chance = pl.Chance,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);

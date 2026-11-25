@@ -451,10 +451,11 @@ namespace Stabby.World
                 if (e.Kind == FeatureEdit.Add) return false;
                 touched = true;
                 double shell = e.R - 1.25 * e.R * FeatureEdit.Blend;
-                float k = e.R * FeatureEdit.Blend, near = (float)(cd - half - 0.05 - shell);
+                e.RockSpan(out float rockLo, out float rockHi);
+                float k = e.R * FeatureEdit.Blend, near = (float)(cd - half - 0.05 - shell - rockLo);
                 if (!hollow && x0 >= e.MinX && xb <= e.MaxX && y0 >= e.MinY && yt <= e.MaxY && z0 >= e.MinZ && zb <= e.MaxZ)
                 {
-                    double far = cd + half + 0.05 + (e.P > 0f ? e.R * (e.P + (e.D > 0f ? FeatureEdit.Flare + e.D : 0f)) : 0.0) + (e.N > 0f ? e.N : 0f);
+                    double far = cd + half + 0.05 + rockHi + (e.P > 0f ? e.R * (e.P + (e.D > 0f ? FeatureEdit.Flare + e.D : 0f)) : 0.0) + (e.N > 0f ? e.N : 0f);
                     hollow = far - shell < -0.05;
                 }
                 holeLo = holeLo < float.MaxValue ? FeatureEdit.Cut(holeLo, near, Features.JoinBlend * k) : near;

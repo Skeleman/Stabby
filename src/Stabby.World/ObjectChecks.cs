@@ -58,36 +58,39 @@ namespace Stabby.World
                 if (!seen[0] && (o.X < cx * span || o.X >= (cx + 1) * span || o.Z < cz * span || o.Z >= (cz + 1) * span)) Fail(0, " lies outside its chunk");
                 int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
                 float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
-                if (!seen[1] && w.Sea[i]) Fail(1, " stands in the sea");
-                int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
-                if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
-                if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
-                if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
-                if (!seen[4])
+                if (!ObjectField.IsCave(def))
                 {
-                    grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
-                    if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
-                    if (ids.Count > 0) Fail(4, " sits inside a feature edit");
+                    if (!seen[1] && w.Sea[i]) Fail(1, " stands in the sea");
+                    int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
+                    if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
+                    if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
+                    if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
+                    if (!seen[4])
+                    {
+                        grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
+                        if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
+                        if (ids.Count > 0) Fail(4, " sits inside a feature edit");
+                    }
+                    for (int k = 0; k < bogs.Length && !seen[11]; k += ObjectField.BogStride)
+                    {
+                        float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
+                        if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
+                    }
+                    if (!seen[5] && (o.Y > ground + 0.05f || o.Y < ground - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
+                    if (!seen[8])
+                    {
+                        float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
+                        float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
+                        if (slope < def.Placement.SlopeMin - 1e-3f || slope > def.Placement.SlopeMax + 1e-3f) Fail(8, $" stands on slope {slope:F2} outside {def.Placement.SlopeMin:F2}-{def.Placement.SlopeMax:F2}");
+                    }
+                    if (!seen[7])
+                    {
+                        string seat = SeatFault(w, detail, o);
+                        if (seat != null) Fail(7, seat);
+                    }
+                    var biomes = def.Placement.Biomes;
+                    if (!seen[6] && biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, " is outside its biomes");
                 }
-                for (int k = 0; k < bogs.Length && !seen[11]; k += ObjectField.BogStride)
-                {
-                    float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
-                    if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
-                }
-                if (!seen[5] && (o.Y > ground + 0.05f || o.Y < ground - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
-                if (!seen[8])
-                {
-                    float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
-                    float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
-                    if (slope < def.Placement.SlopeMin - 1e-3f || slope > def.Placement.SlopeMax + 1e-3f) Fail(8, $" stands on slope {slope:F2} outside {def.Placement.SlopeMin:F2}-{def.Placement.SlopeMax:F2}");
-                }
-                if (!seen[7])
-                {
-                    string seat = SeatFault(w, detail, o);
-                    if (seat != null) Fail(7, seat);
-                }
-                var biomes = def.Placement.Biomes;
-                if (!seen[6] && biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, " is outside its biomes");
                 for (int pi = 0; pi < def.Parts.Count && !seen[10]; pi++)
                 {
                     contacts.Clear();
