@@ -244,7 +244,7 @@ namespace Stabby.Game
         [ReadOnly] public NativeArray<int> Ints;
         [ReadOnly] public NativeArray<float> Floats;
         [NativeDisableParallelForRestriction] public NativeArray<TerrainVertex> Verts;
-        public NativeStream.Writer Tris;
+        public UnsafeList<int> Tris;
         public int Cursor;
 
         public void Begin(int ints, int floats) { }
@@ -261,7 +261,7 @@ namespace Stabby.Game
 
         public void AddTriangle(int a, int b, int c)
         {
-            Tris.Write(a); Tris.Write(b); Tris.Write(c);
+            Tris.Add(a); Tris.Add(b); Tris.Add(c);
         }
     }
 
@@ -345,41 +345,65 @@ namespace Stabby.Game
         public NativeArray<float> Cells, Floats;
         public NativeArray<int> Ints;
         public NativeList<int> Slabs;
-        public NativeStream Rows;
+        public NativeArray<UnsafeList<int>> Rows;
 
-        public static TerrainBuild Make(TerrainChunk c)
+        public static int MaxCells => 2 * TerrainTree.Quads;
+
+        public static TerrainBuild Make()
         {
-            var nets = c.Nets;
-            return new TerrainBuild
+            int m = MaxCells, w = m + 1, window = m + 6;
+            var nets = new NetsChunk { Cells = m };
+            var b = new TerrainBuild
             {
                 Edits = new NativeList<FeatureEdit>(16, Allocator.Persistent),
                 Light = new NativeList<float2>(16, Allocator.Persistent),
-                Cells = new NativeArray<float>(c.Window * c.Window, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
+                Cells = new NativeArray<float>(window * window, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
                 Floats = new NativeArray<float>(SurfaceNets.LayoutFloats(nets), Allocator.Persistent),
                 Ints = new NativeArray<int>(SurfaceNets.LayoutInts(nets), Allocator.Persistent),
-                Slabs = new NativeList<int>(c.Cells + 1, Allocator.Persistent),
+                Slabs = new NativeList<int>(w, Allocator.Persistent),
+                Rows = new NativeArray<UnsafeList<int>>(w, Allocator.Persistent),
             };
+            for (int p = 0; p < w; p++) b.Rows[p] = new UnsafeList<int>(TerrainTree.Indices / w, Allocator.Persistent);
+            return b;
         }
 
-        public static JobHandle Schedule(TerrainChunk c, BlobAssetReference<TerrainLookData> look, int rows, NativeList<TerrainVertex> verts, NativeList<int> tris, NativeArray<float3> bounds, JobHandle after = default)
+        public static JobHandle Schedule(TerrainChunk c, BlobAssetReference<TerrainLookData> look, int rows, TerrainBuild b, NativeList<TerrainVertex> verts, NativeList<int> tris, NativeArray<float3> bounds, JobHandle after = default)
         {
-            var b = Make(c);
             var layout = new TerrainLayoutJob { Chunk = c, Rows = rows, Edits = b.Edits, Light = b.Light, Cells = b.Cells, Ints = b.Ints, Floats = b.Floats, Slabs = b.Slabs, Verts = verts, Tris = tris }.Schedule(after);
-            var made = NativeStream.ScheduleConstruct(out b.Rows, b.Slabs, layout, Allocator.Persistent);
             var slabs = new TerrainRowsJob
             {
                 Columns = c.Read(b.Cells), Edits = new RowEdits { Items = b.Edits.AsDeferredJobArray() }, Chunk = c.Nets, Rows = rows,
-                Ints = b.Ints, Floats = b.Floats, Verts = verts.AsDeferredJobArray(), Tris = b.Rows.AsWriter(), Slabs = b.Slabs.AsDeferredJobArray(),
-            }.Schedule(b.Slabs, 1, made);
-            var mesh = new TerrainMeshJob { Chunk = c, Look = look, Edits = b.Edits, Light = b.Light, Ints = b.Ints, Rows = b.Rows.AsReader(), Verts = verts, Tris = tris, Bounds = bounds }.Schedule(slabs);
-            return b.Dispose(mesh);
+                Ints = b.Ints, Floats = b.Floats, Verts = verts.AsDeferredJobArray(), Tris = b.Rows, Slabs = b.Slabs.AsDeferredJobArray(),
+            }.Schedule(b.Slabs, 1, layout);
+            return new TerrainMeshJob { Chunk = c, Look = look, Edits = b.Edits, Light = b.Light, Ints = b.Ints, Slabs = b.Slabs, Rows = b.Rows, Verts = verts, Tris = tris, Bounds = bounds }.Schedule(slabs);
         }
 
-        JobHandle Dispose(JobHandle after) =>
-            JobHandle.CombineDependencies(
-                JobHandle.CombineDependencies(Edits.Dispose(after), Light.Dispose(after), Cells.Dispose(after)),
-                JobHandle.CombineDependencies(Floats.Dispose(after), Ints.Dispose(after), Slabs.Dispose(after)),
-                Rows.Dispose(after));
+        public int RowCapacity
+        {
+            get
+            {
+                int n = 0;
+                for (int p = 0; p < Rows.Length; p++) n += Rows[p].Capacity;
+                return n;
+            }
+        }
+
+        public long Bytes => Cells.Length * 4L + Floats.Length * 4L + Ints.Length * 4L + Slabs.Capacity * 4L + Rows.Length * (long)UnsafeUtility.SizeOf<UnsafeList<int>>()
+            + RowCapacity * 4L + Edits.Capacity * (long)UnsafeUtility.SizeOf<FeatureEdit>() + Light.Capacity * 8L;
+
+        public int Allocs => 7 + Rows.Length;
+
+        public void Dispose()
+        {
+            for (int p = 0; p < Rows.Length; p++) Rows[p].Dispose();
+            Rows.Dispose();
+            Edits.Dispose();
+            Light.Dispose();
+            Cells.Dispose();
+            Floats.Dispose();
+            Ints.Dispose();
+            Slabs.Dispose();
+        }
     }
 
     [BurstCompile(CompileSynchronously = true)]
@@ -401,6 +425,9 @@ namespace Stabby.Game
             var chunk = Chunk.Nets;
             int m = chunk.Cells, w = m + 1;
             float s = chunk.StepM, x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
+            Edits.Clear();
+            Light.Clear();
+            Slabs.Clear();
             for (int f = 0; f < g.Edits.Length; f++)
             {
                 var e = g.Edits[f];
@@ -427,16 +454,17 @@ namespace Stabby.Game
         [ReadOnly] public NativeArray<int> Ints;
         [ReadOnly] public NativeArray<float> Floats;
         [NativeDisableParallelForRestriction] public NativeArray<TerrainVertex> Verts;
-        public NativeStream.Writer Tris;
+        public NativeArray<UnsafeList<int>> Tris;
 
         public void Execute(int p)
         {
             int w = Chunk.Cells + 1, k0 = p * Rows, k1 = math.min(k0 + Rows, w);
-            var sink = new RowSink { Ints = Ints, Floats = Floats, Verts = Verts, Tris = Tris, Cursor = Ints[3 * k0 * w + 2] };
-            sink.Tris.BeginForEachIndex(p);
+            var tris = Tris[p];
+            tris.Clear();
+            var sink = new RowSink { Ints = Ints, Floats = Floats, Verts = Verts, Tris = tris, Cursor = Ints[3 * k0 * w + 2] };
             SurfaceNets.Vertices(Columns, Edits, Chunk, ref sink, true, k0, k1);
             SurfaceNets.Quads(Edits, Chunk, ref sink, true, k0, k1);
-            sink.Tris.EndForEachIndex();
+            Tris[p] = sink.Tris;
         }
     }
 
@@ -448,7 +476,8 @@ namespace Stabby.Game
         [ReadOnly] public NativeList<FeatureEdit> Edits;
         [ReadOnly] public NativeList<float2> Light;
         [ReadOnly] public NativeArray<int> Ints;
-        [ReadOnly] public NativeStream.Reader Rows;
+        [ReadOnly] public NativeList<int> Slabs;
+        [ReadOnly] public NativeArray<UnsafeList<int>> Rows;
         public NativeList<TerrainVertex> Verts;
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
@@ -584,11 +613,10 @@ namespace Stabby.Game
             var edits = new NativeEdits { Items = Edits };
             var light = Light;
             float x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
-            for (int p = 0; p < Rows.ForEachCount; p++)
+            for (int p = 0; p < Slabs.Length; p++)
             {
-                int count = Rows.BeginForEachIndex(p);
-                for (int t = 0; t < count; t++) Tris.Add(Rows.Read<int>());
-                Rows.EndForEachIndex();
+                var row = Rows[p];
+                for (int t = 0; t < row.Length; t++) Tris.Add(row[t]);
             }
             var crusts = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             for (int f = 0; f < g.Edits.Length; f++)
@@ -876,13 +904,16 @@ namespace Stabby.Game
             public NativeList<TerrainVertex> Verts;
             public NativeList<int> Tris;
             public NativeArray<float3> Bounds;
+            public TerrainBuild Build;
             public int VertCap, TriCap;
+            public long BuildBytes;
 
             public void Dispose()
             {
                 Verts.Dispose();
                 Tris.Dispose();
                 Bounds.Dispose();
+                Build.Dispose();
             }
         }
 
@@ -1274,8 +1305,9 @@ namespace Stabby.Game
             b.Generation = generation;
             b.VertCap = b.Verts.Capacity;
             b.TriCap = b.Tris.Capacity;
+            b.BuildBytes = b.Build.Bytes;
             var chunk = new TerrainChunk { Ground = ground, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth };
-            b.Handle = TerrainBuild.Schedule(chunk, look, SlabRows, b.Verts, b.Tris, b.Bounds);
+            b.Handle = TerrainBuild.Schedule(chunk, look, SlabRows, b.Build, b.Verts, b.Tris, b.Bounds);
             pending.Add(b);
             nd.Pending = 1;
             nodes[key] = nd;
@@ -1291,13 +1323,15 @@ namespace Stabby.Game
                 buffers.RemoveAt(n);
                 return b;
             }
-            NativeAllocs += 3;
-            NativeBytes += (long)TerrainTree.Vertices * UnsafeUtility.SizeOf<TerrainVertex>() + TerrainTree.Indices * 4L + 24;
+            var build = TerrainBuild.Make();
+            NativeAllocs += 3 + build.Allocs;
+            NativeBytes += (long)TerrainTree.Vertices * UnsafeUtility.SizeOf<TerrainVertex>() + TerrainTree.Indices * 4L + 24 + build.Bytes;
             return new Pending
             {
                 Verts = new NativeList<TerrainVertex>(TerrainTree.Vertices, Allocator.Persistent),
                 Tris = new NativeList<int>(TerrainTree.Indices, Allocator.Persistent),
                 Bounds = new NativeArray<float3>(2, Allocator.Persistent),
+                Build = build,
             };
         }
 
@@ -1320,6 +1354,8 @@ namespace Stabby.Game
                 pending.RemoveAt(k--);
                 if (p.Verts.Capacity > p.VertCap) { NativeAllocs++; NativeBytes += (long)p.Verts.Capacity * UnsafeUtility.SizeOf<TerrainVertex>(); }
                 if (p.Tris.Capacity > p.TriCap) { NativeAllocs++; NativeBytes += p.Tris.Capacity * 4L; }
+                long built = p.Build.Bytes;
+                if (built > p.BuildBytes) { NativeAllocs++; NativeBytes += built - p.BuildBytes; }
                 long a0 = GC.GetAllocatedBytesForCurrentThread();
                 if (!stale) { Apply(p); ChunksApplied++; }
                 buffers.Add(p);
