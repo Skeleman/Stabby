@@ -12,5 +12,5 @@ for br in "$@"; do
   git merge -q --no-ff "origin/$br" -m "Merge $br" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No8Ts9XNFMeBwqC9oEsoTi" || { echo "merge failed: $br"; undo; exit 1; }
 done
-if bash tools/scripts/check.sh "" --full; then git push -q && echo "PUSHED $(git log --oneline -1) ($# branches)"
+if bash tools/scripts/check.sh "" --merge; then git push -q && echo "PUSHED $(git log --oneline -1) ($# branches)"
 else echo "TRAIN FAILED: main reset to origin/main; split the train to find the branch"; undo; exit 1; fi
