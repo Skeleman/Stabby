@@ -243,7 +243,7 @@ namespace Stabby.Game
             }
         }
 
-        [BurstCompile]
+        [BurstCompile, WithPresent(typeof(CreatureRetier))]
         partial struct AnimJob : IJobEntity
         {
             public Ground Ground;
@@ -292,10 +292,11 @@ namespace Stabby.Game
             void Show(DynamicBuffer<CreatureLink> links, int from, int count, bool on)
             {
                 if (Gpu) return;
-                for (int i = from; i < from + count; i++) Mmi.SetComponentEnabled(links[i].Value, on);
+                for (int i = from; i < from + count; i++)
+                    if (links[i].Value != Entity.Null) Mmi.SetComponentEnabled(links[i].Value, on);
             }
 
-            void Execute(Entity e, [EntityIndexInQuery] int index, ref CreatureRoot c, in DynamicBuffer<CreatureLink> links)
+            void Execute(Entity e, [EntityIndexInQuery] int index, ref CreatureRoot c, in DynamicBuffer<CreatureLink> links, EnabledRefRW<CreatureRetier> ask)
             {
                 ref var rig = ref c.Rig.Value;
                 ref var fit = ref c.Fit.Value;
@@ -314,7 +315,20 @@ namespace Stabby.Game
                 c.Visible = visible;
                 int half = links.Length / 2;
                 float low = rig.LowPx / q;
+                bool hasHigh = Gpu || links[0].Value != Entity.Null, hasLow = Gpu || links[half].Value != Entity.Null;
+                if (!Gpu && present)
+                {
+                    bool wantHigh = d.Geometry == 0 && CreatureTier.NeedHigh(px, low, hasHigh), wantLow = d.Geometry != 0 || CreatureTier.NeedLow(px, low, hasLow);
+                    if (wantHigh != hasHigh || wantLow != hasLow)
+                    {
+                        c.WantHigh = wantHigh;
+                        c.WantLow = wantLow;
+                        ask.ValueRW = true;
+                    }
+                }
                 float blend = d.Geometry == 0 ? 1 - math.round(Detail.Crossfade(px, low, 1.5f * low) * 16f) / 16f : 1;
+                if (!hasHigh) blend = 1;
+                else if (!hasLow) blend = 0;
                 bool highOn = visible && blend < 1, lowOn = visible && blend > 0;
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
@@ -426,6 +440,7 @@ namespace Stabby.Game
                     });
                     return;
                 }
+                if (link.Value == Entity.Null) return;
                 World[link.Value] = new LocalToWorld { Value = m };
                 var old = Fade[link.Value].Value;
                 if (math.any(math.abs(old - f) > 1e-3f)) Fade[link.Value] = new ObjectFade { Value = f };
