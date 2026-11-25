@@ -588,6 +588,9 @@ Shader "Stabby/Object"
                         orgO = float3(o2.x, 0, o2.y);
                         float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wp.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
                         float4 cwn = cw / max(dot(cw, 1), 1e-3);
+                        float surf = 1;
+                        [branch] if (_StabbyFieldUV.x > 0) surf = smoothstep(6, 2, ContactBed(wp.xz) - wp.y);
+                        cwn *= surf;
                         [branch] if (i.tone.x > 0.25)
                         {
                             bool course = i.tone.w > 1.5;
@@ -609,7 +612,7 @@ Shader "Stabby/Object"
                             float3 sb = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us, 0.5), 0).rgb, sm = sb;
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
                             TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, lerp(sb, sm * 0.1667, 0.5), tone, fp);
-                            TmStoneCover(m, wp - orgO, n, mossy ? float4(saturate(cwn.x + 0.55 * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
+                            TmStoneCover(m, wp - orgO, n, mossy ? float4(saturate(cwn.x + 0.55 * surf * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
                             float3 g = m.grad + cg;
                             g -= n * dot(g, n);
                             n = normalize(n - g);
