@@ -27,7 +27,7 @@ sweep 256 biomes 100 100 coverage, tint and lake cover per seed
 sweep 256 sketch 100 100 sketch, shores and mesas per seed
 sweep 256 surface 6735 22544 detail, near field, geometry, chunk bounds, cliff foot per seed
 sweep 256 meshing 29985 96443 mesher comparison per edit shape and cave roofs per seed
-sweep 256 caves 642 1560 cave paths, caves and cave normals per seed
+sweep 256 caves 7532 30012 cave paths, caves, cave normals and cave objects per seed
 sweep 256 sites 10053 18687 site footprints, sites, structures and discoveries per seed
 sweep 256 objects 20309 25997 objects, landforms, arches and boulders per seed
 sweep 256 creatures 249 542 creature checks per seed
