@@ -89,7 +89,7 @@ namespace Stabby.Game.Editor
         static void Live(ContactFieldSystem contact, ObjectField field)
         {
             var w = contact.Window;
-            var reference = new byte[Res * Res * 2];
+            var reference = new byte[Res * Res * 4];
             int count = Make(field, new HashSet<ulong>(), reference, w.X0 + 0.5f * Res * w.TexelM, w.Z0 + 0.5f * Res * w.TexelM, w.TexelM, out var again);
             Check(again.X0 == w.X0 && again.Z0 == w.Z0, $"live window rebuilt at ({again.X0}, {again.Z0}) vs ({w.X0}, {w.Z0})");
             int diff = Differ(reference, contact.Data);
@@ -98,9 +98,9 @@ namespace Stabby.Game.Editor
 
         static void Splats(ObjectField field, float3 p)
         {
-            var data = new NativeArray<byte>(Res * Res * 2, Allocator.Persistent);
+            var data = new NativeArray<byte>(Res * Res * 4, Allocator.Persistent);
             var columns = new NativeReference<int>(Allocator.Persistent);
-            var reference = new byte[Res * Res * 2];
+            var reference = new byte[Res * Res * 4];
             var cases = new (float dx, float dz, float texel, int goneEvery)[] { (0, 0, 0.5f, 0), (0, 0, 0.5f, 5), (37.3f, -61.9f, 0.25f, 0), (-140.6f, 88.1f, 1f, 3), (12.7f, 5.2f, 0.37f, 7) };
             int warm = 0;
             foreach (var (dx, dz, texel, goneEvery) in cases)
@@ -346,11 +346,12 @@ namespace Stabby.Game.Editor
                         field.ContactsOf(o, columnList);
                         bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
                         float foot = built ? Structures.FootReach * o.Size : 0f;
+                        bool cave = ObjectField.IsCave(field.Library.Objects[o.Def]);
                         foreach (var c in columnList)
                         {
-                            if (!ObjectField.Stamps(field.Library, o, c)) continue;
-                            Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot), built);
-                            count++;
+                            int sides = ObjectField.StampSides(field.Library, o, c);
+                            if ((sides & ObjectField.StampFloor) != 0) { Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot), built, cave ? 2 : 0); count++; }
+                            if ((sides & ObjectField.StampCeiling) != 0) { Stamp(data, x0, z0, texelM, c.X, c.Z, c.R, false, 3); count++; }
                         }
                         lushList.Clear();
                         field.LushOf(o, lushList);
@@ -360,7 +361,7 @@ namespace Stabby.Game.Editor
             return count;
         }
 
-        static void Stamp(byte[] data, float x0, float z0, float texelM, float x, float z, float r, bool built)
+        static void Stamp(byte[] data, float x0, float z0, float texelM, float x, float z, float r, bool built, int channel)
         {
             float pad = built ? Mathf.Clamp(0.25f + 0.35f * r, 0.25f, 0.9f) : Mathf.Clamp(0.12f + 0.12f * r, 0.12f, 0.35f);
             float outer = r + pad, soft = pad + (built ? 0.3f : 0.25f) * r;
@@ -377,7 +378,7 @@ namespace Stabby.Game.Editor
                     if (t <= 0) continue;
                     t = t >= 1 ? 1 : t * t * (3 - 2 * t);
                     byte v = (byte)(t * 255f);
-                    int k = 2 * (row + i);
+                    int k = 4 * (row + i) + channel;
                     if (v > data[k]) data[k] = v;
                 }
             }
@@ -399,7 +400,7 @@ namespace Stabby.Game.Editor
                     if (t <= 0) continue;
                     t = t >= 1 ? 1 : t * t * (3 - 2 * t);
                     byte v = (byte)(t * 255f);
-                    int k = 2 * (row + i) + 1;
+                    int k = 4 * (row + i) + 1;
                     if (v > data[k]) data[k] = v;
                 }
             }

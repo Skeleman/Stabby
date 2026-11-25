@@ -128,7 +128,7 @@ namespace Stabby.Game.Editor
             int room = -1;
             if (hall == null)
                 for (int q = 0; q < edits.Length; q++)
-                    if (edits[q].Shape == FeatureEdit.CaveRoom && (room < 0 || edits[q].R > edits[room].R)) room = q;
+                    if (FeatureEdit.IsRoom(edits[q].Shape) && (room < 0 || edits[q].R > edits[room].R)) room = q;
             if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
@@ -189,6 +189,28 @@ namespace Stabby.Game.Editor
                 GeometryShot(cam, dir, "caves-deep-tunnel-debug-unlit");
             }
             else lines.Add("deep tunnel: no labyrinth tunnel reachable from a mouth");
+            int gem = -1, gems = 0;
+            for (int q = 0; q < edits.Length; q++)
+                if (edits[q].Shape == FeatureEdit.CrystalCell && ++gems > 0 && (gem < 0 || edits[q].R > edits[gem].R)) gem = q;
+            if (gem >= 0)
+            {
+                var ge = edits[gem];
+                var gc = new Vector3(ge.Ax, ge.Ay - ge.R * Features.CaveHollow, ge.Az);
+                var ga = new Vector3(ge.Bx - ge.Ax, 0, ge.Bz - ge.Az);
+                ga = ga.sqrMagnitude > 1f ? ga.normalized : Vector3.forward;
+                float gx = gc.x - ga.x * ge.R * 0.5f, gy = gc.y, gz = gc.z - ga.z * ge.R * 0.5f;
+                Walk.Step(ground, ground.EditsNear(gx, gz, Walk.Radius), cols, ground.WalkStep, ref gx, ref gy, ref gz, 0, 0, Walk.Reach);
+                eye = new Vector3(gx, gy + 1.7f, gz);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(gc + ga * ge.R * 0.5f + Vector3.up * ge.R * 0.3f - eye));
+                waited = LoadWaitTotal();
+                for (var w = Settle(120); w.MoveNext();) yield return null;
+                var gs = DayNightSystem.Shown;
+                lines.Add($"crystal chamber: {gems} crystal cells in this world, {graphs.Count(g => g.Crystal)} crystal graphs, shot cell R {ge.R:F0} m at {gc.x:F0},{gc.y:F0},{gc.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}, pinned hour {gs.Hour:F2}, moon phase {gs.Phase:F2}: stream wait {LoadWaitTotal() - waited:F2} s");
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "caves-crystal");
+                GeometryShot(cam, dir, "caves-crystal-debug-unlit");
+            }
+            else lines.Add("crystal chamber: no crystal cell in this world");
             if (hall == null && room < 0) { lines.Add("hall: no hall or chamber in this world, hall shots skipped"); GameStatus.Lines["~caves"] = string.Join("\n", lines); yield break; }
 
             Vector3 hc, toward;
@@ -202,7 +224,7 @@ namespace Stabby.Game.Editor
                 foreach (var e in edits)
                 {
                     if (Features.TileOf(e, map.Config.CellMeters) != hall.Tile) continue;
-                    if (e.Shape == FeatureEdit.CaveRoom && new Vector2(e.Ax - hc.x, e.Az - hc.z).magnitude < 4f) rh = Mathf.Max(rh, e.R);
+                    if (FeatureEdit.IsRoom(e.Shape) && new Vector2(e.Ax - hc.x, e.Az - hc.z).magnitude < 4f) rh = Mathf.Max(rh, e.R);
                     if (e.Shape == FeatureEdit.Bridge && bridges++ == 0) bridge = new Vector3((e.Ax + e.Bx) * 0.5f, (e.Ay + e.By) * 0.5f, (e.Az + e.Bz) * 0.5f);
                 }
                 toward = bridges > 0 ? new Vector3(bridge.x - hc.x, 0, bridge.z - hc.z).normalized : Vector3.forward;
@@ -239,7 +261,7 @@ namespace Stabby.Game.Editor
             UndimmedShot(cam, dir, shotName + "-debug-probe-undimmed", CaveDebugExposure);
             Object.DestroyImmediate(probe);
             Object.DestroyImmediate(probeMat);
-            var rooms = edits.Where(e => e.Shape == FeatureEdit.CaveRoom).ToList();
+            var rooms = edits.Where(e => FeatureEdit.IsRoom(e.Shape)).ToList();
             int pool = -1;
             for (int q = 0; q < edits.Length; q++)
                 if (Underground.PoolBasin(rooms, edits[q]) && (pool < 0 || edits[q].W > edits[pool].W)) pool = q;

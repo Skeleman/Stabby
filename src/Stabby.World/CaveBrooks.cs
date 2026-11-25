@@ -144,7 +144,7 @@ namespace Stabby.World
         {
             var rooms = new List<FeatureEdit>();
             foreach (var e in edits)
-                if (e.Kind == FeatureEdit.Carve && e.Shape == FeatureEdit.CaveRoom && Underground.Same(e.Ax, e.Az, n.X, n.Z)) rooms.Add(e);
+                if (e.Kind == FeatureEdit.Carve && FeatureEdit.IsRoom(e.Shape) && Underground.Same(e.Ax, e.Az, n.X, n.Z)) rooms.Add(e);
             basin = default;
             if (rooms.Count == 0) return false;
             foreach (var e in edits)

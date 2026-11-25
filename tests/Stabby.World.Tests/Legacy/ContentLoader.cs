@@ -31,6 +31,7 @@ public static class ContentLoader
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Color { get; set; } = "";
+        public float Glow { get; set; }
     }
 
     sealed class LookEntry
@@ -260,7 +261,7 @@ public static class ContentLoader
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
                 Color = uint.Parse(s.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
             }).ToList(),
-            Materials = file.Materials.Select(m => new LibraryMaterial { Id = m.Id, Name = m.Name, Color = Hex(m.Color, path, "materials.color") }).ToList(),
+            Materials = file.Materials.Select(m => new LibraryMaterial { Id = m.Id, Name = m.Name, Color = Hex(m.Color, path, "materials.color"), Glow = m.Glow }).ToList(),
         };
         foreach (var name in MaterialLibrary.KitNames)
             if (file.Kit.TryGetValue(name, out var ids)) lib.Kit[name] = ids;
@@ -531,6 +532,7 @@ public static class ContentLoader
         var lib = new ObjectLibrary();
         var materials = LoadMaterials(contentRoot);
         uint Mat(string id) => materials.Find(id)?.Color ?? 0;
+        float Glow(string id) => materials.Find(id ?? "")?.Glow ?? 0f;
         foreach (var l in file.Lights)
             lib.Lights.Add(new LightKind { Id = l.Id, ShadowedPixels = l.ShadowedPixels, UnshadowedPixels = l.UnshadowedPixels, GlowPixels = l.GlowPixels, Importance = l.Importance });
         lib.LightCaps = new LightBudget.Caps(file.LightBudget.Shadowed, file.LightBudget.Unshadowed, file.LightBudget.Glow);
@@ -542,7 +544,7 @@ public static class ContentLoader
             });
         foreach (var o in file.Objects)
         {
-            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Glow = Glow(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
             if (o.Light != null)
                 def.Light = new ObjectLight { Category = o.Light.Category, Color = Mat(o.Light.Material), Intensity = o.Light.Intensity, RangeM = o.Light.RadiusM, Importance = o.Light.Importance, Flicker = o.Light.Flicker, FlickerHz = o.Light.FlickerHz };
             foreach (var p in o.Parts)
@@ -553,7 +555,7 @@ public static class ContentLoader
                 {
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
-                    HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color,
+                    HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color, Glow = p.Material != null ? Glow(p.Material) : def.Glow,
                     HasLeafColor = p.LeafMaterial != null, LeafColor = p.LeafMaterial != null ? Mat(p.LeafMaterial) : 0,
                 };
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, p.Ends);

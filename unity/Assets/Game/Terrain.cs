@@ -639,6 +639,7 @@ namespace Stabby.Game
             var used = new NativeArray<int>(Verts.Length, Allocator.Temp);
             for (int t = 0; t < Tris.Length; t++) used[Tris[t]] = 1;
             var rim = new NativeArray<int>(ringCount, Allocator.Temp);
+            float drop = s * 0.5f + 20f;
             var rimGap = new NativeArray<float>(ringCount, Allocator.Temp);
             for (int r = 0; r < ringCount; r++)
             {
@@ -655,6 +656,9 @@ namespace Stabby.Game
                 rim[r] = best;
                 rimGap[r] = gap;
                 used[best] = 1;
+                var crest = Verts[best].Pos;
+                for (int u = Ints[c + 2], e = u + Ints[c + 1] - Ints[c]; u < e; u++)
+                    if (used[u] != 0 && Verts[u].Normal.y < 0 && Verts[u].Pos.y < crest.y && Verts[u].Pos.y > crest.y - drop) rimGap[r] = float.MaxValue;
             }
 
             var meta = new NativeList<int3>(Verts.Length / 4 + 16, Allocator.Temp);
@@ -735,7 +739,6 @@ namespace Stabby.Game
                 hi = math.max(hi, p.Pos);
             }
 
-            float drop = s * 0.5f + 20f;
             int first = Verts.Length;
             for (int r = 0; r < ringCount; r++)
             {
@@ -858,6 +861,59 @@ namespace Stabby.Game
                 if (Split.Contains(key)) PushChildren(ref stack, key);
                 else Leaves.Add(new TerrainLeaf { Key = key, Dist = Tree.Distance(key, Eye) });
             }
+        }
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainDrawJob : IJob
+    {
+        public TerrainTree Tree;
+        [ReadOnly] public NativeHashMap<int, TerrainNode> Nodes;
+        [ReadOnly] public NativeHashSet<int> Split;
+        [ReadOnly] public NativeList<int> Roots;
+        public NativeHashSet<int> Drawn;
+
+        public void Execute()
+        {
+            Drawn.Clear();
+            for (int r = 0; r < Roots.Length; r++) Draw(Roots[r]);
+        }
+
+        bool Built(int key) => Nodes.TryGetValue(key, out var v) && v.Built != 0;
+
+        bool Coverable(int key)
+        {
+            if (Built(key)) return true;
+            if (!Split.Contains(key)) return false;
+            for (int q = 0; q < 4; q++)
+            {
+                int c = Tree.Child(key, q);
+                if (c >= 0 && !Coverable(c)) return false;
+            }
+            return true;
+        }
+
+        void Draw(int key)
+        {
+            if (Split.Contains(key))
+            {
+                bool all = true;
+                for (int q = 0; q < 4 && all; q++)
+                {
+                    int c = Tree.Child(key, q);
+                    all = c < 0 || Coverable(c);
+                }
+                if (all)
+                {
+                    for (int q = 0; q < 4; q++)
+                    {
+                        int c = Tree.Child(key, q);
+                        if (c >= 0) Draw(c);
+                    }
+                    return;
+                }
+            }
+            if (Built(key)) Drawn.Add(key);
         }
     }
 
@@ -1126,7 +1182,7 @@ namespace Stabby.Game
         BlobBake<TerrainLookData> lookBake;
         TerrainTree tree;
         NativeHashMap<int, TerrainNode> nodes;
-        NativeHashSet<int> split, drawn, fine;
+        NativeHashSet<int> split, drawn, drawNext, fine;
         NativeList<TerrainLeaf> leaves;
         NativeList<int> roots;
         NativeList<Entity> spare;
@@ -1410,6 +1466,7 @@ namespace Stabby.Game
             nodes = new NativeHashMap<int, TerrainNode>(1024, Allocator.Persistent);
             split = new NativeHashSet<int>(1024, Allocator.Persistent);
             drawn = new NativeHashSet<int>(1024, Allocator.Persistent);
+            drawNext = new NativeHashSet<int>(1024, Allocator.Persistent);
             fine = new NativeHashSet<int>(64, Allocator.Persistent);
             drawnSeen = new NativeHashSet<int>(1024, Allocator.Persistent);
             nodeWrites = new NativeList<TerrainWrite>(256, Allocator.Persistent);
@@ -1464,8 +1521,6 @@ namespace Stabby.Game
 
         TerrainNode Node(int key) => nodes.TryGetValue(key, out var v) ? v : new TerrainNode { Entity = Entity.Null };
 
-        bool Built(int key) => nodes.TryGetValue(key, out var v) && v.Built != 0;
-
         void Roots()
         {
             int missing = 0;
@@ -1489,6 +1544,7 @@ namespace Stabby.Game
             foreach (int key in builtKeys) Evict(key);
             nodes.Clear();
             drawn.Clear();
+            drawNext.Clear();
             rootsReady = false;
         }
 
@@ -1854,40 +1910,7 @@ namespace Stabby.Game
             return sp.Batch.Done;
         }
 
-        bool Coverable(int key)
-        {
-            if (Built(key)) return true;
-            if (!split.Contains(key)) return false;
-            for (int q = 0; q < 4; q++)
-            {
-                int c = tree.Child(key, q);
-                if (c >= 0 && !Coverable(c)) return false;
-            }
-            return true;
-        }
-
-        void Draw(int key)
-        {
-            if (split.Contains(key))
-            {
-                bool all = true;
-                for (int q = 0; q < 4 && all; q++)
-                {
-                    int c = tree.Child(key, q);
-                    all = c < 0 || Coverable(c);
-                }
-                if (all)
-                {
-                    for (int q = 0; q < 4; q++)
-                    {
-                        int c = tree.Child(key, q);
-                        if (c >= 0) Draw(c);
-                    }
-                    return;
-                }
-            }
-            if (Built(key)) drawn.Add(key);
-        }
+        NativeHashSet<int> Walked => nodesScheduled ? drawNext : drawn;
 
         void Lods()
         {
@@ -1918,8 +1941,9 @@ namespace Stabby.Game
                     if (nd.Built == 0 && nd.Pending == 0) Request(key);
                 }
             double t1 = frame.Elapsed.TotalMilliseconds;
-            drawn.Clear();
-            for (int r = 0; r < roots.Length; r++) Draw(roots[r]);
+            var walk = new TerrainDrawJob { Tree = tree, Nodes = nodes, Split = split, Roots = roots, Drawn = drawNext };
+            Expect(walk);
+            var walked = walk.Schedule();
             double t2 = frame.Elapsed.TotalMilliseconds;
             float allowed = Allowed(cam);
             float3 eye = cam.transform.position;
@@ -1931,11 +1955,11 @@ namespace Stabby.Game
             float tanE = math.max(-sunDir.y / math.max(sunRun, 1e-4f), 0.2f);
             var job = new TerrainNodesJob
             {
-                Tree = tree, Nodes = nodes, Drawn = drawn, Split = split, Fine = fine, Seen = drawnSeen, Writes = nodeWrites, Evicts = nodeEvicts, Stats = nodeStats,
+                Tree = tree, Nodes = nodes, Drawn = drawNext, Split = split, Fine = fine, Seen = drawnSeen, Writes = nodeWrites, Evicts = nodeEvicts, Stats = nodeStats,
                 Map = ShadowViewSystem.Map, Eye = eye, Upsun = upsun, Reach = reach, TanE = tanE, Allowed = allowed, Quality = viewQuality, HideSunk = HideSunk,
             };
             Expect(job);
-            nodesHandle = job.Schedule();
+            nodesHandle = job.Schedule(walked);
             nodesScheduled = true;
             (lodRequests, lodDraw, lodNodes) = (t1 - t0, t2 - t1, frame.Elapsed.TotalMilliseconds - t2);
             GameStatus.TerrainBehind = behind;
@@ -1944,6 +1968,7 @@ namespace Stabby.Game
             ScheduleLods(cam);
         }
 
+        partial void Expect(TerrainDrawJob walk);
         partial void Expect(TerrainNodesJob job);
         partial void Compare();
 
@@ -1952,6 +1977,7 @@ namespace Stabby.Game
             double t0 = frame.Elapsed.TotalMilliseconds;
             JobPoll.Done(nodesHandle);
             nodesScheduled = false;
+            (drawn, drawNext) = (drawNext, drawn);
             Compare();
             if (nodeWrites.Length > 0)
             {
@@ -2018,7 +2044,7 @@ namespace Stabby.Game
             nodesHandle.Complete();
             double area = 0, total = 0;
             for (int k = 0; k < roots.Length; k++) total += TerrainTree.Size(TerrainTree.Root) * (double)TerrainTree.Size(TerrainTree.Root);
-            foreach (int key in drawn)
+            foreach (int key in Walked)
             {
                 float s = TerrainTree.Size(tree.Level(key));
                 area += s * (double)s;
@@ -2041,7 +2067,7 @@ namespace Stabby.Game
             using var q = em.CreateEntityQuery(ComponentType.ReadOnly<TerrainStitch>(), ComponentType.ReadOnly<MaterialMeshInfo>());
             r[5] = q.CalculateEntityCount() - r[0] - shownCasting;
             r[6] = (int)math.max(0, total - area);
-            (r[7], r[8], r[9], r[10], r[11]) = (splitSeen, shownWanted, drawn.Count, lodScheduled ? 1 : 0, rootsReady ? 1 : 0);
+            (r[7], r[8], r[9], r[10], r[11]) = (splitSeen, shownWanted, Walked.Count, lodScheduled ? 1 : 0, rootsReady ? 1 : 0);
             return r;
         }
 
@@ -2051,7 +2077,7 @@ namespace Stabby.Game
             if (!ready || !drawn.IsCreated) return false;
             nodesHandle.Complete();
             float best = 0;
-            foreach (int key in drawn)
+            foreach (int key in Walked)
             {
                 var nd = nodes[key];
                 int l = tree.Level(key);
@@ -2150,6 +2176,7 @@ namespace Stabby.Game
             if (split.IsCreated) split.Dispose();
             if (spare.IsCreated) spare.Dispose();
             if (drawn.IsCreated) drawn.Dispose();
+            if (drawNext.IsCreated) drawNext.Dispose();
             if (fine.IsCreated) fine.Dispose();
             if (drawnSeen.IsCreated) drawnSeen.Dispose();
             if (nodeWrites.IsCreated) nodeWrites.Dispose();

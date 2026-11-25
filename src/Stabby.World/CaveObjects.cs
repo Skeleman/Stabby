@@ -13,8 +13,9 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column" };
-        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4;
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5;
+        public const float CrystalFloorShare = 0.4f, CrystalCeilingShare = 0.3f, CrystalJitter = 0.5f, CrystalStepM = 0.5f, CrystalLift = 0.6f;
         public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
         public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 10f, CaveDripSurveyM = 150f;
 
@@ -29,7 +30,7 @@ namespace Stabby.World
             for (int e = 0; e < edits.Length; e++)
             {
                 var c = edits[e];
-                if (c.Kind == FeatureEdit.Carve && (c.Shape == FeatureEdit.Cave || c.Shape == FeatureEdit.CaveRoom)) list.Add(e);
+                if (c.CaveCarve) list.Add(e);
             }
             return list.ToArray();
         }
@@ -67,7 +68,7 @@ namespace Stabby.World
             for (int q = 0; q < rock.N; q++)
             {
                 var o = rock.Items[q];
-                if (o.Kind != FeatureEdit.Carve || (o.Shape != FeatureEdit.Cave && o.Shape != FeatureEdit.CaveRoom)) continue;
+                if (!o.CaveCarve) continue;
                 if (o.Ax == c.Ax && o.Az == c.Az && o.Ay == c.Ay && o.Bx == c.Bx && o.Bz == c.Bz && o.By == c.By) continue;
                 if (Reach3(o, x, y, z) < own) return false;
             }
@@ -103,6 +104,7 @@ namespace Stabby.World
             var def = lib.Objects[d];
             var pl = def.Placement;
             int kind = pl.Cave;
+            if (kind == CaveCrystal) { EmitCrystal(d, chunk, x0, z0, sx, sz, list, ref ordinal); return; }
             var ground = new DetailGround { Detail = detail };
             float s = Features.LatticeStepM, foot = footprint[d];
             var seenX = caveSeenX ?? (caveSeenX = new List<float>());
@@ -114,7 +116,7 @@ namespace Stabby.World
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
                 if (len < 1f) continue;
                 float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;
-                int tries = Math.Max(1, (int)((len + (c.Shape == FeatureEdit.CaveRoom ? 2f * c.R : 0f)) * pl.PerHundredM / 100f));
+                int tries = Math.Max(1, (int)((len + (FeatureEdit.IsRoom(c.Shape) ? 2f * c.R : 0f)) * pl.PerHundredM / 100f));
                 float keep = CaveKeepShare * foot * pl.SizeMaxM + pl.ClusterRadiusM;
                 var rng = new Rng(Rng.Mix(caveStream ^ key[d] ^ CarveKey(c)));
                 seenX.Clear(); seenZ.Clear();
@@ -205,6 +207,11 @@ namespace Stabby.World
             float s = Features.LatticeStepM, reach = footprint[o.Def] * o.Size;
             var rock = RockAt(o.X, o.Z);
             string at = $"{def.Id} at {o.X:F0},{o.Z:F0}";
+            if (kind == CaveCrystal)
+            {
+                string why = CrystalFault(o, reach);
+                return why == null ? null : at + " " + why;
+            }
             if (kind == CaveStalactite)
             {
                 if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.05f * o.Size, o.Z) < 0) return at + " floats free of the ceiling";
@@ -221,6 +228,118 @@ namespace Stabby.World
             if (kind == CaveRubble) return null;
             string crowd = Crowded(rock, o.X, o.Z, reach, kind == CaveStalactite);
             return crowd == null ? null : at + " " + crowd;
+        }
+
+        static void CrystalAxis(ObjectInstance o, out float ax, out float ay, out float az)
+        {
+            float x = o.Qx, y = o.Qy, z = o.Qz, w = o.Qw;
+            ax = 2f * (x * y - w * z);
+            ay = 1f - 2f * (x * x + z * z);
+            az = 2f * (y * z + w * x);
+        }
+
+        static void CrystalTurn(float ax, float ay, float az, float qa, float qb, ref ObjectInstance o)
+        {
+            float l = (float)Math.Sqrt(qa * qa + qb * qb);
+            float cy = l > 1e-4f ? qa / l : 1f, sy = l > 1e-4f ? qb / l : 0f;
+            float x = az, z = -ax, w = 1f + ay, n = (float)Math.Sqrt(x * x + z * z + w * w);
+            if (n < 1e-4f) { x = 1f; z = 0f; w = 0f; }
+            else { x /= n; z /= n; w /= n; }
+            o.Qx = x * cy - z * sy;
+            o.Qy = w * sy;
+            o.Qz = z * cy + x * sy;
+            o.Qw = w * cy;
+        }
+
+        void EmitCrystal(int d, int chunk, float x0, float z0, float sx, float sz, List<ObjectInstance> list, ref int ordinal)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var ground = new DetailGround { Detail = detail };
+            float s = Features.LatticeStepM, foot = footprint[d];
+            foreach (int e in caveCarves)
+            {
+                var c = edits[e];
+                if (c.Shape != FeatureEdit.CrystalCell) continue;
+                if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
+                float ex = c.Bx - c.Ax, ey = c.By - c.Ay, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                float px = len > 1e-3f ? -ez / len : 1f, pz = len > 1e-3f ? ex / len : 0f, hole = c.HoleR, far = c.R + 1f;
+                int tries = Math.Max(1, (int)((len + 2f * hole) * pl.PerHundredM / 100f));
+                var rng = new Rng(Rng.Mix(caveStream ^ key[d] ^ CarveKey(c)));
+                for (int k = 0; k < tries; k++)
+                {
+                    float t = rng.NextFloat(), pick = rng.NextFloat(), da = rng.Range(-1f, 1f), db = rng.Range(-1f, 1f);
+                    float cx = c.Ax + ex * t, cy = c.Ay + ey * t, cz = c.Az + ez * t;
+                    float bx, by, bz;
+                    if (pick < CrystalFloorShare) { bx = 0.3f * da; by = -1f; bz = 0.3f * db; }
+                    else if (pick < CrystalFloorShare + CrystalCeilingShare) { bx = 0.3f * da; by = 1f; bz = 0.3f * db; }
+                    else { bx = da; by = 0f; bz = db; }
+                    for (int m = 0; m < pl.ClusterCount; m++)
+                    {
+                        float ja = rng.Range(-1f, 1f), jb = rng.Range(-1f, 1f), jc = rng.Range(-1f, 1f), grow = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
+                        int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                        float dx = bx, dy = by, dz = bz;
+                        if (m > 0) { dx += CrystalJitter * ja; dy += CrystalJitter * jb; dz += CrystalJitter * jc; }
+                        float dl = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                        if (dl < 1e-3f) continue;
+                        dx /= dl; dy /= dl; dz /= dl;
+                        var rock = RockAt(cx, cz);
+                        if (Walk.Solid(ground, rock, s, cx, cy, cz) >= 0) continue;
+                        float lo = 0f, hi = -1f;
+                        for (float r = CrystalStepM; r <= far; r += CrystalStepM)
+                        {
+                            var at = RockAt(cx + dx * r, cz + dz * r);
+                            if (Walk.Solid(ground, at, s, cx + dx * r, cy + dy * r, cz + dz * r) >= 0) { hi = r; break; }
+                            lo = r;
+                        }
+                        if (hi < 0f) continue;
+                        for (int b = 0; b < 5; b++)
+                        {
+                            float mid = 0.5f * (lo + hi);
+                            var at = RockAt(cx + dx * mid, cz + dz * mid);
+                            if (Walk.Solid(ground, at, s, cx + dx * mid, cy + dy * mid, cz + dz * mid) >= 0) hi = mid; else lo = mid;
+                        }
+                        float hx = cx + dx * hi, hy = cy + dy * hi, hz = cz + dz * hi;
+                        float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * grow * grow, reach = foot * size;
+                        var o = new ObjectInstance { Def = d, Variant = variant, Size = size };
+                        o.X = hx + dx * pl.Sink * size;
+                        o.Y = hy + dy * pl.Sink * size;
+                        o.Z = hz + dz * pl.Sink * size;
+                        if (o.X < x0 || o.Z < z0 || o.X >= x0 + sx || o.Z >= z0 + sz) continue;
+                        if (!Owns(RockAt(o.X, o.Z), c, o.X, o.Y, o.Z)) continue;
+                        if (-dy > 0.7f && Math.Abs((o.X - c.Ax) * px + (o.Z - c.Az) * pz) < CaveWalkLineM + reach) continue;
+                        CrystalTurn(-dx, -dy, -dz, qa, qb, ref o);
+                        if (CrystalFault(o, reach) != null) continue;
+                        o.Id = ObjectIds.Make(chunk, d, ordinal++);
+                        list.Add(o);
+                    }
+                }
+            }
+        }
+
+        string CrystalFault(ObjectInstance o, float reach)
+        {
+            var ground = new DetailGround { Detail = detail };
+            float s = Features.LatticeStepM;
+            CrystalAxis(o, out float ax, out float ay, out float az);
+            var rock = RockAt(o.X, o.Z);
+            if (Walk.Solid(ground, rock, s, o.X, o.Y, o.Z) < 0) return "floats free of the rock";
+            float lift = CrystalLift * o.Size + 0.3f, mx = o.X + ax * lift, my = o.Y + ay * lift, mz = o.Z + az * lift;
+            var near = RockAt(mx, mz);
+            if (Walk.Solid(ground, near, s, mx, my, mz) >= 0) return "is buried in rock";
+            bool inside = false;
+            for (int q = 0; q < near.N && !inside; q++)
+            {
+                var c = near.Items[q];
+                inside = c.Kind == FeatureEdit.Carve && c.Shape == FeatureEdit.CrystalCell && c.Reach(mx, my, mz, out float dist) && c.Hole(dist) < 0f;
+            }
+            if (!inside) return "strays outside its crystal cell";
+            if (ay < -0.3f)
+            {
+                float tx = o.X + ax * o.Size, ty = o.Y + ay * o.Size, tz = o.Z + az * o.Size;
+                if (ty - Walk.Surface(ground, RockAt(tx, tz), s, tx, tz, ty, ty - 40f) < Walk.Height + Underground.HeadroomM) return "hangs into the walking headroom";
+            }
+            return Crowded(RockAt(o.X, o.Z), o.X, o.Z, reach, ay < 0.7f);
         }
     }
 }

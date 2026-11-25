@@ -565,7 +565,19 @@ Shader "Stabby/Object"
                 float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
                 float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
                 float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.01, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
-                [branch] if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
+                [branch] if (base.a > 0.025 && base.a < 0.5)
+                {
+                    float3 q = wp - i.origin;
+                    float bf = OrgRungW(0, fp);
+                    float4 lump = OrgNoise3(q * 1.3 + i.seed * 17.1, int3(0, 0, 0)), nub = OrgRP3(q, OrgF(0), 3.7, 0);
+                    float3 g = 0.12 * lump.yzw + 0.06 * bf * nub.yzw;
+                    g -= n * dot(g, n);
+                    n = normalize(n - g);
+                    albedo = base.rgb * (0.8 + 0.25 * lump.x + 0.1 * bf * nub.x);
+                    tmRough = 0.35 * LookRough();
+                    emberGlow = base.rgb * ((base.a - 0.05) / 0.25) * (0.06 + 0.03 * lump.x);
+                }
+                else if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
                 else if (base.a < 0.5)
                 {
                     float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).a;
@@ -643,16 +655,19 @@ Shader "Stabby/Object"
                     [branch] if (_StabbyFieldUV.z > 0) gw = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
                     Wood(i.local, n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, wp, gw, albedo, n);
                 }
-                float size = max(fade.w, 0.1), ground = fade.z;
+                float size = max(abs(fade.w), 0.1), ground = fade.z;
                 float4x4 mm = UNITY_MATRIX_M;
+                float hang = mm._m11 < 0 ? -1 : 1;
                 float thick = flat ? 0.05 : abs(mm._m10) + abs(mm._m11) + abs(mm._m12);
                 [branch] if (_StabbyFieldUV.x > 0)
                 {
                     float bed = ContactBed(i.origin.xz);
                     ground += (ContactBed(wp.xz) - bed) * smoothstep(6, 2, bed - fade.z);
-                    albedo = ContactObject(albedo, wp, ground, size, thick);
+                    albedo = ContactObject(albedo, wp, ground, size, thick, hang);
+                    [branch] if (fade.w < 0) albedo = ContactObject(albedo, wp, ground - fade.w, size, thick, -1);
                 }
-                float above = max(wp.y - ground, 0);
+                float above = max(hang * (wp.y - ground), 0);
+                [branch] if (fade.w < 0) above = min(above, max(ground - fade.w - wp.y, 0));
                 float ao = lerp(0.85, 1, smoothstep(0, min(min(0.9, 0.6 * size), thick), above)) * lerp(1, 0.5, saturate(-n.y)) * (1 - 0.4 * occ);
                 Light l = GetMainLight(TransformWorldToShadowCoord(wp), wp, half4(1, 1, 1, 1));
                 float sky = CaveSky(wp);

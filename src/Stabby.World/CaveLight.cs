@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public const float Unlit = 1e6f;
 
-        public static bool Lit(FeatureEdit e) => e.Kind == FeatureEdit.Carve && (e.Shape == FeatureEdit.Cave || e.Shape == FeatureEdit.CaveRoom);
+        public static bool Lit(FeatureEdit e) => e.CaveCarve;
 
         public static float[] Distances(FeatureEdit[] edits, CaveGraph[] caves)
         {

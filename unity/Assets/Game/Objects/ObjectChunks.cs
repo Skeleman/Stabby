@@ -13,7 +13,7 @@ namespace Stabby.Game
     public struct ContactStamp
     {
         public float X, Z, R;
-        public byte Built;
+        public byte Built, Channel;
         public ulong Id;
     }
 
@@ -113,14 +113,19 @@ namespace Stabby.Game
             var chunk = new ContactChunk { Stamps = new UnsafeList<ContactStamp>(objects.Count, Allocator.Persistent), Rings = new UnsafeList<ContactRing>(0, Allocator.Persistent) };
             foreach (var o in objects)
             {
-                if (ObjectField.IsCave(field.Library.Objects[o.Def])) continue;
+                bool cave = ObjectField.IsCave(field.Library.Objects[o.Def]);
                 columns.Clear();
                 field.ContactsOf(o, columns);
                 bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
                 float foot = built ? Structures.FootReach * o.Size : 0f;
                 foreach (var c in columns)
-                    if (ObjectField.Stamps(field.Library, o, c))
-                        chunk.Stamps.Add(new ContactStamp { X = c.X, Z = c.Z, R = Math.Max(c.R, foot), Built = (byte)(built ? 1 : 0), Id = o.Id });
+                {
+                    int sides = ObjectField.StampSides(field.Library, o, c);
+                    if ((sides & ObjectField.StampFloor) != 0)
+                        chunk.Stamps.Add(new ContactStamp { X = c.X, Z = c.Z, R = Math.Max(c.R, foot), Built = (byte)(built ? 1 : 0), Channel = (byte)(cave ? 2 : 0), Id = o.Id });
+                    if ((sides & ObjectField.StampCeiling) != 0)
+                        chunk.Stamps.Add(new ContactStamp { X = c.X, Z = c.Z, R = c.R, Channel = 3, Id = o.Id });
+                }
                 lush.Clear();
                 field.LushOf(o, lush);
                 foreach (var c in lush) chunk.Rings.Add(new ContactRing { X = c.X, Z = c.Z, R = c.R, Width = c.Bottom, Id = o.Id });
@@ -183,7 +188,7 @@ namespace Stabby.Game
                     {
                         var st = c.Stamps[s];
                         if (Gone.Contains(st.Id)) continue;
-                        Stamp(st.X, st.Z, st.R, st.Built != 0);
+                        Stamp(st.X, st.Z, st.R, st.Built != 0, st.Channel);
                         count++;
                     }
                     for (int s = 0; s < c.Rings.Length; s++)
@@ -195,7 +200,7 @@ namespace Stabby.Game
             Columns.Value = count;
         }
 
-        void Stamp(float x, float z, float r, bool built)
+        void Stamp(float x, float z, float r, bool built, int channel)
         {
             double x0 = Window.X0, z0 = Window.Z0, texelM = Window.TexelM, xd = x, zd = z, rd = r;
             float pad = built ? (float)math.clamp(0.25 + (double)0.35f * rd, 0.25, (double)0.9f) : (float)math.clamp((double)0.12f + (double)0.12f * rd, (double)0.12f, (double)0.35f);
@@ -213,7 +218,7 @@ namespace Stabby.Game
                     if (t <= 0) continue;
                     t = t >= 1 ? 1 : (float)((double)t * t * (3 - 2 * (double)t));
                     byte v = (byte)(t * 255.0);
-                    int k = 2 * (row + i);
+                    int k = 4 * (row + i) + channel;
                     if (v > Data[k]) Data[k] = v;
                 }
             }
@@ -236,7 +241,7 @@ namespace Stabby.Game
                     if (t <= 0) continue;
                     t = t >= 1 ? 1 : (float)((double)t * t * (3 - 2 * (double)t));
                     byte v = (byte)(t * 255.0);
-                    int k = 2 * (row + i) + 1;
+                    int k = 4 * (row + i) + 1;
                     if (v > Data[k]) Data[k] = v;
                 }
             }

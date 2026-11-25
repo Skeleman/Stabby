@@ -195,6 +195,7 @@ namespace Stabby.World
     {
         public string Id, Name;
         public uint Color;
+        public float Glow;
     }
 
     public sealed class MaterialLibrary
@@ -344,7 +345,10 @@ namespace Stabby.World
             }
             var names = new HashSet<string>();
             foreach (var m in lib.Materials)
+            {
                 if (string.IsNullOrEmpty(m.Id) || !names.Add(m.Id)) errors.Add($"materials: id '{m.Id}' missing or repeated");
+                if (!(m.Glow >= 0f && m.Glow <= 1f)) errors.Add($"materials {m.Id}: glow {m.Glow} outside 0..1");
+            }
             for (int i = 0; i < KitNames.Length; i++)
             {
                 if (lib.Kit == null || !lib.Kit.TryGetValue(KitNames[i], out var kitIds) || kitIds == null) { errors.Add($"kit.{KitNames[i]}: required"); continue; }
