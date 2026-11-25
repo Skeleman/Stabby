@@ -1736,7 +1736,7 @@ namespace Stabby.Game
                 Tree = tree, Nodes = nodes, Drawn = drawn, Split = split, Fine = fine, Seen = drawnSeen, Writes = nodeWrites, Evicts = nodeEvicts, Stats = nodeStats,
                 Map = ShadowViewSystem.Map, Eye = eye, Upsun = upsun, Reach = reach, TanE = tanE, Allowed = allowed, Quality = viewQuality, HideSunk = HideSunk,
             };
-            if (VerifyNodes) Expect(job);
+            Expect(job);
             nodesHandle = job.Schedule();
             nodesScheduled = true;
             (lodRequests, lodDraw, lodNodes) = (t1 - t0, t2 - t1, frame.Elapsed.TotalMilliseconds - t2);
@@ -1746,12 +1746,15 @@ namespace Stabby.Game
             ScheduleLods(cam);
         }
 
+        partial void Expect(TerrainNodesJob job);
+        partial void Compare();
+
         void ApplyNodes()
         {
             double t0 = frame.Elapsed.TotalMilliseconds;
             nodesHandle.Complete();
             nodesScheduled = false;
-            if (VerifyNodes) Compare();
+            Compare();
             if (nodeWrites.Length > 0)
             {
                 if (!writes.IsCreated) writes = new NativeList<TerrainWrite>(nodeWrites.Length, Allocator.TempJob);

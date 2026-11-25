@@ -1,3 +1,4 @@
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,8 +20,9 @@ namespace Stabby.Game
 
         static string WriteKey(TerrainWrite w) => $"{w.Entity.Index}:{w.Entity.Version}:{w.Kind}:{w.Value}";
 
-        void Expect(TerrainNodesJob job)
+        partial void Expect(TerrainNodesJob job)
         {
+            if (!VerifyNodes) return;
             verifyNodes.Clear();
             verifyEvicts.Clear();
             verifyWrites.Clear();
@@ -76,8 +78,9 @@ namespace Stabby.Game
             }
         }
 
-        void Compare()
+        partial void Compare()
         {
+            if (!VerifyNodes) return;
             int bad = 0;
             void Miss(string what)
             {
@@ -193,3 +196,4 @@ namespace Stabby.Game
         }
     }
 }
+#endif
