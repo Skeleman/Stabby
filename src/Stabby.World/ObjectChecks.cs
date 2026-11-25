@@ -7,11 +7,10 @@ namespace Stabby.World
     {
         public const int ObjectCheckChunks = 4;
 
-        static void CheckObjects(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckObjects(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
             var edits = grid.Edits;
             var ids = new List<int>();
-            var field = new ObjectField(w, detail, edits, w.Objects);
             int n = w.Config.Size, across = field.ChunksAcross;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm;
             var bed = RiverBedCells(w, out var segs);
@@ -70,9 +69,8 @@ namespace Stabby.World
 
         public const int SiteCheckLimit = 6;
 
-        static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
-            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             int across = field.ChunksAcross, checkedSites = 0;
             float span = field.ChunkMeters;
             var columns = new List<ObjectColumn>();
@@ -139,9 +137,8 @@ namespace Stabby.World
             return null;
         }
 
-        static void CheckStructures(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckStructures(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
-            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             int across = field.ChunksAcross, found = 0;
             for (int c = 0; c < across * across && found < StructureSweep; c++)
                 foreach (var o in field.Place(c % across, c / across, true))

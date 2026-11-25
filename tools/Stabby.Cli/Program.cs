@@ -20,7 +20,7 @@ switch (args.FirstOrDefault())
     case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--low-while file]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
@@ -148,8 +148,19 @@ int Sweep()
     var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
     var times = new System.Collections.Concurrent.ConcurrentBag<(long, ulong, string)>();
     var stages = new System.Collections.Concurrent.ConcurrentBag<(string, double, long)>();
+    var checkTimes = new System.Collections.Concurrent.ConcurrentBag<long>();
     var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture) };
     bool checks = Opt("checks", "1") != "0";
+    var lowWhile = Opt("low-while", "");
+    if (lowWhile != "" && File.Exists(lowWhile))
+    {
+        Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal;
+        _ = Task.Run(async () =>
+        {
+            while (File.Exists(lowWhile)) await Task.Delay(2000);
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Normal;
+        });
+    }
     Parallel.For(0, count, par, k =>
     {
         var c = Config(from + (ulong)k, size);
@@ -166,14 +177,18 @@ int Sweep()
         var mine = new List<(string, double)>();
         void Note(string name) { double before = last; Mark(name); mine.Add((name, last - before)); }
         var w = WorldGenerator.Generate(c, biomes, materials, null, Note, objects, caves);
-        times.Add((sw.ElapsedMilliseconds, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
+        long genMs = sw.ElapsedMilliseconds;
+        times.Add((genMs, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
         foreach (var v in WorldChecks.Run(w)) failures.Add($"seed {c.Seed}: {v}");
         foreach (var v in WorldChecks.Creatures(w, creatures)) failures.Add($"seed {c.Seed}: {v}");
         Mark("checks");
+        checkTimes.Add(sw.ElapsedMilliseconds - genMs);
     });
     var t = times.OrderBy(x => x.Item1).ToArray();
-    Console.WriteLine($"{count} seeds at {size}x{size}: median {t[t.Length / 2].Item1} ms, max {t[^1].Item1} ms (seed {t[^1].Item2}: {t[^1].Item3}), {failures.Count} violations");
+    var ct = checkTimes.OrderBy(x => x).ToArray();
+    string checkPart = ct.Length > 0 ? $", checks median {ct[ct.Length / 2]} ms, max {ct[^1]} ms" : "";
+    Console.WriteLine($"{count} seeds at {size}x{size}: median {t[t.Length / 2].Item1} ms, max {t[^1].Item1} ms (seed {t[^1].Item2}: {t[^1].Item3}){checkPart}, {failures.Count} violations");
     foreach (var g in stages.GroupBy(s => s.Item1).OrderBy(g => Array.IndexOf(order, g.Key)))
     {
         var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();

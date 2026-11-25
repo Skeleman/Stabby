@@ -688,10 +688,11 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
             CheckChunkBounds(w, grid, e);
-            if (w.Objects != null && w.Biome != null) CheckObjects(w, detail, grid, e);
-            if (w.Objects != null && w.Biome != null) CheckSites(w, detail, grid, e);
-            if (w.Objects != null && w.Biome != null) CheckStructures(w, detail, grid, e);
-            if (w.Objects != null && w.Biome != null) CheckDiscoveries(w, detail, grid, e);
+            var field = w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects) : null;
+            if (field != null) CheckObjects(w, detail, grid, field, e);
+            if (field != null) CheckSites(w, detail, grid, field, e);
+            if (field != null) CheckStructures(w, detail, grid, field, e);
+            if (field != null) CheckDiscoveries(w, field, e);
             CheckCavePaths(w, detail, edits, e);
             CheckCaves(w, detail, edits, caves, e);
             CheckCaveNormals(w, detail, grid, caves, e);
