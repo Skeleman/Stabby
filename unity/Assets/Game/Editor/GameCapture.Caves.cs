@@ -303,6 +303,25 @@ namespace Stabby.Game.Editor
                     Shot(cam, dir, "caves-brook-spring");
                     GeometryShot(cam, dir, "caves-brook-spring-debug-unlit");
                 }
+                CaveBrook sink = null;
+                foreach (var b in brooks) if (b.End == CaveBrook.Sink && (sink == null || b.Rows > sink.Rows)) sink = b;
+                if (sink != null)
+                {
+                    int ka = Mathf.Max(0, sink.Rows - 7), kb = sink.Rows - 1;
+                    var kq = sink.Points;
+                    var kp = new Vector3(kq[ka * st], kq[ka * st + 1], kq[ka * st + 2]);
+                    var ke = new Vector3(kq[kb * st], kq[kb * st + 1], kq[kb * st + 2]);
+                    px = kp.x; py = kp.y + 0.5f; pz = kp.z;
+                    Walk.Step(ground, ground.EditsNear(px, pz, Walk.Radius), cols, ground.WalkStep, ref px, ref py, ref pz, 0, 0, Walk.Reach);
+                    eye = new Vector3(px, py + 1.7f, pz);
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(ke - eye));
+                    waited = LoadWaitTotal();
+                    for (var w = Settle(120); w.MoveNext();) yield return null;
+                    lines.Add($"sink brook in {graphs[sink.Graph].Class} graph {sink.Graph}, {sink.Rows} rows, drops to {ke.y:F1} at {ke.x:F0},{ke.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}: stream wait {LoadWaitTotal() - waited:F2} s");
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, "caves-brook-sink");
+                    GeometryShot(cam, dir, "caves-brook-sink-debug-unlit");
+                }
             }
             else lines.Add("cave brooks: none in this world");
             var sky = DayNightSystem.Shown;
