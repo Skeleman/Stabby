@@ -170,7 +170,7 @@ namespace Stabby.World
                 Mouths.RemoveAt(first);
                 G.Nodes.Add(m);
                 float len = R.Range(C.EdgeMin, C.EdgeMax), grade = R.Range(-0.3f, 1f) * Grade;
-                len = Math.Max(len, (C.Hall ? C.HallMin : C.RadiusMax) + Features.CaveRoof + MouthM + PieceM * 0.5f);
+                len = Math.Max(len, C.RadiusMax + Features.CaveRoof + MouthM + PieceM * 0.5f);
                 var n1 = new CaveNode { X = m.X + m.Hx * len, Z = m.Z + m.Hz * len, Y = m.Y - len * grade, Hx = m.Hx, Hz = m.Hz };
                 if (!Link(0, n1, true)) return false;
                 if (C.Hall) return BuildHall();
