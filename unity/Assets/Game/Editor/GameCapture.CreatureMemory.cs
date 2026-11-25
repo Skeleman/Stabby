@@ -136,6 +136,15 @@ namespace Stabby.Game.Editor
             for (int k = 0; k < 30; k++) yield return null;
         }
 
+        static (long held, int trims) AnimHeld(Unity.Entities.World view)
+        {
+            var h = view.GetExistingSystem<CreatureAnimSystem>();
+            if (h == SystemHandle.Null) return (0, 0);
+            view.EntityManager.CompleteAllTrackedJobs();
+            ref var anim = ref view.Unmanaged.GetUnsafeSystemRef<CreatureAnimSystem>(h);
+            return (anim.HeldBytes, anim.Trims);
+        }
+
         static string Per(long bytes, int n) => $"{bytes / (double)n / 1024.0:F2} KiB";
 
         static System.Collections.IEnumerator CreatureMemory(Camera cam, string dir)
@@ -201,13 +210,19 @@ namespace Stabby.Game.Editor
                 int gone = 0;
                 while (CreatureBuildSystem.Count > left && gone < 1200) { yield return null; gone++; }
                 for (int k = 0; k < 30; k++) yield return null;
+                var (heldAfter, trims0) = AnimHeld(view);
                 var s2 = SampleMemory(vem, draw);
+                int waited = 0;
+                while (path == "instanced" && AnimHeld(view).trims == trims0 && waited < 600) { yield return null; waited++; }
+                var (heldTrim, trims1) = AnimHeld(view);
+                var s3 = SampleMemory(vem, draw);
 
                 lines.Add($"N {n}: built in {frames} frames, retiered after the move in {30 + retier} frames, {CreatureBuildSystem.Count - left + n} live after build; {counts}");
                 lines.Add($"  N {n} entities: {(s1.Entities - s0.Entities) / (float)n:F2} client entities per creature (bench ghost stand-in included), chunks {(s1.Chunks - s0.Chunks) * 16f / n:F2} KiB per creature");
                 lines.Add($"  N {n} {mem}");
                 lines.Add($"  N {n} memory per creature: native {Per(s1.Native - s0.Native, n)}, managed GC {Per(s1.Managed - s0.Managed, n)}, mono heap {Per(s1.Mono - s0.Mono, n)}, instance GPU buffers {Per(s1.Gpu - s0.Gpu, n)}, graphics driver {Per(s1.Driver - s0.Driver, n)}");
-                lines.Add($"  N {n} after removal ({gone} frames): native {(s2.Native - s0.Native) / 1024.0:F0} KiB, managed {(s2.Managed - s0.Managed) / 1024.0:F0} KiB, entities {s2.Entities - s0.Entities}, chunks {s2.Chunks - s0.Chunks}");
+                lines.Add($"  N {n} after removal ({gone} frames): native {(s2.Native - s0.Native) / 1024.0:F0} KiB, managed {(s2.Managed - s0.Managed) / 1024.0:F0} KiB, entities {s2.Entities - s0.Entities}, chunks {s2.Chunks - s0.Chunks}; anim containers hold {heldAfter / 1024.0:F0} KiB");
+                lines.Add($"  N {n} after trim ({waited} more frames, {(trims1 > trims0 ? "trimmed" : "no trim")}): native {(s3.Native - s0.Native) / 1024.0:F0} KiB, anim containers hold {heldTrim / 1024.0:F0} KiB");
                 lines.Add($"  N {n} build budget: peak {CreatureBuildSystem.PeakSpend}/{FrameBudget.CreatureEntities} entities in one frame, {CreatureBuildSystem.TierBuilds} tier builds, {CreatureBuildSystem.TierDrops} tier entities released");
             }
 

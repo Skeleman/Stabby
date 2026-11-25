@@ -116,8 +116,9 @@ namespace Stabby.Game
         NativeArray<float3> scratchPos, scratchEnd;
         NativeArray<quaternion> scratchRot, scratchEndRot;
         NativeArray<float> scratchFloor;
-        float carry;
+        float carry, slack;
         int skipped;
+        public int Trims;
         const int SegCap = 64, PartCap = 32;
 
         public void OnCreate(ref SystemState state)
@@ -166,6 +167,15 @@ namespace Stabby.Game
             a = new NativeArray<T>(size, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
 
+        static void Shrink<T>(ref NativeArray<T> a, int n) where T : struct
+        {
+            a.Dispose();
+            a = new NativeArray<T>(math.max(n, 1), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        }
+
+        public long HeldBytes => (long)Instances.Capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Sorted.Length * UnsafeUtility.SizeOf<CreatureGpu>()
+            + Fur.Length * 16L + (Starts.Length + Counts.Length) * 4L;
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
@@ -184,6 +194,16 @@ namespace Stabby.Game
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
                 Instances.Clear();
+                int want = tally.Links + tally.Links / 2;
+                slack = Instances.Capacity > 2 * want + 1024 ? slack + SystemAPI.Time.DeltaTime : 0;
+                if (slack > 2f)
+                {
+                    Instances.Capacity = math.max(want, 64);
+                    Shrink(ref Sorted, Instances.Capacity);
+                    Shrink(ref Fur, 3 * count + 3 * count / 2);
+                    slack = 0;
+                    Trims++;
+                }
                 if (Instances.Capacity < tally.Links) Instances.Capacity = tally.Links + tally.Links / 2;
                 Fit(ref Sorted, Instances.Capacity);
                 Fit(ref Fur, 3 * count);
