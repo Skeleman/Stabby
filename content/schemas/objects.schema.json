@@ -171,7 +171,10 @@
               "radiusM": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
               "importance": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
               "flicker": { "type": "number", "minimum": 0, "maximum": 1 },
-              "flickerHz": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 }
+              "flickerHz": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
+              "liftM": { "type": "number", "minimum": 0, "maximum": 20 },
+              "daylight": { "type": "boolean" },
+              "core": { "type": "boolean" }
             }
           },
           "parts": {
@@ -222,7 +225,7 @@
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den"] },
-              "cave": { "enum": ["stalactite", "stalagmite", "rubble", "column", "crystal"] },
+              "cave": { "enum": ["stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight"] },
               "liquid": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "spacingM": { "type": "number", "minimum": 200, "maximum": 5000 },
               "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },

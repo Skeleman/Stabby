@@ -13,8 +13,154 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal" };
-        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5;
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8;
+        public const int CaveLightTries = 8;
+        public const float CaveLightSideShare = 0.7f, CaveLightAlongMin = 0.15f, CaveLightAlongMax = 0.85f, SkylightJitterShare = 0.5f, SkylightFloorM = 40f;
+
+        public struct CaveLightSpot
+        {
+            public int Kind, Edit, Tile;
+            public float T, U;
+            public ulong Seed;
+        }
+
+        public static bool IsCaveLight(int kind) => kind >= CaveFungus;
+
+        static CaveLightSpot[] PlanCaveLights(GeneratedWorld w, FeatureEdit[] edits, ulong stream)
+        {
+            var spots = new List<CaveLightSpot>();
+            var lib = w.Caves;
+            if (lib == null || lib.LightMost <= 0) return spots.ToArray();
+            float cm = w.Config.CellMeters;
+            var tiles = new SortedDictionary<int, List<int>>();
+            for (int e = 0; e < edits.Length; e++)
+            {
+                var c = edits[e];
+                if (c.Kind != FeatureEdit.Carve || (c.Shape != FeatureEdit.Shaft && !FeatureEdit.IsRoom(c.Shape))) continue;
+                int t = Features.TileOf(c, cm);
+                if (t < 0) continue;
+                if (!tiles.TryGetValue(t, out var list)) tiles[t] = list = new List<int>();
+                list.Add(e);
+            }
+            var rooms = new List<int>();
+            foreach (var kv in tiles)
+            {
+                var rng = new Rng(Rng.Mix(stream ^ (ulong)(uint)kv.Key));
+                float roll = rng.NextFloat();
+                int want = 1 + (int)(rng.NextU32() % (uint)lib.LightMost), made = 0;
+                rooms.Clear();
+                foreach (int e in kv.Value)
+                {
+                    if (edits[e].Shape != FeatureEdit.Shaft) { rooms.Add(e); continue; }
+                    if (made >= lib.LightMost) continue;
+                    spots.Add(new CaveLightSpot { Kind = CaveSkylight, Edit = e, Tile = kv.Key, Seed = rng.NextU64() });
+                    made++;
+                }
+                if (roll >= lib.LightChance || rooms.Count == 0) continue;
+                for (int k = 0; k < want && made < lib.LightMost; k++, made++)
+                {
+                    int e = rooms[(int)(rng.NextU32() % (uint)rooms.Count)];
+                    float t = rng.Range(CaveLightAlongMin, CaveLightAlongMax), u = rng.Range(-1f, 1f) * CaveLightSideShare;
+                    spots.Add(new CaveLightSpot { Kind = edits[e].Shape == FeatureEdit.CrystalCell ? CaveCrystalLight : CaveFungus, Edit = e, Tile = kv.Key, T = t, U = u, Seed = rng.NextU64() });
+                }
+            }
+            return spots.ToArray();
+        }
+
+        public int CaveLightCount => caveLights.Length;
+        public CaveLightSpot CaveLight(int i) => caveLights[i];
+
+        int CaveDef(int kind)
+        {
+            for (int d = 0; d < lib.Objects.Count; d++) if (lib.Objects[d].Placement.Cave == kind) return d;
+            return -1;
+        }
+
+        public bool CaveLightAt(int i, out ObjectInstance o)
+        {
+            o = default;
+            var p = caveLights[i];
+            int d = CaveDef(p.Kind);
+            return d >= 0 && CaveLightAt(p, d, out o);
+        }
+
+        bool CaveLightAt(CaveLightSpot p, int d, out ObjectInstance o)
+        {
+            o = default;
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var ground = new DetailGround { Detail = detail };
+            float s = Features.LatticeStepM, foot = footprint[d];
+            var c = edits[p.Edit];
+            bool sky = p.Kind == CaveSkylight;
+            float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+            float px = len > 1e-3f ? -ez / len : 1f, pz = len > 1e-3f ? ex / len : 0f, open = c.HoleR;
+            var rng = new Rng(p.Seed);
+            for (int k = 0; k < CaveLightTries; k++)
+            {
+                float t = rng.Range(CaveLightAlongMin, CaveLightAlongMax), u = rng.Range(-1f, 1f), v = rng.Range(-1f, 1f), grow = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
+                int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                if (k == 0) { t = p.T; u = sky ? 0f : p.U; v = 0f; }
+                float x, z, ay, low;
+                if (sky)
+                {
+                    x = c.Ax + u * SkylightJitterShare * open;
+                    z = c.Az + v * SkylightJitterShare * open;
+                    ay = c.Ay;
+                    low = ay - SkylightFloorM;
+                }
+                else
+                {
+                    float side = (k == 0 ? u : u * CaveLightSideShare) * c.FloorHalf;
+                    x = c.Ax + ex * t + px * side;
+                    z = c.Az + ez * t + pz * side;
+                    ay = c.Ay + (c.By - c.Ay) * t;
+                    low = ay - open - 6f;
+                    ay -= 0.2f * open;
+                }
+                var rock = RockAt(x, z);
+                if (!sky && !Owns(rock, c, x, ay, z)) continue;
+                if (Walk.Solid(ground, rock, s, x, ay, z) >= 0) continue;
+                float floor = Walk.Surface(ground, rock, s, x, z, ay, low);
+                if (floor <= low) continue;
+                float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * grow;
+                var q = new ObjectInstance { Def = d, Variant = variant, X = x, Z = z, Size = size, Y = floor - pl.Sink * size };
+                Yaw(qa, qb, false, ref q);
+                if (CaveLightFault(q, rock, foot * size) != null) continue;
+                o = q;
+                return true;
+            }
+            return false;
+        }
+
+        string CaveLightFault(ObjectInstance o, EditSlice rock, float reach)
+        {
+            var ground = new DetailGround { Detail = detail };
+            float s = Features.LatticeStepM;
+            if (Walk.Solid(ground, rock, s, o.X, o.Y, o.Z) < 0) return "floats above the cave floor";
+            if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.5f * o.Size + 0.3f, o.Z) >= 0) return "is buried in rock";
+            var light = lib.Objects[o.Def].Light;
+            float lift = light == null ? 0f : light.LiftM;
+            if (lift > 0f && Walk.Solid(ground, RockAt(o.X, o.Z), s, o.X, o.Y + lift, o.Z) >= 0) return "lights from inside the rock";
+            return Crowded(rock, o.X, o.Z, reach, false);
+        }
+
+        void EmitCaveLights(int d, int chunk, float x0, float z0, float sx, float sz, List<ObjectInstance> list, ref int ordinal)
+        {
+            int kind = lib.Objects[d].Placement.Cave;
+            for (int i = 0; i < caveLights.Length; i++)
+            {
+                var p = caveLights[i];
+                if (p.Kind != kind) continue;
+                var c = edits[p.Edit];
+                if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
+                if (!CaveLightAt(p, d, out var o)) continue;
+                if (o.X < x0 || o.Z < z0 || o.X >= x0 + sx || o.Z >= z0 + sz) continue;
+                o.Id = ObjectIds.Make(chunk, d, ordinal++);
+                list.Add(o);
+            }
+        }
         public const float CrystalFloorShare = 0.4f, CrystalCeilingShare = 0.3f, CrystalJitter = 0.5f, CrystalStepM = 0.5f, CrystalLift = 0.6f;
         public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
         public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 10f, CaveDripSurveyM = 150f;
@@ -105,6 +251,7 @@ namespace Stabby.World
             var pl = def.Placement;
             int kind = pl.Cave;
             if (kind == CaveCrystal) { EmitCrystal(d, chunk, x0, z0, sx, sz, list, ref ordinal); return; }
+            if (IsCaveLight(kind)) { EmitCaveLights(d, chunk, x0, z0, sx, sz, list, ref ordinal); return; }
             var ground = new DetailGround { Detail = detail };
             float s = Features.LatticeStepM, foot = footprint[d];
             var seenX = caveSeenX ?? (caveSeenX = new List<float>());
@@ -210,6 +357,11 @@ namespace Stabby.World
             if (kind == CaveCrystal)
             {
                 string why = CrystalFault(o, reach);
+                return why == null ? null : at + " " + why;
+            }
+            if (IsCaveLight(kind))
+            {
+                string why = CaveLightFault(o, rock, reach);
                 return why == null ? null : at + " " + why;
             }
             if (kind == CaveStalactite)

@@ -58,7 +58,7 @@ public class ObjectTests
         Assert.Contains(errors, e => e == "pit: light category torch is not defined");
         Assert.Contains(errors, e => e == "pit: light needs intensity and radiusM above 0");
         Assert.Contains(errors, e => e.StartsWith("pit: light flicker", StringComparison.Ordinal));
-        Assert.Contains(errors, e => e == "pit: lights belong only to structure objects");
+        Assert.Contains(errors, e => e == "pit: lights belong only to structure and cave objects");
     }
 
     static void Matches(JsonElement schema, JsonElement data)

@@ -93,7 +93,8 @@ namespace Stabby.World
     {
         public string Category;
         public uint Color;
-        public float Intensity, RangeM, Importance, Flicker, FlickerHz;
+        public float Intensity, RangeM, Importance, Flicker, FlickerHz, LiftM;
+        public bool Daylight, Core = true;
     }
 
     public sealed class ObjectDef
@@ -176,7 +177,7 @@ namespace Stabby.World
         public ObjectDef EmitterFor(int shape)
         {
             foreach (var d in Objects)
-                if (d.Light != null)
+                if (d.Light != null && d.Kind == Structure)
                     foreach (var p in d.Parts) if (p.Shape == shape) return d;
             return null;
         }
@@ -274,7 +275,9 @@ namespace Stabby.World
                     if (!(li.Intensity > 0) || !(li.RangeM > 0)) errors.Add(d.Id + ": light needs intensity and radiusM above 0");
                     if (li.Importance < 0) errors.Add(d.Id + ": light importance must not be below 0");
                     if (li.Flicker < 0 || li.Flicker > 1 || (li.Flicker > 0 && !(li.FlickerHz > 0))) errors.Add(d.Id + ": light flicker must be 0-1 and needs flickerHz above 0");
-                    if (d.Kind != Structure) errors.Add(d.Id + ": lights belong only to structure objects");
+                    if (li.LiftM < 0 || li.LiftM > 20) errors.Add(d.Id + ": light liftM must be 0-20");
+                    if (d.Kind != Structure && d.Placement.Cave == 0) errors.Add(d.Id + ": lights belong only to structure and cave objects");
+                    if (li.Daylight != (d.Placement.Cave == ObjectField.CaveSkylight)) errors.Add(d.Id + ": daylight lights belong to skylight objects and only to them");
                 }
                 var pl = d.Placement;
                 if (pl.PerHectare < 0 || pl.PerHectare > 400) errors.Add(d.Id + ": perHectare must be 0-400");

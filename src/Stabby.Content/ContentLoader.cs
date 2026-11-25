@@ -66,6 +66,16 @@ namespace Stabby.Content
             var cell = Pair(root, "crystalCell", DefaultCell, source);
             l.CellMin = cell[0];
             l.CellMax = cell[1];
+            var lights = root.Object("lights");
+            if (lights != null)
+            {
+                l.LightChance = lights.Float("chance", 0);
+                l.LightMost = lights.Int("most", 0);
+                l.SkylightChance = lights.Float("skylightChance", 0);
+                l.SkylightDepthM = lights.Float("skylightDepthM", l.SkylightDepthM);
+                l.SkylightRadiusM = lights.Float("skylightRadiusM", l.SkylightRadiusM);
+                lights.End();
+            }
             foreach (var k in root.Objects("classes", true))
             {
                 var nodes = Pair(k, "nodes", null, source);
@@ -582,7 +592,8 @@ namespace Stabby.Content
                 {
                     Category = light.String("category", ""), Color = Material(light, "material", id + ".light", materials, errors),
                     Intensity = light.Float("intensity", 0), RangeM = light.Float("radiusM", 0), Importance = light.Float("importance", 0),
-                    Flicker = light.Float("flicker", 0), FlickerHz = light.Float("flickerHz", 0),
+                    Flicker = light.Float("flicker", 0), FlickerHz = light.Float("flickerHz", 0), LiftM = light.Float("liftM", 0),
+                    Daylight = light.Bool("daylight", false), Core = light.Bool("core", true),
                 };
                 light.End();
             }

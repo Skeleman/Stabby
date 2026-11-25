@@ -4,7 +4,8 @@
   "lights": [
     { "id": "point", "shadowedPixels": 432, "unshadowedPixels": 108, "glowPixels": 10.8, "importance": 1 },
     { "id": "fire", "shadowedPixels": 324, "unshadowedPixels": 81, "glowPixels": 8.1, "importance": 1.6 },
-    { "id": "candle", "shadowedPixels": 648, "unshadowedPixels": 162, "glowPixels": 16.2, "importance": 0.5 }
+    { "id": "candle", "shadowedPixels": 648, "unshadowedPixels": 162, "glowPixels": 16.2, "importance": 0.5 },
+    { "id": "cave-glow", "shadowedPixels": 1080, "unshadowedPixels": 140, "glowPixels": 12, "importance": 0.8 }
   ],
   "kinds": [
     { "id": "static", "lods": 3, "lodPixels": [86.4, 27], "fadePixels": 4.32, "shadows": true, "shadowPixels": 32.4, "shadowCascadePixels": 64.8, "light": "point", "wind": false, "animated": false, "solid": true },
@@ -337,6 +338,24 @@
       "id": "cave-crystal", "name": "Cave crystal", "kind": "static", "material": "cave-crystal", "variants": 8,
       "parts": [ { "id": "body", "shape": "crystal-cluster", "scale": [0.8, 1.3, 0.8], "solid": "off" } ],
       "placement": { "perHectare": 0, "cave": "crystal", "perHundredM": 140, "sizeMinM": 0.4, "sizeMaxM": 2.2, "clusterCount": 5, "clusterRadiusM": 1.4, "sink": 0.15 }
+    },
+    {
+      "id": "glow-fungus", "name": "Glow fungus", "kind": "static", "material": "glow-fungus", "variants": 8,
+      "parts": [ { "id": "patch", "shape": "rock", "scale": [1.3, 0.25, 1.3], "solid": "off", "shadows": "off" } ],
+      "placement": { "perHectare": 0, "cave": "fungus", "perHundredM": 1, "sizeMinM": 0.5, "sizeMaxM": 1.1, "sink": 0.1 },
+      "light": { "category": "cave-glow", "material": "fungus-light", "intensity": 1.6, "radiusM": 4.5, "importance": 0.8, "liftM": 0.35, "core": false }
+    },
+    {
+      "id": "crystal-light", "name": "Light crystal", "kind": "static", "material": "cave-crystal", "variants": 8,
+      "parts": [ { "id": "body", "shape": "crystal-cluster", "scale": [0.8, 1.3, 0.8], "solid": "off" } ],
+      "placement": { "perHectare": 0, "cave": "crystal-light", "perHundredM": 1, "sizeMinM": 0.9, "sizeMaxM": 1.6, "sink": 0.15 },
+      "light": { "category": "cave-glow", "material": "crystal-light", "intensity": 2.2, "radiusM": 5.5, "importance": 0.8, "liftM": 0.7, "core": false }
+    },
+    {
+      "id": "skylight-moss", "name": "Skylight moss", "kind": "static", "material": "lush-turf", "variants": 8,
+      "parts": [ { "id": "bed", "shape": "rock", "scale": [1.6, 0.12, 1.6], "solid": "off", "shadows": "off" } ],
+      "placement": { "perHectare": 0, "cave": "skylight", "perHundredM": 1, "sizeMinM": 1.2, "sizeMaxM": 1.8, "sink": 0.3 },
+      "light": { "category": "cave-glow", "material": "skylight", "intensity": 3, "radiusM": 12, "importance": 1, "liftM": 6, "daylight": true, "core": false }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
