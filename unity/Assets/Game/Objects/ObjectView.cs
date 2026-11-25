@@ -48,7 +48,7 @@ namespace Stabby.Game
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial class ObjectViewSystem : SystemBase
     {
-        public const int Lods = 3, Stride = Lods + 2, RegisterPerFrame = 24, SpawnBudget = 8000, DespawnBudget = 8000, Frames = 8, Cell = 64;
+        public const int Lods = 3, Stride = Lods + 2, SpawnBudget = 8000, DespawnBudget = 8000, Frames = 8, Cell = 64;
         public const float DespawnReach = 1f / (1f - Detail.Hysteresis), UnloadReach = 1.5f;
 
         struct MeshSpan
@@ -67,9 +67,15 @@ namespace Stabby.Game
             public Vector4[] Centers;
             public int[] Slots;
             public int SlotCount;
+            public MeshPack Pack;
 
             public void Dispose()
             {
+                if (Pack != null)
+                {
+                    Pack.Dispose();
+                    return;
+                }
                 if (Vertices.IsCreated) Vertices.Dispose();
                 if (Narrow.IsCreated) Narrow.Dispose();
                 if (Wide.IsCreated) Wide.Dispose();
@@ -103,7 +109,10 @@ namespace Stabby.Game
         MeshSet meshSet;
         Mesh[] meshes;
         BatchMeshID[] meshIds;
-        int registered;
+        MeshBatch meshBatch;
+        bool meshesDone;
+        readonly List<Mesh> pumped = new List<Mesh>();
+        readonly List<int> pumpedIds = new List<int>();
         public const int FoliageLayer = 8;
         Material material, foliageMaterial;
         BatchMaterialID materialId, foliageMaterialId;
@@ -180,6 +189,7 @@ namespace Stabby.Game
             if (chunkLights != null) foreach (var a in chunkLights) DestroyLights(a);
             foreach (var t in chunkTasks) Owned.Release(t, r => r.Dispose());
             Owned.Release(meshTask, r => r.Dispose());
+            meshBatch?.Dispose();
             meshSet?.Dispose();
             EntityManager.CompleteAllTrackedJobs();
             JobPoll.Teardown(scan);
@@ -291,7 +301,6 @@ namespace Stabby.Game
             },
         };
         static readonly int[] Quad = { 0, 1, 2, 0, 2, 3 };
-        static readonly List<Mesh> applied = new List<Mesh>();
 
         static int Floats(int uvs) => 6 + 4 * uvs;
 
@@ -354,6 +363,7 @@ namespace Stabby.Game
                     set.Slots[k] = -1;
                     if (impostors[k] && set.Spans[k * Stride].Uvs > 0) Impostor(set, k);
                 }
+                Pack(set);
             }
             catch
             {
@@ -432,32 +442,21 @@ namespace Stabby.Game
             End(set, at + 1);
         }
 
-        static void Apply(MeshSet set, int from, int to, Mesh[] into)
+        static void Pack(MeshSet set)
         {
-            int count = 0;
-            for (int i = from; i < to; i++) if (set.Spans[i].Uvs >= 0) count++;
-            if (count == 0) return;
-            var data = Mesh.AllocateWritableMeshData(count);
-            var verts = set.Vertices.AsArray();
-            applied.Clear();
-            for (int i = from, j = 0; i < to; i++)
+            var pack = new MeshPack(set.Vertices, set.Narrow, set.Wide);
+            set.Pack = pack;
+            var attr = new int[Layouts.Length];
+            for (int u = 0; u < Layouts.Length; u++) attr[u] = pack.Layout(Layouts[u]);
+            for (int i = 0; i < set.Spans.Length; i++)
             {
                 var s = set.Spans[i];
                 if (s.Uvs < 0) continue;
-                var d = data[j++];
-                d.SetVertexBufferParams(s.VertexCount, Layouts[s.Uvs]);
-                d.GetVertexData<float>().CopyFrom(verts.GetSubArray(s.Vertex, s.VertexCount * Floats(s.Uvs)));
-                d.SetIndexBufferParams(s.IndexCount, s.Wide ? IndexFormat.UInt32 : IndexFormat.UInt16);
-                if (s.Wide) d.GetIndexData<int>().CopyFrom(set.Wide.AsArray().GetSubArray(s.Index, s.IndexCount));
-                else d.GetIndexData<ushort>().CopyFrom(set.Narrow.AsArray().GetSubArray(s.Index, s.IndexCount));
-                d.subMeshCount = 1;
-                d.SetSubMesh(0, new SubMeshDescriptor(0, s.IndexCount));
-                into[i] = new Mesh { name = "Object " + i };
-                applied.Add(into[i]);
+                pack.Add("Object " + i, new MeshPiece
+                {
+                    Id = i, Vertex = s.Vertex, VertexCount = s.VertexCount, Floats = Floats(s.Uvs), Index = s.Index, IndexCount = s.IndexCount, Attr = attr[s.Uvs], AttrCount = Layouts[s.Uvs].Length, Wide = s.Wide,
+                });
             }
-            Mesh.ApplyAndDisposeWritableMeshData(data, applied);
-            foreach (var m in applied) m.bounds = m.GetSubMesh(0).bounds;
-            applied.Clear();
         }
 
         void Bake(CommandBuffer cmd)
@@ -524,12 +523,19 @@ namespace Stabby.Game
                 atlas = LeafAtlas.Create(atlasTask.Result);
                 atlasTask = null;
             }
-            if (registered >= meshes.Length) return true;
+            if (meshesDone) return true;
             var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            int end = Math.Min(meshes.Length, registered + RegisterPerFrame);
-            Apply(meshSet, registered, end, meshes);
-            for (; registered < end; registered++) if (meshes[registered] != null) meshIds[registered] = graphics.RegisterMesh(meshes[registered]);
-            if (registered < meshes.Length) return false;
+            meshBatch ??= new MeshBatch(meshSet.Pack);
+            if (meshBatch.Pump(pumped, pumpedIds))
+                for (int i = 0; i < pumped.Count; i++)
+                {
+                    meshes[pumpedIds[i]] = pumped[i];
+                    meshIds[pumpedIds[i]] = graphics.RegisterMesh(pumped[i]);
+                }
+            if (!meshBatch.Done) return false;
+            meshBatch.Dispose();
+            meshBatch = null;
+            meshesDone = true;
             meshSet.Dispose();
             meshIdsNative = new NativeArray<BatchMeshID>(meshIds, Allocator.Persistent);
             boundsNative = new NativeArray<AABB>(meshSet.Bounds, Allocator.Persistent);

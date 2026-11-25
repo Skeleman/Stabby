@@ -271,6 +271,8 @@ namespace Stabby.Game.Editor
             using var lightRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(LightPresenterSystem)), 4);
             using var terrainRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(TerrainViewSystem)), 4);
             using var objectRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(view, typeof(ObjectViewSystem)), 4);
+            using var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 4);
+            using var allocCountRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocation In Frame Count", 4);
 
             for (int r = 0; r < BenchCounts.Length; r++)
             {
@@ -326,6 +328,9 @@ namespace Stabby.Game.Editor
                         var animMs = new List<double>(BenchFrames);
                         var terrainMs = new List<double>(BenchFrames);
                         var objectMs = new List<double>(BenchFrames);
+                        var allocKb = new List<float>(BenchFrames);
+                        var allocCount = new List<float>(BenchFrames);
+                        bool profile = n == BenchCounts[BenchCounts.Length - 1] && t == 0 && System.Environment.GetEnvironmentVariable("STABBY_BENCH_PROFILE") == "1";
                         for (int k = 0; k < BenchFrames + 5; k++)
                         {
                             yield return null;
@@ -335,6 +340,9 @@ namespace Stabby.Game.Editor
                             long r1 = Stopwatch.GetTimestamp();
                             cam.targetTexture = null;
                             if (k < 5) continue;
+                            if (k == 5 && profile) WalkProfile(0);
+                            allocKb.Add(allocRec.LastValue / 1024f);
+                            allocCount.Add(allocCountRec.LastValue);
                             main.Add(mainRec.LastValue / 1e6);
                             drawMs.Add(drawRec.LastValue / 1e6 + submitRec.LastValue / 1e6);
                             lightMs.Add(lightRec.LastValue / 1e6);
@@ -344,6 +352,8 @@ namespace Stabby.Game.Editor
                             renderMs.Add((r1 - r0) * 1000.0 / Stopwatch.Frequency);
                         }
                         lines.Add($"  N {n} {BenchTiers[t]} 1080p frames: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms; creature draw markers median {Pct(drawMs, 0.5):F3} ms, p99 {Pct(drawMs, 0.99):F3} ms; light presenter marker median {Pct(lightMs, 0.5):F3} ms, p99 {Pct(lightMs, 0.99):F3} ms; 1080p camera render median {Pct(renderMs, 0.5):F2} ms over {BenchFrames} frames");
+                        if (profile) UnityEngine.Profiling.Profiler.enabled = false;
+                        lines.Add($"  N {n} {BenchTiers[t]} 1080p frames: {GcStats(allocKb, allocCount)}");
                         lines.Add($"  N {n} {BenchTiers[t]} 1080p markers: creature anim median {Pct(animMs, 0.5):F3} ms, p99 {Pct(animMs, 0.99):F3} ms; terrain view median {Pct(terrainMs, 0.5):F3} ms, p99 {Pct(terrainMs, 0.99):F3} ms; object view median {Pct(objectMs, 0.5):F3} ms, p99 {Pct(objectMs, 0.99):F3} ms");
                         if (n == BenchCounts[BenchCounts.Length - 1] && t == 0)
                         {
