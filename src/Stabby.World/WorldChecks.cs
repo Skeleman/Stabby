@@ -916,7 +916,7 @@ namespace Stabby.World
                 if (Math.Abs(p.By - p.Ay) > Features.CaveGrade * run + 1e-3f) { e.Add($"cave path at {p.Ax:F0},{p.Az:F0} is steeper than the cave grade"); return; }
                 int tile = Features.TileOf(p, cm);
                 var near = new List<FeatureEdit>();
-                foreach (var y in edits) if (Features.TileOf(y, cm) == tile) near.Add(y);
+                foreach (var y in edits) if (Features.TileOf(y, cm) == tile && !CaveBrooks.Channel(y)) near.Add(y);
                 string fault = Underground.PathFault(detail, near.ToArray(), p);
                 if (fault != null) { e.Add(fault); return; }
             }
@@ -962,10 +962,111 @@ namespace Stabby.World
             }
             if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
             var pools = CheckCaveObjects(w, detail, edits, e);
-            CheckCaveBrooks(w, caves, CaveBrooks.Build(w, detail, edits, caves), pools, e);
+            var brooks = CaveBrooks.Build(w, detail, edits, caves);
+            CheckCaveBrooks(w, caves, brooks, pools, e);
+            CheckCaveBrookBanks(w, detail, edits, caves, brooks, e);
         }
 
         public const float StreamSlackM = 1e-3f, StreamEndM = 1f, StreamPoolM = 0.05f;
+        public const float BankPadM = 0.3f, BankRiseM = 0.1f, BankShare = 0.95f, BankProbeM = 1.5f, BedShowM = 0.05f, BedShare = 0.9f, BedCapM = 0.5f;
+        public const int BedEvery = 8, BedCells = 8;
+
+        public static void CheckCaveBrookBanks(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, CaveBrook[] streams, List<string> e)
+        {
+            float fine = 0.5f * NearField.NodeStep(0);
+            foreach (var c in edits)
+                if (CaveBrooks.Channel(c) && !c.MeshedIn(fine, c.MinX, c.MinZ, c.MaxX, c.MaxZ))
+                {
+                    e.Add($"cave stream channel at {c.Ax:F0},{c.Ay:F1},{c.Az:F0} is {c.Thick:F2} m thick, too thin to mesh at the {fine:F1} m feature step");
+                    return;
+                }
+            var ground = new DetailGround { Detail = detail };
+            var grid = new EditGrid(edits, w.Config.Size * w.Config.CellMeters);
+            var ids = new List<int>();
+            var meshed = new List<FeatureEdit>();
+            int beds = 0, sunk = 0;
+            bool lying = false;
+            foreach (var s in streams)
+            {
+                var q = s.Points;
+                int rows = s.Rows, st = CaveBrook.Stride, probes = 0, banked = 0;
+                float pool = s.End == CaveBrook.Pool ? q[(rows - 1) * st + 1] + StreamSlackM : float.MinValue;
+                var at = new float[rows];
+                for (int k = 1; k < rows; k++) at[k] = at[k - 1] + Plan(q, k, st);
+                float total = at[rows - 1];
+                for (int k = 0; k < rows; k++)
+                {
+                    float along = at[k], tail = total - along;
+                    if (along < CaveBrooks.TaperM || tail < CaveBrooks.TaperM || q[k * st + 1] <= pool) continue;
+                    int a = Math.Max(k - 1, 0) * st, b = Math.Min(k + 1, rows - 1) * st, o = k * st;
+                    float tx = q[b] - q[a], tz = q[b + 2] - q[a + 2], tl = (float)Math.Sqrt(tx * tx + tz * tz);
+                    if (tl <= 0f) continue;
+                    float px = -tz / tl, pz = tx / tl, y = q[o + 1], d = q[o + 3] + BankPadM;
+                    if (k % BedEvery == 0)
+                    {
+                        beds++;
+                        if (MeshedFloor(detail, edits, grid, ids, meshed, fine, q[o], y, q[o + 2]) <= y - BedShowM) sunk++;
+                    }
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        float x = q[o] + side * px * d, z = q[o + 2] + side * pz * d;
+                        if (Folded(q, at, k, x, z, d + BankProbeM)) continue;
+                        float f = Walk.Surface(ground, grid.Cell(x, z), LatticeStepM, x, z, y + BankProbeM, y - BankProbeM);
+                        probes++;
+                        if (f >= y + BankRiseM) banked++;
+                    }
+                }
+                if (!lying && probes > 0 && banked < BankShare * probes)
+                {
+                    e.Add($"cave stream in {caves[s.Graph].Class} graph {s.Graph} lies on the floor: {banked} of {probes} bank probes {BankPadM:F1} m out rise {BankRiseM:F2} m above the water");
+                    lying = true;
+                }
+            }
+            if (beds > 0 && sunk < BedShare * beds) e.Add($"cave stream beds hide the water: {sunk} of {beds} meshed beds at the {fine:F1} m step sit {BedShowM:F2} m below the water surface");
+        }
+
+        static float MeshedFloor(TerrainDetail detail, FeatureEdit[] edits, EditGrid grid, List<int> ids, List<FeatureEdit> meshed, float sm, float x, float y, float z)
+        {
+            int i0 = (int)Math.Floor(x / sm) - BedCells / 2, k0 = (int)Math.Floor(z / sm) - BedCells / 2;
+            float x0 = i0 * sm, z0 = k0 * sm, x1 = x0 + BedCells * sm, z1 = z0 + BedCells * sm;
+            meshed.Clear();
+            grid.Near(x0 - 0.5f * sm, z0 - 0.5f * sm, x1 + 0.5f * sm, z1 + 0.5f * sm, ids);
+            foreach (int id in ids) if (edits[id].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(edits[id].AtStep(sm));
+            var f = new NetsBuffers();
+            var cols = new DetailColumns { Detail = detail, StepM = sm };
+            SurfaceNets.Edited(cols, new EditArray { Items = meshed.ToArray() }, new NetsChunk { X0 = i0, Z0 = k0, Cells = BedCells, StepM = sm }, ref f);
+            float top = float.MinValue;
+            for (int t = 0; t + 2 < f.Tris.Count; t += 3)
+            {
+                int a = f.Tris[t] * 6, b = f.Tris[t + 1] * 6, c = f.Tris[t + 2] * 6;
+                float ax = f.Verts[a] - x, az = f.Verts[a + 2] - z, bx = f.Verts[b] - x, bz = f.Verts[b + 2] - z, cx = f.Verts[c] - x, cz = f.Verts[c + 2] - z;
+                float det = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
+                if (Math.Abs(det) < 1e-9f) continue;
+                float u = (-ax * (cz - az) + (cx - ax) * az) / det, v = (-(bx - ax) * az + ax * (bz - az)) / det;
+                if (u < 0f || v < 0f || u + v > 1f) continue;
+                float h = f.Verts[a + 1] + u * (f.Verts[b + 1] - f.Verts[a + 1]) + v * (f.Verts[c + 1] - f.Verts[a + 1]);
+                if (h < y + BedCapM && h > top) top = h;
+            }
+            return top;
+        }
+
+        static bool Folded(float[] q, float[] at, int k, float x, float z, float near)
+        {
+            int st = CaveBrook.Stride;
+            for (int j = 0; j < at.Length; j++)
+            {
+                if (Math.Abs(at[j] - at[k]) < 2f * near) continue;
+                float dx = q[j * st] - x, dz = q[j * st + 2] - z, r = q[j * st + 3] + BankProbeM;
+                if (dx * dx + dz * dz < r * r) return true;
+            }
+            return false;
+        }
+
+        static float Plan(float[] q, int k, int st)
+        {
+            float dx = q[k * st] - q[(k - 1) * st], dz = q[k * st + 2] - q[(k - 1) * st + 2];
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
 
         public static void CheckCaveBrooks(GeneratedWorld w, CaveGraph[] caves, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
         {

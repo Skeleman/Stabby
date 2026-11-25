@@ -284,6 +284,15 @@ namespace Stabby.Game.Editor
                 Shot(cam, dir, "caves-brook");
                 ExposedShot(cam, dir, "caves-brook-debug-exposure", CaveDebugExposure);
                 GeometryShot(cam, dir, "caves-brook-debug-unlit");
+                int near = Mathf.Min(brook.Rows - 1, at + 4);
+                var bn = new Vector3(q[near * st], q[near * st + 1], q[near * st + 2]);
+                eye = bp + Vector3.up * 0.4f;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(bn - eye));
+                for (var w = Settle(60); w.MoveNext();) yield return null;
+                lines.Add($"brook close: eye {eye.x:F0},{eye.y:F2},{eye.z:F0}, 0.4 m over the water, half width {q[at * st + 3]:F2} m");
+                Shot(cam, null, "warmup");
+                ExposedShot(cam, dir, "caves-brook-close-debug-exposure", CaveDebugExposure);
+                GeometryShot(cam, dir, "caves-brook-close-debug-unlit");
                 CaveBrook spring = null;
                 foreach (var b in brooks) if (b.End == CaveBrook.Spring && (spring == null || b.Rows > spring.Rows)) spring = b;
                 if (spring != null)
