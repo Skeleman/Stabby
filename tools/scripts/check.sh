@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full|--merge]
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
-# (--full forces all;
-# --merge forces all but the sweeps, which run only when the diff can change generation). One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
+# (--full forces all; --merge forces all but sweeps only 25+5 seeds, and only when the diff can change
+# generation; daily.sh sweeps all). One check per machine at a time. Exit 1 if anything fails. Logs in out/check/.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
 args=" $* "; full=0; [[ "$args" == *" --full "* ]] && full=1
 merge=0; [[ "$args" == *" --merge "* ]] && merge=1
@@ -88,7 +88,8 @@ phase_unity() {
 }
 touch out/check/busy
 { phase_tests & [ $unity = 1 ] && phase_unity & wait; rm -f out/check/busy; } &
-[ $gen = 1 ] && { phase_sweep 100 256 & phase_sweep 20 512 & }
+n256=100; n512=20; [ $merge = 1 ] && { n256=25; n512=5; }
+[ $gen = 1 ] && { phase_sweep $n256 256 & phase_sweep $n512 512 & }
 wait
 fail=0
 for p in tests sweep256 sweep512 unity; do
