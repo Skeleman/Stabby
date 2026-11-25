@@ -307,20 +307,18 @@ namespace Stabby.Game.Editor
                 foreach (var b in brooks)
                 {
                     if (b.End != CaveBrook.Sink || (sink != null && b.Rows <= sink.Rows)) continue;
-                    int ba = Mathf.Max(0, b.Rows - 7) * st, bb = (b.Rows - 1) * st;
+                    int ba = Mathf.Max(0, b.Rows - 30) * st, bb = (b.Rows - 1) * st;
                     var bq = b.Points;
                     if (ground.HeightAt(bq[ba], bq[ba + 2]) < Mathf.Max(20f, bq[ba + 1] + 8f) || ground.HeightAt(bq[bb], bq[bb + 2]) < Mathf.Max(20f, bq[bb + 1] + 8f)) continue;
                     sink = b;
                 }
                 if (sink != null)
                 {
-                    int ka = Mathf.Max(0, sink.Rows - 7), kb = sink.Rows - 1;
+                    int ka = Mathf.Max(0, sink.Rows - 30), kb = sink.Rows - 1;
                     var kq = sink.Points;
                     var kp = new Vector3(kq[ka * st], kq[ka * st + 1], kq[ka * st + 2]);
                     var ke = new Vector3(kq[kb * st], kq[kb * st + 1], kq[kb * st + 2]);
-                    px = kp.x; py = kp.y + 0.5f; pz = kp.z;
-                    Walk.Step(ground, ground.EditsNear(px, pz, Walk.Radius), cols, ground.WalkStep, ref px, ref py, ref pz, 0, 0, Walk.Reach);
-                    eye = new Vector3(px, py + 1.7f, pz);
+                    eye = kp + Vector3.up * 1.7f;
                     cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(ke - eye));
                     waited = LoadWaitTotal();
                     for (var w = Settle(120); w.MoveNext();) yield return null;
