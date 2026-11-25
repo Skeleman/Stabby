@@ -514,7 +514,7 @@ namespace Stabby.Game
                 if (!haveColumns)
                 {
                     long s0 = Stopwatch.GetTimestamp();
-                    using (singletonMarker.Auto()) oc = SystemAPI.GetSingleton<ObjectColumns>();
+                    using (singletonMarker.Auto()) oc = SystemAPI.GetSingletonRW<ObjectColumns>().ValueRO;
                     singletonTicks = Stopwatch.GetTimestamp() - s0;
                     deltas = Deltas;
                     haveColumns = true;
@@ -540,10 +540,12 @@ namespace Stabby.Game
 
         void Free()
         {
+            bool synced = false;
             for (int k = resident.Count - 1; k >= 0; k--)
             {
                 int r = resident[k];
                 if (Near(r, freeReach)) continue;
+                if (!synced) { SystemAPI.GetSingletonRW<ObjectColumns>(); synced = true; }
                 columns -= regions[r].Items.Length;
                 regions[r].Dispose();
                 regions[r] = default;
