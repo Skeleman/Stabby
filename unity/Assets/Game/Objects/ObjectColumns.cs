@@ -407,7 +407,7 @@ namespace Stabby.Game
                     var (w, parts, entry) = MapReady();
                     if (w == null || parts == null) return;
                     var objects = lib;
-                    System.Func<ObjectField> make = () => new ObjectField(w, parts.Detail, parts.Edits, objects);
+                    System.Func<ObjectField> make = () => new ObjectField(w, parts.Detail, parts.Edits, objects, parts.Discoveries);
                     fieldTask = entry == null ? Task.Run(make) : WorldStore.Objects(entry, make);
                     return;
                 }

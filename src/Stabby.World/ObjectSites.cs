@@ -120,6 +120,46 @@ namespace Stabby.World
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
+        readonly object footLock = new object();
+        float[][] siteFeet;
+
+        bool InSiteFoot(FeatureEdit e, float x0, float z0)
+        {
+            float span = WorldChunks.Size * cm;
+            var feet = SiteFeet()[(int)(z0 / span + 0.5f) * across + (int)(x0 / span + 0.5f)];
+            if (feet == null) return false;
+            for (int k = 0; k < feet.Length; k += 4)
+                if (e.MaxX >= feet[k] && e.MinX <= feet[k + 2] && e.MaxZ >= feet[k + 1] && e.MinZ <= feet[k + 3]) return true;
+            return false;
+        }
+
+        float[][] SiteFeet()
+        {
+            lock (footLock)
+            {
+                if (siteFeet != null) return siteFeet;
+                float span = WorldChunks.Size * cm;
+                var bins = new List<float>[across * across];
+                foreach (var o in Discoveries())
+                {
+                    int kind = lib.Objects[o.Def].Placement.Discovery;
+                    if (kind == WolfDen || Pooled(kind)) continue;
+                    float r = footprint[o.Def] * o.Size;
+                    int ax = Math.Max(0, (int)((o.X - r) / span)), bx = Math.Min(across - 1, (int)((o.X + r) / span));
+                    int az = Math.Max(0, (int)((o.Z - r) / span)), bz = Math.Min(across - 1, (int)((o.Z + r) / span));
+                    for (int cz = az; cz <= bz; cz++)
+                        for (int cx = ax; cx <= bx; cx++)
+                        {
+                            var bin = bins[cz * across + cx] ?? (bins[cz * across + cx] = new List<float>());
+                            bin.Add(o.X - r); bin.Add(o.Z - r); bin.Add(o.X + r); bin.Add(o.Z + r);
+                        }
+                }
+                var feet = new float[bins.Length][];
+                for (int k = 0; k < bins.Length; k++) feet[k] = bins[k]?.ToArray();
+                return siteFeet = feet;
+            }
+        }
+
         bool Cleared(List<ObjectInstance> near, float x, float z, float r)
         {
             if (near == null) return false;

@@ -15,6 +15,31 @@ public class DiscoveryTests
     public DiscoveryTests(ITestOutputHelper output) => this.output = output;
 
     [Fact]
+    public void FeaturePassDiscoveriesMatchTheFinalEdits()
+    {
+        int seen = 0;
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, Caves);
+            var detail = new TerrainDetail(w);
+            var edits = Features.Place(w, detail, out _, out var shared);
+            var fresh = new ObjectField(w, detail, edits, Objects).Discoveries();
+            Assert.NotNull(shared);
+            Assert.Equal(fresh.Length, shared.Length);
+            for (int i = 0; i < fresh.Length; i++)
+            {
+                Assert.Equal(fresh[i].Id, shared[i].Id);
+                Assert.Equal(fresh[i].Def, shared[i].Def);
+                Assert.Equal(fresh[i].Variant, shared[i].Variant);
+                Assert.Equal((fresh[i].X, fresh[i].Y, fresh[i].Z, fresh[i].Size), (shared[i].X, shared[i].Y, shared[i].Z, shared[i].Size));
+                Assert.Equal((fresh[i].Qx, fresh[i].Qy, fresh[i].Qz, fresh[i].Qw), (shared[i].Qx, shared[i].Qy, shared[i].Qz, shared[i].Qw));
+            }
+            seen += fresh.Length;
+        }
+        Assert.True(seen > 0);
+    }
+
+    [Fact]
     public void StoneRingsAppearAndReachTheirChunks()
     {
         int d = Objects.Objects.FindIndex(o => o.Id == "stone-ring"), total = 0, worlds = 0;
