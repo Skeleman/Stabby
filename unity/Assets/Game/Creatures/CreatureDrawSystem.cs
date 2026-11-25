@@ -15,11 +15,13 @@ namespace Stabby.Game
     public partial class CreatureDrawSystem : SystemBase
     {
         static readonly int CreaturesId = Shader.PropertyToID("_Creatures");
+        static readonly int BonesId = Shader.PropertyToID("_CreatureBones");
         static readonly int FurId = Shader.PropertyToID("_CreatureFur");
         static readonly int StartId = Shader.PropertyToID("_CreatureStart");
         Material material;
         CreatureBuildSystem build;
-        readonly UploadRing<CreatureGpu> instances = new UploadRing<CreatureGpu>(GraphicsBuffer.Target.Structured, 80, "Creature instances");
+        readonly UploadRing<CreaturePart> instances = new UploadRing<CreaturePart>(GraphicsBuffer.Target.Structured, 32, "Creature instances");
+        readonly UploadRing<float3x4> bones = new UploadRing<float3x4>(GraphicsBuffer.Target.Raw, 48, "Creature bones");
         readonly UploadRing<float4> fur = new UploadRing<float4>(GraphicsBuffer.Target.Structured, 16, "Creature fur");
         readonly UploadRing<GraphicsBuffer.IndirectDrawIndexedArgs> args = new UploadRing<GraphicsBuffer.IndirectDrawIndexedArgs>(GraphicsBuffer.Target.IndirectArguments, GraphicsBuffer.IndirectDrawIndexedArgs.size, "Creature args");
         NativeArray<uint4> meshInfo;
@@ -41,6 +43,7 @@ namespace Stabby.Game
         {
             JobPoll.Teardown(pack);
             instances.Release();
+            bones.Release();
             fur.Release();
             args.Release();
             if (meshInfo.IsCreated) meshInfo.Dispose();
@@ -108,8 +111,8 @@ namespace Stabby.Game
             furCount = anim.FurCount;
             pack = new Pack
             {
-                Sorted = anim.Sorted, Fur = anim.Fur, Starts = anim.Starts, Counts = anim.Counts, Mesh = meshInfo, FurCount = furCount,
-                Instances = instances.Lock(anim.Sorted.Length), FurOut = fur.Lock(math.max(furCount, 3)), Args = args.Lock(groups), Packed = packed,
+                Parts = anim.Parts, Bones = anim.Bones, Fur = anim.Fur, Starts = anim.Starts, Counts = anim.Counts, Mesh = meshInfo, FurCount = furCount,
+                Instances = instances.Lock(anim.Parts.Length), BonesOut = bones.Lock(anim.Bones.Length), FurOut = fur.Lock(math.max(furCount, 3)), Args = args.Lock(groups), Packed = packed,
             }.Schedule(anim.Gpu);
             JobHandle.ScheduleBatchedJobs();
             anim.Gpu = pack;
@@ -124,6 +127,7 @@ namespace Stabby.Game
             packing = false;
             int groups = counts.Length;
             instances.Unlock(packed[2 * groups]);
+            bones.Unlock(packed[2 * groups]);
             fur.Unlock(furCount);
             args.Unlock(groups);
             for (int g = 0; g < groups; g++)
@@ -131,6 +135,7 @@ namespace Stabby.Game
                 counts[g] = packed[g];
                 blocks[g].SetInteger(StartId, packed[groups + g]);
                 blocks[g].SetBuffer(CreaturesId, instances.Current);
+                blocks[g].SetBuffer(BonesId, bones.Current);
                 blocks[g].SetBuffer(FurId, fur.Current);
             }
         }
@@ -160,12 +165,14 @@ namespace Stabby.Game
         [BurstCompile]
         struct Pack : IJob
         {
-            [ReadOnly] public NativeArray<CreatureGpu> Sorted;
+            [ReadOnly] public NativeArray<CreaturePart> Parts;
+            [ReadOnly] public NativeArray<float3x4> Bones;
             [ReadOnly] public NativeArray<float4> Fur;
             [ReadOnly] public NativeArray<int> Starts, Counts;
             [ReadOnly] public NativeArray<uint4> Mesh;
             public int FurCount;
-            public NativeArray<CreatureGpu> Instances;
+            public NativeArray<CreaturePart> Instances;
+            public NativeArray<float3x4> BonesOut;
             public NativeArray<float4> FurOut;
             public NativeArray<GraphicsBuffer.IndirectDrawIndexedArgs> Args;
             public NativeArray<int> Packed;
@@ -182,7 +189,8 @@ namespace Stabby.Game
                     n += Counts[g];
                     Args[g] = new GraphicsBuffer.IndirectDrawIndexedArgs { indexCountPerInstance = m.x, instanceCount = (uint)c, startIndex = m.y, baseVertexIndex = m.z };
                 }
-                NativeArray<CreatureGpu>.Copy(Sorted, Instances, n);
+                NativeArray<CreaturePart>.Copy(Parts, Instances, n);
+                NativeArray<float3x4>.Copy(Bones, BonesOut, n);
                 NativeArray<float4>.Copy(Fur, FurOut, FurCount);
                 Packed[2 * groups] = n;
             }

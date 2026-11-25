@@ -407,7 +407,7 @@ namespace Stabby.Game
                     var (w, parts, entry) = MapReady();
                     if (w == null || parts == null) return;
                     var objects = lib;
-                    System.Func<ObjectField> make = () => new ObjectField(w, parts.Detail, parts.Edits, objects);
+                    System.Func<ObjectField> make = () => new ObjectField(w, parts.Detail, parts.Edits, objects, parts.Discoveries);
                     fieldTask = entry == null ? Task.Run(make) : WorldStore.Objects(entry, make);
                     return;
                 }
@@ -514,7 +514,7 @@ namespace Stabby.Game
                 if (!haveColumns)
                 {
                     long s0 = Stopwatch.GetTimestamp();
-                    using (singletonMarker.Auto()) oc = SystemAPI.GetSingleton<ObjectColumns>();
+                    using (singletonMarker.Auto()) oc = SystemAPI.GetSingletonRW<ObjectColumns>().ValueRO;
                     singletonTicks = Stopwatch.GetTimestamp() - s0;
                     deltas = Deltas;
                     haveColumns = true;
@@ -540,10 +540,12 @@ namespace Stabby.Game
 
         void Free()
         {
+            bool synced = false;
             for (int k = resident.Count - 1; k >= 0; k--)
             {
                 int r = resident[k];
                 if (Near(r, freeReach)) continue;
+                if (!synced) { SystemAPI.GetSingletonRW<ObjectColumns>(); synced = true; }
                 columns -= regions[r].Items.Length;
                 regions[r].Dispose();
                 regions[r] = default;
@@ -556,16 +558,13 @@ namespace Stabby.Game
             int started = 0;
             wanted.Clear();
             foreach (var p in spots) ObjectRegions.Near(Field.ChunksAcross, Field.ChunkMeters, p.x, p.y, reach, wanted);
-            var field = Field;
-            var table = shapes;
             foreach (int r in wanted)
             {
                 if (regions[r].IsCreated || baking.ContainsKey(r) || converting.ContainsKey(r)) continue;
                 started++;
                 if (!instances[r].IsCreated)
                 {
-                    int region = r;
-                    converting[r] = Task.Run(() => Convert(field, table, region));
+                    converting[r] = StartConvert(Field, shapes, r);
                     continue;
                 }
                 var output = new NativeReference<RegionColumns>(Allocator.Persistent);
@@ -580,6 +579,8 @@ namespace Stabby.Game
             if (baking.Count > 0) JobHandle.ScheduleBatchedJobs();
             return started;
         }
+
+        static Task<Converted> StartConvert(ObjectField field, ColumnShapes table, int region) => Task.Run(() => Convert(field, table, region));
 
         [System.ThreadStatic] static List<ObjectInstance> scratch;
 
