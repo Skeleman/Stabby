@@ -645,7 +645,8 @@ Shader "Stabby/Object"
                 float thick = flat ? 0.05 : abs(mm._m10) + abs(mm._m11) + abs(mm._m12);
                 [branch] if (_StabbyFieldUV.x > 0)
                 {
-                    ground += ContactBed(wp.xz) - ContactBed(i.origin.xz);
+                    float bed = ContactBed(i.origin.xz);
+                    ground += (ContactBed(wp.xz) - bed) * smoothstep(6, 2, bed - fade.z);
                     albedo = ContactObject(albedo, wp, ground, size, thick);
                 }
                 float above = max(wp.y - ground, 0);
