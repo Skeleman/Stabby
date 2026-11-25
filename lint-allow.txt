@@ -4,7 +4,6 @@ ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks once per 
 ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
 ClientViewSystem.ToEntityArray copies only player ghosts that still lack a mesh; the query is empty on almost every frame
 TerrainViewSystem applies Mesh data filled in Burst jobs and registers it with Entities Graphics
-BlobBake.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem converts each chunk's managed placement to native instances once, in a task; region bakes, including re-entry, are Burst jobs
@@ -46,7 +45,6 @@ ObjectViewSystem.CompleteAllTrackedJobs only in OnDestroy, before disposing tile
 TerrainViewSystem.CompleteAllTrackedJobs only in Audit, a diagnostic the capture tools call
 CreatureHostSystem.Query reads player positions and in-game connection ids, tens of entities, to feed the scheduled herd jobs
 ServerChunkStreamSystem.Query per-connection chunk requests and send queues, a handful of connection and RPC entities
-ClientChunkReceiveSystem.Query debt: b/sim-jobs; applies every received chunk sum and piece RPC into the inbox on the main thread
 ClientMapSystem.Query the one WorldInfoRpc per join
 ObjectColumnsSystem.Query reads player positions, one per player, to pick collision regions
 ServerObjectDeltaSystem.Query new connections, player positions and removal RPCs, a few per frame
@@ -54,7 +52,6 @@ ClientObjectDeltaSystem.Query replicated delta and reply RPCs and the one local 
 ClientGoInGameSystem.Query the one connection going in game per join
 ServerGoInGameSystem.Query go-in-game RPCs, one per join
 ServerPlayerSystem.Query spawns a player for each connection newly in game, once per join
-PlayerMoveSystem.Query debt: b/sim-jobs; steps every predicted player on the main thread
 ClientInputSystem.Query the one local player's input from UnityEngine.Input
 ClientViewSystem.Query player positions for the managed chase camera
 LightBudgetSystem.Complete only after IsCompleted, or at teardown

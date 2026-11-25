@@ -375,12 +375,15 @@ namespace Stabby.Game
             }
             ecb.Playback(EntityManager);
             if (chunks >= 0)
+            {
                 inbox = EntityManager.CreateSingleton(new ChunkInbox
                 {
                     HostSums = new NativeArray<ulong>(chunks, Allocator.Persistent),
                     Slots = new NativeArray<ChunkSlot>(chunks, Allocator.Persistent),
                     Arena = new NativeList<byte>(Allocator.Persistent),
                 });
+                EntityManager.AddComponentData(inbox, new ChunkCounts());
+            }
 
             if (mine == null && gen != null && gen.IsCompleted)
             {
@@ -398,8 +401,9 @@ namespace Stabby.Game
 
         void Sync()
         {
+            var counts = EntityManager.GetComponentData<ChunkCounts>(inbox);
             var box = EntityManager.GetComponentData<ChunkInbox>(inbox);
-            if (!requested && box.SumsIn == box.HostSums.Length && borrowed != null)
+            if (!requested && counts.SumsIn == box.HostSums.Length && borrowed != null)
             {
                 bool same = true;
                 for (int k = 0; k < mine.Length; k++) same &= mine[k] == box.HostSums[k];
@@ -409,7 +413,7 @@ namespace Stabby.Game
                 requested = true;
                 GameStatus.Lines[World.Name] = $"{World.Name}: {source}, ready after {genMs} ms, 0/{mine.Length} chunks stale, streamed 0 (0 KB deflated in 0 pieces), synced after {clock.ElapsedMilliseconds} ms, 0 differ after sync";
             }
-            if (!requested && box.SumsIn == box.HostSums.Length)
+            if (!requested && counts.SumsIn == box.HostSums.Length)
             {
                 requested = true;
                 var send = new EntityCommandBuffer(Allocator.Temp);
@@ -420,12 +424,12 @@ namespace Stabby.Game
                     stale++;
                     Rpc.Send(send, Entity.Null, new ChunkRequestRpc { Index = k });
                 }
-                box.Remaining = stale;
-                EntityManager.SetComponentData(inbox, box);
+                counts.Remaining = stale;
+                EntityManager.SetComponentData(inbox, counts);
                 send.Playback(EntityManager);
             }
-            if (requested && finish == null && shared == null && box.Remaining == 0) StartFinish(box);
-            if ((finish != null || shared != null) && Map == null) Finish(box);
+            if (requested && finish == null && shared == null && counts.Remaining == 0) StartFinish(box);
+            if ((finish != null || shared != null) && Map == null) Finish(counts);
         }
 
         void Load(bool borrow)
@@ -516,7 +520,7 @@ namespace Stabby.Game
             });
         }
 
-        void Finish(ChunkInbox box)
+        void Finish(ChunkCounts box)
         {
             if (synced == null && shared == null)
             {

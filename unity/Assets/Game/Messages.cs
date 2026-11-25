@@ -187,9 +187,10 @@ namespace Stabby.Game
             return new BlobBake<T> { result = r, builder = builder, handle = new Job { Builder = builder, Out = r }.Schedule() };
         }
 
-        public BlobAssetReference<T> Take()
+        public BlobAssetReference<T> Take() => JobPoll.Done(handle) ? Collect() : default;
+
+        BlobAssetReference<T> Collect()
         {
-            handle.Complete();
             var blob = result.Value;
             result.Dispose();
             var b = builder;
@@ -200,7 +201,8 @@ namespace Stabby.Game
         public void Release()
         {
             if (!result.IsCreated) return;
-            var blob = Take();
+            JobPoll.Teardown(handle);
+            var blob = Collect();
             if (blob.IsCreated) blob.Dispose();
         }
     }
