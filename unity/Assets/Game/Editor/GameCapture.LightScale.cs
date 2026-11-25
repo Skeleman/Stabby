@@ -57,8 +57,8 @@ namespace Stabby.Game.Editor
             };
             for (var w = SetLights(stateQuery, presenter, false, true); w.MoveNext();) yield return null;
 
-            using var budgetRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(world, typeof(LightBudgetSystem)), 4);
-            using var presenterRec = ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(world, typeof(LightPresenterSystem)), 4);
+            using var budgetRec = new SystemMarker(MarkerName(world, typeof(LightBudgetSystem)), 4);
+            using var presenterRec = new SystemMarker(MarkerName(world, typeof(LightPresenterSystem)), 4);
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
 
             foreach (int n in ScaleLights)

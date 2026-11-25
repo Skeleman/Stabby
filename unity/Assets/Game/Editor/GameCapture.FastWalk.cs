@@ -64,11 +64,11 @@ namespace Stabby.Game.Editor
                 land = relief = -1;
             }
 
-            var recs = new List<(int part, ProfilerRecorder rec)>();
+            var recs = new List<(int part, SystemMarker rec)>();
             foreach (var w in Unity.Entities.World.All)
                 foreach (var (type, part) in WalkSystems)
                     if (w.GetExistingSystem(type) != SystemHandle.Null)
-                        recs.Add((part, ProfilerRecorder.StartNew(ProfilerCategory.Scripts, MarkerName(w, type), 1)));
+                        recs.Add((part, new SystemMarker(MarkerName(w, type), 1)));
             var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 1);
             var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
             var lines = new List<string>
