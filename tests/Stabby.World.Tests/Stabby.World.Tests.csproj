@@ -16,7 +16,6 @@
 
   <ItemGroup>
     <Compile Include="../../unity/Assets/Game/ChunkZip.cs" Link="Linked/ChunkZip.cs" />
-    <Compile Include="../../unity/Assets/Game/Objects/ColumnBake.cs" Link="Linked/ColumnBake.cs" />
   </ItemGroup>
 
   <ItemGroup>
