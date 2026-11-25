@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Stabby.World
 {
@@ -29,9 +30,60 @@ namespace Stabby.World
             return -1;
         }
 
-        public static List<string> Run(GeneratedWorld w)
+        public static readonly string[] Groups = { "core", "hydrology", "biomes", "sketch", "surface", "meshing", "caves", "sites", "objects", "creatures" };
+
+        sealed class GroupClock
+        {
+            readonly ICollection<string> only;
+            readonly IDictionary<string, double> ms;
+            readonly Stopwatch watch = new Stopwatch();
+            string at;
+
+            public GroupClock(ICollection<string> only, IDictionary<string, double> ms) { this.only = only; this.ms = ms; }
+
+            public bool Has(string g) => only == null || only.Contains(g);
+
+            public bool Start(string g)
+            {
+                Stop();
+                if (!Has(g)) return false;
+                Time(g);
+                return true;
+            }
+
+            public void Time(string g)
+            {
+                Stop();
+                at = g;
+                watch.Restart();
+            }
+
+            public void Stop()
+            {
+                if (at == null) return;
+                if (ms != null) { ms.TryGetValue(at, out double t); ms[at] = t + watch.Elapsed.TotalMilliseconds; }
+                at = null;
+            }
+        }
+
+        public static List<string> Run(GeneratedWorld w) => Run(w, null, null);
+
+        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms)
         {
             var e = new List<string>();
+            var clock = new GroupClock(groups, ms);
+            if (clock.Start("core")) CheckCore(w, e);
+            if (clock.Start("hydrology")) CheckHydrology(w, e);
+            if (clock.Start("biomes")) CheckBiomes(w, e);
+            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); }
+            if (clock.Start("surface")) { CheckDetail(w, e); CheckNearField(w, e); CheckGeometry(w, e); }
+            CheckFeatures(w, e, clock);
+            clock.Stop();
+            return e;
+        }
+
+        static void CheckCore(GeneratedWorld w, List<string> e)
+        {
             int n = w.Config.Size;
             var hy = w.Water;
 
@@ -53,6 +105,12 @@ namespace Stabby.World
                 if (hy.DischargeM3s[r] + 1e-6f < hy.DischargeM3s[i] && !w.Sea[r])
                 { e.Add($"discharge drops from {i} to {r}"); break; }
             }
+        }
+
+        static void CheckHydrology(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            var hy = w.Water;
 
             foreach (var s in hy.Rivers)
             {
@@ -102,23 +160,21 @@ namespace Stabby.World
                     e.Add($"lake {lake.Id} outflow has no river");
             }
 
-            if (w.Biome != null)
-                for (int i = 0; i < n * n; i++)
-                    if (!w.Sea[i] && w.Biome[i] < 0 && hy.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
-
-            CheckTint(w, e);
-            CheckLakeCover(w, e);
-            if (w.Sketch != null) CheckSketch(w, e);
-            if (w.Sketch != null) CheckMesas(w, e);
-            CheckDetail(w, e);
-            CheckNearField(w, e);
             CheckRiverMouths(w, e);
             CheckLakeOutlets(w, e);
             CheckFalls(w, e);
             CheckRiverShape(w, e);
-            CheckGeometry(w, e);
-            CheckFeatures(w, e);
-            return e;
+        }
+
+        static void CheckBiomes(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            if (w.Biome != null)
+                for (int i = 0; i < n * n; i++)
+                    if (!w.Sea[i] && w.Biome[i] < 0 && w.Water.LakeId[i] < 0) { e.Add($"land cell {i} has no biome"); break; }
+
+            CheckTint(w, e);
+            CheckLakeCover(w, e);
         }
 
         static void CheckRiverBed(GeneratedWorld w, RiverSegment s, List<string> e)
@@ -739,28 +795,42 @@ namespace Stabby.World
             return ix >= 0 && iz >= 0 && ix < n && iz < n ? iz * n + ix : -1;
         }
 
-        static void CheckFeatures(GeneratedWorld w, List<string> e)
+        static void CheckFeatures(GeneratedWorld w, List<string> e, GroupClock clock)
         {
+            bool surface = clock.Has("surface") || clock.Has("meshing"), caved = clock.Has("caves"), sited = clock.Has("sites"), objects = clock.Has("objects");
+            if (!surface && !caved && !sited && !objects) return;
+            clock.Time("features");
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail, out var caves, out var sites);
             float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
-            CheckChunkBounds(w, grid, e);
-            if (sites != null) CheckSiteFootprints(w, grid, sites, e);
-            var field = w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects) : null;
-            if (field != null) CheckObjects(w, detail, grid, field, e);
-            if (field != null) CheckSites(w, detail, grid, field, e);
-            if (field != null) CheckStructures(w, detail, grid, field, e);
-            if (field != null) CheckDiscoveries(w, field, e);
-            CheckCavePaths(w, detail, edits, e);
-            CheckCaves(w, detail, edits, caves, e);
-            CheckCaveNormals(w, detail, grid, caves, e);
-            CheckCliffFoot(w, detail, edits, e);
-            CheckLandforms(w, edits, e);
-            CheckArches(w, edits, e);
-            if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
-            foreach (var x in edits)
-                if (x.Shape != FeatureEdit.Boulder && x.Shape != FeatureEdit.Spring && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
+            var field = (sited || objects) && w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects) : null;
+            if (clock.Start("sites"))
+            {
+                if (sites != null) CheckSiteFootprints(w, grid, sites, e);
+                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); }
+            }
+            if (clock.Start("objects"))
+            {
+                if (field != null) CheckObjects(w, detail, grid, field, e);
+                CheckLandforms(w, edits, e);
+                CheckArches(w, edits, e);
+                if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
+            }
+            if (clock.Start("caves"))
+            {
+                CheckCavePaths(w, detail, edits, e);
+                CheckCaves(w, detail, edits, caves, e);
+                CheckCaveNormals(w, detail, grid, caves, e);
+            }
+            if (clock.Start("surface"))
+            {
+                CheckChunkBounds(w, grid, e);
+                CheckCliffFoot(w, detail, edits, e);
+                foreach (var x in edits)
+                    if (x.Shape != FeatureEdit.Boulder && x.Shape != FeatureEdit.Spring && !Features.Inside(x, cm)) { e.Add($"feature edit at {x.Ax:F0},{x.Az:F0} leaves its tile interior"); return; }
+            }
+            if (!clock.Start("meshing")) return;
             var seen = new bool[FeatureEdit.Shapes];
             foreach (var x in edits)
             {
@@ -900,6 +970,7 @@ namespace Stabby.World
         {
             if (w.Objects == null) return;
             var field = new ObjectField(w, detail, edits, w.Objects);
+            CheckCavePools(w, detail, edits, field.CavePools(), e);
             float span = field.ChunkMeters;
             int across = field.ChunksAcross;
             var picked = new List<int>();
@@ -931,6 +1002,32 @@ namespace Stabby.World
                 }
             if (length >= ObjectField.CaveDripSurveyM && drips * 100f < ObjectField.CaveDripPerHundredM * length)
                 e.Add($"caves: {drips} stalactites over {length:F0} m of passage, under {ObjectField.CaveDripPerHundredM} per 100 m");
+        }
+
+        public const float CavePoolHeadM = 1f, CavePoolSealM = 0.3f;
+
+        public static void CheckCavePools(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, LiquidPool[] pools, List<string> e)
+        {
+            var ground = new DetailGround { Detail = detail };
+            float s = LatticeStepM;
+            foreach (var p in pools)
+            {
+                if (p.Kind != ObjectField.CavePool) continue;
+                if (p.Leaks) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} leaks out through its chamber"); return; }
+                if (p.WetCount == 0 || !(p.Level - p.Floor >= ObjectField.PoolMinDepthM)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} holds no water"); return; }
+                float x0 = p.NodeX(0), z0 = p.NodeZ(0), x1 = p.NodeX(p.Nx - 1), z1 = p.NodeZ(p.Nz - 1);
+                var near = new List<FeatureEdit>();
+                foreach (var f in edits)
+                    if (f.MaxX >= x0 - s && f.MinX <= x1 + s && f.MaxZ >= z0 - s && f.MinZ <= z1 + s) near.Add(f);
+                var list = new EditArray { Items = near.ToArray() };
+                for (int k = 0; k < p.Wet.Length; k++)
+                {
+                    if (!p.Wet[k]) continue;
+                    float x = p.NodeX(k % p.Nx), z = p.NodeZ(k / p.Nx), head = p.Level + CavePoolHeadM;
+                    if (Walk.Solid(ground, list, s, x, p.Ground[k] - CavePoolSealM, z) < 0) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} drains through its floor at {x:F1},{z:F1}"); return; }
+                    if (Walk.Solid(ground, list, s, x, head, z) >= 0 || !Underground.InChamber(near, x, head, z)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} spills outside its carved chamber at {x:F1},{z:F1}"); return; }
+                }
+            }
         }
 
         public const float CaveNormalDeg = 1.5f;

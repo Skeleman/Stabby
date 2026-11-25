@@ -11,13 +11,19 @@ description: How a Stabby lane agent works a card cheaply - ids, checks, shots a
 2. Keep context small: few large tool calls, grep big files instead of reading
    them whole, no Monitor or poll loops. Run anything over a minute in the
    background and wait for its completion notice.
-3. `bash tools/scripts/check.sh [filter]` before every commit: build, filtered
+3. While iterating, run only the tests you touch with
+   `dotnet test -c Release --filter <Class>` (no lock, no sweeps, no Unity).
+   Run `bash tools/scripts/check.sh [filter]` once before hand-back, and
+   again only after merging main or a review change: build, filtered
    tests, sweeps, Unity compile, LF, comment count. Phases run in parallel
    and the ones your diff cannot affect are skipped; one check runs per
-   machine (others wait on a lock). Add `--no-unity` while iterating. Optionally,
+   machine (others wait on a lock, and every run is logged with its wait
+   in stabby-checks.csv beside the git dir). WIP commits need no check. Optionally,
    before hand-back, `check.sh "" --full` on the merged-up branch records the tree,
    so merge.sh skips its rerun. It finds the user-profile .NET SDK itself (or set DOTNET_HOME).
-4. Shots: capture once on final code, view each at <= 1280 px, once.
+4. Shots: capture once on final code (the project runs D3D11 only; d3d12
+   fence timeouts crashed captures), view each at <= 1280 px, once. Kill a hung or
+   crashed capture editor by its PID.
 5. Commit resumable WIP, push the branch, then hand back with: what changed,
    check.sh summary lines, sweep numbers, GeneratorVersion, shot paths, open
    issues. No narration.

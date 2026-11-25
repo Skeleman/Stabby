@@ -222,6 +222,55 @@ public class CaveTests
     }
 
     [Fact]
+    public void ChamberPoolsSitInTheirCarveAndHallsHoldTheLargest()
+    {
+        int pools = 0, halls = 0;
+        float hall = 0f, chamber = 0f;
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var e = new List<string>();
+            var found = field.CavePools();
+            WorldChecks.CheckCavePools(s.W, s.Detail, s.Edits, found, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
+            foreach (var p in found)
+            {
+                Assert.Equal(ObjectField.CavePool, p.Kind);
+                pools++;
+                bool big = s.Graphs.Any(g => g.Nodes.Any(n => n.Hall && (n.X - p.X) * (n.X - p.X) + (n.Z - p.Z) * (n.Z - p.Z) < 60f * 60f));
+                if (big) { halls++; hall = Math.Max(hall, p.Reach); }
+                else chamber = Math.Max(chamber, p.Reach);
+            }
+            Assert.Equal(found.Length, field.LiquidPools().Count(p => p.Kind == ObjectField.CavePool));
+        }
+        Assert.True(pools >= 2, $"{pools} cave pools over eight worlds");
+        Assert.True(halls > 0 && hall > chamber, $"{halls} hall pools, largest hall pool {hall:F1} m, largest chamber pool {chamber:F1} m");
+    }
+
+    [Fact]
+    public void CavePoolOutsideItsChamberOrLeakingFails()
+    {
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var found = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
+            if (found.Length == 0) continue;
+            var p = found[0];
+            var leak = new LiquidPool { X = p.X, Z = p.Z, Reach = p.Reach, Level = p.Level, Floor = p.Floor, Kind = p.Kind, I0 = p.I0, J0 = p.J0, Nx = p.Nx, Nz = p.Nz, WetCount = p.WetCount, Leaks = true, Ground = p.Ground, Wet = p.Wet };
+            var moved = new LiquidPool { X = p.X, Z = p.Z, Reach = p.Reach, Level = p.Level + 40f, Floor = p.Floor, Kind = p.Kind, I0 = p.I0, J0 = p.J0, Nx = p.Nx, Nz = p.Nz, WetCount = p.WetCount, Ground = p.Ground, Wet = p.Wet };
+            var e = new List<string>();
+            WorldChecks.CheckCavePools(s.W, s.Detail, s.Edits, new[] { leak }, e);
+            Assert.Contains(e, m => m.Contains("leaks out"));
+            e.Clear();
+            WorldChecks.CheckCavePools(s.W, s.Detail, s.Edits, new[] { moved }, e);
+            Assert.Contains(e, m => m.Contains("outside its carved chamber"));
+            return;
+        }
+        throw new Xunit.Sdk.XunitException("no cave pool in eight worlds");
+    }
+
+    [Fact]
     public void CaveObjectsAreCommonAndPass()
     {
         int tiles = 0, drips = 0, mites = 0, rubble = 0, columns = 0, flows = 0;

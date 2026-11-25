@@ -58,6 +58,7 @@ Shader "Stabby/Water"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
             #include "Assets/Viewer/Shaders/Sky.hlsl"
+            #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
             float4 _StabbySky, _StabbyFieldUV;
             float4 _StabbyTintSlot;
@@ -346,8 +347,10 @@ Shader "Stabby/Water"
                 float3 n = normalize(nb + s3d * (0.5 * s1.y + 0.3 * s2.y + 0.2 * s3.y + 0.3 * warp.y) + tb * (0.15 * s1.z + 0.1 * s2.z + 0.2 * warp.z));
                 n = dot(n, v) < 0 ? -n : n;
                 Light l = GetMainLight();
+                float cave = CaveSky(i.positionWS);
+                l.color *= cave;
                 LocalGlint lg = LocalLightsGlint(i.positionWS, n, v, 120, 1, i.positionCS);
-                float3 sky = _StabbySky.rgb;
+                float3 sky = _StabbySky.rgb * cave;
                 float ndv = saturate(dot(n, v));
                 float edge = smoothstep(1, 0.82, abs(i.chan.x) + 0.08 * warp.x);
                 float gap = smoothstep(-0.6, -0.15, s1.x + 0.4 * warp.x + 0.5 * flowQ);
@@ -605,7 +608,9 @@ Shader "Stabby/Water"
                 float3 trans = exp(log(max(shallowC, 0.01)) * (path * L0.w));
 
                 Light l = GetMainLight();
-                float3 sky = _StabbySky.rgb;
+                float cave = CaveSky(i.positionWS);
+                l.color *= cave;
+                float3 sky = _StabbySky.rgb * cave;
                 float dk = 1 - exp(-path * L0.w * 0.3);
                 float3 silt = float3(0.5, 0.44, 0.3) * dot(shallowC, 1.0 / 3);
                 float3 teal = shallowC * lerp(float3(0.26, 0.4, 0.42), 0.7, hot);

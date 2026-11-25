@@ -83,7 +83,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -114,6 +114,8 @@ namespace Stabby.World
                     if (ok)
                     {
                         graph = b.G;
+                        var q = new Rng(pools);
+                        Pools(detail, graph, ref q, output, start);
                         var d = new Rng(drip);
                         var f = new Rng(flow);
                         Speleothems(detail, w.Config.CellMeters, ref d, ref f, output, start);
@@ -506,6 +508,84 @@ namespace Stabby.World
             }
             output.AddRange(made);
         }
+
+        public const int PoolTries = 4, PoolHallMost = 2;
+        public const float PoolChamberChance = 0.6f, PoolHallChance = 1f, PoolChamberMinR = 2.5f, PoolChamberMaxR = 5f, PoolHallMinR = 7f, PoolHallMaxR = 11f;
+        public const float PoolMinDepthM = 0.5f, PoolMaxDepthM = 1f, PoolDipM = 0.06f, PoolTopM = 1f, PoolBank = 1.5f, PoolRound = 0.3f, PoolFlatM = 0.6f, PoolSealM = 1f, PoolKeepM = 2f;
+
+        public static float PoolReach(float r, float level, float top) => r + PoolBank * (top - PoolRound - level) + PoolRound;
+
+        static void Pools(TerrainDetail detail, CaveGraph g, ref Rng r, List<FeatureEdit> output, int start)
+        {
+            var ground = new DetailGround { Detail = detail };
+            var rock = new EditArray { Items = output.GetRange(start, output.Count - start).ToArray() };
+            float s = Features.LatticeStepM;
+            var rooms = new List<FeatureEdit>();
+            var made = new List<FeatureEdit>();
+            foreach (var n in g.Nodes)
+            {
+                float roll = r.NextFloat();
+                ulong tries = r.NextU64();
+                if (n.Entrance || roll >= (n.Hall ? PoolHallChance : PoolChamberChance)) continue;
+                rooms.Clear();
+                for (int q = start; q < output.Count; q++)
+                    if (output[q].Shape == FeatureEdit.CaveRoom && Same(output[q].Ax, output[q].Az, n.X, n.Z)) rooms.Add(output[q]);
+                if (rooms.Count == 0) continue;
+                var t = new Rng(tries);
+                int placed = 0, most = n.Hall ? PoolHallMost : 1;
+                for (int k = 0; k < PoolTries && placed < most; k++)
+                {
+                    float size = t.NextFloat(), depth = t.Range(PoolMinDepthM, PoolMaxDepthM), along = t.Range(0.3f, 0.85f), side = t.Range(-1f, 1f), seed = t.NextFloat();
+                    var c = rooms[t.Range(0, rooms.Count)];
+                    float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                    if (len < 1f) continue;
+                    float rp = n.Hall ? PoolHallMinR + (PoolHallMaxR - PoolHallMinR) * size : PoolChamberMinR + (PoolChamberMaxR - PoolChamberMinR) * size;
+                    float floor = c.Ay - c.HoleR, level = floor - PoolDipM, top = floor + PoolTopM, reach = PoolReach(rp, level, top);
+                    float lateral = Math.Max(0f, 0.5f * c.FloorHalf - reach) * side;
+                    float x = c.Ax + ex * along - ez / len * lateral, z = c.Az + ez * along + ex / len * lateral;
+                    var e = ObjectField.Disc(FeatureEdit.Carve, x, z, top, level - depth, reach - PoolRound, PoolRound, -PoolBank, 0f, 0f, seed, 0f, 0f).Finer();
+                    if (Seated(ground, rock, s, e, floor, reach, level - depth, output, start, made)) { made.Add(e); placed++; }
+                }
+            }
+            output.AddRange(made);
+        }
+
+        static bool Seated(DetailGround ground, EditArray rock, float s, FeatureEdit e, float floor, float reach, float bottom, List<FeatureEdit> output, int start, List<FeatureEdit> made)
+        {
+            float keep = PoolKeepM;
+            for (int q = start; q < output.Count; q++)
+            {
+                var o = output[q];
+                if (o.Shape == FeatureEdit.Bridge && Plan(o, e.Ax, e.Az) < reach + o.R + BridgeKeepM) return false;
+            }
+            foreach (var o in made)
+                if (o.MaxX >= e.MinX - keep && o.MinX <= e.MaxX + keep && o.MaxZ >= e.MinZ - keep && o.MinZ <= e.MaxZ + keep) return false;
+            float top = floor + PoolTopM;
+            for (int p = -1; p < 8; p++)
+            {
+                float ux = 0f, uz = 0f;
+                if (p >= 0) ObjectField.FanDir(p, 0.70710678f, out ux, out uz);
+                for (int ring = 0; ring < 2; ring++)
+                {
+                    float rr = ring == 0 ? reach + PoolSealM : e.W, x = e.Ax + ux * rr, z = e.Az + uz * rr;
+                    if (Walk.Solid(ground, rock, s, x, bottom - PoolSealM, z) < 0) return false;
+                    if (ring == 1) continue;
+                    if (Walk.Solid(ground, rock, s, x, top, z) >= 0) return false;
+                    float g = Walk.Surface(ground, rock, s, x, z, top, bottom - PoolSealM);
+                    if (g < floor - 0.5f * PoolDipM || g > floor + PoolFlatM) return false;
+                }
+            }
+            return true;
+        }
+
+        public static bool InChamber(IList<FeatureEdit> near, float x, float y, float z)
+        {
+            foreach (var c in near)
+                if (c.Kind == FeatureEdit.Carve && c.Shape == FeatureEdit.CaveRoom && c.Reach(x, y, z, out float dist) && c.Hole(dist) < 0f) return true;
+            return false;
+        }
+
+        public static bool PoolBasin(IList<FeatureEdit> rooms, FeatureEdit e) => e.Kind == FeatureEdit.Carve && e.Shape == FeatureEdit.Spring && e.F == 0f && e.R == PoolRound && e.T == -PoolBank && InChamber(rooms, e.Ax, e.Ay + e.H + e.R, e.Az);
 
         static bool Drop(FeatureEdit e, List<FeatureEdit> made, List<FeatureEdit> output, DetailGround ground, EditArray rock, float s, float cm, int start, int end)
         {
