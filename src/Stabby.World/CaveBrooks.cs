@@ -22,7 +22,7 @@ namespace Stabby.World
         const int Raw = 5, Shrinks = 3;
         const float SecondsPerYear = 31557600f;
 
-        public const float SinkHoleM = 0.5f, SinkOffM = 1.45f, SinkClearM = Underground.ClearSide + SinkHoleM + 0.15f, SinkTopM = 0.15f, SinkLeanM = 1f, SinkDeepM = 3f, SinkLumps = 0.08f, SinkProbeM = 0.5f;
+        public const float SinkHoleM = 0.75f, SinkOffM = 1.7f, SinkNarrow = 0.6f, SinkClearM = Underground.ClearSide + SinkHoleM + 0.15f, SinkTopM = 0.15f, SinkLeanM = 1f, SinkDeepM = 3f, SinkLumps = 0.08f, SinkProbeM = 0.5f;
 
         public static CaveBrook[] Build(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
         {
@@ -229,7 +229,7 @@ namespace Stabby.World
                 for (int t = 1; t <= steps; t++)
                 {
                     float f = (float)t / steps;
-                    Row(pts, x0 + (hx - x0) * f, n.Y + DepthM, z0 + (hz - z0) * f, half, room, ref surface);
+                    Row(pts, x0 + (hx - x0) * f, n.Y + DepthM, z0 + (hz - z0) * f, half + (Math.Min(half, SinkNarrow * SinkHoleM) - half) * f, room, ref surface);
                 }
                 return true;
             }
