@@ -19,6 +19,7 @@ Shader "Stabby/GrassBlade"
             #include "Assets/Game/Grass/Wind.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
+            #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
             struct Blade { float4 p0; uint4 q; };
             StructuredBuffer<Blade> _Blades;
@@ -76,13 +77,14 @@ Shader "Stabby/GrassBlade"
             {
                 float3 n = normalize(i.normalWS);
                 Light l = GetMainLight(TransformWorldToShadowCoord(i.positionWS), i.positionWS, half4(1, 1, 1, 1));
-                l.color *= l.shadowAttenuation;
+                float sky = CaveSky(i.positionWS);
+                l.color *= l.shadowAttenuation * sky;
                 float3 v = normalize(_WorldSpaceCameraPos - i.positionWS);
-                float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
+                float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5) * sky;
                 float back = _GrassLook.z * saturate(dot(-l.direction, v)) * i.look.x * i.look.z;
                 float occ = 1 - i.color.a * (1 - smoothstep(0, 0.5, i.look.x));
                 float3 c = (LookColor(lerp(i.color.rgb, i.tint.rgb * (1 + 0.08 * l.shadowAttenuation), saturate(i.tint.a * lerp(0.3, 1.2, l.shadowAttenuation))), 1) * (l.color * (saturate(dot(n, l.direction)) + back) + ambient + LocalLights(i.positionWS, n, i.positionCS)) * occ + LookSheen(n, v, l.direction, l.color, LookRough())) * i.look.y;
-                return half4(MixFog(c, i.look.w), 1);
+                return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.look.w), 1);
             }
             ENDHLSL
         }

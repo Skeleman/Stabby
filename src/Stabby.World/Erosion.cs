@@ -51,6 +51,13 @@ namespace Stabby.World
             return h;
         }
 
+        public static void DeepenNearShore(WorldConfig c, bool[] sea, float[] h)
+        {
+            var offshore = WorldSketch.CoastDistance(c.Size, sea);
+            for (int i = 0; i < h.Length; i++)
+                if (sea[i]) h[i] -= c.NearShoreDepth * (1 - (float)FMath.Exp(-offshore[i] * c.CellMeters / c.NearShoreMeters));
+        }
+
         static float BeachCap(WorldConfig c, float metersInland) => MinLandHeight + c.BeachGrade * metersInland;
 
         static float Seabed(WorldConfig c, WorldSketch s, uint seed, int x, int y, float d, float cliff, float beach)
