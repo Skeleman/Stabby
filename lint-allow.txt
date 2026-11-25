@@ -4,13 +4,11 @@ ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks once per 
 ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
 ClientViewSystem.ToEntityArray copies only player ghosts that still lack a mesh; the query is empty on almost every frame
 TerrainViewSystem applies Mesh objects and registers them with Entities Graphics
-TerrainViewSystem.Complete only after IsCompleted, or at teardown; debt: b/sync-points
 BlobBake.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem converts each chunk's managed placement to native instances once, in a task; region bakes, including re-entry, are Burst jobs
 ObjectColumnsSystem.Complete only after IsCompleted, or at teardown
-ObjectViewSystem.Complete only after IsCompleted, at teardown, or before Hide edits the spawned set the tile scan reads
 ObjectViewSystem debt: streams object tiles from the managed ObjectField as the camera moves; registering their meshes with Entities Graphics is the engine part
 GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera
 ServerObjectDeltaSystem converts each chunk's interactive objects to native reach tables once, checks removals in a Burst job, and keeps only RPC and status strings managed
@@ -22,8 +20,8 @@ CreatureBuildSystem.ToEntityArray copies only pending arrivals, when that query 
 CreatureBuildSystem.ToComponentDataArray reads states of pending arrivals and rigs of vanished ghosts only, when those queries are non-empty
 CreaturePrefabSystem GhostPrefabCreation is managed and runs once
 CreaturePlanSystem plans herds from the managed map in a task and converts the plan to a blob once
-CreatureDrawSystem uploads instance buffers and issues indirect draws on managed GraphicsBuffers
-CreatureDrawSystem.Complete only after IsCompleted, or at teardown; debt: b/sync-points
+CreatureDrawSystem locks managed GraphicsBuffers for a Burst pack job and issues indirect draws
+DrawSubmitSystem unlocks the GraphicsBuffers that creature jobs filled and submits their draws last in presentation
 PlayerControls.Read clamps the unitless input vector to length 1, not a distance
 ShadowViewSystem sets the managed URP asset's shadow range and cascades
 DayNightSystem loads managed sky content in a task and steps the UnityEngine Light, Camera, fog and shader globals
@@ -60,3 +58,4 @@ PlayerMoveSystem.Query debt: b/sim-jobs; steps every predicted player on the mai
 ClientInputSystem.Query the one local player's input from UnityEngine.Input
 ClientViewSystem.Query player positions for the managed chase camera
 LightBudgetSystem.Complete only after IsCompleted, or at teardown
+JobPoll.Complete Done completes a handle only after IsCompleted; Teardown is for OnDestroy, before releasing what the job wrote
