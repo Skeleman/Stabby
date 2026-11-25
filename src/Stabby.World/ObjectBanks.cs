@@ -67,7 +67,7 @@ namespace Stabby.World
             }
         }
 
-        void PlaceBank(int d, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, List<ObjectInstance> near, List<ObjectInstance> list)
+        void PlaceBank(int d, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, SiteIndex near, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
@@ -94,7 +94,7 @@ namespace Stabby.World
             if (site == BankSites.Reed) LakeReeds(d, pl, chunk, x0, z0, sx, sz, ref ordinal, near, list);
         }
 
-        void Members(int d, int site, ObjectPlacement pl, ref Rng rng, float ax, float az, float fx, float fz, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> near, List<ObjectInstance> list)
+        void Members(int d, int site, ObjectPlacement pl, ref Rng rng, float ax, float az, float fx, float fz, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, SiteIndex near, List<ObjectInstance> list)
         {
             for (int m = 0; m < pl.ClusterCount; m++)
             {
@@ -162,7 +162,7 @@ namespace Stabby.World
             return found;
         }
 
-        void LakeReeds(int d, ObjectPlacement pl, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> near, List<ObjectInstance> list)
+        void LakeReeds(int d, ObjectPlacement pl, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, SiteIndex near, List<ObjectInstance> list)
         {
             int gx0 = Math.Max(0, (int)Math.Floor(x0 / cm)), gx1 = Math.Min(n - 1, (int)Math.Ceiling((x0 + sx) / cm));
             int gz0 = Math.Max(0, (int)Math.Floor(z0 / cm)), gz1 = Math.Min(n - 1, (int)Math.Ceiling((z0 + sz) / cm));

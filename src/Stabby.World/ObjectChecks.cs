@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -7,75 +8,103 @@ namespace Stabby.World
     {
         public const int ObjectCheckChunks = 4;
 
-        static void CheckObjects(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckObjects(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
+        {
+            var edits = grid.Edits;
+            int across = field.ChunksAcross;
+            float span = WorldChunks.Size * w.Config.CellMeters;
+            List<float[]> segs = null;
+            List<int>[] bed = null;
+            float[] bogs = null;
+            Parallel.Invoke(() => bed = RiverBedCells(w, out segs), () => bogs = field.BogPools());
+            var picked = ObjectChunks(w, edits, bogs, across, span);
+            if (picked.Count == 0) return;
+            var placed = new ObjectInstance[picked.Count][];
+            Parallel.For(0, picked.Count, k => placed[k] = field.Chunk(picked[k] % across, picked[k] / across));
+            int c0 = picked[0], cx0 = c0 % across, cz0 = c0 / across;
+            var a0 = placed[0];
+            var fresh = new string[3];
+            Parallel.Invoke(
+                () => { if (!SameObjects(a0, new ObjectField(w, detail, edits, w.Objects).Place(cx0, cz0))) fresh[0] = $"objects in chunk {cx0},{cz0} differ between runs"; },
+                () => { if (!SolidIdsMatch(a0, field.Fresh().Place(cx0, cz0, true))) fresh[1] = $"object ids in chunk {cx0},{cz0} change when only solid objects are placed"; },
+                () => { string fault = RegionFault(field, field.Fresh(), a0, c0); if (fault != null) fresh[2] = $"collision region {cx0},{cz0} {fault}"; });
+            foreach (var f in fresh) if (f != null) { e.Add(f); return; }
+            var found = new List<KeyValuePair<int, string>>[picked.Count];
+            Parallel.For(0, picked.Count, k => found[k] = ObjectFaults(w, detail, grid, field, bed, segs, bogs, picked[k], placed[k]));
+            var seen = new HashSet<int>();
+            foreach (var list in found)
+                foreach (var f in list)
+                    if (f.Key < 0 || seen.Add(f.Key)) e.Add(f.Value);
+        }
+
+        static List<KeyValuePair<int, string>> ObjectFaults(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<int>[] bed, List<float[]> segs, float[] bogs, int c, ObjectInstance[] a)
         {
             var edits = grid.Edits;
             var ids = new List<int>();
-            var field = new ObjectField(w, detail, edits, w.Objects);
-            int n = w.Config.Size, across = field.ChunksAcross;
+            int n = w.Config.Size, across = field.ChunksAcross, cx = c % across, cz = c / across;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm;
-            var bed = RiverBedCells(w, out var segs);
-            bool first = true;
-            var seen = new HashSet<int>();
-            void Fail(int kind, string message) { if (seen.Add(kind)) e.Add(message); }
+            var found = new List<KeyValuePair<int, string>>();
+            var seen = new bool[12];
+            var idFaults = new List<string>();
+            CheckObjectIds(a, c, idFaults);
+            foreach (var m in idFaults) found.Add(new KeyValuePair<int, string>(-1, m));
             var contacts = new List<ObjectColumn>();
-            var bogs = field.BogPools();
-            foreach (int c in ObjectChunks(w, edits, bogs, across, span))
+            foreach (var o in a)
             {
-                int cx = c % across, cz = c / across;
-                var a = field.Chunk(cx, cz);
-                if (first && !SameObjects(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz))) { e.Add($"objects in chunk {cx},{cz} differ between runs"); return; }
-                if (first && !SolidIdsMatch(a, new ObjectField(w, detail, edits, w.Objects).Place(cx, cz, true))) { e.Add($"object ids in chunk {cx},{cz} change when only solid objects are placed"); return; }
-                if (first) { string fault = RegionFault(field, new ObjectField(w, detail, edits, w.Objects), a, c); if (fault != null) { e.Add($"collision region {cx},{cz} {fault}"); return; } }
-                first = false;
-                CheckObjectIds(a, c, e);
-                foreach (var o in a)
+                var def = w.Objects.Objects[o.Def];
+                float r = field.Footprint(o.Def) * o.Size;
+                string At() => $"{def.Id} at {o.X:F0},{o.Z:F0}";
+                void Fail(int kind, string message) { seen[kind] = true; found.Add(new KeyValuePair<int, string>(kind, At() + message)); }
+                if (!seen[0] && (o.X < cx * span || o.X >= (cx + 1) * span || o.Z < cz * span || o.Z >= (cz + 1) * span)) Fail(0, " lies outside its chunk");
+                int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
+                float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
+                if (!ObjectField.IsCave(def))
                 {
-                    var def = w.Objects.Objects[o.Def];
-                    float r = field.Footprint(o.Def) * o.Size;
-                    string at = $"{def.Id} at {o.X:F0},{o.Z:F0}";
-                    if (o.X < cx * span || o.X >= (cx + 1) * span || o.Z < cz * span || o.Z >= (cz + 1) * span) Fail(0, at + " lies outside its chunk");
-                    if (!ObjectField.IsCave(def))
+                    if (!seen[1] && w.Sea[i]) Fail(1, " stands in the sea");
+                    int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
+                    if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
+                    if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
+                    if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
+                    if (!seen[4])
                     {
-                        int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
-                        float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
-                        if (w.Sea[i]) Fail(1, at + " stands in the sea");
-                        int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
-                        if (site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, at + $" stands in lake {lake}");
-                        if (site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, at + " lies on a river bed");
-                        if (site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, at + " is off its river or lake bank");
                         grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                         if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
-                        if (ids.Count > 0) Fail(4, at + " sits inside a feature edit");
-                        for (int k = 0; k < bogs.Length; k += ObjectField.BogStride)
-                        {
-                            float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
-                            if (bx * bx + bz * bz < reach * reach) Fail(11, at + $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
+                        if (ids.Count > 0) Fail(4, " sits inside a feature edit");
                     }
-                    if (o.Y > ground + 0.05f || o.Y < ground - o.Size) Fail(5, at + $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
-                    float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
-                    float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
-                    if (slope < def.Placement.SlopeMin - 1e-3f || slope > def.Placement.SlopeMax + 1e-3f) Fail(8, at + $" stands on slope {slope:F2} outside {def.Placement.SlopeMin:F2}-{def.Placement.SlopeMax:F2}");
-                    string seat = SeatFault(w, detail, o);
-                    if (seat != null) Fail(7, at + seat);
-                    var biomes = def.Placement.Biomes;
-                    if (biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, at + " is outside its biomes");
-                    }
-                    for (int pi = 0; pi < def.Parts.Count; pi++)
+                    for (int k = 0; k < bogs.Length && !seen[11]; k += ObjectField.BogStride)
                     {
-                        contacts.Clear();
-                        field.PartContactsOf(o, pi, contacts);
-                        if (!contacts.Exists(c => ObjectField.Stamps(w.Objects, o, c))) Fail(10, at + $" part {def.Parts[pi].Id} leaves no contact stamp");
+                        float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
+                        if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
                     }
+                    if (!seen[5] && (o.Y > ground + 0.05f || o.Y < ground - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
+                    if (!seen[8])
+                    {
+                        float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
+                        float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
+                        if (slope < def.Placement.SlopeMin - 1e-3f || slope > def.Placement.SlopeMax + 1e-3f) Fail(8, $" stands on slope {slope:F2} outside {def.Placement.SlopeMin:F2}-{def.Placement.SlopeMax:F2}");
+                    }
+                    if (!seen[7])
+                    {
+                        string seat = SeatFault(w, detail, o);
+                        if (seat != null) Fail(7, seat);
+                    }
+                    var biomes = def.Placement.Biomes;
+                    if (!seen[6] && biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, " is outside its biomes");
+                }
+                for (int pi = 0; pi < def.Parts.Count && !seen[10]; pi++)
+                {
+                    contacts.Clear();
+                    field.PartContactsOf(o, pi, contacts);
+                    if (!contacts.Exists(q => ObjectField.Stamps(w.Objects, o, q))) Fail(10, $" part {def.Parts[pi].Id} leaves no contact stamp");
                 }
             }
+            return found;
         }
 
         public const int SiteCheckLimit = 6;
 
-        static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
-            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             int across = field.ChunksAcross, checkedSites = 0;
             float span = field.ChunkMeters;
             var columns = new List<ObjectColumn>();
@@ -142,9 +171,8 @@ namespace Stabby.World
             return null;
         }
 
-        static void CheckStructures(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        static void CheckStructures(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
-            var field = new ObjectField(w, detail, grid.Edits, w.Objects);
             int across = field.ChunksAcross, found = 0;
             for (int c = 0; c < across * across && found < StructureSweep; c++)
                 foreach (var o in field.Place(c % across, c / across, true))

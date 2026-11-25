@@ -54,6 +54,14 @@ namespace Stabby.Game.Editor
             Shader.SetGlobalFloat("_StabbyCaveDarkOff", 0f);
         }
 
+        static void UndimmedShot(Camera cam, string dir, string name, float ev)
+        {
+            var min = Shader.GetGlobalVector("_StabbyCaveDarkMin");
+            Shader.SetGlobalVector("_StabbyCaveDarkMin", new Vector4(min.x, min.y, min.z, 0));
+            ExposedShot(cam, dir, name, ev);
+            Shader.SetGlobalVector("_StabbyCaveDarkMin", min);
+        }
+
         static void ExposedShot(Camera cam, string dir, string name, float ev)
         {
             GameStatus.ToolFrame = Time.frameCount;
@@ -117,6 +125,10 @@ namespace Stabby.Game.Editor
             lines.Add($"caves: {graphs.Length} graphs ({string.Join(", ", graphs.GroupBy(g => g.Class).Select(g => g.Key + " " + g.Count()))}) placed in {placeMs} ms after a {genMs} ms full regeneration, both in a task, GV {WorldConfig.GeneratorVersion}");
             var hall = Nearest(graphs, "hall");
             var lab = Nearest(graphs, "labyrinth");
+            int room = -1;
+            if (hall == null)
+                for (int q = 0; q < edits.Length; q++)
+                    if (edits[q].Shape == FeatureEdit.CaveRoom && (room < 0 || edits[q].R > edits[room].R)) room = q;
             if (lab == null) { GameStatus.Lines["~caves"] = GameStatus.Failure = lines[0] + "; no labyrinth in this world"; yield break; }
             cam.fieldOfView = 60f;
             for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
@@ -177,37 +189,58 @@ namespace Stabby.Game.Editor
                 GeometryShot(cam, dir, "caves-deep-tunnel-debug-unlit");
             }
             else lines.Add("deep tunnel: no labyrinth tunnel reachable from a mouth");
+            if (hall == null && room < 0) { lines.Add("hall: no hall or chamber in this world, hall shots skipped"); GameStatus.Lines["~caves"] = string.Join("\n", lines); yield break; }
 
-            if (hall == null) lines.Add("hall: none in this world");
-            else
+            Vector3 hc, toward;
+            float rh = 0f;
+            var bridge = Vector3.zero;
+            int bridges = 0;
+            if (hall != null)
             {
                 var hn = hall.Nodes.Find(n => n.Hall);
-                var hc = new Vector3(hn.X, hn.Y, hn.Z);
-                float rh = 0f;
-                var bridge = Vector3.zero;
-                int bridges = 0;
+                hc = new Vector3(hn.X, hn.Y, hn.Z);
                 foreach (var e in edits)
                 {
                     if (Features.TileOf(e, map.Config.CellMeters) != hall.Tile) continue;
                     if (e.Shape == FeatureEdit.CaveRoom && new Vector2(e.Ax - hc.x, e.Az - hc.z).magnitude < 4f) rh = Mathf.Max(rh, e.R);
                     if (e.Shape == FeatureEdit.Bridge && bridges++ == 0) bridge = new Vector3((e.Ax + e.Bx) * 0.5f, (e.Ay + e.By) * 0.5f, (e.Az + e.Bz) * 0.5f);
                 }
-                var toward = bridges > 0 ? new Vector3(bridge.x - hc.x, 0, bridge.z - hc.z).normalized : Vector3.forward;
-                float fx = hc.x - toward.x * rh * 0.3f, fy = hc.y, fz = hc.z - toward.z * rh * 0.3f;
-                Walk.Step(ground, ground.EditsNear(fx, fz, Walk.Radius), cols, ground.WalkStep, ref fx, ref fy, ref fz, 0, 0, Walk.Reach);
-                eye = new Vector3(fx, fy + 1.7f, fz);
-                var look = bridges > 0 ? bridge : hc + toward * rh;
-                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
-                waited = LoadWaitTotal();
-                for (var w = Settle(120); w.MoveNext();) yield return null;
-                lines.Add($"hall {hall.Nodes.Count(n => n.Entrance)} entrances, {bridges} rock bridges, hollow R {rh * Features.CaveHollow:F0} m, centre {hc.x:F0},{hc.y:F0},{hc.z:F0}, floor at eye {fy:F1}: stream wait {LoadWaitTotal() - waited:F2} s");
-                Shot(cam, null, "warmup");
-                Shot(cam, dir, "caves-hall");
-                ExposedShot(cam, dir, "caves-hall-debug-exposure", CaveDebugExposure);
-                GeometryShot(cam, dir, "caves-hall-debug-unlit");
+                toward = bridges > 0 ? new Vector3(bridge.x - hc.x, 0, bridge.z - hc.z).normalized : Vector3.forward;
             }
+            else
+            {
+                var re = edits[room];
+                rh = re.R;
+                hc = new Vector3(re.Ax, re.Ay - re.R * Features.CaveHollow, re.Az);
+                toward = new Vector3(re.Bx - re.Ax, 0, re.Bz - re.Az).normalized;
+                hall = graphs.FirstOrDefault(g => g.Tile == Features.TileOf(re, map.Config.CellMeters)) ?? lab;
+            }
+            string what = room < 0 ? "hall" : "largest chamber (no hall in this world)";
+            string shotName = room < 0 ? "caves-hall" : "caves-chamber";
+            float fx = hc.x - toward.x * rh * 0.3f, fy = hc.y, fz = hc.z - toward.z * rh * 0.3f;
+            Walk.Step(ground, ground.EditsNear(fx, fz, Walk.Radius), cols, ground.WalkStep, ref fx, ref fy, ref fz, 0, 0, Walk.Reach);
+            eye = new Vector3(fx, fy + 1.7f, fz);
+            var look = bridges > 0 ? bridge : hc + toward * rh;
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+            waited = LoadWaitTotal();
+            for (var w = Settle(120); w.MoveNext();) yield return null;
+            lines.Add($"{what}: {hall.Class} graph, {hall.Nodes.Count(n => n.Entrance)} entrances, {bridges} rock bridges, room R {rh:F0} m, hollow R {rh * Features.CaveHollow:F0} m, centre {hc.x:F0},{hc.y:F0},{hc.z:F0}, floor at eye {fy:F1}: stream wait {LoadWaitTotal() - waited:F2} s");
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, shotName);
+            ExposedShot(cam, dir, shotName + "-debug-exposure", CaveDebugExposure);
+            GeometryShot(cam, dir, shotName + "-debug-unlit");
+            var probe = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Object.DestroyImmediate(probe.GetComponent<Collider>());
+            var probeMat = new Material(Shader.Find("Stabby/Object"));
+            probe.GetComponent<MeshRenderer>().sharedMaterial = probeMat;
+            probe.transform.position = eye + (look - eye).normalized * 4f - Vector3.up * 0.5f;
+            probe.transform.localScale = Vector3.one * 1.5f;
+            ExposedShot(cam, dir, shotName + "-debug-probe", CaveDebugExposure);
+            UndimmedShot(cam, dir, shotName + "-debug-probe-undimmed", CaveDebugExposure);
+            Object.DestroyImmediate(probe);
+            Object.DestroyImmediate(probeMat);
             var sky = DayNightSystem.Shown;
-            lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
+            lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; the debug-probe pair adds a 1.5 m Stabby/Object sphere 4 m ahead in the hall or chamber, dimmed by the cave volume and then undimmed; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
             GameStatus.Lines["~caves"] = string.Join("\n", lines);
         }
 

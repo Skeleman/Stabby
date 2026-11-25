@@ -41,6 +41,16 @@ namespace Stabby.Game
         public float Length, Rear, Stand, Stride, RunStride, Fore, Hind, Track;
     }
 
+    public struct CreatureRetier : IComponentData, IEnableableComponent
+    {
+    }
+
+    public static class CreatureTier
+    {
+        public static bool NeedHigh(float px, float low, bool built) => px >= (built ? 0.7f : 0.85f) * low;
+        public static bool NeedLow(float px, float low, bool built) => px <= (built ? 1.9f : 1.7f) * low;
+    }
+
     public struct CreatureRoot : IComponentData
     {
         public BlobAssetReference<CreatureRig> Rig;
@@ -49,7 +59,7 @@ namespace Stabby.Game
         public Entity Ghost;
         public float3 Position;
         public float Heading, Pitch, Move, Alert, Down, WalkSpeed, Phase, Clock, Sink, Wake;
-        public bool Visible, Shadow, HighOn, LowOn;
+        public bool Visible, Shadow, HighOn, LowOn, WantHigh, WantLow;
         public Detail.Decision Decision;
         public float4 Fade;
     }
@@ -189,8 +199,15 @@ namespace Stabby.Game
 
     public struct CreatureGpu
     {
-        public float4 R0, R1, R2, Fade;
+        public float3x4 Bone;
+        public float4 Fade;
         public int Fur, Group, Pad0, Pad1;
+    }
+
+    public struct CreaturePart
+    {
+        public float4 Fade;
+        public int Bone, Fur, Group, Pad;
     }
 
     public struct CreatureFrustum

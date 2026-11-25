@@ -81,7 +81,7 @@ namespace Stabby.Game
 
     struct TerrainNode
     {
-        public int Built, Pending, Drawn, Stitch, Vertices, Cast, Tier;
+        public int Built, Pending, Drawn, Stitch, StitchSeen, Vertices, Cast, Tier;
         public float MorphEnd;
         public Entity Entity, Caster;
         public BatchMeshID Mesh;
@@ -210,6 +210,61 @@ namespace Stabby.Game
         public float Height(int i, int k) => At(i * StepM, k * StepM);
     }
 
+    struct RowEdits : IEditList
+    {
+        [ReadOnly] public NativeArray<FeatureEdit> Items;
+        public int Count => Items.Length;
+        public FeatureEdit At(int k) => Items[k];
+    }
+
+    struct ReadColumns : IColumnField
+    {
+        public GroundColumns Columns;
+        [ReadOnly] public NativeArray<float> Cells;
+        public int I0, K0, W;
+
+        public void Fill(NativeArray<float> cells)
+        {
+            for (int v = 0; v < W; v++)
+                for (int u = 0; u < W; u++) cells[v * W + u] = Columns.Height(I0 + u, K0 + v);
+        }
+
+        public float At(float x, float z) => Columns.At(x, z);
+
+        public float Height(int i, int k)
+        {
+            int u = i - I0, v = k - K0;
+            if ((uint)u >= (uint)W || (uint)v >= (uint)W) return Columns.Height(i, k);
+            return Cells[v * W + u];
+        }
+    }
+
+    struct RowSink : INetsSink
+    {
+        [ReadOnly] public NativeArray<int> Ints;
+        [ReadOnly] public NativeArray<float> Floats;
+        [NativeDisableParallelForRestriction] public NativeArray<TerrainVertex> Verts;
+        public UnsafeList<int> Tris;
+        public int Cursor;
+
+        public void Begin(int ints, int floats) { }
+        public int GetInt(int k) => Ints[k];
+        public void SetInt(int k, int v) { }
+        public float GetFloat(int k) => Floats[k];
+        public void SetFloat(int k, float v) { }
+
+        public int AddVertex(float x, float y, float z, float nx, float ny, float nz)
+        {
+            Verts[Cursor] = new TerrainVertex { Pos = new float3(x, y, z), Normal = new float3(nx, ny, nz) };
+            return Cursor++;
+        }
+
+        public void AddTriangle(int a, int b, int c)
+        {
+            Tris.Add(a); Tris.Add(b); Tris.Add(c);
+        }
+    }
+
     struct CachedColumns : IColumnField
     {
         public GroundColumns Columns;
@@ -250,8 +305,6 @@ namespace Stabby.Game
         {
             Verts.Clear();
             Tris.Clear();
-            Ints = new NativeArray<int>(ints, Allocator.Temp);
-            Floats = new NativeArray<float>(floats, Allocator.Temp);
         }
 
         public int GetInt(int k) => Ints[k];
@@ -271,13 +324,160 @@ namespace Stabby.Game
         }
     }
 
+    struct TerrainChunk
+    {
+        public Ground Ground;
+        public int Ix, Iz, Level;
+        public bool Smooth, Fine;
+
+        public int Cells => Fine ? 2 * TerrainTree.Quads : TerrainTree.Quads;
+        public float StepM => Fine ? TerrainTree.FineStep : TerrainTree.Step(Level);
+        public NetsChunk Nets => new NetsChunk { X0 = Ix * Cells, Z0 = Iz * Cells, Cells = Cells, StepM = StepM };
+        public int Window => Cells + 6;
+        public GroundColumns Columns => new GroundColumns { Ground = Ground, StepM = StepM, Top = Ground.Blob.Value.Top, Smooth = Smooth };
+        public ReadColumns Read(NativeArray<float> cells) => new ReadColumns { Columns = Columns, Cells = cells, I0 = Ix * Cells - 3, K0 = Iz * Cells - 3, W = Window };
+    }
+
+    struct TerrainBuild
+    {
+        public NativeList<FeatureEdit> Edits;
+        public NativeList<float2> Light;
+        public NativeArray<float> Cells, Floats;
+        public NativeArray<int> Ints;
+        public NativeList<int> Slabs;
+        public NativeArray<UnsafeList<int>> Rows;
+
+        public static int MaxCells => 2 * TerrainTree.Quads;
+
+        public static TerrainBuild Make()
+        {
+            int m = MaxCells, w = m + 1, window = m + 6;
+            var nets = new NetsChunk { Cells = m };
+            var b = new TerrainBuild
+            {
+                Edits = new NativeList<FeatureEdit>(16, Allocator.Persistent),
+                Light = new NativeList<float2>(16, Allocator.Persistent),
+                Cells = new NativeArray<float>(window * window, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
+                Floats = new NativeArray<float>(SurfaceNets.LayoutFloats(nets), Allocator.Persistent),
+                Ints = new NativeArray<int>(SurfaceNets.LayoutInts(nets), Allocator.Persistent),
+                Slabs = new NativeList<int>(w, Allocator.Persistent),
+                Rows = new NativeArray<UnsafeList<int>>(w, Allocator.Persistent),
+            };
+            for (int p = 0; p < w; p++) b.Rows[p] = new UnsafeList<int>(TerrainTree.Indices / w, Allocator.Persistent);
+            return b;
+        }
+
+        public static JobHandle Schedule(TerrainChunk c, BlobAssetReference<TerrainLookData> look, int rows, TerrainBuild b, NativeList<TerrainVertex> verts, NativeList<int> tris, NativeArray<float3> bounds, JobHandle after = default)
+        {
+            var layout = new TerrainLayoutJob { Chunk = c, Rows = rows, Edits = b.Edits, Light = b.Light, Cells = b.Cells, Ints = b.Ints, Floats = b.Floats, Slabs = b.Slabs, Verts = verts, Tris = tris }.Schedule(after);
+            var slabs = new TerrainRowsJob
+            {
+                Columns = c.Read(b.Cells), Edits = new RowEdits { Items = b.Edits.AsDeferredJobArray() }, Chunk = c.Nets, Rows = rows,
+                Ints = b.Ints, Floats = b.Floats, Verts = verts.AsDeferredJobArray(), Tris = b.Rows, Slabs = b.Slabs.AsDeferredJobArray(),
+            }.Schedule(b.Slabs, 1, layout);
+            return new TerrainMeshJob { Chunk = c, Look = look, Edits = b.Edits, Light = b.Light, Ints = b.Ints, Slabs = b.Slabs, Rows = b.Rows, Verts = verts, Tris = tris, Bounds = bounds }.Schedule(slabs);
+        }
+
+        public int RowCapacity
+        {
+            get
+            {
+                int n = 0;
+                for (int p = 0; p < Rows.Length; p++) n += Rows[p].Capacity;
+                return n;
+            }
+        }
+
+        public long Bytes => Cells.Length * 4L + Floats.Length * 4L + Ints.Length * 4L + Slabs.Capacity * 4L + Rows.Length * (long)UnsafeUtility.SizeOf<UnsafeList<int>>()
+            + RowCapacity * 4L + Edits.Capacity * (long)UnsafeUtility.SizeOf<FeatureEdit>() + Light.Capacity * 8L;
+
+        public int Allocs => 7 + Rows.Length;
+
+        public void Dispose()
+        {
+            for (int p = 0; p < Rows.Length; p++) Rows[p].Dispose();
+            Rows.Dispose();
+            Edits.Dispose();
+            Light.Dispose();
+            Cells.Dispose();
+            Floats.Dispose();
+            Ints.Dispose();
+            Slabs.Dispose();
+        }
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainLayoutJob : IJob
+    {
+        public TerrainChunk Chunk;
+        public int Rows;
+        public NativeList<FeatureEdit> Edits;
+        public NativeList<float2> Light;
+        public NativeArray<float> Cells, Floats;
+        public NativeArray<int> Ints;
+        public NativeList<int> Slabs;
+        public NativeList<TerrainVertex> Verts;
+        public NativeList<int> Tris;
+
+        public void Execute()
+        {
+            ref var g = ref Chunk.Ground.Blob.Value;
+            var chunk = Chunk.Nets;
+            int m = chunk.Cells, w = m + 1;
+            float s = chunk.StepM, x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
+            Edits.Clear();
+            Light.Clear();
+            Slabs.Clear();
+            for (int f = 0; f < g.Edits.Length; f++)
+            {
+                var e = g.Edits[f];
+                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) { Edits.Add(e.AtStep(s)); Light.Add(g.CaveLight[f]); }
+            }
+            var cached = Chunk.Read(Cells);
+            cached.Fill(Cells);
+            var sink = new TerrainSink { Verts = Verts, Tris = Tris, Ints = Ints, Floats = Floats };
+            if (Edits.Length == 0) { SurfaceNets.Heightfield(cached, chunk, ref sink); return; }
+            int count = SurfaceNets.Layout(cached, new NativeEdits { Items = Edits }, chunk, ref sink);
+            Verts.ResizeUninitialized(count);
+            Slabs.ResizeUninitialized((w + Rows - 1) / Rows);
+        }
+    }
+
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainRowsJob : IJobParallelForDefer
+    {
+        [ReadOnly] public NativeArray<int> Slabs;
+        public ReadColumns Columns;
+        public RowEdits Edits;
+        public NetsChunk Chunk;
+        public int Rows;
+        [ReadOnly] public NativeArray<int> Ints;
+        [ReadOnly] public NativeArray<float> Floats;
+        [NativeDisableParallelForRestriction] public NativeArray<TerrainVertex> Verts;
+        public NativeArray<UnsafeList<int>> Tris;
+
+        public void Execute(int p)
+        {
+            int w = Chunk.Cells + 1, k0 = p * Rows, k1 = math.min(k0 + Rows, w);
+            var tris = Tris[p];
+            tris.Clear();
+            var sink = new RowSink { Ints = Ints, Floats = Floats, Verts = Verts, Tris = tris, Cursor = Ints[3 * k0 * w + 2] };
+            SurfaceNets.Vertices(Columns, Edits, Chunk, ref sink, true, k0, k1);
+            SurfaceNets.Quads(Edits, Chunk, ref sink, true, k0, k1);
+            Tris[p] = sink.Tris;
+        }
+    }
+
     [BurstCompile(CompileSynchronously = true)]
     struct TerrainMeshJob : IJob
     {
-        public Ground Ground;
+        public TerrainChunk Chunk;
         public BlobAssetReference<TerrainLookData> Look;
-        public int Ix, Iz, Level;
-        public bool Smooth, Fine;
+        [ReadOnly] public NativeList<FeatureEdit> Edits;
+        [ReadOnly] public NativeList<float2> Light;
+        [ReadOnly] public NativeArray<int> Ints;
+        [ReadOnly] public NativeList<int> Slabs;
+        [ReadOnly] public NativeArray<UnsafeList<int>> Rows;
         public NativeList<TerrainVertex> Verts;
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
@@ -317,23 +517,15 @@ namespace Stabby.Game
             at = end * s2;
         }
 
-        const float SkyReach = 1.4f, SkyFall = 0.7f;
-
         static float Dark(NativeEdits edits, NativeList<float2> light, float3 p, float cover)
         {
             float inside = 0, lit = 0;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
-                if (!CaveLight.Lit(e)) continue;
-                float3 a = new float3(e.Ax, e.Ay, e.Az), ab = new float3(e.Bx, e.By, e.Bz) - a, ap = p - a;
-                float ll = math.dot(ab, ab), t = ll > 0 ? math.saturate(math.dot(ap, ab) / ll) : 0;
-                float d = math.length(ap - t * ab) / e.R;
-                if (d >= SkyReach) continue;
-                inside = math.max(inside, 1 - math.smoothstep(1f, SkyReach, d));
-                lit = math.max(lit, math.exp(-math.lerp(light[q].x, light[q].y, t) / (SkyFall * e.R)));
+                if (CaveLight.Lit(e)) CaveDark.Add(e, light[q], p, ref inside, ref lit);
             }
-            return inside * math.smoothstep(0.5f, 3f, cover) * (1 - lit);
+            return CaveDark.Of(inside, lit, cover);
         }
 
         static float Fraction(float a, float b, float t) => b != a ? math.saturate((t - a) / (b - a)) : 0.5f;
@@ -404,20 +596,19 @@ namespace Stabby.Game
 
         public void Execute()
         {
-            ref var g = ref Ground.Blob.Value;
+            ref var g = ref Chunk.Ground.Blob.Value;
             ref var look = ref Look.Value;
-            int n = look.N, m = Fine ? 2 * TerrainTree.Quads : TerrainTree.Quads, w = m + 1;
-            float cm = g.CellMeters, top = n - 1, s = Fine ? TerrainTree.FineStep : TerrainTree.Step(Level);
-            var chunk = new NetsChunk { X0 = Ix * m, Z0 = Iz * m, Cells = m, StepM = s };
-            var sink = new TerrainSink { Verts = Verts, Tris = Tris };
-            var columns = new GroundColumns { Ground = Ground, StepM = s, Top = g.Top, Smooth = Smooth };
-            var edits = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
-            var light = new NativeList<float2>(Allocator.Temp);
+            var chunk = Chunk.Nets;
+            int n = look.N, m = chunk.Cells, w = m + 1;
+            float cm = g.CellMeters, top = n - 1, s = chunk.StepM;
+            var columns = Chunk.Columns;
+            var edits = new NativeEdits { Items = Edits };
+            var light = Light;
             float x0m = chunk.X0 * s, z0m = chunk.Z0 * s, x1m = x0m + m * s, z1m = z0m + m * s;
-            for (int f = 0; f < g.Edits.Length; f++)
+            for (int p = 0; p < Slabs.Length; p++)
             {
-                var e = g.Edits[f];
-                if (e.MeshedIn(s, x0m, z0m, x1m, z1m)) { edits.Items.Add(e.AtStep(s)); light.Add(g.CaveLight[f]); }
+                var row = Rows[p];
+                for (int t = 0; t < row.Length; t++) Tris.Add(row[t]);
             }
             var crusts = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             for (int f = 0; f < g.Edits.Length; f++)
@@ -427,12 +618,9 @@ namespace Stabby.Game
                 float ext = e.CrustExtent;
                 if (e.Ax + ext > x0m && e.Ax - ext < x1m && e.Az + ext > z0m && e.Az - ext < z1m) crusts.Items.Add(e);
             }
-            var cached = new CachedColumns(columns, chunk.X0 - 3, chunk.Z0 - 3, m + 6);
-            if (edits.Count > 0) SurfaceNets.Edited(cached, edits, chunk, ref sink);
-            else SurfaceNets.Heightfield(cached, chunk, ref sink);
 
-            bool stitch = Level < TerrainTree.Root;
-            var coarse = new CachedColumns(new GroundColumns { Ground = Ground, StepM = 2 * s, Top = g.Top, Smooth = Smooth }, chunk.X0 / 2 - 3, chunk.Z0 / 2 - 3, stitch ? m / 2 + 8 : 0);
+            bool stitch = Chunk.Level < TerrainTree.Root;
+            var coarse = new CachedColumns(new GroundColumns { Ground = Chunk.Ground, StepM = 2 * s, Top = g.Top, Smooth = Chunk.Smooth }, chunk.X0 / 2 - 3, chunk.Z0 / 2 - 3, stitch ? m / 2 + 8 : 0);
             var near = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
             var nearLight = new NativeList<float2>(Allocator.Temp);
             for (int f = 0; stitch && f < g.Edits.Length; f++)
@@ -457,7 +645,7 @@ namespace Stabby.Game
                 int c = 3 * ring[r], best = -1;
                 float gap = float.MaxValue;
                 for (int pass = 0; pass < 2 && best < 0; pass++)
-                    for (int u = sink.Ints[c + 2], e = u + sink.Ints[c + 1] - sink.Ints[c]; u < e; u++)
+                    for (int u = Ints[c + 2], e = u + Ints[c + 1] - Ints[c]; u < e; u++)
                     {
                         if (pass == 0 && used[u] == 0) continue;
                         var t = Verts[u].Pos;
@@ -475,7 +663,7 @@ namespace Stabby.Game
                 for (int i = 0; i < w; i++)
                 {
                     int col = 3 * (k * w + i);
-                    for (int v = sink.Ints[col + 2], j = sink.Ints[col], e = v + sink.Ints[col + 1] - j; v < e; v++, j++)
+                    for (int v = Ints[col + 2], j = Ints[col], e = v + Ints[col + 1] - j; v < e; v++, j++)
                     {
                         if (used[v] == 0) { used[v] = -1; continue; }
                         used[v] = kept;
@@ -673,13 +861,191 @@ namespace Stabby.Game
         }
     }
 
+    [BurstCompile(CompileSynchronously = true)]
+    struct TerrainNodesJob : IJob
+    {
+        public TerrainTree Tree;
+        public NativeHashMap<int, TerrainNode> Nodes;
+        [ReadOnly] public NativeHashSet<int> Drawn, Split, Fine;
+        public NativeHashSet<int> Seen;
+        public NativeList<TerrainWrite> Writes;
+        public NativeList<int> Evicts;
+        public NativeArray<int> Stats;
+        public Detail.ShadowMap Map;
+        public float3 Eye;
+        public float2 Upsun;
+        public float Reach, TanE, Allowed, Quality;
+        public bool HideSunk;
+        public const float MorphStart = 0.6f;
+        public const int EvictBudget = 32, Version = 0, Sunk = 1, Vertices = 2, Casting = 3, CastVertices = 4, Shadows = 5, Hidden = 6, Levels = 7, StatCount = Levels + TerrainTree.Levels;
+
+        public void Execute()
+        {
+            bool changed = Drawn.Count != Seen.Count;
+            if (!changed)
+                foreach (int key in Drawn)
+                    if (!Seen.Contains(key)) { changed = true; break; }
+            if (changed)
+            {
+                Seen.Clear();
+                foreach (int key in Drawn) Seen.Add(key);
+                Stats[Version]++;
+            }
+            int version = Stats[Version];
+            for (int k = Version + 1; k < StatCount; k++) Stats[k] = 0;
+            Writes.Clear();
+            Evicts.Clear();
+            var keys = Nodes.GetKeyArray(Allocator.Temp);
+            float floor = float.MaxValue;
+            if (Reach > 0)
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    if (Nodes[keys[i]].Built == 0) continue;
+                    MinMaxAABB fb = Tree.Box(keys[i]);
+                    if (fb.Min.y < floor && math.length(math.max(0, math.max(fb.Min - Eye, Eye - fb.Max))) < Reach) floor = fb.Min.y;
+                }
+            for (int i = 0; i < keys.Length; i++)
+            {
+                int key = keys[i];
+                var nd = Nodes[key];
+                if (nd.Built == 0) continue;
+                bool want = Drawn.Contains(key);
+                if (!want && !InTree(key))
+                {
+                    if (Evicts.Length >= EvictBudget && (nd.Drawn != 0 || nd.Cast != 0))
+                    {
+                        if (nd.Drawn != 0) Show(nd.Entity, 0);
+                        if (nd.Cast != 0) Show(nd.Caster, 0);
+                        Stats[Hidden] += nd.Drawn + nd.Cast;
+                        nd.Drawn = 0;
+                        nd.Cast = 0;
+                        Nodes[key] = nd;
+                    }
+                    Evicts.Add(key);
+                    continue;
+                }
+                bool show = want && !(HideSunk && Tree.Sunk(key));
+                Stats[Sunk] += want && !show ? 1 : 0;
+                if (show != (nd.Drawn != 0))
+                {
+                    nd.Drawn = show ? 1 : 0;
+                    Show(nd.Entity, nd.Drawn);
+                }
+                MinMaxAABB nb = Tree.Box(key);
+                int cast = show && CastsNear(nb, floor) && Resolved(nb, nd.Cast != 0) ? 1 : 0;
+                if (cast != nd.Cast)
+                {
+                    Show(nd.Caster, cast);
+                    Stats[Shadows]++;
+                }
+                nd.Cast = cast;
+                Stats[Casting] += cast;
+                Stats[CastVertices] += cast * nd.Vertices;
+                if (show)
+                {
+                    int l = Tree.Level(key);
+                    Stats[Levels + l]++;
+                    Stats[Vertices] += nd.Vertices;
+                    bool thin = l == 0 && Fine.Contains(key);
+                    int mask = nd.Stitch;
+                    if (mask < 0 || nd.StitchSeen != version)
+                    {
+                        mask = StitchMask(key, l, thin);
+                        nd.StitchSeen = version;
+                    }
+                    float end = thin ? TerrainTree.Step(0) / Allowed : l < TerrainTree.Root ? TerrainTree.Step(l + 1) / Allowed : 0;
+                    if (mask != nd.Stitch || end != nd.MorphEnd)
+                    {
+                        var stitch = new float4(mask, MorphStart * end, end, thin ? TerrainTree.FineStep : TerrainTree.Step(l));
+                        Writes.Add(new TerrainWrite { Entity = nd.Entity, Kind = 1, Value = stitch });
+                        Writes.Add(new TerrainWrite { Entity = nd.Caster, Kind = 1, Value = stitch });
+                        nd.Stitch = mask;
+                        nd.MorphEnd = end;
+                    }
+                }
+                Nodes[key] = nd;
+            }
+        }
+
+        void Show(Entity e, int on) => Writes.Add(new TerrainWrite { Entity = e, Kind = 0, Value = on });
+
+        bool InTree(int key)
+        {
+            int parent = Tree.Parent(key);
+            return parent < 0 || Split.Contains(parent);
+        }
+
+        int DrawnLevel(float x, float z)
+        {
+            for (int l = TerrainTree.Root; l >= 0; l--)
+            {
+                int key = Tree.At(x, z, l);
+                if (key < 0) return -1;
+                if (Drawn.Contains(key)) return l;
+            }
+            return -1;
+        }
+
+        bool FineAt(float x, float z)
+        {
+            int k = Tree.At(x, z, 0);
+            return k >= 0 && Fine.Contains(k);
+        }
+
+        int StitchMask(int key, int l, bool thin)
+        {
+            var c = Tree.Cell(key, l);
+            float s = TerrainTree.Size(l), x0 = c.x * s, z0 = c.y * s, x1 = x0 + s, z1 = z0 + s, o = 0.5f;
+            float xa = x0 + 0.25f * s, xb = x0 + 0.75f * s, za = z0 + 0.25f * s, zb = z0 + 0.75f * s;
+            int mask = 0;
+            mask |= Edge(x0 - o, za, x0 - o, zb, l, 1, thin);
+            mask |= Edge(x1 + o, za, x1 + o, zb, l, 2, thin);
+            mask |= Edge(xa, z0 - o, xb, z0 - o, l, 4, thin);
+            mask |= Edge(xa, z1 + o, xb, z1 + o, l, 8, thin);
+            for (int q = 0; q < 4; q++)
+            {
+                float xo = (q & 1) == 0 ? x0 - o : x1 + o, xi = (q & 1) == 0 ? x0 + o : x1 - o;
+                float zo = (q & 2) == 0 ? z0 - o : z1 + o, zi = (q & 2) == 0 ? z0 + o : z1 - o;
+                mask |= Edge(xo, zi, xi, zo, l, 16 << q, thin) | Edge(xo, zo, xo, zo, l, 16 << q, thin);
+            }
+            return mask;
+        }
+
+        int Edge(float xa, float za, float xb, float zb, int l, int bit, bool thin)
+        {
+            int a = DrawnLevel(xa, za), b = DrawnLevel(xb, zb), mask = 0;
+            bool fa = a == 0 && FineAt(xa, za), fb = b == 0 && FineAt(xb, zb);
+            if (a > l || b > l || thin && (a == 0 && !fa || b == 0 && !fb)) mask |= bit;
+            if ((a >= 0 && a < l) || (b >= 0 && b < l) || l == 0 && !thin && (fa || fb)) mask |= bit << 8;
+            return mask;
+        }
+
+        bool Resolved(MinMaxAABB nb, bool was)
+        {
+            float dist = math.length(math.max(0, math.max(nb.Min - Eye, Eye - nb.Max)));
+            return Map.Holds(math.cmax(nb.Max - nb.Min), dist, Quality, was);
+        }
+
+        bool CastsNear(MinMaxAABB nb, float floor)
+        {
+            float run = (nb.Max.y - math.min(floor, nb.Min.y)) / TanE;
+            int steps = (int)math.clamp(math.ceil(run / math.max(math.cmin((nb.Max - nb.Min).xz), 1e-3f)), 1, 16);
+            for (int k = 0; k <= steps; k++)
+            {
+                float2 o = -Upsun * run * k / steps;
+                float3 shift = new float3(o.x, 0, o.y);
+                if (math.length(math.max(0, math.max(nb.Min + shift - Eye, Eye - nb.Max - shift))) < Reach) return true;
+            }
+            return false;
+        }
+    }
+
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     [CreateAfter(typeof(ClientMapSystem))]
     public partial class TerrainViewSystem : SystemBase
     {
         TerrainViewDef quads = new TerrainViewDef();
-        const float MorphStart = 0.6f;
         const int LakeCells = 32;
         public int ApplyVertices = 300000;
         public float ApplyMs = 4f;
@@ -708,20 +1074,47 @@ namespace Stabby.Game
             public NativeList<TerrainVertex> Verts;
             public NativeList<int> Tris;
             public NativeArray<float3> Bounds;
+            public TerrainBuild Build;
             public int VertCap, TriCap;
+            public long BuildBytes;
 
             public void Dispose()
             {
                 Verts.Dispose();
                 Tris.Dispose();
                 Bounds.Dispose();
+                Build.Dispose();
             }
         }
 
         Task<Prepared> preparing;
-        Task<(List<MeshParts>, List<MeshParts>)> steaming;
-        List<MeshParts> steam, pools;
-        int steamApplied;
+        sealed class StaticPack : IDisposable
+        {
+            public readonly MeshPack Pack = new MeshPack();
+            public readonly List<(BatchMaterialID Mat, float Pad, bool Cast)> Kinds = new List<(BatchMaterialID, float, bool)>();
+            public MeshBatch Batch;
+            public int Steam, Pools;
+
+            public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast)
+            {
+                if (part == null) return;
+                Pack.Add(part, Kinds.Count);
+                Kinds.Add((mat, pad, cast));
+            }
+
+            public void Dispose()
+            {
+                Batch?.Dispose();
+                Pack.Dispose();
+            }
+        }
+
+        Task<StaticPack> packing, steaming;
+        StaticPack water, springs;
+        bool steamDone;
+        readonly Dictionary<(BatchMaterialID, bool), Entity> staticPrototypes = new Dictionary<(BatchMaterialID, bool), Entity>();
+        readonly List<Mesh> pumped = new List<Mesh>();
+        readonly List<int> pumpedIds = new List<int>();
         bool hasMist;
         Light sun;
         IEnumerator<string> loading;
@@ -748,8 +1141,12 @@ namespace Stabby.Game
         const MeshUpdateFlags Quiet = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers;
         NativeArray<float4> planes;
         readonly Plane[] frustum = new Plane[6];
-        JobHandle lodHandle;
-        bool lodScheduled, selected;
+        JobHandle lodHandle, nodesHandle;
+        bool lodScheduled, selected, nodesScheduled;
+        NativeHashSet<int> drawnSeen;
+        NativeList<TerrainWrite> nodeWrites;
+        NativeList<int> nodeEvicts;
+        NativeArray<int> nodeStats;
         int splitSeen;
         float3 lodEye;
         quaternion lodTurn;
@@ -758,20 +1155,18 @@ namespace Stabby.Game
         readonly List<int> builtKeys = new List<int>();
         readonly List<Pending> pending = new List<Pending>(), buffers = new List<Pending>();
         readonly List<Mesh> statics = new List<Mesh>();
-        readonly int[] levelCounts = new int[TerrainTree.Levels];
         int shownDrawn, shownSunk, shownWanted, shownBehind, shownVertices, shownCasting, shownCast;
         readonly int[] shownLevels = new int[TerrainTree.Levels];
         readonly Stopwatch frame = new Stopwatch(), since = new Stopwatch();
         EntitiesGraphicsSystem graphics;
         BatchMaterialID material, waterMaterial, mistMaterial;
         Ground ground;
-        int waterApplied, frameVertices, built, evicted, generation, poolMisses, oddBuilt;
+        int frameVertices, built, evicted, generation, poolMisses, oddBuilt;
         bool ready, rootsReady, builtSmooth;
         float worstMs, worstLoadMs, worstLodsMs, worstCollectMs;
         string loadPart = "";
-        double partUpload, partCollect, partStatics, partLods, lodRequests, lodDraw, lodNodes, lodEvictMs, lodShadowMs;
+        double partUpload, partCollect, partStatics, partLods, lodRequests, lodDraw, lodNodes, lodApply, lodEvictMs;
         int lodEvicts, lodDeferred, lodShadows;
-        const int EvictBudget = 32;
 
         NativeList<TerrainWrite> writes;
         ComponentLookup<MaterialMeshInfo> meshLookup;
@@ -792,6 +1187,10 @@ namespace Stabby.Game
             frameVertices = 0;
             if (look.IsCreated)
             {
+                if (nodesScheduled && !nodesHandle.IsCompleted) return;
+                lodApply = lodEvictMs = 0;
+                lodEvicts = lodDeferred = lodShadows = 0;
+                if (nodesScheduled) ApplyNodes();
                 if (SmoothOnly != builtSmooth) Reset();
                 if (upload != null && upload.Step()) upload = null;
                 double tu = frame.Elapsed.TotalMilliseconds;
@@ -800,10 +1199,9 @@ namespace Stabby.Game
                 double tc = frame.Elapsed.TotalMilliseconds;
                 Roots(); Statics(); Steam(); Clock();
                 double ts = frame.Elapsed.TotalMilliseconds;
-                lodRequests = lodDraw = lodNodes = lodEvictMs = lodShadowMs = 0;
-                lodEvicts = lodDeferred = lodShadows = 0;
+                lodRequests = lodDraw = lodNodes = 0;
                 Lods();
-                double lm = frame.Elapsed.TotalMilliseconds - ts;
+                double lm = frame.Elapsed.TotalMilliseconds - ts + lodApply;
                 loadPart = null;
                 (partUpload, partCollect, partStatics, partLods) = (tu, tc - tu, ts - tc, lm);
                 Flush();
@@ -835,7 +1233,7 @@ namespace Stabby.Game
 
         string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, statics {partStatics:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
 
-        string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows} {lodShadowMs:F1} ms]";
+        string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1}, apply {lodApply:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows}]";
 
         static readonly int MistPxId = Shader.PropertyToID("_StabbyMistPx"), ColumnPxId = Shader.PropertyToID("_StabbyColumnPx"), ClockId = Shader.PropertyToID("_StabbyClock");
         static readonly int ShadowPxId = Shader.PropertyToID("_StabbyShadowPx"), ShadowEyeId = Shader.PropertyToID("_StabbyShadowEye");
@@ -863,6 +1261,7 @@ namespace Stabby.Game
         }
 
         static int BuildBudget => math.max(1, JobsUtility.JobWorkerCount / 2);
+        const int SlabRows = 2;
         string stage => !look.IsCreated ? "load" : !ready ? "initial" : "lod";
 
         void Begin()
@@ -1011,6 +1410,10 @@ namespace Stabby.Game
             split = new NativeHashSet<int>(1024, Allocator.Persistent);
             drawn = new NativeHashSet<int>(1024, Allocator.Persistent);
             fine = new NativeHashSet<int>(64, Allocator.Persistent);
+            drawnSeen = new NativeHashSet<int>(1024, Allocator.Persistent);
+            nodeWrites = new NativeList<TerrainWrite>(256, Allocator.Persistent);
+            nodeEvicts = new NativeList<int>(64, Allocator.Persistent);
+            nodeStats = new NativeArray<int>(TerrainNodesJob.StatCount, Allocator.Persistent);
             leaves = new NativeList<TerrainLeaf>(1024, Allocator.Persistent);
             planes = new NativeArray<float4>(6, Allocator.Persistent);
             roots = new NativeList<int>(16, Allocator.Persistent);
@@ -1058,12 +1461,6 @@ namespace Stabby.Game
 
         bool Fine(int key, int l) => l == 0 && fine.Contains(key);
 
-        bool FineAt(float x, float z)
-        {
-            int k = tree.At(x, z, 0);
-            return k >= 0 && fine.Contains(k);
-        }
-
         TerrainNode Node(int key) => nodes.TryGetValue(key, out var v) ? v : new TerrainNode { Entity = Entity.Null };
 
         bool Built(int key) => nodes.TryGetValue(key, out var v) && v.Built != 0;
@@ -1105,7 +1502,9 @@ namespace Stabby.Game
             b.Generation = generation;
             b.VertCap = b.Verts.Capacity;
             b.TriCap = b.Tris.Capacity;
-            b.Handle = new TerrainMeshJob { Ground = ground, Look = look, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth, Verts = b.Verts, Tris = b.Tris, Bounds = b.Bounds }.Schedule();
+            b.BuildBytes = b.Build.Bytes;
+            var chunk = new TerrainChunk { Ground = ground, Ix = c.x, Iz = c.y, Level = l, Fine = Fine(key, l), Smooth = builtSmooth };
+            b.Handle = TerrainBuild.Schedule(chunk, look, SlabRows, b.Build, b.Verts, b.Tris, b.Bounds);
             pending.Add(b);
             nd.Pending = 1;
             nodes[key] = nd;
@@ -1121,13 +1520,15 @@ namespace Stabby.Game
                 buffers.RemoveAt(n);
                 return b;
             }
-            NativeAllocs += 3;
-            NativeBytes += (long)TerrainTree.Vertices * UnsafeUtility.SizeOf<TerrainVertex>() + TerrainTree.Indices * 4L + 24;
+            var build = TerrainBuild.Make();
+            NativeAllocs += 3 + build.Allocs;
+            NativeBytes += (long)TerrainTree.Vertices * UnsafeUtility.SizeOf<TerrainVertex>() + TerrainTree.Indices * 4L + 24 + build.Bytes;
             return new Pending
             {
                 Verts = new NativeList<TerrainVertex>(TerrainTree.Vertices, Allocator.Persistent),
                 Tris = new NativeList<int>(TerrainTree.Indices, Allocator.Persistent),
                 Bounds = new NativeArray<float3>(2, Allocator.Persistent),
+                Build = build,
             };
         }
 
@@ -1146,10 +1547,12 @@ namespace Stabby.Game
                 if (!p.Handle.IsCompleted) continue;
                 bool stale = p.Generation != generation;
                 if (!stale && !Spend(TerrainTree.Vertices)) return;
-                p.Handle.Complete();
+                JobPoll.Done(p.Handle);
                 pending.RemoveAt(k--);
                 if (p.Verts.Capacity > p.VertCap) { NativeAllocs++; NativeBytes += (long)p.Verts.Capacity * UnsafeUtility.SizeOf<TerrainVertex>(); }
                 if (p.Tris.Capacity > p.TriCap) { NativeAllocs++; NativeBytes += p.Tris.Capacity * 4L; }
+                long built = p.Build.Bytes;
+                if (built > p.BuildBytes) { NativeAllocs++; NativeBytes += built - p.BuildBytes; }
                 long a0 = GC.GetAllocatedBytesForCurrentThread();
                 if (!stale) { Apply(p); ChunksApplied++; }
                 buffers.Add(p);
@@ -1324,17 +1727,29 @@ namespace Stabby.Game
         void Statics()
         {
             if (ready || !rootsReady) return;
-            var lakes = prepared.Lakes;
-            int water = lakes.Count + prepared.Rivers.Count, total = water + prepared.Mist.Count;
-            while (waterApplied < total)
+            if (water == null)
             {
-                var part = waterApplied < lakes.Count ? lakes[waterApplied] : waterApplied < water ? prepared.Rivers[waterApplied - lakes.Count] : prepared.Mist[waterApplied - water];
-                if (part != null && !Spend(part.Verts.Length)) return;
-                if (part != null && waterApplied < water) AddStatic(part, waterMaterial, 0);
-                else if (part != null) AddStatic(part, mistMaterial, WaterGeometry.MistPad);
-                waterApplied++;
+                if (packing == null)
+                {
+                    var p = prepared;
+                    BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+                    packing = Task.Run(() => Pack(sp =>
+                    {
+                        foreach (var part in p.Lakes) sp.Add(part, wm, 0, Casts(part));
+                        foreach (var part in p.Rivers) sp.Add(part, wm, 0, Casts(part));
+                        foreach (var part in p.Mist) sp.Add(part, mm, WaterGeometry.MistPad, true);
+                        sp.Add(p.Sea, wm, 0, Casts(p.Sea));
+                    }));
+                    return;
+                }
+                if (!packing.IsCompleted) return;
+                if (packing.IsFaulted) { GameStatus.Failure = packing.Exception.ToString(); return; }
+                water = packing.Result;
+                packing = null;
             }
-            AddStatic(prepared.Sea, waterMaterial, 0);
+            if (!PumpStatics(water)) return;
+            water.Dispose();
+            water = null;
             GameStatus.Lines["terrain~ready"] = $"terrain ready at {since.ElapsedMilliseconds} ms";
             prepared = null;
             ready = true;
@@ -1343,49 +1758,99 @@ namespace Stabby.Game
 
         void Steam()
         {
-            if (!ready || (steam != null && steamApplied >= steam.Count + pools.Count)) return;
-            if (steam == null)
+            if (!ready || steamDone) return;
+            if (springs == null)
             {
                 if (steaming == null)
                 {
                     var field = World.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
                     if (field == null) return;
-                    steaming = Task.Run(() => { var l = new List<MeshParts>(); var w = new List<MeshParts>(); WaterGeometry.Springs(field, l, w); return (l, w); });
+                    bool mist = hasMist;
+                    BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+                    steaming = Task.Run(() => Pack(sp =>
+                    {
+                        var l = new List<MeshParts>();
+                        var w = new List<MeshParts>();
+                        WaterGeometry.Springs(field, l, w);
+                        if (!mist) l.Clear();
+                        (sp.Steam, sp.Pools) = (l.Count, w.Count);
+                        foreach (var part in l) sp.Add(part, mm, WaterGeometry.MistPad, true);
+                        foreach (var part in w) sp.Add(part, wm, 0, Casts(part));
+                    }));
                     return;
                 }
                 if (!steaming.IsCompleted) return;
-                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); steam = pools = new List<MeshParts>(); return; }
-                (steam, pools) = steaming.Result;
-                if (!hasMist) steam.Clear();
+                if (steaming.IsFaulted) { GameStatus.Failure = steaming.Exception.ToString(); steaming = null; steamDone = true; return; }
+                springs = steaming.Result;
                 steaming = null;
             }
-            while (steamApplied < steam.Count + pools.Count)
-            {
-                bool water = steamApplied >= steam.Count;
-                var part = water ? pools[steamApplied - steam.Count] : steam[steamApplied];
-                if (!Spend(part.Verts.Length)) return;
-                AddStatic(part, water ? waterMaterial : mistMaterial, water ? 0 : WaterGeometry.MistPad);
-                steamApplied++;
-            }
-            GameStatus.Lines["terrain~steam"] = $"spring steam {steam.Count} pieces, {pools.Count} pool pieces";
+            if (!PumpStatics(springs)) return;
+            GameStatus.Lines["terrain~steam"] = $"spring steam {springs.Steam} pieces, {springs.Pools} pool pieces";
+            springs.Dispose();
+            springs = null;
+            steamDone = true;
         }
 
-        bool Casts(MeshParts part, BatchMaterialID mat)
+        static StaticPack Pack(Action<StaticPack> fill)
         {
-            if (mat == mistMaterial) return true;
-            if (part.Uv4 == null) return false;
+            var sp = new StaticPack();
+            try
+            {
+                fill(sp);
+                sp.Batch = new MeshBatch(sp.Pack);
+            }
+            catch
+            {
+                sp.Dispose();
+                throw;
+            }
+            return sp;
+        }
+
+        static bool Casts(MeshParts part)
+        {
+            if (part?.Uv4 == null) return false;
             for (int i = 0; i < part.Uv4.Length; i++)
                 if (part.Uv4[i].x > 0.5f) return true;
             return false;
         }
 
-        void AddStatic(MeshParts part, BatchMaterialID mat, float pad)
+        bool PumpStatics(StaticPack sp)
         {
-            var mesh = WaterGeometry.ToMesh(part);
-            var id = graphics.RegisterMesh(mesh);
-            statics.Add(mesh);
-            var b = mesh.bounds;
-            Spawn(id, new AABB { Center = b.center, Extents = (float3)b.extents + pad }, mat, Casts(part, mat) ? ShadowCastingMode.On : ShadowCastingMode.Off);
+            if (!sp.Batch.Pump(pumped, pumpedIds)) return sp.Batch.Done;
+            var em = EntityManager;
+            var protos = new Entity[pumped.Count];
+            var infos = new MaterialMeshInfo[pumped.Count];
+            var boxes = new AABB[pumped.Count];
+            for (int i = 0; i < pumped.Count; i++)
+            {
+                var mesh = pumped[i];
+                var kind = sp.Kinds[pumpedIds[i]];
+                var id = graphics.RegisterMesh(mesh);
+                statics.Add(mesh);
+                frameVertices += mesh.vertexCount;
+                var key = (kind.Mat, kind.Cast);
+                if (!staticPrototypes.TryGetValue(key, out var proto))
+                {
+                    proto = Spawn(id, default, kind.Mat, kind.Cast ? ShadowCastingMode.On : ShadowCastingMode.Off);
+                    em.AddComponent<Prefab>(proto);
+                    staticPrototypes[key] = proto;
+                }
+                var b = mesh.bounds;
+                protos[i] = proto;
+                infos[i] = new MaterialMeshInfo(kind.Mat, id);
+                boxes[i] = new AABB { Center = b.center, Extents = (float3)b.extents + kind.Pad };
+            }
+            foreach (var proto in staticPrototypes.Values)
+            {
+                int n = 0;
+                foreach (var e in protos) if (e == proto) n++;
+                if (n == 0) continue;
+                using var made = em.Instantiate(proto, n, Allocator.Temp);
+                for (int i = 0, k = 0; i < protos.Length; i++)
+                    if (protos[i] == proto) Queue(new TerrainWrite { Entity = made[k++], Kind = 2, Mesh = infos[i], Box = boxes[i] });
+            }
+            return sp.Batch.Done;
         }
 
         bool Coverable(int key)
@@ -1423,31 +1888,13 @@ namespace Stabby.Game
             if (Built(key)) drawn.Add(key);
         }
 
-        bool InTree(int key)
-        {
-            int parent = tree.Parent(key);
-            return parent < 0 || split.Contains(parent);
-        }
-
-        int DrawnLevel(float x, float z)
-        {
-            for (int l = TerrainTree.Root; l >= 0; l--)
-            {
-                int key = tree.At(x, z, l);
-                if (key < 0) return -1;
-                if (drawn.Contains(key)) return l;
-            }
-            return -1;
-        }
-
         void Lods()
         {
             var cam = Camera.main;
             if (cam == null || !rootsReady) return;
             if (lodScheduled)
             {
-                if (!lodHandle.IsCompleted) return;
-                lodHandle.Complete();
+                if (!JobPoll.Done(lodHandle)) return;
                 lodScheduled = false;
                 selected = true;
                 splitSeen = split.Count;
@@ -1472,99 +1919,69 @@ namespace Stabby.Game
             double t1 = frame.Elapsed.TotalMilliseconds;
             drawn.Clear();
             for (int r = 0; r < roots.Length; r++) Draw(roots[r]);
-            double t2 = frame.Elapsed.TotalMilliseconds, evictMs = 0, shadowMs = 0;
-            int evicts = 0, deferred = 0, shadows = 0;
-            builtKeys.Clear();
-            builtKeys.AddRange(meshes.Keys);
-            Array.Clear(levelCounts, 0, levelCounts.Length);
+            double t2 = frame.Elapsed.TotalMilliseconds;
             float allowed = Allowed(cam);
             float3 eye = cam.transform.position;
             float reach = Casting && UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.shadowDistance : 0;
-            int vertices = 0, casting = 0, castVertices = 0, sunk = 0;
             if (sun == null) sun = RenderSettings.sun != null ? RenderSettings.sun : Array.Find(UnityEngine.Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
             float3 sunDir = sun != null ? (float3)sun.transform.forward : new float3(0, -1, 0);
             float sunRun = math.length(sunDir.xz);
             float2 upsun = sunRun > 1e-4f ? -sunDir.xz / sunRun : float2.zero;
             float tanE = math.max(-sunDir.y / math.max(sunRun, 1e-4f), 0.2f);
-            float floor = float.MaxValue;
-            if (reach > 0)
-                foreach (int key in builtKeys)
-                {
-                    MinMaxAABB fb = tree.Box(key);
-                    if (fb.Min.y < floor && math.length(math.max(0, math.max(fb.Min - eye, eye - fb.Max))) < reach) floor = fb.Min.y;
-                }
-            foreach (int key in builtKeys)
+            var job = new TerrainNodesJob
             {
-                var nd = nodes[key];
-                bool want = drawn.Contains(key);
-                if (!want && !InTree(key))
-                {
-                    if (evicts == 0 || (evicts < EvictBudget && frame.Elapsed.TotalMilliseconds < ApplyMs))
-                    {
-                        double te = frame.Elapsed.TotalMilliseconds;
-                        Evict(key);
-                        evicts++;
-                        evictMs += frame.Elapsed.TotalMilliseconds - te;
-                    }
-                    else
-                    {
-                        deferred++;
-                        if (nd.Drawn != 0 || nd.Cast != 0)
-                        {
-                            if (nd.Drawn != 0) Show(nd.Entity, false);
-                            if (nd.Cast != 0) Show(nd.Caster, false);
-                            nd.Drawn = 0;
-                            nd.Cast = 0;
-                            nodes[key] = nd;
-                        }
-                    }
-                    continue;
-                }
-                bool show = want && !(HideSunk && tree.Sunk(key));
-                sunk += want && !show ? 1 : 0;
-                if (show != (nd.Drawn != 0))
-                {
-                    Show(nd.Entity, show);
-                    nd.Drawn = show ? 1 : 0;
-                }
-                MinMaxAABB nb = tree.Box(key);
-                int cast = show && CastsNear(nb, eye, reach, floor, upsun, tanE) && Resolved(nb, eye, nd.Cast != 0) ? 1 : 0;
-                if (cast != nd.Cast)
-                {
-                    double tsh = frame.Elapsed.TotalMilliseconds;
-                    Show(nd.Caster, cast != 0);
-                    shadows++;
-                    shadowMs += frame.Elapsed.TotalMilliseconds - tsh;
-                }
-                nd.Cast = cast;
-                casting += cast;
-                castVertices += cast * nd.Vertices;
-                if (show)
-                {
-                    int l = tree.Level(key);
-                    levelCounts[l]++;
-                    vertices += nd.Vertices;
-                    int mask = StitchMask(key, l);
-                    bool thin = Fine(key, l);
-                    float end = thin ? TerrainTree.Step(0) / allowed : l < TerrainTree.Root ? TerrainTree.Step(l + 1) / allowed : 0;
-                    if (mask != nd.Stitch || end != nd.MorphEnd)
-                    {
-                        var stitch = new float4(mask, MorphStart * end, end, thin ? TerrainTree.FineStep : TerrainTree.Step(l));
-                        Queue(new TerrainWrite { Entity = nd.Entity, Kind = 1, Value = stitch });
-                        Queue(new TerrainWrite { Entity = nd.Caster, Kind = 1, Value = stitch });
-                        nd.Stitch = mask;
-                        nd.MorphEnd = end;
-                    }
-                }
-                nodes[key] = nd;
-            }
-            (lodRequests, lodDraw, lodNodes, lodEvictMs, lodShadowMs) = (t1 - t0, t2 - t1, frame.Elapsed.TotalMilliseconds - t2, evictMs, shadowMs);
-            (lodEvicts, lodDeferred, lodShadows) = (evicts, deferred, shadows);
+                Tree = tree, Nodes = nodes, Drawn = drawn, Split = split, Fine = fine, Seen = drawnSeen, Writes = nodeWrites, Evicts = nodeEvicts, Stats = nodeStats,
+                Map = ShadowViewSystem.Map, Eye = eye, Upsun = upsun, Reach = reach, TanE = tanE, Allowed = allowed, Quality = viewQuality, HideSunk = HideSunk,
+            };
+            Expect(job);
+            nodesHandle = job.Schedule();
+            nodesScheduled = true;
+            (lodRequests, lodDraw, lodNodes) = (t1 - t0, t2 - t1, frame.Elapsed.TotalMilliseconds - t2);
             GameStatus.TerrainBehind = behind;
-            (shownDrawn, shownSunk, shownWanted, shownBehind, shownVertices, shownCasting, shownCast) = (drawn.Count - sunk, sunk, leaves.Length, behind, vertices, casting, castVertices);
-            Array.Copy(levelCounts, shownLevels, levelCounts.Length);
+            (shownWanted, shownBehind) = (leaves.Length, behind);
             if (!GameStatus.Live.ContainsKey("terrain")) GameStatus.Live["terrain"] = Status;
             ScheduleLods(cam);
+        }
+
+        partial void Expect(TerrainNodesJob job);
+        partial void Compare();
+
+        void ApplyNodes()
+        {
+            double t0 = frame.Elapsed.TotalMilliseconds;
+            JobPoll.Done(nodesHandle);
+            nodesScheduled = false;
+            Compare();
+            if (nodeWrites.Length > 0)
+            {
+                if (!writes.IsCreated) writes = new NativeList<TerrainWrite>(nodeWrites.Length, Allocator.TempJob);
+                writes.AddRange(nodeWrites.AsArray());
+            }
+            double te = frame.Elapsed.TotalMilliseconds;
+            int evicts = 0;
+            for (int i = 0; i < nodeEvicts.Length && i < TerrainNodesJob.EvictBudget; i++)
+            {
+                int key = nodeEvicts[i];
+                if (evicts == 0 || frame.Elapsed.TotalMilliseconds < ApplyMs)
+                {
+                    Evict(key);
+                    evicts++;
+                    continue;
+                }
+                var nd = nodes[key];
+                if (nd.Drawn == 0 && nd.Cast == 0) continue;
+                if (nd.Drawn != 0) Show(nd.Entity, false);
+                if (nd.Cast != 0) Show(nd.Caster, false);
+                nd.Drawn = 0;
+                nd.Cast = 0;
+                nodes[key] = nd;
+            }
+            int sunk = nodeStats[TerrainNodesJob.Sunk];
+            (lodEvicts, lodDeferred, lodShadows) = (evicts, nodeEvicts.Length - evicts, nodeStats[TerrainNodesJob.Shadows]);
+            (shownDrawn, shownSunk, shownVertices, shownCasting, shownCast) = (drawn.Count - sunk, sunk, nodeStats[TerrainNodesJob.Vertices], nodeStats[TerrainNodesJob.Casting], nodeStats[TerrainNodesJob.CastVertices]);
+            for (int l = 0; l < shownLevels.Length; l++) shownLevels[l] = nodeStats[TerrainNodesJob.Levels + l];
+            double t1 = frame.Elapsed.TotalMilliseconds;
+            (lodEvictMs, lodApply) = (t1 - te, t1 - t0);
         }
 
         void ScheduleLods(Camera cam)
@@ -1579,56 +1996,8 @@ namespace Stabby.Game
             float allowed = Allowed(cam);
             GeometryUtility.CalculateFrustumPlanes(cam, frustum);
             for (int p = 0; p < 6; p++) planes[p] = new float4(frustum[p].normal, frustum[p].distance);
-            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Fine = fine, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule();
+            lodHandle = new TerrainSelectJob { Tree = tree, Split = split, Fine = fine, Leaves = leaves, Eye = eye, Allowed = allowed, Planes = planes }.Schedule(nodesHandle);
             lodScheduled = true;
-        }
-
-        int StitchMask(int key, int l)
-        {
-            var c = tree.Cell(key, l);
-            float s = TerrainTree.Size(l), x0 = c.x * s, z0 = c.y * s, x1 = x0 + s, z1 = z0 + s, o = 0.5f;
-            float xa = x0 + 0.25f * s, xb = x0 + 0.75f * s, za = z0 + 0.25f * s, zb = z0 + 0.75f * s;
-            int mask = 0;
-            bool thin = Fine(key, l);
-            mask |= Edge(x0 - o, za, x0 - o, zb, l, 1, thin);
-            mask |= Edge(x1 + o, za, x1 + o, zb, l, 2, thin);
-            mask |= Edge(xa, z0 - o, xb, z0 - o, l, 4, thin);
-            mask |= Edge(xa, z1 + o, xb, z1 + o, l, 8, thin);
-            for (int q = 0; q < 4; q++)
-            {
-                float xo = (q & 1) == 0 ? x0 - o : x1 + o, xi = (q & 1) == 0 ? x0 + o : x1 - o;
-                float zo = (q & 2) == 0 ? z0 - o : z1 + o, zi = (q & 2) == 0 ? z0 + o : z1 - o;
-                mask |= Edge(xo, zi, xi, zo, l, 16 << q, thin) | Edge(xo, zo, xo, zo, l, 16 << q, thin);
-            }
-            return mask;
-        }
-
-        int Edge(float xa, float za, float xb, float zb, int l, int bit, bool thin)
-        {
-            int a = DrawnLevel(xa, za), b = DrawnLevel(xb, zb), mask = 0;
-            bool fa = a == 0 && FineAt(xa, za), fb = b == 0 && FineAt(xb, zb);
-            if (a > l || b > l || thin && (a == 0 && !fa || b == 0 && !fb)) mask |= bit;
-            if ((a >= 0 && a < l) || (b >= 0 && b < l) || l == 0 && !thin && (fa || fb)) mask |= bit << 8;
-            return mask;
-        }
-
-        bool Resolved(MinMaxAABB nb, float3 eye, bool was)
-        {
-            float dist = math.length(math.max(0, math.max(nb.Min - eye, eye - nb.Max)));
-            return ShadowViewSystem.Map.Holds(math.cmax(nb.Max - nb.Min), dist, viewQuality, was);
-        }
-
-        static bool CastsNear(MinMaxAABB nb, float3 eye, float reach, float floor, float2 upsun, float tanE)
-        {
-            float run = (nb.Max.y - math.min(floor, nb.Min.y)) / tanE;
-            int steps = (int)math.clamp(math.ceil(run / math.max(math.cmin((nb.Max - nb.Min).xz), 1e-3f)), 1, 16);
-            for (int k = 0; k <= steps; k++)
-            {
-                float2 o = -upsun * run * k / steps;
-                float3 shift = new float3(o.x, 0, o.y);
-                if (math.length(math.max(0, math.max(nb.Min + shift - eye, eye - nb.Max - shift))) < reach) return true;
-            }
-            return false;
         }
 
         public void NearMeshes(float3 eye, float reach, List<Mesh> into)
@@ -1645,6 +2014,7 @@ namespace Stabby.Game
             if (!ready || !drawn.IsCreated) return r;
             var em = EntityManager;
             em.CompleteAllTrackedJobs();
+            nodesHandle.Complete();
             double area = 0, total = 0;
             for (int k = 0; k < roots.Length; k++) total += TerrainTree.Size(TerrainTree.Root) * (double)TerrainTree.Size(TerrainTree.Root);
             foreach (int key in drawn)
@@ -1678,6 +2048,7 @@ namespace Stabby.Game
         {
             at = across = default;
             if (!ready || !drawn.IsCreated) return false;
+            nodesHandle.Complete();
             float best = 0;
             foreach (int key in drawn)
             {
@@ -1751,11 +2122,12 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (GameStatus.Live.Remove("terrain")) GameStatus.Lines["terrain"] = Status();
-            if (lodScheduled) lodHandle.Complete();
+            if (lodScheduled) JobPoll.Teardown(lodHandle);
+            if (nodesScheduled) JobPoll.Teardown(nodesHandle);
             if (writes.IsCreated) writes.Dispose();
             foreach (var p in pending)
             {
-                p.Handle.Complete();
+                JobPoll.Teardown(p.Handle);
                 p.Dispose();
             }
             pending.Clear();
@@ -1767,6 +2139,10 @@ namespace Stabby.Game
             if (zeros.IsCreated) zeros.Dispose();
             foreach (var free in pool)
                 foreach (var mesh in free) UnityEngine.Object.Destroy(mesh);
+            Owned.Release(packing, sp => sp.Dispose());
+            Owned.Release(steaming, sp => sp.Dispose());
+            water?.Dispose();
+            springs?.Dispose();
             foreach (var mesh in statics) UnityEngine.Object.Destroy(mesh);
             if (tree.Offset.IsCreated) { tree.Offset.Dispose(); tree.Dim.Dispose(); tree.Range.Dispose(); }
             if (nodes.IsCreated) nodes.Dispose();
@@ -1774,6 +2150,10 @@ namespace Stabby.Game
             if (spare.IsCreated) spare.Dispose();
             if (drawn.IsCreated) drawn.Dispose();
             if (fine.IsCreated) fine.Dispose();
+            if (drawnSeen.IsCreated) drawnSeen.Dispose();
+            if (nodeWrites.IsCreated) nodeWrites.Dispose();
+            if (nodeEvicts.IsCreated) nodeEvicts.Dispose();
+            if (nodeStats.IsCreated) nodeStats.Dispose();
             if (leaves.IsCreated) leaves.Dispose();
             if (planes.IsCreated) planes.Dispose();
             if (roots.IsCreated) roots.Dispose();
