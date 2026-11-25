@@ -178,13 +178,14 @@ namespace Stabby.Game
             es.Dispose();
             states.Dispose();
             if (fresh == null) return;
-            var k = kit;
-            arriving = Task.Run(() =>
-            {
-                for (int i = 0; i < fresh.Count; i++) fresh[i] = Prepare(k, fresh[i]);
-                return fresh;
-            });
+            arriving = StartPrepare(kit, fresh);
         }
+
+        static Task<List<Arrival>> StartPrepare(Kit k, List<Arrival> fresh) => Task.Run(() =>
+        {
+            for (int i = 0; i < fresh.Count; i++) fresh[i] = Prepare(k, fresh[i]);
+            return fresh;
+        });
 
         void Vanish()
         {
