@@ -73,15 +73,22 @@ namespace Stabby.World
 
         public SkyStop Blend(float sunHeight)
         {
-            var r = new SkyStop { SunHeight = sunHeight };
+            var r = new SkyStop();
+            BlendInto(sunHeight, r);
+            return r;
+        }
+
+        void BlendInto(float sunHeight, SkyStop r)
+        {
             int n = Stops.Count;
-            if (n == 0) return r;
-            if (sunHeight >= Stops[0].SunHeight) return Copy(Stops[0], sunHeight);
-            if (sunHeight <= Stops[n - 1].SunHeight) return Copy(Stops[n - 1], sunHeight);
+            if (n == 0) { Fill(r, Empty, sunHeight); return; }
+            if (sunHeight >= Stops[0].SunHeight) { Fill(r, Stops[0], sunHeight); return; }
+            if (sunHeight <= Stops[n - 1].SunHeight) { Fill(r, Stops[n - 1], sunHeight); return; }
             int i = 1;
             while (Stops[i].SunHeight > sunHeight) i++;
             SkyStop hi = Stops[i - 1], lo = Stops[i];
             float t = (hi.SunHeight - sunHeight) / (hi.SunHeight - lo.SunHeight);
+            r.SunHeight = sunHeight;
             r.Sky = Rgb.Lerp(hi.Sky, lo.Sky, t);
             r.Zenith = Rgb.Lerp(hi.Zenith, lo.Zenith, t);
             r.Glow = Rgb.Lerp(hi.Glow, lo.Glow, t);
@@ -89,13 +96,16 @@ namespace Stabby.World
             r.AmbientGround = Rgb.Lerp(hi.AmbientGround, lo.AmbientGround, t);
             r.Sun = Rgb.Lerp(hi.Sun, lo.Sun, t);
             r.SunIntensity = hi.SunIntensity + (lo.SunIntensity - hi.SunIntensity) * t;
-            return r;
         }
 
-        static SkyStop Copy(SkyStop s, float h) => new SkyStop
+        static readonly SkyStop Empty = new SkyStop();
+
+        static void Fill(SkyStop r, SkyStop s, float h)
         {
-            SunHeight = h, Sky = s.Sky, Zenith = s.Zenith, Glow = s.Glow, AmbientSky = s.AmbientSky, AmbientGround = s.AmbientGround, Sun = s.Sun, SunIntensity = s.SunIntensity,
-        };
+            r.SunHeight = h; r.Sky = s.Sky; r.Zenith = s.Zenith; r.Glow = s.Glow; r.AmbientSky = s.AmbientSky; r.AmbientGround = s.AmbientGround; r.Sun = s.Sun; r.SunIntensity = s.SunIntensity;
+        }
+
+        [ThreadStatic] static SkyStop blended;
 
         public SkyState At(float hour) => At(hour, FullMoon);
 
@@ -103,7 +113,8 @@ namespace Stabby.World
         {
             Toward(Sun, hour, out float sx, out float sy, out float sz);
             Toward(Moon, hour, out float mx, out float my, out float mz);
-            var b = Blend(sy);
+            var b = blended ??= new SkyStop();
+            BlendInto(sy, b);
             float lit = Illumination(phase);
             float dark = Clamp01((MoonSwitchHeight - sy) / MoonFadeHeight);
             float ambient = 1 + (NewMoonAmbient + (1 - NewMoonAmbient) * lit - 1) * dark;
