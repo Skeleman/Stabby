@@ -199,8 +199,15 @@ namespace Stabby.Game
 
     public struct CreatureGpu
     {
-        public float4 R0, R1, R2, Fade;
+        public float3x4 Bone;
+        public float4 Fade;
         public int Fur, Group, Pad0, Pad1;
+    }
+
+    public struct CreaturePart
+    {
+        public float4 Fade;
+        public int Bone, Fur, Group, Pad;
     }
 
     public struct CreatureFrustum

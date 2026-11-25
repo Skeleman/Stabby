@@ -3,19 +3,19 @@ ServerMapSystem loads or generates the managed Stabby.World map once at startup,
 ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks once per world it joins
 ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
 ClientViewSystem.ToEntityArray copies only player ghosts that still lack a mesh; the query is empty on almost every frame
-TerrainViewSystem applies Mesh objects and registers them with Entities Graphics
+TerrainViewSystem applies Mesh data filled in Burst jobs and registers it with Entities Graphics
 BlobBake.Complete only after IsCompleted, or at teardown
 PlayerPrefabSystem GhostPrefabCreation is managed and runs once
 ClientInputSystem reads UnityEngine.Input
 ObjectColumnsSystem converts each chunk's managed placement to native instances once, in a task; region bakes, including re-entry, are Burst jobs
 ObjectColumnsSystem.Complete only after IsCompleted, or at teardown
-ObjectViewSystem debt: streams object tiles from the managed ObjectField as the camera moves; registering their meshes with Entities Graphics is the engine part
+ObjectViewSystem applies object Meshes filled in Burst jobs and registers them with Entities Graphics; tiles still stream from the managed ObjectField
 GrassViewSystem dispatches grass compute and an indirect draw on managed GraphicsBuffers per camera
 ServerObjectDeltaSystem converts each chunk's interactive objects to native reach tables once, checks removals in a Burst job, and keeps only RPC and status strings managed
 ClientObjectDeltaSystem converts each chunk's interactive objects to native reach tables once, resolves removals and picks in Burst jobs, and reads UnityEngine.Input for the take key
 ContactFieldSystem converts each chunk's contact stamps to native tables once, splats them in a Burst job, and uploads the result to a managed Texture2D
 JobSlot.Complete only after IsCompleted, or at teardown
-CreatureBuildSystem assembles bodies for arriving creature ghosts in a task and registers their meshes with Entities Graphics
+CreatureBuildSystem applies creature Meshes filled in Burst jobs and registers them with Entities Graphics
 CreatureBuildSystem.ToEntityArray copies only pending arrivals, when that query is non-empty
 CreatureBuildSystem.ToComponentDataArray reads states of pending arrivals and rigs of vanished ghosts only, when those queries are non-empty
 CreaturePrefabSystem GhostPrefabCreation is managed and runs once
