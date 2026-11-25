@@ -13,9 +13,10 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble" };
-        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3;
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4;
         public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
+        public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 10f, CaveDripSurveyM = 150f;
 
         [ThreadStatic] static List<float> caveSeenX, caveSeenZ;
         [ThreadStatic] static FeatureEdit[] caveRock;
@@ -155,15 +156,26 @@ namespace Stabby.World
                             float ceil = Underground.Ceiling(ground, rock, s, mx, floor + 1f, mz, floor + 3f * hole);
                             if (float.IsNaN(ceil)) continue;
                             float gap = ceil - floor;
-                            if (gap < Underground.DripGapM) continue;
                             bool hangs = kind == CaveStalactite;
-                            if (hangs)
+                            if (gap < (hangs ? Walk.Height + CaveTipHeadroomM + pl.SizeMinM : kind == CaveColumn ? CaveColumnGapMinM : Underground.DripGapM)) continue;
+                            if (kind == CaveColumn)
+                            {
+                                if (gap > CaveColumnGapMaxM) continue;
+                                float side = Math.Abs((mx - c.Ax) * px + (mz - c.Az) * pz);
+                                o.Size = size = gap + 2f * CaveColumnEmbedM;
+                                if (side < CaveWalkLineM + foot * size) continue;
+                                o.Y = floor - CaveColumnEmbedM;
+                                if (Walk.Solid(ground, rock, s, mx, o.Y + size, mz) < 0) continue;
+                            }
+                            else if (hangs)
                             {
                                 size = Math.Max(pl.SizeMinM, Math.Min(pl.SizeMaxM, gap * (0.15f + 0.3f * grow)));
                                 if (gap - size < Walk.Height + CaveTipHeadroomM) continue;
                                 o.Size = size;
                                 o.Y = ceil + pl.Sink * size;
                                 if (Walk.Solid(ground, rock, s, mx, o.Y + 0.05f * size, mz) < 0) continue;
+                                float tip = o.Y - size;
+                                if (tip - Walk.Surface(ground, rock, s, mx, mz, tip, tip - 40f) < Walk.Height + Underground.HeadroomM) continue;
                             }
                             else
                             {
@@ -202,6 +214,7 @@ namespace Stabby.World
             }
             else
             {
+                if (kind == CaveColumn && Walk.Solid(ground, rock, s, o.X, o.Y + o.Size, o.Z) < 0) return at + " does not reach the ceiling";
                 if (Walk.Solid(ground, rock, s, o.X, o.Y, o.Z) < 0) return at + " floats above the cave floor";
                 if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.5f * o.Size + 0.3f, o.Z) >= 0) return at + " is buried in rock";
             }

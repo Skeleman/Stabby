@@ -317,25 +317,29 @@ public class CaveTests
     [Fact]
     public void CaveObjectsAreCommonAndPass()
     {
-        int tiles = 0, drips = 0, mites = 0, rubble = 0;
+        int tiles = 0, drips = 0, mites = 0, rubble = 0, columns = 0, flows = 0;
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var s = At(seed);
             var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
             tiles += s.Graphs.Length;
+            foreach (var x in s.Edits) if (x.Shape == FeatureEdit.Speleothem && x.T == 0f) flows++;
             foreach (var o in CaveObjects(s, field))
             {
                 int kind = s.W.Objects.Objects[o.Def].Placement.Cave;
                 if (kind == ObjectField.CaveStalactite) drips++;
                 else if (kind == ObjectField.CaveStalagmite) mites++;
+                else if (kind == ObjectField.CaveColumn) columns++;
                 else rubble++;
                 string fault = field.CaveFault(o);
                 Assert.True(fault == null, fault);
             }
         }
         Assert.True(drips >= 8 * tiles, $"{drips} stalactites over {tiles} cave tiles");
-        Assert.True(mites >= drips / 4, $"{mites} stalagmites for {drips} stalactites");
+        Assert.True(mites >= drips / 8, $"{mites} stalagmites for {drips} stalactites");
         Assert.True(rubble >= drips, $"{rubble} rubble stones for {drips} stalactites");
+        Assert.True(columns >= tiles, $"{columns} columns over {tiles} cave tiles");
+        Assert.True(flows >= tiles, $"{flows} flowstones over {tiles} cave tiles");
     }
 
     [Fact]

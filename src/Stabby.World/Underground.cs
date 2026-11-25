@@ -83,7 +83,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong pools, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -117,7 +117,8 @@ namespace Stabby.World
                         var q = new Rng(pools);
                         Pools(detail, graph, ref q, output, start);
                         var d = new Rng(drip);
-                        Speleothems(detail, w.Config.CellMeters, ref d, output, start);
+                        var f = new Rng(flow);
+                        Speleothems(detail, w.Config.CellMeters, ref d, ref f, output, start);
                         return;
                     }
                     output.RemoveRange(start, output.Count - start);
@@ -439,9 +440,9 @@ namespace Stabby.World
         }
 
         public const float DripPerM = 1f / 5f, DripClearM = 2.5f, PassM = 1.5f, BridgeKeepM = 6f, DripGapM = 4f, ColumnGapM = 14f, HeadroomM = 0.7f;
-        public const float ColumnChance = 0.12f;
+        public const float ColumnChance = 0.12f, FlowPerM = 1f / 8f, FlowReachM = 9f, FlowWallM = 1f;
 
-        static void Speleothems(TerrainDetail detail, float cm, ref Rng r, List<FeatureEdit> output, int start)
+        static void Speleothems(TerrainDetail detail, float cm, ref Rng r, ref Rng f, List<FeatureEdit> output, int start)
         {
             var ground = new DetailGround { Detail = detail };
             var rock = new EditArray { Items = output.GetRange(start, output.Count - start).ToArray() };
@@ -471,6 +472,37 @@ namespace Stabby.World
                     var e = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Speleothem, Ax = x, Az = z, Bx = x, Bz = z, S = seed };
                     e.R = 1.4f + 1.2f * girth;
                     e.Ay = ceil + 1.5f; e.By = floor - 1f; e.T = 0.5f; e.P = 0.55f; e.N = 0.15f * e.R;
+                    Drop(e, made, output, ground, rock, s, cm, start, end);
+                }
+            }
+            for (int q = start; q < end; q++)
+            {
+                var c = output[q];
+                if (c.Kind != FeatureEdit.Carve) continue;
+                float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez), hole = c.HoleR;
+                int tries = Math.Max(1, (int)((len + (c.Shape == FeatureEdit.CaveRoom ? 2f * c.R : 0f)) * FlowPerM));
+                for (int k = 0; k < tries; k++)
+                {
+                    float t = f.NextFloat(), dx = f.Range(-1f, 1f), dz = f.Range(-1f, 1f), girth = f.NextFloat(), tall = f.NextFloat(), pinch = f.NextFloat(), seed = f.NextFloat();
+                    float dl = (float)Math.Sqrt(dx * dx + dz * dz);
+                    if (dl < 0.2f) continue;
+                    dx /= dl; dz /= dl;
+                    float x = c.Ax + ex * t, z = c.Az + ez * t, ay = c.Ay + (c.By - c.Ay) * t;
+                    if (Walk.Solid(ground, rock, s, x, ay - 0.2f * hole, z) >= 0) continue;
+                    float floor = Walk.Surface(ground, rock, s, x, z, ay - 0.2f * hole, ay - hole - 6f);
+                    if (floor <= ay - hole - 6f) continue;
+                    float ceil = Ceiling(ground, rock, s, x, floor + 1f, z, floor + 3f * hole);
+                    if (float.IsNaN(ceil) || ceil - floor < DripGapM) continue;
+                    float wall = -1f;
+                    for (float d = 0.5f; d < FlowReachM; d += 0.25f)
+                        if (Walk.Solid(ground, rock, s, x + dx * d, floor + FlowWallM, z + dz * d) >= 0) { wall = d; break; }
+                    if (wall < 0f) continue;
+                    var e = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Speleothem, S = seed };
+                    e.R = 0.9f + 0.9f * girth;
+                    float wx = x + dx * (wall + 0.25f * e.R), wz = z + dz * (wall + 0.25f * e.R);
+                    e.Ax = wx; e.Az = wz; e.Bx = wx; e.Bz = wz;
+                    e.Ay = floor + Math.Min(0.8f * (ceil - floor), 2.5f + 3f * tall); e.By = floor - 0.5f;
+                    e.T = 0f; e.P = 0.55f + 0.3f * pinch; e.N = 0.25f * e.R;
                     Drop(e, made, output, ground, rock, s, cm, start, end);
                 }
             }
@@ -595,6 +627,7 @@ namespace Stabby.World
             string at = $"speleothem at {e.Ax:F0},{e.Az:F0}";
             if (Walk.Solid(g, rock, s, e.Ax, e.Ay, e.Az) < 0) return at + " floats free of the rock";
             if (e.T == 1f && Walk.Solid(g, rock, s, e.Bx, e.By, e.Bz) >= 0) return at + " is buried in rock";
+            if (e.T == 0f && Walk.Solid(g, rock, s, e.Bx, e.By + 0.5f + FlowWallM, e.Bz) < 0) return at + " stands off the wall";
             bool hangs = e.T == 1f && e.Ay > e.By;
             if (hangs && e.By - Walk.Surface(g, rock, s, e.Bx, e.Bz, e.By, e.By - 40f) < Walk.Height + HeadroomM) return at + " hangs into the walking headroom";
             float reach = e.R + e.N;

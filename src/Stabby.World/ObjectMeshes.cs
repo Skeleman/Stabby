@@ -51,6 +51,7 @@ namespace Stabby.World
             if (shape == ObjectPart.BasaltColumns) return Columns(key, lod);
             if (shape == ObjectPart.Crystals) return Crystals(key, lod);
             if (shape == ObjectPart.Dripstone) return Dripstone(key, lod, aspect > 0 ? aspect : 0.3f);
+            if (shape == ObjectPart.DripColumn) return DripColumn(key, lod);
             return Rock(key, RockLevels[lod]);
         }
 
@@ -286,6 +287,45 @@ namespace Stabby.World
             }
             int top = first + rings * n, apex = b.Add(dx + rng.Range(-0.02f, 0.02f), 1f, dz + rng.Range(-0.02f, 0.02f));
             for (int k = 0; k < n; k++) b.Tri(apex, top + (k + 1) % n, top + k);
+            return b.Finish();
+        }
+
+        internal static ObjectMesh DripColumn(ulong key, int lod)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0xC01D5701E5EEDUL));
+            int n = DripSegments[lod], rings = 2 * DripRings[lod];
+            float baseR = rng.Range(0.22f, 0.32f), waist = rng.Range(0.3f, 0.55f), mid = rng.Range(0.4f, 0.6f);
+            float foot = rng.Range(0.5f, 1.1f), crown = rng.Range(0.3f, 0.8f);
+            Lobe(ref rng, out float l1x, out float l1z);
+            Lobe(ref rng, out float l2x, out float l2z);
+            float a1 = rng.Range(0.12f, 0.24f), a2 = rng.Range(0.08f, 0.18f), dx = rng.Range(-0.6f, 0.6f) * baseR, dz = rng.Range(-0.6f, 0.6f) * baseR;
+            Turn(n, out float tc, out float ts);
+            var b = Builder.New();
+            for (int j = 0; j <= rings + 2; j++)
+            {
+                float t = j == 0 ? 0f : j == rings + 2 ? 1f : (j - 1f) / rings, y = j == 0 ? -DripSkirt : j == rings + 2 ? 1f + DripSkirt : t;
+                float e = t < mid ? (mid - t) / mid : (t - mid) / (1f - mid), lo = (1f - t) * (1f - t) * (1f - t), hi = t * t * t;
+                float r = baseR * (waist + (1f - waist) * e * e + foot * lo + crown * hi) * (j == 0 || j == rings + 2 ? 1.1f : 1f);
+                float bend = 4f * t * (1f - t), ox = dx * bend, oz = dz * bend, w1 = a1 * (0.5f + lo + hi), w2 = a2 * (0.5f + 0.5f * e);
+                int ring = b.P.Count / 3;
+                float cx = 1f, cz = 0f;
+                for (int k = 0; k < n; k++)
+                {
+                    float c1 = cx * l1x + cz * l1z, c2 = cx * l2x + cz * l2z;
+                    float m = 1f + w1 * c1 + w2 * (2f * c2 * c2 - 1f) + rng.Range(-0.02f, 0.02f);
+                    b.Add(ox + cx * r * m, y, oz + cz * r * m);
+                    float nx = cx * tc - cz * ts;
+                    cz = cx * ts + cz * tc;
+                    cx = nx;
+                }
+                if (j == 0) continue;
+                int below = ring - n;
+                for (int k = 0; k < n; k++)
+                {
+                    int q = (k + 1) % n;
+                    b.Quad(below + k, ring + k, ring + q, below + q);
+                }
+            }
             return b.Finish();
         }
 

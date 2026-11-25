@@ -316,7 +316,7 @@
     {
       "id": "stalactite", "name": "Stalactite", "kind": "static", "material": "dripstone", "variants": 8,
       "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.3, 1, 0.3], "solid": "off" } ],
-      "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 20, "sizeMinM": 1.5, "sizeMaxM": 8, "sink": 0.1 }
+      "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 60, "sizeMinM": 0.4, "sizeMaxM": 8, "clusterCount": 3, "clusterRadiusM": 1.0, "sink": 0.1 }
     },
     {
       "id": "stalagmite", "name": "Stalagmite", "kind": "static", "material": "dripstone", "variants": 8,
@@ -327,6 +327,11 @@
       "id": "cave-rubble", "name": "Cave rubble", "kind": "static", "material": "talus-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "cave": "rubble", "perHundredM": 40, "sizeMinM": 0.25, "sizeMaxM": 0.9, "clusterCount": 3, "clusterRadiusM": 1.2, "sink": 0.25 }
+    },
+    {
+      "id": "dripstone-column", "name": "Dripstone column", "kind": "static", "material": "dripstone", "variants": 8,
+      "parts": [ { "id": "body", "shape": "dripstone-column", "scale": [0.45, 1, 0.45] } ],
+      "placement": { "perHectare": 0, "cave": "column", "perHundredM": 15, "sizeMinM": 2.4, "sizeMaxM": 8.8, "sink": 0 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

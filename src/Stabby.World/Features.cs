@@ -445,7 +445,7 @@ namespace Stabby.World
             var strata = new StrataField(w.Config, w.Materials);
             int tiles = w.Config.Size / TileCells;
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "cave-graph").NextU64();
-            ulong rk = Rng.Stream(w.Config.Seed, "cave-rock").NextU64(), rd = Rng.Stream(w.Config.Seed, "cave-speleothems").NextU64();
+            ulong rk = Rng.Stream(w.Config.Seed, "cave-rock").NextU64(), rd = Rng.Stream(w.Config.Seed, "cave-speleothems").NextU64(), rf = Rng.Stream(w.Config.Seed, "cave-flowstone").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
             ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
@@ -470,7 +470,7 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
                     var width = new Rng(Rng.Mix(rw + t));
-                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rp + t), list.GetRange(from, list.Count - from), tile, out var graph);
+                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), list.GetRange(from, list.Count - from), tile, out var graph);
                     if (Keep(w, tile, list) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();
