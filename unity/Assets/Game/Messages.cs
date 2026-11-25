@@ -151,7 +151,7 @@ namespace Stabby.Game
             var dark = CaveLight.Distances(edits, caves);
             var cl = b.Allocate(ref root.CaveLight, edits.Length);
             for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
-            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Blob = b };
+            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Brooks = CaveBrooks.Build(w, edits, caves), Blob = b };
         }
 
         public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
@@ -212,6 +212,7 @@ namespace Stabby.Game
         public TerrainDetail Detail;
         public FeatureEdit[] Edits;
         public ObjectInstance[] Discoveries;
+        public CaveBrook[] Brooks;
         public BlobBuilder Blob;
     }
 

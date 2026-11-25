@@ -263,6 +263,29 @@ namespace Stabby.Game.Editor
                 GeometryShot(cam, dir, "caves-pool-debug-unlit");
             }
             else lines.Add("cave pool: none in this world");
+            var brooks = CaveBrooks.Build(map, edits, graphs);
+            CaveBrook brook = null;
+            foreach (var b in brooks) if (brook == null || b.Rows > brook.Rows) brook = b;
+            if (brook != null)
+            {
+                int st = CaveBrook.Stride, at = brook.Rows / 3, to = Mathf.Min(brook.Rows - 1, at + 6);
+                var q = brook.Points;
+                var bp = new Vector3(q[at * st], q[at * st + 1], q[at * st + 2]);
+                var bt = new Vector3(q[to * st], q[to * st + 1], q[to * st + 2]);
+                float px = bp.x, py = bp.y + 0.5f, pz = bp.z;
+                Walk.Step(ground, ground.EditsNear(px, pz, Walk.Radius), cols, ground.WalkStep, ref px, ref py, ref pz, 0, 0, Walk.Reach);
+                eye = new Vector3(px, py + 1.7f, pz);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(bt - eye));
+                waited = LoadWaitTotal();
+                for (var w = Settle(120); w.MoveNext();) yield return null;
+                string[] kinds = { "spring", "pool", "sink" };
+                lines.Add($"cave brooks: {brooks.Length} ({string.Join(", ", brooks.GroupBy(b => b.End).Select(g => kinds[g.Key] + " " + g.Count()))}); shot brook in {graphs[brook.Graph].Class} graph {brook.Graph}, {brook.Rows} rows, {brook.Flow * 1000f:F2} L/s, ends at a {kinds[brook.End]}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}: stream wait {LoadWaitTotal() - waited:F2} s");
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "caves-brook");
+                ExposedShot(cam, dir, "caves-brook-debug-exposure", CaveDebugExposure);
+                GeometryShot(cam, dir, "caves-brook-debug-unlit");
+            }
+            else lines.Add("cave brooks: none in this world");
             var sky = DayNightSystem.Shown;
             lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; the debug-probe pair adds a 1.5 m Stabby/Object sphere 4 m ahead in the hall or chamber, dimmed by the cave volume and then undimmed; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
             GameStatus.Lines["~caves"] = string.Join("\n", lines);

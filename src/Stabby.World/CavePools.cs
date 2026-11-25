@@ -25,8 +25,7 @@ namespace Stabby.World
             foreach (var e in edits)
             {
                 if (!Underground.PoolBasin(rooms, e)) continue;
-                float top = e.Ay + e.H + e.R, floor = top - Underground.PoolTopM, reach = e.W - e.T * 2f * e.H + e.R * ((float)Math.Sqrt(1f + e.T * e.T) - 1f) + 2f * e.R;
-                var p = Pool(CavePool, water, e.Ax, e.Az, reach, floor - Underground.PoolDipM, e.Ay - e.H - e.R - Underground.PoolSealM, top);
+                var p = Pool(CavePool, water, e.Ax, e.Az, Underground.BasinReach(e), Underground.BasinLevel(e), e.Ay - e.H - e.R - Underground.PoolSealM, Underground.BasinTop(e));
                 if (!p.Leaks && p.WetCount > 0 && p.Level - p.Floor >= PoolMinDepthM) list.Add(p);
             }
             return list.ToArray();
