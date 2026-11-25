@@ -165,6 +165,37 @@ public class LintTests
     [InlineData("debt: rebuilds a managed list every frame")]
     public void AcceptsHonestSystemReasons(string reason) => Assert.Empty(Ecs(Managed, new Dictionary<string, string> { ["Sys"] = reason }));
 
+    static List<string> MainThread(string code, Dictionary<string, string>? allow = null) =>
+        Linter.MainThreadProblems(GameFile, code, allow ?? new Dictionary<string, string>());
+
+    const string Looping = "[BurstCompile] partial struct Sys : ISystem { [BurstCompile] public void OnUpdate(ref SystemState s) { foreach (var t in SystemAPI.Query<RefRW<Tag>>()) t.ValueRW.A++; } }";
+
+    [Theory]
+    [InlineData(Looping)]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { foreach (var (t, e) in SystemAPI.Query<RefRO<Tag>>().WithEntityAccess()) { } } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { new StepJob().Run(); } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { Entities.ForEach((ref Tag t) => t.A++).Run(); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { EntityQuery q; public void OnUpdate(ref SystemState s) { new StepJob().Run(q); } }")]
+    public void FlagsMainThreadLoops(string code) => Assert.Single(MainThread(code));
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.Dependency = new StepJob().ScheduleParallel(s.Dependency); } }")]
+    [InlineData("partial class Sys : SystemBase { Task<int> t; protected override void OnUpdate() { t = Task.Run(() => 1); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { float r = Pose.Run(ref s, 1f); } }")]
+    [InlineData("static class Tools { static void Each() { foreach (var t in SystemAPI.Query<RefRO<Tag>>()) { } new StepJob().Run(); } }")]
+    public void IgnoresScheduledOrNonSystemWork(string code) => Assert.Empty(MainThread(code));
+
+    [Fact]
+    public void AllowListSilencesAMainThreadLoop() =>
+        Assert.Empty(MainThread(Looping, new Dictionary<string, string> { ["Sys.Query"] = "debt: b/sim-jobs" }));
+
+    [Theory]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.Dependency.Complete(); } }")]
+    [InlineData("partial class Sys : SystemBase { protected override void OnUpdate() { EntityManager.CompleteAllTrackedJobs(); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { public void OnUpdate(ref SystemState s) { s.CompleteDependency(); } }")]
+    [InlineData("[BurstCompile] partial struct Sys : ISystem { NativeArray<JobHandle> h; public void OnUpdate(ref SystemState s) { JobHandle.CompleteAll(h); } }")]
+    public void FlagsJobCompletes(string code) => Assert.Single(Linter.BlockingProblems(GameFile, code, new Dictionary<string, string>()));
+
     [Fact]
     public void OnlyRuntimeCodeGetsEcsChecks()
     {

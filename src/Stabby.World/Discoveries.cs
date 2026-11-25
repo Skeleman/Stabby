@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -8,7 +10,7 @@ namespace Stabby.World
         public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den" };
         static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den" };
         public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11;
-        public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4;
+        public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
@@ -39,6 +41,8 @@ namespace Stabby.World
                 builtSites = new ObjectInstance[across * across][];
                 var list = new List<ObjectInstance>();
                 PlaceFields(list);
+                _ = Towns;
+                Woods(0, 0);
                 for (int d = 0; d < lib.Objects.Count; d++)
                 {
                     int kind = lib.Objects[d].Placement.Discovery;
@@ -49,6 +53,14 @@ namespace Stabby.World
             }
         }
 
+        struct DiscoveryTry
+        {
+            public float Fit, X, Z, Size, Qa, Qb;
+            public int Variant, Cell;
+            public bool Pass;
+            public ObjectInstance O;
+        }
+
         void PlaceDiscoveries(int d, ulong root, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
@@ -56,31 +68,62 @@ namespace Stabby.World
             if (pl.Discovery == Shrine) { PlaceShrines(d, root, list); return; }
             float step = DiscoveryStep(worldM, pl.SpacingM), inset = DiscoveryInset * step;
             int cells = (int)Math.Round(worldM / step);
-            for (int gz = 0; gz < cells; gz++)
-                for (int gx = 0; gx < cells; gx++)
+            var drawn = new DiscoveryTry[cells * cells][];
+            Parallel.For(0, cells * cells, c => drawn[c] = CellDraws(d, root, c, cells, step, inset));
+            var all = new List<DiscoveryTry[]>();
+            foreach (var tries in drawn) if (tries != null) all.Add(tries);
+            Parallel.For(0, all.Count * DiscoveryTries, q => EvalTry(d, cells, step, inset, ref all[q / DiscoveryTries][q % DiscoveryTries]));
+            foreach (var tries in all)
+            {
+                bool any = false;
+                float best = float.MinValue;
+                ObjectInstance pick = default;
+                foreach (var t in tries)
                 {
-                    var rng = new Rng(Rng.Mix(root ^ key[d] ^ ((ulong)(gz * cells + gx + 1) * 0x9E3779B97F4A7C15UL)));
-                    bool roll = rng.NextFloat() < pl.Chance, any = false;
-                    float best = float.MinValue;
-                    ObjectInstance pick = default;
-                    for (int t = 0; t < DiscoveryTries; t++)
-                    {
-                        float px = gx * step + inset + rng.NextFloat() * (step - 2 * inset), pz = gz * step + inset + rng.NextFloat() * (step - 2 * inset);
-                        float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
-                        int variant = (int)(rng.NextU32() % (uint)def.Variants);
-                        if (!roll) continue;
-                        if (pl.Discovery == Hilltop) Climb(ref px, ref pz, gx * step + inset, gz * step + inset, (gx + 1) * step - inset, (gz + 1) * step - inset);
-                        if (pl.Discovery == WolfDen)
-                        {
-                            float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
-                            SeekDen(ref px, ref pz, x0, z0, x1, z1);
-                            if (!ToFace(ref px, ref pz, DenRear(d, variant, size), x0, z0, x1, z1, out qa, out qb)) continue;
-                        }
-                        if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
-                        any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
-                    }
-                    if (any) list.Add(pick);
+                    if (t.Fit <= best || !t.Pass || !ApartFromOthers(d, t.X, t.Z, list)) continue;
+                    best = t.Fit; pick = t.O; any = true;
                 }
+                if (any) list.Add(pick);
+            }
+        }
+
+        DiscoveryTry[] CellDraws(int d, ulong root, int c, int cells, float step, float inset)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            int gx = c % cells, gz = c / cells;
+            var rng = new Rng(Rng.Mix(root ^ key[d] ^ ((ulong)(gz * cells + gx + 1) * 0x9E3779B97F4A7C15UL)));
+            if (!(rng.NextFloat() < pl.Chance)) return null;
+            var tries = new DiscoveryTry[DiscoveryTries];
+            for (int t = 0; t < DiscoveryTries; t++)
+            {
+                ref var r = ref tries[t];
+                r.Cell = c;
+                r.X = gx * step + inset + rng.NextFloat() * (step - 2 * inset); r.Z = gz * step + inset + rng.NextFloat() * (step - 2 * inset);
+                r.Size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(); r.Qa = rng.Range(-1f, 1f); r.Qb = rng.Range(-1f, 1f);
+                r.Variant = (int)(rng.NextU32() % (uint)def.Variants);
+                r.Fit = float.MinValue;
+            }
+            return tries;
+        }
+
+        void EvalTry(int d, int cells, float step, float inset, ref DiscoveryTry r)
+        {
+            var pl = lib.Objects[d].Placement;
+            int gx = r.Cell % cells, gz = r.Cell / cells;
+            float px = r.X, pz = r.Z, qa = r.Qa, qb = r.Qb;
+            float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
+            if (pl.Discovery == Hilltop) Climb(ref px, ref pz, x0, z0, x1, z1);
+            if (pl.Discovery == WolfDen)
+            {
+                SeekDen(ref px, ref pz, x0, z0, x1, z1);
+                if (!ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
+            }
+            if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
+            float fit = Fitness(pl.Discovery, px, pz);
+            if (fit == float.MinValue) return;
+            r.Fit = fit; r.X = px; r.Z = pz;
+            r.Pass = SiteFits(d, r.Variant, px, pz, r.Size, qa, qb, out r.O);
         }
 
         void PlaceFields(List<ObjectInstance> list)
@@ -177,6 +220,8 @@ namespace Stabby.World
             float best = float.MinValue;
             ObjectInstance pick = default;
             int bit = 1 << Array.IndexOf(VentDefs, d);
+            var tries = new DiscoveryTry[DiscoveryTries];
+            int count = 0;
             for (int t = 0; t < DiscoveryTries; t++)
             {
                 var site = near[(int)(rng.NextU32() % (uint)near.Count)];
@@ -184,8 +229,19 @@ namespace Stabby.World
                 float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
                 if ((site.Mask & bit) == 0 || !ApartFromKin(d, px, pz, VentGapM, list)) continue;
-                FaceDownhill(px, pz, ref qa, ref qb);
-                any |= TrySite(d, variant, px, pz, size, qa, qb, list, ref best, ref pick);
+                tries[count++] = new DiscoveryTry { X = px, Z = pz, Size = size, Qa = qa, Qb = qb, Variant = variant };
+            }
+            Parallel.For(0, count, q =>
+            {
+                ref var r = ref tries[q];
+                FaceDownhill(r.X, r.Z, ref r.Qa, ref r.Qb);
+                r.Fit = Fitness(pl.Discovery, r.X, r.Z);
+                r.Pass = ApartFromOthers(d, r.X, r.Z, list) && SiteFits(d, r.Variant, r.X, r.Z, r.Size, r.Qa, r.Qb, out r.O);
+            });
+            for (int q = 0; q < count; q++)
+            {
+                if (tries[q].Fit <= best || !tries[q].Pass) continue;
+                best = tries[q].Fit; pick = tries[q].O; any = true;
             }
             if (any) list.Add(pick);
             return any;
@@ -227,7 +283,14 @@ namespace Stabby.World
         bool TrySite(int d, int variant, float px, float pz, float size, float qa, float qb, List<ObjectInstance> list, ref float best, ref ObjectInstance pick)
         {
             float fit = Fitness(lib.Objects[d].Placement.Discovery, px, pz);
-            if (fit <= best || !Open(d, variant, size, px, pz) || !ApartFromOthers(d, px, pz, list) || !Accept(d, px, pz, size, qa, qb, out var o)) return false;
+            if (fit <= best || !ApartFromOthers(d, px, pz, list) || !SiteFits(d, variant, px, pz, size, qa, qb, out var o)) return false;
+            best = fit; pick = o;
+            return true;
+        }
+
+        bool SiteFits(int d, int variant, float px, float pz, float size, float qa, float qb, out ObjectInstance o)
+        {
+            if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
             int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen ? lib.Objects[d].Variants : 1, k = 0;
@@ -236,9 +299,7 @@ namespace Stabby.World
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
                 if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null))) break;
             }
-            if (k == tries) return false;
-            best = fit; pick = o;
-            return true;
+            return k < tries;
         }
 
         public bool SeatGrounded(ObjectInstance o)
@@ -451,7 +512,16 @@ namespace Stabby.World
             return best;
         }
 
-        public Geothermal Hotspots => hotspots ?? (hotspots = Geothermal.Build(w, w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config))), (x, z, r) => VentSites(x, z, r, null, VentSitesMin) >= VentSitesMin));
+        public Geothermal Hotspots
+        {
+            get
+            {
+                if (hotspots != null) return hotspots;
+                _ = Towns;
+                _ = VentDefs;
+                return hotspots = Geothermal.Build(w, w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config))), (x, z, r) => VentSites(x, z, r, null, VentSitesMin) >= VentSitesMin);
+            }
+        }
 
         void FaceDownhill(float x, float z, ref float qa, ref float qb)
         {
@@ -485,14 +555,26 @@ namespace Stabby.World
             int steps = (int)(reach / VentSiteStepM), found = 0, start = (sites ??= new List<VentSite>()).Count;
             var nb = new List<int>();
             if (cluster != null) Array.Clear(cluster, 0, cluster.Length);
-            for (int a = -steps; a <= steps && found < stop; a++)
-                for (int b = -steps; b <= steps && found < stop; b++)
+            _ = Towns;
+            var grid = new List<float>();
+            for (int a = -steps; a <= steps; a++)
+                for (int b = -steps; b <= steps; b++)
                 {
                     float dx = b * VentSiteStepM, dz = a * VentSiteStepM;
                     if (dx * dx + dz * dz > reach * reach) continue;
-                    int mask = VentGround(hx + dx, hz + dz, vents);
+                    grid.Add(hx + dx); grid.Add(hz + dz);
+                }
+            int points = grid.Count / 2;
+            var masks = new int[Math.Min(points, VentBatch)];
+            for (int at = 0; at < points && found < stop; at += VentBatch)
+            {
+                int from = at, count = Math.Min(VentBatch, points - at);
+                Parallel.For(0, count, q => masks[q] = VentGround(grid[2 * (from + q)], grid[2 * (from + q) + 1], vents));
+                for (int p = 0; p < count && found < stop; p++)
+                {
+                    int mask = masks[p];
                     if (mask == 0) continue;
-                    var site = new VentSite { X = hx + dx, Z = hz + dz, Mask = mask };
+                    var site = new VentSite { X = grid[2 * (from + p)], Z = grid[2 * (from + p) + 1], Mask = mask };
                     int i = sites.Count - start;
                     for (int k = 0; k < vents.Length; k++) nb.Add((mask & (1 << k)) != 0 ? 1 : 0);
                     for (int j = 0; j < i; j++)
@@ -507,6 +589,7 @@ namespace Stabby.World
                     sites.Add(site);
                     for (int k = 0; k < vents.Length; k++) if ((mask & (1 << k)) != 0) Tally(nb, i * vents.Length + k, k, cluster, ref found, 0);
                 }
+            }
             return found;
         }
 
@@ -769,12 +852,13 @@ namespace Stabby.World
                 for (int x = Math.Max(0, cx - reach); x <= Math.Min(across - 1, cx + reach); x++)
                 {
                     int c = z * across + x;
-                    var built = builtSites[c];
+                    var built = Volatile.Read(ref builtSites[c]);
                     if (built == null)
                     {
                         var list = new List<ObjectInstance>();
                         PlaceInto(x, z, false, list, null, true, true);
-                        builtSites[c] = built = list.ToArray();
+                        var made = list.ToArray();
+                        built = Interlocked.CompareExchange(ref builtSites[c], made, null) ?? made;
                     }
                     foreach (var s in built)
                         if (Math.Min(SiteGap(s, o.X, o.Z), SiteGap(o, s.X, s.Z)) < r + SiteMarginM + SiteBandM) return false;

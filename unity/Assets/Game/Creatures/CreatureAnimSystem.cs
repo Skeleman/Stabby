@@ -116,8 +116,9 @@ namespace Stabby.Game
         NativeArray<float3> scratchPos, scratchEnd;
         NativeArray<quaternion> scratchRot, scratchEndRot;
         NativeArray<float> scratchFloor;
-        float carry;
-        int skipped;
+        float carry, slack;
+        int skipped, capacity;
+        public int Trims;
         const int SegCap = 64, PartCap = 32;
 
         public void OnCreate(ref SystemState state)
@@ -158,13 +159,22 @@ namespace Stabby.Game
             Counts.Dispose(dep);
         }
 
-        static void Fit<T>(ref NativeArray<T> a, int n) where T : struct
+        static void Fit<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
         {
             if (a.Length >= n) return;
             int size = math.max(n, a.Length + a.Length / 2);
-            a.Dispose();
+            a.Dispose(after);
             a = new NativeArray<T>(size, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
         }
+
+        static void Shrink<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
+        {
+            a.Dispose(after);
+            a = new NativeArray<T>(math.max(n, 1), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        }
+
+        public long HeldBytes => (long)capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Sorted.Length * UnsafeUtility.SizeOf<CreatureGpu>()
+            + Fur.Length * 16L + (Starts.Length + Counts.Length) * 4L;
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
@@ -183,12 +193,23 @@ namespace Stabby.Game
             {
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
-                Instances.Clear();
-                if (Instances.Capacity < tally.Links) Instances.Capacity = tally.Links + tally.Links / 2;
-                Fit(ref Sorted, Instances.Capacity);
-                Fit(ref Fur, 3 * count);
-                Fit(ref Starts, tally.Groups);
-                Fit(ref Counts, tally.Groups);
+                int want = tally.Links + tally.Links / 2;
+                slack = capacity > 2 * want + 1024 ? slack + SystemAPI.Time.DeltaTime : 0;
+                bool trim = slack > 2f;
+                if (trim)
+                {
+                    capacity = math.max(want, 64);
+                    Shrink(ref Sorted, capacity, Gpu);
+                    Shrink(ref Fur, 3 * count + 3 * count / 2, Gpu);
+                    slack = 0;
+                    Trims++;
+                }
+                if (capacity < tally.Links) capacity = tally.Links + tally.Links / 2;
+                Gpu = new Reset { Instances = Instances, Capacity = capacity, Trim = trim }.Schedule(Gpu);
+                Fit(ref Sorted, capacity, Gpu);
+                Fit(ref Fur, 3 * count, Gpu);
+                Fit(ref Starts, tally.Groups, Gpu);
+                Fit(ref Counts, tally.Groups, Gpu);
                 FurCount = 3 * count;
             }
             state.Dependency = new AnimJob
@@ -204,6 +225,20 @@ namespace Stabby.Game
             state.Dependency = new Compact { Instances = Instances, Sorted = Sorted, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
             Gpu = state.Dependency;
             Pending = true;
+        }
+
+        [BurstCompile]
+        struct Reset : IJob
+        {
+            public NativeList<CreatureGpu> Instances;
+            public int Capacity;
+            public bool Trim;
+
+            public void Execute()
+            {
+                Instances.Clear();
+                if (Instances.Capacity < Capacity || Trim) Instances.Capacity = Capacity;
+            }
         }
 
         [BurstCompile]
@@ -230,7 +265,7 @@ namespace Stabby.Game
             }
         }
 
-        [BurstCompile]
+        [BurstCompile, WithPresent(typeof(CreatureRetier))]
         partial struct AnimJob : IJobEntity
         {
             public Ground Ground;
@@ -279,10 +314,11 @@ namespace Stabby.Game
             void Show(DynamicBuffer<CreatureLink> links, int from, int count, bool on)
             {
                 if (Gpu) return;
-                for (int i = from; i < from + count; i++) Mmi.SetComponentEnabled(links[i].Value, on);
+                for (int i = from; i < from + count; i++)
+                    if (links[i].Value != Entity.Null) Mmi.SetComponentEnabled(links[i].Value, on);
             }
 
-            void Execute(Entity e, [EntityIndexInQuery] int index, ref CreatureRoot c, in DynamicBuffer<CreatureLink> links)
+            void Execute(Entity e, [EntityIndexInQuery] int index, ref CreatureRoot c, in DynamicBuffer<CreatureLink> links, EnabledRefRW<CreatureRetier> ask)
             {
                 ref var rig = ref c.Rig.Value;
                 ref var fit = ref c.Fit.Value;
@@ -301,7 +337,20 @@ namespace Stabby.Game
                 c.Visible = visible;
                 int half = links.Length / 2;
                 float low = rig.LowPx / q;
+                bool hasHigh = Gpu || links[0].Value != Entity.Null, hasLow = Gpu || links[half].Value != Entity.Null;
+                if (!Gpu && present)
+                {
+                    bool wantHigh = d.Geometry == 0 && CreatureTier.NeedHigh(px, low, hasHigh), wantLow = d.Geometry != 0 || CreatureTier.NeedLow(px, low, hasLow);
+                    if (wantHigh != hasHigh || wantLow != hasLow)
+                    {
+                        c.WantHigh = wantHigh;
+                        c.WantLow = wantLow;
+                        ask.ValueRW = true;
+                    }
+                }
                 float blend = d.Geometry == 0 ? 1 - math.round(Detail.Crossfade(px, low, 1.5f * low) * 16f) / 16f : 1;
+                if (!hasHigh) blend = 1;
+                else if (!hasLow) blend = 0;
                 bool highOn = visible && blend < 1, lowOn = visible && blend > 0;
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
@@ -413,6 +462,7 @@ namespace Stabby.Game
                     });
                     return;
                 }
+                if (link.Value == Entity.Null) return;
                 World[link.Value] = new LocalToWorld { Value = m };
                 var old = Fade[link.Value].Value;
                 if (math.any(math.abs(old - f) > 1e-3f)) Fade[link.Value] = new ObjectFade { Value = f };
