@@ -17,8 +17,18 @@ for spec in "100 256" "20 512"; do set -- $spec
   [[ "$line" == *" 0 violations"* ]] || fail=1
 done
 if [[ "$args" != *" --no-unity "* ]]; then
-  "$UNITY_EXE" -batchmode -quit -projectPath unity -logFile out/check/unity.log > /dev/null 2>&1
-  n=$(grep -c "error CS" out/check/unity.log); say "unity: $n CS errors"; [ "$n" = 0 ] || { fail=1; grep "error CS" out/check/unity.log | sort -u | head -5; }
+  rm -f out/check/unity.log; t0=$SECONDS; done_at=0; stuck=""
+  "$UNITY_EXE" -batchmode -nographics -timestamps -quit -projectPath unity -logFile out/check/unity.log > /dev/null 2>&1 & up=$!
+  while kill -0 $up 2>/dev/null; do
+    [ $done_at = 0 ] && grep -q "CodeReloadManager destroyed" out/check/unity.log 2>/dev/null && done_at=$SECONDS
+    if { [ $done_at != 0 ] && [ $((SECONDS - done_at)) -ge 30 ]; } || [ $((SECONDS - t0)) -ge 1800 ]; then
+      stuck=", stopped after $((SECONDS - t0)) s stuck in shutdown"; taskkill //F //PID "$(cat /proc/$up/winpid)" > /dev/null 2>&1; break
+    fi
+    sleep 2
+  done
+  wait $up 2>/dev/null
+  [ $done_at = 0 ] && [ -n "$stuck" ] && { stuck=", timed out"; fail=1; }
+  n=$(grep -c "error CS" out/check/unity.log); say "unity: $n CS errors, $((SECONDS - t0)) s$stuck"; [ "$n" = 0 ] || { fail=1; grep "error CS" out/check/unity.log | sort -u | head -5; }
 fi
 base=$(git merge-base HEAD origin/main)
 bad=$(git diff --name-only "$base" | xargs -r git ls-files --eol 2>/dev/null | grep -v -E "w/(lf|-text|none)" | grep -v "binary")
