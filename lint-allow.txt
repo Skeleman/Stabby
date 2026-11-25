@@ -59,3 +59,5 @@ ClientInputSystem.Query the one local player's input from UnityEngine.Input
 ClientViewSystem.Query player positions for the managed chase camera
 LightBudgetSystem.Complete only after IsCompleted, or at teardown
 JobPoll.Complete Done completes a handle only after IsCompleted; Teardown is for OnDestroy, before releasing what the job wrote
+CaveDarkSystem follows Camera.main and uploads a Burst-built cave darkness volume to a managed Texture3D (Texture API, no unmanaged form)
+CaveDarkSystem.Complete only after IsCompleted, or at teardown

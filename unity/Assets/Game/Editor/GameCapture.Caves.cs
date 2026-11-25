@@ -54,6 +54,14 @@ namespace Stabby.Game.Editor
             Shader.SetGlobalFloat("_StabbyCaveDarkOff", 0f);
         }
 
+        static void UndimmedShot(Camera cam, string dir, string name, float ev)
+        {
+            var min = Shader.GetGlobalVector("_StabbyCaveDarkMin");
+            Shader.SetGlobalVector("_StabbyCaveDarkMin", new Vector4(min.x, min.y, min.z, 0));
+            ExposedShot(cam, dir, name, ev);
+            Shader.SetGlobalVector("_StabbyCaveDarkMin", min);
+        }
+
         static void ExposedShot(Camera cam, string dir, string name, float ev)
         {
             GameStatus.ToolFrame = Time.frameCount;
@@ -202,8 +210,18 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "caves-hall");
             ExposedShot(cam, dir, "caves-hall-debug-exposure", CaveDebugExposure);
             GeometryShot(cam, dir, "caves-hall-debug-unlit");
+            var probe = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Object.DestroyImmediate(probe.GetComponent<Collider>());
+            var probeMat = new Material(Shader.Find("Stabby/Object"));
+            probe.GetComponent<MeshRenderer>().sharedMaterial = probeMat;
+            probe.transform.position = eye + (look - eye).normalized * 4f - Vector3.up * 0.5f;
+            probe.transform.localScale = Vector3.one * 1.5f;
+            ExposedShot(cam, dir, "caves-hall-debug-probe", CaveDebugExposure);
+            UndimmedShot(cam, dir, "caves-hall-debug-probe-undimmed", CaveDebugExposure);
+            Object.DestroyImmediate(probe);
+            Object.DestroyImmediate(probeMat);
             var sky = DayNightSystem.Shown;
-            lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
+            lines.Add($"pinned hour {sky.Hour:F2}, moon phase {sky.Phase:F2}; each debug-exposure inspection shot is the same frame with +{CaveDebugExposure:F0} EV applied to the saved pixels, no lights added; the debug-probe pair adds a 1.5 m Stabby/Object sphere 4 m ahead in the hall, dimmed by the cave volume and then undimmed; each debug-unlit shot turns cave darkness off to show the geometry and is never the look");
             GameStatus.Lines["~caves"] = string.Join("\n", lines);
         }
 
