@@ -607,6 +607,28 @@ namespace Stabby.World
 
         public const float LatticeStepM = Features.LatticeStepM;
 
+        struct ColumnCache : IColumnField
+        {
+            DetailColumns inner;
+            int i0, k0, w;
+            float[] h;
+
+            public static ColumnCache Over(DetailColumns inner, int i0, int k0, int w)
+            {
+                var c = new ColumnCache { inner = inner, i0 = i0, k0 = k0, w = w, h = new float[w * w] };
+                for (int k = 0; k < w; k++)
+                    for (int i = 0; i < w; i++)
+                        c.h[k * w + i] = inner.Height(i0 + i, k0 + k);
+                return c;
+            }
+
+            public float Height(int i, int k)
+            {
+                int a = i - i0, b = k - k0;
+                return a >= 0 && b >= 0 && a < w && b < w ? h[b * w + a] : inner.Height(i, k);
+            }
+        }
+
         static void CheckGeometry(GeneratedWorld w, List<string> e)
         {
             int n = w.Config.Size, top = 0;
@@ -757,9 +779,9 @@ namespace Stabby.World
                         minX = Math.Min(minX, y.MinX); maxX = Math.Max(maxX, y.MaxX);
                         minZ = Math.Min(minZ, y.MinZ); maxZ = Math.Max(maxZ, y.MaxZ);
                     }
-                var cols = new DetailColumns { Detail = detail, StepM = s };
                 int x0 = (int)Math.Floor(minX / s) - 3, z0 = (int)Math.Floor(minZ / s) - 3;
                 int cells = Math.Max((int)Math.Ceiling(maxX / s) + 3 - x0, (int)Math.Ceiling(maxZ / s) + 3 - z0);
+                var cols = ColumnCache.Over(new DetailColumns { Detail = detail, StepM = s }, x0 - 4, z0 - 4, cells + 9);
                 var c = new NetsChunk { X0 = x0, Z0 = z0, Cells = cells, StepM = s };
                 SurfaceNets.HeightRange(cols, c, out int jMin, out int jMax);
                 var list = new EditArray { Items = group.ToArray() };
@@ -771,7 +793,7 @@ namespace Stabby.World
                 var f = new NetsBuffers();
                 SurfaceNets.Edited(cols, list, c, ref f);
                 var g = new NetsBuffers();
-                SurfaceNets.General(new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
+                SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
                 string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
@@ -781,7 +803,7 @@ namespace Stabby.World
                 if (x.Shape == FeatureEdit.Cave)
                 {
                     int bi = (int)Math.Round(x.Bx / s), bj = (int)Math.Round(x.By / s), bk = (int)Math.Round(x.Bz / s);
-                    var solid = new EditedSolid<DetailColumns, EditArray> { Columns = cols, Edits = list, StepM = s };
+                    var solid = new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s };
                     if (solid.Density(bi, bj, bk) >= 0) e.Add($"cave at {x.Ax:F0},{x.Az:F0} is not hollow at its first bend");
                     if (cols.Height(bi, bk) < x.By + x.R) e.Add($"cave at {x.Ax:F0},{x.Az:F0} has no roof at its first bend");
                 }
