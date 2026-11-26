@@ -678,7 +678,7 @@ namespace Stabby.Content
                     Sink = pl.Float("sink", 0), AlignToSlope = pl.Float("alignToSlope", 0),
                     FootRiseM = pl.Float("footRiseM", 0), FootReachM = pl.Float("footReachM", 12f), FanM = pl.Float("fanM", 0), EditMinSizeM = pl.Float("editMinSizeM", 0),
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
-                    ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
+                    ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0), ChainHead = pl.String("chainHead", null),
                     Bank = pl.String("bank", null), PerHundredM = pl.Float("perHundredM", 0),
                     Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), Cave = Array.IndexOf(ObjectField.CaveNames, pl.String("cave", "")), CaveIce = pl.Bool("caveIce", false), Liquid = pl.String("liquid", null), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
                 };

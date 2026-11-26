@@ -378,6 +378,9 @@ namespace Stabby.World
     {
         public const int SiteCells = 16, Tries = 16, MaxHerd = 16, MaxBodies = 16;
         public const float HerdSpread = 4f, EdgeM = 4f, RiverCost = 30f;
+        public const int PoolStride = 4;
+        public const float PoolStandM = 0.75f, PoolRiseM = 1.5f, PoolDipM = 0.3f;
+        static readonly float[] Eight = { 1f, 0f, 0.70710678f, 0.70710678f, 0f, 1f, -0.70710678f, 0.70710678f, -1f, 0f, -0.70710678f, -0.70710678f, 0f, -1f, 0.70710678f, -0.70710678f };
         public const float NeedM = 180f, BedM = 90f;
         public static int CellsFor(float meters, float cellMeters) => Math.Max(1, (int)Math.Ceiling(meters / cellMeters));
 
@@ -413,18 +416,22 @@ namespace Stabby.World
 
         public static ulong Root(GeneratedWorld w) => Rng.Stream(w.Config.Seed, "creatures").NextU64();
 
-        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib) => Build(w, new TerrainDetail(w).Cells, lib);
+        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib) => Build(w, lib, out _);
 
-        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib) => Build(w, cells, lib, out _);
+        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib, out DrinkSpotList drinks)
+        {
+            var detail = new TerrainDetail(w);
+            return Build(w, detail.Cells, lib, Pools(w, detail), out drinks);
+        }
 
-        public static List<CreatureSpawn> Build(GeneratedWorld w, CreatureLibrary lib, out DrinkSpotList drinks) => Build(w, new TerrainDetail(w).Cells, lib, out drinks);
+        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, float[] pools) => Build(w, cells, lib, pools, out _);
 
-        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, out DrinkSpotList drinks)
+        public static List<CreatureSpawn> Build(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, float[] pools, out DrinkSpotList drinks)
         {
             var list = new List<CreatureSpawn>();
             ulong root = Root(w);
             int across = SitesAcross(w.Config.Size);
-            drinks = Drinks(w, cells, lib);
+            drinks = Drinks(w, cells, lib, pools);
             for (int s = 0; s < across * across; s++) Site(w, cells, lib, root, s, drinks, list);
             return list;
         }
@@ -539,18 +546,62 @@ namespace Stabby.World
 
         public static float DrinkReach(float cellMeters) => (NeedM + cellMeters) * 1.4f;
 
-        public static DrinkSpotList Drinks(GeneratedWorld w, NearArrays cells, CreatureLibrary lib)
+        public static float[] Pools(GeneratedWorld w, TerrainDetail detail)
+        {
+            var edits = Features.Place(w, detail, out var caves, out var discoveries);
+            var field = w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects, discoveries) : null;
+            return Pools(field, CaveBrooks.Build(w, detail, edits, caves));
+        }
+
+        public static float[] Pools(ObjectField field, CaveBrook[] brooks)
+        {
+            var o = new List<float>();
+            if (field != null)
+                foreach (var p in field.LiquidPools())
+                {
+                    if (p.Kind != ObjectField.Spring && p.Kind != ObjectField.MudPot || p.Leaks || p.WetCount == 0) continue;
+                    float edge = 0;
+                    for (int j = 0; j < p.Nz; j++)
+                        for (int i = 0; i < p.Nx; i++)
+                        {
+                            if (!p.Wet[j * p.Nx + i]) continue;
+                            float dx = p.NodeX(i) - p.X, dz = p.NodeZ(j) - p.Z;
+                            edge = Math.Max(edge, dx * dx + dz * dz);
+                        }
+                    o.Add(p.X); o.Add(p.Z); o.Add((float)Math.Sqrt(edge) + ObjectField.PoolStepM); o.Add(p.Level);
+                }
+            if (brooks != null)
+                foreach (var b in brooks)
+                {
+                    if (b.End != CaveBrook.Spring || b.Points == null || b.Points.Length < CaveBrook.Stride) continue;
+                    int last = b.Points.Length - CaveBrook.Stride;
+                    o.Add(b.Points[last]); o.Add(b.Points[last + 2]); o.Add(b.Points[last + 3]); o.Add(b.Points[last + 1]);
+                }
+            return o.ToArray();
+        }
+
+        public static DrinkSpotList Drinks(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, float[] pools)
         {
             int n = w.Config.Size, across = SitesAcross(n);
             float cm = w.Config.CellMeters, top = 0;
             foreach (var def in lib.Bodies) top = Math.Max(top, Footing.Grade(def.MaxSlope));
             float limit = 4 * Footing.FeelM * Footing.FeelM * top * top;
             ulong key = Rng.Stream(w.Config.Seed, "drink-spots").NextU64();
-            var list = new DrinkSpotList { Start = new int[across * across + 1] };
+            var list = new DrinkSpotList { Start = new int[across * across + 1], Pools = pools ?? Array.Empty<float>() };
             var spots = new List<DrinkSpot>();
+            var pooled = PoolSpots(w, cells, list.Pools, limit, key);
+            var order = new long[pooled.Count];
+            for (int k = 0; k < order.Length; k++)
+            {
+                HerdMind.OffMap(n, cm, pooled[k].X, pooled[k].Z, out int c);
+                order[k] = ((long)(c % n / SiteCells + c / n / SiteCells * across) << 32) + k;
+            }
+            Array.Sort(order);
+            int next = 0;
             for (int site = 0; site < across * across; site++)
             {
                 list.Start[site] = spots.Count;
+                for (; next < order.Length && order[next] >> 32 == site; next++) spots.Add(pooled[(int)(order[next] & 0xFFFFFFFF)]);
                 var rng = new Rng(Rng.Mix(key ^ (ulong)(site + 1) * 0x9E3779B97F4A7C15UL));
                 int sx = site % across * SiteCells, sz = site / across * SiteCells;
                 for (int z = Math.Max(1, sz); z < Math.Min(n - 1, sz + SiteCells); z++)
@@ -580,6 +631,61 @@ namespace Stabby.World
             list.Start[across * across] = spots.Count;
             list.Spots = spots.ToArray();
             return list;
+        }
+
+        static List<DrinkSpot> PoolSpots(GeneratedWorld w, NearArrays cells, float[] pools, float limit, ulong key)
+        {
+            var spots = new List<DrinkSpot>();
+            float cm = w.Config.CellMeters;
+            var rng = new Rng(Rng.Mix(key ^ 0xD1B54A32D192ED03UL));
+            for (int k = 0; k < pools.Length; k += PoolStride)
+            {
+                int turn = rng.Range(0, 8);
+                float steep = float.MaxValue, qx = 0, qz = 0, wx = 0, wz = 0, r = pools[k + 2] + PoolStandM;
+                for (int d = 0; d < 8; d++)
+                {
+                    int e = (d + turn) % 8 * 2;
+                    float ux = Eight[e], uz = Eight[e + 1], tx = pools[k] + ux * r, tz = pools[k + 1] + uz * r;
+                    if (!PoolStand(w, cells, pools, k, tx, tz)) continue;
+                    float slope = Footing.SlopeSq(cells, tx, tz);
+                    if (slope < steep) { steep = slope; qx = tx; qz = tz; wx = -ux; wz = -uz; }
+                }
+                if (!(steep <= limit)) continue;
+                bool crowded = false;
+                foreach (var s in spots) crowded |= (s.X - qx) * (s.X - qx) + (s.Z - qz) * (s.Z - qz) < cm * cm;
+                if (crowded) continue;
+                float rise = Math.Max(0, NearField.Sample(cells, qx, qz) - pools[k + 3]);
+                spots.Add(new DrinkSpot { X = qx, Z = qz, WaterX = wx, WaterZ = wz, Steep = steep, Cost = rise * 20 + RiverCost });
+            }
+            return spots;
+        }
+
+        public static bool PoolStand(GeneratedWorld w, NearArrays cells, float[] pools, int k, float x, float z)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            if (HerdMind.OffMap(n, cm, x, z, out int c) || Wet(w, c)) return false;
+            if (c % n == 0 || c / n == 0 || c % n == n - 1 || c / n == n - 1) return false;
+            float rise = NearField.Sample(cells, x, z) - pools[k + 3];
+            if (rise < -PoolDipM || rise > PoolRiseM) return false;
+            for (int q = 0; q < pools.Length; q += PoolStride)
+            {
+                float dx = x - pools[q], dz = z - pools[q + 1];
+                if (dx * dx + dz * dz < pools[q + 2] * pools[q + 2]) return false;
+            }
+            return true;
+        }
+
+        public static bool AtPool(GeneratedWorld w, NearArrays cells, float[] pools, float x, float z, float waterX, float waterZ)
+        {
+            if (pools == null) return false;
+            for (int k = 0; k < pools.Length; k += PoolStride)
+            {
+                float dx = pools[k] - x, dz = pools[k + 1] - z, d = (float)Math.Sqrt(dx * dx + dz * dz);
+                if (d < 1e-3f || Math.Abs(d - pools[k + 2] - PoolStandM) > 0.01f || Math.Abs(dx / d - waterX) > 0.01f || Math.Abs(dz / d - waterZ) > 0.01f) continue;
+                if (PoolStand(w, cells, pools, k, x, z)) return true;
+            }
+            return false;
         }
 
         public static bool Bank(GeneratedWorld w, float x, float z, float waterX, float waterZ)
@@ -646,8 +752,8 @@ namespace Stabby.World
             return needs;
         }
 
-        public static bool AtShore(GeneratedWorld w, NearArrays cells, CreatureDef def, in HerdNeeds needs) =>
-            Bank(w, needs.DrinkX, needs.DrinkZ, needs.WaterX, needs.WaterZ) && !Footing.SteepAt(cells, needs.DrinkX, needs.DrinkZ, Footing.Grade(def.MaxSlope));
+        public static bool AtShore(GeneratedWorld w, NearArrays cells, CreatureDef def, in HerdNeeds needs, float[] pools) =>
+            (Bank(w, needs.DrinkX, needs.DrinkZ, needs.WaterX, needs.WaterZ) || AtPool(w, cells, pools, needs.DrinkX, needs.DrinkZ, needs.WaterX, needs.WaterZ)) && !Footing.SteepAt(cells, needs.DrinkX, needs.DrinkZ, Footing.Grade(def.MaxSlope));
 
         public static void MemberAt(in CreatureSpawn s, double t, out float x, out float z, out float heading)
         {
