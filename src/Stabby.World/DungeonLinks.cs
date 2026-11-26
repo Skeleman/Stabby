@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class DungeonLinks
     {
         public const string Class = "dungeon-link", Basis = "branching";
-        public const float RadiusMin = 5f, RadiusMax = 5.8f, AheadM = 2.5f, SealM = 6.3f;
+        public const float RadiusMin = 5f, RadiusMax = 5.8f, AheadM = 2.5f, SealM = 6.3f, WidthMin = 4f, WidthMax = 6.5f;
         public const int MostNodes = 4;
 
         public static bool IsLink(CaveGraph g) => g.Class == Class;
@@ -43,6 +43,37 @@ namespace Stabby.World
             return list.Count == edits.Length ? edits : list.ToArray();
         }
 
+        public static bool Fits(float width) => width >= WidthMin && width <= WidthMax;
+
+        public static float Width(TerrainDetail detail, FeatureEdit[] items, CaveGraph g)
+        {
+            var ground = new DetailGround { Detail = detail };
+            var list = new EditArray { Items = items };
+            float sum = 0f;
+            int count = 0;
+            foreach (var edge in g.Edges)
+            {
+                var p = edge.Points;
+                for (int q = 3; q + 2 < p.Length; q += 3)
+                {
+                    float ex = p[q] - p[q - 3], ez = p[q + 2] - p[q - 1], run = (float)Math.Sqrt(ex * ex + ez * ez);
+                    if (run <= 0f) continue;
+                    float x = p[q - 3] + 0.5f * ex, z = p[q - 1] + 0.5f * ez, y = 0.5f * (p[q - 2] + p[q + 1]) + 1f, sx = -ez / run, sz = ex / run;
+                    if (Walk.Density(list, Walk.At(ground, list, x, z, Features.LatticeStepM), y) >= 0) continue;
+                    sum += Reach(ground, list, x, z, y, sx, sz) + Reach(ground, list, x, z, y, -sx, -sz);
+                    count++;
+                }
+            }
+            return count == 0 ? 0f : sum / count;
+        }
+
+        static float Reach(DetailGround ground, EditArray list, float x, float z, float y, float sx, float sz)
+        {
+            float d = 0f;
+            while (d < 2f * WidthMax && Walk.Density(list, Walk.At(ground, list, x + sx * (d + 0.1f), z + sz * (d + 0.1f), Features.LatticeStepM), y) < 0) d += 0.1f;
+            return d;
+        }
+
         static bool Build(GeneratedWorld w, TerrainDetail detail, ObjectField field, ObjectInstance o, CaveClass c, CaveNode m, List<FeatureEdit> list, List<CaveGraph> caves, HashSet<int> taken, ref Rng r)
         {
             float cm = w.Config.CellMeters;
@@ -67,7 +98,7 @@ namespace Stabby.World
             var all = near.ToArray();
             foreach (var e in edits) if (Underground.PathFault(detail, all, e) != null) return false;
             foreach (var edge in g.Edges) if (Underground.Cramped(detail, all, g, edge) != null) return false;
-            if (Underground.Unreached(detail, all, g) != null) return false;
+            if (Underground.Unreached(detail, all, g) != null || !Fits(Width(detail, all, g))) return false;
             g.Tile = tile;
             list.AddRange(edits);
             caves.Add(g);

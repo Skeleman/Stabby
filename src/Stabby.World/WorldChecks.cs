@@ -1233,7 +1233,7 @@ namespace Stabby.World
                 if (q.Shape == FeatureEdit.Mine && q.Kind != FeatureEdit.Carve) { e.Add($"mines: edit at {q.Ax:F0},{q.Az:F0} is not a carve"); return; }
         }
 
-        public const float LinkWidthMin = 4f, LinkWidthMax = 6.5f, LinkSocketM = 0.5f;
+        public const float LinkSocketM = 0.5f;
 
         public static void CheckDungeonLinks(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, ObjectInstance[] sites, List<string> e)
         {
@@ -1250,7 +1250,6 @@ namespace Stabby.World
                     float f = 0.5f * t, x = q.Ax + (q.Bx - q.Ax) * f, z = q.Az + (q.Bz - q.Az) * f, top = q.Ay + (q.By - q.Ay) * f + q.R * (1f - Features.CaveHollow);
                     if (detail.HeightAt(x / cm, z / cm) < top) { e.Add($"dungeon links: link carve at {x:F0},{z:F0} opens to the surface"); return; }
                 }
-            var ground = new DetailGround { Detail = detail };
             foreach (var g in caves)
             {
                 if (!DungeonLinks.IsLink(g)) continue;
@@ -1264,24 +1263,8 @@ namespace Stabby.World
                 var items = near.ToArray();
                 string why = Underground.Unreached(detail, items, g);
                 if (why != null) { e.Add($"{at}: {why}"); return; }
-                var list = new EditArray { Items = items };
-                float sum = 0f;
-                int count = 0;
-                foreach (var edge in g.Edges)
-                {
-                    var p = edge.Points;
-                    for (int q = 3; q + 2 < p.Length; q += 3)
-                    {
-                        float ex = p[q] - p[q - 3], ez = p[q + 2] - p[q - 1], run = (float)Math.Sqrt(ex * ex + ez * ez);
-                        if (run <= 0f) continue;
-                        float x = p[q - 3] + 0.5f * ex, z = p[q - 1] + 0.5f * ez, y = 0.5f * (p[q - 2] + p[q + 1]) + 1f, sx = -ez / run, sz = ex / run;
-                        if (Walk.Density(list, Walk.At(ground, list, x, z, Features.LatticeStepM), y) >= 0) continue;
-                        sum += Reach(ground, list, x, z, y, sx, sz) + Reach(ground, list, x, z, y, -sx, -sz);
-                        count++;
-                    }
-                }
-                float width = count == 0 ? 0f : sum / count;
-                if (width < LinkWidthMin || width > LinkWidthMax) { e.Add($"{at} passages average {width:F1} m wide at 1 m, outside {LinkWidthMin:F0}-{LinkWidthMax:F1} m"); return; }
+                float width = DungeonLinks.Width(detail, items, g);
+                if (!DungeonLinks.Fits(width)) { e.Add($"{at} passages average {width:F1} m wide at 1 m, outside {DungeonLinks.WidthMin:F0}-{DungeonLinks.WidthMax:F1} m"); return; }
             }
             foreach (var q in edits)
             {
@@ -1289,13 +1272,6 @@ namespace Stabby.World
                 int tile = Features.TileOf(q, cm);
                 if (!q.CaveCarve || !tiles.Contains(tile)) { e.Add($"dungeon links: edit at {q.Ax:F0},{q.Az:F0} is not a carve of a link cave"); return; }
             }
-        }
-
-        static float Reach(DetailGround ground, EditArray list, float x, float z, float y, float sx, float sz)
-        {
-            float d = 0f;
-            while (d < 2f * LinkWidthMax && Walk.Density(list, Walk.At(ground, list, x + sx * (d + 0.1f), z + sz * (d + 0.1f), Features.LatticeStepM), y) < 0) d += 0.1f;
-            return d;
         }
 
         public static LiquidPool[] CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
