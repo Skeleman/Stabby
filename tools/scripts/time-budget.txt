@@ -9,6 +9,7 @@ test CaveTests.SeedsGrowEveryClassAndPass 30 grows every cave class over several
 test ObjectTests.ObjectPlacementIsDeterministicAndVaried 27 places objects for a world twice and compares
 test CaveTests.TunnelsAreNarrowFineAndVaried 24 carves and meshes cave tunnels on full worlds
 test ObjectTests.ObjectsStayInTheirBiomes 21 checks every placed object against its biome
+test TestWorldsTests.DefaultHasCavesRiversTownInnDungeonAndMine 15 builds and places TestWorlds.Default once; later feature tests reuse the cached world
 test CaveTests.HallsBuildAtFullSize 21 builds and meshes full-size cave halls
 test CaveTests.CaveLightsAreSporadicAndPass 30 places and checks cave lights on four worlds
 test MineTests.MinesAreWalkableGridAlignedAndTimbered 20 carves mines on full worlds, walks each from its entrance and places its timber
