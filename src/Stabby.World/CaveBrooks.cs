@@ -19,7 +19,7 @@ namespace Stabby.World
         public const float RowM = 1f, DepthM = 0.25f, MinRunM = 30f, MinRainMm = 300f, CatchmentM2 = 250000f, Infiltration = 0.3f;
         public const float HalfPerRootFlow = 12f, MinHalfM = 0.35f, MaxHalfM = 1.2f, FloorShare = 0.4f, PoolInsetM = 0.3f, PoolSkimM = 0.02f;
         public const float TaperM = 6f, TaperFloor = 0.2f, KnotM = 7f, WidthSwing = 0.35f, WanderShare = 0.6f, BuryMinM = 0.04f, BuryMaxM = 0.22f, HugM = 8f, Spread = 1.5f;
-        public const float RecessM = 0.2f, BedM = 0.4f, BankPadM = 0.2f, BankRun = 1f, ChannelRound = 0.2f, EdgeInM = 0.05f, ChannelLumpM = 0.04f, BankOutM = 0.3f, FineStepM = 0.5f, MeshPadM = 0.02f;
+        public const float RecessM = 0.2f, BedM = 0.5f, BankPadM = 0.2f, BankRun = 1f, ChannelRound = 0.2f, EdgeInM = 0.05f, ChannelLumpM = 0.04f, BankOutM = 0.3f, FineStepM = 0.5f, MeshPadM = 0.02f;
         const int Raw = 5, ChannelRows = 2;
         const float SecondsPerYear = 31557600f;
 
