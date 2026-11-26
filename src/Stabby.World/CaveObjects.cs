@@ -13,8 +13,8 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart" };
-        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8, CaveMineTimber = 9, CaveMineRail = 10, CaveMineCart = 11;
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart", "lava-glow" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8, CaveMineTimber = 9, CaveMineRail = 10, CaveMineCart = 11, CaveLava = 12;
         public const int CaveLightTries = 8;
         public const float CaveLightSideShare = 0.7f, CaveLightAlongMin = 0.15f, CaveLightAlongMax = 0.85f, SkylightJitterShare = 0.5f, SkylightFloorM = 40f;
 
@@ -25,7 +25,7 @@ namespace Stabby.World
             public ulong Seed;
         }
 
-        public static bool IsCaveLight(int kind) => kind >= CaveFungus && kind <= CaveSkylight;
+        public static bool IsCaveLight(int kind) => (kind >= CaveFungus && kind <= CaveSkylight) || kind == CaveLava;
         public static bool IsMineKind(int kind) => kind >= CaveMineTimber && kind <= CaveMineCart;
 
         static CaveLightSpot[] PlanCaveLights(GeneratedWorld w, FeatureEdit[] edits, ulong stream)
@@ -38,8 +38,9 @@ namespace Stabby.World
             for (int e = 0; e < edits.Length; e++)
             {
                 var c = edits[e];
-                if (c.Kind != FeatureEdit.Carve || (c.Shape != FeatureEdit.Shaft && !FeatureEdit.IsRoom(c.Shape))) continue;
-                int t = Features.TileOf(c, cm);
+                bool lava = LavaBasin(c);
+                if (c.Kind != FeatureEdit.Carve || (c.Shape != FeatureEdit.Shaft && !FeatureEdit.IsRoom(c.Shape) && !lava)) continue;
+                int t = lava ? Features.TileAt(c.Ax, c.Az, cm) : Features.TileOf(c, cm);
                 if (t < 0) continue;
                 if (!tiles.TryGetValue(t, out var list)) tiles[t] = list = new List<int>();
                 list.Add(e);
@@ -53,9 +54,10 @@ namespace Stabby.World
                 rooms.Clear();
                 foreach (int e in kv.Value)
                 {
-                    if (edits[e].Shape != FeatureEdit.Shaft) { rooms.Add(e); continue; }
+                    bool lava = LavaBasin(edits[e]);
+                    if (edits[e].Shape != FeatureEdit.Shaft && !lava) { rooms.Add(e); continue; }
                     if (made >= lib.LightMost) continue;
-                    spots.Add(new CaveLightSpot { Kind = CaveSkylight, Edit = e, Tile = kv.Key, Seed = rng.NextU64() });
+                    spots.Add(new CaveLightSpot { Kind = lava ? CaveLava : CaveSkylight, Edit = e, Tile = kv.Key, Seed = rng.NextU64() });
                     made++;
                 }
                 if (roll >= lib.LightChance || rooms.Count == 0) continue;
@@ -68,6 +70,8 @@ namespace Stabby.World
             }
             return spots.ToArray();
         }
+
+        public static bool LavaBasin(FeatureEdit c) => c.Obsidian && c.Kind == FeatureEdit.Carve && c.Shape == FeatureEdit.Spring;
 
         public int CaveLightCount => caveLights.Length;
         public CaveLightSpot CaveLight(int i) => caveLights[i];
@@ -130,7 +134,7 @@ namespace Stabby.World
             var ground = new DetailGround { Detail = detail };
             float s = Features.LatticeStepM, foot = footprint[d];
             var c = edits[p.Edit];
-            bool sky = p.Kind == CaveSkylight;
+            bool sky = p.Kind == CaveSkylight, lava = p.Kind == CaveLava;
             float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
             float px = len > 1e-3f ? -ez / len : 1f, pz = len > 1e-3f ? ex / len : 0f, open = c.HoleR;
             var rng = new Rng(p.Seed);
@@ -140,7 +144,15 @@ namespace Stabby.World
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
                 if (k == 0) { t = p.T; u = sky ? 0f : p.U; v = 0f; }
                 float x, z, ay, low;
-                if (sky)
+                if (lava)
+                {
+                    float jitter = k == 0 ? 0f : LavaGlowJitterM;
+                    x = c.Ax + u * jitter;
+                    z = c.Az + v * jitter;
+                    ay = Underground.BasinLevel(c) + LavaGlowAboveM;
+                    low = Underground.BasinLevel(c) - Underground.PoolMaxDepthM - LavaGlowAboveM;
+                }
+                else if (sky)
                 {
                     x = c.Ax + u * SkylightJitterShare * open;
                     z = c.Az + v * SkylightJitterShare * open;
@@ -157,7 +169,7 @@ namespace Stabby.World
                     ay -= 0.2f * open;
                 }
                 var rock = RockAt(x, z);
-                if (!sky && !Owns(rock, c, x, ay, z)) continue;
+                if (!sky && !lava && !Owns(rock, c, x, ay, z)) continue;
                 if (Walk.Solid(ground, rock, s, x, ay, z) >= 0) continue;
                 float floor = Walk.Surface(ground, rock, s, x, z, ay, low);
                 if (floor <= low) continue;
@@ -195,6 +207,7 @@ namespace Stabby.World
                 list.Add(o);
             }
         }
+        public const float LavaGlowJitterM = 0.3f, LavaGlowAboveM = 0.1f;
         public const float CrystalFloorShare = 0.4f, CrystalCeilingShare = 0.3f, CrystalJitter = 0.5f, CrystalStepM = 0.5f, CrystalLift = 0.6f;
         public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
         public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 10f, CaveDripSurveyM = 150f;

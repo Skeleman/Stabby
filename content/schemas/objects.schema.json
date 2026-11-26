@@ -273,7 +273,7 @@
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon"] },
-              "cave": { "enum": ["stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart"] },
+              "cave": { "enum": ["stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart", "lava-glow"] },
               "caveIce": { "type": "boolean" },
               "liquid": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "spacingM": { "type": "number", "minimum": 200, "maximum": 5000 },

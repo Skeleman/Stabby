@@ -745,7 +745,7 @@ Shader "Stabby/Water"
                     float3 fc = L6.rgb * (l.color * saturate(dot(n, l.direction)) * 0.8 + sky * 0.4 + lg.diffuse * 0.8) + l.color * pow(saturate(dot(n, h)), 40) * 0.08;
                     c = lerp(c, fc, film);
                 }
-                c += Mixed(i, 8).rgb;
+                c += Mixed(i, 8).rgb * (1 - film);
 
                 float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 if (river && i.fall.y > 0) alpha *= smoothstep(0, PoolShore, depth);

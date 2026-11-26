@@ -552,6 +552,74 @@ public class CaveTests
     }
 
     [Fact]
+    public void ObsidianCavesFormInHotDryGroundWithLavaPools()
+    {
+        int hot = 0, lava = 0, glow = 0;
+        for (ulong seed = 1; seed <= 16 && lava == 0; seed++)
+        {
+            var s = At(seed);
+            var e = new List<string>();
+            WorldChecks.CheckCaveObsidian(s.W, s.Edits, s.Graphs, e);
+            Assert.Empty(e);
+            hot += s.Graphs.Count(g => g.Obsidian);
+            if (!s.Graphs.Any(g => g.Obsidian)) continue;
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            float span = Features.TileCells * s.W.Config.CellMeters;
+            foreach (var p in field.CavePools())
+            {
+                int tile = (int)Math.Floor(p.Z / span) * 65536 + (int)Math.Floor(p.X / span);
+                Assert.Equal(s.Graphs.Any(x => x.Tile == tile && x.Obsidian), field.LavaPool(p));
+                if (field.LavaPool(p)) lava++;
+            }
+            for (int i = 0; i < field.CaveLightCount; i++)
+                if (field.CaveLight(i).Kind == ObjectField.CaveLava && field.CaveLightAt(i, out _)) glow++;
+            WorldChecks.CheckCaveLights(s.W, s.Edits, field, e);
+            Assert.Empty(e);
+        }
+        output.WriteLine($"{hot} obsidian caves, {lava} lava pools, {glow} lava glows");
+        Assert.True(hot > 0 && lava > 0 && glow > 0, $"{hot} obsidian caves, {lava} lava pools, {glow} lava glows in seeds 1..16");
+    }
+
+    [Fact]
+    public void LavaPoolOnAPassageFails()
+    {
+        for (ulong seed = 1; seed <= 16; seed++)
+        {
+            var s = At(seed);
+            var rooms = s.Edits.Where(x => x.Kind == FeatureEdit.Carve && FeatureEdit.IsRoom(x.Shape)).ToList();
+            int i = Array.FindIndex(s.Edits, x => x.Obsidian && Underground.PoolBasin(rooms, x));
+            if (i < 0) continue;
+            float cm = s.W.Config.CellMeters;
+            var room = rooms.First(r => Underground.InChamber(new[] { r }, s.Edits[i].Ax, Underground.BasinTop(s.Edits[i]), s.Edits[i].Az));
+            var tunnel = s.Edits.First(x => x.Shape == FeatureEdit.Cave && (Near(x.Ax, x.Az, room.Ax, room.Az) || Near(x.Bx, x.Bz, room.Ax, room.Az)));
+            float tx = Near(tunnel.Ax, tunnel.Az, room.Ax, room.Az) ? tunnel.Ax : tunnel.Bx, tz = tx == tunnel.Ax ? tunnel.Az : tunnel.Bz;
+            var moved = (FeatureEdit[])s.Edits.Clone();
+            moved[i].Ax = tx;
+            moved[i].Az = tz;
+            moved[i].Bx = moved[i].Ax;
+            moved[i].Bz = moved[i].Az;
+            var e = new List<string>();
+            WorldChecks.CheckCaveObsidian(s.W, moved, s.Graphs, e);
+            Assert.Contains(e, m => m.Contains("blocks a cave passage"));
+            return;
+        }
+        Assert.Fail("no lava pool in seeds 1..16");
+    }
+
+    static bool Near(float ax, float az, float bx, float bz) => Math.Abs(ax - bx) < 1e-2f && Math.Abs(az - bz) < 1e-2f;
+
+    [Fact]
+    public void WetWorldsGrowNoObsidianCaves()
+    {
+        var lib = ContentLoader.LoadCaves(Root);
+        lib.ObsidianChance = 1f;
+        lib.ObsidianMaxRainMm = 0f;
+        var s = Make(1, lib);
+        Assert.DoesNotContain(s.Graphs, g => g.Obsidian);
+        Assert.DoesNotContain(s.Edits, x => x.Obsidian);
+    }
+
+    [Fact]
     public void CrystalCavesCarveFacetedCellsLinedWithCrystals()
     {
         var s = Gem.Value;
