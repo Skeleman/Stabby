@@ -127,7 +127,7 @@ namespace Stabby.World
             {
                 if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
             }
-            if (pl.Discovery == Overlook && !SeekOverlook(ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
+            if (pl.Discovery == Overlook && !SeekOverlook(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
             if (pl.Discovery == Dungeon)
             {

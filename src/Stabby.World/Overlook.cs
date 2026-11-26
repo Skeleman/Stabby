@@ -42,11 +42,13 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float OverlookSteadyM = 5f, OverlookReliefM = 1.2f, OverlookEyeM = 1.6f, OverlookDropM = 15f, OverlookNearM = 40f, OverlookHorizon = 0.03f, OverlookOpenFit = 2f, OverlookSeekM = 30f;
+        public const float OverlookSteadyM = 3f, OverlookReliefM = 1.2f, OverlookEyeM = 1.6f, OverlookDropM = 15f, OverlookNearM = 40f, OverlookHorizon = 0.03f, OverlookOpenFit = 2f, OverlookSeekM = 30f, OverlookEdgeM = 12f, OverlookEdgeDropM = 4f, OverlookEdgeStepM = 1f, OverlookEdgeRiseM = 0.5f, OverlookCreepM = 36f, OverlookCreepStepM = 2f;
         public const int OverlookSeekRings = 3;
         static readonly float[] OverlookReach = { 20f, 80f, 160f, 320f };
 
-        public float OverlookFit(float x, float z, out float vx, out float vz)
+        public float OverlookFit(float x, float z, out float vx, out float vz) => OverlookFit(x, z, true, out vx, out vz);
+
+        float OverlookFit(float x, float z, bool edge, out float vx, out float vz)
         {
             vx = 0; vz = 1;
             float y = GroundAt(detail, cm, x, z);
@@ -60,7 +62,7 @@ namespace Stabby.World
             int open = 0;
             for (int k = 0; k < 16; k++)
             {
-                float ux = Structures.Cos16(k), uz = Structures.Sin16(k), drop = OverlookView(x, z, y, ux, uz);
+                float ux = Structures.Cos16(k), uz = Structures.Sin16(k), drop = OverlookView(x, z, y, ux, uz, edge);
                 if (drop == float.MinValue) continue;
                 open++;
                 if (drop > best) { best = drop; vx = ux; vz = uz; }
@@ -68,12 +70,14 @@ namespace Stabby.World
             return best == float.MinValue ? float.MinValue : best + OverlookOpenFit * open;
         }
 
-        public float OverlookView(float x, float z, float y, float ux, float uz)
+        public float OverlookView(float x, float z, float y, float ux, float uz) => OverlookView(x, z, y, ux, uz, true);
+
+        float OverlookView(float x, float z, float y, float ux, float uz, bool edge)
         {
             float px = x + ux * OverlookNearM, pz = z + uz * OverlookNearM;
             if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return float.MinValue;
             float drop = y - GroundAt(detail, cm, px, pz);
-            if (drop < OverlookDropM) return float.MinValue;
+            if (drop < OverlookDropM || edge && !OverlookEdge(x, z, y, ux, uz)) return float.MinValue;
             foreach (float r in OverlookReach)
             {
                 px = x + ux * r; pz = z + uz * r;
@@ -82,21 +86,46 @@ namespace Stabby.World
             return drop;
         }
 
-        bool SeekOverlook(ref float x, ref float z, float x0, float z0, float x1, float z1, out float qa, out float qb)
+        bool OverlookEdge(float x, float z, float y, float ux, float uz)
         {
-            float best = OverlookFit(x, z, out float vx, out float vz), bx = x, bz = z;
-            for (int ring = 1; ring <= OverlookSeekRings; ring++)
-                for (int k = 0; k < 8; k++)
+            for (float r = OverlookEdgeStepM; r <= OverlookEdgeM; r += OverlookEdgeStepM)
+            {
+                float px = x + ux * r, pz = z + uz * r;
+                if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return false;
+                float g = GroundAt(detail, cm, px, pz);
+                if (g > y + OverlookEdgeRiseM) return false;
+                if (y - g >= OverlookEdgeDropM) return true;
+            }
+            return false;
+        }
+
+        bool SeekOverlook(int d, int variant, float size, ref float x, ref float z, float x0, float z0, float x1, float z1, out float qa, out float qb)
+        {
+            float best = float.MinValue, bx = x, bz = z, vx = 0, vz = 1;
+            for (int ring = 0; ring <= OverlookSeekRings; ring++)
+                for (int k = 0; k < (ring == 0 ? 1 : 8); k++)
                 {
                     FanDir(k, 0.70710678f, out float ux, out float uz);
                     float px = Math.Min(x1, Math.Max(x0, x + ux * ring * OverlookSeekM)), pz = Math.Min(z1, Math.Max(z0, z + uz * ring * OverlookSeekM));
-                    float fit = OverlookFit(px, pz, out float wx, out float wz);
-                    if (fit > best) { best = fit; bx = px; bz = pz; vx = wx; vz = wz; }
+                    if (OverlookFit(px, pz, false, out float rx, out float rz) == float.MinValue) continue;
+                    for (float step = 0; step <= OverlookCreepM; step += OverlookCreepStepM)
+                    {
+                        float cx = Math.Min(x1, Math.Max(x0, px + rx * step)), cz = Math.Min(z1, Math.Max(z0, pz + rz * step));
+                        float fit = OverlookFit(cx, cz, out float wx, out float wz);
+                        if (fit <= best) continue;
+                        Heading(wx, wz, out float ha, out float hb);
+                        if (SiteFits(d, variant, cx, cz, size, ha, hb, out _)) { best = fit; bx = cx; bz = cz; vx = wx; vz = wz; }
+                    }
                 }
             x = bx; z = bz;
+            Heading(vx, vz, out qa, out qb);
+            return best > float.MinValue;
+        }
+
+        static void Heading(float vx, float vz, out float qa, out float qb)
+        {
             qa = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + vz)));
             qb = (vx < 0 ? -1 : 1) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - vz)));
-            return best > float.MinValue;
         }
 
         public string OverlookFault(ObjectInstance o)
