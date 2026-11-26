@@ -50,7 +50,7 @@ Shader "Stabby/Object"
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
             float4 _StabbyKit[39], _StabbyKitSrgb[39];
             float _StabbyClock;
             static float3 emberGlow;
@@ -710,8 +710,8 @@ Shader "Stabby/Object"
                 {
                     float bed = ContactBed(i.origin.xz);
                     ground += (ContactBed(wp.xz) - bed) * smoothstep(6, 2, bed - fade.z);
-                    albedo = ContactObject(albedo, wp, ground, size, thick, hang);
-                    [branch] if (fade.w < 0) albedo = ContactObject(albedo, wp, ground - fade.w, size, thick, -1);
+                    albedo = ContactObject(albedo, wp, ground, size, thick, hang, iceWrap > 0 ? 1 : 0);
+                    [branch] if (fade.w < 0) albedo = ContactObject(albedo, wp, ground - fade.w, size, thick, -1, iceWrap > 0 ? 1 : 0);
                 }
                 float above = max(hang * (wp.y - ground), 0);
                 [branch] if (fade.w < 0) above = min(above, max(ground - fade.w - wp.y, 0));
