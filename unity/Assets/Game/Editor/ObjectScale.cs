@@ -101,7 +101,17 @@ namespace Stabby.Game.Editor
             var texList = Resources.FindObjectsOfTypeAll<Texture>();
             foreach (var t in texList) texBytes += Profiler.GetRuntimeMemorySizeLong(t);
             foreach (var w in Unity.Entities.World.All) chunks += w.EntityManager.UniversalQuery.CalculateChunkCountWithoutFiltering();
-            return $"scale memory (MB): unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, graphics driver {Profiler.GetAllocatedMemoryForGraphicsDriver() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, working set {(ulong)mem.WorkingSetSize / (ulong)mb}, peak working set {(ulong)mem.PeakWorkingSetSize / (ulong)mb}, peak commit {(ulong)mem.PeakPagefileUsage / (ulong)mb}; meshes {meshList.Length} {meshBytes / mb}, textures {texList.Length} {texBytes / mb}, entity chunks {chunks} {chunks * 16 / 1024}; top mesh groups {top}; lake meshes {lakes.Length}, vertices {lakeVerts} (max {lakeMax}), stride {stride} B, readable {readable}; recorders {counters}";
+            var archetypes = new List<(string world, int chunks, int capacity, int entities)>();
+            foreach (var w in Unity.Entities.World.All)
+            {
+                using var all = new Unity.Collections.NativeList<EntityArchetype>(Unity.Collections.Allocator.Temp);
+                w.EntityManager.GetAllArchetypes(all);
+                foreach (var a in all) if (a.ChunkCount > 0) archetypes.Add((w.Name, a.ChunkCount, a.ChunkCapacity, a.ChunkCount * a.ChunkCapacity));
+            }
+            int partBytes = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<Stabby.Game.ObjectSpawn>();
+            string owners = $"object parts {ObjectViewSystem.PartsHeld} x {partBytes} B = {(long)ObjectViewSystem.PartsHeld * partBytes / mb}, entity chunks {chunks * 16 / 1024}, largest archetypes " + string.Join(", ", archetypes.OrderByDescending(a => a.chunks).Take(4).Select(a => $"{a.world} {a.chunks} chunks of {a.capacity} = {a.chunks * 16 / 1024}"));
+            GameStatus.Lines["~scale native"] = $"scale native owners (MB): {owners}";
+            return $"scale memory (MB):unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, graphics driver {Profiler.GetAllocatedMemoryForGraphicsDriver() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, working set {(ulong)mem.WorkingSetSize / (ulong)mb}, peak working set {(ulong)mem.PeakWorkingSetSize / (ulong)mb}, peak commit {(ulong)mem.PeakPagefileUsage / (ulong)mb}; meshes {meshList.Length} {meshBytes / mb}, textures {texList.Length} {texBytes / mb}, entity chunks {chunks} {chunks * 16 / 1024}; top mesh groups {top}; lake meshes {lakes.Length}, vertices {lakeVerts} (max {lakeMax}), stride {stride} B, readable {readable}; recorders {counters}";
         }
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
