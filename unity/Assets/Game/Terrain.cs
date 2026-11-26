@@ -1164,10 +1164,10 @@ namespace Stabby.Game
             public MeshBatch Batch;
             public int Steam, Pools;
 
-            public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast)
+            public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast, bool lean = false)
             {
                 if (part == null) return;
-                Pack.Add(part, Kinds.Count);
+                Pack.Add(part, Kinds.Count, lean);
                 Kinds.Add((mat, pad, cast));
             }
 
@@ -1803,12 +1803,13 @@ namespace Stabby.Game
                 {
                     var p = prepared;
                     BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+                    bool lean = wm != material;
                     packing = Task.Run(() => Pack(sp =>
                     {
-                        foreach (var part in p.Lakes) sp.Add(part, wm, 0, Casts(part));
-                        foreach (var part in p.Rivers) sp.Add(part, wm, 0, Casts(part));
+                        foreach (var part in p.Lakes) sp.Add(part, wm, 0, Casts(part), lean);
+                        foreach (var part in p.Rivers) sp.Add(part, wm, 0, Casts(part), lean);
                         foreach (var part in p.Mist) sp.Add(part, mm, WaterGeometry.MistPad, true);
-                        sp.Add(p.Sea, wm, 0, Casts(p.Sea));
+                        sp.Add(p.Sea, wm, 0, Casts(p.Sea), lean);
                     }));
                     return;
                 }
@@ -1837,6 +1838,7 @@ namespace Stabby.Game
                     if (field == null) return;
                     bool mist = hasMist;
                     BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+                    bool lean = wm != material;
                     steaming = Task.Run(() => Pack(sp =>
                     {
                         var l = new List<MeshParts>();
@@ -1845,7 +1847,7 @@ namespace Stabby.Game
                         if (!mist) l.Clear();
                         (sp.Steam, sp.Pools) = (l.Count, w.Count);
                         foreach (var part in l) sp.Add(part, mm, WaterGeometry.MistPad, true);
-                        foreach (var part in w) sp.Add(part, wm, 0, Casts(part));
+                        foreach (var part in w) sp.Add(part, wm, 0, Casts(part), lean);
                     }));
                     return;
                 }
@@ -1867,7 +1869,7 @@ namespace Stabby.Game
             try
             {
                 fill(sp);
-                sp.Batch = new MeshBatch(sp.Pack);
+                sp.Batch = new MeshBatch(sp.Pack, true);
             }
             catch
             {
