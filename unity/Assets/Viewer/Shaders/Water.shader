@@ -74,7 +74,7 @@ Shader "Stabby/Water"
             static const float SlopeRange = 0.1;
             static const float MudFeather = 4, PoolFeather = 0.5, PoolShore = 1.2;
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
-            static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05;
+            static const float CurtainPath = 6, CurtainBend = 0.05, CurtainSpill = 1.5, CurtainFlutter = 0.07, CurtainRipple = 0.06, CurtainBulge = 0.05, CurtainSink = 0.5, CurtainFroth = 0.7, CurtainDrown = 0.3;
             static const int SwTrains = 7;
             static const float SwTrainL[7] = { 1, 0.66, 0.47, 0.31, 0.21, 0.14, 0.095 };
             static const float2 SwTrainD[7] = { float2(0.8, 0.6), float2(0.96, -0.28), float2(0.53, 0.848), float2(0.99, 0.141), float2(0.6, 0.8), float2(0.894, 0.447), float2(0.707, 0.707) };
@@ -90,7 +90,7 @@ Shader "Stabby/Water"
             static const float2x2 Spin = float2x2(-0.737, -0.675, 0.675, -0.737);
             static const int ChopOctaves = 6;
             static const float ChopLacunarity = 1.93, ChopGain = 0.78, ChopPxLo = 1.5, ChopPxHi = 4, ChopWarp = 0.35, ChopStrength = 0.5, ChopBroad = 0.45, ChopFloorA2 = 0.0015, ChopLostBlur = 0.15;
-            static const float SetBase = 1.25, SetGain = 2.2, GlitPx = 2, GlitExp = 300, GlitGain = 4, GlitRate = 0.7, GlitTilt = 0.08, GlitTiltMax = 0.35, LocalSpecMax = 300, RippleLit = 0.9, GrazeFlat = 0.2;
+            static const float SetBase = 1.25, SetGain = 2.2, GlitPx = 2, GlitExp = 300, GlitGain = 4, GlitRate = 0.7, GlitTilt = 0.08, GlitTiltMax = 0.35, LocalSpecMax = 300, GlitFacetLo = 0.01, GlitFacetHi = 0.04, RippleLit = 0.9, GrazeFlat = 0.2;
             static const float FarPx = 6, FarStep = 3, FarShare = 0.6, FarDrift = 0.08, GustLo = 0.8, GustHi = 1.2, GustDrift = 0.05;
             static const float2 SetDir[6] = { float2(0.82, 0.57), float2(-0.34, 0.94), float2(0.98, -0.21), float2(-0.71, -0.70), float2(0.26, -0.96), float2(-0.93, 0.36) };
             static const float SetFreq[6] = { 1, 1.37, 1.93, 2.71, 3.83, 5.29 };
@@ -341,6 +341,8 @@ Shader "Stabby/Water"
                 float str = s1.x + 0.5 * s2.x + 0.3 * s3.x;
                 float aer = saturate(smoothstep(0.25, 1, u) * (0.6 + 0.45 * flowQ) + 0.1 * flowQ);
                 float white = saturate(aer + smoothstep(0.1, 0.6, str) * (0.2 + 0.45 * u) * (0.6 + 0.4 * flowQ)) * L8.w;
+                float wl = h - CurtainSink - y + 0.25 * (s1.x + 0.5 * warp.x);
+                white = max(white, (1 - smoothstep(0, CurtainFroth, wl)) * smoothstep(-0.4, 0.3, str) * L8.w);
                 float3 up = float3(0, 1, 0), f3 = float3(fd.x, 0, fd.y), s3d = float3(sd.x, 0, sd.y);
                 float3 nb = normalize(f3 * (0.35 + u) + up * (1 - u) * 0.9);
                 float3 tb = normalize(cross(s3d, nb));
@@ -384,7 +386,7 @@ Shader "Stabby/Water"
                 float glint = pow(saturate(dot(n, h3)), 400) * smoothstep(0.35, 0.75, s2.x + 0.5 * s3.x + 0.3 * warp.x);
                 c += l.color * (glint * 3 * detail + pow(saturate(dot(n, h3)), 120) * 0.3) * (1 - white);
                 c += lg.spec * 0.3 * (1 - white);
-                float alpha = saturate(lerp(0.9, 1, white)) * edge * lerp(0.35, 1, gap) * lerp(0.6, 1, spill) * L7.y;
+                float alpha = saturate(lerp(0.9, 1, white)) * edge * lerp(0.35, 1, gap) * lerp(0.6, 1, spill) * L7.y * smoothstep(-CurtainDrown, 0, wl);
                 return half4(StabbyMixFog(c, i.positionWS, i.fog), alpha);
             }
 
@@ -661,7 +663,7 @@ Shader "Stabby/Water"
                     float fpr = fpa * _ScreenParams.y / 1080;
                     float tilt = clamp(GlitTilt + sig * sqrt(lost + 0.2), GlitTilt, GlitTiltMax);
                     float3 hl = normalize(lg.dir + v);
-                    c += lg.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick)) * Glitter(xz, fpr, n, hl, _Time.y, tilt);
+                    c += lg.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * smoothstep(GlitFacetLo, GlitFacetHi, fpa)) * Glitter(xz, fpr, n, hl, _Time.y, tilt);
                 }
                 UNITY_BRANCH if (look && !river && opacity < 0.5 && l.direction.y > 0)
                 {
