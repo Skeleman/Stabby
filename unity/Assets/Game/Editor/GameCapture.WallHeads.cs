@@ -58,11 +58,6 @@ namespace Stabby.Game.Editor
             var eye = target + outward * WallHeadOut + side * WallHeadSide;
             eye.y = ground.HeightAt(eye.x, eye.z) + WallHeadUp;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(target - eye));
-            ObjectViewSystem.HideDef = headDef;
-            for (var w = Settle(180); w.MoveNext();) yield return null;
-            Shot(cam, null, "warmup");
-            Shot(cam, dir, "wallheads-before");
-            ObjectViewSystem.HideDef = -1;
             for (var w = Settle(180); w.MoveNext();) yield return null;
             Shot(cam, null, "warmup");
             Shot(cam, dir, "wallheads-after");
