@@ -29,7 +29,7 @@ namespace Stabby.World
         public static CaveBrook[] Build(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
         {
             edits = Array.FindAll(edits, e => !Channel(e));
-            var list = Traces(w, edits, caves);
+            var list = Traces(w, detail, edits, caves);
             if (list.Count == 0) return list.ToArray();
             var floor = new Floor { Ground = new DetailGround { Detail = detail }, Grid = new EditGrid(edits, w.Config.Size * w.Config.CellMeters) };
             foreach (var s in list)
@@ -40,11 +40,11 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        public static FeatureEdit[] Sinks(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves)
+        public static FeatureEdit[] Sinks(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
         {
             var holes = new List<FeatureEdit>();
             float cm = w.Config.CellMeters;
-            foreach (var s in Traces(w, edits, caves))
+            foreach (var s in Traces(w, detail, edits, caves))
             {
                 var end = caves[s.Graph].Nodes[s.Nodes[s.Nodes.Length - 1]];
                 if (s.End == CaveBrook.Plunge)
@@ -71,10 +71,11 @@ namespace Stabby.World
             return holes.ToArray();
         }
 
-        static List<CaveBrook> Traces(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves)
+        static List<CaveBrook> Traces(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
         {
             var list = new List<CaveBrook>();
             if (caves == null || w.Climate == null) return list;
+            var rock = new Rocks { Ground = new DetailGround { Detail = detail }, Grid = new EditGrid(Array.FindAll(edits, e => e.CaveCarve), w.Config.Size * w.Config.CellMeters) };
             for (int gi = 0; gi < caves.Length; gi++)
             {
                 var g = caves[gi];
@@ -84,7 +85,7 @@ namespace Stabby.World
                 order.Sort((a, b) => g.Nodes[b].Y.CompareTo(g.Nodes[a].Y) != 0 ? g.Nodes[b].Y.CompareTo(g.Nodes[a].Y) : a.CompareTo(b));
                 foreach (int src in order)
                 {
-                    var s = Trace(w, edits, caves, gi, src);
+                    var s = Trace(w, rock, edits, caves, gi, src);
                     if (s == null) continue;
                     list.Add(s);
                     break;
@@ -152,7 +153,7 @@ namespace Stabby.World
             return best;
         }
 
-        static CaveBrook Trace(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves, int gi, int src)
+        static CaveBrook Trace(GeneratedWorld w, Rocks rock, FeatureEdit[] edits, CaveGraph[] caves, int gi, int src)
         {
             var g = caves[gi];
             if (g.Obsidian) return null;
@@ -169,8 +170,8 @@ namespace Stabby.World
             bool pooled = false;
             while (true)
             {
-                if (at != src && Ledge(w, edits, caves, gi, at, pts, ref surface, out fall)) { end = CaveBrook.Plunge; break; }
                 if (at != src && Basin(edits, g.Nodes[at], out basin)) { end = CaveBrook.Pool; pooled = true; break; }
+                if (at != src && Ledge(w, rock, edits, caves, gi, at, pts, ref surface, out fall)) { end = CaveBrook.Plunge; break; }
                 if (at != src && g.Nodes[at].Entrance) { end = CaveBrook.Spring; break; }
                 int next = Lower(w, g, at, nodes, out var edge);
                 if (next < 0) break;
@@ -190,7 +191,7 @@ namespace Stabby.World
             };
         }
 
-        static bool Ledge(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves, int gi, int at, List<float> pts, ref float surface, out int fall)
+        static bool Ledge(GeneratedWorld w, Rocks rock, FeatureEdit[] edits, CaveGraph[] caves, int gi, int at, List<float> pts, ref float surface, out int fall)
         {
             fall = -1;
             var g = caves[gi];
@@ -212,16 +213,16 @@ namespace Stabby.World
                 float cx = n.X + ways[k] * PlungeOffM, cz = n.Z + ways[k + 1] * PlungeOffM, lx = n.X + ways[k] * lip, lz = n.Z + ways[k + 1] * lip;
                 if (Clear(caves, cx, cz) < PlungeClearM) continue;
                 float lf = float.NaN;
-                if (!Rock(edits, lx, n.Y + PlungeScanM, lz))
+                if (!rock.At(lx, n.Y + PlungeScanM, lz))
                     for (float y = n.Y + PlungeScanM; y >= n.Y - PlungeDeepM; y -= PlungeStepM)
-                        if (Rock(edits, lx, y, lz)) { lf = y; break; }
+                        if (rock.At(lx, y, lz)) { lf = y; break; }
                 if (float.IsNaN(lf)) continue;
-                float pool = lf - drop, low = pool - PlungeHoleM - PlungeProbeM;
+                float pool = Math.Min(lf, surface - DepthM) - RecessM - PlungeStepM - drop, low = pool - PlungeHoleM - PlungeProbeM;
                 var sh = Shaft(w, gi, cx, cz, pool);
                 if (!Features.Inside(sh, w.Config.CellMeters) || Crowded(edits, sh)) continue;
                 bool solid = true;
                 for (float y = pool + PlungeProbeM; y >= low && solid; y -= 1f)
-                    solid = (y >= pool - PlungeHoleM || Rock(edits, cx, y, cz)) && Rock(edits, cx + ring, y, cz) && Rock(edits, cx - ring, y, cz) && Rock(edits, cx, y, cz + ring) && Rock(edits, cx, y, cz - ring);
+                    solid = (y >= pool - PlungeHoleM || rock.At(cx, y, cz)) && rock.At(cx + ring, y, cz) && rock.At(cx - ring, y, cz) && rock.At(cx, y, cz + ring) && rock.At(cx, y, cz - ring);
                 if (!solid) continue;
                 int last = pts.Count - Raw;
                 float x0 = pts[last], z0 = pts[last + 2], half = pts[last + 3], room = pts[last + 4], go = (float)Math.Sqrt((lx - x0) * (lx - x0) + (lz - z0) * (lz - z0));
@@ -239,11 +240,12 @@ namespace Stabby.World
             return false;
         }
 
-        static bool Rock(FeatureEdit[] edits, float x, float y, float z)
+        struct Rocks
         {
-            foreach (var e in edits)
-                if (e.CaveCarve && e.Apply(1f, x, y, z) < 0f) return false;
-            return true;
+            public DetailGround Ground;
+            public EditGrid Grid;
+
+            public bool At(float x, float y, float z) => Walk.Solid(Ground, Grid.Cell(x, z), Features.LatticeStepM, x, y, z) > 0f;
         }
 
         public static bool PlungeShaft(FeatureEdit e) => e.Kind == FeatureEdit.Carve && e.Shape == FeatureEdit.Sink && e.R == PlungeHoleM / Features.CaveHollow && e.N == PlungeLumpM;

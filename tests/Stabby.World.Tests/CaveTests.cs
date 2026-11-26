@@ -334,7 +334,7 @@ public class CaveTests
             brooks += all.Length;
             var pools = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
             var e = new List<string>();
-            WorldChecks.CheckCaveFalls(s.Edits, all, pools, e);
+            WorldChecks.CheckCaveFalls(s.Detail, s.Edits, all, pools, e);
             Assert.True(e.Count == 0, string.Join("; ", e));
             foreach (var x in all)
             {
@@ -342,10 +342,10 @@ public class CaveTests
                 falls++;
                 var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
                 e.Clear();
-                WorldChecks.CheckCaveFalls(bare, new[] { x }, null, e);
+                WorldChecks.CheckCaveFalls(s.Detail, bare, new[] { x }, null, e);
                 Assert.Contains(e, m => m.Contains("leaves its carve") || m.Contains("no pool or basin"));
                 e.Clear();
-                WorldChecks.CheckCaveFalls(s.Edits, new[] { x }, Array.Empty<LiquidPool>(), e);
+                WorldChecks.CheckCaveFalls(s.Detail, s.Edits, new[] { x }, Array.Empty<LiquidPool>(), e);
                 Assert.Contains(e, m => m.Contains("drops into no water"));
             }
         }
