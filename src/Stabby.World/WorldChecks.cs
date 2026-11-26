@@ -1462,7 +1462,7 @@ namespace Stabby.World
             int drips = 0;
             var contacts = new List<ObjectColumn>();
             foreach (int c in picked)
-                foreach (var o in field.Chunk(c % across, c / across))
+                foreach (var o in field.CaveChunk(c % across, c / across))
                 {
                     var def = w.Objects.Objects[o.Def];
                     if (!ObjectField.IsCave(def)) continue;
@@ -1513,7 +1513,7 @@ namespace Stabby.World
                     if (ax < 0 || az < 0 || ax >= across || az >= across) continue;
                     if ((dx < 0 && o.X - cx * span > edge) || (dx > 0 && (cx + 1) * span - o.X > edge)) continue;
                     if ((dz < 0 && o.Z - cz * span > edge) || (dz > 0 && (cz + 1) * span - o.Z > edge)) continue;
-                    foreach (var m in field.Chunk(ax, az))
+                    foreach (var m in field.CaveChunk(ax, az))
                     {
                         int kind = defs[m.Def].Placement.Cave;
                         if (kind != ObjectField.CaveStalagmite && kind != ObjectField.CaveColumn) continue;

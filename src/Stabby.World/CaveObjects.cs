@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace Stabby.World
 {
@@ -307,6 +308,23 @@ namespace Stabby.World
             float cy = l > 1e-4f ? qa / l : 1f, sy = l > 1e-4f ? qb / l : 0f;
             if (flip) { o.Qx = cy; o.Qy = 0f; o.Qz = -sy; o.Qw = 0f; }
             else { o.Qx = 0f; o.Qy = sy; o.Qz = 0f; o.Qw = cy; }
+        }
+
+        ObjectInstance[][] caveChunks;
+
+        public ObjectInstance[] CaveChunk(int cx, int cz)
+        {
+            var all = Volatile.Read(ref caveChunks) ?? Interlocked.CompareExchange(ref caveChunks, new ObjectInstance[across * across][], null) ?? caveChunks;
+            int c = cz * across + cx;
+            var s = Volatile.Read(ref all[c]);
+            if (s != null) return s;
+            var full = Volatile.Read(ref chunks[c]);
+            var list = new List<ObjectInstance>();
+            if (full != null) { foreach (var o in full) if (IsCave(lib.Objects[o.Def])) list.Add(o); }
+            else for (int d = 0; d < lib.Objects.Count; d++) if (IsCave(lib.Objects[d])) PlaceInto(cx, cz, false, list, null, false, false, d);
+            s = list.ToArray();
+            Volatile.Write(ref all[c], s);
+            return s;
         }
 
         void EmitCave(int d, int chunk, float x0, float z0, float sx, float sz, List<ObjectInstance> list, ref int ordinal)
