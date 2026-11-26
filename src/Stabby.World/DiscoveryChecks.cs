@@ -78,7 +78,7 @@ namespace Stabby.World
                 foreach (int q in ids)
                 {
                     var f = grid.Edits[q];
-                    if (f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Vault || ((kind == ObjectField.WolfDen || ObjectField.Pooled(kind)) && f.Shape == FeatureEdit.Boulder)) continue;
+                    if (f.Link || f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Vault || ((kind == ObjectField.WolfDen || ObjectField.Pooled(kind)) && f.Shape == FeatureEdit.Boulder)) continue;
                     if (o.X + r >= f.MinX && o.X - r <= f.MaxX && o.Z + r >= f.MinZ && o.Z - r <= f.MaxZ) { e.Add($"{def.Id} at {o.X:F0},{o.Z:F0} has feature edit {f.Shape} at {f.Ax:F0},{f.Az:F0} inside its footprint"); return; }
                 }
             }

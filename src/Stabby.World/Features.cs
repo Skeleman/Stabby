@@ -51,7 +51,7 @@ namespace Stabby.World
 
         public float Thick => R + Math.Min(W, H);
 
-        public bool Fine, Ice;
+        public bool Fine, Ice, Link;
 
         public FeatureEdit Finer()
         {
@@ -477,6 +477,8 @@ namespace Stabby.World
             bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             dens.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length);
             vaults.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length);
+            all = DungeonLinks.Place(w, detail, field, discoveries, all, graphs);
+            caves = graphs.ToArray();
             return Brooked(w, detail, all, caves);
         }
 

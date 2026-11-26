@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public int Shape, Open;
         public float X, Y, Z, C, S, Scale;
-        public bool Stub;
+        public bool Stub, Breach;
     }
 
     public struct DungeonVault
@@ -19,7 +19,7 @@ namespace Stabby.World
     public static partial class Structures
     {
         public const int DungeonSpanI = 5, DungeonSpanJ = 10, DungeonTries = 40, DungeonRoomsMin = 4, DungeonRoomsMax = 8;
-        public const float DungeonZ0 = -20.5f, DungeonFloorY = -8f, DungeonDoorChance = 0.25f, DungeonStubChance = 0.3f;
+        public const float DungeonZ0 = -20.5f, DungeonFloorY = -8f, DungeonDoorChance = 0.25f, DungeonStubChance = 0.3f, DungeonBreachChance = 0.75f;
         public const float VaultR = 1.2f, VaultInset = 0.375f * VaultR, VaultFloor = 0.08f, VaultReach = 0.6f, VaultPorch = 1.2f;
         static readonly float[] DungeonSeats = { 0, -22.1f / DungeonM, 1.9f / DungeonM, -23.5f / DungeonM, -1.9f / DungeonM, -23.5f / DungeonM, 1.4f / DungeonM, -20.2f / DungeonM, -1.4f / DungeonM, -20.2f / DungeonM };
 
@@ -88,7 +88,36 @@ namespace Stabby.World
                 p.Open = open[r];
                 plan.Add(p);
             }
+            PickBreach(key, plan);
             return plan;
+        }
+
+        static void PickBreach(ulong key, List<DungeonPiece> plan)
+        {
+            var rng = Rng.Stream(key, "dungeon-breach");
+            var stubs = new List<int>();
+            for (int k = 0; k < plan.Count; k++) if (plan[k].Stub) stubs.Add(k);
+            if (stubs.Count == 0 || !(rng.NextFloat() < DungeonBreachChance)) return;
+            int at = stubs[rng.Range(0, stubs.Count)];
+            var p = plan[at];
+            p.Breach = true;
+            plan[at] = p;
+        }
+
+        public static bool DungeonBreach(ulong key, out float x, out float y, out float z, out float hx, out float hz)
+        {
+            foreach (var p in DungeonLayout(key))
+            {
+                if (!p.Breach) continue;
+                x = p.X - p.S * 0.5f * KitCellM;
+                y = p.Y;
+                z = p.Z + p.C * 0.5f * KitCellM;
+                hx = -p.S;
+                hz = p.C;
+                return true;
+            }
+            x = y = z = hx = hz = 0f;
+            return false;
         }
 
         static void Claim(bool[] used, int i, int j)
@@ -109,7 +138,7 @@ namespace Stabby.World
                 switch (p.Shape)
                 {
                     case ObjectPart.DungeonCorridor: Corridor(l, pk, g, false); break;
-                    case ObjectPart.DungeonCollapse: Corridor(l, pk, g, true); break;
+                    case ObjectPart.DungeonCollapse: if (p.Breach) Breach(l, pk, g); else Corridor(l, pk, g, true); break;
                     case ObjectPart.DungeonDoor: Door(l, pk, g, trim); break;
                     case ObjectPart.DungeonStairs: Stairs(l, pk, g); break;
                     case ObjectPart.DungeonPillar: Pillar(l, pk, g, trim); break;
@@ -187,7 +216,7 @@ namespace Stabby.World
                         Vault(p, list, -hx, hx, -VaultFloor, PortalHeightM + 0.1f, -c - VaultReach - (k == 0 ? VaultPorch : 0), c + VaultReach, k == 0);
                         break;
                     case ObjectPart.DungeonCollapse:
-                        Vault(p, list, -hx, hx, -VaultFloor, PortalHeightM + 0.1f, -c - VaultReach, 0.5f, false);
+                        Vault(p, list, -hx, hx, -VaultFloor, PortalHeightM + 0.1f, -c - VaultReach, p.Breach ? c + VaultReach : 0.5f, false);
                         break;
                     case ObjectPart.DungeonRoom:
                         float a = 0.5f * RoomM - 0.5f;

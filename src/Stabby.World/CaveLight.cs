@@ -37,12 +37,13 @@ namespace Stabby.World
             var open = new SortedSet<(float, int)>();
             if (caves != null)
                 foreach (var g in caves)
-                    foreach (var node in g.Nodes)
-                        if (node.Entrance && keys.TryGetValue(Key(node.X, node.Z), out int s) && dist[s] > 0)
-                        {
-                            dist[s] = 0;
-                            open.Add((0f, s));
-                        }
+                    if (!DungeonLinks.IsLink(g))
+                        foreach (var node in g.Nodes)
+                            if (node.Entrance && keys.TryGetValue(Key(node.X, node.Z), out int s) && dist[s] > 0)
+                            {
+                                dist[s] = 0;
+                                open.Add((0f, s));
+                            }
             while (open.Count > 0)
             {
                 var top = open.Min;
