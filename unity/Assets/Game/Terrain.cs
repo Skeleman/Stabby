@@ -1851,6 +1851,16 @@ namespace Stabby.Game
             GameStatus.TerrainBuilt = true;
         }
 
+        static Vector3 GroundColor(BlobAssetReference<TerrainLookData> lk, float cm, float x, float z, float h)
+        {
+            ref var look = ref lk.Value;
+            int n = look.N;
+            float top = n - 1, gx = math.clamp(x / cm, 0, top), gy = math.clamp(z / cm, 0, top);
+            int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
+            var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), h, 1);
+            return new Vector3(col.x, col.y, col.z);
+        }
+
         void Steam()
         {
             if (!ready || steamDone) return;
@@ -1863,11 +1873,13 @@ namespace Stabby.Game
                     bool mist = hasMist;
                     BatchMaterialID wm = waterMaterial, mm = mistMaterial;
                     bool lean = wm != material;
+                    var lk = look;
+                    float lcm = ground.Blob.Value.CellMeters;
                     steaming = Task.Run(() => Pack(sp =>
                     {
                         var l = new List<MeshParts>();
                         var w = new List<MeshParts>();
-                        WaterGeometry.Springs(field, l, w);
+                        WaterGeometry.Springs(field, l, w, lk.IsCreated ? (x, z, h) => GroundColor(lk, lcm, x, z, h) : null);
                         if (!mist) l.Clear();
                         (sp.Steam, sp.Pools) = (l.Count, w.Count);
                         foreach (var part in l) sp.Add(part, mm, WaterGeometry.MistPad, true);

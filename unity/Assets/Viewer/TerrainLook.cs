@@ -403,7 +403,7 @@ namespace Stabby.Viewer
                 v[b + 1] = new Vector4(shallow.x, shallow.y, shallow.z, 1f / w.ShoreM);
                 v[b + 2] = new Vector4(1f / w.WaveScaleM, w.WaveSpeed, w.WaveStrength, w.FoamWidthM);
                 v[b + 3] = new Vector4(1f / w.SwellScaleM, w.SwellStrength, 1f / w.BedFieldM, w.OpaqueDepthM > 0 ? 1f / w.OpaqueDepthM : -1f);
-                v[b + 4] = new Vector4(w.FlowSpeed, 1f / w.RapidsSlope, w.LakeSwell, 0);
+                v[b + 4] = new Vector4(w.FlowSpeed, 1f / w.RapidsSlope, w.LakeSwell, w.GroundTint);
                 v[b + 5] = new Vector4(w.Opacity, w.Viscosity, w.Bubbles, w.Film);
                 v[b + 6] = new Vector4(film.x, film.y, film.z, w.Silt);
                 v[b + 7] = new Vector4(w.FallSpeed, w.SheetOpacity, w.Spray, w.Roughness);

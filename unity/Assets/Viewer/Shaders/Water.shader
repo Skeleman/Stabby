@@ -313,7 +313,7 @@ Shader "Stabby/Water"
                 return g * (0.55 + 0.6 * smoothstep(-0.35, 0.45, w1.x + 0.5 * w2.x));
             }
 
-            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; float4 tint : TEXCOORD7; float4 curt : TEXCOORD8; float4 swell : TEXCOORD9; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 positionWS : TEXCOORD0; float4 color : COLOR; float fog : TEXCOORD1; float4 screen : TEXCOORD2; float4 chan : TEXCOORD3; float along : TEXCOORD4; float4 fall : TEXCOORD5; float warm : TEXCOORD6; float4 tint : TEXCOORD7; float4 curt : TEXCOORD8; float4 swell : TEXCOORD9; float3 ground : TEXCOORD10; };
 
             float4 Mixed(Varyings i, int row)
             {
@@ -445,6 +445,7 @@ Shader "Stabby/Water"
                 o.along = i.reach.z;
                 o.warm = i.reach.w;
                 o.tint = float4(round(i.reach.w) == 0 ? saturate(i.tint.xyz) : 0, i.tint.w);
+                o.ground = round(i.reach.w) == 0 ? 0 : saturate(i.tint.xyz);
                 o.swell = float4(i.color.a > 0.25 && i.fall.z > 0 ? i.fall.x : 0, lift, kind, 0);
                 o.fall = i.fall;
                 o.curt = i.curt;
@@ -455,6 +456,8 @@ Shader "Stabby/Water"
             {
                 float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L2 = Mixed(i, 2), L3 = Mixed(i, 3), L4 = Mixed(i, 4), L5 = Mixed(i, 5), L6 = Mixed(i, 6), L7 = Mixed(i, 7);
                 float opacity = L5.x, visc = L5.y, pace = 1 - 0.7 * visc;
+                float3 grd = i.ground;
+                float gw = L4.w * step(0.001, dot(grd, 1));
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float3 bed = _WorldSpaceCameraPos - v * (dist * scene / max(surface, 0.001));
@@ -583,6 +586,11 @@ Shader "Stabby/Water"
                 }
                 g += swGrad;
                 g = g * (1 - visc) + bub.yz;
+                UNITY_BRANCH if (gw > 0.01)
+                {
+                    float3 s1 = Noise(xz * 9 + 3.7), s2 = Noise(mul(Turn, xz) * 23 + 8.3);
+                    g += gw * (s1.yz * 0.12 * saturate(2 - fp * 30) + s2.yz * 0.07 * saturate(2 - fp * 70));
+                }
                 float3 n = normalize(float3(-g.x, 1, -g.y));
                 float streak = 0;
                 UNITY_BRANCH if (river && churn > 0.35)
@@ -734,6 +742,7 @@ Shader "Stabby/Water"
                 {
                     float mot = Noise(xz * 0.9 + 2.7).x + 0.5 * Noise(mul(Turn, xz) * 3.1 + 6.1).x;
                     float3 mc = lerp(L1.rgb, L0.rgb, saturate(0.45 + 0.6 * mot));
+                    mc = lerp(mc, grd * (0.8 + 0.06 * mot), gw);
                     mc *= 1 + 0.3 * saturate(bub.x);
                     float3 lit = mc * (l.color * saturate(dot(n, l.direction)) * 0.9 + sky * 0.45 + lg.diffuse * 0.9);
                     lit = lerp(lit, skyR, fres * 0.5) + l.color * pow(saturate(dot(n, h)), 90) * 0.15 * (1 - L7.w);
@@ -749,7 +758,7 @@ Shader "Stabby/Water"
                     float plate = smoothstep(-0.02, 0.05 + fp * 0.2, fn - 0.02);
                     film = L5.w * lerp(smoothstep(-0.05, 0.45, fn), plate, molten);
                     seam = molten * (1 - smoothstep(-0.25, 0.02, fn - 0.02));
-                    float3 fc = L6.rgb * (l.color * saturate(dot(n, l.direction)) * 0.8 + sky * 0.4 + lg.diffuse * 0.8) + l.color * pow(saturate(dot(n, h)), 40) * 0.08 + lg.spec * 0.15 * molten;
+                    float3 fc = lerp(L6.rgb, grd * 0.95, gw) * (l.color * saturate(dot(n, l.direction)) * 0.8 + sky * 0.4 + lg.diffuse * 0.8) + l.color * pow(saturate(dot(n, h)), 40) * 0.08 + lg.spec * 0.15 * molten;
                     fc += glow * molten * 0.1 * saturate(1 - plate * 0.6 + 0.4 * Noise(fq * 5.3 + 3.3).x);
                     c = lerp(c, fc, film);
                 }

@@ -286,7 +286,7 @@ namespace Stabby.Content
                 SwellScaleM = e.Float("swellScaleM", 0), SwellStrength = e.Float("swellStrength", 0), LakeSwell = e.Float("lakeSwell", 0),
                 FlowSpeed = e.Float("flowSpeed", 0), RapidsSlope = e.Float("rapidsSlope", 0), BedFieldM = e.Float("bedFieldM", 0),
                 Silt = e.Float("silt", 0), Opacity = e.Float("opacity", 0), Viscosity = e.Float("viscosity", 0), Bubbles = e.Float("bubbles", 0),
-                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0),
+                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0), GroundTint = e.Float("groundTint", 0),
                 Biomes = e.Strings("biomes", new List<string>()),
             };
             var f = e.Object("fall");

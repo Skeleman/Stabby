@@ -590,7 +590,7 @@ namespace Stabby.Viewer
             }
         }
 
-        public static void Springs(ObjectField field, List<MeshParts> mists, List<MeshParts> water)
+        public static void Springs(ObjectField field, List<MeshParts> mists, List<MeshParts> water, System.Func<float, float, float, Vector3> ground = null)
         {
             var mist = new MistBuffers();
             var pools = new List<float>();
@@ -619,12 +619,16 @@ namespace Stabby.Viewer
             }
             if (mist.Verts.Count > 0) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
             var sheet = new SheetBuffers();
-            foreach (var p in liquid) Pool(p, field.Materials != null && field.Materials.Liquids[p.Liquid].Opacity > 0.5f, sheet);
+            foreach (var p in liquid)
+            {
+                var def = field.Materials?.Liquids[p.Liquid];
+                Pool(p, def != null && def.Opacity > 0.5f, p.Liquid != 0 && def != null && def.GroundTint > 0 ? ground : null, sheet);
+            }
             var piece = sheet.Piece("Liquid pools", SpringKind);
             if (piece != null) water.Add(piece);
         }
 
-        static void Pool(LiquidPool p, bool opaque, SheetBuffers sheet)
+        static void Pool(LiquidPool p, bool opaque, System.Func<float, float, float, Vector3> ground, SheetBuffers sheet)
         {
             int nx = p.Nx, nz = p.Nz;
             var index = new int[nx * nz];
@@ -649,7 +653,8 @@ namespace Stabby.Viewer
                     if (count > 0) { x = sx / count; z = sz / count; }
                     rim = opaque ? 1 : 0;
                 }
-                return index[k] = sheet.Add(new Vector3(x, p.Level, z), new Vector4(rim, 0, 0, p.Liquid), Vector4.zero);
+                var c = ground == null ? Vector3.zero : ground(x, z, p.Level);
+                return index[k] = sheet.Add(new Vector3(x, p.Level, z), new Vector4(rim, 0, 0, p.Liquid), new Vector4(c.x, c.y, c.z, 0));
             }
             for (int j = 0; j + 1 < nz; j++)
                 for (int i = 0; i + 1 < nx; i++)

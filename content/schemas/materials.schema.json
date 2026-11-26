@@ -110,6 +110,7 @@
           "silt": { "$ref": "#/$defs/amp" },
           "opacity": { "$ref": "#/$defs/amp" },
           "viscosity": { "$ref": "#/$defs/amp" },
+          "groundTint": { "$ref": "#/$defs/amp" },
           "bubbles": { "$ref": "#/$defs/amp" },
           "film": { "$ref": "#/$defs/amp" },
           "emission": { "type": "number", "minimum": 0, "maximum": 8 },

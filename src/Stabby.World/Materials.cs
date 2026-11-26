@@ -185,7 +185,7 @@ namespace Stabby.World
         public float WaveScaleM, WaveSpeed, WaveStrength;
         public float SwellScaleM, SwellStrength, LakeSwell;
         public float FlowSpeed, RapidsSlope, BedFieldM;
-        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness;
+        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness, GroundTint;
         public int Spray;
         public float FallSpeed, SheetOpacity, SprayAmount, Froth;
         public uint SprayColor;
@@ -441,6 +441,7 @@ namespace Stabby.World
                     Amp(errors, n + ".silt", w.Silt);
                     Amp(errors, n + ".opacity", w.Opacity);
                     Amp(errors, n + ".viscosity", w.Viscosity);
+                    Amp(errors, n + ".groundTint", w.GroundTint);
                     Amp(errors, n + ".bubbles", w.Bubbles);
                     Amp(errors, n + ".film", w.Film);
                     if (!(w.Emission >= 0 && w.Emission <= 8)) errors.Add($"{n}.emission {w.Emission} outside 0..8");
