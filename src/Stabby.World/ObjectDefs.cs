@@ -369,7 +369,6 @@ namespace Stabby.World
             {
                 if (string.IsNullOrEmpty(t.Id) || !towns.Add(t.Id)) errors.Add("town without unique id " + t.Id);
                 if (!(t.ReliefM > 0 && t.WaterM > 0 && t.PlazaM > 0 && t.LaneWidthM > 0 && t.SeekM >= 0 && t.LaneM >= 0)) errors.Add("town " + t.Id + ": distances out of range");
-                if (t.SeekM + Math.Max(t.PlazaM, t.LaneM) + 0.5f * t.LaneWidthM + ObjectField.TownSetbackM + ObjectField.TownYardM > ObjectField.TownReachM) errors.Add("town " + t.Id + ": seekM reaches past the discovery clearance");
                 if (biomeIds != null)
                     foreach (var b in t.Biomes)
                         if (!Contains(biomeIds, b)) errors.Add("town " + t.Id + ": unknown biome " + b);

@@ -358,7 +358,7 @@ namespace Stabby.World
                 float dx = l.X * cm - x, dz = l.Y * cm - z;
                 if (dx * dx + dz * dz < TownClearM * TownClearM) return false;
             }
-            return true;
+            return !InTownGround(x, z, r, true);
         }
 
         bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list)

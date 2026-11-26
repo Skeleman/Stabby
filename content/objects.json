@@ -18,8 +18,8 @@
   ],
   "towns": [
     {
-      "id": "village", "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "seekM": 280, "reliefM": 12, "waterM": 400,
-      "plazaM": 13, "laneM": 46, "laneWidthM": 5,
+      "id": "village", "biomes": ["steppe", "temperate-forest", "temperate-rain", "boreal", "shrubland", "savanna", "tropical-forest"], "seekM": 1500, "reliefM": 12, "waterM": 400,
+      "plazaM": 13, "laneM": 40, "laneWidthM": 5,
       "sites": [ { "object": "well", "place": "centre", "count": [1, 1] }, { "object": "inn", "place": "plaza", "count": [1, 1] }, { "object": "house", "place": "lane", "count": [5, 9] } ]
     }
   ],

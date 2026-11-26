@@ -12,8 +12,8 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const int TownTries = 24, TownRing = 8;
-        public const float TownYardM = 8f, TownGapM = 1f, TownSetbackM = 1.5f, TownSlotM = 2f, TownJitterM = 0.8f, TownReachM = 0.85f * TownClearM;
+        public const int TownTries = 256, TownRing = 8, TownMinMembers = 3;
+        public const float TownYardM = 8f, TownGapM = 1f, TownSetbackM = 1.5f, TownSlotM = 2f, TownJitterM = 0.8f, TownSpaceM = 400f;
 
         readonly object townLock = new object();
         TownPlan[] townPlans;
@@ -136,7 +136,7 @@ namespace Stabby.World
                     if (TryMember(plan, d, mx, mz, size, qa, qb)) got++;
                 }
             }
-            return plan.Members.Count > 0 ? plan : null;
+            return plan.Members.Count >= TownMinMembers ? plan : null;
         }
 
         static void Facing(float fx, float fz, out float qa, out float qb)
@@ -164,14 +164,14 @@ namespace Stabby.World
 
         float TownScore(TownDef t, float x, float z, float radius, List<TownPlan> placed)
         {
-            if (x - radius < 0 || z - radius < 0 || x + radius >= worldM || z + radius >= worldM) return float.MaxValue; 
+            if (x - radius < 0 || z - radius < 0 || x + radius >= worldM || z + radius >= worldM) return float.MaxValue;
             foreach (var p in placed)
             {
-                float dx = p.X - x, dz = p.Z - z, g = p.Radius + radius + t.SeekM;
+                float dx = p.X - x, dz = p.Z - z, g = p.Radius + radius + TownSpaceM;
                 if (dx * dx + dz * dz < g * g) return float.MaxValue;
             }
             int b = w.Biome[Cell(z) * n + Cell(x)];
-            if (b < 0 || !t.Biomes.Contains(w.BiomeIds[b])) return float.MaxValue; 
+            if (b < 0 || !t.Biomes.Contains(w.BiomeIds[b])) return float.MaxValue;
             float y0 = GroundAt(detail, cm, x, z), lo = y0, hi = y0;
             for (int ring = 1; ring <= 2; ring++)
                 for (int k = 0; k < TownRing; k++)
@@ -183,12 +183,17 @@ namespace Stabby.World
                     float g = GroundAt(detail, cm, rx, rz);
                     lo = Math.Min(lo, g); hi = Math.Max(hi, g);
                 }
-            if (hi - lo > t.ReliefM) return float.MaxValue; 
+            if (hi - lo > t.ReliefM) return float.MaxValue;
+            for (int p = 0; p < pax.Count; p++)
+            {
+                float d = Distance(p, x, z) - radius;
+                if (d < phw[p] + RiverClearM || (d < 2 * phw[p] + BankReachM && lo < psurf[p] + ShoreClearM)) return float.MaxValue;
+            }
             float water = TownWater(x, z, t.WaterM);
-            if (water > t.WaterM) return float.MaxValue; 
+            if (water > t.WaterM) return float.MaxValue;
             foreach (var f in edits)
             {
-                if (f.Shape == FeatureEdit.Boulder || f.Shape == FeatureEdit.Spring) continue;
+                if (f.Shape == FeatureEdit.Boulder) continue;
                 float ext = f.Crusts ? f.CrustExtent : 0f;
                 float cx = Math.Max(Math.Min(f.MinX, f.Ax - ext), Math.Min(x, Math.Max(f.MaxX, f.Ax + ext)));
                 float cz = Math.Max(Math.Min(f.MinZ, f.Az - ext), Math.Min(z, Math.Max(f.MaxZ, f.Az + ext)));
