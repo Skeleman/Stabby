@@ -69,7 +69,7 @@ namespace Stabby.World
                     {
                         grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                         if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
-                        ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Vault && (def.Placement.Discovery > 0 || ground > edits[f].MaxY));
+                        ids.RemoveAll(f => edits[f].Link || (edits[f].Shape == FeatureEdit.Vault && (def.Placement.Discovery > 0 || ground > edits[f].MaxY)));
                         if (ids.Count > 0) Fail(4, " sits inside a feature edit");
                     }
                     for (int k = 0; k < bogs.Length && !seen[11]; k += ObjectField.BogStride)
@@ -217,7 +217,7 @@ namespace Stabby.World
                 if (OnBed(bed, segs, i, x, z, r)) { e.Add(at + " lies on a river bed"); return; }
                 grid.Near(b.MinX, b.MinZ, b.MaxX, b.MaxZ, ids);
                 foreach (int f in ids)
-                    if (edits[f].Shape != FeatureEdit.Boulder) { e.Add(at + " overlaps a terrain feature"); return; }
+                    if (edits[f].Shape != FeatureEdit.Boulder && !edits[f].Link) { e.Add(at + " overlaps a terrain feature"); return; }
             }
             int samples = Math.Min(BoulderMeshSamples, boulders.Count);
             for (int k = 0; k < samples; k++)

@@ -882,6 +882,7 @@ namespace Stabby.World
                 CheckCavePaths(w, detail, edits, e);
                 CheckCaves(w, detail, edits, caves, e);
                 CheckMines(w, detail, edits, caves, e);
+                CheckDungeonLinks(w, detail, edits, caves, sites, e);
                 CheckCaveIce(w, edits, caves, e);
                 CheckCaveNormals(w, detail, grid, caves, e);
             }
@@ -1232,6 +1233,71 @@ namespace Stabby.World
                 if (q.Shape == FeatureEdit.Mine && q.Kind != FeatureEdit.Carve) { e.Add($"mines: edit at {q.Ax:F0},{q.Az:F0} is not a carve"); return; }
         }
 
+        public const float LinkWidthMin = 4f, LinkWidthMax = 6.5f, LinkSocketM = 0.5f;
+
+        public static void CheckDungeonLinks(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, ObjectInstance[] sites, List<string> e)
+        {
+            if (caves == null) return;
+            float cm = w.Config.CellMeters;
+            var tiles = new HashSet<int>();
+            var sockets = new List<CaveNode>();
+            if (sites != null && w.Objects != null)
+                foreach (var o in sites)
+                    if (ObjectField.IsDungeon(w.Objects, o) && ObjectField.BreachOf(w.Objects, o, out var m)) sockets.Add(m);
+            foreach (var q in edits)
+                for (int t = 0; q.Link && t <= 2; t++)
+                {
+                    float f = 0.5f * t, x = q.Ax + (q.Bx - q.Ax) * f, z = q.Az + (q.Bz - q.Az) * f, top = q.Ay + (q.By - q.Ay) * f + q.R * (1f - Features.CaveHollow);
+                    if (detail.HeightAt(x / cm, z / cm) < top) { e.Add($"dungeon links: link carve at {x:F0},{z:F0} opens to the surface"); return; }
+                }
+            var ground = new DetailGround { Detail = detail };
+            foreach (var g in caves)
+            {
+                if (!DungeonLinks.IsLink(g)) continue;
+                string at = $"dungeon links: link in tile {g.Tile}";
+                if (!tiles.Add(g.Tile)) { e.Add(at + " shares its tile with another link"); return; }
+                var n0 = g.Nodes.Count == 0 ? null : g.Nodes[0];
+                if (n0 == null || !n0.Entrance || !sockets.Exists(m => Math.Abs(m.X - n0.X) < LinkSocketM && Math.Abs(m.Z - n0.Z) < LinkSocketM && Math.Abs(m.Y - n0.Y) < LinkSocketM)) { e.Add(at + " does not start at a dungeon breach socket"); return; }
+                for (int k = 1; k < g.Nodes.Count; k++) if (g.Nodes[k].Entrance) { e.Add(at + " has a second entrance"); return; }
+                var near = new List<FeatureEdit>();
+                foreach (var q in edits) if (Features.TileOf(q, cm) == g.Tile) near.Add(q);
+                var items = near.ToArray();
+                string why = Underground.Unreached(detail, items, g);
+                if (why != null) { e.Add($"{at}: {why}"); return; }
+                var list = new EditArray { Items = items };
+                float sum = 0f;
+                int count = 0;
+                foreach (var edge in g.Edges)
+                {
+                    var p = edge.Points;
+                    for (int q = 3; q + 2 < p.Length; q += 3)
+                    {
+                        float ex = p[q] - p[q - 3], ez = p[q + 2] - p[q - 1], run = (float)Math.Sqrt(ex * ex + ez * ez);
+                        if (run <= 0f) continue;
+                        float x = p[q - 3] + 0.5f * ex, z = p[q - 1] + 0.5f * ez, y = 0.5f * (p[q - 2] + p[q + 1]) + 1f, sx = -ez / run, sz = ex / run;
+                        if (Walk.Density(list, Walk.At(ground, list, x, z, Features.LatticeStepM), y) >= 0) continue;
+                        sum += Reach(ground, list, x, z, y, sx, sz) + Reach(ground, list, x, z, y, -sx, -sz);
+                        count++;
+                    }
+                }
+                float width = count == 0 ? 0f : sum / count;
+                if (width < LinkWidthMin || width > LinkWidthMax) { e.Add($"{at} passages average {width:F1} m wide at 1 m, outside {LinkWidthMin:F0}-{LinkWidthMax:F1} m"); return; }
+            }
+            foreach (var q in edits)
+            {
+                if (!q.Link) continue;
+                int tile = Features.TileOf(q, cm);
+                if (!q.CaveCarve || !tiles.Contains(tile)) { e.Add($"dungeon links: edit at {q.Ax:F0},{q.Az:F0} is not a carve of a link cave"); return; }
+            }
+        }
+
+        static float Reach(DetailGround ground, EditArray list, float x, float z, float y, float sx, float sz)
+        {
+            float d = 0f;
+            while (d < 2f * LinkWidthMax && Walk.Density(list, Walk.At(ground, list, x + sx * (d + 0.1f), z + sz * (d + 0.1f), Features.LatticeStepM), y) < 0) d += 0.1f;
+            return d;
+        }
+
         public static LiquidPool[] CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
         {
             if (w.Objects == null) return null;
@@ -1243,7 +1309,7 @@ namespace Stabby.World
             var picked = new List<int>();
             foreach (var x in edits)
             {
-                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave) continue;
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link) continue;
                 float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz);
                 int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
                 if (!picked.Contains(c)) picked.Add(c);
@@ -1268,7 +1334,7 @@ namespace Stabby.World
             float length = 0f;
             foreach (var x in edits)
             {
-                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave) continue;
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link) continue;
                 float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz), ex = x.Bx - x.Ax, ez = x.Bz - x.Az;
                 int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
                 if (picked.Contains(c)) length += (float)Math.Sqrt(ex * ex + ez * ez);
