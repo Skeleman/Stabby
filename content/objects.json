@@ -168,7 +168,7 @@
       "id": "dry-stone-wall", "name": "Dry-stone wall", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "wall", "shape": "dry-stone-wall" } ],
       "placement": { "biomes": ["steppe", "shrubland", "tundra", "temperate-forest", "alpine", "boreal", "cold-desert"], "perHectare": 0.1, "slopeMax": 0.25, "hardnessMin": 0.1, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005,
-        "chainMin": 3, "chainMax": 10, "chainCorner": 0.14, "chainGate": 0.07,
+        "chainMin": 3, "chainMax": 10, "chainCorner": 0.14, "chainGate": 0.07, "chainHead": "wall-head",
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.4 }, { "biome": "boreal", "scale": 0.3 }, { "biome": "cold-desert", "scale": 0.5 } ] }
     },
     {
@@ -449,6 +449,11 @@
       "id": "crypt-dungeon", "name": "Crypt dungeon", "kind": "structure", "style": "crypt", "variants": 4,
       "parts": [ { "id": "site", "shape": "dungeon" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland"], "perHectare": 0, "discovery": "dungeon", "spacingM": 1200, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 16, "sink": 0 }
+    },
+    {
+      "id": "wall-head", "name": "Wall head", "kind": "structure", "material": "fieldstone-grey", "variants": 4,
+      "parts": [ { "id": "head", "shape": "wall-head" } ],
+      "placement": { "perHectare": 0, "slopeMax": 0.4, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
