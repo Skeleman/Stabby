@@ -88,6 +88,72 @@ namespace Stabby.Game.Editor
             Object.DestroyImmediate(rt);
         }
 
+        static System.Collections.IEnumerator IceCaveTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            ClientMapSystem sys = null;
+            Ground ground = default;
+            ObjectColumns cols = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var s = w.GetExistingSystemManaged<ClientMapSystem>();
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (s?.Map == null || q.CalculateEntityCount() != 1) continue;
+                sys = s;
+                ground = q.GetSingleton<Ground>();
+                var oq = w.EntityManager.CreateEntityQuery(typeof(ObjectColumns));
+                if (oq.CalculateEntityCount() == 1) cols = oq.GetSingleton<ObjectColumns>();
+                break;
+            }
+            if (sys == null) { GameStatus.Lines["~caveice"] = GameStatus.Failure = "caveice: no map"; yield break; }
+            var caves = ContentFiles.Caves();
+            var full = System.Threading.Tasks.Task.Run(() =>
+            {
+                var g = WorldGenerator.Generate(sys.Map.Config, sys.Defs, sys.Materials);
+                g.Objects = sys.Objects;
+                g.Caves = caves;
+                MapGen.RaiseMound(g);
+                var placed = Features.Place(g, new TerrainDetail(g), out var gs);
+                return (g, placed, gs);
+            });
+            while (!full.IsCompleted) yield return null;
+            if (full.IsFaulted) { GameStatus.Lines["~caveice"] = GameStatus.Failure = "caveice: " + full.Exception; yield break; }
+            var (map, edits, graphs) = full.Result;
+            int pick = -1, iced = 0;
+            for (int q = 0; q < edits.Length; q++)
+            {
+                if (!edits[q].Ice || !edits[q].CaveCarve) continue;
+                iced++;
+                bool room = FeatureEdit.IsRoom(edits[q].Shape), best = pick >= 0 && FeatureEdit.IsRoom(edits[pick].Shape);
+                if (pick < 0 || room && !best || room == best && edits[q].R > edits[pick].R) pick = q;
+            }
+            if (pick < 0) { GameStatus.Lines["~caveice"] = GameStatus.Failure = $"caveice: no ice cave in this world, GV {WorldConfig.GeneratorVersion}"; yield break; }
+            cam.fieldOfView = 60f;
+            for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
+            var ie = edits[pick];
+            var ic = new Vector3(ie.Ax, ie.Ay - ie.R * Features.CaveHollow, ie.Az);
+            var ia = new Vector3(ie.Bx - ie.Ax, 0, ie.Bz - ie.Az);
+            ia = ia.sqrMagnitude > 1f ? ia.normalized : Vector3.forward;
+            float gx = ic.x - ia.x * ie.R * 0.5f, gy = ic.y, gz = ic.z - ia.z * ie.R * 0.5f;
+            Walk.Step(ground, ground.EditsNear(gx, gz, Walk.Radius), cols, ground.WalkStep, ref gx, ref gy, ref gz, 0, 0, Walk.Reach);
+            var eye = new Vector3(gx, gy + 1.7f, gz);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(ic + ia * ie.R * 0.5f + Vector3.up * ie.R * 0.3f - eye));
+            double waited = LoadWaitTotal();
+            for (var w = Settle(120); w.MoveNext();) yield return null;
+            var shown = DayNightSystem.Shown;
+            var graph = graphs.FirstOrDefault(g => g.Ice && g.Tile == Features.TileOf(ie, map.Config.CellMeters));
+            float temp = graph != null ? Underground.EntranceTempC(map, graph) : float.NaN;
+            var lines = new List<string>
+            {
+                $"caveice: GV {WorldConfig.GeneratorVersion}, {graphs.Count(g => g.Ice)} ice graphs of {graphs.Length}, {iced} ice carves, shot {(FeatureEdit.IsRoom(ie.Shape) ? "room" : "tunnel")} R {ie.R:F0} m at {ic.x:F0},{ic.y:F0},{ic.z:F0}, entrance {temp:F1} C, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}, pinned hour {shown.Hour:F2}, moon phase {shown.Phase:F2}: stream wait {LoadWaitTotal() - waited:F2} s"
+            };
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "caves-ice");
+            ExposedShot(cam, dir, "caves-ice-debug-exposure", CaveDebugExposure);
+            GeometryShot(cam, dir, "caves-ice-debug-unlit");
+            GameStatus.Lines["~caveice"] = string.Join("\n", lines);
+        }
+
         static System.Collections.IEnumerator CavesTour(Camera cam, string dir)
         {
             GameStatus.HoldCamera = true;

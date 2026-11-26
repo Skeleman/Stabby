@@ -320,6 +320,11 @@
       "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 60, "sizeMinM": 0.4, "sizeMaxM": 8, "clusterCount": 3, "clusterRadiusM": 1.0, "sink": 0.1 }
     },
     {
+      "id": "icicle", "name": "Icicle", "kind": "static", "material": "ice", "variants": 8,
+      "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.22, 1, 0.22], "solid": "off" } ],
+      "placement": { "perHectare": 0, "cave": "stalactite", "caveIce": true, "perHundredM": 70, "sizeMinM": 0.4, "sizeMaxM": 6, "clusterCount": 3, "clusterRadiusM": 0.8, "sink": 0.1 }
+    },
+    {
       "id": "stalagmite", "name": "Stalagmite", "kind": "static", "material": "dripstone", "variants": 8,
       "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.55, 1, 0.55] } ],
       "placement": { "perHectare": 0, "cave": "stalagmite", "perHundredM": 18, "sizeMinM": 0.5, "sizeMaxM": 3.2, "clusterCount": 3, "clusterRadiusM": 0.9, "sink": 0.1 }

@@ -62,7 +62,7 @@ namespace Stabby.Content
         public static CaveLibrary ParseCaves(string json, string source)
         {
             var root = Root(json, source, CaveSchemaVersion);
-            var l = new CaveLibrary { Chance = root.Float("chance", 0), CrystalChance = root.Float("crystalChance", 0) };
+            var l = new CaveLibrary { Chance = root.Float("chance", 0), CrystalChance = root.Float("crystalChance", 0), IceChance = root.Float("iceChance", 0), IceMaxTempC = root.Float("iceMaxTempC", 0) };
             var cell = Pair(root, "crystalCell", DefaultCell, source);
             l.CellMin = cell[0];
             l.CellMax = cell[1];
@@ -255,7 +255,7 @@ namespace Stabby.Content
             lib.Strata = strata;
             foreach (var m in root.Objects("materials"))
             {
-                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0) });
+                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0), Translucency = m.Float("translucency", 0) });
                 m.End();
             }
             var kit = root.Object("kit");
@@ -563,6 +563,7 @@ namespace Stabby.Content
         }
 
         static float Glow(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.Glow ?? 0f;
+        static float Translucency(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.Translucency ?? 0f;
 
         static void InlineColor(Json j, string field, string where, List<string> errors)
         {
@@ -576,7 +577,7 @@ namespace Stabby.Content
             var def = new ObjectDef
             {
                 Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""),
-                Color = Material(o, "material", id, materials, errors), Glow = Glow(o, "material", materials), Variants = o.Int("variants", 1),
+                Color = Material(o, "material", id, materials, errors), Glow = Glow(o, "material", materials), Translucency = Translucency(o, "material", materials), Variants = o.Int("variants", 1),
             };
             var interact = o.Object("interact");
             if (interact != null)
@@ -613,6 +614,7 @@ namespace Stabby.Content
                     Solid = ObjectLibrary.Tri(p.String("solid", "")), Shadows = ObjectLibrary.Tri(p.String("shadows", "")),
                     HasColor = color, Color = color ? Material(p, "material", id + ".parts." + pid, materials, errors) : def.Color,
                     Glow = color ? Glow(p, "material", materials) : def.Glow,
+                    Translucency = color ? Translucency(p, "material", materials) : def.Translucency,
                     HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0,
                 };
                 string ends = p.String("ends", "auto");
@@ -639,7 +641,7 @@ namespace Stabby.Content
                     ChainMin = pl.Int("chainMin", 1), ChainMax = pl.Int("chainMax", 1),
                     ChainCorner = pl.Float("chainCorner", 0), ChainGate = pl.Float("chainGate", 0),
                     Bank = pl.String("bank", null), PerHundredM = pl.Float("perHundredM", 0),
-                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), Cave = Array.IndexOf(ObjectField.CaveNames, pl.String("cave", "")), Liquid = pl.String("liquid", null), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
+                    Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.String("discovery", "")), Cave = Array.IndexOf(ObjectField.CaveNames, pl.String("cave", "")), CaveIce = pl.Bool("caveIce", false), Liquid = pl.String("liquid", null), SpacingM = pl.Float("spacingM", 0), Chance = pl.Float("chance", 1f),
                 };
                 foreach (var b in pl.Objects("biomeDensity"))
                 {

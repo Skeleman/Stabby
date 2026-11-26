@@ -594,6 +594,17 @@ namespace Stabby.Game
             return peat;
         }
 
+        static float Ice(NativeEdits edits, float3 p, float cover)
+        {
+            float inside = 0, lit = 0;
+            for (int q = 0; q < edits.Count; q++)
+            {
+                var e = edits.Items[q];
+                if (e.Ice && e.CaveCarve) CaveDark.Add(e, float2.zero, p, ref inside, ref lit);
+            }
+            return inside * math.smoothstep(0.5f, 3f, cover);
+        }
+
         public void Execute()
         {
             ref var g = ref Chunk.Ground.Blob.Value;
@@ -720,7 +731,8 @@ namespace Stabby.Game
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, Sinter(edits, crusts, p.Pos));
-                p.Stitch.w = math.floor(p.Stitch.w) + 0.5f * Peat(edits, p.Pos);
+                float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, p.Pos, cover);
+                p.Stitch.w = math.floor(p.Stitch.w) + (ice > 0.01f ? 0.51f + 0.489f * ice : 0.5f * peat);
                 float dark = Dark(edits, light, p.Pos, cover);
                 p.Dark = new half2(new float2(dark, dark));
                 if (stitch)

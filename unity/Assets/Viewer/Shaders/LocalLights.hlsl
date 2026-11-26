@@ -1,7 +1,7 @@
 #ifndef STABBY_LOCAL_LIGHTS
 #define STABBY_LOCAL_LIGHTS
 
-float3 LocalLights(float3 wp, float3 n, float4 positionCS)
+float3 LocalLightsWrap(float3 wp, float3 n, float4 positionCS, float wrap)
 {
     float3 sum = 0;
 #if USE_CLUSTER_LIGHT_LOOP || defined(_ADDITIONAL_LIGHTS)
@@ -11,11 +11,13 @@ float3 LocalLights(float3 wp, float3 n, float4 positionCS)
     uint pixelLightCount = GetAdditionalLightsCount();
     LIGHT_LOOP_BEGIN(pixelLightCount)
         Light a = GetAdditionalLight(lightIndex, wp, half4(1, 1, 1, 1));
-        sum += a.color * (a.distanceAttenuation * a.shadowAttenuation * saturate(dot(n, a.direction)));
+        sum += a.color * (a.distanceAttenuation * a.shadowAttenuation * saturate((dot(n, a.direction) + wrap) / (1 + wrap)));
     LIGHT_LOOP_END
 #endif
     return sum;
 }
+
+float3 LocalLights(float3 wp, float3 n, float4 positionCS) { return LocalLightsWrap(wp, n, positionCS, 0); }
 
 struct LocalGlint { float3 diffuse; float3 spec; float3 color; float3 dir; };
 

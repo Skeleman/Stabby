@@ -51,7 +51,7 @@ namespace Stabby.World
         public float ScaleX = 1, ScaleY = 1, ScaleZ = 1;
         public int Solid = -1, Shadows = -1;
         public uint Color;
-        public float Glow;
+        public float Glow, Translucency;
         public bool HasColor;
         public uint LeafColor;
         public bool HasLeafColor;
@@ -78,6 +78,7 @@ namespace Stabby.World
         public float PerHundredM;
         public int Discovery;
         public int Cave;
+        public bool CaveIce;
         public string Liquid;
         public float SpacingM, Chance = 1f;
         public List<BiomeDensity> BiomeDensity = new List<BiomeDensity>();
@@ -101,7 +102,7 @@ namespace Stabby.World
     {
         public string Id, Name, Kind;
         public uint Color;
-        public float Glow;
+        public float Glow, Translucency;
         public int Variants = 1;
         public string Verb;
         public float ReachM;
@@ -304,6 +305,7 @@ namespace Stabby.World
                     errors.Add(d.Id + ": editMinSizeM is too small for boulder edits to mesh at the finest step");
                 if (pl.Bank != null && (BankSites.Of(pl.Bank) < 0 || pl.PerHectare > 0 || pl.PerHundredM <= 0 || pl.PerHundredM > 800 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0 || pl.ChainMax > 1 || d.Kind == Structure || pl.Biomes.Count > 0))
                     errors.Add(d.Id + ": bank placement needs a known bank site, perHundredM 0-800, no perHectare, biomes, foot, edits, chains or structures");
+                if (pl.CaveIce && pl.Cave != ObjectField.CaveStalactite) errors.Add(d.Id + ": caveIce belongs only to stalactite placement");
                 if (pl.Bank == null && pl.Cave == 0 && pl.PerHundredM != 0) errors.Add(d.Id + ": perHundredM belongs only to bank and cave placement");
                 if (pl.Cave < 0 || (pl.Cave > 0 && (pl.PerHundredM <= 0 || pl.PerHundredM > 200 || pl.PerHectare > 0 || pl.Bank != null || pl.Discovery > 0 || pl.Biomes.Count > 0 || pl.FootRiseM > 0 || pl.EditMinSizeM > 0 || pl.ChainMax > 1 || d.Kind == Structure)))
                     errors.Add(d.Id + ": cave placement needs a known cave spot, perHundredM 0-200, no perHectare, bank, discovery, biomes, foot, edits, chains or structures");

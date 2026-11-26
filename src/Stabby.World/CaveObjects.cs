@@ -260,6 +260,7 @@ namespace Stabby.World
             {
                 var c = edits[e];
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
+                if (pl.CaveIce ? !c.Ice : c.Ice && kind == CaveStalactite) continue;
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
                 if (len < 1f) continue;
                 float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;

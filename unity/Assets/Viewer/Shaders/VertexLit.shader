@@ -24,7 +24,7 @@ Shader "Stabby/VertexLit"
             #include "LocalLights.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
-            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre;
+            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre, _StabbyIce;
             float _StabbyStrataPeriod, _StabbyCellMeters, _StabbyCaveDarkOff;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -61,7 +61,8 @@ Shader "Stabby/VertexLit"
                 o.xz = p.positionWS.xz - OrgOrigin(_WorldSpaceCameraPos);
                 o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
                 o.sinter = i.strata.w;
-                o.peat = frac(i.stitch.w) * 2;
+                float pf = frac(i.stitch.w) * 2;
+                o.peat = pf <= 1 ? pf : -saturate((pf - 1.02) / 0.978);
                 float dk = lerp(i.dark.x, i.dark.y, t);
                 o.sky = float2(1 - dk * (1 - _StabbyCaveDarkOff), dk);
                 o.fog = float4(StabbyFogColor(p.positionWS), ComputeFogFactor(p.positionCS.z));
@@ -206,6 +207,23 @@ Shader "Stabby/VertexLit"
                     tmGrass *= 1 - cover;
                     n = normalize(n - grad * cover);
                 }
+                float wrap = 0;
+                [branch] if (i.peat < -0.01)
+                {
+                    float3 q = float3(i.xz.x, h, i.xz.y);
+                    float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
+                    float4 big = OrgNoise3(q * float3(0.5, 0.15, 0.5) + 7.3, int3(0, 0, 0)), mid = OrgRL3(q, OrgF(0), 8.3, 0), fine = OrgRL3(q, OrgF(2), 5.9, 2);
+                    float fm = OrgRungW(0, fp), ff = OrgRungW(2, fp);
+                    float cover = smoothstep(0.2, 0.6, -i.peat + 0.15 * big.x + 0.05 * mid.x * fm);
+                    float3 a = _StabbyIce.rgb * (0.88 + 0.1 * big.x + 0.05 * mid.x * fm + 0.03 * fine.x * ff);
+                    float3 grad = 0.06 * big.yzw + 0.04 * mid.yzw * fm + 0.02 * fine.yzw * ff;
+                    grad -= n * dot(grad, n);
+                    m.albedo = lerp(m.albedo, a, cover);
+                    tmRough = lerp(tmRough, 0.15, cover);
+                    tmGrass *= 1 - cover;
+                    wrap = _StabbyIce.w * cover;
+                    n = normalize(n - grad * cover);
+                }
                 [branch] if (_StabbyGrassFar.x > 0 && tmGrass > 0.01)
                 {
                     float2 xa = i.xz + OrgOrigin(_WorldSpaceCameraPos);
@@ -224,7 +242,7 @@ Shader "Stabby/VertexLit"
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
                 float sky = saturate(i.sky.x);
-                float3 c = (LookColor(m.albedo, 1) * (sky * (l.color * saturate(dot(n, l.direction)) + ambient) + LocalLights(float3(xv.x, h, xv.y), n, i.positionCS)) + sky * LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
+                float3 c = (LookColor(m.albedo, 1) * (sky * (l.color * saturate((dot(n, l.direction) + wrap) / (1 + wrap)) + ambient) + LocalLightsWrap(float3(xv.x, h, xv.y), n, i.positionCS, wrap)) + sky * LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
                 return half4(MixFogColor(c, i.fog.rgb * sky, i.fog.w), 1);
             }
             ENDHLSL
