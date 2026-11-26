@@ -159,6 +159,8 @@ namespace Stabby.Game
         static readonly Unity.Profiling.ProfilerMarker LoadMarker = new Unity.Profiling.ProfilerMarker("ObjectView.LoadChunks"), DespawnMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Despawn"), SpawnMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Spawn"), RegisterMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Register");
 
         public static int Pending { get; private set; } = 1;
+        public static volatile int HideDef = -1;
+        int collectedHide = -1;
         static float3 readyAt;
         static int readyFrame = -1;
         public static bool ReadyAround(float3 p, float within) => readyFrame >= UnityEngine.Time.frameCount - 2 && math.distance(readyAt, p) <= within;
@@ -632,7 +634,7 @@ namespace Stabby.Game
             field.PlaceInto(cx, cz, placed);
             var emitters = lights ? LightsIn(placed) : null;
             int kept = 0;
-            for (int i = 0; i < placed.Count; i++) if (baseReach[placed[i].Def] >= minBase) placed[kept++] = placed[i];
+            for (int i = 0; i < placed.Count; i++) if (baseReach[placed[i].Def] >= minBase && placed[i].Def != HideDef) placed[kept++] = placed[i];
             placed.RemoveRange(kept, placed.Count - kept);
             int n = 0;
             for (int i = 0; i < placed.Count; i++) n += lib.Objects[placed[i].Def].Parts.Count;
@@ -774,11 +776,17 @@ namespace Stabby.Game
                 peakChunks = math.max(peakChunks, chunksHeld);
             }
             float q = math.max(reachQuality, 1e-3f), ring = maxReach + span;
+            int hide = HideDef;
+            bool rehide = collectedHide != hide;
+            if (rehide)
+                foreach (long key in spawned)
+                    if ((int)(key >> 40) == hide || (int)(key >> 40) == collectedHide) doomedKeys.Add(key);
+            collectedHide = hide;
             for (int c = 0; c < loaded.Length; c++)
             {
                 if (!loaded[c] || collectingChunk[c]) continue;
                 float dist = RectDistance(cam, (c % across) * span, (c / across) * span, span);
-                if (dist <= ring * UnloadReach)
+                if (!rehide && dist <= ring * UnloadReach)
                 {
                     float want = Need(dist, q);
                     if ((Grows(dist, q, heldBase[c]) || want > heldBase[c] * ShrinkAt) && SameSet(heldBase[c], want)) heldBase[c] = want;
