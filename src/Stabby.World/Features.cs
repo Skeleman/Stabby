@@ -143,33 +143,19 @@ namespace Stabby.World
 
         public const float CellRelief = 0.3f, FacetJitter = 0.2f;
 
-        static readonly float[] Faces = FaceNormals();
-
-        static float[] FaceNormals()
-        {
-            float p = 1.618034f, l = (float)Math.Sqrt(1f + p * p);
-            float a = 1f / l, b = p / l;
-            var f = new float[36];
-            int i = 0;
-            for (int s = 0; s < 4; s++)
-            {
-                float u = (s & 1) == 0 ? a : -a, v = (s & 2) == 0 ? b : -b;
-                f[i++] = 0f; f[i++] = u; f[i++] = v;
-                f[i++] = u; f[i++] = v; f[i++] = 0f;
-                f[i++] = v; f[i++] = 0f; f[i++] = u;
-            }
-            return f;
-        }
-
         float Facets(float x, float y, float z)
         {
             uint seed = RockSeed ^ 0x2545F491u;
             float ca = Unit(Hash(seed, 1, 0, 0)) - 0.5f, sa = Unit(Hash(seed, 2, 0, 0)) - 0.5f, n = (float)Math.Sqrt(ca * ca + sa * sa);
             if (n < 1e-3f) { ca = 1f; sa = 0f; } else { ca /= n; sa /= n; }
             float rx = ca * x - sa * z, rz = sa * x + ca * z, best = float.MinValue;
+            float p = 1.618034f, l = (float)Math.Sqrt(1f + p * p), a = 1f / l, b = p / l;
             for (int k = 0; k < 12; k++)
             {
-                float d = (rx * Faces[3 * k] + y * Faces[3 * k + 1] + rz * Faces[3 * k + 2]) * (1f + FacetJitter * Unit(Hash(seed, k, 3, 5)));
+                int s = k / 3, r = k - 3 * s;
+                float u = (s & 1) == 0 ? a : -a, v = (s & 2) == 0 ? b : -b;
+                float fx = r == 0 ? 0f : r == 1 ? u : v, fy = r == 0 ? u : r == 1 ? v : 0f, fz = r == 0 ? v : r == 1 ? 0f : u;
+                float d = (rx * fx + y * fy + rz * fz) * (1f + FacetJitter * Unit(Hash(seed, k, 3, 5)));
                 if (d > best) best = d;
             }
             return best;
@@ -263,8 +249,15 @@ namespace Stabby.World
 
         bool Basin(float x, float y, float z, out float dist)
         {
-            float dx = x - Ax, dz = z - Az;
-            float h = Math.Max(y - Ay + H, 0f);
+            float dx = x - Ax, dz = z - Az, ay = Ay;
+            if (Bx != Ax || Bz != Az)
+            {
+                float fx = Bx - Ax, fz = Bz - Az, t = Math.Max(0f, Math.Min(1f, (dx * fx + dz * fz) / (fx * fx + fz * fz)));
+                dx -= t * fx;
+                dz -= t * fz;
+                ay += t * (By - Ay);
+            }
+            float h = Math.Max(y - ay + H, 0f);
             if (D > 0f)
             {
                 float j = 0.6f * Value(Seed ^ 0x3C6EF372u, x / 3f, 0f, z / 3f), s = h / D + j, i = (float)Math.Floor(s), f = s - i;
@@ -281,7 +274,7 @@ namespace Stabby.World
             float a = (float)Math.Sqrt(dx * dx + dz * dz) - rad - wob;
             if (T != 0f) a /= (float)Math.Sqrt(1f + T * T);
             a = Math.Max(a, 0f);
-            float c = Math.Max(Math.Abs(y - Ay) - H, 0f);
+            float c = Math.Max(Math.Abs(y - ay) - H, 0f);
             dist = (float)Math.Sqrt(a * a + c * c);
             if (N > 0f)
             {
@@ -317,7 +310,13 @@ namespace Stabby.World
         {
             if (Shape == Spring)
             {
-                float sx = x - Ax, sz = z - Az, rr = Spread + R;
+                float sx = x - Ax, sz = z - Az, rr = Spread + R, gx = Bx - Ax, gz = Bz - Az, gg = gx * gx + gz * gz;
+                if (gg > 0f)
+                {
+                    float u = Math.Max(0f, Math.Min(1f, (sx * gx + sz * gz) / gg));
+                    sx -= u * gx;
+                    sz -= u * gz;
+                }
                 return sx * sx + sz * sz <= rr * rr;
             }
             if (W > 0f)
@@ -462,20 +461,30 @@ namespace Stabby.World
             caves = graphs.ToArray();
             terrain = Sunk(terrain, CaveBrooks.Sinks(w, terrain, caves));
             discoveries = null;
-            if (w.Objects == null || w.Biome == null) return terrain;
+            if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
             var bogs = field.BogEdits();
             var dens = field.DenEdits();
             discoveries = field.Discoveries();
-            if (boulders.Length + springs.Length + bogs.Length + dens.Length == 0) return terrain;
+            if (boulders.Length + springs.Length + bogs.Length + dens.Length == 0) return Brooked(w, detail, terrain, caves);
             var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
             springs.CopyTo(all, terrain.Length + boulders.Length);
             bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             dens.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length);
+            return Brooked(w, detail, all, caves);
+        }
+
+        static FeatureEdit[] Brooked(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
+        {
+            var channels = CaveBrooks.Channels(w, CaveBrooks.Build(w, detail, edits, caves));
+            if (channels.Length == 0) return edits;
+            var all = new FeatureEdit[edits.Length + channels.Length];
+            edits.CopyTo(all, 0);
+            channels.CopyTo(all, edits.Length);
             return all;
         }
 
