@@ -11,6 +11,8 @@ test CaveTests.TunnelsAreNarrowFineAndVaried 24 carves and meshes cave tunnels o
 test ObjectTests.ObjectsStayInTheirBiomes 21 checks every placed object against its biome
 test CaveTests.HallsBuildAtFullSize 21 builds and meshes full-size cave halls
 test CaveTests.CaveLightsAreSporadicAndPass 30 places and checks cave lights on four worlds
+test CaveTests.ObsidianCavesFormInHotDryGroundWithLavaPools 30 builds up to sixteen 512 worlds until an obsidian cave holds a lava pool and glow
+test CaveTests.LavaPoolOnAPassageFails 30 builds up to sixteen 512 worlds to find a lava pool, then moves it onto a passage
 test MineTests.MinesAreWalkableGridAlignedAndTimbered 20 carves mines on full worlds, walks each from its entrance and places its timber
 test MineTests.FloatingTimberIsCaught 8 builds one world and checks a lifted timber fails
 test DungeonLinkTests.LinksJoinDungeonsToWalkableDarkCaves 25 builds two worlds, checks their dungeon link caves and cave darkness

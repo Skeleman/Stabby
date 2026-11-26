@@ -51,7 +51,7 @@ namespace Stabby.World
 
         public float Thick => R + Math.Min(W, H);
 
-        public bool Fine, Ice, Link;
+        public bool Fine, Ice, Obsidian, Link;
 
         public FeatureEdit Finer()
         {
@@ -483,6 +483,12 @@ namespace Stabby.World
             return any;
         }
 
+        public static int TileAt(float x, float z, float cellMeters)
+        {
+            float span = TileCells * cellMeters;
+            return (int)Math.Floor(z / span) * 65536 + (int)Math.Floor(x / span);
+        }
+
         public static int TileOf(FeatureEdit e, float cellMeters)
         {
             float span = TileCells * cellMeters;
@@ -569,7 +575,7 @@ namespace Stabby.World
             ulong ro = Rng.Stream(w.Config.Seed, "overhangs").NextU64(), ra = Rng.Stream(w.Config.Seed, "arches").NextU64(), rc = Rng.Stream(w.Config.Seed, "cave-graph").NextU64();
             ulong rk = Rng.Stream(w.Config.Seed, "cave-rock").NextU64(), rd = Rng.Stream(w.Config.Seed, "cave-speleothems").NextU64(), rf = Rng.Stream(w.Config.Seed, "cave-flowstone").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
-            ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64(), rg = Rng.Stream(w.Config.Seed, "cave-crystal").NextU64(), ri = Rng.Stream(w.Config.Seed, "cave-ice").NextU64();
+            ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64(), rg = Rng.Stream(w.Config.Seed, "cave-crystal").NextU64(), ri = Rng.Stream(w.Config.Seed, "cave-ice").NextU64(), rv = Rng.Stream(w.Config.Seed, "cave-obsidian").NextU64();
             ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
             ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64(), rs = Rng.Stream(w.Config.Seed, "cave-skylights").NextU64();
             var lips = Landforms.BiomeMask(w, Mesas.Biomes);
@@ -592,7 +598,7 @@ namespace Stabby.World
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
                     var width = new Rng(Rng.Mix(rw + t));
-                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), Rng.Mix(rg + t), Rng.Mix(ri + t), Rng.Mix(rs + t), list.GetRange(from, list.Count - from), tile, out var graph);
+                    Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), Rng.Mix(rg + t), Rng.Mix(ri + t), Rng.Mix(rv + t), Rng.Mix(rs + t), list.GetRange(from, list.Count - from), tile, out var graph);
                     if (Keep(w, tile, list) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();

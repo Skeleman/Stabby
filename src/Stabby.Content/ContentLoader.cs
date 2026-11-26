@@ -62,7 +62,7 @@ namespace Stabby.Content
         public static CaveLibrary ParseCaves(string json, string source)
         {
             var root = Root(json, source, CaveSchemaVersion);
-            var l = new CaveLibrary { Chance = root.Float("chance", 0), CrystalChance = root.Float("crystalChance", 0), IceChance = root.Float("iceChance", 0), IceMaxTempC = root.Float("iceMaxTempC", 0) };
+            var l = new CaveLibrary { Chance = root.Float("chance", 0), CrystalChance = root.Float("crystalChance", 0), IceChance = root.Float("iceChance", 0), IceMaxTempC = root.Float("iceMaxTempC", 0), ObsidianChance = root.Float("obsidianChance", 0), ObsidianMinTempC = root.Float("obsidianMinTempC", 0), ObsidianMaxRainMm = root.Float("obsidianMaxRainMm", 0) };
             var cell = Pair(root, "crystalCell", DefaultCell, source);
             l.CellMin = cell[0];
             l.CellMax = cell[1];
