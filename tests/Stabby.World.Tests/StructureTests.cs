@@ -148,7 +148,8 @@ public class StructureTests
         var walls = new List<ObjectInstance>();
         int across = field.ChunksAcross;
         var chunks = new ObjectInstance[across * across][];
-        Parallel.For(0, chunks.Length, c => chunks[c] = field.Chunk(c % across, c / across));
+        Parallel.For(0, chunks.Length, c => chunks[c] = field.Place(c % across, c / across, true));
+        Assert.All(Objects.Objects.Where(d => ObjectField.Seats(d) != null), d => Assert.Contains(d.Parts, p => Objects.PartSolid(d, p)));
         foreach (var chunk in chunks)
             foreach (var o in chunk)
             {
