@@ -37,10 +37,10 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, Shapes = 48;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, Shapes = 49;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
-        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || IsDungeon(shape) || IsMine(shape);
+        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || shape == House || IsDungeon(shape) || IsMine(shape);
         public static bool IsDungeon(int shape) => shape >= DungeonCorridor && shape <= Dungeon;
         public static bool IsMine(int shape) => shape >= MineTimber && shape <= MineCart;
         public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || shape == DripColumn || IsStructure(shape);
@@ -156,6 +156,22 @@ namespace Stabby.World
         public QualityLevel Pick(string requested) => Level(requested ?? "") ?? Level(Default) ?? Levels[0];
     }
 
+    public sealed class TownSite
+    {
+        public const int Centre = 0, Plaza = 1, Lane = 2;
+        public static readonly string[] PlaceNames = { "centre", "plaza", "lane" };
+        public string ObjectId;
+        public int Place, Min, Max;
+    }
+
+    public sealed class TownDef
+    {
+        public string Id;
+        public List<string> Biomes = new List<string>();
+        public float SeekM, ReliefM, WaterM, PlazaM, LaneM, LaneWidthM;
+        public List<TownSite> Sites = new List<TownSite>();
+    }
+
     public sealed class ObjectLibrary
     {
         public List<LightKind> Lights = new List<LightKind>();
@@ -166,6 +182,7 @@ namespace Stabby.World
         public FoliageDef Foliage = new FoliageDef();
         public QualityDef Quality = new QualityDef();
         public List<ArchStyle> Styles = new List<ArchStyle>();
+        public List<TownDef> Towns = new List<TownDef>();
 
         public ObjectKind KindOf(ObjectDef d)
         {
@@ -347,6 +364,26 @@ namespace Stabby.World
             if (lib.Objects.Count > MaxDefs) errors.Add("at most " + MaxDefs + " object defs");
             lib.Terrain.Validate(errors);
             lib.Foliage.Validate(errors);
+            var towns = new HashSet<string>();
+            foreach (var t in lib.Towns)
+            {
+                if (string.IsNullOrEmpty(t.Id) || !towns.Add(t.Id)) errors.Add("town without unique id " + t.Id);
+                if (!(t.ReliefM > 0 && t.WaterM > 0 && t.PlazaM > 0 && t.LaneWidthM > 0 && t.SeekM >= 0 && t.LaneM >= 0)) errors.Add("town " + t.Id + ": distances out of range");
+                if (biomeIds != null)
+                    foreach (var b in t.Biomes)
+                        if (!Contains(biomeIds, b)) errors.Add("town " + t.Id + ": unknown biome " + b);
+                int centres = 0;
+                foreach (var s in t.Sites)
+                {
+                    var od = lib.Objects.Find(o => o.Id == s.ObjectId);
+                    if (od == null) errors.Add("town " + t.Id + ": unknown object " + s.ObjectId);
+                    else if (od.Kind != "structure") errors.Add("town " + t.Id + ": " + s.ObjectId + " is not a structure");
+                    if (s.Place < 0) errors.Add("town " + t.Id + ": unknown place for " + s.ObjectId);
+                    if (!(s.Min >= 0 && s.Max >= s.Min)) errors.Add("town " + t.Id + ": count out of range for " + s.ObjectId);
+                    if (s.Place == TownSite.Centre) centres += s.Max;
+                }
+                if (centres > 1) errors.Add("town " + t.Id + ": at most one centre site");
+            }
             return errors;
         }
 

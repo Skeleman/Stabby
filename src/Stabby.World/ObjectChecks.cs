@@ -136,6 +136,69 @@ namespace Stabby.World
                 }
         }
 
+        public static void CheckTowns(GeneratedWorld w, EditGrid grid, ObjectField field, List<string> e)
+        {
+            var defs = w.Objects.Objects;
+            float span = field.ChunkMeters;
+            int across = field.ChunksAcross;
+            var plans = field.TownPlans();
+            var under = new SortedSet<int>();
+            foreach (var p in plans)
+            {
+                int x0 = Math.Max(0, (int)((p.X - p.Radius) / span)), x1 = Math.Min(across - 1, (int)((p.X + p.Radius) / span));
+                int z0 = Math.Max(0, (int)((p.Z - p.Radius) / span)), z1 = Math.Min(across - 1, (int)((p.Z + p.Radius) / span));
+                for (int cz = z0; cz <= z1; cz++)
+                    for (int cx = x0; cx <= x1; cx++)
+                        under.Add(cz * across + cx);
+                foreach (var m in p.Members)
+                    under.Add(Math.Min(across - 1, (int)(m.Z / span)) * across + Math.Min(across - 1, (int)(m.X / span)));
+            }
+            var chunks = new List<int>(under);
+            Parallel.For(0, chunks.Count, k => field.Chunk(chunks[k] % across, chunks[k] / across));
+            foreach (var p in plans)
+            {
+                var t = w.Objects.Towns[p.Town];
+                string at = $"town {t.Id} at {p.X:F0},{p.Z:F0}";
+                if (p.Members.Count == 0) { e.Add(at + " has no sites"); return; }
+                for (int a = 0; a < p.Members.Count; a++)
+                {
+                    var m = p.Members[a];
+                    float ra = defs[m.Def].FootprintRadius() * m.Size;
+                    for (int b = a + 1; b < p.Members.Count; b++)
+                    {
+                        var o = p.Members[b];
+                        float g = ra + defs[o.Def].FootprintRadius() * o.Size, dx = m.X - o.X, dz = m.Z - o.Z;
+                        if (dx * dx + dz * dz < g * g) { e.Add($"{at}: {defs[m.Def].Id} and {defs[o.Def].Id} overlap"); return; }
+                    }
+                    int cx = Math.Min(across - 1, (int)(m.X / span)), cz = Math.Min(across - 1, (int)(m.Z / span));
+                    if (!Array.Exists(field.Chunk(cx, cz), o => o.Def == m.Def && o.X == m.X && o.Z == m.Z)) { e.Add($"{at}: {defs[m.Def].Id} at {m.X:F0},{m.Z:F0} is missing from its chunk"); return; }
+                    if (Math.Sqrt((m.X - p.X) * (m.X - p.X) + (m.Z - p.Z) * (m.Z - p.Z)) + ra > p.Radius) { e.Add($"{at}: {defs[m.Def].Id} lies outside the town"); return; }
+                }
+                float water = field.TownWater(p.X, p.Z, t.WaterM);
+                if (water > t.WaterM) { e.Add($"{at} lies {water:F0} m from water, over {t.WaterM:F0}"); return; }
+                foreach (var f in grid.Edits)
+                {
+                    float fx = Math.Max(f.MinX, Math.Min(p.X, f.MaxX)), fz = Math.Max(f.MinZ, Math.Min(p.Z, f.MaxZ));
+                    if ((fx - p.X) * (fx - p.X) + (fz - p.Z) * (fz - p.Z) >= p.Radius * p.Radius) continue;
+                    if (f.Shape == FeatureEdit.Boulder ? field.InTownGround(0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ), f.R, true) : true) { e.Add($"{at} holds a feature edit of shape {f.Shape}"); return; }
+                }
+                foreach (var s in field.Discoveries())
+                {
+                    float dx = s.X - p.X, dz = s.Z - p.Z, g = p.Radius + field.SiteRadius(s);
+                    if (dx * dx + dz * dz < g * g) { e.Add($"{at} overlaps discovery {defs[s.Def].Id}"); return; }
+                }
+                int x0 = Math.Max(0, (int)((p.X - p.Radius) / span)), x1 = Math.Min(across - 1, (int)((p.X + p.Radius) / span));
+                int z0 = Math.Max(0, (int)((p.Z - p.Radius) / span)), z1 = Math.Min(across - 1, (int)((p.Z + p.Radius) / span));
+                for (int cz = z0; cz <= z1; cz++)
+                    for (int cx = x0; cx <= x1; cx++)
+                        foreach (var o in field.Chunk(cx, cz))
+                        {
+                            if (field.IsTownMember(o.Def) || field.IsSite(o.Def) || defs[o.Def].Placement.Cave > 0) continue;
+                            if (field.InTownGround(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size, defs[o.Def].Kind == ObjectLibrary.Structure)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on the ground of {at}"); return; }
+                        }
+            }
+        }
+
         static string RegionFault(ObjectField full, ObjectField fresh, ObjectInstance[] placed, int c)
         {
             var columns = new List<ObjectColumn>();
