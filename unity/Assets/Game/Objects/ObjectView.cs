@@ -83,6 +83,7 @@ namespace Stabby.Game
         struct ChunkParts
         {
             public int Chunk;
+            public float Base, Ms;
             public NativeArray<long> Keys;
             public NativeArray<int3> Ranges;
             public NativeArray<ObjectSpawn> Parts;
@@ -123,6 +124,9 @@ namespace Stabby.Game
         RenderTexture impA, impB;
         readonly List<Task<ChunkParts>> chunkTasks = new List<Task<ChunkParts>>();
         bool[] collectingChunk;
+        float[] heldBase;
+        int recollects;
+        float collectMaxMs;
         static readonly int Collectors = math.max(1, Environment.ProcessorCount / 4);
         NativeArray<DefLod> defLods;
         NativeArray<BatchMeshID> meshIdsNative;
@@ -157,6 +161,8 @@ namespace Stabby.Game
         public static bool ReadyAround(float3 p, float within) => readyFrame >= UnityEngine.Time.frameCount - 2 && math.distance(readyAt, p) <= within;
         public static int LiveEntities { get; private set; }
         public static int PartsHeld { get; private set; }
+        public static int Recollects { get; private set; }
+        public static float CollectMaxMs { get; private set; }
         public static int ChunksHeld { get; private set; }
         public static int ChunksUnloaded { get; private set; }
         public static float LastMs { get; private set; }
@@ -251,6 +257,7 @@ namespace Stabby.Game
             chunkKeys = new NativeArray<long>[across * across];
             chunkLights = new List<Entity>[across * across];
             collectingChunk = new bool[across * across];
+            heldBase = new float[across * across];
             float minTile = cm * 0.5f;
             int defs = lib.Objects.Count, count = 0;
             meshBase = new int[defs][];
@@ -598,17 +605,27 @@ namespace Stabby.Game
 
         [System.ThreadStatic] static List<StructureLight> anchorScratch;
 
-        ChunkParts Collect(int c)
+        ChunkParts Collect(int c, float minBase, bool lights)
         {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             var placed = ListPool.Rent<ObjectInstance>();
-            try { return Collect(c, placed); }
+            try
+            {
+                var r = Collect(c, placed, minBase, lights);
+                r.Ms = Since(t0);
+                return r;
+            }
             finally { ListPool.Return(placed); }
         }
 
-        ChunkParts Collect(int c, List<ObjectInstance> placed)
+        ChunkParts Collect(int c, List<ObjectInstance> placed, float minBase, bool lights)
         {
             int cx = c % across, cz = c / across;
             field.PlaceInto(cx, cz, placed);
+            var emitters = lights ? LightsIn(placed) : null;
+            int kept = 0;
+            for (int i = 0; i < placed.Count; i++) if (baseReach[placed[i].Def] >= minBase) placed[kept++] = placed[i];
+            placed.RemoveRange(kept, placed.Count - kept);
             int n = 0;
             for (int i = 0; i < placed.Count; i++) n += lib.Objects[placed[i].Def].Parts.Count;
             var order = new NativeArray<SortKey>(n, Allocator.Persistent);
@@ -649,7 +666,7 @@ namespace Stabby.Game
                 };
             }
             order.Dispose();
-            return new ChunkParts { Chunk = c, Keys = keys, Ranges = spans, Parts = parts, Lights = LightsIn(placed) };
+            return new ChunkParts { Chunk = c, Base = minBase, Keys = keys, Ranges = spans, Parts = parts, Lights = emitters };
         }
 
         List<LightEmitter> LightsIn(List<ObjectInstance> placed)
@@ -710,11 +727,22 @@ namespace Stabby.Game
                 if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
                 var r = task.Result;
                 collectingChunk[r.Chunk] = false;
+                collectMaxMs = math.max(collectMaxMs, r.Ms);
+                bool again = loaded[r.Chunk];
+                if (again)
+                {
+                    DropParts(r.Chunk);
+                    recollects++;
+                }
                 for (int i = 0; i < r.Keys.Length; i++)
                     if (!ranges.TryAdd(r.Keys[i], r.Ranges[i])) r.Keys[i] = -1;
                 r.Ranges.Dispose();
                 chunkParts[r.Chunk] = r.Parts;
                 chunkKeys[r.Chunk] = r.Keys;
+                heldBase[r.Chunk] = r.Base;
+                partsHeld += r.Parts.Length;
+                peakParts = math.max(peakParts, partsHeld);
+                if (again) continue;
                 loaded[r.Chunk] = true;
                 if (r.Lights != null)
                 {
@@ -729,42 +757,72 @@ namespace Stabby.Game
                 }
                 chunksLoaded++;
                 chunksHeld++;
-                partsHeld += r.Parts.Length;
-                peakParts = math.max(peakParts, partsHeld);
                 peakChunks = math.max(peakChunks, chunksHeld);
             }
+            float q = math.max(reachQuality, 1e-3f);
             for (int c = 0; c < loaded.Length; c++)
             {
-                if (!loaded[c] || RectDistance(cam, (c % across) * span, (c / across) * span, span) <= maxReach * UnloadReach) continue;
-                foreach (long key in chunkKeys[c]) if (key >= 0) ranges.Remove(key);
-                partsHeld -= chunkParts[c].Length;
-                chunkParts[c].Dispose();
-                chunkKeys[c].Dispose();
+                if (!loaded[c] || collectingChunk[c]) continue;
+                float dist = RectDistance(cam, (c % across) * span, (c / across) * span, span);
+                if (dist <= maxReach * UnloadReach)
+                {
+                    float want = dist / (q * UnloadReach);
+                    if ((dist / q < heldBase[c] * GrowAt || want > heldBase[c] * ShrinkAt) && SameSet(heldBase[c], want)) heldBase[c] = want;
+                    continue;
+                }
+                DropParts(c);
                 DestroyLights(chunkLights[c]);
                 chunkLights[c] = null;
                 loaded[c] = false;
                 chunksHeld--;
                 chunksUnloaded++;
             }
-            int best = 0;
-            while (best >= 0 && chunkTasks.Count < Collectors)
+            bool unserved = false;
+            while (true)
             {
-                best = -1;
-                float bestD = maxReach;
+                int best = -1;
+                float bestD = maxReach, bestShrink = float.MaxValue;
+                int shrink = -1;
                 for (int c = 0; c < loaded.Length; c++)
                 {
-                    if (loaded[c] || collectingChunk[c]) continue;
+                    if (collectingChunk[c]) continue;
                     float d = RectDistance(cam, (c % across) * span, (c / across) * span, span);
+                    if (loaded[c])
+                    {
+                        if (d / q < heldBase[c] * GrowAt) { if (d < bestD) { bestD = d; best = c; } }
+                        else if (d / (q * UnloadReach) > heldBase[c] * ShrinkAt && d < bestShrink) { bestShrink = d; shrink = c; }
+                        continue;
+                    }
                     if (d < bestD) { bestD = d; best = c; }
                 }
-                if (best < 0) break;
-                collectingChunk[best] = true;
-                chunkTasks.Add(StartCollect(best));
+                int pick = best >= 0 ? best : shrink;
+                if (pick < 0) break;
+                if (chunkTasks.Count >= Collectors) { unserved = best >= 0; break; }
+                collectingChunk[pick] = true;
+                float minBase = RectDistance(cam, (pick % across) * span, (pick / across) * span, span) / (q * UnloadReach);
+                chunkTasks.Add(StartCollect(pick, minBase, !loaded[pick]));
             }
-            Pending = best >= 0 || chunkTasks.Count > 0 ? 1 : 0;
+            Pending = unserved || chunkTasks.Count > 0 ? 1 : 0;
         }
 
-        Task<ChunkParts> StartCollect(int c) => Task.Run(() => Collect(c));
+        const float GrowAt = 1.2f, ShrinkAt = 2f;
+
+        bool SameSet(float a, float b)
+        {
+            float lo = math.min(a, b), hi = math.max(a, b);
+            foreach (float r in baseReach) if (r >= lo && r < hi) return false;
+            return true;
+        }
+
+        void DropParts(int c)
+        {
+            foreach (long key in chunkKeys[c]) if (key >= 0) ranges.Remove(key);
+            partsHeld -= chunkParts[c].Length;
+            chunkParts[c].Dispose();
+            chunkKeys[c].Dispose();
+        }
+
+        Task<ChunkParts> StartCollect(int c, float minBase, bool lights) => Task.Run(() => Collect(c, minBase, lights));
 
         public const float StreamMs = 2.5f;
 
@@ -802,7 +860,7 @@ namespace Stabby.Game
                 int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
                 float t = tile[d];
                 int c = math.min(across - 1, (int)(tz * t / span)) * across + math.min(across - 1, (int)(tx * t / span));
-                if (!loaded[c]) { waiting++; continue; }
+                if (!loaded[c] || baseReach[d] < heldBase[c]) { waiting++; continue; }
                 if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
                 if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
                 SpawnTile(key, chunkParts[range.z], range);
@@ -998,6 +1056,8 @@ namespace Stabby.Game
             scanned = true;
             LiveEntities = liveEntities;
             PartsHeld = partsHeld;
+            Recollects = recollects;
+            CollectMaxMs = collectMaxMs;
             ChunksHeld = chunksHeld;
             ChunksUnloaded = chunksUnloaded;
             liveByDefShared = liveByDef;
@@ -1007,7 +1067,7 @@ namespace Stabby.Game
             if (!GameStatus.Live.ContainsKey("~objects view")) GameStatus.Live["~objects view"] = Status;
         }
 
-        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}); worst view update after terrain built {worstUpdate:F1} ms";
+        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}), {recollects} re-collects, slowest collect {collectMaxMs:F1} ms; worst view update after terrain built {worstUpdate:F1} ms";
     }
 
     [BurstCompile]
