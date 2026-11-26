@@ -7,10 +7,14 @@ namespace Stabby.World
     {
         public static List<string> Creatures(GeneratedWorld w, CreatureLibrary lib)
         {
-            var e = new List<string>();
             var detail = new TerrainDetail(w);
+            return Creatures(w, lib, detail, CreaturePlan.Pools(w, detail));
+        }
+
+        public static List<string> Creatures(GeneratedWorld w, CreatureLibrary lib, TerrainDetail detail, float[] pools)
+        {
+            var e = new List<string>();
             var cells = detail.Cells;
-            var pools = CreaturePlan.Pools(w, detail);
             var a = CreaturePlan.Build(w, cells, lib, pools, out var drinks);
             var b = CreaturePlan.Build(w, cells, lib, pools, out var again);
             if (drinks.Count != again.Count) e.Add("drink spot count differs between runs");
