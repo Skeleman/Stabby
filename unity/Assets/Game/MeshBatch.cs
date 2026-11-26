@@ -64,33 +64,53 @@ namespace Stabby.Game
 
         public void Add(MeshParts d, int id, bool lean = false)
         {
-            int attr = Attrs.Length, floats = 3;
-            var norms = lean ? null : d.Norms;
+            int attr = Attrs.Length, floats = 3, vc = d.Verts.Length;
             Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Position));
-            if (norms != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Normal)); floats += 3; }
-            if (d.Cols != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4)); floats += 4; }
-            if (d.Uvs != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2)); floats += 2; }
+            var chans = new List<(VertexAttribute At, Vector4[] V, int Dim)>();
+            if (d.Norms != null && !lean) chans.Add((VertexAttribute.Normal, Array.ConvertAll(d.Norms, n => (Vector4)n), 3));
+            if (d.Cols != null) chans.Add((VertexAttribute.Color, Array.ConvertAll(d.Cols, c => (Vector4)c), 4));
+            if (d.Uvs != null) chans.Add((VertexAttribute.TexCoord0, Array.ConvertAll(d.Uvs, t => (Vector4)t), 2));
             var extra = new[] { d.Uv1, d.Uv2, d.Uv3, d.Uv4 };
             for (int u = 0; u < 4; u++)
-                if (extra[u] != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord1 + u, VertexAttributeFormat.Float32, 4)); floats += 4; }
-            int vc = d.Verts.Length, vertex = Vertices.Length;
+                if (extra[u] != null) chans.Add((VertexAttribute.TexCoord1 + u, extra[u], 4));
+            var half = new bool[chans.Count];
+            for (int k = 0; k < chans.Count; k++)
+            {
+                var (at, vs, dim) = chans[k];
+                half[k] = lean && dim != 3 && HalfExact(vs, dim);
+                Attrs.Add(new VertexAttributeDescriptor(at, half[k] ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, dim));
+                floats += half[k] ? dim / 2 : dim;
+            }
+            int vertex = Vertices.Length;
             Vertices.ResizeUninitialized(vertex + vc * floats);
-            var dst = Vertices.AsArray();
+            var dst = Vertices.AsArray().Reinterpret<uint>();
             for (int v = 0, o = vertex; v < vc; v++)
             {
                 var p = d.Verts[v];
-                dst[o++] = p.x; dst[o++] = p.y; dst[o++] = p.z;
-                if (norms != null) { var n = norms[v]; dst[o++] = n.x; dst[o++] = n.y; dst[o++] = n.z; }
-                if (d.Cols != null) { var c = d.Cols[v]; dst[o++] = c.r; dst[o++] = c.g; dst[o++] = c.b; dst[o++] = c.a; }
-                if (d.Uvs != null) { var t = d.Uvs[v]; dst[o++] = t.x; dst[o++] = t.y; }
-                for (int u = 0; u < 4; u++)
-                    if (extra[u] != null) { var t = extra[u][v]; dst[o++] = t.x; dst[o++] = t.y; dst[o++] = t.z; dst[o++] = t.w; }
+                dst[o++] = math.asuint(p.x); dst[o++] = math.asuint(p.y); dst[o++] = math.asuint(p.z);
+                for (int k = 0; k < chans.Count; k++)
+                {
+                    var t = chans[k].V[v];
+                    int dim = chans[k].Dim;
+                    if (half[k])
+                        for (int c = 0; c < dim; c += 2) dst[o++] = math.f32tof16(t[c]) | (math.f32tof16(t[c + 1]) << 16);
+                    else
+                        for (int c = 0; c < dim; c++) dst[o++] = math.asuint(t[c]);
+                }
             }
             bool wide = vc > 65535;
             int index = wide ? Wide.Length : Narrow.Length;
             if (wide) foreach (var t in d.Tris) Wide.Add(t);
             else foreach (var t in d.Tris) Narrow.Add((ushort)t);
             Add(d.Name, new MeshPiece { Id = id, Vertex = vertex, VertexCount = vc, Floats = floats, Index = index, IndexCount = d.Tris.Length, Attr = attr, AttrCount = Attrs.Length - attr, Wide = wide, AllBounds = true });
+        }
+
+        static bool HalfExact(Vector4[] vs, int dim)
+        {
+            foreach (var t in vs)
+                for (int c = 0; c < dim; c++)
+                    if (math.f16tof32(math.f32tof16(t[c])) != t[c]) return false;
+            return true;
         }
 
         public void Dispose()
