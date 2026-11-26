@@ -13,7 +13,7 @@ public class ObjectRegionTests
     [Fact]
     public void RegionsHoldTheirChunkColumnsAndCollideOnlyWhileResident()
     {
-        var (_, _, _, field) = TestWorlds.Get(4);
+        var (_, _, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int across = field.ChunksAcross;
         var regions = ColumnRegions.For(field);
         ColumnRegion? best = null;

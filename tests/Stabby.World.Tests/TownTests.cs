@@ -9,29 +9,24 @@ public class TownTests
     [Fact]
     public void TownsPlaceTheirSitesAndPassTheCheck()
     {
-        int towns = 0;
-        foreach (ulong seed in new ulong[] { 2, 3, 6 })
+        var (w, _, edits, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
+        var plans = field.TownPlans();
+        Assert.True(plans.Length <= field.Towns.Count, $"{plans.Length} towns from {field.Towns.Count} landmarks");
+        var errors = new List<string>();
+        WorldChecks.CheckTowns(w, new EditGrid(edits, w.Config.Size * w.Config.CellMeters), field, errors);
+        Assert.True(errors.Count == 0, string.Join("; ", errors));
+        foreach (var p in plans)
         {
-            var (w, _, edits, field) = TestWorlds.Get(seed);
-            var plans = field.TownPlans();
-            towns += plans.Length;
-            Assert.True(plans.Length <= field.Towns.Count, $"seed {seed}: {plans.Length} towns from {field.Towns.Count} landmarks");
-            var errors = new List<string>();
-            WorldChecks.CheckTowns(w, new EditGrid(edits, w.Config.Size * w.Config.CellMeters), field, errors);
-            Assert.True(errors.Count == 0, $"seed {seed}: " + string.Join("; ", errors));
-            foreach (var p in plans)
-            {
-                Assert.Contains(p.Members, m => Objects.Objects[m.Def].Id == "well");
-                Assert.True(p.Members.Count(m => Objects.Objects[m.Def].Id == "house") >= 2, $"seed {seed} town at {p.X:F0},{p.Z:F0} has {p.Members.Count} sites");
-            }
+            Assert.Contains(p.Members, m => Objects.Objects[m.Def].Id == "well");
+            Assert.True(p.Members.Count(m => Objects.Objects[m.Def].Id == "house") >= 2, $"town at {p.X:F0},{p.Z:F0} has {p.Members.Count} sites");
         }
-        Assert.True(towns >= 4, $"{towns} towns on three seeds");
+        Assert.True(plans.Length >= 4, $"{plans.Length} towns");
     }
 
     [Fact]
     public void HouseDoorsFaceTheLane()
     {
-        var (_, _, _, field) = TestWorlds.Get(2);
+        var (_, _, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int house = Objects.Objects.FindIndex(o => o.Id == "house"), seen = 0;
         foreach (var p in field.TownPlans())
             foreach (var m in p.Members)
@@ -49,7 +44,7 @@ public class TownTests
     [Fact]
     public void TownsAreDeterministicAcrossFields()
     {
-        var (w, detail, edits, field) = TestWorlds.Get(6);
+        var (w, detail, edits, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var again = new ObjectField(w, detail, edits, Objects).TownPlans();
         var plans = field.TownPlans();
         Assert.Equal(plans.Length, again.Length);

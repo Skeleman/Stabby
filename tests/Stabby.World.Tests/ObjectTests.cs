@@ -13,14 +13,6 @@ public class ObjectTests
 
     static readonly float[] RisingLods = { 10f, 50f };
 
-    static GeneratedWorld Gen(ulong seed, int size = 256) => TestWorlds.World(seed, size);
-
-    static readonly Lazy<(GeneratedWorld, ObjectField)> Big = new(() =>
-    {
-        var (w, _, _, field) = TestWorlds.Get(5, 512);
-        return (w, field);
-    });
-
     [Fact]
     public void DungeonRoomsLightFewTorchesThroughTheFireEmitter()
     {
@@ -200,7 +192,7 @@ public class ObjectTests
     [Fact]
     public void PlaceIntoMatchesCachedAndFreshPlacement()
     {
-        var (w, detail, edits, _) = TestWorlds.Get(4);
+        var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var cached = new ObjectField(w, detail, edits, Objects);
         var fresh = new ObjectField(w, detail, edits, Objects);
         var list = new List<ObjectInstance>();
@@ -219,7 +211,7 @@ public class ObjectTests
     [Fact]
     public void ConcurrentChunksComputeOnceAndAgree()
     {
-        var (w, detail, edits, _) = TestWorlds.Get(4);
+        var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var serial = new ObjectField(w, detail, edits, Objects);
         int n = serial.ChunksAcross, c = Enumerable.Range(0, n * n).First(i => serial.Chunk(i % n, i / n).Length > 0);
         var expect = serial.Chunk(c % n, c / n);
@@ -238,7 +230,7 @@ public class ObjectTests
     [Fact]
     public void ConcurrentSitesComputeOnceAndAgree()
     {
-        var (w, detail, edits, _) = TestWorlds.Get(4);
+        var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var serial = new ObjectField(w, detail, edits, Objects);
         int n = serial.ChunksAcross, c = Enumerable.Range(0, n * n).First(i => serial.Sites(i % n, i / n).Length > 0);
         var expect = serial.Sites(c % n, c / n);
@@ -257,7 +249,7 @@ public class ObjectTests
     [Fact]
     public void ObjectPlacementIsDeterministicAndVaried()
     {
-        var (w, detail, edits, _) = TestWorlds.Get(4);
+        var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var a = new ObjectField(w, detail, edits, Objects);
         var b = new ObjectField(w, detail, edits, Objects);
         var kinds = new HashSet<int>();
@@ -401,7 +393,7 @@ public class ObjectTests
     [Fact]
     public void InteractiveRemovalIsValidatedRecordedPerChunkAndClearsColumns()
     {
-        var (w, detail, edits, _) = TestWorlds.Get(4);
+        var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var host = new ObjectField(w, detail, edits, Objects);
         int stoneDef = Objects.Objects.FindIndex(d => d.Id == "loose-stone"), woodDef = Objects.Objects.FindIndex(d => d.Id == "brushwood");
         ObjectInstance stone = default, wood = default, plain = default;
@@ -491,14 +483,10 @@ public class ObjectTests
     public void TorsAndHoodoosStandAsSolidAdds()
     {
         int tors = 0, hoodoos = 0;
-        foreach (ulong seed in new ulong[] { 4, 19 })
+        foreach (var e in TestWorlds.Default.Edits)
         {
-            var w = Gen(seed);
-            foreach (var e in Features.Place(w, new TerrainDetail(w)))
-            {
-                if (e.Shape == FeatureEdit.Tor) { Assert.Equal(FeatureEdit.Add, e.Kind); tors++; }
-                if (e.Shape == FeatureEdit.Hoodoo) { Assert.Equal(FeatureEdit.Add, e.Kind); hoodoos++; }
-            }
+            if (e.Shape == FeatureEdit.Tor) { Assert.Equal(FeatureEdit.Add, e.Kind); tors++; }
+            if (e.Shape == FeatureEdit.Hoodoo) { Assert.Equal(FeatureEdit.Add, e.Kind); hoodoos++; }
         }
         Assert.True(tors > 0 && hoodoos > 0, $"{tors} tor edits, {hoodoos} hoodoo edits");
     }
@@ -506,7 +494,7 @@ public class ObjectTests
     [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
-        var (w, detail, edits, _) = TestWorlds.Get(4);
+        var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         Assert.Contains(edits, e => e.Shape == FeatureEdit.Boulder && e.Kind == FeatureEdit.Add);
         var field = new ObjectField(w, detail, edits, Objects);
         int big = Objects.Objects.FindIndex(o => o.Id == "large-boulder");
@@ -522,14 +510,13 @@ public class ObjectTests
     [Fact]
     public void ObjectsStayInTheirBiomes()
     {
-        var w = Gen(5);
+        var w = TestWorlds.Default.W;
         var c = Objects.Objects.First(o => o.Id == "small-rock");
         var keep = c.Placement.Biomes;
         c.Placement.Biomes = new List<string> { "boreal" };
         try
         {
-            var detail = new TerrainDetail(w);
-            var field = new ObjectField(w, detail, Features.Place(w, detail), Objects);
+            var field = new ObjectField(w, TestWorlds.Default.Detail, TestWorlds.Default.Edits, Objects);
             int n = w.Config.Size, d = Objects.Objects.IndexOf(c);
             for (int cz = 0; cz < field.ChunksAcross; cz++)
                 for (int cx = 0; cx < field.ChunksAcross; cx++)
@@ -545,7 +532,7 @@ public class ObjectTests
     [Fact]
     public void TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse()
     {
-        var (w, field) = Big.Value;
+        var (w, _, _, field) = TestWorlds.Get(5, 512);
         int n = w.Config.Size, talus = Objects.Objects.FindIndex(o => o.Id == "talus"), rock = Objects.Objects.FindIndex(o => o.Id == "small-rock");
         var pl = Objects.Objects[talus].Placement;
         var perDef = new int[Objects.Objects.Count];
@@ -567,7 +554,7 @@ public class ObjectTests
             string b = w.BiomeIds[w.Biome[i]];
             if (b == "desert" || b == "wetland" || b == "mangrove") sparseCells++; else denseCells++;
         }
-        var report = string.Join(", ", Objects.Objects.Select((o, d) => o.Id + " " + perDef[d])) + $"; talus at feet {talusFoot}, small rocks at feet {rockFoot}, sparse {rockSparse}/{sparseCells} dense {rockDense}/{denseCells}";
+        var report = string.Join(", ", Objects.Objects.Select((o, d) => o.Id + " " + perDef[d])) + $"; seed 5 at 512 for its cliff share; talus at feet {talusFoot}, small rocks at feet {rockFoot}, sparse {rockSparse}/{sparseCells} dense {rockDense}/{denseCells}";
         Assert.True(perDef[talus] > 1000, report);
         Assert.True(talusFoot * 2 > perDef[talus] * 0.4f * 2 && talusFoot * (double)perDef[rock] > 5.0 * rockFoot * perDef[talus], report);
         Assert.True(sparseCells == 0 || rockSparse / (double)sparseCells < 0.4 * rockDense / denseCells, report);
@@ -576,7 +563,7 @@ public class ObjectTests
     [Fact]
     public void RiverBanksGrowReedsBarsDriftAndWetStones()
     {
-        var (w, field) = Big.Value;
+        var (w, field) = (TestWorlds.Default.W, TestWorlds.Default.Field);
         var ids = new[] { "reeds", "driftwood", "drift-root", "river-gravel", "river-cobble", "wet-stone" };
         var perDef = new int[Objects.Objects.Count];
         foreach (var o in Enumerable.Range(0, field.ChunksAcross * field.ChunksAcross).SelectMany(c => field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross)))

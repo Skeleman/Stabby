@@ -102,7 +102,7 @@ public class InnTests
     [Fact]
     public void InnsPlaceLevelInTheTestWorld()
     {
-        var (w, detail, _, field) = TestWorlds.Get(4);
+        var (w, detail, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int d = Objects.Objects.FindIndex(o => o.Id == "inn"), seen = 0;
         var seat = ObjectField.Seats(Objects.Objects[d]);
         int across = field.ChunksAcross;
