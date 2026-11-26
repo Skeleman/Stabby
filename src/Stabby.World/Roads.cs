@@ -257,7 +257,7 @@ namespace Stabby.World
                     int item = blockItems[k];
                     if (item < 0)
                     {
-                        var f = edits[~item];
+                        var f = solid[~item];
                         if (f.Shape == FeatureEdit.Boulder || f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Vault || f.Link) continue;
                         if (Math.Max(x0, x1) + RoadHalfM < f.MinX || Math.Min(x0, x1) - RoadHalfM > f.MaxX || Math.Max(z0, z1) + RoadHalfM < f.MinZ || Math.Min(z0, z1) - RoadHalfM > f.MaxZ) continue;
                         if (f.MinY < Math.Max(h0, h1) + RoadEditY && f.MaxY > Math.Min(h0, h1) - RoadEditY) return $"meets a feature edit of shape {f.Shape}";

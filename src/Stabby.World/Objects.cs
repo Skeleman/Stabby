@@ -44,6 +44,7 @@ namespace Stabby.World
         readonly ulong[] key;
         readonly int[] blockStart, blockItems, bankSite, bankStart, bankItems;
         readonly FeatureEdit[] edits;
+        readonly FeatureEdit[] solid;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly ObjectInstance[][] chunks;
         readonly object[] chunkGates;
@@ -54,7 +55,8 @@ namespace Stabby.World
         public ObjectField(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, ObjectLibrary lib)
         {
             this.w = w; this.detail = detail; this.lib = lib;
-            this.edits = Array.FindAll(edits ?? Array.Empty<FeatureEdit>(), e => !e.Link);
+            solid = edits ?? Array.Empty<FeatureEdit>();
+            this.edits = Array.FindAll(solid, e => !e.Link);
             n = w.Config.Size; cm = w.Config.CellMeters; worldM = n * cm;
             across = WorldChunks.Across(n);
             chunks = new ObjectInstance[across * across][];
@@ -71,7 +73,7 @@ namespace Stabby.World
             lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
             sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
             caveStream = Rng.Stream(w.Config.Seed, "objects-cave").NextU64();
-            caveCarves = CaveCarves(this.edits);
+            caveCarves = CaveCarves(solid);
             caveLights = PlanCaveLights(w, this.edits, Rng.Stream(w.Config.Seed, "objects-cave-lights").NextU64());
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
@@ -110,9 +112,9 @@ namespace Stabby.World
             {
                 var fill = pass == 1 ? (int[])blockStart.Clone() : null;
                 int[] items = pass == 1 ? new int[blockStart[n * n]] : null;
-                for (int e = 0; e < this.edits.Length; e++)
+                for (int e = 0; e < solid.Length; e++)
                 {
-                    var f = this.edits[e];
+                    var f = solid[e];
                     float ext = f.Crusts ? f.CrustExtent : 0f;
                     Mark(Math.Min(f.MinX, f.Ax - ext) - maxR, Math.Min(f.MinZ, f.Az - ext) - maxR, Math.Max(f.MaxX, f.Ax + ext) + maxR, Math.Max(f.MaxZ, f.Az + ext) + maxR, ~e, fill, items);
                 }
@@ -527,7 +529,8 @@ namespace Stabby.World
                 int item = blockItems[k];
                 if (item < 0)
                 {
-                    var f = edits[~item];
+                    var f = solid[~item];
+                    if (f.Link) continue;
                     if (town && (f.Shape == FeatureEdit.Boulder || f.Shape == FeatureEdit.Spring)) continue;
                     if (site > 0 && (f.Shape == FeatureEdit.Spring || ((site == WolfDen || Pooled(site)) && f.Shape == FeatureEdit.Boulder))) continue;
                     if (f.Shape == FeatureEdit.Vault && (site > 0 || y > f.MaxY)) continue;

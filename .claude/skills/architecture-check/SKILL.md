@@ -26,6 +26,14 @@ broken rule as `file:line - rule N - fix`. Say "clean" if none.
    `tools/Stabby.Lint` (run by the tests) enforces it. Unity Game code is
    Burst `ISystem`; managed systems need a reasoned line in `lint-allow.txt`.
 8. **LF.** `git ls-files --eol <files>` shows `w/lf` for touched text files.
+9. **Locality and scope (rule 14).** A loop over edits, sites, plans, rivers,
+   chunks or objects nested in a per-candidate, per-object or per-site loop
+   goes through a spatial index (`EditGrid`, chunk bins) or a
+   per-kind list, never the whole collection. Filter by kind before work, not
+   inside it. Tests and checks build only what they assert: the chunks and
+   object kinds near the thing checked (`Place(cx, cz, true)` for solids),
+   not every chunk or every object. Flag full `ObjectField.Chunk` placement
+   or map-wide scans where only a radius or one kind matters.
 
 Also flag: CLI or tests calling generation internals instead of
 `WorldGenerator`/`WorldChecks`, and new options missing from README usage.
