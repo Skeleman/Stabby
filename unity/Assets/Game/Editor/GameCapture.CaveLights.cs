@@ -9,7 +9,7 @@ namespace Stabby.Game.Editor
     public static partial class GameCapture
     {
         static readonly float[] CaveLightEyeDistances = { 5f, 7f, 3.5f };
-        static readonly float[] FungusEyeDistances = { 2.5f, 3.5f, 5f };
+        static readonly float[] FungusEyeDistances = { 1.2f, 2f, 3f };
 
         static bool OpenAt(Ground ground, Vector3 p) => Walk.Solid(ground, ground.EditsNear(p.x, p.z, Walk.Radius), ground.WalkStep, p.x, p.y, p.z) < 0;
 
@@ -100,7 +100,7 @@ namespace Stabby.Game.Editor
                     look = new Vector3(sh.x, sh.z, sh.y);
                     clear = ShaftEye(ground, new Vector3(sh.x, o.Y, sh.y), look, out eye);
                 }
-                else if (kind == ObjectField.CaveFungus) clear = CaveLightEye(ground, at, 1.8f, out eye, FungusEyeDistances);
+                else if (kind == ObjectField.CaveFungus) clear = CaveLightEye(ground, at, 2.5f, out eye, FungusEyeDistances);
                 else clear = CaveLightEye(ground, at, 1.4f, out eye);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 var hours = sky ? new[] { (PinnedMidday, "noon"), (NightHour, "night") } : new[] { (PinnedMidday, "noon") };
