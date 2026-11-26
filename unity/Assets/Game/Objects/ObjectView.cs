@@ -36,12 +36,10 @@ namespace Stabby.Game
 
     public struct ObjectSpawn
     {
-        public float4x4 M;
-        public float4 Color, Leaf;
-        public int Mesh, Def;
-        public float Radius, Ground, Size;
-        public bool Shadow;
+        public float3x4 M;
         public ulong Id;
+        public float Tint, LeafTint, Hue, Radius, Ground, Size;
+        public int Mesh, Def;
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
@@ -117,7 +115,9 @@ namespace Stabby.Game
         Material material, foliageMaterial;
         BatchMaterialID materialId, foliageMaterialId;
         Entity castPrefab, flatPrefab, castFoliagePrefab, flatFoliagePrefab;
-        bool[] foliageMesh;
+        bool[] foliageMesh, shadowMesh;
+        NativeArray<float4> colorNative, leafNative;
+        NativeArray<bool> shadowNative;
         Task<LeafAtlas.Pixels> atlasTask;
         Texture2D atlas;
         RenderTexture impA, impB;
@@ -201,6 +201,9 @@ namespace Stabby.Game
             if (meshIdsNative.IsCreated) meshIdsNative.Dispose();
             if (boundsNative.IsCreated) boundsNative.Dispose();
             if (slotsNative.IsCreated) slotsNative.Dispose();
+            if (colorNative.IsCreated) colorNative.Dispose();
+            if (leafNative.IsCreated) leafNative.Dispose();
+            if (shadowNative.IsCreated) shadowNative.Dispose();
             if (ranges.IsCreated) ranges.Dispose();
             if (spawned.IsCreated) spawned.Dispose();
             if (tileEntities.IsCreated) tileEntities.Dispose();
@@ -216,13 +219,15 @@ namespace Stabby.Game
 
         public const float GlowBase = 0.05f, GlowSpan = 0.2f, GlowPatternStep = 0.22f, IceBase = 0.48f, IceSpan = 0.015f;
 
-        static float4 Linear(uint rgb, float tint, int shape, float glow, int pattern, float translucency)
+        static float4 ColorBase(ObjectPart part)
         {
-            if (translucency > 0f) return new float4(Decode(rgb) * tint, IceBase + IceSpan * translucency);
-            if (glow > 0f) return new float4(Decode(rgb) * tint, GlowBase + GlowSpan * glow + GlowPatternStep * pattern);
-            if (ObjectPart.IsStone(shape)) return new float4(tint, tint, tint, 0);
-            return new float4(Decode(rgb) * tint, shape);
+            if (part.Translucency > 0f) return new float4(Decode(part.Color), IceBase + IceSpan * part.Translucency);
+            if (part.Glow > 0f) return new float4(Decode(part.Color), GlowBase + GlowSpan * part.Glow + GlowPatternStep * part.GlowPattern);
+            if (ObjectPart.IsStone(part.Shape)) return new float4(1, 1, 1, 0);
+            return new float4(Decode(part.Color), part.Shape);
         }
+
+        static float4 LeafBase(ObjectPart part) => ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor), 2) : float4.zero;
 
         static float3 Decode(uint rgb)
         {
@@ -259,6 +264,9 @@ namespace Stabby.Game
             var keys = new List<ulong>();
             var parts = new List<ObjectPart>();
             var impostors = new List<bool>();
+            var colorBase = new List<float4>();
+            var leafBase = new List<float4>();
+            var shadows = new List<bool>();
             for (int d = 0; d < defs; d++)
             {
                 var def = lib.Objects[d];
@@ -271,6 +279,7 @@ namespace Stabby.Game
                     {
                         shapes.Add(def.Parts[p].Shape); parts.Add(def.Parts[p]); keys.Add(ObjectMeshes.Key(def.Id, p, v));
                         impostors.Add(kind.ImpostorPixels > 0 && ObjectPart.IsFoliage(def.Parts[p].Shape));
+                        colorBase.Add(ColorBase(def.Parts[p])); leafBase.Add(LeafBase(def.Parts[p])); shadows.Add(lib.PartShadows(def, def.Parts[p]));
                         count++;
                     }
                 }
@@ -287,6 +296,10 @@ namespace Stabby.Game
             doomedKeys = new NativeList<long>(256, Allocator.Persistent);
             wantKeys = new NativeList<long>(256, Allocator.Persistent);
             foliageMesh = new bool[shapes.Count];
+            shadowMesh = shadows.ToArray();
+            colorNative = new NativeArray<float4>(colorBase.ToArray(), Allocator.Persistent);
+            leafNative = new NativeArray<float4>(leafBase.ToArray(), Allocator.Persistent);
+            shadowNative = new NativeArray<bool>(shadowMesh, Allocator.Persistent);
             bool anyFoliage = false;
             for (int k = 0; k < shapes.Count; k++) anyFoliage |= foliageMesh[k] = ObjectPart.IsFoliage(shapes[k]);
             meshTask = Task.Run(() => BuildMeshes(shapes, parts, keys, impostors));
@@ -625,13 +638,13 @@ namespace Stabby.Game
                 var local = float4x4.TRS(new float3(part.OffsetX, part.OffsetY, part.OffsetZ) * o.Size, quaternion.identity, scale);
                 float leafTint = 0.88f + 0.24f * math.frac(o.Variant * 0.381966f + o.Z * 0.0171f + o.Size * 1.3f);
                 float hue = 2f * math.frac(o.Variant * 0.7548777f + o.X * 0.0093f + o.Z * 0.0061f) - 1f;
-                var leaf = ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor) * leafTint * (1f + hue * new float3(0.16f, 0.06f, -0.13f)), 2) : float4.zero;
+                var m = math.mul(root, local);
                 ObjectField.ContactEnds(lib, o, out float floorY, out float ceilY);
                 bool both = !float.IsNaN(floorY) && !float.IsNaN(ceilY);
                 parts[i] = new ObjectSpawn
                 {
-                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape, part.Glow, part.GlowPattern, part.Translucency), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
-                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = part.Shape == ObjectPart.Dungeon ? o.Y + Structures.DungeonFloorY : ObjectPart.IsStructure(part.Shape) && !ObjectField.IsCave(def) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
+                    M = new float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz), Tint = tint, LeafTint = leafTint, Hue = hue, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
+                    Radius = 0.5f * math.cmax(scale), Ground = part.Shape == ObjectPart.Dungeon ? o.Y + Structures.DungeonFloorY : ObjectPart.IsStructure(part.Shape) && !ObjectField.IsCave(def) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
                     Id = o.Id,
                 };
             }
@@ -798,7 +811,7 @@ namespace Stabby.Game
             if (writes.Length > 0)
                 Dependency = new SpawnJob
                 {
-                    Writes = writes.AsArray(), Defs = defLods, Ids = meshIdsNative, Bounds = boundsNative, Slots = slotsNative,
+                    Writes = writes.AsArray(), Defs = defLods, Ids = meshIdsNative, Bounds = boundsNative, Slots = slotsNative, ColorBase = colorNative, LeafBase = leafNative, Shadows = shadowNative,
                     Material = materialId, Foliage = foliageMaterialId,
                     Ltw = GetComponentLookup<LocalToWorld>(), Rb = GetComponentLookup<RenderBounds>(), Mmi = GetComponentLookup<MaterialMeshInfo>(),
                     Color = GetComponentLookup<ObjectColor>(), Fade = GetComponentLookup<ObjectFade>(), Leaf = GetComponentLookup<ObjectLeaf>(), Lod = GetComponentLookup<ObjectLod>(),
@@ -896,6 +909,8 @@ namespace Stabby.Game
             [ReadOnly] public NativeArray<BatchMeshID> Ids;
             [ReadOnly] public NativeArray<AABB> Bounds;
             [ReadOnly] public NativeArray<int> Slots;
+            [ReadOnly] public NativeArray<float4> ColorBase, LeafBase;
+            [ReadOnly] public NativeArray<bool> Shadows;
             public BatchMaterialID Material, Foliage;
             [NativeDisableParallelForRestriction] public ComponentLookup<LocalToWorld> Ltw;
             [NativeDisableParallelForRestriction] public ComponentLookup<RenderBounds> Rb;
@@ -912,14 +927,20 @@ namespace Stabby.Game
                 var k = Defs[s.Def];
                 int m = s.Mesh * Stride;
                 bool imp = w.Foliage && k.Impostor > 0 && Slots[s.Mesh] >= 0;
-                Ltw[w.E] = new LocalToWorld { Value = s.M };
+                bool shadow = Shadows[s.Mesh];
+                var c = ColorBase[s.Mesh];
+                Ltw[w.E] = new LocalToWorld { Value = new float4x4(new float4(s.M.c0, 0), new float4(s.M.c1, 0), new float4(s.M.c2, 0), new float4(s.M.c3, 1)) };
                 Rb[w.E] = new RenderBounds { Value = Bounds[s.Mesh] };
                 Mmi[w.E] = new MaterialMeshInfo(w.Foliage ? Foliage : Material, Ids[m]);
-                Color[w.E] = new ObjectColor { Value = s.Color };
-                Fade[w.E] = new ObjectFade { Value = new float4(1, s.Shadow ? 1 : 0, s.Ground, s.Size) };
-                if (w.Foliage) Leaf[w.E] = new ObjectLeaf { Value = s.Leaf };
+                Color[w.E] = new ObjectColor { Value = new float4(c.xyz * s.Tint, c.w) };
+                Fade[w.E] = new ObjectFade { Value = new float4(1, shadow ? 1 : 0, s.Ground, s.Size) };
+                if (w.Foliage)
+                {
+                    var l = LeafBase[s.Mesh];
+                    Leaf[w.E] = new ObjectLeaf { Value = new float4(l.xyz * s.LeafTint * (1f + s.Hue * new float3(0.16f, 0.06f, -0.13f)), l.w) };
+                }
                 var rule = k.Rule;
-                if (!s.Shadow) rule.ShadowCascadePixels = rule.ShadowPixels = Detail.Never;
+                if (!shadow) rule.ShadowCascadePixels = rule.ShadowPixels = Detail.Never;
                 Lod[w.E] = new ObjectLod
                 {
                     L0 = Ids[m], L1 = Ids[m + math.min(1, k.Lods - 1)], L2 = Ids[m + math.min(2, k.Lods - 1)], Rule = rule, Radius = s.Radius,
@@ -928,7 +949,7 @@ namespace Stabby.Game
             }
         }
 
-        int Group(in ObjectSpawn s) => (s.Shadow ? 1 : 0) + (foliageMaterial != null && foliageMesh[s.Mesh] ? 2 : 0);
+        int Group(in ObjectSpawn s) => (shadowMesh[s.Mesh] ? 1 : 0) + (foliageMaterial != null && foliageMesh[s.Mesh] ? 2 : 0);
 
         bool Warm()
         {
