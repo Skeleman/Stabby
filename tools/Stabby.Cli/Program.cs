@@ -171,7 +171,7 @@ int Sweep()
             Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Normal;
         });
     }
-    Parallel.For(0, count, par, k =>
+    Task.Run(() => Parallel.For(0, count, par, k =>
     {
         var c = Config(from + (ulong)k, size);
         var sw = Stopwatch.StartNew();
@@ -191,19 +191,13 @@ int Sweep()
         times.Add((genMs, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
         var spent = new Dictionary<string, double>();
-        var found = WorldChecks.Run(w, groups, spent);
-        if (groups == null || groups.Contains("creatures"))
-        {
-            var cw = Stopwatch.StartNew();
-            found.AddRange(WorldChecks.Creatures(w, creatures));
-            spent["creatures"] = cw.Elapsed.TotalMilliseconds;
-        }
+        var found = WorldChecks.Run(w, groups, spent, creatures);
         foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value, c.Seed));
         foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
         perSeed[c.Seed] = found;
         Mark("checks");
         checkTimes.Add(sw.ElapsedMilliseconds - genMs);
-    });
+    })).Wait();
     var t = times.OrderBy(x => x.Item1).ToArray();
     var ct = checkTimes.OrderBy(x => x).ToArray();
     string checkPart = ct.Length > 0 ? $", checks median {ct[ct.Length / 2]} ms, max {ct[^1]} ms" : "";

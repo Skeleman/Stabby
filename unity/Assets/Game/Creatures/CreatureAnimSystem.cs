@@ -288,7 +288,7 @@ namespace Stabby.Game
                     var x = Instances[i];
                     Bones[i] = x.Bone;
                     if (x.Group < 0) continue;
-                    int skin = i + 1 < Instances.Length && Instances[i + 1].Group < 0 ? i + 1 : 0;
+                    int skin = i + 1 < Instances.Length && Instances[i + 1].Group < 0 ? i + 1 | (Instances[i + 2].Group == -2 ? 1 << 30 : 0) : 0;
                     Parts[cursor[x.Group]++] = new CreaturePart { Fade = x.Fade, Bone = i, Fur = x.Fur, Group = x.Group, Skin = skin };
                 }
                 Totals[0] = Instances.Length;
@@ -389,7 +389,7 @@ namespace Stabby.Game
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
                 if (!visible) return;
-                c.Shadow = d.Casts;
+                c.Shadow = d.Casts && Detail.Holds(px, rig.ShadowPx / q, c.Shadow);
                 if (Gpu)
                 {
                     if (!c.Shadow && Frustum.Outside(centre, sc.Length)) return;
@@ -507,7 +507,7 @@ namespace Stabby.Game
             static float4x4 Moved(int p, ref CreatureRig rig, ref CreatureFit fit, float3 rootPos, quaternion rootRot, NativeArray<float3> pos, NativeArray<quaternion> rot) =>
                 p < 0 ? new float4x4(rootRot, rootPos) : math.mul(new float4x4(rot[p], pos[p]), math.fastinverse(new float4x4(rig.RestRot[p], fit.RestPos[p])));
 
-            static CreatureGpu Bend(float4x4 m) => new CreatureGpu { Bone = new float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz), Group = -1 };
+            static CreatureGpu Bend(float4x4 m, int group = -1) => new CreatureGpu { Bone = new float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz), Group = group };
 
             void Skinned(ref CreatureRig rig, ref CreatureFit fit, DynamicBuffer<CreatureLink> links, int half, float3 rootPos, quaternion rootRot,
                 NativeArray<float3> pos, NativeArray<quaternion> rot, NativeArray<float> floor, float bend, float4 f, int index, NativeArray<CreatureGpu> records, ref int k)
@@ -535,7 +535,7 @@ namespace Stabby.Game
                         int after = j + 1 < part.Count ? s + 1 : down;
                         var next = after >= 0 ? math.mul(Moved(after, ref rig, ref fit, rootPos, rootRot, pos, rot), rest) : m;
                         records[k++] = Bend(m + bend * (prev - m));
-                        records[k++] = Bend(m + bend * (next - m));
+                        records[k++] = Bend(m + bend * (next - m), after >= 0 ? -1 : -2);
                     }
                 }
             }
