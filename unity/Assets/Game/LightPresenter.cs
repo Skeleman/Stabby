@@ -4,6 +4,7 @@ using Stabby.Viewer;
 using Stabby.World;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -15,6 +16,7 @@ namespace Stabby.Game
     public partial class LightPresenterSystem : SystemBase
     {
         static readonly int GlowsId = Shader.PropertyToID("_Glows");
+        public static readonly ProfilerMarker GlowUpload = new ProfilerMarker("LightPresenter.GlowUpload");
         Task<LightBudget.Caps> capsTask;
         readonly List<Light> pool = new List<Light>();
         GraphicsBuffer glows;
@@ -84,7 +86,7 @@ namespace Stabby.Game
             if (!Ready(count)) return;
             if (uploaded != b.Published)
             {
-                glows.SetData(b.ShownGlows.AsArray(), 0, 0, count);
+                using (GlowUpload.Auto()) glows.SetData(b.ShownGlows.AsArray(), 0, 0, count);
                 uploaded = b.Published;
             }
             var rp = new RenderParams(material)
