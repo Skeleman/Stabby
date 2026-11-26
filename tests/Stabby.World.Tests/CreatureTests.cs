@@ -125,6 +125,51 @@ public class CreatureTests
         Assert.Equal(first.Idle[0], mirror.Idle[0]);
     }
 
+    [Fact]
+    public void YoungShareTheBodyWithAgeProportions()
+    {
+        var deer = Lib.Body("deer")!;
+        var adult = CreatureBody.Assemble(deer, Lib, 7);
+        var young = CreatureBody.Assemble(deer, Lib, 7, 0.3f);
+        Assert.Equal(adult.Parts.Count, young.Parts.Count);
+        Assert.Equal(adult.Segments.Select(s => s.Shape), young.Segments.Select(s => s.Shape));
+        Assert.Equal(adult.WalkSpeed, young.WalkSpeed);
+        Assert.InRange(young.Size / adult.Size, deer.YoungSize - 0.01f, deer.YoungSize + 0.01f);
+        float Ratio(int role, Func<CreatureSegmentInstance, float> of)
+        {
+            int part = adult.Parts.FindIndex(p => p.Role == role);
+            int seg = adult.Parts[part].FirstSegment;
+            return of(young.Segments[seg]) / young.Size / (of(adult.Segments[seg]) / adult.Size);
+        }
+        Assert.True(Ratio(CreaturePartDef.Head, s => s.Radius) > 1.2f);
+        Assert.True(Ratio(CreaturePartDef.Ear, s => s.Radius) > 1.2f);
+        Assert.True(Ratio(CreaturePartDef.Leg, s => s.Length) > 1.2f);
+        Assert.True(Ratio(CreaturePartDef.Neck, s => s.Length) < 0.8f);
+        var boar = Lib.Body("boar")!;
+        var tusks = boar.Slots.FindIndex(s => s.Adult);
+        Assert.True(tusks >= 0);
+        var piglet = CreatureBody.Assemble(boar, Lib, 7, 0.3f);
+        var sow = CreatureBody.Assemble(boar, Lib, 7);
+        Assert.Contains(piglet.Segments.Zip(sow.Segments), p => p.First.Radius < p.Second.Radius * 0.1f);
+    }
+
+    [Fact]
+    public void HerdsCarryYoungLedByAnAdult()
+    {
+        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var young = plan.Where(s => s.Lead >= 0).ToList();
+        Assert.NotEmpty(young);
+        Assert.Contains(young, s => Lib.Bodies[s.Body].Id == "deer");
+        Assert.DoesNotContain(young, s => Lib.Bodies[s.Body].YoungShare <= 0);
+        var e = new List<string>();
+        WorldChecks.YoungHaveAdults(Lib, plan, e);
+        Assert.Empty(e);
+        var orphan = young[0];
+        var broken = plan.Where(s => s.Id != orphan.Lead).ToList();
+        WorldChecks.YoungHaveAdults(Lib, broken, e);
+        Assert.Contains(e, m => m.Contains("young creature " + orphan.Id + " has no adult"));
+    }
+
     static readonly GeneratedWorld PlanWorld = TestWorlds.Default.W;
     static readonly NearArrays PlanCells = TestWorlds.Default.Detail.Cells;
     static readonly float[] PlanPools = Pools(TestWorlds.Default);
