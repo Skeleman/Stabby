@@ -8,7 +8,7 @@ namespace Stabby.World
     {
         public const float SurfaceTolerance = 1e-3f;
         public const float CorridorFollowShare = 0.7f;
-        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f, ShoreToeMaxBend = 3f;
+        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f, ShoreToeMaxBend = 3f, BeachTerraceShare = 0.05f, BeachRippleBend = 0.05f, BeachRippleShare = 0.04f;
         public const int ShoreToeMinPairs = 20;
 
         static int FirstUndrained(GeneratedWorld w)
@@ -1685,6 +1685,9 @@ namespace Stabby.World
             }
             CheckShores(w, island, e);
             CheckBeachShelf(w, e);
+            var offshore = Erosion.Offshore(n, w.Sea);
+            CheckBeachTerrace(w, offshore, e);
+            CheckBeachRipple(w, offshore, e);
             if (s.Landmasses.Count > 1)
             {
                 int a = island[(int)s.Landmasses[0].Y * n + (int)s.Landmasses[0].X];
@@ -1808,6 +1811,42 @@ namespace Stabby.World
                     }
                 }
             if (pairs > 0 && flat > pairs * BeachShelfShare) e.Add($"beach seabed is flat beside the shore at {flat} of {pairs} cells");
+        }
+
+        static void CheckBeachTerrace(GeneratedWorld w, float[] offshore, List<string> e)
+        {
+            var c = w.Config;
+            int n = c.Size, cells = 0, flat = 0;
+            for (int i = 0; i < n * n; i++)
+            {
+                if (!w.Sea[i] || w.Sketch.Beach[i] < 0.5f || offshore[i] < 2 || offshore[i] > 20) continue;
+                cells++;
+                float floor = -1 - c.NearShoreDepth * (1 - (float)FMath.Exp(-offshore[i] * c.CellMeters / c.NearShoreMeters));
+                if (w.Height[i] > floor - 0.005f) flat++;
+            }
+            if (cells > 0 && flat > cells * BeachTerraceShare) e.Add($"beach seabed sits on the -1 m terrace at {flat} of {cells} near-shore cells");
+        }
+
+        static float Alternation(float[] h, int i, int step)
+        {
+            float a = h[i - 2 * step] + h[i] - 2 * h[i - step], b = h[i - step] + h[i + step] - 2 * h[i], c = h[i] + h[i + 2 * step] - 2 * h[i + step];
+            if (a * b >= 0 || b * c >= 0) return 0;
+            return Math.Min(Math.Abs(b), Math.Min(Math.Abs(a), Math.Abs(c)));
+        }
+
+        static void CheckBeachRipple(GeneratedWorld w, float[] offshore, List<string> e)
+        {
+            int n = w.Config.Size, cells = 0, bent = 0;
+            var h = w.Height;
+            for (int y = 2; y < n - 2; y++)
+                for (int x = 2; x < n - 2; x++)
+                {
+                    int i = y * n + x;
+                    if (!w.Sea[i] || w.Sketch.Beach[i] < 0.5f || offshore[i] < 4 || offshore[i] > 20) continue;
+                    cells++;
+                    if (Math.Max(Alternation(h, i, 1), Alternation(h, i, n)) > BeachRippleBend) bent++;
+                }
+            if (cells > 0 && bent > cells * BeachRippleShare) e.Add($"beach seabed ripples along grid lines at {bent} of {cells} near-shore cells");
         }
 
         static bool TouchesLand(GeneratedWorld w, int n, int i, float beach)
