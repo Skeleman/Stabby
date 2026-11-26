@@ -37,11 +37,12 @@ namespace Stabby.Game
         {
             count = math.max(count, 1);
             var b = slots[next];
-            if (b == null || b.count < count)
+            if (b == null || b.count < count || PoolSize.Oversized(b.count, count))
             {
                 int old = b == null ? 0 : b.count;
                 b?.Release();
-                b = slots[next] = new GraphicsBuffer(target, GraphicsBuffer.UsageFlags.LockBufferForWrite, math.max(count, old == 0 ? 64 : old + old / 2), stride) { name = name };
+                int size = old < count ? math.max(count, old == 0 ? 64 : old + old / 2) : PoolSize.Trimmed(count);
+                b = slots[next] = new GraphicsBuffer(target, GraphicsBuffer.UsageFlags.LockBufferForWrite, size, stride) { name = name };
             }
             Locked = true;
             return b.LockBufferForWrite<T>(0, count);

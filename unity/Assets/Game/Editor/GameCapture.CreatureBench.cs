@@ -17,7 +17,6 @@ namespace Stabby.Game.Editor
         static readonly int[] BenchCounts = { 10, 50, 100, 250, 500 };
         static readonly string[] BenchTiers = { "close", "mid", "far", "still", "hidden" };
         const int BenchSamples = 30, BenchFrames = 120;
-        const string BenchFlag = "STABBY_CREATURE_PATH";
 
         static float BenchPixels(BlobAssetReference<CreatureRig> rigRef, int tier, float q)
         {
@@ -261,7 +260,7 @@ namespace Stabby.Game.Editor
 
         static System.Collections.IEnumerator CreatureBench(Camera cam, string dir)
         {
-            string path = System.Environment.GetEnvironmentVariable(BenchFlag) ?? "entity";
+            string path = CreaturePath.Instanced ? "instanced" : "entity";
             var view = ViewWorld();
             var server = ServerWorld();
             if (view == null || server == null) { GameStatus.Lines["~creature bench"] = "creature bench: no worlds"; yield break; }
