@@ -392,7 +392,7 @@
       "id": "lava-glow", "name": "Lava glow", "kind": "static", "material": "obsidian", "variants": 4,
       "parts": [ { "id": "crust", "shape": "rock", "scale": [1.2, 0.3, 1.2], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "cave": "lava-glow", "perHundredM": 1, "sizeMinM": 0.6, "sizeMaxM": 0.9, "sink": 0.1 },
-      "light": { "category": "cave-glow", "material": "lava-light", "intensity": 8, "radiusM": 8, "importance": 0.8, "liftM": 1.1, "core": false }
+      "light": { "category": "cave-glow", "material": "lava-light", "intensity": 40, "radiusM": 8, "importance": 0.8, "liftM": 1.1, "core": false }
     }
 ,
     {

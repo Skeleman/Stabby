@@ -267,7 +267,7 @@ Shader "Stabby/VertexLit"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, saturate(n.y * 0.5 + 0.5 + wrap));
                 float sky = saturate(i.sky.x);
                 float3 c = (LookColor(m.albedo, 1) * (sky * (l.color * saturate((dot(n, l.direction) + wrap) / (1 + wrap)) + ambient) + LocalLightsWrap(float3(xv.x, h, xv.y), n, i.positionCS, wrap)) + sky * LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
-                [branch] if (glint > 0.01) c += LocalLightsGlint(float3(xv.x, h, xv.y), n, v, 260, i.positionCS).spec * glint * 2.5;
+                [branch] if (glint > 0.01) c += LocalLightsGlint(float3(xv.x, h, xv.y), n, v, 140, i.positionCS).spec * glint * 4;
                 return half4(MixFogColor(c, i.fog.rgb * sky, i.fog.w), 1);
             }
             ENDHLSL
