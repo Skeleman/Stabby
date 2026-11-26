@@ -265,6 +265,12 @@
       "placement": { "perHectare": 0, "sizeMinM": 1.8, "sizeMaxM": 1.8 }
     },
     {
+      "id": "wall-torch", "name": "Wall torch", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
+      "light": { "category": "fire", "material": "firelight", "intensity": 3.5, "radiusM": 6, "importance": 1.2, "flicker": 0.3, "flickerHz": 3.1 },
+      "parts": [ { "id": "torch", "shape": "wall-torch" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 0.7, "sizeMaxM": 0.7 }
+    },
+    {
       "id": "log-seat", "name": "Log seat", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "seat", "shape": "log-seat" } ],
       "placement": { "perHectare": 0, "sizeMinM": 1.6, "sizeMaxM": 1.6 }
