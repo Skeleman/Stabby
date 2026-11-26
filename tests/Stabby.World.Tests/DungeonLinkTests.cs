@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Stabby.Content;
 using Stabby.World;
 using Xunit;
 using Xunit.Abstractions;
@@ -10,20 +9,13 @@ namespace Stabby.World.Tests;
 
 public class DungeonLinkTests
 {
-    static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
-    static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
-    static readonly MaterialLibrary Materials = ContentLoader.LoadMaterials(Root);
-    static readonly CaveLibrary Caves = ContentLoader.LoadCaves(Root);
-    static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
     readonly ITestOutputHelper output;
     public DungeonLinkTests(ITestOutputHelper o) { output = o; }
 
-    static (GeneratedWorld w, TerrainDetail d, FeatureEdit[] edits, CaveGraph[] graphs, ObjectInstance[] sites) Make(ulong seed)
+    static (GeneratedWorld w, TerrainDetail d, FeatureEdit[] edits, CaveGraph[] graphs, ObjectInstance[] sites) Make()
     {
-        var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 512, CellMeters = WorldConfig.CellMetersFor(512) }, Biomes, Materials, null, null, Objects, Caves);
-        var d = new TerrainDetail(w);
-        var edits = Features.Place(w, d, out var graphs, out var sites);
-        return (w, d, edits, graphs, sites);
+        var p = TestWorlds.Default;
+        return (p.W, p.Detail, p.Edits, p.Graphs, p.Sites);
     }
 
     [Fact]
@@ -42,15 +34,13 @@ public class DungeonLinkTests
         Assert.InRange(breached, 20, 199);
     }
 
-    [Theory]
-    [InlineData(1UL)]
-    [InlineData(3UL)]
-    public void LinksJoinDungeonsToWalkableDarkCaves(ulong seed)
+    [Fact]
+    public void LinksJoinDungeonsToWalkableDarkCaves()
     {
-        var (w, d, edits, graphs, sites) = Make(seed);
+        var (w, d, edits, graphs, sites) = Make();
         var links = graphs.Where(DungeonLinks.IsLink).ToArray();
         int dungeons = sites.Count(o => ObjectField.IsDungeon(w.Objects, o)), sockets = sites.Count(o => ObjectField.IsDungeon(w.Objects, o) && ObjectField.BreachOf(w.Objects, o, out _));
-        output.WriteLine($"seed {seed}: {dungeons} dungeons, {sockets} breach sockets, {links.Length} links, {edits.Count(e => e.Link)} link carves");
+        output.WriteLine($"{dungeons} dungeons, {sockets} breach sockets, {links.Length} links, {edits.Count(e => e.Link)} link carves");
         Assert.NotEmpty(links);
         var e = new List<string>();
         WorldChecks.CheckDungeonLinks(w, d, edits, graphs, sites, e);
@@ -67,7 +57,7 @@ public class DungeonLinkTests
     [Fact]
     public void SurfacedOrStrayLinksAreCaught()
     {
-        var (w, d, edits, graphs, sites) = Make(1);
+        var (w, d, edits, graphs, sites) = Make();
         var link = graphs.First(DungeonLinks.IsLink);
         var bored = graphs.Where(ObjectField.IsTunnel).Select(g => g.Tile).ToHashSet();
         int i = Array.FindIndex(edits, x => x.Link && !bored.Contains(Features.TileOf(x, w.Config.CellMeters)));

@@ -263,7 +263,7 @@ public class CaveTests
     [Fact]
     public void StreamsRunDownhillToSpringsPoolsOrSinks()
     {
-        var ends = new int[3];
+        var ends = new int[4];
         int graphs = 0;
         for (ulong seed = 1; seed <= 8; seed++)
         {
@@ -281,8 +281,8 @@ public class CaveTests
                 for (int k = 1; k < x.Nodes.Length; k++) Assert.True(g.Nodes[x.Nodes[k]].Y < g.Nodes[x.Nodes[k - 1]].Y);
             }
         }
-        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}");
-        Assert.True(ends[0] + ends[1] + ends[2] >= graphs / 3, $"only {ends[0] + ends[1] + ends[2]} streams in {graphs} cave graphs");
+        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}, falls {ends[3]}");
+        Assert.True(ends.Sum() >= graphs / 3, $"only {ends.Sum()} streams in {graphs} cave graphs");
         Assert.True(ends[0] > 0 && ends[2] > 0);
     }
 
@@ -321,6 +321,36 @@ public class CaveTests
             }
         }
         throw new Xunit.Sdk.XunitException("no sink brook in seeds 1-8");
+    }
+
+    [Fact]
+    public void CaveFallsDropIntoTheirShaftPools()
+    {
+        int falls = 0, brooks = 0;
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var all = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
+            brooks += all.Length;
+            var pools = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
+            var e = new List<string>();
+            WorldChecks.CheckCaveFalls(s.Detail, s.Edits, all, pools, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
+            foreach (var x in all)
+            {
+                if (x.End != CaveBrook.Plunge) continue;
+                falls++;
+                var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
+                e.Clear();
+                WorldChecks.CheckCaveFalls(s.Detail, bare, new[] { x }, null, e);
+                Assert.Contains(e, m => m.Contains("leaves its carve") || m.Contains("no pool or basin"));
+                e.Clear();
+                WorldChecks.CheckCaveFalls(s.Detail, s.Edits, new[] { x }, Array.Empty<LiquidPool>(), e);
+                Assert.Contains(e, m => m.Contains("drops into no water"));
+            }
+        }
+        Console.WriteLine($"cave falls {falls} of {brooks} brooks");
+        Assert.True(falls > 0 && falls * 3 <= brooks, $"{falls} falls in {brooks} brooks");
     }
 
     [Fact]
@@ -489,13 +519,26 @@ public class CaveTests
     [Fact]
     public void CaveObjectsOffTheirRockLeaveNoStamp()
     {
-        foreach (int kind in new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite, ObjectField.CaveColumn })
+        var kinds = new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite, ObjectField.CaveColumn };
+        var hits = new Dictionary<int, (Sample, ObjectInstance)>();
+        for (ulong seed = 1; seed <= 4 && hits.Count < kinds.Length; seed++)
         {
-            var (s, _, o) = FindCave(kind);
-            var lib = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-            lib.Objects[o.Def].Parts[0].OffsetY = 1.5f;
-            var moved = new ObjectField(s.W, s.Detail, s.Edits, lib);
-            Assert.EndsWith(kind == ObjectField.CaveStalactite ? "leaves no ceiling contact stamp" : "leaves no contact stamp", moved.ContactFault(o, new List<ObjectColumn>()) ?? "");
+            var s = At(seed);
+            foreach (var o in CaveObjects(s, new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects)))
+            {
+                int k = s.W.Objects.Objects[o.Def].Placement.Cave;
+                if (Array.IndexOf(kinds, k) >= 0 && !hits.ContainsKey(k)) hits[k] = (s, o);
+            }
+        }
+        var lib = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
+        foreach (var (_, o) in hits.Values) lib.Objects[o.Def].Parts[0].OffsetY = 1.5f;
+        var moved = new Dictionary<Sample, ObjectField>();
+        foreach (int kind in kinds)
+        {
+            if (!hits.TryGetValue(kind, out var hit)) throw new Xunit.Sdk.XunitException("no cave object of kind " + kind);
+            var (s, o) = hit;
+            if (!moved.TryGetValue(s, out var field)) moved[s] = field = new ObjectField(s.W, s.Detail, s.Edits, lib);
+            Assert.EndsWith(kind == ObjectField.CaveStalactite ? "leaves no ceiling contact stamp" : "leaves no contact stamp", field.ContactFault(o, new List<ObjectColumn>()) ?? "");
         }
     }
 

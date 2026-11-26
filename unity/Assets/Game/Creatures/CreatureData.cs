@@ -222,7 +222,7 @@ namespace Stabby.Game
 
     public static class CreaturePath
     {
-        public static readonly bool Instanced = System.Environment.GetEnvironmentVariable("STABBY_CREATURE_PATH") == "instanced";
+        public static readonly bool Instanced = System.Environment.GetEnvironmentVariable("STABBY_CREATURE_PATH") != "entities";
     }
 
     [MaterialProperty("_FurBase")]

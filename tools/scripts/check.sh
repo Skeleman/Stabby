@@ -3,7 +3,7 @@
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
 # (--full forces all; --merge forces all but sweeps only 25+5 seeds, and only when the diff can change
 # generation; daily.sh sweeps all). Tests follow tools/scripts/test-impact.txt; Category=Sweep tests skip
-# when sweeps run. Time budgets (budget.sh) warn; only a runaway fails. One check per machine at a time.
+# when sweeps run, except TwentySeedsPassEveryCheck under --merge. Time budgets (budget.sh) warn; only a runaway fails. One check per machine at a time.
 # Exit 1 if anything fails. Logs in out/check/.
 # Without --full, sweeps run only the check groups tools/scripts/sweep-impact.txt maps the diff to.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"; mkdir -p out/check
@@ -71,12 +71,12 @@ if [ $full = 1 ] || [ $merge = 1 ]; then tf=""
 elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"; explicit=1
 else
   terms="Lint$(impact)"
-  { [ $game = 1 ] || [ $unity = 1 ]; } && terms="$terms|ChunkZip|RuntimeParity"
+  { [ $game = 1 ] || [ $unity = 1 ]; } && terms="$terms|ChunkZip|RuntimeParity|PoolSize"
   tf=$(tr '|' '\n' <<< "$terms" | grep -v '^$' | sort -u | sed 's/^/FullyQualifiedName~/' | paste -sd'|' -)
 fi
 parity=0
 if [ $unity = 1 ] && { [ -z "$tf" ] || [[ "$tf" == *RuntimeParity* ]]; }; then parity=1; tf="${tf:+($tf)&}FullyQualifiedName!~RuntimeParity"; fi
-[ $gen = 1 ] && [ $explicit = 0 ] && tf="${tf:+($tf)&}Category!=Sweep"
+[ $gen = 1 ] && [ $explicit = 0 ] && { sw="Category!=Sweep"; [ $merge = 1 ] && sw="($sw|FullyQualifiedName~TwentySeedsPassEveryCheck)"; tf="${tf:+($tf)&}$sw"; }
 say "phases: tests${tf:+ ($tf)}$([ $gen = 1 ] && echo ", sweeps ($sg)")$([ $unity = 1 ] && echo ", unity")"
 if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: FAILED"; grep -E "error" out/check/build.log | head -10; exit 1; fi
 say "build: ok, $((SECONDS - t0)) s"
