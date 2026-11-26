@@ -141,7 +141,21 @@ namespace Stabby.World
             var defs = w.Objects.Objects;
             float span = field.ChunkMeters;
             int across = field.ChunksAcross;
-            foreach (var p in field.TownPlans())
+            var plans = field.TownPlans();
+            var under = new SortedSet<int>();
+            foreach (var p in plans)
+            {
+                int x0 = Math.Max(0, (int)((p.X - p.Radius) / span)), x1 = Math.Min(across - 1, (int)((p.X + p.Radius) / span));
+                int z0 = Math.Max(0, (int)((p.Z - p.Radius) / span)), z1 = Math.Min(across - 1, (int)((p.Z + p.Radius) / span));
+                for (int cz = z0; cz <= z1; cz++)
+                    for (int cx = x0; cx <= x1; cx++)
+                        under.Add(cz * across + cx);
+                foreach (var m in p.Members)
+                    under.Add(Math.Min(across - 1, (int)(m.Z / span)) * across + Math.Min(across - 1, (int)(m.X / span)));
+            }
+            var chunks = new List<int>(under);
+            Parallel.For(0, chunks.Count, k => field.Chunk(chunks[k] % across, chunks[k] / across));
+            foreach (var p in plans)
             {
                 var t = w.Objects.Towns[p.Town];
                 string at = $"town {t.Id} at {p.X:F0},{p.Z:F0}";
