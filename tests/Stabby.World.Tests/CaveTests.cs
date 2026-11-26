@@ -269,7 +269,7 @@ public class CaveTests
         {
             var s = At(seed);
             var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
-            graphs += s.Graphs.Count(g => !DungeonLinks.IsLink(g));
+            graphs += s.Graphs.Count(g => !DungeonLinks.IsLink(g) && !ObjectField.IsTunnel(g));
             var e = new List<string>();
             WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, streams, null, e);
             Assert.True(e.Count == 0, string.Join("; ", e));
