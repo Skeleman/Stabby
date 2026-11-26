@@ -51,7 +51,7 @@ namespace Stabby.World
             for (int k = 0; k < q.Length; k += BogStride)
             {
                 float top = q[k + 5] + BogHeadM;
-                list.Add(Pool(QuicksandPool, sand, q[k], q[k + 1], BogReach(q[k + 2], q[k + 3], top, QuicksandBank), q[k + 3], q[k + 4] - BogHeadM, top));
+                list.Add(Pool(QuicksandPool, sand, q[k], q[k + 1], BogReach(q[k + 2], q[k + 3], top), q[k + 3], q[k + 4] - BogHeadM, top));
             }
             list.AddRange(CavePools());
             return list.ToArray();
