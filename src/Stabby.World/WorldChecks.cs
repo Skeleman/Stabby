@@ -839,7 +839,7 @@ namespace Stabby.World
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
                 bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink;
-                float s = cave ? NearField.NodeStep(0) : LatticeStepM;
+                float s = cave || x.Shape == FeatureEdit.Shaft ? NearField.NodeStep(0) : LatticeStepM;
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
                     if ((y.Shape == x.Shape || (x.Shape == FeatureEdit.Bridge && FeatureEdit.IsCaveCarve(y.Shape))) && Features.TileOf(y, cm) == tile
@@ -866,7 +866,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -929,6 +929,14 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             foreach (var x in edits)
                 if (FeatureEdit.IsCaveCarve(x.Shape) && Underground.Wet(w, x)) { e.Add($"cave at {x.Ax:F0},{x.Az:F0} breaks into the sea or a lake"); return; }
+            var rooms = new List<FeatureEdit>();
+            foreach (var x in edits) if (x.Kind == FeatureEdit.Carve && FeatureEdit.IsRoom(x.Shape)) rooms.Add(x);
+            foreach (var x in edits)
+            {
+                if (x.Shape != FeatureEdit.Shaft) continue;
+                if (!Underground.SkylightOpen(w, detail, x, w.Caves.SkylightDepthM)) { e.Add($"skylight shaft at {x.Ax:F0},{x.Az:F0} does not open onto dry ground within {w.Caves.SkylightDepthM:F0} m of its chamber"); return; }
+                if (!Underground.InChamber(rooms, x.Ax, x.Ay, x.Az)) { e.Add($"skylight shaft at {x.Ax:F0},{x.Az:F0} does not drop into a cave chamber"); return; }
+            }
             var ground = new DetailGround { Detail = detail };
             int probes = 0, settled = 0;
             foreach (var g in caves)
@@ -1159,7 +1167,27 @@ namespace Stabby.World
             if (cells > 0 && gems == 0) e.Add($"caves: {cells} crystal cells hold no crystals");
             if (length >= ObjectField.CaveDripSurveyM && drips * 100f < ObjectField.CaveDripPerHundredM * length)
                 e.Add($"caves: {drips} stalactites over {length:F0} m of passage, under {ObjectField.CaveDripPerHundredM} per 100 m");
+            CheckCaveLights(w, edits, field, e);
             return pools;
+        }
+
+        public static void CheckCaveLights(GeneratedWorld w, FeatureEdit[] edits, ObjectField field, List<string> e)
+        {
+            var perTile = new Dictionary<int, int>();
+            for (int i = 0; i < field.CaveLightCount; i++)
+            {
+                var p = field.CaveLight(i);
+                perTile.TryGetValue(p.Tile, out int had);
+                if ((perTile[p.Tile] = had + 1) > w.Caves.LightMost) { e.Add($"caves: tile {p.Tile} holds more than {w.Caves.LightMost} natural lights"); return; }
+                var c = edits[p.Edit];
+                if ((p.Kind == ObjectField.CaveSkylight) != (c.Shape == FeatureEdit.Shaft)) { e.Add($"caves: light {i} pairs a skylight with a non-shaft edit or a shaft with another light"); return; }
+                if (!field.CaveLightAt(i, out var o)) continue;
+                string fault = field.CaveFault(o);
+                if (fault != null) { e.Add(fault); return; }
+                if (p.Kind != ObjectField.CaveSkylight) continue;
+                float dx = o.X - c.Ax, dz = o.Z - c.Az;
+                if (dx * dx + dz * dz > c.HoleR * c.HoleR || o.Y > c.Ay) { e.Add($"caves: skylight light at {o.X:F0},{o.Z:F0} does not sit under its shaft"); return; }
+            }
         }
 
         public const float CavePoolHeadM = 1f, CavePoolSealM = 0.3f;

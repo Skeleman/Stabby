@@ -649,13 +649,15 @@ namespace Stabby.Game
                 for (int k = 0; k < anchors.Count; k++)
                 {
                     var a = anchors[k];
-                    var light = lib.EmitterFor(a.Shape)?.Light;
+                    var light = a.Shape < 0 ? lib.Objects[o.Def].Light : lib.EmitterFor(a.Shape)?.Light;
                     var kind = light == null ? null : lib.LightNamed(light.Category);
                     if (kind == null) continue;
                     var e = LightEmitter.Of(kind, new float3(a.X, a.Y, a.Z), Decode(light.Color), light.RangeM, light.Intensity);
                     if (light.Importance > 0) e.Importance = light.Importance;
                     e.Flicker = light.Flicker;
                     e.FlickerHz = light.FlickerHz;
+                    e.Sky = light.Daylight;
+                    e.Coreless = !light.Core;
                     e.Phase = ((o.Id + (ulong)k) * 0x9E3779B97F4A7C15UL >> 40) / 16777216f;
                     (lights ??= new List<LightEmitter>()).Add(e);
                 }

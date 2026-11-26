@@ -146,19 +146,21 @@ public class StructureTests
         var (w, detail, _, field) = TestWorlds.Get(4);
         int seen = 0;
         var walls = new List<ObjectInstance>();
-        for (int cz = 0; cz < field.ChunksAcross; cz++)
-            for (int cx = 0; cx < field.ChunksAcross; cx++)
-                foreach (var o in field.Chunk(cx, cz))
-                {
-                    var seat = ObjectField.Seats(Objects.Objects[o.Def]);
-                    if (seat == null) continue;
-                    seen++;
-                    if (Objects.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall) walls.Add(o);
-                    ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
-                    Assert.True(hi - lo <= Structures.SeatM && o.Y <= lo, $"{o.X:F0},{o.Z:F0}: seats {lo:F2}..{hi:F2}, y {o.Y:F2}");
-                    Assert.Equal(0f, o.Qx);
-                    Assert.Equal(0f, o.Qz);
-                }
+        int across = field.ChunksAcross;
+        var chunks = new ObjectInstance[across * across][];
+        Parallel.For(0, chunks.Length, c => chunks[c] = field.Chunk(c % across, c / across));
+        foreach (var chunk in chunks)
+            foreach (var o in chunk)
+            {
+                var seat = ObjectField.Seats(Objects.Objects[o.Def]);
+                if (seat == null) continue;
+                seen++;
+                if (Objects.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall) walls.Add(o);
+                ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
+                Assert.True(hi - lo <= Structures.SeatM && o.Y <= lo, $"{o.X:F0},{o.Z:F0}: seats {lo:F2}..{hi:F2}, y {o.Y:F2}");
+                Assert.Equal(0f, o.Qx);
+                Assert.Equal(0f, o.Qz);
+            }
         Assert.True(seen > 20, $"{seen} structures");
         int linked = walls.Count(a => walls.Count(b => a.Id != b.Id && ObjectIds.Chunk(a.Id) == ObjectIds.Chunk(b.Id)
             && (a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z) <= Math.Pow(Structures.WallSpan * Math.Max(a.Size, b.Size), 2)) >= 2);

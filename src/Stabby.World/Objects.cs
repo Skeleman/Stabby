@@ -33,6 +33,7 @@ namespace Stabby.World
         readonly float cm, worldM, contrast;
         readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream;
         readonly int[] caveCarves;
+        readonly CaveLightSpot[] caveLights;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
@@ -68,6 +69,7 @@ namespace Stabby.World
             sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
             caveStream = Rng.Stream(w.Config.Seed, "objects-cave").NextU64();
             caveCarves = CaveCarves(this.edits);
+            caveLights = PlanCaveLights(w, this.edits, Rng.Stream(w.Config.Seed, "objects-cave-lights").NextU64());
             strata = new StrataField(w.Config, w.Materials);
             contrast = w.Config.StrataContrast > 0 ? w.Config.StrataContrast : 1f;
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
@@ -634,6 +636,11 @@ namespace Stabby.World
         public static void AddLights(ObjectLibrary lib, PartShapes shapes, ObjectInstance o, List<StructureLight> list)
         {
             var def = lib.Objects[o.Def];
+            if (def.Light != null && def.Kind != ObjectLibrary.Structure)
+            {
+                list.Add(new StructureLight { X = o.X, Y = o.Y + def.Light.LiftM, Z = o.Z, Shape = -1 });
+                return;
+            }
             for (int pi = 0; pi < def.Parts.Count; pi++)
             {
                 var anchors = shapes.Lights[o.Def][pi];

@@ -48,6 +48,7 @@ namespace Stabby.Game
             }
             if (!SystemAPI.TryGetSingletonRW<LightBudgetState>(out var budget)) { Hide(); return; }
             budget.ValueRW.Clock = (float)(DayNightSystem.Clock % 3600.0);
+            budget.ValueRW.Daylight = Mathf.Clamp01(DayNightSystem.Shown.Intensity);
             if (budget.ValueRO.Hidden) { Hide(); return; }
             ref var b = ref World.Unmanaged.GetUnsafeSystemRef<LightBudgetSystem>(budgetSystem);
             var r = b.ShownResult.Value;

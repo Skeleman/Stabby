@@ -12,6 +12,7 @@ namespace Stabby.Game
     {
         public float3 Position, Color;
         public float RangeM, Intensity, Importance, Flicker, FlickerHz, Phase;
+        public bool Sky, Coreless;
         public Detail.Thresholds Thresholds;
         public LightBudget.Slot Slot;
 
@@ -33,7 +34,7 @@ namespace Stabby.Game
     {
         public LightBudget.Caps Caps;
         public LightBudget.Counts Counts;
-        public float Clock;
+        public float Clock, Daylight;
         public bool Budgeted, Hidden;
     }
 
@@ -194,6 +195,7 @@ namespace Stabby.Game
                 Budgeted = budget.Budgeted,
                 Dt = scheduledAt < 0.0 ? SystemAPI.Time.DeltaTime : (float)(now - scheduledAt),
                 Clock = budget.Clock,
+                Daylight = budget.Daylight,
             }.Schedule(chain);
             scheduled = true;
             scheduledAt = now;
@@ -268,7 +270,7 @@ namespace Stabby.Game
             public DetailView View;
             public LightBudget.Caps Caps;
             public bool Budgeted;
-            public float Dt, Clock;
+            public float Dt, Clock, Daylight;
 
             public void Execute()
             {
@@ -279,7 +281,7 @@ namespace Stabby.Game
                     var e = items[i];
                     var s = e.Slot;
                     s.Pixels = View.ScreenSize(e.RangeM, e.Position);
-                    s.Importance = e.Importance;
+                    s.Importance = e.Sky ? e.Importance * Daylight : e.Importance;
                     s.Wanted = (byte)Detail.Tier(s.Pixels, e.Thresholds.Scaled(View.Quality), s.Wanted);
                     if (!Budgeted)
                     {
@@ -302,6 +304,7 @@ namespace Stabby.Game
                     var e = items[i];
                     var s = e.Slot;
                     if ((s.Shadow > 0f && s.Shadow < 1f) || (s.Real > 0f && s.Real < 1f) || (s.Glow > 0f && s.Glow < 1f)) r.Fading = true;
+                    if (e.Sky) e.Intensity *= Daylight;
                     if (s.Real > 0f)
                     {
                         Out.Add(e);
@@ -309,9 +312,11 @@ namespace Stabby.Game
                         if (s.Shadow > 0f) r.Shadowed++;
                     }
                     float intensity = e.Intensity * e.Gain(Clock);
-                    var p = new float4(e.Position, CoreM);
-                    Glows.AddNoResize(new LightGlow { PosSize = p, Color = new float4(e.Color, CoreGain * intensity) });
-                    r.Cores++;
+                    if (!e.Coreless)
+                    {
+                        Glows.AddNoResize(new LightGlow { PosSize = new float4(e.Position, CoreM), Color = new float4(e.Color, CoreGain * intensity) });
+                        r.Cores++;
+                    }
                     if (s.Glow > 0f)
                     {
                         Glows.AddNoResize(new LightGlow { PosSize = new float4(e.Position, e.RangeM * HaloShare), Color = new float4(HaloTint(e.Color), HaloGain * intensity * s.GlowWeight) });
