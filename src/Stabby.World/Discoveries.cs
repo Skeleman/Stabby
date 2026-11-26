@@ -805,20 +805,21 @@ namespace Stabby.World
             int cx = (int)(o.X / span), cz = (int)(o.Z / span);
             for (int z = Math.Max(0, cz - reach); z <= Math.Min(across - 1, cz + reach); z++)
                 for (int x = Math.Max(0, cx - reach); x <= Math.Min(across - 1, cx + reach); x++)
-                {
-                    int c = z * across + x;
-                    var built = Volatile.Read(ref builtSites[c]);
-                    if (built == null)
-                    {
-                        var list = new List<ObjectInstance>();
-                        PlaceInto(x, z, false, list, null, true, true);
-                        var made = list.ToArray();
-                        built = Interlocked.CompareExchange(ref builtSites[c], made, null) ?? made;
-                    }
-                    foreach (var s in built)
+                    foreach (var s in Built(x, z))
                         if (Math.Min(SiteGap(s, o.X, o.Z), SiteGap(o, s.X, s.Z)) < r + SiteMarginM + SiteBandM) return false;
-                }
             return true;
+        }
+
+        ObjectInstance[] Built(int x, int z)
+        {
+            var cache = builtSites;
+            int c = z * across + x;
+            var built = cache == null ? null : Volatile.Read(ref cache[c]);
+            if (built != null) return built;
+            var list = new List<ObjectInstance>();
+            PlaceInto(x, z, false, list, null, true, true);
+            var made = list.ToArray();
+            return cache == null ? made : Interlocked.CompareExchange(ref cache[c], made, null) ?? made;
         }
 
         void Climb(ref float x, ref float z, float x0, float z0, float x1, float z1)

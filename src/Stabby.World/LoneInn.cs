@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Stabby.World
 {
@@ -56,7 +57,7 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float LoneInnRoadMinM = 17f, LoneInnRoadM = 30f, LoneInnRoadAimM = 19f, LoneInnProbeM = 12f, LoneInnReliefM = 0.8f;
+        public const float LoneInnRoadMinM = 17f, LoneInnRoadM = 30f, LoneInnRoadAimM = 19f, LoneInnProbeM = 12f, LoneInnReliefM = 0.8f, LoneInnBuildingM = 300f;
         public const int LoneInnTries = 64;
 
         public string LoneInnFault(ObjectInstance o)
@@ -66,7 +67,27 @@ namespace Stabby.World
             if (OnRoad(o.X, o.Z, SiteRadius(o))) return "lies on a road";
             SeatRange(detail, cm, Seats(lib.Objects[o.Def]), o, out float lo, out float hi);
             if (hi - lo > Structures.SeatM) return "stands on uneven ground";
+            float span = WorldChunks.Size * cm;
+            int reach = (int)Math.Ceiling(LoneInnBuildingM / span), cx = (int)(o.X / span), cz = (int)(o.Z / span);
+            TownPlans();
+            for (int z = Math.Max(0, cz - reach); z <= Math.Min(across - 1, cz + reach); z++)
+                for (int x = Math.Max(0, cx - reach); x <= Math.Min(across - 1, cx + reach); x++)
+                {
+                    var near = NearBuilding(o, Built(x, z));
+                    if (near < 0 && townChunks.TryGetValue(z * across + x, out var town)) near = NearBuilding(o, town);
+                    if (near >= 0) return $"stands within {LoneInnBuildingM:F0} m of {lib.Objects[near].Id}";
+                }
             return null;
+        }
+
+        static int NearBuilding(ObjectInstance o, IEnumerable<ObjectInstance> sites)
+        {
+            foreach (var s in sites)
+            {
+                float dx = s.X - o.X, dz = s.Z - o.Z;
+                if (dx * dx + dz * dz < LoneInnBuildingM * LoneInnBuildingM) return s.Def;
+            }
+            return -1;
         }
     }
 }
