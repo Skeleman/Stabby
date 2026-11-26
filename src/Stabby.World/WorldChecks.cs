@@ -765,6 +765,7 @@ namespace Stabby.World
                         fine.Add((ix, iz));
             }
             var cols = new DetailColumns { Detail = detail, StepM = s };
+            var meshed = new Dictionary<(int, int), (NetsChunk, NetsBuffers)>();
             for (int fz = n0z; fz <= n1z; fz++)
                 for (int fx = n0x; fx <= n1x; fx++)
                 {
@@ -773,12 +774,17 @@ namespace Stabby.World
                     {
                         int nx = fx + d % 3 - 1, nz = fz + d / 3 - 1;
                         if (fine.Contains((nx, nz))) continue;
-                        var list = MeshedAt(grid, s, nx * size, nz * size, (nx + 1) * size, (nz + 1) * size, ids);
-                        var c = new NetsChunk { X0 = nx * NearField.NodeQuads, Z0 = nz * NearField.NodeQuads, Cells = NearField.NodeQuads, StepM = s };
-                        var f = new NetsBuffers();
-                        if (list.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
-                        else SurfaceNets.Heightfield(cols, c, ref f);
-                        if (!StitchTargetsMatch(cols, near, c, f))
+                        if (!meshed.TryGetValue((nx, nz), out var m))
+                        {
+                            var list = MeshedAt(grid, s, nx * size, nz * size, (nx + 1) * size, (nz + 1) * size, ids);
+                            var c = new NetsChunk { X0 = nx * NearField.NodeQuads, Z0 = nz * NearField.NodeQuads, Cells = NearField.NodeQuads, StepM = s };
+                            var f = new NetsBuffers();
+                            if (list.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
+                            else SurfaceNets.Heightfield(cols, c, ref f);
+                            m = (c, f);
+                            meshed[(nx, nz)] = m;
+                        }
+                        if (!StitchTargetsMatch(cols, near, m.Item1, m.Item2))
                         {
                             at = $"fine brook node {fx * size:F0},{fz * size:F0} cannot stitch to its level 0 neighbour {nx * size:F0},{nz * size:F0}";
                             return false;
