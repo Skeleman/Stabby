@@ -50,10 +50,11 @@ Shader "Stabby/Object"
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
             float4 _StabbyKit[39], _StabbyKitSrgb[39];
             float _StabbyClock;
             static float3 emberGlow;
+            static float iceWrap;
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -557,6 +558,7 @@ Shader "Stabby/Object"
                 float occ = 0;
                 tmRough = LookRough();
                 emberGlow = 0;
+                iceWrap = 0;
                 float3 gn = normalize(i.grain), qo = wp - i.origin, acr = cross(gn, n);
                 acr *= rsqrt(max(dot(acr, acr), 1e-8));
                 float yf = i.tone.w - i.seed, suq = dot(qo, acr);
@@ -565,7 +567,19 @@ Shader "Stabby/Object"
                 float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
                 float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
                 float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.01, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
-                [branch] if (base.a > 0.025 && base.a < 0.5)
+                [branch] if (base.a > 0.475 && base.a < 0.5)
+                {
+                    float3 q = wp - i.origin;
+                    float bf = OrgRungW(0, fp);
+                    float4 vein = OrgNoise3(q * float3(2.1, 0.6, 2.1) + i.seed * 13.7, int3(0, 0, 0)), fine = OrgRP3(q, OrgF(0), 6.1, 0);
+                    float3 g = 0.08 * vein.yzw + 0.04 * bf * fine.yzw;
+                    g -= n * dot(g, n);
+                    n = normalize(n - g);
+                    albedo = base.rgb * (0.85 + 0.12 * vein.x + 0.05 * bf * fine.x);
+                    tmRough = 0.2 * LookRough();
+                    iceWrap = (base.a - 0.48) / 0.015;
+                }
+                else if (base.a > 0.025 && base.a < 0.5)
                 {
                     float3 q = wp - i.origin, v = normalize(_WorldSpaceCameraPos - wp);
                     bool cap = base.a > 0.26;
@@ -696,8 +710,8 @@ Shader "Stabby/Object"
                 {
                     float bed = ContactBed(i.origin.xz);
                     ground += (ContactBed(wp.xz) - bed) * smoothstep(6, 2, bed - fade.z);
-                    albedo = ContactObject(albedo, wp, ground, size, thick, hang);
-                    [branch] if (fade.w < 0) albedo = ContactObject(albedo, wp, ground - fade.w, size, thick, -1);
+                    albedo = ContactObject(albedo, wp, ground, size, thick, hang, iceWrap > 0 ? 1 : 0);
+                    [branch] if (fade.w < 0) albedo = ContactObject(albedo, wp, ground - fade.w, size, thick, -1, iceWrap > 0 ? 1 : 0);
                 }
                 float above = max(hang * (wp.y - ground), 0);
                 [branch] if (fade.w < 0) above = min(above, max(ground - fade.w - wp.y, 0));
@@ -715,7 +729,7 @@ Shader "Stabby/Object"
                     bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
                 }
                 float3 ambient = (_StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5)) * sky;
-                float3 c = LookColor(albedo, 1) * (l.color * saturate(dot(n, l.direction)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLights(wp, n, i.positionCS)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao + emberGlow;
+                float3 c = LookColor(albedo, 1) * (l.color * saturate((dot(n, l.direction) + iceWrap) / (1 + iceWrap)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLightsWrap(wp, n, i.positionCS, iceWrap)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao + emberGlow;
                 return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.pof.w), 1);
             }
             ENDHLSL

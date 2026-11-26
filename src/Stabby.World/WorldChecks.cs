@@ -875,6 +875,7 @@ namespace Stabby.World
             {
                 CheckCavePaths(w, detail, edits, e);
                 CheckCaves(w, detail, edits, caves, e);
+                CheckCaveIce(w, edits, caves, e);
                 CheckCaveNormals(w, detail, grid, caves, e);
             }
             if (clock.Start("surface"))
@@ -977,6 +978,28 @@ namespace Stabby.World
         }
 
         public const float WalkStride = Underground.WalkStride;
+
+        public static void CheckCaveIce(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves, List<string> e)
+        {
+            if (caves == null) return;
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            var iced = new HashSet<int>();
+            foreach (var g in caves)
+            {
+                if (!g.Ice) continue;
+                iced.Add(g.Tile);
+                float t = Underground.EntranceTempC(w, g);
+                if (t <= w.Caves.IceMaxTempC && !g.Crystal) continue;
+                var m = g.Nodes.Find(q => q.Entrance);
+                int x = m == null ? 0 : Math.Min(n - 1, Math.Max(0, (int)Math.Round(m.X / cm))), z = m == null ? 0 : Math.Min(n - 1, Math.Max(0, (int)Math.Round(m.Z / cm)));
+                string biome = m != null && w.Biome != null && w.BiomeIds != null ? w.BiomeIds[w.Biome[z * n + x]] : "unknown";
+                e.Add($"caves: ice cave on tile {g.Tile} sits in {biome} at {t:F1} C, warmer than {w.Caves.IceMaxTempC:F1} C or crystal");
+                return;
+            }
+            foreach (var x in edits)
+                if (x.Ice && (!x.CaveCarve || !iced.Contains(Features.TileOf(x, cm)))) { e.Add($"caves: ice edit at {x.Ax:F0},{x.Az:F0} outside an ice cave"); return; }
+        }
 
         public static void CheckCaves(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, List<string> e)
         {
