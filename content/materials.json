@@ -202,8 +202,8 @@
     { "id": "ember-core",       "name": "Ember core",       "color": "#ffb04a" },
     { "id": "firelight",        "name": "Firelight",        "color": "#ff9a4c" },
     { "id": "dripstone",        "name": "Dripstone",        "color": "#a3967c" },
-    { "id": "cave-crystal",     "name": "Cave crystal",     "color": "#9b8bc4", "glow": 0.5 },
-    { "id": "glow-fungus",      "name": "Glow fungus",      "color": "#6fc4a8", "glow": 0.7 },
+    { "id": "cave-crystal",     "name": "Cave crystal",     "color": "#7650c8", "glow": 0.6, "glowPattern": "facet" },
+    { "id": "glow-fungus",      "name": "Glow fungus",      "color": "#6fc4a8", "glow": 0.7, "glowPattern": "cap" },
     { "id": "fungus-light",     "name": "Fungus light",     "color": "#7ee0c0" },
     { "id": "crystal-light",    "name": "Crystal light",    "color": "#b4a2f0" },
     { "id": "skylight",         "name": "Skylight",         "color": "#dfe6ee" }
