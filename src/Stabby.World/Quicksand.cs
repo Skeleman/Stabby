@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public const int QuicksandPool = -3;
         public const float QuicksandChance = 0.8f, QuicksandSpreadM = 30f, QuicksandMinR = 1.5f, QuicksandMaxR = 5f;
-        public const float QuicksandMinDepthM = 0.25f, QuicksandMaxDepthM = 0.35f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 0.1f, QuicksandDipM = 0.025f, QuicksandGapM = 0.025f, QuicksandBank = 3f;
+        public const float QuicksandMinDepthM = 0.5f, QuicksandMaxDepthM = 0.6f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 0.1f, QuicksandDipM = 0.025f, QuicksandGapM = 0.025f, QuicksandBank = 1.5f;
         readonly object quicksandLock = new object();
         float[] quicksandPools;
 
