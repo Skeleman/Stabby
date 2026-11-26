@@ -69,6 +69,7 @@ namespace Stabby.World
                     {
                         grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                         if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
+                        ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Vault && (def.Placement.Discovery > 0 || ground > edits[f].MaxY));
                         if (ids.Count > 0) Fail(4, " sits inside a feature edit");
                     }
                     for (int k = 0; k < bogs.Length && !seen[11]; k += ObjectField.BogStride)
@@ -76,7 +77,9 @@ namespace Stabby.World
                         float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
                         if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
                     }
-                    if (!seen[5] && (o.Y > ground + 0.05f || o.Y < ground - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {ground:F2})");
+                    float foot = ground;
+                    if (ObjectPart.IsDungeon(def.Parts[0].Shape)) ObjectField.SeatRange(detail, cm, ObjectField.Seats(def), o, out foot, out _);
+                    if (!seen[5] && (o.Y > foot + 0.05f || o.Y < foot - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {foot:F2})");
                     if (!seen[8])
                     {
                         float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);

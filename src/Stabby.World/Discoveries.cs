@@ -7,9 +7,9 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
@@ -128,6 +128,11 @@ namespace Stabby.World
                 if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
             }
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
+            if (pl.Discovery == Dungeon)
+            {
+                FaceDownhill(px, pz, ref qa, ref qb);
+                (qa, qb) = (-qb, qa);
+            }
             float fit = Fitness(pl.Discovery, px, pz);
             if (fit == float.MinValue) return;
             r.Fit = fit; r.X = px; r.Z = pz;
@@ -302,11 +307,11 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null))) break;
+                if (ClearOfBuilt(o) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -909,6 +914,8 @@ namespace Stabby.World
             return best > float.MinValue;
         }
 
+        public const float DungeonReliefM = 8f, DungeonReliefAimM = 4f, DungeonRiverM = 40f;
+
         public float Fitness(int kind, float x, float z)
         {
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
@@ -949,6 +956,7 @@ namespace Stabby.World
                 if (!(draw > 0) || relief > (kind == Spring ? SpringReliefM : VentReliefM) || RiverGap(x, z) < SpringRiverM) return float.MinValue;
                 return draw - 0.05f * relief;
             }
+            if (kind == Dungeon) return relief >= 1f && relief <= DungeonReliefM && RiverGap(x, z) >= DungeonRiverM ? -0.2f * rise - 0.1f * Math.Abs(relief - DungeonReliefAimM) : float.MinValue;
             if (kind == Ruin) return relief <= RuinReliefM ? rise - 0.2f * relief : float.MinValue;
             if (kind == FairyRing) return relief <= FairyReliefM ? -0.2f * relief - Math.Abs(Woods(x, z) - FairyWoods) : float.MinValue;
             if (kind == WolfDen)

@@ -10,7 +10,9 @@ namespace Stabby.World
         public const int StairSteps = 16;
         const float JambM = 0.4f, LineStep = 0.4f, LineR = 0.4f;
 
-        public static float DungeonSizeM(int shape) => shape == ObjectPart.DungeonRoom ? RoomM : shape == ObjectPart.DungeonStairs ? StairsM : KitCellM;
+        public const float DungeonM = 16f, DungeonPlotM = 48f, FloorColumnStepM = 1f, FloorColumnR = 0.5f;
+
+        public static float DungeonSizeM(int shape) => shape == ObjectPart.Dungeon ? DungeonM : shape == ObjectPart.DungeonRoom ? RoomM : shape == ObjectPart.DungeonStairs ? StairsM : KitCellM;
 
         static void Dungeon(int shape, ulong key, StructureLayout l, int trim)
         {
@@ -18,11 +20,12 @@ namespace Stabby.World
             switch (shape)
             {
                 case ObjectPart.DungeonCorridor: Corridor(l, key, f, false); break;
-                case ObjectPart.DungeonRoom: Room(l, key, f, trim); break;
+                case ObjectPart.DungeonRoom: Room(l, key, f, trim, RoomOpenZ); break;
                 case ObjectPart.DungeonStairs: Stairs(l, key, f); break;
                 case ObjectPart.DungeonDoor: Door(l, key, f, trim); break;
                 case ObjectPart.DungeonPillar: Pillar(l, key, f, trim); break;
                 case ObjectPart.DungeonCollapse: Corridor(l, key, f, true); break;
+                case ObjectPart.Dungeon: Composite(l, key, f, trim); break;
             }
         }
 
@@ -71,6 +74,9 @@ namespace Stabby.World
             }
             Dressed(l, key, f, x0, x1, -KitFloorM, 0, z0, z1, 1, 2);
             Flat(l, start);
+            int nx = Math.Max(1, (int)Math.Ceiling((x1 - x0) / FloorColumnStepM)), nz = Math.Max(1, (int)Math.Ceiling((z1 - z0) / FloorColumnStepM));
+            for (int a = 0; a < nz; a++)
+                for (int b = 0; b < nx; b++) Col(l, f, x0 + (b + 0.5f) * (x1 - x0) / nx, z0 + (a + 0.5f) * (z1 - z0) / nz, FloorColumnR, -KitFloorM, 0);
         }
 
         static void Line(StructureLayout l, in Frame f, float x0, float z0, float x1, float z1, float bottom, float top)
@@ -147,28 +153,38 @@ namespace Stabby.World
             for (int k = 0; k < 16; k += 3) Col(l, f, 0.75f * Cos16(k), mz + 0.75f * Sin16(k), 0.35f, -KitFloorM, 0.45f);
         }
 
-        static void Room(StructureLayout l, ulong key, in Frame f, int trim)
+        public const int RoomOpenZ = 1 | 4;
+        public static readonly int[] RoomDx = { 0, 1, 0, -1 }, RoomDz = { 1, 0, -1, 0 };
+
+        static void Room(StructureLayout l, ulong key, in Frame f, int trim, int open)
         {
             var rng = Rng.Stream(key, "dungeon-room");
             float c = 0.5f * RoomM, i = c - KitWallM, top = KitRoomHeightM + KitSlabM, p = 0.5f * KitCellM, h = 0.5f * PortalWidthM;
             Flags(l, key, ref rng, f, -i, i, -i, i);
-            for (int sg = -1; sg <= 1; sg += 2)
+            for (int d = 0; d < 4; d++)
             {
-                var side = f.Child(0, 0, 0, sg);
-                Masonry(l, key, side, i, c, -KitFloorM, top, -c, c);
-                Line(l, side, c - 0.5f * KitWallM, -c, c - 0.5f * KitWallM, c, -KitFloorM, top);
-                for (int s2 = -1; s2 <= 1; s2 += 2)
+                var side = f.Child(0, 0, 0, RoomDx[d], RoomDz[d]);
+                float a = (d & 1) == 1 ? c : i, lx = c - 0.5f * KitWallM;
+                if ((open & (1 << d)) == 0)
                 {
-                    Masonry(l, key, side, s2 < 0 ? -i : p, s2 < 0 ? -p : i, -KitFloorM, top, i, c);
-                    Line(l, side, s2 * (h + LineR), c - 0.5f * KitWallM, s2 * i, c - 0.5f * KitWallM, -KitFloorM, top);
+                    Masonry(l, key, side, i, c, -KitFloorM, top, -a, a);
+                    Line(l, side, lx, -a, lx, a, -KitFloorM, top);
+                    Pilaster(l, key, ref rng, side, i);
                 }
-                Flags(l, key, ref rng, side, -h, h, i, c);
-                Edge(l, key, side, c, top, KitWallM);
-                Pilaster(l, key, ref rng, side, i);
+                else
+                {
+                    for (int s2 = -1; s2 <= 1; s2 += 2)
+                    {
+                        Masonry(l, key, side, i, c, -KitFloorM, top, s2 < 0 ? -a : p, s2 < 0 ? -p : a);
+                        Line(l, side, lx, s2 * (h + LineR), lx, s2 * a, -KitFloorM, top);
+                    }
+                    Flags(l, key, ref rng, side, i, c, -h, h);
+                    Edge(l, key, side.Child(0, 0, 0, 0, -1), c, top, KitWallM);
+                }
+                float gap = (open & (1 << d)) == 0 ? 0.45f : h;
                 for (int s2 = -1; s2 <= 1; s2 += 2)
                 {
-                    Plinth(l, key, ref rng, side, i, s2 < 0 ? -i : 0.45f, s2 < 0 ? -0.45f : i);
-                    Plinth(l, key, ref rng, side.Child(0, 0, 0, 0, 1), i, s2 < 0 ? -i : h, s2 < 0 ? -h : i);
+                    Plinth(l, key, ref rng, side, i, s2 < 0 ? -i : gap, s2 < 0 ? -gap : i);
                     Sconce(l, key, side, i, s2 * rng.Range(2.4f, 2.8f), trim);
                 }
             }

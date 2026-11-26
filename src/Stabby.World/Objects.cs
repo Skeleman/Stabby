@@ -519,6 +519,7 @@ namespace Stabby.World
                 {
                     var f = edits[~item];
                     if (site > 0 && (f.Shape == FeatureEdit.Spring || ((site == WolfDen || Pooled(site)) && f.Shape == FeatureEdit.Boulder))) continue;
+                    if (f.Shape == FeatureEdit.Vault && (site > 0 || y > f.MaxY)) continue;
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;
                     if (f.Crusts && CrustDraw(x, z) < CrustThin * f.Crust(x, z)) return false;
                     continue;
@@ -590,6 +591,12 @@ namespace Stabby.World
             bool spans = needs == (StampFloor | StampCeiling);
             floor = (needs & StampFloor) != 0 ? o.Y + (spans ? CaveColumnEmbedM : sink) : float.NaN;
             ceiling = (needs & StampCeiling) != 0 ? (spans ? o.Y + o.Size - CaveColumnEmbedM : o.Y - sink) : float.NaN;
+        }
+
+        public static int StampChannel(ObjectLibrary lib, ObjectInstance o, ObjectColumn c)
+        {
+            var def = lib.Objects[o.Def];
+            return IsCave(def) || (def.Parts.Count > 0 && ObjectPart.IsDungeon(def.Parts[0].Shape) && c.Top < o.Y - 1) ? 2 : 0;
         }
 
         public static int StampSides(ObjectLibrary lib, ObjectInstance o, ObjectColumn c)

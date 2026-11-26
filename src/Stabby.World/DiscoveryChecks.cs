@@ -78,7 +78,7 @@ namespace Stabby.World
                 foreach (int q in ids)
                 {
                     var f = grid.Edits[q];
-                    if (f.Shape == FeatureEdit.Spring || ((kind == ObjectField.WolfDen || ObjectField.Pooled(kind)) && f.Shape == FeatureEdit.Boulder)) continue;
+                    if (f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Vault || ((kind == ObjectField.WolfDen || ObjectField.Pooled(kind)) && f.Shape == FeatureEdit.Boulder)) continue;
                     if (o.X + r >= f.MinX && o.X - r <= f.MaxX && o.Z + r >= f.MinZ && o.Z - r <= f.MaxZ) { e.Add($"{def.Id} at {o.X:F0},{o.Z:F0} has feature edit {f.Shape} at {f.Ax:F0},{f.Az:F0} inside its footprint"); return; }
                 }
             }
@@ -127,6 +127,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Ruin && field.Fitness(ObjectField.Ruin, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too broken for a ruin"); return; }
                 if (def.Placement.Discovery == ObjectField.FairyRing && field.Fitness(ObjectField.FairyRing, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground too uneven for a fairy ring"); return; }
                 if (def.Placement.Discovery == ObjectField.WolfDen) { if (field.Fitness(ObjectField.WolfDen, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground unfit for a wolf den"); return; } if (!field.BesideRock(s.X, s.Z)) { e.Add(at + " is not beside steep rock"); return; } var bf = field.DenBackFault(s); if (bf != null) { e.Add(at + " " + bf); return; } var cf = field.DenCoverFault(s); if (cf != null) { e.Add(at + " " + cf); return; } var df = field.DenFault(s); if (df != null) { e.Add(at + " " + df); return; } }
+                if (def.Placement.Discovery == ObjectField.Dungeon) { if (field.Fitness(ObjectField.Dungeon, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground unfit for a dungeon"); return; } var vf = field.DungeonFault(s); if (vf != null) { e.Add(at + " " + vf); return; } }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
                 if (ObjectField.Pooled(def.Placement.Discovery)) { if (!(field.Hotspots.Heat(s.X, s.Z) > 0)) { e.Add(at + " lies outside every geothermal hotspot"); return; } var fault = field.VentFault(s); if (fault != null) { e.Add(at + " " + fault); return; } if (!field.InVentField(s, found)) { e.Add(at + $" has no other vent within {ObjectField.VentFieldM:F0} m in its hotspot"); return; } }
                 float gap = 2 * ObjectField.DiscoveryInset * ObjectField.DiscoveryStep(worldM, def.Placement.SpacingM);
