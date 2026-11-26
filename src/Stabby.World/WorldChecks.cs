@@ -731,7 +731,7 @@ namespace Stabby.World
                     var cols = new DetailColumns { Detail = detail, StepM = sm };
                     var c = new NetsChunk { X0 = (int)(x0 / sm), Z0 = (int)(z0 / sm), Cells = NearField.NodeQuads, StepM = sm };
                     var meshed = new List<FeatureEdit>();
-                    grid.Near(x0 - 0.5f * sm, z0 - 0.5f * sm, x1 + 0.5f * sm, z1 + 0.5f * sm, ids);
+                    grid.Near(x0 - 1.5f * sm, z0 - 1.5f * sm, x1 + 1.5f * sm, z1 + 1.5f * sm, ids);
                     foreach (int q in ids) if (placed[q].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(placed[q].AtStep(sm));
                     var f = new NetsBuffers();
                     var list = new EditArray { Items = meshed.ToArray() };
@@ -797,7 +797,7 @@ namespace Stabby.World
         static EditArray MeshedAt(EditGrid grid, float s, float x0, float z0, float x1, float z1, List<int> ids)
         {
             var list = new List<FeatureEdit>();
-            grid.Near(x0 - 0.5f * s, z0 - 0.5f * s, x1 + 0.5f * s, z1 + 0.5f * s, ids);
+            grid.Near(x0 - 1.5f * s, z0 - 1.5f * s, x1 + 1.5f * s, z1 + 1.5f * s, ids);
             foreach (int q in ids) if (grid.Edits[q].MeshedIn(s, x0, z0, x1, z1)) list.Add(grid.Edits[q].AtStep(s));
             return new EditArray { Items = list.ToArray() };
         }
@@ -1124,7 +1124,7 @@ namespace Stabby.World
             int i0 = (int)Math.Floor(x / sm) - BedCells / 2, k0 = (int)Math.Floor(z / sm) - BedCells / 2;
             float x0 = i0 * sm, z0 = k0 * sm, x1 = x0 + BedCells * sm, z1 = z0 + BedCells * sm;
             meshed.Clear();
-            grid.Near(x0 - 0.5f * sm, z0 - 0.5f * sm, x1 + 0.5f * sm, z1 + 0.5f * sm, ids);
+            grid.Near(x0 - 1.5f * sm, z0 - 1.5f * sm, x1 + 1.5f * sm, z1 + 1.5f * sm, ids);
             foreach (int id in ids) if (edits[id].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(edits[id].AtStep(sm));
             var f = new NetsBuffers();
             var cols = new DetailColumns { Detail = detail, StepM = sm };
@@ -1421,7 +1421,7 @@ namespace Stabby.World
                 float sm = NearField.NodeStep(level), size = NearField.NodeSize(level);
                 float x0 = (float)Math.Floor(spot.X / size) * size, z0 = (float)Math.Floor(spot.Z / size) * size, x1 = x0 + size, z1 = z0 + size;
                 var meshed = new List<FeatureEdit>();
-                grid.Near(x0 - 0.5f * sm, z0 - 0.5f * sm, x1 + 0.5f * sm, z1 + 0.5f * sm, ids);
+                grid.Near(x0 - 1.5f * sm, z0 - 1.5f * sm, x1 + 1.5f * sm, z1 + 1.5f * sm, ids);
                 foreach (int q in ids) if (placed[q].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(placed[q].AtStep(sm));
                 if (meshed.Count == 0) continue;
                 var list = new EditArray { Items = meshed.ToArray() };

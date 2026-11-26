@@ -328,7 +328,7 @@ namespace Stabby.World
         static FeatureEdit[] NearAt(EditGrid grid, float s, int x0, int z0, int cells, List<int> ids)
         {
             float bx0 = x0 * s, bz0 = z0 * s, bx1 = (x0 + cells) * s, bz1 = (z0 + cells) * s;
-            grid.Near(bx0 - 0.5f * s, bz0 - 0.5f * s, bx1 + 0.5f * s, bz1 + 0.5f * s, ids);
+            grid.Near(bx0 - 1.5f * s, bz0 - 1.5f * s, bx1 + 1.5f * s, bz1 + 1.5f * s, ids);
             var near = new List<FeatureEdit>();
             foreach (int q in ids) if (grid.Edits[q].MeshedIn(s, bx0, bz0, bx1, bz1)) near.Add(grid.Edits[q].AtStep(s));
             return near.ToArray();
