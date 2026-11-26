@@ -31,6 +31,7 @@ namespace Stabby.World
         public float[] Socket = new float[3], Direction = new float[3];
         public bool Mirror;
         public float Phase, MirrorPhase, RunPhase, RunMirrorPhase, Scale = 1;
+        public bool Adult;
     }
 
     public sealed class CreatureDef
@@ -42,7 +43,7 @@ namespace Stabby.World
         public uint Base, Accent, Dark;
         public float SizeMin = 1, SizeMax = 1, WalkSpeed = 1, Jitter, MaxSlope = 30;
         public int HerdMin = 1, HerdMax = 1;
-        public float HerdChance;
+        public float HerdChance, YoungShare, YoungSize = 1;
         public float AlertPixels = 25.7f, FleePixels = 46.8f, CalmPixels = 14.7f, RunSpeed = 6.5f, RunStride = 2.4f, Dart;
         public float SpawnPixels = 4.32f, FadePixels = 6.48f, ShadowPixels = 32.4f, IkPixels = 64.8f, AnimPixels = 10.8f, ThinkPixels = 10.8f, LowPixels = 32.4f, ShadowCascadePixels = 64.8f;
         public CreatureDrives Drives = new CreatureDrives { Hunger = DriveDef.Of(240, 0.6f, 30), Thirst = DriveDef.Of(600, 0.7f, 20), Rest = DriveDef.Of(900, 0.8f, 60) };
@@ -119,6 +120,8 @@ namespace Stabby.World
                 if (b.HerdMin < 1 || b.HerdMax < b.HerdMin) errors.Add(b.Id + ": herd range is empty");
                 if (b.HerdMax > CreaturePlan.MaxHerd) errors.Add(b.Id + ": herd above " + CreaturePlan.MaxHerd);
                 if (b.HerdChance < 0 || b.HerdChance > 1) errors.Add(b.Id + ": herdChance out of 0..1");
+                if (!(b.YoungShare >= 0 && b.YoungShare <= 0.5f)) errors.Add(b.Id + ": youngShare out of 0..0.5");
+                if (!(b.YoungSize >= 0.3f && b.YoungSize <= 1)) errors.Add(b.Id + ": youngSize out of 0.3..1");
                 if (!(b.SpawnPixels > 0 && b.SpawnPixels < b.FadePixels)) errors.Add(b.Id + ": spawnPixels must be positive and below fadePixels");
                 if (b.WalkSpeed <= 0) errors.Add(b.Id + ": walkSpeed must be positive");
                 if (!(b.MaxSlope >= 5 && b.MaxSlope <= 60)) errors.Add(b.Id + ": maxSlope out of 5..60 degrees");
@@ -223,7 +226,13 @@ namespace Stabby.World
             return walk;
         }
 
-        public static CreatureBody Assemble(CreatureDef def, CreatureLibrary lib, ulong seed)
+        public const float AdultAge = 1, YoungAgeMin = 0.15f, YoungAgeMax = 0.45f, YoungHead = 0.35f, YoungLeg = 0.3f, YoungNeck = 0.3f, AdultOnly = 0.05f;
+
+        public static float Youth(float age) => age >= AdultAge ? 0 : Math.Min(1, (AdultAge - age) / (AdultAge - YoungAgeMin * 2));
+
+        public static float AgeScale(CreatureDef def, float age) => 1 - (1 - def.YoungSize) * Youth(age);
+
+        public static CreatureBody Assemble(CreatureDef def, CreatureLibrary lib, ulong seed, float age = AdultAge)
         {
             var rng = Rng.Stream(seed, "creature-body");
             var used = UsedParts(def);
@@ -231,6 +240,8 @@ namespace Stabby.World
             for (int i = 0, k = 1; i < used.Count; i++) { firstShape[i] = k; k += lib.Part(used[i]).Segments.Count; }
 
             Gait(def, ref rng, out float size, out float thick, out float walk);
+            float youth = Youth(age);
+            size *= AgeScale(def, age);
             var body = new CreatureBody
             {
                 Size = size, Length = def.Length * size, RearRadius = def.Radius * def.Taper * size * thick, FrontRadius = def.Radius * size * thick,
@@ -244,17 +255,22 @@ namespace Stabby.World
 
             float half = body.Length * 0.5f;
             var copies = new List<List<int>>();
+            var grows = new float[def.Slots.Count];
             for (int si = 0; si < def.Slots.Count; si++)
             {
                 var slot = def.Slots[si];
                 var part = lib.Part(slot.Part);
-                float scale = size * slot.Scale;
                 float stretch = 1 + rng.Range(-def.Jitter, def.Jitter);
+                float inherited = 1;
                 var parents = new List<int>();
                 if (slot.Parent == null) parents.Add(-1);
                 else
                     for (int k = si - 1; k >= 0; k--)
-                        if (def.Slots[k].Part == slot.Parent) { parents.AddRange(copies[k]); break; }
+                        if (def.Slots[k].Part == slot.Parent) { parents.AddRange(copies[k]); inherited = grows[k]; break; }
+                float grow = part.Role == CreaturePartDef.Head ? inherited * (1 + YoungHead * youth) : inherited;
+                grows[si] = grow;
+                float scale = size * slot.Scale * grow * (slot.Adult && youth > 0 ? AdultOnly : 1);
+                float reach = part.Role == CreaturePartDef.Leg ? 1 + YoungLeg * youth : part.Role == CreaturePartDef.Neck ? 1 - YoungNeck * youth : 1;
                 var made = new List<int>();
                 foreach (var parent in parents)
                 {
@@ -269,7 +285,7 @@ namespace Stabby.World
                             float r = Lerp(body.RearRadius, body.FrontRadius, sz * 0.5f + 0.5f);
                             sx *= r; sy *= r * def.Flatten; sz *= half;
                         }
-                        else { sx *= size; sy *= size; sz *= size; }
+                        else { float g = size * inherited; sx *= g; sy *= g; sz *= g; }
                         var inst = new CreaturePartInstance
                         {
                             Parent = parent, Role = part.Role, FirstSegment = body.Segments.Count, SegmentCount = part.Segments.Count,
@@ -282,7 +298,7 @@ namespace Stabby.World
                         for (int j = 0; j < part.Segments.Count; j++)
                         {
                             var s = part.Segments[j];
-                            var seg = new CreatureSegmentInstance { Shape = shape + j, Length = s.Length * scale * stretch, Radius = scale, Flatten = s.Flatten };
+                            var seg = new CreatureSegmentInstance { Shape = shape + j, Length = s.Length * scale * stretch * reach, Radius = scale, Flatten = s.Flatten };
                             Poses(seg, s, side);
                             body.Segments.Add(seg);
                         }
@@ -338,7 +354,8 @@ namespace Stabby.World
     public struct CreatureSpawn
     {
         public int Id, Body;
-        public float X, Z, Heading, WalkSpeed;
+        public float X, Z, Heading, WalkSpeed, Age;
+        public int Lead;
         public ulong BodySeed, HerdSeed;
         public uint Seed;
         public HerdRoute Route;
@@ -435,6 +452,7 @@ namespace Stabby.World
                 var route = Route(w, cells, def, herdSeed, cell, cx, cz);
                 var needs = Needs(w, cells, def, cell, drinks);
                 float grade = Footing.Grade(def.MaxSlope);
+                int first = list.Count;
                 for (int k = 0; k < count; k++)
                 {
                     ulong seed = rng.NextU64();
@@ -446,11 +464,44 @@ namespace Stabby.World
                         Id = site << 8 | b << 4 | k, Body = b,
                         X = cx + ox, Z = cz + oz,
                         Heading = heading + rng.Range(-0.7f, 0.7f), BodySeed = seed, Seed = rng.NextU32() | 1u, HerdSeed = herdSeed,
-                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed), Route = route, Needs = needs,
+                        WalkSpeed = CreatureBody.WalkSpeedFor(def, seed), Route = route, Needs = needs, Age = CreatureBody.AdultAge, Lead = -1,
                     });
                 }
+                Young(cells, def, herdSeed, cx, cz, grade, list, first);
             }
         }
+
+        public const float YoungNearMin = 1.5f, YoungNearMax = 3f;
+
+        static void Young(NearArrays cells, CreatureDef def, ulong herdSeed, float cx, float cz, float grade, List<CreatureSpawn> list, int first)
+        {
+            if (def.YoungShare <= 0) return;
+            var rng = Rng.Stream(herdSeed, "creature-young");
+            int count = list.Count - first, adults = count;
+            var young = new bool[count];
+            for (int k = 1; k < count; k++)
+                if (rng.NextFloat() < def.YoungShare && adults > 1) { young[k] = true; adults--; }
+            var mothers = new List<int>();
+            for (int k = 0; k < count; k++) if (!young[k]) mothers.Add(first + k);
+            for (int k = 0; k < count; k++)
+            {
+                if (!young[k]) continue;
+                var s = list[first + k];
+                var lead = list[mothers[rng.Range(0, mothers.Count)]];
+                float ux = rng.Range(-1f, 1f), uz = rng.Range(-1f, 1f), d = rng.Range(YoungNearMin, YoungNearMax);
+                float len = (float)Math.Sqrt(ux * ux + uz * uz);
+                if (len < 0.1f) { ux = 1; uz = 0; len = 1; }
+                float ox = Clamp(lead.X - cx + ux / len * d, -HerdSpread, HerdSpread), oz = Clamp(lead.Z - cz + uz / len * d, -HerdSpread, HerdSpread);
+                if (Footing.SteepAt(cells, cx + ox, cz + oz, grade)) { ox = lead.X - cx; oz = lead.Z - cz; }
+                s.X = cx + ox; s.Z = cz + oz;
+                s.Heading = lead.Heading + rng.Range(-0.4f, 0.4f);
+                s.Age = rng.Range(CreatureBody.YoungAgeMin, CreatureBody.YoungAgeMax);
+                s.Lead = lead.Id;
+                list[first + k] = s;
+            }
+        }
+
+        static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
 
         public static HerdRoute Route(GeneratedWorld w, NearArrays cells, CreatureDef def, ulong herdSeed, int cell, float cx, float cz)
         {

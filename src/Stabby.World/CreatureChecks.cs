@@ -74,12 +74,34 @@ namespace Stabby.World
                     if (h.Value < def.HerdMin || h.Value > def.HerdMax) e.Add("creature site " + kv.Key + " herd of " + h.Value + " " + def.Id);
                 }
             }
+            YoungHaveAdults(lib, a, e);
             FleeStaysAshore(w, lib, a, e);
             RoutesStayAshore(w, cells, lib, a, e);
             NeedsHold(w, cells, lib, a, e);
             DrivesStayBounded(lib, a, e);
             DrinkSpotsHold(w, cells, lib, a, drinks, e);
             return e;
+        }
+
+        public static void YoungHaveAdults(CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        {
+            var byId = new Dictionary<int, CreatureSpawn>();
+            foreach (var s in plan) byId[s.Id] = s;
+            var adults = new HashSet<int>();
+            foreach (var s in plan) if (s.Lead < 0) adults.Add(CreaturePlan.HerdOf(s.Id));
+            foreach (var s in plan)
+            {
+                int herd = CreaturePlan.HerdOf(s.Id);
+                if (!adults.Contains(herd)) e.Add("creature herd " + herd + " has no adult");
+                bool adult = s.Age == CreatureBody.AdultAge;
+                if (adult != (s.Lead < 0)) { e.Add("creature " + s.Id + " age and lead disagree"); continue; }
+                if (adult) continue;
+                if (!(s.Age >= CreatureBody.YoungAgeMin && s.Age <= CreatureBody.YoungAgeMax)) e.Add("young creature " + s.Id + " age out of range");
+                if (!(lib.Bodies[s.Body].YoungShare > 0)) e.Add("young creature " + s.Id + " belongs to a species without young");
+                if (!byId.TryGetValue(s.Lead, out var lead) || CreaturePlan.HerdOf(lead.Id) != herd || lead.Lead >= 0) { e.Add("young creature " + s.Id + " has no adult in its herd"); continue; }
+                float dx = s.X - lead.X, dz = s.Z - lead.Z;
+                if (dx * dx + dz * dz > (CreaturePlan.YoungNearMax + 0.01f) * (CreaturePlan.YoungNearMax + 0.01f)) e.Add("young creature " + s.Id + " wakes " + (int)Math.Sqrt(dx * dx + dz * dz) + " m from its adult");
+            }
         }
 
         public const float RouteStepSeconds = 2f;
@@ -253,7 +275,7 @@ namespace Stabby.World
         }
 
         static bool Same(CreatureSpawn a, CreatureSpawn b) =>
-            a.Id == b.Id && a.Body == b.Body && a.X == b.X && a.Z == b.Z && a.Heading == b.Heading
+            a.Id == b.Id && a.Body == b.Body && a.X == b.X && a.Z == b.Z && a.Heading == b.Heading && a.Age == b.Age && a.Lead == b.Lead
             && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed && a.HerdSeed == b.HerdSeed
             && a.Route.X0 == b.Route.X0 && a.Route.Z0 == b.Route.Z0 && a.Route.X1 == b.Route.X1 && a.Route.Z1 == b.Route.Z1
             && a.Route.X2 == b.Route.X2 && a.Route.Z2 == b.Route.Z2 && a.Route.X3 == b.Route.X3 && a.Route.Z3 == b.Route.Z3

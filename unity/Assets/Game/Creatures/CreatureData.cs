@@ -76,6 +76,7 @@ namespace Stabby.Game
         [GhostField(Quantization = 1000, Smoothing = SmoothingAction.Interpolate)] public float Move;
         [GhostField(Quantization = 100, Smoothing = SmoothingAction.Interpolate)] public float Alert;
         [GhostField] public byte Act;
+        [GhostField(Quantization = 100)] public float Age;
     }
 
     public struct CreatureBrain : IComponentData
@@ -83,7 +84,7 @@ namespace Stabby.Game
         public float2 Home, Offset;
         public float2 Push, Spot, Water;
         public float Timer, Turn, Debt, Seek;
-        public int Herd;
+        public int Herd, Lead;
         public Random Random;
         public DriveLevels Levels;
         public byte Want;
@@ -99,7 +100,8 @@ namespace Stabby.Game
     {
         public int Id, Body;
         public float2 At;
-        public float Heading, WalkSpeed;
+        public float Heading, WalkSpeed, Age;
+        public int Lead;
         public ulong BodySeed, HerdSeed;
         public uint Seed;
         public HerdRoute Route;

@@ -508,6 +508,8 @@ namespace Stabby.Content
                 if (herd == null || herd.Length != 2) errors.Add(id + ": herd needs 2 numbers");
                 else { def.HerdMin = (int)herd[0]; def.HerdMax = (int)herd[1]; }
                 def.HerdChance = b.Float("herdChance", -1);
+                def.YoungShare = b.Float("youngShare", 0);
+                def.YoungSize = b.Float("youngSize", 1);
                 var detail = b.Object("detail");
                 if (detail == null) errors.Add(id + ": detail missing");
                 else
@@ -551,6 +553,7 @@ namespace Stabby.Content
                         Socket = s.Floats("socket", Array.Empty<float>()), Direction = s.Floats("direction", zero),
                         Mirror = s.Bool("mirror", false), Phase = phase, MirrorPhase = mirrorPhase,
                         RunPhase = s.Float("runPhase", phase), RunMirrorPhase = s.Float("runMirrorPhase", mirrorPhase), Scale = s.Float("scale", 1),
+                        Adult = s.Bool("adult", false),
                     });
                     s.End();
                 }
