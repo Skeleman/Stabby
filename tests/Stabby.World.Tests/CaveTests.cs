@@ -263,7 +263,7 @@ public class CaveTests
     [Fact]
     public void StreamsRunDownhillToSpringsPoolsOrSinks()
     {
-        var ends = new int[3];
+        var ends = new int[4];
         int graphs = 0;
         for (ulong seed = 1; seed <= 8; seed++)
         {
@@ -281,8 +281,8 @@ public class CaveTests
                 for (int k = 1; k < x.Nodes.Length; k++) Assert.True(g.Nodes[x.Nodes[k]].Y < g.Nodes[x.Nodes[k - 1]].Y);
             }
         }
-        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}");
-        Assert.True(ends[0] + ends[1] + ends[2] >= graphs / 3, $"only {ends[0] + ends[1] + ends[2]} streams in {graphs} cave graphs");
+        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}, falls {ends[3]}");
+        Assert.True(ends.Sum() >= graphs / 3, $"only {ends.Sum()} streams in {graphs} cave graphs");
         Assert.True(ends[0] > 0 && ends[2] > 0);
     }
 
@@ -321,6 +321,32 @@ public class CaveTests
             }
         }
         throw new Xunit.Sdk.XunitException("no sink brook in seeds 1-8");
+    }
+
+    [Fact]
+    public void CaveFallsDropIntoTheirShaftPools()
+    {
+        int falls = 0, brooks = 0;
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var all = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
+            brooks += all.Length;
+            var e = new List<string>();
+            WorldChecks.CheckCaveFalls(s.Edits, all, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
+            foreach (var x in all)
+            {
+                if (x.End != CaveBrook.Plunge) continue;
+                falls++;
+                var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
+                e.Clear();
+                WorldChecks.CheckCaveFalls(bare, new[] { x }, e);
+                Assert.Contains(e, m => m.Contains("leaves its carve") || m.Contains("no pool or basin"));
+            }
+        }
+        Console.WriteLine($"cave falls {falls} of {brooks} brooks");
+        Assert.True(falls > 0 && falls * 3 <= brooks, $"{falls} falls in {brooks} brooks");
     }
 
     [Fact]
