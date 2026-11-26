@@ -56,4 +56,4 @@ sweep 512 meshing 1808 4930 mesher comparison per edit shape and cave roofs per 
 sweep 512 caves 19626 56979 cave paths, caves, mines, dungeon links, cave normals and cave objects per seed
 sweep 512 sites 14831 21557 site footprints, sites, structures and discoveries per seed
 sweep 512 objects 23846 29431 objects, landforms, arches and boulders per seed
-sweep 512 creatures 1496 2213 creature checks per seed
+sweep 512 creatures 1700 4000 creature checks per seed
