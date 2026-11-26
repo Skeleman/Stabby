@@ -334,6 +334,7 @@ public static class ContentLoader
         public List<LightEntry> Lights { get; set; } = new();
         public BudgetEntry LightBudget { get; set; } = new();
         public List<KindEntry> Kinds { get; set; } = new();
+        public List<StyleEntry> Styles { get; set; } = new();
         public List<ObjectEntry> Objects { get; set; } = new();
         public TerrainEntry? Terrain { get; set; }
         public FoliageEntry? Foliage { get; set; }
@@ -439,12 +440,21 @@ public static class ContentLoader
         public bool Solid { get; set; }
     }
 
+    sealed class StyleEntry
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Stone { get; set; } = "";
+        public string Trim { get; set; } = "";
+    }
+
     sealed class ObjectEntry
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Kind { get; set; } = "";
         public string Material { get; set; } = "";
+        public string? Style { get; set; }
         public int Variants { get; set; } = 1;
         public InteractEntry? Interact { get; set; }
         public ObjectLightEntry? Light { get; set; }
@@ -548,9 +558,13 @@ public static class ContentLoader
                 Id = k.Id, Lods = k.Lods, LodPixels = k.LodPixels, FadePixels = k.FadePixels,
                 Shadows = k.Shadows, ShadowPixels = k.ShadowPixels, ShadowCascadePixels = k.ShadowCascadePixels, Light = k.Light, Wind = k.Wind, SwayPixels = k.SwayPixels, FlutterPixels = k.FlutterPixels, ImpostorPixels = k.ImpostorPixels, Animated = k.Animated, Solid = k.Solid,
             });
+        foreach (var st in file.Styles)
+            lib.Styles.Add(new ArchStyle { Id = st.Id, Name = st.Name, Stone = st.Stone, Trim = st.Trim, StoneColor = Mat(st.Stone) });
         foreach (var o in file.Objects)
         {
-            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = Mat(o.Material), Glow = Glow(o.Material), GlowPattern = Pattern(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0 };
+            var style = o.Style == null ? null : lib.Styles.Find(st => st.Id == o.Style);
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = style != null ? style.StoneColor : Mat(o.Material), Glow = o.Style == null ? Glow(o.Material) : 0, GlowPattern = o.Style == null ? Pattern(o.Material) : 0, Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0, Style = o.Style };
+            int trim = style == null ? 0 : Array.IndexOf(MaterialLibrary.KitNames, style.Trim) + 1;
             if (o.Light != null)
                 def.Light = new ObjectLight { Category = o.Light.Category, Color = Mat(o.Light.Material), Intensity = o.Light.Intensity, RangeM = o.Light.RadiusM, Importance = o.Light.Importance, Flicker = o.Light.Flicker, FlickerHz = o.Light.FlickerHz, LiftM = o.Light.LiftM, ConeDeg = o.Light.ConeDeg, Daylight = o.Light.Daylight, Core = o.Light.Core };
             foreach (var p in o.Parts)
@@ -562,7 +576,7 @@ public static class ContentLoader
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
                     HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color, Glow = p.Material != null ? Glow(p.Material) : def.Glow, GlowPattern = p.Material != null ? Pattern(p.Material) : def.GlowPattern,
-                    HasLeafColor = p.LeafMaterial != null, LeafColor = p.LeafMaterial != null ? Mat(p.LeafMaterial) : 0,
+                    HasLeafColor = p.LeafMaterial != null, LeafColor = p.LeafMaterial != null ? Mat(p.LeafMaterial) : 0, Trim = trim,
                 };
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, p.Ends);
                 if (part.Ends < 0) errors.Add(o.Id + ": part " + p.Id + " has unknown ends \"" + p.Ends + "\"");

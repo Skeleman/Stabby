@@ -13,6 +13,9 @@
     { "id": "animated", "lods": 3, "lodPixels": [108, 32.4], "fadePixels": 6.48, "shadows": true, "shadowPixels": 43.2, "shadowCascadePixels": 86.4, "light": "point", "wind": true, "swayPixels": 16.2, "flutterPixels": 54, "impostorPixels": 16.2, "animated": true, "solid": false },
     { "id": "structure", "lods": 3, "lodPixels": [129.6, 43.2], "fadePixels": 3.24, "shadows": true, "shadowPixels": 21.6, "shadowCascadePixels": 43.2, "light": "point", "wind": false, "animated": false, "solid": true }
   ],
+  "styles": [
+    { "id": "crypt", "name": "Crypt", "stone": "ruin-stone", "trim": "iron" }
+  ],
   "objects": [
     {
       "id": "small-rock", "name": "Small rock", "kind": "static", "material": "fieldstone-grey", "variants": 6,
@@ -356,6 +359,37 @@
       "parts": [ { "id": "bed", "shape": "rock", "scale": [1.6, 0.12, 1.6], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "cave": "skylight", "perHundredM": 1, "sizeMinM": 1.2, "sizeMaxM": 1.8, "sink": 0.3 },
       "light": { "category": "cave-glow", "material": "skylight", "intensity": 30, "radiusM": 12, "importance": 1, "liftM": 6, "coneDeg": 70, "daylight": true, "core": false }
+    }
+,
+    {
+      "id": "crypt-corridor", "name": "Crypt corridor", "kind": "structure", "style": "crypt", "variants": 2,
+      "parts": [ { "id": "module", "shape": "dungeon-corridor" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
+      "id": "crypt-room", "name": "Crypt room", "kind": "structure", "style": "crypt", "variants": 2,
+      "parts": [ { "id": "module", "shape": "dungeon-room" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 12, "sizeMaxM": 12 }
+    },
+    {
+      "id": "crypt-stairs", "name": "Crypt stairs", "kind": "structure", "style": "crypt", "variants": 2,
+      "parts": [ { "id": "module", "shape": "dungeon-stairs" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 8, "sizeMaxM": 8 }
+    },
+    {
+      "id": "crypt-door", "name": "Crypt door", "kind": "structure", "style": "crypt", "variants": 2,
+      "parts": [ { "id": "module", "shape": "dungeon-door" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
+      "id": "crypt-pillar", "name": "Crypt pillar", "kind": "structure", "style": "crypt", "variants": 2,
+      "parts": [ { "id": "module", "shape": "dungeon-pillar" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
+      "id": "crypt-collapse", "name": "Crypt collapse", "kind": "structure", "style": "crypt", "variants": 2,
+      "parts": [ { "id": "module", "shape": "dungeon-collapse" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

@@ -379,9 +379,17 @@ namespace Stabby.Content
                 });
                 k.End();
             }
+            foreach (var st in root.Objects("styles"))
+            {
+                string sid = st.String("id", ""), stone = st.String("stone", "");
+                var sm = materials?.Find(stone);
+                if (sm == null) errors.Add("styles." + sid + ".stone: unknown material \"" + stone + "\"");
+                lib.Styles.Add(new ArchStyle { Id = sid, Name = st.String("name", ""), Stone = stone, Trim = st.String("trim", ""), StoneColor = sm?.Color ?? 0 });
+                st.End();
+            }
             foreach (var o in root.Objects("objects"))
             {
-                lib.Objects.Add(Object(o, errors, materials));
+                lib.Objects.Add(Object(o, errors, materials, lib.Styles));
                 o.End();
             }
             var terrain = root.Object("terrain");
@@ -571,15 +579,22 @@ namespace Stabby.Content
             if (j.String(field, null) != null) errors.Add(where + ": inline \"" + field + "\"; name a materials.json material instead");
         }
 
-        static ObjectDef Object(Json o, List<string> errors, MaterialLibrary materials)
+        static ObjectDef Object(Json o, List<string> errors, MaterialLibrary materials, List<ArchStyle> styles)
         {
             string id = o.String("id", "");
             InlineColor(o, "color", id, errors);
-            var def = new ObjectDef
+            string styleId = o.String("style", null);
+            var style = styleId == null ? null : styles.Find(s => s.Id == styleId);
+            if (styleId != null && o.String("material", null) != null) errors.Add(id + ": give \"material\" or \"style\", not both");
+            var def = new ObjectDef { Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""), Variants = o.Int("variants", 1), Style = styleId };
+            if (styleId == null)
             {
-                Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""),
-                Color = Material(o, "material", id, materials, errors), Glow = Glow(o, "material", materials), GlowPattern = GlowPattern(o, "material", materials), Variants = o.Int("variants", 1),
-            };
+                def.Color = Material(o, "material", id, materials, errors);
+                def.Glow = Glow(o, "material", materials);
+                def.GlowPattern = GlowPattern(o, "material", materials);
+            }
+            else if (style != null) def.Color = style.StoneColor;
+            int trim = style == null ? 0 : Array.IndexOf(MaterialLibrary.KitNames, style.Trim) + 1;
             var interact = o.Object("interact");
             if (interact != null)
             {
@@ -615,7 +630,7 @@ namespace Stabby.Content
                     Solid = ObjectLibrary.Tri(p.String("solid", "")), Shadows = ObjectLibrary.Tri(p.String("shadows", "")),
                     HasColor = color, Color = color ? Material(p, "material", id + ".parts." + pid, materials, errors) : def.Color,
                     Glow = color ? Glow(p, "material", materials) : def.Glow, GlowPattern = color ? GlowPattern(p, "material", materials) : def.GlowPattern,
-                    HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0,
+                    HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0, Trim = trim,
                 };
                 string ends = p.String("ends", "auto");
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, ends);
