@@ -442,7 +442,7 @@ namespace Stabby.World
                     Amp(errors, n + ".viscosity", w.Viscosity);
                     Amp(errors, n + ".bubbles", w.Bubbles);
                     Amp(errors, n + ".film", w.Film);
-                    Amp(errors, n + ".emission", w.Emission);
+                    if (!(w.Emission >= 0 && w.Emission <= 8)) errors.Add($"{n}.emission {w.Emission} outside 0..8");
                     Amp(errors, n + ".roughness", w.Roughness);
                     Amp(errors, n + ".fall.sheetOpacity", w.SheetOpacity);
                     Amp(errors, n + ".fall.froth", w.Froth);
