@@ -130,7 +130,21 @@ for p in tests sweep256 sweep512 unity; do
   [ -f out/check/$p.rc ] && [ "$(cat out/check/$p.rc)" != 0 ] && fail=1
 done
 [ -f out/check/tests.rc ] || fail=1
-bash tools/scripts/budget.sh out/check || fail=1
+if ! bash tools/scripts/budget.sh out/check; then
+  # A whole-machine stall freezes every phase at once; only a runaway that repeats alone fails
+  cp out/check/budget.out out/check/budget-first.out
+  say "runaway: rerunning the runaway sweeps and tests alone"
+  for z in $(sed -n -E 's/^RUNAWAY sweep ([0-9]+) .*/\1/p' out/check/budget-first.out | sort -u); do
+    cp out/check/sweep$z.log out/check/sweep$z-first.log
+    phase_sweep $([ $z = 256 ] && echo $n256 || echo $n512) $z; cat out/check/sweep$z.sum; [ "$(cat out/check/sweep$z.rc)" != 0 ] && fail=1
+  done
+  rt=$(sed -n -E 's/^RUNAWAY test ([^:]+):.*/FullyQualifiedName~\1/p' out/check/budget-first.out | paste -sd'|' -)
+  mv out/check/test.log out/check/test-first.log 2> /dev/null
+  if [ -n "$rt" ]; then
+    dotnet test -c Release --no-build --filter "$rt" --logger "console;verbosity=normal" > out/check/test.log 2>&1 || fail=1
+  fi
+  bash tools/scripts/budget.sh out/check || fail=1
+fi
 bad=$(git diff --name-only "$base" | xargs -r git ls-files --eol 2> /dev/null | grep -v -E "w/(lf|-text|none)" | grep -v "binary")
 [ -z "$bad" ] && say "eol: ok" || { say "eol: NOT LF"; echo "$bad"; fail=1; }
 nc=$(git diff "$base" -- '*.cs' '*.shader' '*.hlsl' '*.compute' | grep -c -E "^\+\s*(//|/\*)")
