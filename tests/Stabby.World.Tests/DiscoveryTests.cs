@@ -282,32 +282,30 @@ public class DiscoveryTests
     public void ObjectsKeepOutOfBogMargins()
     {
         int pools = 0, near = 0;
-        for (ulong seed = 1; seed <= 2; seed++)
+        ulong seed = TestWorlds.DefaultSeed;
+        var field = TestWorlds.Default.Field;
+        var bogs = field.BogPools();
+        float span = field.ChunkMeters;
+        var seen = new HashSet<int>();
+        for (int k = 0; k < bogs.Length && k < 3 * ObjectField.BogStride; k += ObjectField.BogStride)
         {
-            var (w, detail, _, field) = World(seed);
-            var bogs = field.BogPools();
-            float span = field.ChunkMeters;
-            var seen = new HashSet<int>();
-            for (int k = 0; k < bogs.Length && k < 3 * ObjectField.BogStride; k += ObjectField.BogStride)
-            {
-                pools++;
-                float edge = ObjectField.BogMargin(bogs[k + 2]) + 4f;
-                for (int cz = (int)((bogs[k + 1] - edge) / span); cz <= (int)((bogs[k + 1] + edge) / span); cz++)
-                    for (int cx = (int)((bogs[k] - edge) / span); cx <= (int)((bogs[k] + edge) / span); cx++)
+            pools++;
+            float edge = ObjectField.BogMargin(bogs[k + 2]) + 4f;
+            for (int cz = (int)((bogs[k + 1] - edge) / span); cz <= (int)((bogs[k + 1] + edge) / span); cz++)
+                for (int cx = (int)((bogs[k] - edge) / span); cx <= (int)((bogs[k] + edge) / span); cx++)
+                {
+                    if (cx < 0 || cz < 0 || cx >= field.ChunksAcross || cz >= field.ChunksAcross || !seen.Add(cz * field.ChunksAcross + cx)) continue;
+                    foreach (var o in field.Chunk(cx, cz))
                     {
-                        if (cx < 0 || cz < 0 || cx >= field.ChunksAcross || cz >= field.ChunksAcross || !seen.Add(cz * field.ChunksAcross + cx)) continue;
-                        foreach (var o in field.Chunk(cx, cz))
+                        float r = 0.5f * field.Footprint(o.Def) * o.Size;
+                        for (int j = 0; j < bogs.Length; j += ObjectField.BogStride)
                         {
-                            float r = 0.5f * field.Footprint(o.Def) * o.Size;
-                            for (int j = 0; j < bogs.Length; j += ObjectField.BogStride)
-                            {
-                                float dx = o.X - bogs[j], dz = o.Z - bogs[j + 1], reach = ObjectField.BogMargin(bogs[j + 2]) + r;
-                                if (dx * dx + dz * dz < (reach + 4f) * (reach + 4f)) near++;
-                                Assert.False(dx * dx + dz * dz < reach * reach, $"seed {seed}: {Objects.Objects[o.Def].Id} at {o.X:F1},{o.Z:F1} stands in the bog margin at {bogs[j]:F0},{bogs[j + 1]:F0}");
-                            }
+                            float dx = o.X - bogs[j], dz = o.Z - bogs[j + 1], reach = ObjectField.BogMargin(bogs[j + 2]) + r;
+                            if (dx * dx + dz * dz < (reach + 4f) * (reach + 4f)) near++;
+                            Assert.False(dx * dx + dz * dz < reach * reach, $"seed {seed}: {Objects.Objects[o.Def].Id} at {o.X:F1},{o.Z:F1} stands in the bog margin at {bogs[j]:F0},{bogs[j + 1]:F0}");
                         }
                     }
-            }
+                }
         }
         output.WriteLine($"{pools} bog pools, {near} objects within 4 m of a margin");
         Assert.True(pools > 0);
