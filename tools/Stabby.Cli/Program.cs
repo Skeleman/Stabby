@@ -160,7 +160,7 @@ int Sweep()
         if (unknown.Length > 0) { Console.WriteLine($"unknown check groups: {string.Join(",", unknown)} (known: {string.Join(",", WorldChecks.Groups)})"); return 2; }
         groups.Add("core");
     }
-    var groupTimes = new System.Collections.Concurrent.ConcurrentBag<(string, double)>();
+    var groupTimes = new System.Collections.Concurrent.ConcurrentBag<(string, double, ulong)>();
     var lowWhile = Opt("low-while", "");
     if (lowWhile != "" && File.Exists(lowWhile))
     {
@@ -192,7 +192,7 @@ int Sweep()
         if (!checks) return;
         var spent = new Dictionary<string, double>();
         var found = WorldChecks.Run(w, groups, spent, creatures);
-        foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value));
+        foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value, c.Seed));
         foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
         perSeed[c.Seed] = found;
         Mark("checks");
@@ -210,8 +210,8 @@ int Sweep()
     if (checks) Console.WriteLine($"  check groups: {(groups == null ? "all" : string.Join(",", WorldChecks.Groups.Where(groups.Contains)))}");
     foreach (var g in groupTimes.GroupBy(s => s.Item1).OrderBy(g => g.Key == "features" ? -1 : Array.IndexOf(WorldChecks.Groups, g.Key)))
     {
-        var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();
-        Console.WriteLine($"    {g.Key,-10} median {ms[ms.Length / 2],8:F1} ms, max {ms[^1],8:F1} ms");
+        var ms = g.OrderBy(s => s.Item2).ToArray();
+        Console.WriteLine($"    {g.Key,-10} median {ms[ms.Length / 2].Item2,8:F1} ms, max {ms[^1].Item2,8:F1} ms (seed {ms[^1].Item3})");
     }
     foreach (var f in failures.OrderBy(x => x).Take(30)) Console.WriteLine("  " + f);
     var list = Opt("violations", "");
