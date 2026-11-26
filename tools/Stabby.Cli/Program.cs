@@ -171,7 +171,7 @@ int Sweep()
             Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Normal;
         });
     }
-    Parallel.For(0, count, par, k =>
+    Task.Run(() => Parallel.For(0, count, par, k =>
     {
         var c = Config(from + (ulong)k, size);
         var sw = Stopwatch.StartNew();
@@ -203,7 +203,7 @@ int Sweep()
         perSeed[c.Seed] = found;
         Mark("checks");
         checkTimes.Add(sw.ElapsedMilliseconds - genMs);
-    });
+    })).Wait();
     var t = times.OrderBy(x => x.Item1).ToArray();
     var ct = checkTimes.OrderBy(x => x).ToArray();
     string checkPart = ct.Length > 0 ? $", checks median {ct[ct.Length / 2]} ms, max {ct[^1]} ms" : "";
