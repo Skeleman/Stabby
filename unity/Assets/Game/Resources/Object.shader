@@ -567,7 +567,7 @@ Shader "Stabby/Object"
                 float g11 = dot(qa, qa), g12 = dot(qa, qb), g22 = dot(qb, qb);
                 float gy = (dyf.x * dyf.x * g22 - 2 * dyf.x * dyf.y * g12 + dyf.y * dyf.y * g11) / max(g11 * g22 - g12 * g12, 1e-20);
                 float4 th = float4(yf, gy < 1e-6 ? 0.05 : clamp(rsqrt(gy), 0.01, 3), max(length(float2(ddx(suq), ddy(suq))), 1e-5), i.seed);
-                [branch] if (base.a > 0.325 && base.a < 0.5)
+                [branch] if (base.a > 0.475 && base.a < 0.5)
                 {
                     float3 q = wp - i.origin;
                     float bf = OrgRungW(0, fp);
@@ -577,19 +577,52 @@ Shader "Stabby/Object"
                     n = normalize(n - g);
                     albedo = base.rgb * (0.85 + 0.12 * vein.x + 0.05 * bf * fine.x);
                     tmRough = 0.2 * LookRough();
-                    iceWrap = (base.a - 0.35) / 0.1;
+                    iceWrap = (base.a - 0.48) / 0.015;
                 }
                 else if (base.a > 0.025 && base.a < 0.5)
                 {
-                    float3 q = wp - i.origin;
-                    float bf = OrgRungW(0, fp);
-                    float4 lump = OrgNoise3(q * 1.3 + i.seed * 17.1, int3(0, 0, 0)), nub = OrgRP3(q, OrgF(0), 3.7, 0);
-                    float3 g = 0.12 * lump.yzw + 0.06 * bf * nub.yzw;
-                    g -= n * dot(g, n);
-                    n = normalize(n - g);
-                    albedo = base.rgb * (0.8 + 0.25 * lump.x + 0.1 * bf * nub.x);
-                    tmRough = 0.35 * LookRough();
-                    emberGlow = base.rgb * ((base.a - 0.05) / 0.25) * (0.06 + 0.03 * lump.x);
+                    float3 q = wp - i.origin, v = normalize(_WorldSpaceCameraPos - wp);
+                    bool cap = base.a > 0.26;
+                    float glow = (base.a - 0.05 - (cap ? 0.22 : 0)) / 0.2;
+                    float4 lump = OrgNoise3(q * 1.3 + i.seed * 17.1);
+                    [branch] if (cap)
+                    {
+                        float2 cp = (q.xz + i.seed * 31.7) * 6.5, cf = floor(cp), rel = 0;
+                        float best = 9;
+                        [unroll] for (int y = -1; y <= 1; y++)
+                        [unroll] for (int x = -1; x <= 1; x++)
+                        {
+                            int2 c = int2(cf) + int2(x, y);
+                            float2 d = float2(c) + float2(OrgHash(c), OrgHash(c + int2(17, 5))) - cp;
+                            float k = length(d) / (0.24 + 0.3 * OrgHash(c + int2(3, 29)));
+                            if (k < best) { best = k; rel = d; }
+                        }
+                        float w = OrgFade(6.5, fp), up = smoothstep(-0.1, 0.5, n.y);
+                        float capM = lerp(0.4, smoothstep(1, 0.86, best), w) * up, tip = lerp(0.45, saturate(1 - best * best), w);
+                        float gill = smoothstep(0.62, 0.95, best) * (0.5 + 0.5 * sin(atan2(rel.y, rel.x) * 22)) * w;
+                        float spot = smoothstep(0.5, 0.72, OrgNoise3(q * 26 + i.seed * 7.3).x) * OrgFade(26, fp);
+                        float3 g = 0.1 * lump.yzw;
+                        g.xz += 0.9 * w * up * smoothstep(1, 0.5, best) * rel / max(length(rel), 1e-4) * saturate(best);
+                        g -= n * dot(g, n);
+                        n = normalize(n - g);
+                        albedo = lerp(lerp(base.rgb, float3(0.05, 0.045, 0.04), 0.75), base.rgb, capM) * (0.85 + 0.2 * lump.x);
+                        tmRough = 0.5 * LookRough();
+                        emberGlow = base.rgb * glow * (0.03 + capM * (0.3 + 1.5 * tip * tip + 0.5 * gill + 0.8 * spot)) + glow * capM * 0.3 * tip * tip * tip * tip;
+                    }
+                    else
+                    {
+                        int3 fc = int3(floor(q * 6 + i.seed * 13.3));
+                        float3 tilt = float3(OrgHash(fc), OrgHash(fc + int3(11, 3, 7)), OrgHash(fc + int3(5, 19, 2))) - 0.5;
+                        float3 g = 0.16 * OrgFade(6, fp) * tilt + 0.07 * lump.yzw;
+                        g -= n * dot(g, n);
+                        n = normalize(n - g);
+                        float rim = pow(1 - saturate(abs(dot(n, v))), 2.5), ht = saturate(q.y / 1.8), tipT = ht * ht;
+                        float inner = 0.65 + 0.35 * OrgNoise3(q * 3.1 + i.seed * 5.9).x;
+                        float3 col = lerp(base.rgb, 0.5 * base.rgb + float3(0.42, 0.4, 0.55), 0.55 * tipT);
+                        albedo = base.rgb * (0.32 + 0.08 * lump.x);
+                        tmRough = 0.12;
+                        emberGlow = col * glow * (0.2 + 1.8 * rim + 1.2 * tipT) * inner;
+                    }
                 }
                 else if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
                 else if (base.a < 0.5)

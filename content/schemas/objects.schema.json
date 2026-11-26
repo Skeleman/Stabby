@@ -173,6 +173,7 @@
               "flicker": { "type": "number", "minimum": 0, "maximum": 1 },
               "flickerHz": { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
               "liftM": { "type": "number", "minimum": 0, "maximum": 20 },
+              "coneDeg": { "type": "number", "minimum": 0, "maximum": 150 },
               "daylight": { "type": "boolean" },
               "core": { "type": "boolean" }
             }

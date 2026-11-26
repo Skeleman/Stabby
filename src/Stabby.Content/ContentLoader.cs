@@ -255,7 +255,7 @@ namespace Stabby.Content
             lib.Strata = strata;
             foreach (var m in root.Objects("materials"))
             {
-                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0), Translucency = m.Float("translucency", 0) });
+                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0), Translucency = m.Float("translucency", 0), GlowPattern = Array.IndexOf(LibraryMaterial.GlowPatterns, m.String("glowPattern", "facet")) });
                 m.End();
             }
             var kit = root.Object("kit");
@@ -565,6 +565,8 @@ namespace Stabby.Content
         static float Glow(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.Glow ?? 0f;
         static float Translucency(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.Translucency ?? 0f;
 
+        static int GlowPattern(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.GlowPattern ?? 0;
+
         static void InlineColor(Json j, string field, string where, List<string> errors)
         {
             if (j.String(field, null) != null) errors.Add(where + ": inline \"" + field + "\"; name a materials.json material instead");
@@ -577,7 +579,7 @@ namespace Stabby.Content
             var def = new ObjectDef
             {
                 Id = id, Name = o.String("name", ""), Kind = o.String("kind", ""),
-                Color = Material(o, "material", id, materials, errors), Glow = Glow(o, "material", materials), Translucency = Translucency(o, "material", materials), Variants = o.Int("variants", 1),
+                Color = Material(o, "material", id, materials, errors), Glow = Glow(o, "material", materials), Translucency = Translucency(o, "material", materials), GlowPattern = GlowPattern(o, "material", materials), Variants = o.Int("variants", 1),
             };
             var interact = o.Object("interact");
             if (interact != null)
@@ -593,7 +595,7 @@ namespace Stabby.Content
                 {
                     Category = light.String("category", ""), Color = Material(light, "material", id + ".light", materials, errors),
                     Intensity = light.Float("intensity", 0), RangeM = light.Float("radiusM", 0), Importance = light.Float("importance", 0),
-                    Flicker = light.Float("flicker", 0), FlickerHz = light.Float("flickerHz", 0), LiftM = light.Float("liftM", 0),
+                    Flicker = light.Float("flicker", 0), FlickerHz = light.Float("flickerHz", 0), LiftM = light.Float("liftM", 0), ConeDeg = light.Float("coneDeg", 0),
                     Daylight = light.Bool("daylight", false), Core = light.Bool("core", true),
                 };
                 light.End();
@@ -613,7 +615,7 @@ namespace Stabby.Content
                     Id = pid, Shape = ObjectLibrary.ShapeOf(p.String("shape", "")),
                     Solid = ObjectLibrary.Tri(p.String("solid", "")), Shadows = ObjectLibrary.Tri(p.String("shadows", "")),
                     HasColor = color, Color = color ? Material(p, "material", id + ".parts." + pid, materials, errors) : def.Color,
-                    Glow = color ? Glow(p, "material", materials) : def.Glow,
+                    Glow = color ? Glow(p, "material", materials) : def.Glow, GlowPattern = color ? GlowPattern(p, "material", materials) : def.GlowPattern,
                     Translucency = color ? Translucency(p, "material", materials) : def.Translucency,
                     HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0,
                 };

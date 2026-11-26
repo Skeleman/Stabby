@@ -65,6 +65,14 @@ namespace Stabby.Game
                 var l = Take(i);
                 l.transform.position = e.Position;
                 l.color = new Color(e.Color.x, e.Color.y, e.Color.z);
+                var type = e.ConeDeg > 0f ? LightType.Spot : LightType.Point;
+                if (l.type != type) l.type = type;
+                if (type == LightType.Spot)
+                {
+                    l.spotAngle = e.ConeDeg;
+                    l.innerSpotAngle = e.ConeDeg * 0.4f;
+                    l.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                }
                 l.range = e.RangeM;
                 l.intensity = e.Intensity * e.Gain(r.Clock) * s.RealWeight;
                 l.shadows = s.Shadow > 0f ? LightShadows.Soft : LightShadows.None;

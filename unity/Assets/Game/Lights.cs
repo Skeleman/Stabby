@@ -11,7 +11,7 @@ namespace Stabby.Game
     public struct LightEmitter : IComponentData
     {
         public float3 Position, Color;
-        public float RangeM, Intensity, Importance, Flicker, FlickerHz, Phase;
+        public float RangeM, Intensity, Importance, Flicker, FlickerHz, Phase, ConeDeg;
         public bool Sky, Coreless;
         public Detail.Thresholds Thresholds;
         public LightBudget.Slot Slot;
@@ -73,7 +73,7 @@ namespace Stabby.Game
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial struct LightBudgetSystem : ISystem
     {
-        public const float CoreM = 0.09f, CoreGain = 2f, HaloShare = 0.18f, HaloGain = 0.06f;
+        public const float CoreM = 0.09f, CoreGain = 2f, HaloShare = 0.18f, HaloGain = 0.06f, BeamShare = 0.5f, BeamGain = 0.004f;
 
         public NativeList<LightEmitter> Shown;
         public NativeList<LightGlow> ShownGlows;
@@ -317,7 +317,13 @@ namespace Stabby.Game
                         Glows.AddNoResize(new LightGlow { PosSize = new float4(e.Position, CoreM), Color = new float4(e.Color, CoreGain * intensity) });
                         r.Cores++;
                     }
-                    if (s.Glow > 0f)
+                    float beam = math.max(s.RealWeight, s.GlowWeight) * Daylight;
+                    if (e.Sky && beam > 0f)
+                    {
+                        Glows.AddNoResize(new LightGlow { PosSize = new float4(e.Position, -e.RangeM * BeamShare), Color = new float4(e.Color, BeamGain * intensity * beam) });
+                        if (s.Glow > 0f) r.Glows++;
+                    }
+                    else if (!e.Sky && s.Glow > 0f)
                     {
                         Glows.AddNoResize(new LightGlow { PosSize = new float4(e.Position, e.RangeM * HaloShare), Color = new float4(HaloTint(e.Color), HaloGain * intensity * s.GlowWeight) });
                         r.Glows++;
