@@ -88,7 +88,7 @@ namespace Stabby.World
             float s = Features.LatticeStepM, cell = Structures.KitCellM, chance = pl.PerHundredM * cell / 100f;
             var mine = new List<FeatureEdit>();
             foreach (int e in caveCarves)
-                if (edits[e].Shape == FeatureEdit.Mine && !Mines.Vertical(edits[e])) mine.Add(edits[e]);
+                if (solid[e].Shape == FeatureEdit.Mine && !Mines.Vertical(solid[e])) mine.Add(solid[e]);
             foreach (var c in mine)
             {
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;

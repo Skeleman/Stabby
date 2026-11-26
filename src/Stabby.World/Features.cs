@@ -102,9 +102,13 @@ namespace Stabby.World
             return dist < R;
         }
 
-        public const float Fill = 0.35f, RockBand = 6f, RockFade = 3f, DebrisBand = 4.5f, RockRefM = 10f, RockFineM = 2f;
+        public const float Fill = 0.35f, RockBand = 6f, RockFade = 3f, DebrisBand = 4.5f, RockRefM = 10f, RockFineM = 2f, LinkRock = 0.3f;
 
         public float HoleR => R - 1.25f * R * Blend;
+
+        float FloorScale => Math.Min(1f, HoleR / RockRefM);
+
+        float RockScale => Link ? Math.Max(LinkRock, FloorScale) : FloorScale;
 
         public float FloorHalf
         {
@@ -121,7 +125,7 @@ namespace Stabby.World
         {
             lo = hi = 0f;
             if (!CaveCarve) return;
-            float h = HoleR, k = Math.Min(1f, h / RockRefM);
+            float h = HoleR, k = RockScale;
             lo = 2f * Fill * h + k * ReliefLo;
             hi = k * ReliefHi;
         }
@@ -134,10 +138,11 @@ namespace Stabby.World
             bool cell = Shape == CrystalCell;
             float wall = (cell ? Facets(qx, sy, qz) : (float)Math.Sqrt(qx * qx + sy * sy + qz * qz)) - Fill * hole;
             if (N > 0f) wall += N * Lump(x, y, z);
-            float k = Math.Min(1f, hole / RockRefM), band = Math.Abs(wall - hole);
+            float k = Link ? FloorScale + (RockScale - FloorScale) * Math.Clamp((qy + 0.5f * hole) / (0.5f * hole), 0f, 1f) : RockScale, band = Math.Abs(wall - hole);
             if (band < RockBand * k) wall += (cell ? CellRelief : Shape == Mine ? MineRelief : 1f) * k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
             floor = -qy;
-            if (Math.Abs(floor - hole) < DebrisBand * k) floor += k * Debris(x, z);
+            float d = FloorScale;
+            if (Math.Abs(floor - hole) < DebrisBand * d) floor += d * Debris(x, z);
             return Math.Max(wall, floor);
         }
 

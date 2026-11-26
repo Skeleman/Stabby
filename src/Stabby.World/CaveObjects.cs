@@ -229,7 +229,7 @@ namespace Stabby.World
             if (buf == null || buf.Length < to - from) caveRock = buf = new FeatureEdit[Math.Max(64, to - from)];
             int count = 0;
             for (int k = from; k < to; k++)
-                if (blockItems[k] < 0) buf[count++] = edits[~blockItems[k]];
+                if (blockItems[k] < 0) buf[count++] = solid[~blockItems[k]];
             return new EditSlice { Items = buf, N = count };
         }
 
@@ -294,8 +294,8 @@ namespace Stabby.World
             var seenZ = caveSeenZ ?? (caveSeenZ = new List<float>());
             foreach (int e in caveCarves)
             {
-                var c = edits[e];
-                if (c.Shape == FeatureEdit.Mine) continue;
+                var c = solid[e];
+                if (c.Shape == FeatureEdit.Mine || (c.Link && kind != CaveStalactite && kind != CaveRubble)) continue;
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
                 if (pl.CaveIce ? !c.Ice : c.Ice && (kind == CaveStalactite || kind == CaveStalagmite)) continue;
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -454,7 +454,7 @@ namespace Stabby.World
             float s = Features.LatticeStepM, foot = footprint[d];
             foreach (int e in caveCarves)
             {
-                var c = edits[e];
+                var c = solid[e];
                 if (c.Shape != FeatureEdit.CrystalCell) continue;
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
                 float ex = c.Bx - c.Ax, ey = c.By - c.Ay, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
