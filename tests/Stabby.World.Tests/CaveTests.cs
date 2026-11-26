@@ -519,13 +519,26 @@ public class CaveTests
     [Fact]
     public void CaveObjectsOffTheirRockLeaveNoStamp()
     {
-        foreach (int kind in new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite, ObjectField.CaveColumn })
+        var kinds = new[] { ObjectField.CaveStalactite, ObjectField.CaveStalagmite, ObjectField.CaveColumn };
+        var hits = new Dictionary<int, (Sample, ObjectInstance)>();
+        for (ulong seed = 1; seed <= 4 && hits.Count < kinds.Length; seed++)
         {
-            var (s, _, o) = FindCave(kind);
-            var lib = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-            lib.Objects[o.Def].Parts[0].OffsetY = 1.5f;
-            var moved = new ObjectField(s.W, s.Detail, s.Edits, lib);
-            Assert.EndsWith(kind == ObjectField.CaveStalactite ? "leaves no ceiling contact stamp" : "leaves no contact stamp", moved.ContactFault(o, new List<ObjectColumn>()) ?? "");
+            var s = At(seed);
+            foreach (var o in CaveObjects(s, new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects)))
+            {
+                int k = s.W.Objects.Objects[o.Def].Placement.Cave;
+                if (Array.IndexOf(kinds, k) >= 0 && !hits.ContainsKey(k)) hits[k] = (s, o);
+            }
+        }
+        var lib = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
+        foreach (var (_, o) in hits.Values) lib.Objects[o.Def].Parts[0].OffsetY = 1.5f;
+        var moved = new Dictionary<Sample, ObjectField>();
+        foreach (int kind in kinds)
+        {
+            if (!hits.TryGetValue(kind, out var hit)) throw new Xunit.Sdk.XunitException("no cave object of kind " + kind);
+            var (s, o) = hit;
+            if (!moved.TryGetValue(s, out var field)) moved[s] = field = new ObjectField(s.W, s.Detail, s.Edits, lib);
+            Assert.EndsWith(kind == ObjectField.CaveStalactite ? "leaves no ceiling contact stamp" : "leaves no contact stamp", field.ContactFault(o, new List<ObjectColumn>()) ?? "");
         }
     }
 
