@@ -159,6 +159,8 @@ namespace Stabby.World
         static void Room(StructureLayout l, ulong key, in Frame f, int trim, int open)
         {
             var rng = Rng.Stream(key, "dungeon-room");
+            var torch = Rng.Stream(key, "dungeon-torch");
+            int first = torch.NextFloat() < TorchRoomShare ? torch.Range(0, 8) : -1, second = first >= 0 && torch.NextFloat() < 0.4f ? (first + torch.Range(3, 6)) & 7 : -1;
             float c = 0.5f * RoomM, i = c - KitWallM, top = KitRoomHeightM + KitSlabM, p = 0.5f * KitCellM, h = 0.5f * PortalWidthM;
             Flags(l, key, ref rng, f, -i, i, -i, i);
             for (int d = 0; d < 4; d++)
@@ -185,7 +187,10 @@ namespace Stabby.World
                 for (int s2 = -1; s2 <= 1; s2 += 2)
                 {
                     Plinth(l, key, ref rng, side, i, s2 < 0 ? -i : gap, s2 < 0 ? -gap : i);
-                    Sconce(l, key, side, i, s2 * rng.Range(2.4f, 2.8f), trim);
+                    float z = s2 * rng.Range(2.4f, 2.8f);
+                    Sconce(l, key, side, i, z, trim);
+                    int n = 2 * d + (s2 + 1) / 2;
+                    if (n == first || n == second) WallTorch(l, key, side.Child(i - 0.3f, 2.0f, z));
                 }
             }
             int strips = 4;
@@ -224,6 +229,19 @@ namespace Stabby.World
             Box(l, key, side, i - 0.02f, 1.8f, z, 0.04f, 0.32f, 0.14f, trim, GV, 0, 0);
             Box(l, key, side, i - 0.17f, 2.0f, z, 0.3f, 0.04f, 0.04f, trim, GX, 0, 0);
             Box(l, key, side, i - 0.3f, 2.04f, z, 0.14f, 0.1f, 0.14f, trim, GV, 0, 0);
+        }
+
+        const float TorchRoomShare = 0.35f;
+
+        static void WallTorch(StructureLayout l, ulong key, in Frame f)
+        {
+            var rng = Rng.Stream(key, "wall-torch");
+            float h = rng.Range(0.44f, 0.54f), w = rng.Range(0.04f, 0.05f);
+            int turn = rng.Range(0, 16);
+            Box(l, key, f, 0, 0, 0, w, h, w, Timber, GV, 0, Tiers - 1, Cos16(turn), Sin16(turn));
+            Box(l, key, f, 0, h - 0.2f, 0, w + 0.03f, 0.06f, w + 0.03f, Iron, GV, 0, 0, Cos16(turn), Sin16(turn));
+            Box(l, key, f, 0, h - 0.16f, 0, w + 0.02f, 0.12f, w + 0.02f, Ember, GV, 0, 1, Cos16(turn + 2), Sin16(turn + 2));
+            l.Lights.Add(new StructureLight { X = f.X, Y = f.Y + f.U * (h + 0.05f), Z = f.Z, Shape = ObjectPart.WallTorch });
         }
 
         static void Stairs(StructureLayout l, ulong key, in Frame f)
