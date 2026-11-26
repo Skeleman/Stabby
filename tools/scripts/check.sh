@@ -71,7 +71,7 @@ if [ $full = 1 ] || [ $merge = 1 ]; then tf=""
 elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"; explicit=1
 else
   terms="Lint$(impact)"
-  { [ $game = 1 ] || [ $unity = 1 ]; } && terms="$terms|ChunkZip|RuntimeParity"
+  { [ $game = 1 ] || [ $unity = 1 ]; } && terms="$terms|ChunkZip|RuntimeParity|PoolSize"
   tf=$(tr '|' '\n' <<< "$terms" | grep -v '^$' | sort -u | sed 's/^/FullyQualifiedName~/' | paste -sd'|' -)
 fi
 parity=0

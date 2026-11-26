@@ -1086,6 +1086,7 @@ namespace Stabby.World
             var pools = CheckCaveObjects(w, detail, edits, e);
             var brooks = CaveBrooks.Build(w, detail, edits, caves);
             CheckCaveBrooks(w, caves, edits, brooks, pools, e);
+            CheckCaveFalls(edits, brooks, pools, e);
             CheckCaveBrookBanks(w, detail, edits, caves, brooks, e);
         }
 
@@ -1216,6 +1217,7 @@ namespace Stabby.World
                         if (p.Kind == ObjectField.CavePool && (ex - p.X) * (ex - p.X) + (ez - p.Z) * (ez - p.Z) <= (p.Reach + StreamEndM) * (p.Reach + StreamEndM) && ey >= p.Level - StreamPoolM) fed = true;
                     if (!fed) { e.Add(at + $" ends at {ex:F0},{ez:F0} with no cave pool to fill"); return; }
                 }
+                else if (s.End == CaveBrook.Plunge) continue;
                 else if (s.End == CaveBrook.Sink)
                 {
                     if (end.Entrance || CaveBrooks.Lower(w, g, s.Nodes[s.Nodes.Length - 1], s.Nodes, out _) >= 0) { e.Add(at + " sinks where it could still run downhill"); return; }
@@ -1227,6 +1229,58 @@ namespace Stabby.World
                 }
                 else { e.Add(at + " ends at no spring, pool or sink"); return; }
             }
+        }
+
+        public const float FallMinM = 3f, FallAirM = 0.1f, FallRimOutM = 0.5f, FallBasinM = 1f, FallWaterM = 0.5f;
+
+        public static void CheckCaveFalls(FeatureEdit[] edits, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
+        {
+            const float Diag = 0.70710678f;
+            float[] ring = { 1f, 0f, Diag, Diag, 0f, 1f, -Diag, Diag, -1f, 0f, -Diag, -Diag, 0f, -1f, Diag, -Diag };
+            foreach (var s in streams)
+            {
+                if (s.End != CaveBrook.Plunge) continue;
+                var q = s.Points;
+                int st = CaveBrook.Stride;
+                string at = $"cave fall in graph {s.Graph}";
+                if (s.Fall < 1 || s.Fall >= s.Rows) { e.Add(at + " has no fall row"); return; }
+                int l = (s.Fall - 1) * st, c = s.Fall * st;
+                float lx = q[l], ly = q[l + 1], lz = q[l + 2], cx = q[c], py = q[c + 1], cz = q[c + 2], drop = ly - py;
+                if (drop < FallMinM) { e.Add(at + $" at {lx:F0},{lz:F0} drops only {drop:F1} m"); return; }
+                float dx = cx - lx, dz = cz - lz, d = (float)Math.Sqrt(dx * dx + dz * dz);
+                if (d < 1e-3f) { e.Add(at + " has no fall direction"); return; }
+                dx /= d; dz /= d;
+                float th = Hydrology.FallThrow(drop), fx = lx + dx * th, fz = lz + dz * th;
+                if (!Air(edits, lx, ly + FallAirM, lz) || !Air(edits, lx + 0.7f * dx * th, ly - 0.5f * drop, lz + 0.7f * dz * th) || !Air(edits, fx, py + FallAirM, fz))
+                {
+                    e.Add(at + $" at {lx:F0},{lz:F0} leaves its carve");
+                    return;
+                }
+                bool floor = false;
+                for (float y = py - FallAirM; y >= py - CaveBrooks.PlungeHoleM - FallBasinM && !floor; y -= 0.25f) floor = !Air(edits, fx, y, fz);
+                bool rim = true;
+                for (int k = 0; k < ring.Length && rim; k += 2) rim = !Air(edits, cx + ring[k] * (s.PoolR + FallRimOutM), py - FallAirM, cz + ring[k + 1] * (s.PoolR + FallRimOutM));
+                if (!floor || !rim) { e.Add(at + $" at {lx:F0},{lz:F0} has no pool or basin under it"); return; }
+                if (pools != null && !Watered(pools, fx, fz, py)) { e.Add(at + $" at {lx:F0},{lz:F0} drops into no water"); return; }
+            }
+        }
+
+        static bool Watered(LiquidPool[] pools, float x, float z, float level)
+        {
+            foreach (var p in pools)
+            {
+                if (p.Kind != ObjectField.CavePool || Math.Abs(p.Level - level) > FallWaterM) continue;
+                int i = (int)Math.Round(x / ObjectField.PoolStepM) - p.I0, j = (int)Math.Round(z / ObjectField.PoolStepM) - p.J0;
+                if (i >= 0 && j >= 0 && i < p.Nx && j < p.Nz && p.Wet[j * p.Nx + i]) return true;
+            }
+            return false;
+        }
+
+        static bool Air(FeatureEdit[] edits, float x, float y, float z)
+        {
+            foreach (var x0 in edits)
+                if (x0.Kind == FeatureEdit.Carve && x0.Apply(1f, x, y, z) < 0f) return true;
+            return false;
         }
 
         public const int CaveObjectChunks = 6;
@@ -1429,7 +1483,7 @@ namespace Stabby.World
                     if (!p.Wet[k]) continue;
                     float x = p.NodeX(k % p.Nx), z = p.NodeZ(k / p.Nx), head = p.Level + CavePoolHeadM;
                     if (Walk.Solid(ground, list, s, x, p.Ground[k] - CavePoolSealM, z) < 0) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} drains through its floor at {x:F1},{z:F1}"); return; }
-                    if (Walk.Solid(ground, list, s, x, head, z) >= 0 || !Underground.InChamber(near, x, head, z)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} spills outside its carved chamber at {x:F1},{z:F1}"); return; }
+                    if (Walk.Solid(ground, list, s, x, head, z) >= 0 || !Underground.InChamber(near, x, head, z) && !CaveBrooks.InShaft(near, x, head, z)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} spills outside its carved chamber at {x:F1},{z:F1}"); return; }
                 }
             }
         }

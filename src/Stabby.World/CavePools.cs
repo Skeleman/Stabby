@@ -28,6 +28,12 @@ namespace Stabby.World
                 var p = Pool(CavePool, e.Obsidian ? lava : water, e.Ax, e.Az, Underground.BasinReach(e), Underground.BasinLevel(e), e.Ay - e.H - e.R - Underground.PoolSealM, Underground.BasinTop(e));
                 if (!p.Leaks && p.WetCount > 0 && p.Level - p.Floor >= PoolMinDepthM) list.Add(p);
             }
+            foreach (var e in edits)
+            {
+                if (!CaveBrooks.PlungeShaft(e)) continue;
+                var p = Pool(CavePool, water, e.Bx, e.Bz, CaveBrooks.PlungeHoleM, e.By, e.By - CaveBrooks.PlungeHoleM - Underground.PoolSealM, e.By + Underground.PoolTopM);
+                if (!p.Leaks && p.WetCount > 0 && p.Level - p.Floor >= PoolMinDepthM) list.Add(p);
+            }
             return list.ToArray();
         }
 
