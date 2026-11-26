@@ -57,7 +57,7 @@ namespace Stabby.World
             var f = new ObjectField(w, detail, edits, lib);
             f.discoveries = Discoveries();
             f.bogPools = BogPools();
-            f.roads = Roads(); f.roadStart = roadStart; f.roadItems = roadItems; f.roadSites = roadSites; f.siteCells = siteCells; f.siteList = siteList;
+            f.roads = Roads(); f.roadStart = roadStart; f.roadItems = roadItems; f.roadSites = roadSites; f.siteCells = siteCells; f.siteList = siteList; f.tunnelEdits = tunnelEdits; f.tunnelGraphs = tunnelGraphs;
             f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover;
             return f;
         }
@@ -127,6 +127,7 @@ namespace Stabby.World
             {
                 if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
             }
+            if (pl.Discovery == Overlook && !SeekOverlook(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
             if (pl.Discovery == Dungeon)
             {
@@ -270,7 +271,7 @@ namespace Stabby.World
             int station = 0;
             foreach (var s in segs)
             {
-                if (s.Kind == RoadSegment.Lane) { lx = float.NaN; continue; }
+                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel) { lx = float.NaN; continue; }
                 if (s.X0 != lx || s.Z0 != lz) walked = 0;
                 lx = s.X1; lz = s.Z1;
                 float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
@@ -313,11 +314,11 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Bones ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Bones || BonesFault(o) == null)) break;
+                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != Bones || BonesFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -855,6 +856,7 @@ namespace Stabby.World
 
         public float Fitness(int kind, float x, float z)
         {
+            if (kind == Overlook) return OverlookFit(x, z, out _, out _);
             if (kind == Bones) return BonesFit(x, z);
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
             if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;

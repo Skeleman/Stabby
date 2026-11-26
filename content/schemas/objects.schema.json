@@ -270,6 +270,7 @@
               "chainMax": { "type": "integer", "minimum": 1, "maximum": 24 },
               "chainCorner": { "type": "number", "minimum": 0, "maximum": 1 },
               "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "chainHead": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones"] },
