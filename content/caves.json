@@ -4,6 +4,9 @@
   "crystalChance": 0.12,
   "iceChance": 0.7,
   "iceMaxTempC": 2,
+  "obsidianChance": 0.6,
+  "obsidianMinTempC": 5,
+  "obsidianMaxRainMm": 750,
   "crystalCell": [14, 22],
   "lights": { "chance": 0.3, "most": 3, "skylightChance": 0.8, "skylightDepthM": 80, "skylightRadiusM": 2.5 },
   "classes": [

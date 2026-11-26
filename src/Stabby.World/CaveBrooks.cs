@@ -155,6 +155,7 @@ namespace Stabby.World
         static CaveBrook Trace(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves, int gi, int src)
         {
             var g = caves[gi];
+            if (g.Obsidian) return null;
             var start = g.Nodes[src];
             float rain = w.Climate.PrecipitationMm[CellOf(w, start.X, start.Z)];
             if (rain < MinRainMm) return null;

@@ -884,6 +884,7 @@ namespace Stabby.World
                 CheckMines(w, detail, edits, caves, e);
                 CheckDungeonLinks(w, detail, edits, caves, sites, e);
                 CheckCaveIce(w, edits, caves, e);
+                CheckCaveObsidian(w, edits, caves, e);
                 CheckCaveNormals(w, detail, grid, caves, e);
             }
             if (clock.Start("surface"))
@@ -1007,6 +1008,33 @@ namespace Stabby.World
             }
             foreach (var x in edits)
                 if (x.Ice && (!x.CaveCarve || !iced.Contains(Features.TileOf(x, cm)))) { e.Add($"caves: ice edit at {x.Ax:F0},{x.Az:F0} outside an ice cave"); return; }
+        }
+
+        public static void CheckCaveObsidian(GeneratedWorld w, FeatureEdit[] edits, CaveGraph[] caves, List<string> e)
+        {
+            if (caves == null) return;
+            float cm = w.Config.CellMeters;
+            var hot = new HashSet<int>();
+            foreach (var g in caves)
+            {
+                if (!g.Obsidian) continue;
+                hot.Add(g.Tile);
+                if (g.Ice || g.Crystal || !Underground.Volcanic(w, w.Caves, g)) { e.Add($"caves: obsidian cave on tile {g.Tile} is iced, crystal or outside the hot, dry climate limits"); return; }
+            }
+            var rooms = new List<FeatureEdit>();
+            foreach (var x in edits) if (x.Kind == FeatureEdit.Carve && FeatureEdit.IsRoom(x.Shape)) rooms.Add(x);
+            for (int i = 0; i < edits.Length; i++)
+            {
+                var x = edits[i];
+                if (!x.Obsidian) continue;
+                bool basin = Underground.PoolBasin(rooms, x);
+                if (!(x.CaveCarve || basin) || !hot.Contains(Features.TileOf(x, cm))) { e.Add($"caves: obsidian edit at {x.Ax:F0},{x.Az:F0} outside an obsidian cave"); return; }
+                if (!basin) continue;
+                var near = new List<FeatureEdit>();
+                foreach (var y in edits) if (y.Shape == FeatureEdit.Cave && Features.TileOf(y, cm) == Features.TileOf(x, cm)) near.Add(y);
+                string fault = Underground.LavaFault(near, 0, x.Ax, x.Az, Underground.BasinReach(x));
+                if (fault != null) { e.Add("caves: " + fault); return; }
+            }
         }
 
         public static void CheckCaves(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, List<string> e)
@@ -1364,7 +1392,7 @@ namespace Stabby.World
             float length = 0f;
             foreach (var x in edits)
             {
-                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link) continue;
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link || x.Obsidian) continue;
                 float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz), ex = x.Bx - x.Ax, ez = x.Bz - x.Az;
                 int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
                 if (picked.Contains(c)) length += (float)Math.Sqrt(ex * ex + ez * ez);
@@ -1401,6 +1429,7 @@ namespace Stabby.World
                 if ((perTile[p.Tile] = had + 1) > w.Caves.LightMost) { e.Add($"caves: tile {p.Tile} holds more than {w.Caves.LightMost} natural lights"); return; }
                 var c = edits[p.Edit];
                 if ((p.Kind == ObjectField.CaveSkylight) != (c.Shape == FeatureEdit.Shaft)) { e.Add($"caves: light {i} pairs a skylight with a non-shaft edit or a shaft with another light"); return; }
+                if ((p.Kind == ObjectField.CaveLava) != ObjectField.LavaBasin(c)) { e.Add($"caves: light {i} pairs a lava glow with a non-lava edit or a lava pool with another light"); return; }
                 if (!field.CaveLightAt(i, out var o)) continue;
                 string fault = field.CaveFault(o) ?? CaveLightOverlap(w, field, o);
                 if (fault != null) { e.Add(fault); return; }

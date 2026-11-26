@@ -21,11 +21,11 @@ namespace Stabby.World
                 if (FeatureEdit.IsRoom(solid[k].Shape) && !solid[k].Link) rooms.Add(solid[k]);
             var list = new List<LiquidPool>();
             if (rooms.Count == 0) return list.ToArray();
-            int water = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("water"));
+            int water = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("water")), lava = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("lava"));
             foreach (var e in edits)
             {
                 if (!Underground.PoolBasin(rooms, e)) continue;
-                var p = Pool(CavePool, water, e.Ax, e.Az, Underground.BasinReach(e), Underground.BasinLevel(e), e.Ay - e.H - e.R - Underground.PoolSealM, Underground.BasinTop(e));
+                var p = Pool(CavePool, e.Obsidian ? lava : water, e.Ax, e.Az, Underground.BasinReach(e), Underground.BasinLevel(e), e.Ay - e.H - e.R - Underground.PoolSealM, Underground.BasinTop(e));
                 if (!p.Leaks && p.WetCount > 0 && p.Level - p.Floor >= PoolMinDepthM) list.Add(p);
             }
             foreach (var e in edits)
@@ -36,5 +36,7 @@ namespace Stabby.World
             }
             return list.ToArray();
         }
+
+        public bool LavaPool(LiquidPool p) => p.Kind == CavePool && w.Materials != null && p.Liquid == w.Materials.Liquid("lava");
     }
 }

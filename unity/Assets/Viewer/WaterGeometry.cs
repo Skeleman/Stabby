@@ -334,7 +334,7 @@ namespace Stabby.Viewer
 
         static int LakeOf(Hydrology hy, int i) => hy.LakeId[i] >= 0 || hy.LakeCover == null ? hy.LakeId[i] : hy.LakeCover[i];
 
-        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].SprayAmount > 0);
+        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].Spray != LiquidDef.SprayShimmer && world.Materials.Liquids[liquid].SprayAmount > 0);
 
         static float SprayAmount(GeneratedWorld world, int liquid) => world.Materials == null ? 1 : world.Materials.Liquids[liquid].SprayAmount;
 

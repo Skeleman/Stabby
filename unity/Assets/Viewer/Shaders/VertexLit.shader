@@ -24,7 +24,7 @@ Shader "Stabby/VertexLit"
             #include "LocalLights.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
-            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre, _StabbyIce, _StabbyRoad, _StabbyRut;
+            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre, _StabbyIce, _StabbyRoad, _StabbyRut, _StabbyObsidian;
             float _StabbyStrataPeriod, _StabbyCellMeters, _StabbyCaveDarkOff;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -44,7 +44,7 @@ Shader "Stabby/VertexLit"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; float2 dark : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float peat : TEXCOORD6; float3 sky : TEXCOORD7; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float2 peat : TEXCOORD6; float3 sky : TEXCOORD7; };
 
             Varyings vert(Attributes i)
             {
@@ -63,7 +63,7 @@ Shader "Stabby/VertexLit"
                 float sw = i.strata.w;
                 o.sinter = sw < -1 ? 0 : sw;
                 float pf = frac(i.stitch.w) * 2;
-                o.peat = pf <= 1 ? pf : -saturate((pf - 1.02) / 0.978);
+                o.peat = float2(pf <= 1 ? pf : -saturate((pf - 1.02) / 0.978), ((uint)i.stitch.w & 8192u) != 0 ? 1 : 0);
                 float dk = lerp(i.dark.x, i.dark.y, t);
                 o.sky = float3(1 - dk * (1 - _StabbyCaveDarkOff), dk, sw < -1 ? saturate(-sw - 1) : 0);
                 o.fog = float4(StabbyFogColor(p.positionWS), ComputeFogFactor(p.positionCS.z));
@@ -190,14 +190,14 @@ Shader "Stabby/VertexLit"
                     tmRough = lerp(tmRough, lerp(0.9, _StabbyMudSurface.w, wet), cover);
                     n = normalize(n - grad * cover);
                 }
-                [branch] if (i.peat > 0.01)
+                [branch] if (i.peat.x > 0.01)
                 {
                     float3 q = float3(i.xz.x, h, i.xz.y);
                     float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
                     float4 big = OrgNoise3(q * 0.7 + 2.9, int3(0, 0, 0)), mid = OrgRL3(q, OrgF(0), 6.1, 0), fine = OrgRL3(q, OrgF(2), 4.4, 2);
                     float fm = OrgRungW(0, fp), ff = OrgRungW(2, fp);
-                    float cover = smoothstep(0.35, 0.7, i.peat + 0.2 * big.x + 0.08 * mid.x * fm);
-                    float wet = smoothstep(0.6, 1, i.peat + 0.15 * big.x + 0.06 * mid.x * fm);
+                    float cover = smoothstep(0.35, 0.7, i.peat.x + 0.2 * big.x + 0.08 * mid.x * fm);
+                    float wet = smoothstep(0.6, 1, i.peat.x + 0.15 * big.x + 0.06 * mid.x * fm);
                     float fib = smoothstep(0.3, 0.8, 0.6 * fine.x + 0.5 * mid.x) * ff * (1 - wet);
                     float3 a = lerp(_StabbyPeatWet.rgb, _StabbyPeatDark.rgb, wet * (0.75 + 0.25 * mid.x * fm));
                     a = lerp(a, _StabbyPeatFibre.rgb, 0.55 * fib) * (0.92 + 0.08 * fine.x * ff);
@@ -225,23 +225,26 @@ Shader "Stabby/VertexLit"
                     tmGrass *= 1 - cover;
                     n = normalize(n - grad * cover);
                 }
-                float wrap = 0, ice = 0;
-                [branch] if (i.peat < -0.01)
+                float wrap = 0, ice = 0, glint = 0;
+                [branch] if (i.peat.x < -0.01)
                 {
                     float3 q = float3(i.xz.x, h, i.xz.y);
                     float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
                     float4 big = OrgNoise3(q * float3(0.5, 0.15, 0.5) + 7.3, int3(0, 0, 0)), mid = OrgRL3(q, OrgF(0), 8.3, 0), fine = OrgRL3(q, OrgF(2), 5.9, 2);
                     float fm = OrgRungW(0, fp), ff = OrgRungW(2, fp);
-                    float cover = smoothstep(0.12, 0.5, -i.peat + 0.2 * big.x + 0.06 * mid.x * fm);
-                    float thick = saturate(-i.peat * (0.75 + 0.35 * big.x) + 0.12 * mid.x * fm);
+                    float cover = smoothstep(0.12, 0.5, -i.peat.x + 0.2 * big.x + 0.06 * mid.x * fm);
+                    float thick = saturate(-i.peat.x * (0.75 + 0.35 * big.x) + 0.12 * mid.x * fm);
+                    float glass = i.peat.y;
                     float3 a = lerp(_StabbyIce.rgb * 1.06, _StabbyIce.rgb * float3(0.74, 0.88, 1.0), thick * thick) * (0.95 + 0.04 * mid.x * fm + 0.03 * fine.x * ff);
+                    a = lerp(a, _StabbyObsidian.rgb * (0.8 + 0.3 * big.x + 0.1 * mid.x * fm), glass);
                     float3 grad = 0.06 * big.yzw + 0.04 * mid.yzw * fm + 0.02 * fine.yzw * ff;
                     grad -= n * dot(grad, n);
                     m.albedo = lerp(m.albedo, a, cover);
-                    tmRough = lerp(tmRough, 0.15, cover);
+                    tmRough = lerp(tmRough, lerp(0.15, 0.06, glass), cover);
                     tmGrass *= 1 - cover;
-                    wrap = _StabbyIce.w * cover;
+                    wrap = _StabbyIce.w * cover * (1 - glass);
                     ice = cover;
+                    glint = glass * cover;
                     ao = lerp(ao, 1, 0.85 * cover);
                     n = normalize(n - grad * cover);
                 }
@@ -264,6 +267,7 @@ Shader "Stabby/VertexLit"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, saturate(n.y * 0.5 + 0.5 + wrap));
                 float sky = saturate(i.sky.x);
                 float3 c = (LookColor(m.albedo, 1) * (sky * (l.color * saturate((dot(n, l.direction) + wrap) / (1 + wrap)) + ambient) + LocalLightsWrap(float3(xv.x, h, xv.y), n, i.positionCS, wrap)) + sky * LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
+                [branch] if (glint > 0.01) c += LocalLightsGlint(float3(xv.x, h, xv.y), n, v, 140, i.positionCS).spec * glint * 4;
                 return half4(MixFogColor(c, i.fog.rgb * sky, i.fog.w), 1);
             }
             ENDHLSL

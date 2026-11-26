@@ -109,6 +109,8 @@
 14. Checks scale with the project. Every test and sweep check group has a
     time budget in `tools/scripts/time-budget.txt`; new tests and checks fit
     it, or the change raises it with the reason in the commit message.
+    Feature tests run on `TestWorlds.Default` unless they need another seed
+    or size, and say why.
     Expensive invariants belong in sweep check groups, not per-seed tests.
     Going over budget warns and never blocks a merge; only a runaway (5x
     budget or 10 min) fails.

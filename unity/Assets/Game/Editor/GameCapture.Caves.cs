@@ -154,6 +154,83 @@ namespace Stabby.Game.Editor
             GameStatus.Lines["~caveice"] = string.Join("\n", lines);
         }
 
+        static System.Collections.IEnumerator LavaCaveTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            ClientMapSystem sys = null;
+            Ground ground = default;
+            ObjectColumns cols = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var s = w.GetExistingSystemManaged<ClientMapSystem>();
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (s?.Map == null || q.CalculateEntityCount() != 1) continue;
+                sys = s;
+                ground = q.GetSingleton<Ground>();
+                var oq = w.EntityManager.CreateEntityQuery(typeof(ObjectColumns));
+                if (oq.CalculateEntityCount() == 1) cols = oq.GetSingleton<ObjectColumns>();
+                break;
+            }
+            if (sys == null) { GameStatus.Lines["~cavelava"] = GameStatus.Failure = "cavelava: no map"; yield break; }
+            var caves = ContentFiles.Caves();
+            var full = System.Threading.Tasks.Task.Run(() =>
+            {
+                var g = WorldGenerator.Generate(sys.Map.Config, sys.Defs, sys.Materials);
+                g.Objects = sys.Objects;
+                g.Caves = caves;
+                MapGen.RaiseMound(g);
+                var placed = Features.Place(g, new TerrainDetail(g), out var gs);
+                return (g, placed, gs);
+            });
+            while (!full.IsCompleted) yield return null;
+            if (full.IsFaulted) { GameStatus.Lines["~cavelava"] = GameStatus.Failure = "cavelava: " + full.Exception; yield break; }
+            var (map, edits, graphs) = full.Result;
+            int pick = -1, pools = 0;
+            for (int q = 0; q < edits.Length; q++)
+            {
+                if (!ObjectField.LavaBasin(edits[q])) continue;
+                pools++;
+                if (pick < 0) pick = q;
+            }
+            if (pick < 0) { GameStatus.Lines["~cavelava"] = GameStatus.Failure = $"cavelava: no lava pool in seed {map.Config.Seed}, GV {WorldConfig.GeneratorVersion}"; yield break; }
+            var le = edits[pick];
+            var lc = new Vector3(le.Ax, Underground.BasinLevel(le), le.Az);
+            int tunnel = -1;
+            float near = float.MaxValue;
+            for (int q = 0; q < edits.Length; q++)
+            {
+                var t = edits[q];
+                if (!t.Obsidian || t.Shape != FeatureEdit.Cave || t.Kind != FeatureEdit.Carve) continue;
+                var a = new Vector2(t.Ax, t.Az);
+                var ab = new Vector2(t.Bx, t.Bz) - a;
+                float u = ab.sqrMagnitude > 0.01f ? Mathf.Clamp01(Vector2.Dot(new Vector2(lc.x, lc.z) - a, ab) / ab.sqrMagnitude) : 0f;
+                float d = (a + ab * u - new Vector2(lc.x, lc.z)).magnitude;
+                if (d < near) { near = d; tunnel = q; }
+            }
+            var axis = tunnel >= 0 ? new Vector3(edits[tunnel].Bx - edits[tunnel].Ax, 0, edits[tunnel].Bz - edits[tunnel].Az) : Vector3.forward;
+            axis = axis.sqrMagnitude > 1f ? axis.normalized : Vector3.forward;
+            cam.fieldOfView = 60f;
+            for (var w = ShowHour(CaveShotHour); w.MoveNext();) yield return null;
+            float back = Underground.BasinReach(le) + 2.5f;
+            float gx = lc.x - axis.x * back, gy = lc.y + Underground.PoolDipM + 0.5f, gz = lc.z - axis.z * back;
+            Walk.Step(ground, ground.EditsNear(gx, gz, Walk.Radius), cols, ground.WalkStep, ref gx, ref gy, ref gz, 0, 0, Walk.Reach);
+            var eye = new Vector3(gx, gy + 1.7f, gz);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(lc + axis * 0.5f - eye));
+            double waited = LoadWaitTotal();
+            for (var w = Settle(120); w.MoveNext();) yield return null;
+            var shown = DayNightSystem.Shown;
+            var graph = graphs.FirstOrDefault(g => g.Obsidian && g.Tile == Features.TileAt(le.Ax, le.Az, map.Config.CellMeters));
+            float temp = graph != null ? Underground.EntranceTempC(map, graph) : float.NaN;
+            var lines = new List<string>
+            {
+                $"cavelava: GV {WorldConfig.GeneratorVersion}, seed {map.Config.Seed}, {graphs.Count(g => g.Obsidian)} obsidian graphs of {graphs.Length}, {pools} lava pools, shot pool reach {Underground.BasinReach(le):F1} m at {lc.x:F0},{lc.y:F1},{lc.z:F0}, entrance {temp:F1} C, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}, pinned hour {shown.Hour:F2}, moon phase {shown.Phase:F2}: stream wait {LoadWaitTotal() - waited:F2} s"
+            };
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "caves-lava");
+            GeometryShot(cam, dir, "caves-lava-debug-unlit");
+            GameStatus.Lines["~cavelava"] = string.Join("\n", lines);
+        }
+
         static System.Collections.IEnumerator CavesTour(Camera cam, string dir)
         {
             GameStatus.HoldCamera = true;
