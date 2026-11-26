@@ -125,12 +125,34 @@ public class CreatureTests
     }
 
     static readonly GeneratedWorld PlanWorld = TestWorlds.Default.W;
+    static readonly NearArrays PlanCells = TestWorlds.Default.Detail.Cells;
+    static readonly float[] PlanPools = Pools(TestWorlds.Default);
+
+    static float[] Pools(TestWorlds.Placed p) =>
+        CreaturePlan.Pools(new ObjectField(p.W, p.Detail, p.Edits, TestWorlds.Objects, p.Sites), CaveBrooks.Build(p.W, p.Detail, p.Edits, p.Graphs));
+
+    [Fact]
+    public void SpringAndMudPoolsGetSparseDrinkSpots()
+    {
+        Assert.True(PlanPools.Length > 0, "default world has no spring or mud pool");
+        CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools, out var drinks);
+        var bare = CreaturePlan.Drinks(PlanWorld, PlanCells, Lib, null);
+        int pooled = drinks.Count - bare.Count, pools = PlanPools.Length / CreaturePlan.PoolStride;
+        Assert.InRange(pooled, 1, pools);
+        for (int k = 0; k < drinks.Count; k++)
+        {
+            var s = drinks.Spots[k];
+            if (CreaturePlan.Bank(PlanWorld, s.X, s.Z, s.WaterX, s.WaterZ)) continue;
+            Assert.True(CreaturePlan.AtPool(PlanWorld, PlanCells, PlanPools, s.X, s.Z, s.WaterX, s.WaterZ), "pool drink spot at " + (int)s.X + "," + (int)s.Z + " is not at a pool edge");
+            Assert.InRange(s.WaterX * s.WaterX + s.WaterZ * s.WaterZ, 0.99f, 1.01f);
+        }
+    }
 
     [Fact]
     public void SpawnPlanPassesWorldChecks()
     {
         Assert.Empty(WorldChecks.Creatures(PlanWorld, Lib));
-        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var plan = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
         Assert.NotEmpty(plan);
         var deer = Lib.Body("deer")!;
         foreach (var s in plan) Assert.Equal(CreatureBody.Assemble(Lib.Bodies[s.Body], Lib, s.BodySeed).WalkSpeed, s.WalkSpeed);
@@ -141,7 +163,7 @@ public class CreatureTests
     [Fact]
     public void HerdsFindWaterGrassAndBeds()
     {
-        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var plan = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
         var herds = plan.GroupBy(s => CreaturePlan.HerdOf(s.Id)).Select(g => g.First()).ToList();
         foreach (var body in Enumerable.Range(0, Lib.Bodies.Count))
         {
@@ -191,7 +213,7 @@ public class CreatureTests
     public void EachSpeciesLivesInItsBiomesBelowItsMaxSlope(string id)
     {
         var cells = new TerrainDetail(PlanWorld).Cells;
-        var plan = CreaturePlan.Build(PlanWorld, cells, Lib);
+        var plan = CreaturePlan.Build(PlanWorld, cells, Lib, PlanPools);
         int body = Lib.Bodies.FindIndex(b => b.Id == id);
         var def = Lib.Bodies[body];
         var mine = plan.Where(s => s.Body == body).ToList();
@@ -227,8 +249,8 @@ public class CreatureTests
         var strict = ContentLoader.LoadCreatures(Root, BiomeIds);
         var deer = strict.Body("deer")!;
         deer.MaxSlope = 8;
-        var loose = CreaturePlan.Build(PlanWorld, cells, Lib);
-        var tight = CreaturePlan.Build(PlanWorld, cells, strict);
+        var loose = CreaturePlan.Build(PlanWorld, cells, Lib, PlanPools);
+        var tight = CreaturePlan.Build(PlanWorld, cells, strict, PlanPools);
         Assert.NotEmpty(tight);
         Assert.True(tight.Count < loose.Count, tight.Count + " herd members at 8 degrees, " + loose.Count + " at the content limit");
         float grade = Footing.Grade(deer.MaxSlope), cm = PlanWorld.Config.CellMeters;
@@ -246,15 +268,15 @@ public class CreatureTests
     public void SpawnPlanVariesBySeed()
     {
         var other = TestWorlds.World(6);
-        var a = CreaturePlan.Build(PlanWorld, Lib);
-        var b = CreaturePlan.Build(other, Lib);
+        var a = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
+        var b = CreaturePlan.Build(other, new TerrainDetail(other).Cells, Lib, null);
         Assert.False(a.Count == b.Count && a.Zip(b).All(p => p.First.X == p.Second.X && p.First.BodySeed == p.Second.BodySeed));
     }
 
     [Fact]
     public void HerdsShareOneSeedFromTheirOwnStream()
     {
-        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var plan = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
         var herds = plan.GroupBy(s => CreaturePlan.HerdOf(s.Id)).ToList();
         Assert.Contains(herds, h => h.Count() > 1);
         foreach (var h in herds) Assert.Single(h.Select(s => s.HerdSeed).Distinct());

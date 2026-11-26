@@ -8,9 +8,11 @@ namespace Stabby.World
         public static List<string> Creatures(GeneratedWorld w, CreatureLibrary lib)
         {
             var e = new List<string>();
-            var cells = new TerrainDetail(w).Cells;
-            var a = CreaturePlan.Build(w, cells, lib, out var drinks);
-            var b = CreaturePlan.Build(w, cells, lib, out var again);
+            var detail = new TerrainDetail(w);
+            var cells = detail.Cells;
+            var pools = CreaturePlan.Pools(w, detail);
+            var a = CreaturePlan.Build(w, cells, lib, pools, out var drinks);
+            var b = CreaturePlan.Build(w, cells, lib, pools, out var again);
             if (drinks.Count != again.Count) e.Add("drink spot count differs between runs");
             else
                 for (int i = 0; i < drinks.Count; i++)
@@ -76,7 +78,7 @@ namespace Stabby.World
             }
             FleeStaysAshore(w, lib, a, e);
             RoutesStayAshore(w, cells, lib, a, e);
-            NeedsHold(w, cells, lib, a, e);
+            NeedsHold(w, cells, lib, a, pools, e);
             DrivesStayBounded(lib, a, e);
             DrinkSpotsHold(w, cells, lib, a, drinks, e);
             return e;
@@ -123,7 +125,7 @@ namespace Stabby.World
             if (done.Count >= 4 && moving * 2 < done.Count) e.Add("only " + moving + " of " + done.Count + " creature herds have a grazing route");
         }
 
-        static void NeedsHold(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        static void NeedsHold(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, List<CreatureSpawn> plan, float[] pools, List<string> e)
         {
             var wet = new WorldWet { World = w };
             int n = w.Config.Size;
@@ -149,7 +151,7 @@ namespace Stabby.World
                 if (needs.Can(Drives.Drink))
                 {
                     drinkers++;
-                    if (!CreaturePlan.AtShore(w, cells, def, needs)) e.Add("creature herd " + herd + " drinks away from a walkable lake or river edge at " + (int)needs.DrinkX + "," + (int)needs.DrinkZ);
+                    if (!CreaturePlan.AtShore(w, cells, def, needs, pools)) e.Add("creature herd " + herd + " drinks away from a walkable lake, river or pool edge at " + (int)needs.DrinkX + "," + (int)needs.DrinkZ);
                 }
             }
             if (done.Count >= 8 && drinkers * 10 < done.Count) e.Add("only " + drinkers + " of " + done.Count + " creature herds have water to drink");
@@ -162,6 +164,7 @@ namespace Stabby.World
             foreach (var def in lib.Bodies) top = Math.Max(top, Footing.Grade(def.MaxSlope));
             if (spots.Start == null || spots.Start.Length != across * across + 1 || spots.Start[0] != 0 || spots.Start[across * across] != spots.Count) { e.Add("drink spot site index does not cover the spot list"); return; }
             var keys = new HashSet<long>();
+            var pooled = new List<DrinkSpot>();
             for (int site = 0; site < across * across; site++)
                 for (int k = spots.Start[site]; k < spots.Start[site + 1]; k++)
                 {
@@ -171,10 +174,17 @@ namespace Stabby.World
                     if (w.Sea[c]) e.Add("drink spot on sea" + at);
                     if (CreaturePlan.Wet(w, c)) e.Add("drink spot is not dry" + at);
                     if (c % n / CreaturePlan.SiteCells + c / n / CreaturePlan.SiteCells * across != site) e.Add("drink spot filed under the wrong site" + at);
-                    if (!CreaturePlan.Bank(w, s.X, s.Z, s.WaterX, s.WaterZ)) e.Add("drink spot is not beside drinkable water" + at);
+                    bool bank = CreaturePlan.Bank(w, s.X, s.Z, s.WaterX, s.WaterZ);
+                    if (!bank && !CreaturePlan.AtPool(w, cells, spots.Pools, s.X, s.Z, s.WaterX, s.WaterZ)) e.Add("drink spot is not beside drinkable water" + at);
                     if (!s.Fits(top) || Footing.SlopeSq(cells, s.X, s.Z) != s.Steep) e.Add("drink spot is not walkable" + at);
                     if (!(s.Cost >= 0)) e.Add("drink spot cost below zero" + at);
-                    if (!keys.Add((long)c * 4 + (s.WaterX + 2 * s.WaterZ > 0 ? 1 : 0) * 2 + (s.WaterX != 0 ? 1 : 0))) e.Add("drink spot repeats a bank" + at);
+                    if (bank && !keys.Add((long)c * 4 + (s.WaterX + 2 * s.WaterZ > 0 ? 1 : 0) * 2 + (s.WaterX != 0 ? 1 : 0))) e.Add("drink spot repeats a bank" + at);
+                    if (!bank)
+                    {
+                        foreach (var q in pooled)
+                            if ((q.X - s.X) * (q.X - s.X) + (q.Z - s.Z) * (q.Z - s.Z) < cm * cm) { e.Add("pool drink spots crowd each other" + at); break; }
+                        pooled.Add(s);
+                    }
                 }
             int banks = 0;
             for (int z = 1; z < n - 1; z++)

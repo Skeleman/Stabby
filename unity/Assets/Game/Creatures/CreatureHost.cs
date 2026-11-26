@@ -70,13 +70,19 @@ namespace Stabby.Game
         {
             if (plan == null)
             {
-                var map = World.GetExistingSystemManaged<ServerMapSystem>()?.Map;
-                if (map == null) return;
+                var server = World.GetExistingSystemManaged<ServerMapSystem>();
+                var map = server?.Map;
+                var parts = server?.Parts;
+                if (map == null || parts == null) return;
                 var biomes = defs;
-                plan = Task.Run(() =>
+                var entry = server.Shared;
+                plan = Task.Run(async () =>
                 {
                     var lib = ContentFiles.Creatures(biomes);
-                    var spawns = CreaturePlan.Build(map, lib, out var drinks);
+                    var objects = ContentFiles.Objects(biomes);
+                    System.Func<ObjectField> make = () => new ObjectField(map, parts.Detail, parts.Edits, objects, parts.Discoveries);
+                    var field = await (entry == null ? Task.Run(make) : WorldStore.Objects(entry, make));
+                    var spawns = CreaturePlan.Build(map, parts.Detail.Cells, lib, CreaturePlan.Pools(field, parts.Brooks), out var drinks);
                     return new Built { Spawns = spawns, Drinks = drinks, Lib = lib, Across = CreaturePlan.SitesAcross(map.Config.Size), SiteMeters = CreaturePlan.SiteCells * map.Config.CellMeters, Ground = CreaturePlan.Ground(map) };
                 });
                 return;
