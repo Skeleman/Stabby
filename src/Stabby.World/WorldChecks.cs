@@ -868,7 +868,7 @@ namespace Stabby.World
             if (clock.Start("sites"))
             {
                 if (sites != null) CheckSiteFootprints(w, grid, sites, e);
-                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); }
+                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); CheckRoads(w, grid, field, e); }
             }
             if (clock.Start("objects"))
             {
@@ -1270,7 +1270,7 @@ namespace Stabby.World
             {
                 if (!q.Link) continue;
                 int tile = Features.TileOf(q, cm);
-                if (!q.CaveCarve || !tiles.Contains(tile)) { e.Add($"dungeon links: edit at {q.Ax:F0},{q.Az:F0} is not a carve of a link cave"); return; }
+                if ((!q.CaveCarve && !(q.Kind == FeatureEdit.Add && q.Shape == FeatureEdit.Speleothem)) || !tiles.Contains(tile)) { e.Add($"dungeon links: edit at {q.Ax:F0},{q.Az:F0} is not a carve of a link cave"); return; }
             }
         }
 
@@ -1285,7 +1285,7 @@ namespace Stabby.World
             var picked = new List<int>();
             foreach (var x in edits)
             {
-                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link) continue;
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave) continue;
                 float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz);
                 int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
                 if (!picked.Contains(c)) picked.Add(c);

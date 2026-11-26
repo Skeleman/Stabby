@@ -124,12 +124,17 @@ namespace Stabby.World
             float h = HoleR, k = Math.Min(1f, h / RockRefM);
             lo = 2f * Fill * h + k * ReliefLo;
             hi = k * ReliefHi;
+            if (!Natural) return;
+            float m = Math.Min(1f, h / ProfileRefM);
+            lo += m * (UndercutM + 0.5f * LedgeStepM + CeilDomeM) + LeanMax * (2f * h + 1f) + (CeilShift + WideW + RiftH) * h;
+            hi += m * (CeilBumpM + CeilDropM + MoundM + BankM) + (WideH + RiftTopW) * 2f * h;
         }
 
         uint RockSeed => (uint)(F * 16777216f) * 0x9E3779B1u + 0x7F4A7C15u;
 
         float Rock(float x, float y, float z, float qx, float qy, float qz, out float floor)
         {
+            if (Natural) return Passage(x, y, z, qx, qy, qz, out floor);
             float hole = HoleR, sy = qy + Fill * hole;
             bool cell = Shape == CrystalCell;
             float wall = (cell ? Facets(qx, sy, qz) : (float)Math.Sqrt(qx * qx + sy * sy + qz * qz)) - Fill * hole;
@@ -139,6 +144,48 @@ namespace Stabby.World
             floor = -qy;
             if (Math.Abs(floor - hole) < DebrisBand * k) floor += k * Debris(x, z);
             return Math.Max(wall, floor);
+        }
+
+        bool Natural => Shape == Cave || Shape == CaveRoom;
+
+        public const float ProfileRefM = 2.2f, LeanMax = 0.35f, LeanSpanM = 9f, SideSpanM = 11f, CeilShift = 0.45f, ShiftSpanM = 13f, SectionSpanM = 12f, WideW = 0.25f, WideH = 0.2f, RiftFloorW = 0.05f, RiftTopW = 0.3f, RiftH = 0.7f;
+        public const float LedgeStepM = 1.1f, UndercutM = 0.6f, UndercutAtM = 0.8f, UndercutSpanM = 0.55f, CeilBumpM = 0.35f, CeilDropM = 0.9f, CeilDomeM = 1.0f, CeilSpanM = 21f, MoundM = 0.3f, BankM = 0.5f;
+        const uint ProfileSeed = 0x3C6EF372u;
+
+        float Passage(float x, float y, float z, float qx, float qy, float qz, out float floor)
+        {
+            float hole = HoleR, m = Math.Min(1f, hole / ProfileRefM), shell = 2f * (float)Math.Sqrt(qx * qx + qy * qy + qz * qz) - R;
+            float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+            float px = len > 1e-3f ? -ez / len : 1f, pz = len > 1e-3f ? ex / len : 0f;
+            float u = qx * px + qz * pz, a2 = Math.Max(0f, qx * qx + qz * qz - u * u), half = FloorHalf;
+            float vf = qy + hole, side = 2f * Value(ProfileSeed ^ 0xA54FF53Au, x / SideSpanM, 0f, z / SideSpanM) - 1f;
+            float tilt = CeilShift * hole * (2f * Value(ProfileSeed ^ 0x6A09E667u, x / ShiftSpanM, 0f, z / ShiftSpanM) - 1f) * Smooth(0.3f * hole, 1.3f * hole, vf);
+            float su = u - LeanMax * (2f * Value(ProfileSeed ^ 0x510E527Fu, x / LeanSpanM, 0f, z / LeanSpanM) - 1f) * vf - tilt;
+            float sec = Value(ProfileSeed ^ 0xBB67AE85u, x / SectionSpanM, 0f, z / SectionSpanM), wide = Smooth(0.35f, 0.15f, sec), rift = Smooth(0.65f, 0.85f, sec);
+            float sw = 1f + WideW * wide - rift * (RiftFloorW + RiftTopW * Smooth(0f, 1.5f * hole, vf)), sh = 1f - WideH * wide + RiftH * rift;
+            float ledge = Smooth(0.2f, 0.7f, side * su / hole) * Smooth(0.6f, 1.4f, vf), cut = Smooth(0.2f, 0.7f, -side * su / hole);
+            float g = vf / LedgeStepM, gf = g - (float)Math.Floor(g), sy = qy + Fill * hole + ledge * LedgeStepM * (gf * gf * gf * (gf * (6f * gf - 15f) + 10f) - gf);
+            float wall = hole + ((float)Math.Sqrt(Sq(su / sw) + a2 + Sq(sy / sh)) - (1f + Fill) * hole) * Math.Min(sw, sh);
+            if (N > 0f) wall += N * Lump(x, y, z);
+            float k = Math.Min(1f, hole / RockRefM), band = Math.Abs(wall - hole);
+            if (band < RockBand * k) wall += k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
+            float under = Math.Max(0f, 1f - Sq((vf - UndercutAtM) / UndercutSpanM));
+            wall -= m * UndercutM * cut * under * under;
+            float c = Value(ProfileSeed ^ 0x9B05688Cu, x / CeilSpanM, 0f, z / CeilSpanM);
+            float roof = CeilBumpM * (2f * Value(ProfileSeed ^ 0x1F83D9ABu, x / 3.5f, y / 3.5f, z / 3.5f) - 1f) + CeilDropM * Smooth(0.6f, 0.85f, c) - CeilDomeM * Smooth(0.6f, 0.85f, 1f - c);
+            wall += m * roof * Smooth(0.2f * hole, 0.9f * hole, qy);
+            float off = Math.Abs(u) / half;
+            floor = -qy + m * (MoundM * Value(ProfileSeed ^ 0x5BE0CD19u, x / 4.5f, 0f, z / 4.5f) * Smooth(0.75f, 0.95f, off) + BankM * Smooth(0.75f, 1.05f, off));
+            if (Math.Abs(floor - hole) < DebrisBand * k) floor += k * Debris(x, z);
+            return Math.Max(Math.Max(wall, floor), shell);
+        }
+
+        static float Sq(float v) => v * v;
+
+        static float Smooth(float a, float b, float v)
+        {
+            float t = Math.Max(0f, Math.Min(1f, (v - a) / (b - a)));
+            return t * t * (3f - 2f * t);
         }
 
         public const float CellRelief = 0.3f, MineRelief = 0.3f, FacetJitter = 0.2f;
@@ -454,8 +501,11 @@ namespace Stabby.World
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves) => Place(w, detail, out caves, out _);
 
-        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries)
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries) => Place(w, detail, out caves, out discoveries, out _);
+
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads)
         {
+            roads = Array.Empty<RoadSegment>();
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
@@ -469,6 +519,7 @@ namespace Stabby.World
             var dens = field.DenEdits();
             var vaults = field.DungeonEdits();
             discoveries = field.Discoveries();
+            roads = field.Roads();
             if (boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length == 0) return Brooked(w, detail, terrain, caves);
             var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length];
             terrain.CopyTo(all, 0);

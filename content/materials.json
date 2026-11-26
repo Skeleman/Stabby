@@ -207,7 +207,9 @@
     { "id": "glow-fungus",      "name": "Glow fungus",      "color": "#6fc4a8", "glow": 0.7, "glowPattern": "cap" },
     { "id": "fungus-light",     "name": "Fungus light",     "color": "#7ee0c0" },
     { "id": "crystal-light",    "name": "Crystal light",    "color": "#b4a2f0" },
-    { "id": "skylight",         "name": "Skylight",         "color": "#dfe6ee" }
+    { "id": "skylight",         "name": "Skylight",         "color": "#dfe6ee" },
+    { "id": "dirt-road",        "name": "Dirt road",        "color": "#8a7860" },
+    { "id": "rut-dirt",         "name": "Rut dirt",         "color": "#5e5040" }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],

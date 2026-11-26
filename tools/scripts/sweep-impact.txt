@@ -36,6 +36,7 @@ src/Stabby.World/Object*.cs objects,sites,surface
 src/Stabby.World/Objects.cs objects,sites,surface
 src/Stabby.World/CaveObjects.cs objects,sites,surface,caves
 src/Stabby.World/Towns.cs objects,sites
+src/Stabby.World/Roads.cs objects,sites
 src/Stabby.World/Mines.cs caves,objects
 src/Stabby.World/MineKit.cs objects,caves
 src/Stabby.World/DungeonLinks.cs caves,objects,sites

@@ -118,7 +118,7 @@ public class DiscoveryTests
             var (w, detail, _, field) = World(seed);
             var all = field.Discoveries();
             var shrines = all.Where(o => o.Def == shrine).ToArray();
-            output.WriteLine($"seed {seed}: {field.Routes.Length / 4} routes, {shrines.Length} shrines " + string.Join(" ", shrines.Select(c => $"{c.X:F0},{c.Z:F0}:{field.RoadSide(c.X, c.Z, out _, out _):F1}")));
+            output.WriteLine($"seed {seed}: {field.Roads().Length} road segments, {shrines.Length} shrines " + string.Join(" ", shrines.Select(c => $"{c.X:F0},{c.Z:F0}:{field.RoadSide(c.X, c.Z, out _, out _):F1}")));
             foreach (var c in shrines)
             {
                 float d = field.RoadSide(c.X, c.Z, out float rx, out float rz);

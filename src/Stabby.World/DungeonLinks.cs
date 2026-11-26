@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class DungeonLinks
     {
         public const string Class = "dungeon-link", Basis = "branching";
-        public const float RadiusMin = 5f, RadiusMax = 5.8f, AheadM = 2.5f, SealM = 6.3f, WidthMin = 4f, WidthMax = 6.5f;
+        public const float RadiusMin = 5.4f, RadiusMax = 6f, AheadM = 2.5f, SealM = 6.3f, WidthMin = 4f, WidthMax = 6.5f;
         public const int MostNodes = 4;
 
         public static bool IsLink(CaveGraph g) => g.Class == Class;
@@ -78,13 +78,16 @@ namespace Stabby.World
         {
             float cm = w.Config.CellMeters;
             var width = new Rng(r.NextU64());
+            var drip = new Rng(r.NextU64());
+            var flow = new Rng(r.NextU64());
             float grain = r.NextFloat();
             var edits = new List<FeatureEdit>();
-            if (!Underground.Breach(w, detail, c, m, m.Y + SealM, Mines.RoofM, grain, ref r, ref width, edits, out var g)) return false;
+            if (!Underground.Breach(w, detail, c, m, m.Y + SealM, Mines.RoofM, grain, ref r, ref width, ref drip, ref flow, edits, out var g)) return false;
             int tile = Features.TileOf(edits[0], cm);
             if (tile < 0 || taken.Contains(tile)) return false;
             foreach (var e in edits) if (Features.TileOf(e, cm) != tile) return false;
             foreach (var e in edits) if (field.InTownGround(0.5f * (e.MinX + e.MaxX), 0.5f * (e.MinZ + e.MaxZ), 0.5f * (float)Math.Sqrt((e.MaxX - e.MinX) * (e.MaxX - e.MinX) + (e.MaxZ - e.MinZ) * (e.MaxZ - e.MinZ)), true)) return false;
+            foreach (var e in edits) if (field.OnRoad(0.5f * (e.MinX + e.MaxX), 0.5f * (e.MinZ + e.MaxZ), 0.5f * (float)Math.Sqrt((e.MaxX - e.MinX) * (e.MaxX - e.MinX) + (e.MaxZ - e.MinZ) * (e.MaxZ - e.MinZ)))) return false;
             var own = new List<FeatureEdit>();
             field.DungeonEditsOf(o, own);
             float ox0 = float.MaxValue, ox1 = float.MinValue, oz0 = float.MaxValue, oz1 = float.MinValue;
@@ -95,6 +98,12 @@ namespace Stabby.World
             for (int i = 0; i < edits.Count; i++) { var e = edits[i]; e.Link = true; edits[i] = e; }
             var near = new List<FeatureEdit>();
             foreach (var e in list) if (Features.TileOf(e, cm) == tile) near.Add(e);
+            var bare = near.FindAll(q => q.Shape != FeatureEdit.Speleothem);
+            bare.AddRange(edits.FindAll(q => q.Shape != FeatureEdit.Speleothem));
+            var rock = bare.ToArray();
+            var ground = new DetailGround { Detail = detail };
+            var solid = new EditArray { Items = rock };
+            edits.RemoveAll(q => q.Shape == FeatureEdit.Speleothem && Underground.DripFault(ground, solid, Features.LatticeStepM, q, rock, 0, rock.Length, Underground.PassM) != null);
             near.AddRange(edits);
             var all = near.ToArray();
             foreach (var e in edits) if (Underground.PathFault(detail, all, e) != null) return false;

@@ -136,6 +136,38 @@ namespace Stabby.World
                 }
         }
 
+        public static void CheckRoads(GeneratedWorld w, EditGrid grid, ObjectField field, List<string> e)
+        {
+            var defs = w.Objects.Objects;
+            var segs = field.Roads();
+            float span = field.ChunkMeters;
+            int across = field.ChunksAcross;
+            var chunks = new HashSet<int>();
+            foreach (var s in segs)
+            {
+                string at = $"road {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0}";
+                if (s.Kind != RoadSegment.Lane)
+                {
+                    string f = field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford);
+                    if (f != null) { e.Add($"{at} {f}"); return; }
+                    if (ford != (s.Kind == RoadSegment.Ford)) { e.Add($"{at} fords a river without being marked as a ford"); return; }
+                }
+                int x0 = Math.Max(0, (int)((Math.Min(s.X0, s.X1) - s.HalfWidth) / span)), x1 = Math.Min(across - 1, (int)((Math.Max(s.X0, s.X1) + s.HalfWidth) / span));
+                int z0 = Math.Max(0, (int)((Math.Min(s.Z0, s.Z1) - s.HalfWidth) / span)), z1 = Math.Min(across - 1, (int)((Math.Max(s.Z0, s.Z1) + s.HalfWidth) / span));
+                for (int cz = z0; cz <= z1; cz++) for (int cx = x0; cx <= x1; cx++) chunks.Add(cz * across + cx);
+            }
+            foreach (var f in grid.Edits)
+                if (f.Link && field.OnRoad(0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ), 0.5f * (float)Math.Sqrt((f.MaxX - f.MinX) * (f.MaxX - f.MinX) + (f.MaxZ - f.MinZ) * (f.MaxZ - f.MinZ)))) { e.Add($"dungeon link edit at {f.Ax:F0},{f.Az:F0} meets a road"); return; }
+            foreach (int c in chunks)
+                foreach (var o in field.Chunk(c % across, c / across))
+                {
+                    if (field.IsTownMember(o.Def) || defs[o.Def].Placement.Cave > 0) continue;
+                    if (field.OnRoad(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on a road"); return; }
+                }
+            foreach (var s in field.Discoveries())
+                if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add($"discovery {defs[s.Def].Id} at {s.X:F0},{s.Z:F0} sits on a road"); return; }
+        }
+
         public static void CheckTowns(GeneratedWorld w, EditGrid grid, ObjectField field, List<string> e)
         {
             var defs = w.Objects.Objects;
