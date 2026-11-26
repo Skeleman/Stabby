@@ -450,6 +450,7 @@ namespace Stabby.World
             int gx = Cell(x), gz = Cell(z), i = gz * n + gx;
             float r = footprint[d] * size;
             if (!town && !bank && pl.Cave <= 0 && InTownGround(x, z, r, seats[d] != null)) return false;
+            if (!town && pl.Cave <= 0 && OnRoad(x, z, r)) return false;
             float y = GroundAt(detail, cm, x, z);
             float s = SlopeStepM;
             float gxs = (GroundAt(detail, cm, x + s, z) - GroundAt(detail, cm, x - s, z)) / (2 * s);

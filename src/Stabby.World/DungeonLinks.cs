@@ -85,6 +85,7 @@ namespace Stabby.World
             if (tile < 0 || taken.Contains(tile)) return false;
             foreach (var e in edits) if (Features.TileOf(e, cm) != tile) return false;
             foreach (var e in edits) if (field.InTownGround(0.5f * (e.MinX + e.MaxX), 0.5f * (e.MinZ + e.MaxZ), 0.5f * (float)Math.Sqrt((e.MaxX - e.MinX) * (e.MaxX - e.MinX) + (e.MaxZ - e.MinZ) * (e.MaxZ - e.MinZ)), true)) return false;
+            foreach (var e in edits) if (field.OnRoad(0.5f * (e.MinX + e.MaxX), 0.5f * (e.MinZ + e.MaxZ), 0.5f * (float)Math.Sqrt((e.MaxX - e.MinX) * (e.MaxX - e.MinX) + (e.MaxZ - e.MinZ) * (e.MaxZ - e.MinZ)))) return false;
             var own = new List<FeatureEdit>();
             field.DungeonEditsOf(o, own);
             float ox0 = float.MaxValue, ox1 = float.MinValue, oz0 = float.MaxValue, oz1 = float.MinValue;
