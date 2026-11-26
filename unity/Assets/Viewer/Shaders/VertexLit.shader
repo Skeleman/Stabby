@@ -225,7 +225,7 @@ Shader "Stabby/VertexLit"
                     tmGrass *= 1 - cover;
                     n = normalize(n - grad * cover);
                 }
-                float wrap = 0, ice = 0;
+                float wrap = 0, ice = 0, glint = 0;
                 [branch] if (i.peat.x < -0.01)
                 {
                     float3 q = float3(i.xz.x, h, i.xz.y);
@@ -244,6 +244,7 @@ Shader "Stabby/VertexLit"
                     tmGrass *= 1 - cover;
                     wrap = _StabbyIce.w * cover * (1 - glass);
                     ice = cover;
+                    glint = glass * cover;
                     ao = lerp(ao, 1, 0.85 * cover);
                     n = normalize(n - grad * cover);
                 }
@@ -266,6 +267,7 @@ Shader "Stabby/VertexLit"
                 float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, saturate(n.y * 0.5 + 0.5 + wrap));
                 float sky = saturate(i.sky.x);
                 float3 c = (LookColor(m.albedo, 1) * (sky * (l.color * saturate((dot(n, l.direction) + wrap) / (1 + wrap)) + ambient) + LocalLightsWrap(float3(xv.x, h, xv.y), n, i.positionCS, wrap)) + sky * LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
+                [branch] if (glint > 0.01) c += LocalLightsGlint(float3(xv.x, h, xv.y), n, v, 260, i.positionCS).spec * glint * 2.5;
                 return half4(MixFogColor(c, i.fog.rgb * sky, i.fog.w), 1);
             }
             ENDHLSL

@@ -81,12 +81,12 @@
       "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     },
     {
-      "id": "lava", "deepColor": "#3a0a02", "shallowColor": "#b8380a", "filmColor": "#1d1714", "emissionColor": "#ff5a14",
+      "id": "lava", "deepColor": "#3a0a02", "shallowColor": "#b8380a", "filmColor": "#1a1210", "emissionColor": "#ff8a2a",
       "clarityM": 0.1, "shoreM": 0.05, "foamWidthM": 0,
       "waveScaleM": 6, "waveSpeed": 0.05, "waveStrength": 0.03,
       "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
       "flowSpeed": 0.05, "rapidsSlope": 0.04, "bedFieldM": 120,
-      "silt": 0, "opacity": 1, "viscosity": 0.95, "bubbles": 0.05, "film": 0.8, "emission": 0.8, "roughness": 0.45,
+      "silt": 0, "opacity": 1, "viscosity": 0.95, "bubbles": 0.05, "film": 1, "emission": 3, "roughness": 0.45,
       "fall": { "spray": "shimmer", "speed": 0.1, "sheetOpacity": 1, "sprayColor": "#ffb070", "sprayAmount": 0.3, "froth": 0 }
     }
   ],
@@ -214,7 +214,7 @@
     { "id": "cave-crystal",     "name": "Cave crystal",     "color": "#7650c8", "glow": 0.6, "glowPattern": "facet" },
     { "id": "ice",              "name": "Ice",              "color": "#cfe2ec", "translucency": 0.6 },
     { "id": "obsidian",         "name": "Obsidian",         "color": "#17141c" },
-    { "id": "lava-light",       "name": "Lava light",       "color": "#ff6a24" },
+    { "id": "lava-light",       "name": "Lava light",       "color": "#ff8c3a" },
     { "id": "glow-fungus",      "name": "Glow fungus",      "color": "#6fc4a8", "glow": 0.7, "glowPattern": "cap" },
     { "id": "fungus-light",     "name": "Fungus light",     "color": "#7ee0c0" },
     { "id": "crystal-light",    "name": "Crystal light",    "color": "#b4a2f0" },

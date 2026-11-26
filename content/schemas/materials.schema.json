@@ -111,7 +111,7 @@
           "viscosity": { "$ref": "#/$defs/amp" },
           "bubbles": { "$ref": "#/$defs/amp" },
           "film": { "$ref": "#/$defs/amp" },
-          "emission": { "$ref": "#/$defs/amp" },
+          "emission": { "type": "number", "minimum": 0, "maximum": 8 },
           "roughness": { "$ref": "#/$defs/amp" },
           "fall": {
             "type": "object",

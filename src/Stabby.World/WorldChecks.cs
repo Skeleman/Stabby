@@ -1338,7 +1338,7 @@ namespace Stabby.World
             float length = 0f;
             foreach (var x in edits)
             {
-                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link) continue;
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.Cave || x.Link || x.Obsidian) continue;
                 float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz), ex = x.Bx - x.Ax, ez = x.Bz - x.Az;
                 int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
                 if (picked.Contains(c)) length += (float)Math.Sqrt(ex * ex + ez * ez);

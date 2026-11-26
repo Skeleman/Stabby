@@ -255,6 +255,22 @@ namespace Stabby.World
             return (float)Math.Sqrt(qx * qx + qy * qy + qz * qz) - c.HoleR;
         }
 
+        static bool Dripstone(int kind) => kind == CaveStalactite || kind == CaveStalagmite || kind == CaveColumn;
+
+        static bool InObsidian(EditSlice rock, float x, float y, float z)
+        {
+            float best = float.MaxValue;
+            bool glass = false;
+            for (int q = 0; q < rock.N; q++)
+            {
+                var o = rock.Items[q];
+                if (!o.CaveCarve) continue;
+                float r = Reach3(o, x, y, z);
+                if (r < best) { best = r; glass = o.Obsidian; }
+            }
+            return glass;
+        }
+
         static bool Owns(EditSlice rock, FeatureEdit c, float x, float y, float z)
         {
             float own = Reach3(c, x, y, z);
@@ -311,6 +327,7 @@ namespace Stabby.World
                 if (c.Shape == FeatureEdit.Mine || (c.Link && kind != CaveStalactite && kind != CaveRubble)) continue;
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
                 if (pl.CaveIce ? !c.Ice : c.Ice && (kind == CaveStalactite || kind == CaveStalagmite)) continue;
+                if (c.Obsidian && Dripstone(kind)) continue;
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
                 if (len < 1f) continue;
                 float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;
@@ -420,6 +437,7 @@ namespace Stabby.World
                 string why = MineFault(kind, o);
                 return why == null ? null : at + " " + why;
             }
+            if (Dripstone(kind) && InObsidian(rock, o.X, o.Y + (kind == CaveStalactite ? -0.5f : 0.5f) * o.Size, o.Z)) return at + " is dripstone in an obsidian cave";
             if (kind == CaveStalactite)
             {
                 if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.05f * o.Size, o.Z) < 0) return at + " floats free of the ceiling";
