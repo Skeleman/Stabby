@@ -143,7 +143,7 @@ public class StructureTests
     [Fact]
     public void PlacedStructuresSitLevelOnTheirSeats()
     {
-        var (w, detail, _, field) = TestWorlds.Get(4);
+        var (w, detail, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int seen = 0;
         var walls = new List<ObjectInstance>();
         int across = field.ChunksAcross;

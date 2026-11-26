@@ -11,7 +11,20 @@ static class TestWorlds
     public static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
     static readonly CaveLibrary Caves = ContentLoader.LoadCaves(Root);
     static readonly ConcurrentDictionary<(ulong, int), Lazy<GeneratedWorld>> Worlds = new();
-    static readonly ConcurrentDictionary<(ulong, int), Lazy<(GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField)>> Placed = new();
+    static readonly ConcurrentDictionary<(ulong, int), Lazy<Placed>> Full = new();
+    public const ulong DefaultSeed = 4;
+    public const int DefaultSize = 256;
+
+    public sealed class Placed
+    {
+        public required GeneratedWorld W;
+        public required TerrainDetail Detail;
+        public required FeatureEdit[] Edits;
+        public required CaveGraph[] Graphs;
+        public required ObjectInstance[] Sites;
+        public required RoadSegment[] Roads;
+        public required ObjectField Field;
+    }
 
     public static GeneratedWorld Fresh(ulong seed, int size) =>
         WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, Biomes, Materials, null, null, Objects, Caves);
@@ -19,12 +32,20 @@ static class TestWorlds
     public static GeneratedWorld World(ulong seed, int size = 256) =>
         Worlds.GetOrAdd((seed, size), k => new Lazy<GeneratedWorld>(() => Fresh(k.Item1, k.Item2))).Value;
 
-    public static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) Get(ulong seed, int size = 256) =>
-        Placed.GetOrAdd((seed, size), k => new Lazy<(GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField)>(() =>
+    public static Placed Default => Place(DefaultSeed, DefaultSize);
+
+    public static Placed Place(ulong seed, int size = 256) =>
+        Full.GetOrAdd((seed, size), k => new Lazy<Placed>(() =>
         {
             var w = World(k.Item1, k.Item2);
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail);
-            return (w, detail, edits, new ObjectField(w, detail, edits, Objects));
+            var edits = Features.Place(w, detail, out var graphs, out var sites, out var roads);
+            return new Placed { W = w, Detail = detail, Edits = edits, Graphs = graphs, Sites = sites, Roads = roads, Field = new ObjectField(w, detail, edits, Objects) };
         })).Value;
+
+    public static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) Get(ulong seed, int size = 256)
+    {
+        var p = Place(seed, size);
+        return (p.W, p.Detail, p.Edits, p.Field);
+    }
 }

@@ -102,18 +102,20 @@ public class InnTests
     [Fact]
     public void InnsPlaceLevelInTheTestWorld()
     {
-        var (w, detail, _, field) = TestWorlds.Get(4);
+        var (w, detail, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int d = Objects.Objects.FindIndex(o => o.Id == "inn"), seen = 0;
         var seat = ObjectField.Seats(Objects.Objects[d]);
-        for (int cz = 0; cz < field.ChunksAcross; cz++)
-            for (int cx = 0; cx < field.ChunksAcross; cx++)
-                foreach (var o in field.Place(cx, cz, true))
-                {
-                    if (o.Def != d) continue;
-                    seen++;
-                    ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
-                    Assert.True(hi - lo <= Structures.SeatM && o.Y <= lo, $"{o.X:F0},{o.Z:F0}: seats {lo:F2}..{hi:F2}, y {o.Y:F2}");
-                }
+        int across = field.ChunksAcross;
+        var chunks = new ObjectInstance[across * across][];
+        Parallel.For(0, chunks.Length, c => chunks[c] = field.Place(c % across, c / across, true));
+        foreach (var chunk in chunks)
+            foreach (var o in chunk)
+            {
+                if (o.Def != d) continue;
+                seen++;
+                ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
+                Assert.True(hi - lo <= Structures.SeatM && o.Y <= lo, $"{o.X:F0},{o.Z:F0}: seats {lo:F2}..{hi:F2}, y {o.Y:F2}");
+            }
         Assert.True(seen > 0, "no inn placed");
     }
 

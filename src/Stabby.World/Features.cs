@@ -21,7 +21,7 @@ namespace Stabby.World
         public bool MeshedIn(float stepM, float x0, float z0, float x1, float z1)
         {
             var e = AtStep(stepM);
-            return e.Thick >= MinMeshSteps * stepM && e.MaxX > x0 && e.MinX < x1 && e.MaxZ > z0 && e.MinZ < z1;
+            return e.Thick >= MinMeshSteps * stepM && e.MaxX > x0 - stepM && e.MinX < x1 + stepM && e.MaxZ > z0 - stepM && e.MinZ < z1 + stepM;
         }
 
         public FeatureEdit AtStep(float stepM)
@@ -515,7 +515,7 @@ namespace Stabby.World
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
-            terrain = Sunk(terrain, CaveBrooks.Sinks(w, terrain, caves));
+            terrain = Sunk(terrain, CaveBrooks.Sinks(w, detail, terrain, caves));
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
             var field = new ObjectField(w, detail, terrain, w.Objects);

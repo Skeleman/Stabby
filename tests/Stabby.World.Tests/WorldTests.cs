@@ -179,7 +179,7 @@ public class WorldTests
     [Fact]
     public void WorldsHaveRiversLakesAndMountains()
     {
-        var w = Gen(3, 256);
+        var w = TestWorlds.Default.W;
         Assert.True(w.Water.Rivers.Count > 10, $"{w.Water.Rivers.Count} river reaches");
         Assert.True(w.Height.Max() > 300, $"peak {w.Height.Max()} m");
     }
@@ -281,7 +281,7 @@ public class WorldTests
         Assert.Equal((int)Math.Round(lib.PeriodM / 0.5f), bands.Length);
         for (int s = 0; s < lib.Strata.Count; s++)
             Assert.Equal((int)Math.Round(lib.Strata[s].ThicknessM / 0.5f), bands.Count(b => b == s));
-        var w = Gen(3);
+        var w = TestWorlds.Default.W;
         var a = lib.Offsets(w);
         Assert.Equal(a, lib.Offsets(w));
         Assert.Contains(a, v => Math.Abs(v) > 1f);

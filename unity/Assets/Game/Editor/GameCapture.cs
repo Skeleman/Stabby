@@ -1894,7 +1894,9 @@ namespace Stabby.Game.Editor
                 var across = q * Vector3.forward;
                 var along = q * Vector3.right;
                 Vector3 eye, target;
-                if (mode == 0) { target = centre + across * focusZ * u + Vector3.up * 0.5f * u; eye = centre + (across * close.x + along * close.y) * close.z * u + Vector3.up * 1.7f; }
+                if (shape == ObjectPart.Overlook && mode == 0) { eye = centre - across * 3.2f + along * 0.6f + Vector3.up * 3.4f; target = centre + across * 30f - Vector3.up * 9f; }
+                else if (shape == ObjectPart.Overlook) { eye = centre + along * 32f - across * 6f + Vector3.up * 10f; target = centre + across * 3f; }
+                else if (mode == 0) { target = centre + across * focusZ * u + Vector3.up * 0.5f * u; eye = centre + (across * close.x + along * close.y) * close.z * u + Vector3.up * 1.7f; }
                 else { target = centre + Vector3.up * 0.6f * u; eye = centre + (across * 0.8f + along * 0.6f).normalized * 16f * u + Vector3.up * 6f * u; }
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
