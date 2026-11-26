@@ -508,6 +508,50 @@ public class CaveTests
     }
 
     [Fact]
+    public void IceCavesFormOnlyInColdGroundWithIcicles()
+    {
+        int ice = 0, icicles = 0, mites = 0;
+        for (ulong seed = 1; seed <= 8 && (icicles == 0 || mites == 0); seed++)
+        {
+            var s = At(seed);
+            var e = new List<string>();
+            WorldChecks.CheckCaveIce(s.W, s.Edits, s.Graphs, e);
+            Assert.Empty(e);
+            foreach (var g in s.Graphs.Where(g => g.Ice))
+            {
+                ice++;
+                Assert.False(g.Crystal);
+                Assert.True(Underground.EntranceTempC(s.W, g) <= Caves.IceMaxTempC);
+            }
+            if (!s.Graphs.Any(g => g.Ice)) continue;
+            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            foreach (var o in CaveObjects(s, field))
+            {
+                var pl = s.W.Objects.Objects[o.Def].Placement;
+                if (pl.Cave != ObjectField.CaveStalactite && pl.Cave != ObjectField.CaveStalagmite) continue;
+                float span = Features.TileCells * s.W.Config.CellMeters;
+                int tile = (int)Math.Floor(o.Z / span) * 65536 + (int)Math.Floor(o.X / span);
+                Assert.Equal(s.Graphs.Any(x => x.Tile == tile && x.Ice), pl.CaveIce);
+                if (pl.CaveIce && pl.Cave == ObjectField.CaveStalactite) icicles++;
+                else if (pl.CaveIce) mites++;
+            }
+        }
+        output.WriteLine($"{ice} ice caves, {icicles} icicles, {mites} ice stalagmites");
+        Assert.True(ice > 0 && icicles > 0 && mites > 0, $"{ice} ice caves, {icicles} icicles, {mites} ice stalagmites in seeds 1..8");
+    }
+
+    [Fact]
+    public void WarmWorldsGrowNoIceCaves()
+    {
+        var lib = ContentLoader.LoadCaves(Root);
+        lib.IceChance = 1f;
+        lib.IceMaxTempC = -60f;
+        var s = Make(1, lib);
+        Assert.DoesNotContain(s.Graphs, g => g.Ice);
+        Assert.DoesNotContain(s.Edits, x => x.Ice);
+    }
+
+    [Fact]
     public void CrystalCavesCarveFacetedCellsLinedWithCrystals()
     {
         var s = Gem.Value;

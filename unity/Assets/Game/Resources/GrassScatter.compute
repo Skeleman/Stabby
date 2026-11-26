@@ -2,7 +2,7 @@
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 
-float4 _StabbySand, _StabbyFieldUV;
+float4 _StabbySand, _StabbyFieldUV, _StabbyIce;
 float _StabbyStrataPeriod;
 float3 _WorldSpaceCameraPos;
 TEXTURE2D(_StabbyStrata);

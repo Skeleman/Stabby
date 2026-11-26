@@ -35,6 +35,8 @@
     "schemaVersion": { "const": 1 },
     "chance": { "type": "number", "minimum": 0, "maximum": 1 },
     "crystalChance": { "type": "number", "minimum": 0, "maximum": 1 },
+    "iceChance": { "type": "number", "minimum": 0, "maximum": 1 },
+    "iceMaxTempC": { "type": "number", "minimum": -60, "maximum": 10 },
     "crystalCell": { "$ref": "#/$defs/range" },
     "lights": {
       "type": "object",

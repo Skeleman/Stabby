@@ -141,7 +141,7 @@ Shader "Stabby/Foliage"
             #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-            float4 _StabbySky, _StabbyGround, _StabbySand, _StabbyFieldUV;
+            float4 _StabbySky, _StabbyGround, _StabbySand, _StabbyFieldUV, _StabbyIce;
             TEXTURE2D(_StabbyBiome);
             SAMPLER(sampler_StabbyBiome);
             TEXTURE2D(_StabbyBed);

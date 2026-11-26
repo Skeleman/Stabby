@@ -18,7 +18,7 @@ namespace Stabby.World
 
     public sealed class CaveLibrary
     {
-        public float Chance = 0.35f, CrystalChance, CellMin = 14f, CellMax = 22f;
+        public float Chance = 0.35f, CrystalChance, CellMin = 14f, CellMax = 22f, IceChance, IceMaxTempC;
         public float LightChance, SkylightChance, SkylightDepthM = 48f, SkylightRadiusM = 2.5f;
         public int LightMost;
         public List<CaveClass> Classes = new List<CaveClass>();
@@ -34,6 +34,8 @@ namespace Stabby.World
             var e = new List<string>();
             if (!(l.Chance >= 0f && l.Chance <= 1f)) e.Add("chance must be within 0..1");
             if (!(l.CrystalChance >= 0f && l.CrystalChance <= 1f)) e.Add("crystalChance must be within 0..1");
+            if (!(l.IceChance >= 0f && l.IceChance <= 1f)) e.Add("iceChance must be within 0..1");
+            if (!(l.IceMaxTempC >= -60f && l.IceMaxTempC <= 10f)) e.Add("iceMaxTempC must be within -60..10");
             if (!(l.CellMax >= l.CellMin) || l.Classes.Exists(c => !(l.CellMin > c.RadiusMax))) e.Add("crystalCell needs tunnel radius < min <= max");
             if (l.Classes.Count == 0) e.Add("classes must not be empty");
             if (!(l.LightChance >= 0f && l.LightChance <= 1f && l.SkylightChance >= 0f && l.SkylightChance <= 1f)) e.Add("lights chance and skylightChance must be within 0..1");
@@ -81,7 +83,7 @@ namespace Stabby.World
     {
         public string Class;
         public int Tile;
-        public bool Crystal;
+        public bool Crystal, Ice;
         public List<CaveNode> Nodes = new List<CaveNode>();
         public List<CaveEdge> Edges = new List<CaveEdge>();
     }
@@ -91,7 +93,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, ulong sky, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, ulong ice, ulong sky, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -124,6 +126,11 @@ namespace Stabby.World
                     {
                         graph = b.G;
                         for (int j = start; j < output.Count && gem; j++) if (output[j].Shape == FeatureEdit.CrystalCell) { graph.Crystal = true; break; }
+                        if (!graph.Crystal && EntranceTempC(w, graph) <= lib.IceMaxTempC && new Rng(ice).NextFloat() < lib.IceChance)
+                        {
+                            graph.Ice = true;
+                            for (int j = start; j < output.Count; j++) if (output[j].CaveCarve) { var x = output[j]; x.Ice = true; output[j] = x; }
+                        }
                         var q = new Rng(pools);
                         Pools(detail, graph, ref q, output, start);
                         var k = new Rng(sky);
@@ -137,6 +144,20 @@ namespace Stabby.World
                 }
                 cls = cls.Fallback.Length > 0 ? lib.Find(cls.Fallback) : null;
             }
+        }
+
+        public static float EntranceTempC(GeneratedWorld w, CaveGraph g)
+        {
+            if (w.Climate == null) return float.PositiveInfinity;
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, t = float.NegativeInfinity;
+            foreach (var m in g.Nodes)
+            {
+                if (!m.Entrance) continue;
+                int x = Math.Min(n - 1, Math.Max(0, (int)Math.Round(m.X / cm))), z = Math.Min(n - 1, Math.Max(0, (int)Math.Round(m.Z / cm)));
+                t = Math.Max(t, w.Climate.TemperatureC[z * n + x]);
+            }
+            return float.IsNegativeInfinity(t) ? float.PositiveInfinity : t;
         }
 
         static FeatureEdit[] Near(List<FeatureEdit> prior, List<FeatureEdit> output, int start)
