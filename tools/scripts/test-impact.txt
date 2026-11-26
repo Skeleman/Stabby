@@ -17,7 +17,7 @@ src/Stabby.World/Materials.cs src/Stabby.World/TintChecks.cs content/materials.j
 src/Stabby.Content/* tests/Stabby.World.Tests/Legacy/* -> ContentParityTests|WorldTests|ObjectTests|CreatureTests|SkyTests|CaveTests|ScenarioTests
 tests/Stabby.World.Tests/TestWorlds.cs -> RoadTests|DiscoveryTests|InnTests|TownTests|ObjectRegionTests|ObjectTests|StructureTests|WorldTests
 tools/Stabby.Lint/* lint-allow.txt -> LintTests
-unity/* -> LintTests|ChunkZipTests|RuntimeParityTests
+unity/* -> LintTests|ChunkZipTests|RuntimeParityTests|PoolSizeTests
 tools/scripts/* -> TestImpactTests
 fallback -> Feature|Object|Discover
 src/Stabby.World/DungeonLinks.cs -> DungeonLinkTests|DungeonTests|CaveTests|ObjectTests|DiscoveryTests

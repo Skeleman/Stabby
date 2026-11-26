@@ -59,10 +59,10 @@ namespace Stabby.Game.Editor
             return "no live plan creature";
         }
 
-        static void AimClear(Camera cam, in Ground ground, float reach, float stand)
+        static void AimClear(Camera cam, in Ground ground, float reach, float stand, float lift = 4f)
         {
             var eye = cam.transform.position;
-            eye.y = ground.HeightAt(eye.x, eye.z) + 4f;
+            eye.y = ground.HeightAt(eye.x, eye.z) + lift;
             float baseYaw = math.atan2(cam.transform.forward.x, cam.transform.forward.z);
             float best = baseYaw, bestClear = float.MinValue;
             for (int a = 0; a < 24; a++)
@@ -152,12 +152,12 @@ namespace Stabby.Game.Editor
             for (int t = 0; t < 4 && rigRef.IsCreated; t++)
             {
                 float px = BenchPixels(rigRef, t, q);
-                AimClear(cam, ground, Detail.Reach(length, px, DetailView.Current.PixelsPerMetre), stand);
+                AimClear(cam, ground, Detail.Reach(length, px, DetailView.Current.PixelsPerMetre), stand, 14f);
                 PlaceBench(view, herd, cam, length, stand, px, ground);
                 for (int k = 0; k < 40; k++) yield return null;
                 lines.Add($"herd 12 {BenchTiers[t]} ({px:F1} px, high from {rigRef.Value.LowPx / q:F1}, anim from {rigRef.Value.AnimPx / q:F1}, ik from {rigRef.Value.IkPx / q:F1}, fade from {rigRef.Value.FadePx / q:F1}): {TierCounts(view, ground)}{(draw != null && draw.Enabled ? $", instances drawn {draw.Drawn}" : "")}");
                 if (t == 0) Shot(cam, dir, $"herd-near-{path}");
-                if (t == 2) Shot(cam, dir, $"herd-far-{path}");
+                if (t == 1) Shot(cam, dir, $"herd-far-{path}");
             }
             vem.DestroyEntity(herd);
             herd.Dispose();
@@ -228,8 +228,9 @@ namespace Stabby.Game.Editor
                 {
                     yield return null;
                     frames++;
-                    worstMain = math.max(worstMain, mainRec.LastValue / 1e6);
                     worstBuild = math.max(worstBuild, buildRec.LastValue / 1e6);
+                    if (frames <= 2) continue;
+                    worstMain = math.max(worstMain, mainRec.LastValue / 1e6);
                     worstDt = math.max(worstDt, Time.unscaledDeltaTime * 1000.0);
                 }
                 var (rigRef, length, stand, _, _, _) = BenchRig(vem);
@@ -267,16 +268,17 @@ namespace Stabby.Game.Editor
                 var s2 = SampleMemory(vem, draw);
                 int waited = 0;
                 while (path == "instanced" && AnimHeld(view).trims == trims0 && waited < 600) { yield return null; waited++; }
+                for (int k = 0; k < 10; k++) yield return null;
                 var (heldTrim, trims1) = AnimHeld(view);
                 var s3 = SampleMemory(vem, draw);
 
-                lines.Add($"N {n}: built in {frames} frames, worst arrival frame: main thread {worstMain:F2} ms, build system {worstBuild:F2} ms, dt {worstDt:F1} ms; steady 1080p: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms, camera render median {Pct(renderMs, 0.5):F2} ms over {BenchFrames} frames");
+                lines.Add($"N {n}: built in {frames} frames, worst arrival frame: build system {worstBuild:F2} ms, main thread {worstMain:F2} ms and dt {worstDt:F1} ms past the bench's own spawn frames; steady 1080p: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms, camera render median {Pct(renderMs, 0.5):F2} ms over {BenchFrames} frames");
                 lines.Add($"  N {n}: retiered after the move in {30 + retier} frames, {CreatureBuildSystem.Count - left + n} live after build; {counts}");
                 lines.Add($"  N {n} entities: {(s1.Entities - s0.Entities) / (float)n:F2} client entities per creature (bench ghost stand-in included), chunks {(s1.Chunks - s0.Chunks) * 16f / n:F2} KiB per creature");
                 lines.Add($"  N {n} {mem}");
                 lines.Add($"  N {n} memory per creature: native {Per(s1.Native - s0.Native, n)}, managed GC {Per(s1.Managed - s0.Managed, n)}, mono heap {Per(s1.Mono - s0.Mono, n)}, instance GPU buffers {Per(s1.Gpu - s0.Gpu, n)}, graphics driver {Per(s1.Driver - s0.Driver, n)}");
                 lines.Add($"  N {n} after removal ({gone} frames): native {(s2.Native - s0.Native) / 1024.0:F0} KiB, driver {(s2.Driver - s0.Driver) / 1024.0:F0} KiB, instance GPU buffers {(s2.Gpu - s0.Gpu) / 1024.0:F0} KiB, managed {(s2.Managed - s0.Managed) / 1024.0:F0} KiB, entities {s2.Entities - s0.Entities}, chunks {s2.Chunks - s0.Chunks}; anim containers hold {heldAfter / 1024.0:F0} KiB");
-                lines.Add($"  N {n} after trim ({waited} more frames, {(trims1 > trims0 ? "trimmed" : "no trim")}): native {(s3.Native - s0.Native) / 1024.0:F0} KiB, driver {(s3.Driver - s0.Driver) / 1024.0:F0} KiB, instance GPU buffers {(s3.Gpu - s0.Gpu) / 1024.0:F0} KiB, anim containers hold {heldTrim / 1024.0:F0} KiB");
+                lines.Add($"  N {n} after trim ({waited} + 10 more frames, {(trims1 > trims0 ? "trimmed" : "no trim")}): native {(s3.Native - s0.Native) / 1024.0:F0} KiB, driver {(s3.Driver - s0.Driver) / 1024.0:F0} KiB, instance GPU buffers {(s3.Gpu - s0.Gpu) / 1024.0:F0} KiB, anim containers hold {heldTrim / 1024.0:F0} KiB");
                 lines.Add($"  N {n} build budget: peak {CreatureBuildSystem.PeakSpend}/{FrameBudget.CreatureEntities} entities in one frame, {CreatureBuildSystem.TierBuilds} tier builds, {CreatureBuildSystem.TierDrops} tier entities released");
             }
 
