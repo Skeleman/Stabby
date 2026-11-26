@@ -98,7 +98,7 @@ namespace Stabby.Game
     {
         public const int Levels = NearField.NodeLevels, Root = Levels - 1, Quads = NearField.NodeQuads;
         public const int Vertices = (Quads + 1) * (Quads + 1) + 4 * Quads, Indices = Quads * Quads * 6 + 4 * Quads * 12;
-        public const float SkirtBit = 4096f, GlassBit = 8192f;
+        public const float SkirtBit = 4096f, GlassBit = 8192f, BoulderBit = 16384f;
         public const int Tiers = 10;
 
         public static void Capacity(int tier, out int vertices, out int indices)
@@ -482,17 +482,18 @@ namespace Stabby.Game
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
 
-        float Cover(NativeEdits edits, GroundColumns columns, float3 p, out float stone, out float boulderBase)
+        float Cover(NativeEdits edits, GroundColumns columns, float3 p, out float stone, out float boulderBase, out bool boulder)
         {
             stone = 0;
             boulderBase = 0;
+            boulder = false;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
                 if (p.x >= e.MinX && p.x <= e.MaxX && p.z >= e.MinZ && p.z <= e.MaxZ)
                 {
                     float cover = columns.At(p.x, p.z) - p.y;
-                    if (e.Shape == FeatureEdit.Boulder) { stone = Lift(math.min(cover, 0)); boulderBase = e.Ay - ObjectField.BoulderLift * e.R; }
+                    if (e.Shape == FeatureEdit.Boulder) { stone = Lift(math.min(cover, 0)); boulderBase = e.Ay - ObjectField.BoulderLift * e.R; boulder = true; }
                     return cover;
                 }
             }
@@ -751,12 +752,12 @@ namespace Stabby.Game
                 int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
                 float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
-                float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
+                float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase, out bool boulder), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y);
-                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), cover, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
                 float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover, false), glass = peat > 0 || ice > 0.01f ? 0 : Ice(edits, light, p.Pos, cover, true), coat = math.max(ice, glass);
-                p.Stitch.w = math.floor(p.Stitch.w) + (glass > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : 0.5f * peat);
+                p.Stitch.w = math.floor(p.Stitch.w) + (boulder ? TerrainTree.BoulderBit : 0) + (glass > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : 0.5f * peat);
                 float dark = Dark(edits, light, p.Pos, cover);
                 p.Dark = new half2(new float2(dark, dark));
                 if (stitch)
@@ -765,7 +766,7 @@ namespace Stabby.Game
                     float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
-                    float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _), sLift = Lift(sCover);
+                    float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _, out _), sLift = Lift(sCover);
                     p.StitchNormal = new half4(new float4(sn, math.max(sc.w, sLift)));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover) + sStone));
                     p.Dark.y = (half)Dark(near, nearLight, p.Stitch.xyz, sCover);
