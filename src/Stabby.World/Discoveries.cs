@@ -15,8 +15,8 @@ namespace Stabby.World
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 4f, DenProbeM = 6f, DenSeekM = 50f, DenRiverM = 40f, DenWoods = 0.25f;
-        public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, RouteStepM = 24f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
-        public const int DenSeekRings = 3, DiscoveryTries = 16, ClimbSteps = 12, RouteLinks = 2;
+        public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
+        public const int DenSeekRings = 3, DiscoveryTries = 16, ClimbSteps = 12;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
         ObjectInstance[] discoveries;
@@ -25,7 +25,6 @@ namespace Stabby.World
         List<LandmarkSketch> towns;
         WorldSketch sketch;
         Geothermal hotspots;
-        float[] routes;
 
         public List<LandmarkSketch> Towns => towns ?? (towns = (w.Sketch ?? (sketch ?? (sketch = WorldSketch.Generate(w.Config)))).Landmarks);
 
@@ -58,7 +57,8 @@ namespace Stabby.World
             var f = new ObjectField(w, detail, edits, lib);
             f.discoveries = Discoveries();
             f.bogPools = BogPools();
-            f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover; f.routes = routes;
+            f.roads = Roads(); f.roadStart = roadStart; f.roadItems = roadItems; f.roadSites = roadSites; f.siteCells = siteCells; f.siteList = siteList;
+            f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover;
             return f;
         }
 
@@ -265,24 +265,29 @@ namespace Stabby.World
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
-            var r = Routes;
-            for (int k = 0; k + 3 < r.Length; k += 4)
+            var segs = Roads();
+            float walked = 0, lx = float.NaN, lz = float.NaN;
+            int station = 0;
+            foreach (var s in segs)
             {
-                float ax = r[k], az = r[k + 1], dx = r[k + 2] - ax, dz = r[k + 3] - az, len = (float)Math.Sqrt(dx * dx + dz * dz);
-                int stations = (int)(len / pl.SpacingM);
-                if (stations < 1) continue;
-                float ux = dx / len, uz = dz / len, step = len / stations;
-                for (int st = 0; st < stations; st++)
+                if (s.Kind == RoadSegment.Lane) { lx = float.NaN; continue; }
+                if (s.X0 != lx || s.Z0 != lz) walked = 0;
+                lx = s.X1; lz = s.Z1;
+                float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
+                if (len < 1e-3f) continue;
+                float ux = dx / len, uz = dz / len, next = pl.SpacingM - walked;
+                for (; next <= len; next += pl.SpacingM)
                 {
-                    var rng = new Rng(Rng.Mix(root ^ key[d] ^ ((ulong)((k / 4) * 65536 + st + 1) * 0x9E3779B97F4A7C15UL)));
+                    var rng = new Rng(Rng.Mix(root ^ key[d] ^ ((ulong)(++station) * 0x9E3779B97F4A7C15UL)));
                     if (rng.NextFloat() >= pl.Chance) continue;
+                    float cx = s.X0 + ux * next, cz = s.Z0 + uz * next;
                     bool any = false;
                     float best = float.MinValue;
                     ObjectInstance pick = default;
                     for (int t = 0; t < DiscoveryTries; t++)
                     {
-                        float along = (st + DiscoveryInset + rng.NextFloat() * (1 - 2 * DiscoveryInset)) * step, off = (rng.NextFloat() < 0.5f ? -1 : 1) * rng.Range(ShrineRoadMinM, ShrineRoadM);
-                        float px = ax + ux * along - uz * off, pz = az + uz * along + ux * off;
+                        float along = (DiscoveryInset - 0.5f + rng.NextFloat() * (1 - 2 * DiscoveryInset)) * pl.SpacingM, off = (rng.NextFloat() < 0.5f ? -1 : 1) * rng.Range(ShrineRoadMinM, ShrineRoadM);
+                        float px = cx + ux * along - uz * off, pz = cz + uz * along + ux * off;
                         float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = 1f, qb = 0f;
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
                         if (!ApartFromKin(d, px, pz, 0.5f * pl.SpacingM, list)) continue;
@@ -291,6 +296,7 @@ namespace Stabby.World
                     }
                     if (any) list.Add(pick);
                 }
+                walked = len - (next - pl.SpacingM);
             }
         }
 
@@ -371,75 +377,6 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < g * g) return false;
             }
             return true;
-        }
-
-        public float[] Routes
-        {
-            get
-            {
-                if (routes != null) return routes;
-                var t = Towns;
-                var seg = new List<float>();
-                var linked = new HashSet<int>();
-                var order = new List<int>();
-                for (int a = 0; a < t.Count; a++)
-                {
-                    float ax = t[a].X * cm, az = t[a].Y * cm;
-                    order.Clear();
-                    for (int b = 0; b < t.Count; b++) if (b != a) order.Add(b);
-                    order.Sort((p, q) =>
-                    {
-                        float dp = Far(t[p], ax, az), dq = Far(t[q], ax, az);
-                        return dp != dq ? dp.CompareTo(dq) : p.CompareTo(q);
-                    });
-                    int links = 0;
-                    foreach (int b in order)
-                    {
-                        if (links >= RouteLinks) break;
-                        float bx = t[b].X * cm, bz = t[b].Y * cm;
-                        if (!DryLine(ax, az, bx, bz)) continue;
-                        links++;
-                        if (!linked.Add(Math.Min(a, b) * t.Count + Math.Max(a, b))) continue;
-                        seg.Add(ax); seg.Add(az); seg.Add(bx); seg.Add(bz);
-                    }
-                }
-                return routes = seg.ToArray();
-            }
-        }
-
-        float Far(LandmarkSketch l, float x, float z)
-        {
-            float dx = l.X * cm - x, dz = l.Y * cm - z;
-            return dx * dx + dz * dz;
-        }
-
-        bool DryLine(float x0, float z0, float x1, float z1)
-        {
-            float dx = x1 - x0, dz = z1 - z0;
-            int steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(dx * dx + dz * dz) / RouteStepM));
-            for (int k = 0; k <= steps; k++)
-            {
-                float u = k / (float)steps, px = x0 + u * dx, pz = z0 + u * dz;
-                if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return false;
-                int i = Cell(pz) * n + Cell(px);
-                if (w.Sea[i] || w.Water.LakeId[i] >= 0) return false;
-            }
-            return true;
-        }
-
-        public float RoadSide(float x, float z, out float rx, out float rz)
-        {
-            var r = Routes;
-            float best = float.MaxValue;
-            rx = x; rz = z;
-            for (int k = 0; k + 3 < r.Length; k += 4)
-            {
-                float dx = r[k + 2] - r[k], dz = r[k + 3] - r[k + 1], len2 = dx * dx + dz * dz;
-                float u = len2 > 0 ? Math.Max(0, Math.Min(1, ((x - r[k]) * dx + (z - r[k + 1]) * dz) / len2)) : 0;
-                float px = r[k] + u * dx, pz = r[k + 1] + u * dz, d2 = (px - x) * (px - x) + (pz - z) * (pz - z);
-                if (d2 < best) { best = d2; rx = px; rz = pz; }
-            }
-            return best == float.MaxValue ? best : (float)Math.Sqrt(best);
         }
 
         void FaceRoad(float x, float z, ref float qa, ref float qb)

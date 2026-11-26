@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace Stabby.World
 {
@@ -15,11 +16,14 @@ namespace Stabby.World
     public sealed partial class ObjectField
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
-        public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f;
+        public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f;
 
         readonly object roadLock = new object();
-        RoadSegment[] roads;
+        RoadSegment[] roads, roadDraft;
         int[] roadStart, roadItems;
+        ObjectInstance[][] roadSites;
+        Dictionary<int, List<int>> siteCells;
+        List<ObjectInstance> siteList;
 
         public RoadSegment[] Roads()
         {
@@ -28,6 +32,7 @@ namespace Stabby.World
             lock (roadLock)
             {
                 if (roads != null) return roads;
+                if (roadDraft != null) return roadDraft;
                 var list = new List<RoadSegment>();
                 var plans = TownPlans();
                 foreach (var p in plans)
@@ -56,11 +61,145 @@ namespace Stabby.World
                         if (linked.Add(Math.Min(a, b) * plans.Length + Math.Max(a, b))) Link(plans, a, b, list);
                     }
                 }
+                roadDraft = list.ToArray();
+                IndexRoads(roadDraft);
+                PlaceRoadSites();
+                foreach (var o in siteList) LinkSite(o, plans, list);
                 var segs = list.ToArray();
                 IndexRoads(segs);
-                roads = segs;
-                return roads;
+                Volatile.Write(ref roads, segs);
+                roadDraft = null;
+                return segs;
             }
+        }
+
+        public bool RoadSite(int d) => IsTownMember(d) && seats[d] != null && lib.Objects[d].Placement.PerHectare > 0;
+
+        void PlaceRoadSites()
+        {
+            var bins = new ObjectInstance[across * across][];
+            var all = new List<ObjectInstance>();
+            var scratch = new List<ObjectInstance>();
+            var cells = new Dictionary<int, List<int>>();
+            for (int d = 0; d < lib.Objects.Count; d++)
+            {
+                if (!RoadSite(d)) continue;
+                for (int c = 0; c < across * across; c++)
+                {
+                    scratch.Clear();
+                    PlaceInto(c % across, c / across, false, scratch, null, false, false, d);
+                    if (scratch.Count == 0) continue;
+                    var bin = bins[c];
+                    int at = bin == null ? 0 : bin.Length;
+                    Array.Resize(ref bin, at + scratch.Count);
+                    scratch.CopyTo(bin, at);
+                    bins[c] = bin;
+                    all.AddRange(scratch);
+                }
+            }
+            for (int k = 0; k < all.Count; k++)
+            {
+                var o = all[k];
+                float g = SiteDisc(o) + cm;
+                int a = Math.Max(0, (int)Math.Floor((o.X - g) / cm)), b = Math.Min(n - 1, (int)Math.Ceiling((o.X + g) / cm));
+                int c0 = Math.Max(0, (int)Math.Floor((o.Z - g) / cm)), c1 = Math.Min(n - 1, (int)Math.Ceiling((o.Z + g) / cm));
+                for (int gz = c0; gz <= c1; gz++)
+                    for (int gx = a; gx <= b; gx++)
+                    {
+                        if (!cells.TryGetValue(gz * n + gx, out var l)) cells[gz * n + gx] = l = new List<int>();
+                        l.Add(k);
+                    }
+            }
+            roadSites = bins;
+            siteList = all;
+            siteCells = cells;
+        }
+
+        float SiteDisc(ObjectInstance o) => footprint[o.Def] * o.Size + RoadHalfM;
+
+        void EmitRoadSites(int d, int chunk, List<ObjectInstance> list, ref int ordinal)
+        {
+            Roads();
+            var bin = roadSites[chunk];
+            if (bin == null) return;
+            foreach (var m in bin)
+            {
+                if (m.Def != d) continue;
+                var o = m;
+                o.Id = ObjectIds.Make(chunk, d, ordinal++);
+                list.Add(o);
+            }
+        }
+
+        void LinkSite(ObjectInstance o, TownPlan[] plans, List<RoadSegment> list)
+        {
+            float best = RoadSiteReachM * RoadSiteReachM, tx = 0, tz = 0, ex = 0, ez = 0;
+            bool any = false, town = false;
+            foreach (var p in plans)
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    float o2 = p.Radius + RoadHalfM + RoadOutCells * cm, ox = p.X + s * p.Ux * o2, oz = p.Z + s * p.Uz * o2;
+                    float d2 = (ox - o.X) * (ox - o.X) + (oz - o.Z) * (oz - o.Z);
+                    if (d2 >= best) continue;
+                    best = d2; tx = ox; tz = oz; ex = p.X + s * p.Ux * p.LaneM; ez = p.Z + s * p.Uz * p.LaneM; any = town = true;
+                }
+            foreach (var s in list)
+            {
+                if (s.Kind == RoadSegment.Lane) continue;
+                float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, l2 = dx * dx + dz * dz;
+                float t = l2 > 1e-9f ? Math.Max(0f, Math.Min(1f, ((o.X - s.X0) * dx + (o.Z - s.Z0) * dz) / l2)) : 0f;
+                float px = s.X0 + t * dx, pz = s.Z0 + t * dz, d2 = (px - o.X) * (px - o.X) + (pz - o.Z) * (pz - o.Z);
+                if (d2 >= best) continue;
+                best = d2; tx = px; tz = pz; any = true; town = false;
+            }
+            if (!any) return;
+            float dist = (float)Math.Sqrt(best), ux = (tx - o.X) / dist, uz = (tz - o.Z) / dist, r = SiteDisc(o);
+            float sx = o.X + ux * (r + RoadClearM), sz = o.Z + uz * (r + RoadClearM), ax = o.X + ux * (r + 2 * cm), az = o.Z + uz * (r + 2 * cm);
+            if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return;
+            var path = RoadPath(Cell(ax), Cell(az), Cell(tx), Cell(tz));
+            if (path == null) return;
+            var px2 = new List<float>(); var pz2 = new List<float>();
+            foreach (int node in path) { px2.Add((node % n) * cm); pz2.Add((node / n) * cm); }
+            Pull(px2, pz2);
+            Smooth(px2, pz2);
+            if (RoadFault(sx, sz, px2[0], pz2[0], out _) != null) return;
+            int end = px2.Count - 1;
+            if (!town && RoadFault(px2[end], pz2[end], tx, tz, out _) != null) return;
+            AddRun(sx, sz, px2[0], pz2[0], list);
+            for (int k = 0; k < end; k++) AddRun(px2[k], pz2[k], px2[k + 1], pz2[k + 1], list);
+            if (town) list.Add(new RoadSegment { X0 = px2[end], Z0 = pz2[end], X1 = ex, Z1 = ez, HalfWidth = RoadHalfM, Kind = RoadSegment.Lane });
+            else AddRun(px2[end], pz2[end], tx, tz, list);
+        }
+
+        void AddRun(float x0, float z0, float x1, float z1, List<RoadSegment> list)
+        {
+            if ((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0) < 1e-6f) return;
+            RoadFault(x0, z0, x1, z1, out bool ford);
+            list.Add(new RoadSegment { X0 = x0, Z0 = z0, X1 = x1, Z1 = z1, HalfWidth = RoadHalfM, Kind = ford ? RoadSegment.Ford : RoadSegment.Dirt });
+        }
+
+        public float RoadSide(float x, float z, out float rx, out float rz)
+        {
+            var segs = Roads();
+            float best = RoadSideReachM * RoadSideReachM;
+            rx = x; rz = z;
+            bool any = false;
+            int a = Math.Max(0, (int)Math.Floor((x - RoadSideReachM) / cm)), b = Math.Min(n - 1, (int)Math.Ceiling((x + RoadSideReachM) / cm));
+            int c = Math.Max(0, (int)Math.Floor((z - RoadSideReachM) / cm)), d = Math.Min(n - 1, (int)Math.Ceiling((z + RoadSideReachM) / cm));
+            for (int gz = c; gz <= d; gz++)
+                for (int gx = a; gx <= b; gx++)
+                {
+                    int i = gz * n + gx;
+                    for (int k = roadStart[i]; k < roadStart[i + 1]; k++)
+                    {
+                        var s = segs[roadItems[k]];
+                        float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, l2 = dx * dx + dz * dz;
+                        float t = l2 > 1e-9f ? Math.Max(0f, Math.Min(1f, ((x - s.X0) * dx + (z - s.Z0) * dz) / l2)) : 0f;
+                        float px = s.X0 + t * dx, pz = s.Z0 + t * dz, d2 = (px - x) * (px - x) + (pz - z) * (pz - z);
+                        if (d2 < best) { best = d2; rx = px; rz = pz; any = true; }
+                    }
+                }
+            return any ? (float)Math.Sqrt(best) : float.MaxValue;
         }
 
         public bool OnRoad(float x, float z, float r)
@@ -134,6 +273,20 @@ namespace Stabby.World
             {
                 float g = p.Radius + RoadHalfM;
                 if (PointSegment2(p.X, p.Z, x0, z0, x1, z1) < g * g) return "crosses a town";
+            }
+            if (siteCells == null) return null;
+            last = -1;
+            for (int t = 0; t <= 2; t++)
+            {
+                int i = Cell(z0 + (z1 - z0) * 0.5f * t) * n + Cell(x0 + (x1 - x0) * 0.5f * t);
+                if (i == last || !siteCells.TryGetValue(i, out var near)) continue;
+                last = i;
+                foreach (int k in near)
+                {
+                    var o = siteList[k];
+                    float g = SiteDisc(o);
+                    if (PointSegment2(o.X, o.Z, x0, z0, x1, z1) < g * g) return "crosses a building";
+                }
             }
             return null;
         }

@@ -221,7 +221,7 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false, bool builtOnly = false)
+        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false, bool builtOnly = false, int stageDef = -1)
         {
             float span = WorldChunks.Size * cm;
             float x0 = cx * span, z0 = cz * span;
@@ -229,9 +229,10 @@ namespace Stabby.World
             if (sx <= 0 || sz <= 0) return;
             int chunk = cz * across + cx;
             ulong chunkKey = Rng.Mix((ulong)chunk + 1);
-            var near = sitesOnly ? null : SitesNear(cx, cz);
+            var near = sitesOnly || stageDef >= 0 ? null : SitesNear(cx, cz);
             for (int d = 0; d < lib.Objects.Count; d++)
             {
+                if (stageDef >= 0 && d != stageDef) continue;
                 int ordinal = 0;
                 var pl = lib.Objects[d].Placement;
                 if (sitesOnly && siteBox[d] == null) continue;
@@ -250,7 +251,12 @@ namespace Stabby.World
                     if (!builtOnly && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitCave(d, chunk, x0, z0, sx, sz, list, ref ordinal);
                     continue;
                 }
-                if (townMember[d] && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
+                if (townMember[d] && stageDef < 0 && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
+                if (stageDef < 0 && RoadSite(d))
+                {
+                    if (boulders == null && (!solidOnly || AnySolid(d))) EmitRoadSites(d, chunk, list, ref ordinal);
+                    continue;
+                }
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
                 bool foot = pl.FootRiseM > 0, built = seats[d] != null;
                 var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : built ? structureStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
