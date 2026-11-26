@@ -173,6 +173,18 @@ namespace Stabby.World
             return false;
         }
 
+        void BinFoot(List<float>[] bins, float span, float x0, float z0, float x1, float z1)
+        {
+            int ax = Math.Max(0, (int)(x0 / span)), bx = Math.Min(across - 1, (int)(x1 / span));
+            int az = Math.Max(0, (int)(z0 / span)), bz = Math.Min(across - 1, (int)(z1 / span));
+            for (int cz = az; cz <= bz; cz++)
+                for (int cx = ax; cx <= bx; cx++)
+                {
+                    var bin = bins[cz * across + cx] ?? (bins[cz * across + cx] = new List<float>());
+                    bin.Add(x0); bin.Add(z0); bin.Add(x1); bin.Add(z1);
+                }
+        }
+
         float[][] SiteFeet()
         {
             lock (footLock)
@@ -180,19 +192,17 @@ namespace Stabby.World
                 if (siteFeet != null) return siteFeet;
                 float span = WorldChunks.Size * cm;
                 var bins = new List<float>[across * across];
+                var vaults = new List<FeatureEdit>();
                 foreach (var o in Discoveries())
                 {
                     int kind = lib.Objects[o.Def].Placement.Discovery;
                     if (kind == WolfDen || Pooled(kind)) continue;
                     float r = footprint[o.Def] * o.Size;
-                    int ax = Math.Max(0, (int)((o.X - r) / span)), bx = Math.Min(across - 1, (int)((o.X + r) / span));
-                    int az = Math.Max(0, (int)((o.Z - r) / span)), bz = Math.Min(across - 1, (int)((o.Z + r) / span));
-                    for (int cz = az; cz <= bz; cz++)
-                        for (int cx = ax; cx <= bx; cx++)
-                        {
-                            var bin = bins[cz * across + cx] ?? (bins[cz * across + cx] = new List<float>());
-                            bin.Add(o.X - r); bin.Add(o.Z - r); bin.Add(o.X + r); bin.Add(o.Z + r);
-                        }
+                    BinFoot(bins, span, o.X - r, o.Z - r, o.X + r, o.Z + r);
+                    if (kind != Dungeon) continue;
+                    vaults.Clear();
+                    DungeonEditsOf(o, vaults);
+                    foreach (var v in vaults) BinFoot(bins, span, v.MinX, v.MinZ, v.MaxX, v.MaxZ);
                 }
                 var feet = new float[bins.Length][];
                 for (int k = 0; k < bins.Length; k++) feet[k] = bins[k]?.ToArray();

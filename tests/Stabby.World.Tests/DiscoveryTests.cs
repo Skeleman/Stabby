@@ -327,7 +327,7 @@ public class DiscoveryTests
     public void LoadedWorldPlacesTheSameDiscoveries()
     {
         var materials = ContentLoader.LoadMaterials(Root);
-        var (w, _, _, field) = World(1);
+        var (w, _, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var loaded = WorldFile.Read(WorldFile.Write(w), materials);
         loaded.Objects = Objects;
         string Rings(ObjectField f) => string.Join(" ", f.Discoveries().Select(r => $"{r.X},{r.Z},{r.Size}"));

@@ -124,9 +124,7 @@ public class CreatureTests
         Assert.Equal(first.Idle[0], mirror.Idle[0]);
     }
 
-    static readonly GeneratedWorld PlanWorld = WorldGenerator.Generate(
-        new WorldConfig { Seed = 5, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) },
-        ContentLoader.LoadBiomes(Root), ContentLoader.LoadMaterials(Root), null, null, ContentLoader.LoadObjects(Root, BiomeIds), ContentLoader.LoadCaves(Root));
+    static readonly GeneratedWorld PlanWorld = TestWorlds.Default.W;
 
     [Fact]
     public void SpawnPlanPassesWorldChecks()
@@ -247,9 +245,7 @@ public class CreatureTests
     [Fact]
     public void SpawnPlanVariesBySeed()
     {
-        var other = WorldGenerator.Generate(
-            new WorldConfig { Seed = 6, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) },
-            ContentLoader.LoadBiomes(Root), ContentLoader.LoadMaterials(Root), null, null, ContentLoader.LoadObjects(Root, BiomeIds), ContentLoader.LoadCaves(Root));
+        var other = TestWorlds.World(6);
         var a = CreaturePlan.Build(PlanWorld, Lib);
         var b = CreaturePlan.Build(other, Lib);
         Assert.False(a.Count == b.Count && a.Zip(b).All(p => p.First.X == p.Second.X && p.First.BodySeed == p.Second.BodySeed));
