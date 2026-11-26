@@ -210,6 +210,30 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void OverlooksAppearOnOpenRims()
+    {
+        int look = Objects.Objects.FindIndex(o => o.Id == "overlook"), total = 0, worlds = 0;
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var (_, _, _, field) = World(seed);
+            var all = field.Discoveries();
+            var looks = all.Where(o => o.Def == look).ToArray();
+            output.WriteLine($"seed {seed}: {looks.Length} overlooks " + string.Join(" ", looks.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+            foreach (var c in looks)
+            {
+                Assert.True(field.Fitness(ObjectField.Overlook, c.X, c.Z) > float.MinValue);
+                Assert.Null(field.OverlookFault(c));
+                Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+                foreach (var o in all.Where(o => o.Def != look))
+                    Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+            }
+            total += looks.Length;
+            if (looks.Length > 0) worlds++;
+        }
+        Assert.True(worlds >= 2, $"overlooks in only {worlds} of 4 worlds ({total} total)");
+    }
+
+    [Fact]
     public void HotSpringsSitInHotspots()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;

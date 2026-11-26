@@ -572,7 +572,9 @@ namespace Stabby.World
             }
         }
 
-        static void Cairn(ulong key, StructureLayout l)
+        static void Cairn(ulong key, StructureLayout l) => Cairn(l, key, Frame.Root(1));
+
+        static void Cairn(StructureLayout l, ulong key, in Frame f)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x7F4A7C159E3779B9UL));
             int layers = rng.Range(4, 7);
@@ -586,12 +588,12 @@ namespace Stabby.World
                 {
                     int k = off + i * 16 / count;
                     float dx = Cos16(k), dz = Sin16(k), rr = r * rng.Range(0.92f, 1.06f);
-                    Add(l, key, dx * rr, y, dz * rr, s * rng.Range(1f, 1.35f), sy * rng.Range(0.9f, 1.1f), s * rng.Range(0.75f, 0.95f), -dz, dx, 0, 1);
+                    Hewn(l, key, f, dx * rr, y, dz * rr, s * rng.Range(1f, 1.35f), sy * rng.Range(0.9f, 1.1f), s * rng.Range(0.75f, 0.95f), -dz, dx, 0, 1, Squareness);
                 }
-                Add(l, key, 0, y, 0, 1.8f * r, 0.9f * sy, 1.8f * r, 1, 0, 0, 1);
+                Hewn(l, key, f, 0, y, 0, 1.8f * r, 0.9f * sy, 1.8f * r, 1, 0, 0, 1, Squareness);
                 int pd = rng.Range(0, 16);
-                Add(l, key, 0, y, 0, 2 * r + 0.9f * s, sy, 2 * r + 0.9f * s, Cos16(pd), Sin16(pd), 2, 2);
-                l.Columns.Add(new ObjectColumn { X = 0, Z = 0, R = r + 0.4f * s, Bottom = 0, Top = y + sy });
+                Hewn(l, key, f, 0, y, 0, 2 * r + 0.9f * s, sy, 2 * r + 0.9f * s, Cos16(pd), Sin16(pd), 2, 2, Squareness);
+                Col(l, f, 0, 0, r + 0.4f * s, 0, y + sy);
                 y += 0.82f * sy;
                 r *= 0.72f;
                 s *= 0.86f;
@@ -599,14 +601,14 @@ namespace Stabby.World
             bool standing = rng.NextFloat() < 0.5f;
             float tx = s * (standing ? 0.7f : 1.5f), tz = s * (standing ? 0.5f : 1.3f), ty = s * (standing ? 1.8f : 0.5f);
             int td = rng.Range(0, 16);
-            Add(l, key, 0, y, 0, tx, ty, tz, Cos16(td), Sin16(td), 0, 2);
-            l.Columns.Add(new ObjectColumn { X = 0, Z = 0, R = 0.5f * Math.Min(tx, tz), Bottom = 0, Top = y + ty });
+            Hewn(l, key, f, 0, y, 0, tx, ty, tz, Cos16(td), Sin16(td), 0, 2, Squareness);
+            Col(l, f, 0, 0, 0.5f * Math.Min(tx, tz), 0, y + ty);
             int loose = rng.Range(3, 7);
             for (int k = 0; k < loose; k++)
             {
                 int dir = rng.Range(0, 16), yd = rng.Range(0, 16);
                 float rr = rng.Range(0.38f, 0.43f), ss = rng.Range(0.05f, 0.09f), sy = 0.7f * ss;
-                Add(l, key, Cos16(dir) * rr, -0.2f * sy, Sin16(dir) * rr, 1.4f * ss, sy, ss, Cos16(yd), Sin16(yd), 0, 0);
+                Hewn(l, key, f, Cos16(dir) * rr, -0.2f * sy, Sin16(dir) * rr, 1.4f * ss, sy, ss, Cos16(yd), Sin16(yd), 0, 0, Squareness);
             }
         }
     }
