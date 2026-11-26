@@ -12,7 +12,7 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const int TownTries = 256, TownRing = 8, TownMinMembers = 3;
+        public const int TownTries = 256, TownRing = 8, TownMinMembers = 3, TownSpots = 8, TownGoodMembers = 7;
         public const float TownYardM = 8f, TownGapM = 1f, TownSetbackM = 1.5f, TownSlotM = 2f, TownJitterM = 0.8f, TownSpaceM = 400f;
 
         readonly object townLock = new object();
@@ -78,16 +78,29 @@ namespace Stabby.World
         {
             int ti = (int)(rng.NextU32() % (uint)lib.Towns.Count);
             var t = lib.Towns[ti];
-            float radius = TownRadius(t), best = float.MaxValue, bx = 0, bz = 0;
+            float radius = TownRadius(t);
+            var spots = new List<(float score, float x, float z)>();
             for (int k = 0; k <= TownTries; k++)
             {
                 float ox = rng.Range(-1f, 1f), oz = rng.Range(-1f, 1f);
                 if (k > 0 && ox * ox + oz * oz > 1) continue;
                 float x = lx + (k == 0 ? 0 : ox * t.SeekM), z = lz + (k == 0 ? 0 : oz * t.SeekM);
                 float score = TownScore(t, x, z, radius, placed);
-                if (score < best) { best = score; bx = x; bz = z; }
+                if (score < float.MaxValue) spots.Add((score, x, z));
             }
-            if (best == float.MaxValue) return null;
+            spots.Sort((a, b) => a.score != b.score ? a.score.CompareTo(b.score) : a.x != b.x ? a.x.CompareTo(b.x) : a.z.CompareTo(b.z));
+            TownPlan best = null;
+            for (int k = 0; k < spots.Count && k < TownSpots; k++)
+            {
+                var plan = LayTown(ti, t, landmark, spots[k].x, spots[k].z, radius, rng);
+                if (plan.Members.Count >= TownMinMembers && (best == null || plan.Members.Count > best.Members.Count)) best = plan;
+                if (best != null && best.Members.Count >= TownGoodMembers) break;
+            }
+            return best;
+        }
+
+        TownPlan LayTown(int ti, TownDef t, int landmark, float bx, float bz, float radius, Rng rng)
+        {
             float ux = rng.Range(-1f, 1f), uz = rng.Range(-1f, 1f), ul = (float)Math.Sqrt(ux * ux + uz * uz);
             if (ul < 1e-3f) { ux = 1; uz = 0; ul = 1; }
             ux /= ul; uz /= ul;
@@ -136,7 +149,7 @@ namespace Stabby.World
                     if (TryMember(plan, d, mx, mz, size, qa, qb)) got++;
                 }
             }
-            return plan.Members.Count >= TownMinMembers ? plan : null;
+            return plan;
         }
 
         static void Facing(float fx, float fz, out float qa, out float qb)
@@ -179,7 +192,7 @@ namespace Stabby.World
                     FanDir(k, 0.70710678f, out float ux, out float uz);
                     float rx = x + ux * radius * ring * 0.5f, rz = z + uz * radius * ring * 0.5f;
                     int i = Cell(rz) * n + Cell(rx);
-                    if (w.Sea[i] || w.Water.LakeId[i] >= 0) return float.MaxValue;
+                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Biome[i] < 0 || !t.Biomes.Contains(w.BiomeIds[w.Biome[i]])) return float.MaxValue;
                     float g = GroundAt(detail, cm, rx, rz);
                     lo = Math.Min(lo, g); hi = Math.Max(hi, g);
                 }
