@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class DungeonLinks
     {
         public const string Class = "dungeon-link", Basis = "branching";
-        public const float RadiusMin = 5f, RadiusMax = 5.8f, AheadM = 2.5f, SealM = 6.3f, WidthMin = 4f, WidthMax = 6.5f;
+        public const float RadiusMin = 5.4f, RadiusMax = 6f, AheadM = 2.5f, SealM = 6.3f, WidthMin = 4f, WidthMax = 6.5f;
         public const int MostNodes = 4;
 
         public static bool IsLink(CaveGraph g) => g.Class == Class;
@@ -78,9 +78,11 @@ namespace Stabby.World
         {
             float cm = w.Config.CellMeters;
             var width = new Rng(r.NextU64());
+            var drip = new Rng(r.NextU64());
+            var flow = new Rng(r.NextU64());
             float grain = r.NextFloat();
             var edits = new List<FeatureEdit>();
-            if (!Underground.Breach(w, detail, c, m, m.Y + SealM, Mines.RoofM, grain, ref r, ref width, edits, out var g)) return false;
+            if (!Underground.Breach(w, detail, c, m, m.Y + SealM, Mines.RoofM, grain, ref r, ref width, ref drip, ref flow, edits, out var g)) return false;
             int tile = Features.TileOf(edits[0], cm);
             if (tile < 0 || taken.Contains(tile)) return false;
             foreach (var e in edits) if (Features.TileOf(e, cm) != tile) return false;

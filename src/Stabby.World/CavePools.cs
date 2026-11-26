@@ -18,7 +18,7 @@ namespace Stabby.World
         {
             var rooms = new List<FeatureEdit>();
             foreach (int k in caveCarves)
-                if (FeatureEdit.IsRoom(edits[k].Shape)) rooms.Add(edits[k]);
+                if (FeatureEdit.IsRoom(solid[k].Shape) && !solid[k].Link) rooms.Add(solid[k]);
             var list = new List<LiquidPool>();
             if (rooms.Count == 0) return list.ToArray();
             int water = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("water"));
