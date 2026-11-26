@@ -539,6 +539,8 @@ namespace Stabby.World
                 raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (falls ? 1 - Gorge(c, s0, s1, x, z, s, f) : 1) * Grid.Smoothstep(0, Erosion.MinLandHeight, s) * (1 - cap) * (1 - sea * (1 - Grid.Smoothstep(2 * Erosion.MinLandHeight, 4 * Erosion.MinLandHeight, s))));
             }
             float cut = float.MaxValue, pool = float.MaxValue, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
+            Span<float> hs = stackalloc float[HoldCap], ha = stackalloc float[HoldCap];
+            int hn = -1;
             for (int k = s0; k < s1; k++)
             {
                 if (!falls && !mask.Has(k - s0)) continue;
@@ -565,7 +567,8 @@ namespace Stabby.World
                 }
                 else
                 {
-                    top = Math.Max(top, Hold(c, s0, s1, hold, x, z, h, s, f));
+                    if (hn == -1) hn = Held(c, s0, s1, hold, x, z, h, f, hs, ha);
+                    top = Math.Max(top, hn < 0 ? Hold(c, s0, s1, hold, x, z, h, s, f) : Hold(hs, ha, hn, h, s));
                     float nb = 0.5f + 0.5f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed, x / BankNoiseM, z / BankNoiseM) + 0.5f * Noise.Gradient(c.RiverSeed + 1u, 2.3f * x / BankNoiseM, 2.3f * z / BankNoiseM)));
                     wb = w + Math.Max(Bank(w) * (1 - CutShrink * Math.Max(0, -inner)) * (1 - BankNoise * nb), Math.Min(Bank(w), (top - s - bar) / MaxBankSlope));
                     float r = Math.Min(WallRampM, 2f * (wb - w));
@@ -599,6 +602,38 @@ namespace Stabby.World
                 float sq = q.Sa + (q.Sb - q.Sa) * t;
                 if (sq <= s) continue;
                 top = Math.Max(top, h + Math.Max(0, sq + Rise(w) - h) * (1 - Grid.Smoothstep(wb, wb + reach, d)) * Grid.Smoothstep(0, HoldStageM, sq - s));
+            }
+            return top;
+        }
+
+        const int HoldCap = 256;
+
+        static int Held<T>(T c, int s0, int s1, PieceMask mask, float x, float z, float h, float f, Span<float> hs, Span<float> ha) where T : struct, INearCells
+        {
+            int n = 0;
+            for (int k = s0; k < s1; k++)
+            {
+                if (!mask.Has(k - s0)) continue;
+                var q = c.Piece(c.PieceAt(k));
+                Project(q, x, z, out float d, out float t);
+                float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w), reach = Math.Min(Bank(w), f);
+                if (d >= wb + reach) continue;
+                float sq = q.Sa + (q.Sb - q.Sa) * t, a = Math.Max(0, sq + Rise(w) - h) * (1 - Grid.Smoothstep(wb, wb + reach, d));
+                if (a == 0) continue;
+                if (n == HoldCap) return -2;
+                hs[n] = sq;
+                ha[n++] = a;
+            }
+            return n;
+        }
+
+        static float Hold(Span<float> hs, Span<float> ha, int n, float h, float s)
+        {
+            float top = h;
+            for (int i = 0; i < n; i++)
+            {
+                if (hs[i] <= s) continue;
+                top = Math.Max(top, h + ha[i] * Grid.Smoothstep(0, HoldStageM, hs[i] - s));
             }
             return top;
         }
