@@ -62,7 +62,7 @@ namespace Stabby.World
                 {
                     if (!seen[1] && w.Sea[i]) Fail(1, " stands in the sea");
                     int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
-                    if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
+                    if (!seen[2] && site < 0 && def.Placement.Discovery != ObjectField.SunkenShrine && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
                     if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
                     if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
                     if (!seen[4])

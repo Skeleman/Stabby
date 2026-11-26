@@ -7,9 +7,9 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "sunken-shrine" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-sunken-shrine" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, SunkenShrine = 13;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
@@ -81,7 +81,9 @@ namespace Stabby.World
             Parallel.For(0, cells * cells, c => drawn[c] = CellDraws(d, root, c, cells, step, inset));
             var all = new List<DiscoveryTry[]>();
             foreach (var tries in drawn) if (tries != null) all.Add(tries);
+            if (pl.Discovery == SunkenShrine) shallows = Shallows(cells, step);
             Parallel.For(0, all.Count * DiscoveryTries, q => EvalTry(d, cells, step, inset, ref all[q / DiscoveryTries][q % DiscoveryTries]));
+            shallows = null;
             foreach (var tries in all)
             {
                 bool any = false;
@@ -89,7 +91,7 @@ namespace Stabby.World
                 ObjectInstance pick = default;
                 foreach (var t in tries)
                 {
-                    if (t.Fit <= best || !t.Pass || !ApartFromOthers(d, t.X, t.Z, list)) continue;
+                    if (t.Fit <= best || !t.Pass || !ApartFromOthers(d, t.X, t.Z, list, pl.Discovery == SunkenShrine ? 2 * inset : 0)) continue;
                     best = t.Fit; pick = t.O; any = true;
                 }
                 if (any) list.Add(pick);
@@ -122,6 +124,7 @@ namespace Stabby.World
             int gx = r.Cell % cells, gz = r.Cell / cells;
             float px = r.X, pz = r.Z, qa = r.Qa, qb = r.Qb;
             float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
+            if (pl.Discovery == SunkenShrine && !SeekShallows(r.Cell, (px - x0) / (x1 - x0), (pz - z0) / (z1 - z0), ref px, ref pz)) return;
             if (pl.Discovery == Hilltop) Climb(ref px, ref pz, x0, z0, x1, z1);
             if (pl.Discovery == WolfDen)
             {
@@ -310,14 +313,14 @@ namespace Stabby.World
 
         bool SiteFits(int d, int variant, float px, float pz, float size, float qa, float qb, out ObjectInstance o)
         {
-            if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
+            if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o, kind == SunkenShrine)) { o = default; return false; }
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == SunkenShrine ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null)) break;
+                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != SunkenShrine || SunkenFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -357,7 +360,7 @@ namespace Stabby.World
                 float px = x + r * ux * len, pz = z + r * uz * len;
                 if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return false;
                 int i = Math.Min(n - 1, (int)(pz / cm)) * n + Math.Min(n - 1, (int)(px / cm));
-                if (w.Sea[i] || w.Water.LakeId[i] >= 0) return false;
+                if (w.Sea[i] || (w.Water.LakeId[i] >= 0 && lib.Objects[d].Placement.Discovery != SunkenShrine)) return false;
             }
             foreach (var l in Towns)
             {
@@ -367,13 +370,13 @@ namespace Stabby.World
             return !InTownGround(x, z, r, true);
         }
 
-        bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list)
+        bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list, float sameGapM = 0)
         {
             bool vent = Pooled(lib.Objects[d].Placement.Discovery);
             foreach (var o in list)
             {
-                if (o.Def == d) continue;
-                float dx = o.X - x, dz = o.Z - z, g = vent && IsVent(o) ? VentGapM : DiscoveryGapM;
+                if (o.Def == d && !(sameGapM > 0)) continue;
+                float dx = o.X - x, dz = o.Z - z, g = o.Def == d ? sameGapM : vent && IsVent(o) ? VentGapM : DiscoveryGapM;
                 if (dx * dx + dz * dz < g * g) return false;
             }
             return true;
@@ -855,6 +858,7 @@ namespace Stabby.World
 
         public float Fitness(int kind, float x, float z)
         {
+            if (kind == SunkenShrine) return SunkenFit(x, z);
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
             if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;

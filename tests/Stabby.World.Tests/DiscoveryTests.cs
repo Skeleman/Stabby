@@ -334,4 +334,31 @@ public class DiscoveryTests
         Assert.NotEmpty(expected);
         Assert.Equal(expected, Rings(new ObjectField(loaded, loadedDetail, Features.Place(loaded, loadedDetail), Objects)));
     }
+
+    [Fact]
+    public void SunkenShrinesStandInSteadyLakeShallows()
+    {
+        int sunken = Objects.Objects.FindIndex(o => o.Id == "sunken-shrine");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == sunken).ToArray();
+        output.WriteLine($"{found.Length} sunken shrines " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.True(found.Length > 0, "no sunken shrine on the default world");
+        int n = w.Config.Size;
+        float cm = WorldConfig.MapMeters / n;
+        foreach (var c in found)
+        {
+            int i = Math.Min(n - 1, (int)(c.Z / cm)) * n + Math.Min(n - 1, (int)(c.X / cm));
+            Assert.False(w.Sea[i]);
+            Assert.True(w.Water.LakeId[i] >= 0);
+            Assert.True(field.Fitness(ObjectField.SunkenShrine, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.SunkenFault(c));
+            foreach (var o in all)
+            {
+                if (o.X == c.X && o.Z == c.Z) continue;
+                float dx = o.X - c.X, dz = o.Z - c.Z;
+                Assert.True(dx * dx + dz * dz >= ObjectField.DiscoveryGapM * ObjectField.DiscoveryGapM);
+            }
+        }
+    }
 }

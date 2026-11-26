@@ -57,6 +57,7 @@ src/Stabby.World/Structure*.cs sites
 src/Stabby.World/Dungeon.cs sites
 src/Stabby.World/DungeonLayout.cs sites
 src/Stabby.World/WolfDen.cs sites,surface
+src/Stabby.World/SunkenShrine.cs sites,surface
 src/Stabby.World/MesaChecks.cs sketch
 src/Stabby.World/TintChecks.cs biomes
 src/Stabby.World/WaterTint.cs biomes
