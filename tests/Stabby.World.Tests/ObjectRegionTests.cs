@@ -18,9 +18,11 @@ public class ObjectRegionTests
         var regions = ColumnRegions.For(field);
         ColumnRegion? best = null;
         var clock = Stopwatch.StartNew();
-        for (int c = 0; c < across * across; c++)
+        var built = new ColumnRegion[across * across];
+        Parallel.For(0, built.Length, c => built[c] = ColumnRegion.Build(field, c));
+        for (int c = 0; c < built.Length; c++)
         {
-            var r = ColumnRegion.Build(field, c);
+            var r = built[c];
             Assert.All(r.Owners, id => Assert.Equal(c, ObjectIds.Chunk(id)));
             Assert.Equal(r.Count, r.Starts[r.Grid.Cells]);
             if (best == null || r.Count > best.Count) best = r;
