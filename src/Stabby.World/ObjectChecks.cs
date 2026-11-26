@@ -15,9 +15,9 @@ namespace Stabby.World
             float span = WorldChunks.Size * w.Config.CellMeters;
             List<float[]> segs = null;
             List<int>[] bed = null;
-            float[] bogs = null;
-            Parallel.Invoke(() => bed = RiverBedCells(w, out segs), () => bogs = field.BogPools());
-            var picked = ObjectChunks(w, edits, bogs, across, span);
+            float[] bogs = null, sands = null;
+            Parallel.Invoke(() => bed = RiverBedCells(w, out segs), () => bogs = field.BogPools(), () => sands = field.QuicksandPools());
+            var picked = ObjectChunks(w, edits, bogs, sands, across, span);
             if (picked.Count == 0) return;
             var placed = new ObjectInstance[picked.Count][];
             Parallel.For(0, picked.Count, k => placed[k] = field.Chunk(picked[k] % across, picked[k] / across));
@@ -30,21 +30,21 @@ namespace Stabby.World
                 () => { string fault = RegionFault(field, field.Fresh(), a0, c0); if (fault != null) fresh[2] = $"collision region {cx0},{cz0} {fault}"; });
             foreach (var f in fresh) if (f != null) { e.Add(f); return; }
             var found = new List<KeyValuePair<int, string>>[picked.Count];
-            Parallel.For(0, picked.Count, k => found[k] = ObjectFaults(w, detail, grid, field, bed, segs, bogs, picked[k], placed[k]));
+            Parallel.For(0, picked.Count, k => found[k] = ObjectFaults(w, detail, grid, field, bed, segs, bogs, sands, picked[k], placed[k]));
             var seen = new HashSet<int>();
             foreach (var list in found)
                 foreach (var f in list)
                     if (f.Key < 0 || seen.Add(f.Key)) e.Add(f.Value);
         }
 
-        static List<KeyValuePair<int, string>> ObjectFaults(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<int>[] bed, List<float[]> segs, float[] bogs, int c, ObjectInstance[] a)
+        static List<KeyValuePair<int, string>> ObjectFaults(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<int>[] bed, List<float[]> segs, float[] bogs, float[] sands, int c, ObjectInstance[] a)
         {
             var edits = grid.Edits;
             var ids = new List<int>();
             int n = w.Config.Size, across = field.ChunksAcross, cx = c % across, cz = c / across;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm;
             var found = new List<KeyValuePair<int, string>>();
-            var seen = new bool[12];
+            var seen = new bool[13];
             var idFaults = new List<string>();
             CheckObjectIds(a, c, idFaults);
             foreach (var m in idFaults) found.Add(new KeyValuePair<int, string>(-1, m));
@@ -76,6 +76,11 @@ namespace Stabby.World
                     {
                         float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
                         if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
+                    }
+                    for (int k = 0; k < sands.Length && !seen[12]; k += ObjectField.BogStride)
+                    {
+                        float bx = o.X - sands[k], bz = o.Z - sands[k + 1], reach = ObjectField.BogMargin(sands[k + 2]) + 0.5f * r;
+                        if (bx * bx + bz * bz < reach * reach) Fail(12, $" stands in the quicksand margin at {sands[k]:F0},{sands[k + 1]:F0}");
                     }
                     float foot = ground;
                     if (ObjectPart.IsDungeon(def.Parts[0].Shape)) ObjectField.SeatRange(detail, cm, ObjectField.Seats(def), o, out foot, out _);
@@ -431,7 +436,7 @@ namespace Stabby.World
             return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
-        static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, int across, float span)
+        static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, float[] sands, int across, float span)
         {
             var picked = new List<int>();
             foreach (var f in edits)
@@ -443,6 +448,11 @@ namespace Stabby.World
             for (int k = 0; k < bogs.Length && k < 2 * ObjectField.BogStride; k += ObjectField.BogStride)
             {
                 int c = Math.Min(across - 1, (int)(bogs[k + 1] / span)) * across + Math.Min(across - 1, (int)(bogs[k] / span));
+                if (!picked.Contains(c)) picked.Add(c);
+            }
+            for (int k = 0; k < sands.Length && k < 2 * ObjectField.BogStride; k += ObjectField.BogStride)
+            {
+                int c = Math.Min(across - 1, (int)(sands[k + 1] / span)) * across + Math.Min(across - 1, (int)(sands[k] / span));
                 if (!picked.Contains(c)) picked.Add(c);
             }
             int quota = picked.Count + ObjectCheckChunks / 2;

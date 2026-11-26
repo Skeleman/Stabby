@@ -29,9 +29,38 @@ namespace Stabby.World
             }
         }
 
+        static void CheckQuicksand(GeneratedWorld w, ObjectField field, List<string> e)
+        {
+            var sands = field.QuicksandPools();
+            foreach (var b in field.QuicksandEdits())
+                if (!b.MeshedIn(NearStepM, b.MinX, b.MinZ, b.MaxX, b.MaxZ)) { e.Add($"quicksand at {b.Ax:F0},{b.Az:F0} is too thin to mesh near the player"); return; }
+            if (sands.Length > 0 && w.Materials.Liquid("quicksand") < 0) { e.Add("quicksand patches are placed but the liquid library has no quicksand"); return; }
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, worldM = n * cm;
+            for (int k = 0; k < sands.Length; k += ObjectField.BogStride)
+            {
+                float x = sands[k], z = sands[k + 1], r = sands[k + 2];
+                string at = $"quicksand at {x:F0},{z:F0}";
+                if (!(sands[k + 4] < sands[k + 3] && sands[k + 3] < sands[k + 5])) { e.Add(at + " has its floor, surface and bank out of order"); return; }
+                for (int p = 0; p < 9; p++)
+                {
+                    float ux = p == 0 ? 0 : (float)Math.Cos(p * Math.PI / 4), uz = p == 0 ? 0 : (float)Math.Sin(p * Math.PI / 4);
+                    float px = x + ux * (r + ObjectField.BogLipM), pz = z + uz * (r + ObjectField.BogLipM);
+                    if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) { e.Add(at + " reaches past the world edge"); return; }
+                    int i = Math.Min(n - 1, (int)(pz / cm + 0.5f)) * n + Math.Min(n - 1, (int)(px / cm + 0.5f));
+                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || field.RiverGap(px, pz) <= 0) { e.Add(at + " stands in open water"); return; }
+                    if (!field.SandAt(px, pz)) { e.Add(at + " lies off sand-coated ground"); return; }
+                }
+                float span = field.RimSpan(x, z, r);
+                if (span > ObjectField.QuicksandSteadyM) { e.Add(at + $" sits on a slope: its rim spans {span:F2} m"); return; }
+            }
+            foreach (var p in field.LiquidPools())
+                if (p.Kind == ObjectField.QuicksandPool && p.Liquid != w.Materials.Liquid("quicksand")) { e.Add($"quicksand at {p.X:F0},{p.Z:F0} holds the wrong liquid"); return; }
+        }
+
         static void CheckPools(ObjectField field, List<string> e)
         {
-            int expected = field.BogPools().Length / ObjectField.BogStride + field.CavePools().Length;
+            int expected = field.BogPools().Length / ObjectField.BogStride + field.QuicksandPools().Length / ObjectField.BogStride + field.CavePools().Length;
             var spots = new List<float>();
             foreach (var o in field.Discoveries())
                 if (field.IsVent(o)) { field.SpringPoolsAt(o, spots); expected += spots.Count / ObjectField.SpringStride; }
@@ -39,7 +68,7 @@ namespace Stabby.World
             if (pools.Length != expected) { e.Add($"{pools.Length} liquid pools are water bodies but {expected} pools were placed"); return; }
             foreach (var p in pools)
             {
-                string at = $"{(p.Kind == ObjectField.BogPool ? "bog" : p.Kind == ObjectField.CavePool ? "cave" : "vent")} pool at {p.X:F0},{p.Z:F0}";
+                string at = $"{(p.Kind == ObjectField.BogPool ? "bog" : p.Kind == ObjectField.CavePool ? "cave" : p.Kind == ObjectField.QuicksandPool ? "quicksand" : "vent")} pool at {p.X:F0},{p.Z:F0}";
                 if (!(p.Level <= p.Rim)) { e.Add(at + $" stands at {p.Level:F2} m, above its basin rim at {p.Rim:F2} m"); return; }
                 if (p.Leaks) { e.Add(at + " spills out of its basin"); return; }
                 if (p.WetCount == 0 || !(p.Level - p.Floor >= ObjectField.PoolMinDepthM)) { e.Add(at + $" holds no water: level {p.Level:F2} m over floor {p.Floor:F2} m"); return; }
@@ -87,6 +116,7 @@ namespace Stabby.World
         static void CheckDiscoveries(GeneratedWorld w, ObjectField field, List<string> e)
         {
             CheckBogs(w, field, e);
+            CheckQuicksand(w, field, e);
             CheckPools(field, e);
             var found = field.Discoveries();
             var hot = field.Hotspots;

@@ -82,7 +82,7 @@
       }
     },
     "liquids": {
-      "type": "array", "minItems": 1, "maxItems": 8,
+      "type": "array", "minItems": 1, "maxItems": 16,
       "items": {
         "type": "object",
         "required": ["id", "deepColor", "shallowColor", "filmColor", "emissionColor", "clarityM", "shoreM", "foamWidthM", "waveScaleM", "waveSpeed", "waveStrength", "swellScaleM", "swellStrength", "lakeSwell", "flowSpeed", "rapidsSlope", "bedFieldM", "silt", "opacity", "viscosity", "bubbles", "film", "emission", "roughness", "fall"],

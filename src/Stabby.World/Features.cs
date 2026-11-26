@@ -521,7 +521,11 @@ namespace Stabby.World
             var field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
-            var bogs = field.BogEdits();
+            var bog = field.BogEdits();
+            var sand = field.QuicksandEdits();
+            var bogs = new FeatureEdit[bog.Length + sand.Length];
+            bog.CopyTo(bogs, 0);
+            sand.CopyTo(bogs, bog.Length);
             var dens = field.DenEdits();
             var vaults = field.DungeonEdits();
             discoveries = field.Discoveries();

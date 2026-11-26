@@ -176,7 +176,7 @@ namespace Stabby.World
 
     public sealed class LiquidDef
     {
-        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 8, TintSlots = 3;
+        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 16, TintSlots = 3;
         public static readonly string[] SprayNames = { "none", "mist", "dust", "shimmer" };
         public string Id;
         public List<string> Biomes = new List<string>();

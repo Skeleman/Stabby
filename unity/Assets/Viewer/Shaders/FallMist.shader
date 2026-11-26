@@ -15,7 +15,7 @@ Shader "Stabby/FallMist"
         float4 _StabbyShadowPx;
         float4 _StabbyShadowEye;
         float _StabbyClock;
-        float4 _StabbyLiquid[80];
+        float4 _StabbyLiquid[160];
 
         static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
         static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6, SteamPeriod = 6.5, SteamOpacity = 0.14, JetPeriod = 1.7, ColumnSteamPeriod = 5.5, JetRamp = 1.5, SteamLinger = 9, JetOpacity = 0.75, JetStretch = 3.2, ColumnSteamOpacity = 0.3, JetCover = 0.1, SteamCover = 0.12;
@@ -224,7 +224,7 @@ Shader "Stabby/FallMist"
                 float3 c = _StabbySky.rgb * 0.9 + 0.12 + l.color * sun * (0.6 + 0.9 * fwd);
                 c *= (0.88 + 0.12 * saturate(n * 0.5 + 0.5)) * (1 - 0.18 * dens);
                 c *= kind > 3.5 && flowQ < 0.5 ? 1.08 : 1;
-                c *= kind < 2.5 ? _StabbyLiquid[clamp((int)round(i.corner.z), 0, 7) * 10 + 9].rgb : 1;
+                c *= kind < 2.5 ? _StabbyLiquid[clamp((int)round(i.corner.z), 0, 15) * 10 + 9].rgb : 1;
                 return half4(MixFog(c, i.fog), dens * soft * near * px * op);
             }
             ENDHLSL

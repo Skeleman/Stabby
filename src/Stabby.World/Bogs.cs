@@ -26,14 +26,7 @@ namespace Stabby.World
             var list = new List<float>();
             int wet = w.BiomeIds == null ? -1 : Array.IndexOf(w.BiomeIds, "wetland");
             if (w.Biome == null || wet < 0) return list.ToArray();
-            var keep = new List<float>();
-            var pools = new List<float>();
-            foreach (var o in Discoveries())
-            {
-                if (!IsVent(o)) { keep.Add(o.X); keep.Add(o.Z); keep.Add(SiteRadius(o)); continue; }
-                SpringPoolsAt(o, pools);
-                for (int k = 0; k < pools.Count; k += SpringStride) { keep.Add(pools[k]); keep.Add(pools[k + 1]); keep.Add(pools[k + 3]); }
-            }
+            var keep = SoftKeep();
             ulong stream = Rng.Stream(w.Config.Seed, "bog-pools").NextU64();
             int cells = (int)Math.Ceiling(worldM / BogCellM);
             for (int cz = 0; cz < cells; cz++)
@@ -52,12 +45,27 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        void BogAt(float x, float z, float r, float depth, int wet, List<float> keep, List<float> list)
+        List<float> SoftKeep()
+        {
+            var keep = new List<float>();
+            var pools = new List<float>();
+            foreach (var o in Discoveries())
+            {
+                if (!IsVent(o)) { keep.Add(o.X); keep.Add(o.Z); keep.Add(SiteRadius(o)); continue; }
+                SpringPoolsAt(o, pools);
+                for (int k = 0; k < pools.Count; k += SpringStride) { keep.Add(pools[k]); keep.Add(pools[k + 1]); keep.Add(pools[k + 3]); }
+            }
+            return keep;
+        }
+
+        void BogAt(float x, float z, float r, float depth, int wet, List<float> keep, List<float> list) => SoftAt(BogPool, x, z, r, depth, c => w.Biome[c] == wet, BogRiverM, BogSteadyM, keep, list);
+
+        bool SoftAt(int kind, float x, float z, float r, float depth, Func<int, bool> fits, float riverM, float steady, List<float> keep, List<float> list)
         {
             float probe = BogReach(r, 0f, BogSteadyM + BogDipM + BogTopM + BogHeadM);
-            if (x - probe < 0 || z - probe < 0 || x + probe >= worldM || z + probe >= worldM || w.Biome[Cell(z) * n + Cell(x)] != wet) return;
+            if (x - probe < 0 || z - probe < 0 || x + probe >= worldM || z + probe >= worldM || !fits(Cell(z) * n + Cell(x))) return false;
             int c = Cell(z) * n + Cell(x);
-            if (w.Sea[c] || w.Water.LakeId[c] >= 0 || RiverGap(x, z) <= BogRiverM) return;
+            if (w.Sea[c] || w.Water.LakeId[c] >= 0 || RiverGap(x, z) <= riverM) return false;
             float low = GroundAt(detail, cm, x, z), high = low;
             for (int ring = 0; ring < 2; ring++)
                 for (int p = 0; p < 8; p++)
@@ -65,33 +73,34 @@ namespace Stabby.World
                     FanDir(p, 0.70710678f, out float ux, out float uz);
                     float rr = ring == 0 ? r + BogLipM : probe, px = x + ux * rr, pz = z + uz * rr;
                     int i = Cell(pz) * n + Cell(px);
-                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || RiverGap(px, pz) <= BogRiverM) return;
+                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || RiverGap(px, pz) <= riverM) return false;
                     float g = GroundAt(detail, cm, px, pz);
                     low = Math.Min(low, g); high = Math.Max(high, g);
                 }
-            if (high - low > BogSteadyM) return;
+            if (high - low > steady) return false;
             float level = low - BogDipM, top = high + BogTopM, rout = BogReach(r, level, top + BogHeadM);
             foreach (var f in edits)
-                if (f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring && x + rout >= f.MinX && x - rout <= f.MaxX && z + rout >= f.MinZ && z - rout <= f.MaxZ) return;
+                if (f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring && x + rout >= f.MinX && x - rout <= f.MaxX && z + rout >= f.MinZ && z - rout <= f.MaxZ) return false;
             for (int k = 0; k < keep.Count; k += 3)
             {
                 float dx = keep[k] - x, dz = keep[k + 1] - z, gap = keep[k + 2] + rout + BogSiteM;
-                if (dx * dx + dz * dz < gap * gap) return;
+                if (dx * dx + dz * dz < gap * gap) return false;
             }
             for (int k = 0; k < list.Count; k += BogStride)
             {
                 float dx = list[k] - x, dz = list[k + 1] - z, gap = BogReach(list[k + 2], list[k + 3], list[k + 5] + BogHeadM) + rout + BogGapM;
-                if (dx * dx + dz * dz < gap * gap) return;
+                if (dx * dx + dz * dz < gap * gap) return false;
             }
             foreach (var t in Towns)
             {
                 float dx = t.X * cm - x, dz = t.Y * cm - z;
-                if (dx * dx + dz * dz < BogTownM * BogTownM) return;
+                if (dx * dx + dz * dz < BogTownM * BogTownM) return false;
             }
-            if (RoadSide(x, z, out _, out _) < rout + BogRoadM || UnderMesa(x, z, rout)) return;
-            var basin = Pool(BogPool, 0, x, z, rout, level, level - depth - BogHeadM, top + BogHeadM, new[] { BogEdit(x, z, r, level, level - depth, top + BogHeadM) });
-            if (basin.Leaks || basin.WetCount == 0 || !(basin.Level - basin.Floor >= PoolMinDepthM)) return;
+            if (RoadSide(x, z, out _, out _) < rout + BogRoadM || UnderMesa(x, z, rout)) return false;
+            var basin = Pool(kind, 0, x, z, rout, level, level - depth - BogHeadM, top + BogHeadM, new[] { SoftEdit(x, z, r, level, level - depth, top + BogHeadM, kind == BogPool ? -r : 0f) });
+            if (basin.Leaks || basin.WetCount == 0 || !(basin.Level - basin.Floor >= PoolMinDepthM)) return false;
             list.Add(x); list.Add(z); list.Add(r); list.Add(level); list.Add(level - depth); list.Add(top);
+            return true;
         }
 
         bool NearBog(FeatureEdit e)
@@ -114,10 +123,12 @@ namespace Stabby.World
             return list;
         }
 
-        static FeatureEdit BogEdit(float x, float z, float r, float level, float floor, float top)
+        static FeatureEdit BogEdit(float x, float z, float r, float level, float floor, float top) => SoftEdit(x, z, r, level, floor, top, -r);
+
+        static FeatureEdit SoftEdit(float x, float z, float r, float level, float floor, float top, float mud)
         {
             float seed = (float)((Rng.Mix(((ulong)(uint)(int)(x * 64f) << 32 | (uint)(int)(z * 64f)) ^ 0xB0C5UL) >> 40) / 16777216.0);
-            return Disc(FeatureEdit.Carve, x, z, top, floor, BogReach(r, level, top) - BogRound, BogRound, -BogBank, -BogLobe, BogLumpM, seed, -r, 0);
+            return Disc(FeatureEdit.Carve, x, z, top, floor, BogReach(r, level, top) - BogRound, BogRound, -BogBank, -BogLobe, BogLumpM, seed, mud, 0);
         }
     }
 }

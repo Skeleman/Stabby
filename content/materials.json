@@ -88,6 +88,15 @@
       "flowSpeed": 0.05, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 0, "opacity": 1, "viscosity": 0.95, "bubbles": 0.05, "film": 1, "emission": 3, "roughness": 0.45,
       "fall": { "spray": "shimmer", "speed": 0.1, "sheetOpacity": 1, "sprayColor": "#ffb070", "sprayAmount": 0.3, "froth": 0 }
+    },
+    {
+      "id": "quicksand", "deepColor": "#5e4f38", "shallowColor": "#8a7656", "filmColor": "#a8956f", "emissionColor": "#000000",
+      "clarityM": 0.1, "shoreM": 0.08, "foamWidthM": 0,
+      "waveScaleM": 4, "waveSpeed": 0.08, "waveStrength": 0.02,
+      "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
+      "flowSpeed": 0.05, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 1, "opacity": 1, "viscosity": 0.97, "bubbles": 0, "film": 0.35, "emission": 0, "roughness": 0.12,
+      "fall": { "spray": "none", "speed": 0.1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 0, "froth": 0 }
     }
   ],
   "surface": {

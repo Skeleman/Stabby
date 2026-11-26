@@ -7,11 +7,11 @@ Shader "Stabby/Water"
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-        float4 _StabbyLiquid[80];
+        float4 _StabbyLiquid[160];
         float4 _StabbyShadowPx;
         float4 _StabbyShadowEye;
 
-        float4 Liquid(float id, int row) { return _StabbyLiquid[clamp((int)round(id), 0, 7) * 10 + row]; }
+        float4 Liquid(float id, int row) { return _StabbyLiquid[clamp((int)round(id), 0, 15) * 10 + row]; }
 
         float2 Grad(int2 p)
         {

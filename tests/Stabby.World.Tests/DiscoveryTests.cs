@@ -331,6 +331,45 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void QuicksandPatchesSitOnWetSand()
+    {
+        var placed = TestWorlds.Default;
+        var w = placed.W;
+        var field = placed.Field;
+        var sands = field.QuicksandPools();
+        int liquid = w.Materials.Liquid("quicksand"), pooled = 0, near = 0;
+        Assert.True(liquid > 0);
+        foreach (var p in field.LiquidPools())
+            if (p.Kind == ObjectField.QuicksandPool) { pooled++; Assert.Equal(liquid, p.Liquid); Assert.False(p.Leaks); }
+        Assert.Equal(sands.Length / ObjectField.BogStride, pooled);
+        float span = field.ChunkMeters;
+        var seen = new HashSet<int>();
+        for (int k = 0; k < sands.Length; k += ObjectField.BogStride)
+        {
+            float x = sands[k], z = sands[k + 1], r = sands[k + 2];
+            Assert.True(field.SandAt(x, z) && field.DampAt(x, z), $"quicksand at {x:F0},{z:F0} is not on wet sand");
+            Assert.InRange(sands[k + 3] - sands[k + 4], ObjectField.QuicksandMinDepthM, ObjectField.QuicksandMaxDepthM);
+            Assert.InRange(r, ObjectField.QuicksandMinR, ObjectField.QuicksandMaxR);
+            Assert.InRange(field.RimSpan(x, z, r), 0f, ObjectField.QuicksandSteadyM);
+            if (k >= 2 * ObjectField.BogStride) continue;
+            float edge = ObjectField.BogMargin(r) + 4f;
+            for (int cz = (int)((z - edge) / span); cz <= (int)((z + edge) / span); cz++)
+                for (int cx = (int)((x - edge) / span); cx <= (int)((x + edge) / span); cx++)
+                {
+                    if (cx < 0 || cz < 0 || cx >= field.ChunksAcross || cz >= field.ChunksAcross || !seen.Add(cz * field.ChunksAcross + cx)) continue;
+                    foreach (var o in field.Chunk(cx, cz))
+                    {
+                        float dx = o.X - x, dz = o.Z - z, reach = ObjectField.BogMargin(r) + 0.5f * field.Footprint(o.Def) * o.Size;
+                        if (dx * dx + dz * dz < (reach + 4f) * (reach + 4f)) near++;
+                        Assert.False(dx * dx + dz * dz < reach * reach, $"{Objects.Objects[o.Def].Id} at {o.X:F1},{o.Z:F1} stands in the quicksand margin at {x:F0},{z:F0}");
+                    }
+                }
+        }
+        output.WriteLine($"{pooled} quicksand patches, {near} objects within 4 m of a margin");
+        Assert.True(pooled > 0, "no quicksand on the default world");
+    }
+
+    [Fact]
     public void GeyserCyclesDifferPerSite()
     {
         Structures.GeyserCycle(1, out float i1, out float d1, out float o1);
