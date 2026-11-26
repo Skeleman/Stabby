@@ -58,9 +58,9 @@ namespace Stabby.World
             return keep;
         }
 
-        void BogAt(float x, float z, float r, float depth, int wet, List<float> keep, List<float> list) => SoftAt(BogPool, x, z, r, depth, c => w.Biome[c] == wet, BogRiverM, BogSteadyM, keep, list);
+        void BogAt(float x, float z, float r, float depth, int wet, List<float> keep, List<float> list) => SoftAt(BogPool, x, z, r, depth, c => w.Biome[c] == wet, BogRiverM, BogSteadyM, BogDipM, false, keep, list);
 
-        bool SoftAt(int kind, float x, float z, float r, float depth, Func<int, bool> fits, float riverM, float steady, List<float> keep, List<float> list)
+        bool SoftAt(int kind, float x, float z, float r, float depth, Func<int, bool> fits, float riverM, float steady, float dip, bool flush, List<float> keep, List<float> list)
         {
             float probe = BogReach(r, 0f, BogSteadyM + BogDipM + BogTopM + BogHeadM);
             if (x - probe < 0 || z - probe < 0 || x + probe >= worldM || z + probe >= worldM || !fits(Cell(z) * n + Cell(x))) return false;
@@ -74,11 +74,12 @@ namespace Stabby.World
                     float rr = ring == 0 ? r + BogLipM : probe, px = x + ux * rr, pz = z + uz * rr;
                     int i = Cell(pz) * n + Cell(px);
                     if (w.Sea[i] || w.Water.LakeId[i] >= 0 || RiverGap(px, pz) <= riverM) return false;
+                    if (flush && ring == 1) continue;
                     float g = GroundAt(detail, cm, px, pz);
                     low = Math.Min(low, g); high = Math.Max(high, g);
                 }
             if (high - low > steady) return false;
-            float level = low - BogDipM, top = high + BogTopM, rout = BogReach(r, level, top + BogHeadM);
+            float level = low - dip, top = high + BogTopM, rout = BogReach(r, level, top + BogHeadM);
             foreach (var f in edits)
                 if (f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring && x + rout >= f.MinX && x - rout <= f.MaxX && z + rout >= f.MinZ && z - rout <= f.MaxZ) return false;
             for (int k = 0; k < keep.Count; k += 3)

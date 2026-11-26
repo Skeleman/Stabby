@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public const int QuicksandPool = -3;
         public const float QuicksandChance = 0.8f, QuicksandSpreadM = 30f, QuicksandMinR = 1.5f, QuicksandMaxR = 5f;
-        public const float QuicksandMinDepthM = 0.3f, QuicksandMaxDepthM = 0.5f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 1.2f;
+        public const float QuicksandMinDepthM = 0.6f, QuicksandMaxDepthM = 0.9f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 0.1f, QuicksandDipM = 0.04f;
         readonly object quicksandLock = new object();
         float[] quicksandPools;
 
@@ -46,11 +46,12 @@ namespace Stabby.World
             var bogs = BogPools();
             for (int k = 0; k < bogs.Length; k += BogStride) { keep.Add(bogs[k]); keep.Add(bogs[k + 1]); keep.Add(BogReach(bogs[k + 2], bogs[k + 3], bogs[k + 5] + BogHeadM)); }
             ulong stream = Rng.Stream(w.Config.Seed, "quicksand-pools").NextU64();
+            var near = WetNear((int)Math.Ceiling(QuicksandWetM / cm) + 1);
             for (int cz = 0; cz < n; cz++)
                 for (int cx = 0; cx < n; cx++)
                 {
                     float ox = (cx + 0.5f) * cm, oz = (cz + 0.5f) * cm;
-                    if (w.Sea[cz * n + cx] || !SandAt(ox, oz) || !DampAt(ox, oz)) continue;
+                    if (!near[cz * n + cx] || w.Sea[cz * n + cx] || !SandAt(ox, oz) || !DampAt(ox, oz)) continue;
                     var rng = new Rng(Rng.Mix(stream ^ (ulong)(cz * n + cx + 1) * 0x9E3779B97F4A7C15UL));
                     int count = rng.Range(3, 8);
                     if (rng.NextFloat() >= QuicksandChance) continue;
@@ -59,10 +60,37 @@ namespace Stabby.World
                         float x = ox + rng.Range(-QuicksandSpreadM, QuicksandSpreadM), z = oz + rng.Range(-QuicksandSpreadM, QuicksandSpreadM);
                         float r = rng.Range(QuicksandMinR, QuicksandMaxR), depth = rng.Range(QuicksandMinDepthM, QuicksandMaxDepthM);
                         if (x < 0 || z < 0 || x >= worldM || z >= worldM || !DampAt(x, z) || !SandRing(x, z, r)) continue;
-                        SoftAt(QuicksandPool, x, z, r, depth, c => true, QuicksandRiverM, QuicksandSteadyM, keep, list);
+                        SoftAt(QuicksandPool, x, z, r, depth, c => true, QuicksandRiverM, QuicksandSteadyM, QuicksandDipM, true, keep, list);
                     }
                 }
             return list.ToArray();
+        }
+
+        bool[] WetNear(int reach)
+        {
+            var wet = new bool[n * n];
+            for (int i = 0; i < wet.Length; i++)
+            {
+                wet[i] = !w.Sea[i] && w.Water.LakeId[i] >= 0;
+                for (int k = blockStart[i]; !wet[i] && k < blockStart[i + 1]; k++) wet[i] = blockItems[k] >= 0;
+            }
+            var row = new bool[n * n];
+            for (int z = 0; z < n; z++)
+                for (int x = 0, last = -reach - 1; x < n + reach; x++)
+                {
+                    if (x < n && wet[z * n + x]) last = x;
+                    int at = x - reach;
+                    if (at >= 0) row[z * n + at] = x - last <= 2 * reach;
+                }
+            var near = new bool[n * n];
+            for (int x = 0; x < n; x++)
+                for (int z = 0, last = -reach - 1; z < n + reach; z++)
+                {
+                    if (z < n && row[z * n + x]) last = z;
+                    int at = z - reach;
+                    if (at >= 0) near[at * n + x] = z - last <= 2 * reach;
+                }
+            return near;
         }
 
         public float RimSpan(float x, float z, float r)
@@ -105,7 +133,7 @@ namespace Stabby.World
             var b = QuicksandPools();
             var list = new FeatureEdit[b.Length / BogStride];
             for (int k = 0, e = 0; k < b.Length; k += BogStride, e++)
-                list[e] = SoftEdit(b[k], b[k + 1], b[k + 2], b[k + 3], b[k + 4], b[k + 5] + BogHeadM, 0f);
+                list[e] = SoftEdit(b[k], b[k + 1], b[k + 2], b[k + 3], b[k + 4], b[k + 5] + BogHeadM, 0f).Finer();
             return list;
         }
     }
