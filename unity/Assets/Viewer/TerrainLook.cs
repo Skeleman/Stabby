@@ -121,6 +121,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyPeatWet", s.Sinter[6]);
             Shader.SetGlobalVector("_StabbyPeatDark", s.Sinter[7]);
             Shader.SetGlobalVector("_StabbyPeatFibre", s.Sinter[8]);
+            Shader.SetGlobalVector("_StabbyIce", s.Sinter[9]);
             Shader.SetGlobalVectorArray("_StabbyKit", s.Kit);
             Shader.SetGlobalVectorArray("_StabbyKitSrgb", s.KitSrgb);
         }
@@ -331,7 +332,7 @@ namespace Stabby.Viewer
                 CoatA = coatA, CoatB = coatB,
                 Liquids = LiquidLook(lib),
                 Tints = TintLook(lib),
-                Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat),
+                Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat, lib.Find("ice")),
                 Kit = KitLook(lib, true),
                 KitSrgb = KitLook(lib, false),
             };
@@ -358,10 +359,10 @@ namespace Stabby.Viewer
             return level;
         }
 
-        static Vector4[] SinterLook(SinterDef d, MudDef m, PeatDef p)
+        static Vector4[] SinterLook(SinterDef d, MudDef m, PeatDef p, LibraryMaterial ice)
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
-            return new[] { C(d.White, 0), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0) };
+            return new[] { C(d.White, 0), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0), C(ice?.Color ?? 0xcfe2ecu, ice?.Translucency ?? 0) };
         }
 
         static Vector4[] KitLook(MaterialLibrary lib, bool linear)

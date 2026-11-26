@@ -91,7 +91,7 @@ Shader "Stabby/Creature"
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand;
+            float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
             float _StabbyStrataPeriod;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
