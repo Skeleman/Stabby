@@ -98,6 +98,12 @@ namespace Stabby.World
             for (int i = 0; i < edits.Count; i++) { var e = edits[i]; e.Link = true; edits[i] = e; }
             var near = new List<FeatureEdit>();
             foreach (var e in list) if (Features.TileOf(e, cm) == tile) near.Add(e);
+            var bare = near.FindAll(q => q.Shape != FeatureEdit.Speleothem);
+            bare.AddRange(edits.FindAll(q => q.Shape != FeatureEdit.Speleothem));
+            var rock = bare.ToArray();
+            var ground = new DetailGround { Detail = detail };
+            var solid = new EditArray { Items = rock };
+            edits.RemoveAll(q => q.Shape == FeatureEdit.Speleothem && Underground.DripFault(ground, solid, Features.LatticeStepM, q, rock, 0, rock.Length, Underground.PassM) != null);
             near.AddRange(edits);
             var all = near.ToArray();
             foreach (var e in edits) if (Underground.PathFault(detail, all, e) != null) return false;

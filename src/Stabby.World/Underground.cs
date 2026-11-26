@@ -18,7 +18,7 @@ namespace Stabby.World
 
     public sealed class CaveLibrary
     {
-        public float Chance = 0.35f, CrystalChance, CellMin = 14f, CellMax = 22f, IceChance, IceMaxTempC;
+        public float Chance = 0.35f, CrystalChance, CellMin = 14f, CellMax = 22f, IceChance, IceMaxTempC, ObsidianChance, ObsidianMinTempC, ObsidianMaxRainMm;
         public float LightChance, SkylightChance, SkylightDepthM = 48f, SkylightRadiusM = 2.5f;
         public int LightMost;
         public List<CaveClass> Classes = new List<CaveClass>();
@@ -36,6 +36,9 @@ namespace Stabby.World
             if (!(l.CrystalChance >= 0f && l.CrystalChance <= 1f)) e.Add("crystalChance must be within 0..1");
             if (!(l.IceChance >= 0f && l.IceChance <= 1f)) e.Add("iceChance must be within 0..1");
             if (!(l.IceMaxTempC >= -60f && l.IceMaxTempC <= 10f)) e.Add("iceMaxTempC must be within -60..10");
+            if (!(l.ObsidianChance >= 0f && l.ObsidianChance <= 1f)) e.Add("obsidianChance must be within 0..1");
+            if (!(l.ObsidianMinTempC >= 0f && l.ObsidianMinTempC <= 50f && l.ObsidianMaxRainMm >= 0f && l.ObsidianMaxRainMm <= 4000f)) e.Add("obsidianMinTempC must be within 0..50 and obsidianMaxRainMm 0..4000");
+            if (l.ObsidianChance > 0f && !(l.ObsidianMinTempC > l.IceMaxTempC)) e.Add("obsidianMinTempC must exceed iceMaxTempC");
             if (!(l.CellMax >= l.CellMin) || l.Classes.Exists(c => !(l.CellMin > c.RadiusMax))) e.Add("crystalCell needs tunnel radius < min <= max");
             if (l.Classes.Count == 0) e.Add("classes must not be empty");
             if (!(l.LightChance >= 0f && l.LightChance <= 1f && l.SkylightChance >= 0f && l.SkylightChance <= 1f)) e.Add("lights chance and skylightChance must be within 0..1");
@@ -83,7 +86,7 @@ namespace Stabby.World
     {
         public string Class;
         public int Tile;
-        public bool Crystal, Ice;
+        public bool Crystal, Ice, Obsidian;
         public List<CaveNode> Nodes = new List<CaveNode>();
         public List<CaveEdge> Edges = new List<CaveEdge>();
     }
@@ -93,7 +96,7 @@ namespace Stabby.World
         public const float MinRadius = 5f, PieceM = 40f, Grade = 0.17f, PorchM = 45f, MouthM = 15f, BridgeClearM = 2f, BridgeReachM = 150f;
         public const int Tries = 6;
 
-        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, ulong ice, ulong sky, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
+        public static void Tile(GeneratedWorld w, TerrainDetail detail, CaveLibrary lib, int tx, int ty, ref Rng r, ref Rng width, ulong rock, ulong drip, ulong flow, ulong pools, ulong crystal, ulong ice, ulong obsidian, ulong sky, List<FeatureEdit> prior, List<FeatureEdit> output, out CaveGraph graph)
         {
             graph = null;
             if (lib == null || lib.Classes.Count == 0) return;
@@ -130,6 +133,11 @@ namespace Stabby.World
                         {
                             graph.Ice = true;
                             for (int j = start; j < output.Count; j++) if (output[j].CaveCarve) { var x = output[j]; x.Ice = true; output[j] = x; }
+                        }
+                        else if (!graph.Crystal && Volcanic(w, lib, graph) && new Rng(obsidian).NextFloat() < lib.ObsidianChance)
+                        {
+                            graph.Obsidian = true;
+                            for (int j = start; j < output.Count; j++) if (output[j].CaveCarve) { var x = output[j]; x.Obsidian = true; output[j] = x; }
                         }
                         var q = new Rng(pools);
                         Pools(detail, graph, ref q, output, start);
@@ -172,6 +180,21 @@ namespace Stabby.World
                 t = Math.Max(t, w.Climate.TemperatureC[z * n + x]);
             }
             return float.IsNegativeInfinity(t) ? float.PositiveInfinity : t;
+        }
+
+        public static bool Volcanic(GeneratedWorld w, CaveLibrary lib, CaveGraph g)
+        {
+            if (w.Climate == null || lib.ObsidianChance <= 0f) return false;
+            int n = w.Config.Size, seen = 0;
+            float cm = w.Config.CellMeters;
+            foreach (var m in g.Nodes)
+            {
+                if (!m.Entrance) continue;
+                int x = Math.Min(n - 1, Math.Max(0, (int)Math.Round(m.X / cm))), z = Math.Min(n - 1, Math.Max(0, (int)Math.Round(m.Z / cm)));
+                if (w.Climate.TemperatureC[z * n + x] < lib.ObsidianMinTempC || w.Climate.PrecipitationMm[z * n + x] > lib.ObsidianMaxRainMm) return false;
+                seen++;
+            }
+            return seen > 0;
         }
 
         static FeatureEdit[] Near(List<FeatureEdit> prior, List<FeatureEdit> output, int start)
@@ -599,6 +622,7 @@ namespace Stabby.World
 
         public const int PoolTries = 4, PoolHallMost = 2;
         public const float PoolChamberChance = 0.6f, PoolHallChance = 1f, PoolChamberMinR = 2.5f, PoolChamberMaxR = 5f, PoolHallMinR = 7f, PoolHallMaxR = 11f;
+        public const float LavaMinR = 0.8f, LavaMaxR = 1.8f, LavaAlong = 0.6f;
         public const float PoolMinDepthM = 0.5f, PoolMaxDepthM = 1f, PoolDipM = 0.06f, PoolTopM = 1f, PoolBank = 1.5f, PoolRound = 0.3f, PoolFlatM = 0.6f, PoolSealM = 1f, PoolKeepM = 2f;
 
         public static float PoolReach(float r, float level, float top) => r + PoolBank * (top - PoolRound - level) + PoolRound;
@@ -674,15 +698,25 @@ namespace Stabby.World
                     var c = rooms[t.Range(0, rooms.Count)];
                     float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
                     if (len < 1f) continue;
-                    float rp = n.Hall ? PoolHallMinR + (PoolHallMaxR - PoolHallMinR) * size : PoolChamberMinR + (PoolChamberMaxR - PoolChamberMinR) * size;
+                    float rp = g.Obsidian ? LavaMinR + (LavaMaxR - LavaMinR) * size : n.Hall ? PoolHallMinR + (PoolHallMaxR - PoolHallMinR) * size : PoolChamberMinR + (PoolChamberMaxR - PoolChamberMinR) * size;
+                    if (g.Obsidian) along = LavaAlong + (1f - LavaAlong) * (along - 0.3f) / 0.55f * 0.85f;
                     float floor = c.Ay - c.HoleR, level = floor - PoolDipM, top = floor + PoolTopM, reach = PoolReach(rp, level, top);
                     float lateral = Math.Max(0f, 0.5f * c.FloorHalf - reach) * side;
                     float x = c.Ax + ex * along - ez / len * lateral, z = c.Az + ez * along + ex / len * lateral;
                     var e = ObjectField.Disc(FeatureEdit.Carve, x, z, top, level - depth, reach - PoolRound, PoolRound, -PoolBank, 0f, 0f, seed, 0f, 0f).Finer();
+                    e.Obsidian = g.Obsidian;
+                    if (g.Obsidian && LavaFault(output, start, x, z, BasinReach(e)) != null) continue;
                     if (Seated(ground, rock, s, e, floor, reach, level - depth, output, start, made)) { made.Add(e); placed++; }
                 }
             }
             output.AddRange(made);
+        }
+
+        public static string LavaFault(IList<FeatureEdit> items, int from, float x, float z, float reach)
+        {
+            for (int q = from; q < items.Count; q++)
+                if (items[q].Shape == FeatureEdit.Cave && Plan(items[q], x, z) < reach + PassM) return $"lava pool at {x:F0},{z:F0} blocks a cave passage";
+            return null;
         }
 
         static bool Seated(DetailGround ground, EditArray rock, float s, FeatureEdit e, float floor, float reach, float bottom, List<FeatureEdit> output, int start, List<FeatureEdit> made)

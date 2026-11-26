@@ -98,7 +98,7 @@ namespace Stabby.Game
     {
         public const int Levels = NearField.NodeLevels, Root = Levels - 1, Quads = NearField.NodeQuads;
         public const int Vertices = (Quads + 1) * (Quads + 1) + 4 * Quads, Indices = Quads * Quads * 6 + 4 * Quads * 12;
-        public const float SkirtBit = 4096f;
+        public const float SkirtBit = 4096f, GlassBit = 8192f;
         public const int Tiers = 10;
 
         public static void Capacity(int tier, out int vertices, out int indices)
@@ -609,13 +609,13 @@ namespace Stabby.Game
             return road * math.smoothstep(RoadUp, RoadUp + 0.15f, up);
         }
 
-        static float Ice(NativeEdits edits, NativeList<float2> light, float3 p, float cover)
+        static float Ice(NativeEdits edits, NativeList<float2> light, float3 p, float cover, bool glass)
         {
             float inside = 0, lit = 0;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
-                if (e.Ice && e.CaveCarve) CaveDark.Add(e, light[q], p, ref inside, ref lit);
+                if ((glass ? e.Obsidian : e.Ice) && e.CaveCarve) CaveDark.Add(e, light[q], p, ref inside, ref lit);
             }
             float warm = 0.5f + 0.5f * noise.snoise(p * 0.11f);
             return inside * math.smoothstep(0.5f, 3f, cover) * (1 - 0.85f * math.smoothstep(0.25f, 0.85f, lit + 0.25f * warm));
@@ -756,8 +756,8 @@ namespace Stabby.Game
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y);
                 p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
-                float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover);
-                p.Stitch.w = math.floor(p.Stitch.w) + (ice > 0.01f ? 0.51f + 0.489f * ice : 0.5f * peat);
+                float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover, false), glass = peat > 0 || ice > 0.01f ? 0 : Ice(edits, light, p.Pos, cover, true), coat = math.max(ice, glass);
+                p.Stitch.w = math.floor(p.Stitch.w) + (glass > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : 0.5f * peat);
                 float dark = Dark(edits, light, p.Pos, cover);
                 p.Dark = new half2(new float2(dark, dark));
                 if (stitch)
