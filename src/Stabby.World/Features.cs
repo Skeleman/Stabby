@@ -126,8 +126,8 @@ namespace Stabby.World
             hi = k * ReliefHi;
             if (!Natural) return;
             float m = Math.Min(1f, h / ProfileRefM);
-            lo += m * (UndercutM + 0.5f * LedgeStepM + CeilDomeM) + LeanMax * (2f * h + 1f);
-            hi += m * (CeilBumpM + CeilDropM + MoundM + BankM);
+            lo += m * (UndercutM + 0.5f * LedgeStepM + CeilDomeM) + LeanMax * (2f * h + 1f) + (CeilShift + WideW + RiftH) * h;
+            hi += m * (CeilBumpM + CeilDropM + MoundM + BankM) + (WideH + RiftTopW) * 2f * h;
         }
 
         uint RockSeed => (uint)(F * 16777216f) * 0x9E3779B1u + 0x7F4A7C15u;
@@ -148,7 +148,7 @@ namespace Stabby.World
 
         bool Natural => Shape == Cave || Shape == CaveRoom;
 
-        public const float ProfileRefM = 2.2f, LeanMax = 0.15f, LeanSpanM = 15f, SideSpanM = 11f;
+        public const float ProfileRefM = 2.2f, LeanMax = 0.35f, LeanSpanM = 9f, SideSpanM = 11f, CeilShift = 0.45f, ShiftSpanM = 13f, SectionSpanM = 12f, WideW = 0.25f, WideH = 0.2f, RiftFloorW = 0.05f, RiftTopW = 0.3f, RiftH = 0.7f;
         public const float LedgeStepM = 1.1f, UndercutM = 0.6f, UndercutAtM = 0.8f, UndercutSpanM = 0.55f, CeilBumpM = 0.35f, CeilDropM = 0.9f, CeilDomeM = 1.0f, CeilSpanM = 21f, MoundM = 0.3f, BankM = 0.5f;
         const uint ProfileSeed = 0x3C6EF372u;
 
@@ -159,10 +159,13 @@ namespace Stabby.World
             float px = len > 1e-3f ? -ez / len : 1f, pz = len > 1e-3f ? ex / len : 0f;
             float u = qx * px + qz * pz, a2 = Math.Max(0f, qx * qx + qz * qz - u * u), half = FloorHalf;
             float vf = qy + hole, side = 2f * Value(ProfileSeed ^ 0xA54FF53Au, x / SideSpanM, 0f, z / SideSpanM) - 1f;
-            float su = u - LeanMax * (2f * Value(ProfileSeed ^ 0x510E527Fu, x / LeanSpanM, 0f, z / LeanSpanM) - 1f) * vf;
+            float tilt = CeilShift * hole * (2f * Value(ProfileSeed ^ 0x6A09E667u, x / ShiftSpanM, 0f, z / ShiftSpanM) - 1f) * Smooth(0.3f * hole, 1.3f * hole, vf);
+            float su = u - LeanMax * (2f * Value(ProfileSeed ^ 0x510E527Fu, x / LeanSpanM, 0f, z / LeanSpanM) - 1f) * vf - tilt;
+            float sec = Value(ProfileSeed ^ 0xBB67AE85u, x / SectionSpanM, 0f, z / SectionSpanM), wide = Smooth(0.35f, 0.15f, sec), rift = Smooth(0.65f, 0.85f, sec);
+            float sw = 1f + WideW * wide - rift * (RiftFloorW + RiftTopW * Smooth(0f, 1.5f * hole, vf)), sh = 1f - WideH * wide + RiftH * rift;
             float ledge = Smooth(0.2f, 0.7f, side * su / hole) * Smooth(0.6f, 1.4f, vf), cut = Smooth(0.2f, 0.7f, -side * su / hole);
             float g = vf / LedgeStepM, gf = g - (float)Math.Floor(g), sy = qy + Fill * hole + ledge * LedgeStepM * (gf * gf * gf * (gf * (6f * gf - 15f) + 10f) - gf);
-            float wall = (float)Math.Sqrt(su * su + a2 + sy * sy) - Fill * hole;
+            float wall = hole + ((float)Math.Sqrt(Sq(su / sw) + a2 + Sq(sy / sh)) - (1f + Fill) * hole) * Math.Min(sw, sh);
             if (N > 0f) wall += N * Lump(x, y, z);
             float k = Math.Min(1f, hole / RockRefM), band = Math.Abs(wall - hole);
             if (band < RockBand * k) wall += k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
