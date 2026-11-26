@@ -146,10 +146,10 @@ namespace Stabby.World
             }
         }
 
-        public static bool Breach(GeneratedWorld w, TerrainDetail detail, CaveClass c, CaveNode start, float seal, float roof, float grain, float spread, ref Rng r, ref Rng width, ref Rng drip, ref Rng flow, List<FeatureEdit> output, out CaveGraph graph)
+        public static bool Breach(GeneratedWorld w, TerrainDetail detail, CaveClass c, CaveNode start, float seal, float roof, float grain, ref Rng r, ref Rng width, ref Rng drip, ref Rng flow, List<FeatureEdit> output, out CaveGraph graph)
         {
             int mark = output.Count;
-            var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = mark, C = c, R = r, Width = width, Mouths = new List<int>(), Grain = grain, RoomShape = FeatureEdit.CaveRoom, Roof = roof, Seal = seal, Shallow = true, Spread = spread };
+            var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = mark, C = c, R = r, Width = width, Mouths = new List<int>(), Grain = grain, RoomShape = FeatureEdit.CaveRoom, Roof = roof, Seal = seal, Shallow = true };
             b.G = new CaveGraph { Class = c.Id };
             bool ok = b.Breach(start);
             r = b.R;
@@ -210,7 +210,6 @@ namespace Stabby.World
             public float CellMin, CellMax;
             public float Roof = Features.CaveRoof, Seal = float.NaN;
             public bool Shallow;
-            public float Spread;
             readonly List<int> parents = new List<int>();
 
             float Ground(float x, float z) => Detail.HeightAt(x / Cm, z / Cm);
@@ -455,8 +454,7 @@ namespace Stabby.World
                 int mark = Out.Count;
                 for (int s = 0; s + 1 < ts.Count; s++)
                 {
-                    float rs = Spread > 0f && !(mouth && s == 0) ? r * (1f + Spread * Width.Range(-1f, 1f)) : r;
-                    var e = Carve(FeatureEdit.Cave, rs, pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2], pts[s * 3 + 3], pts[s * 3 + 4], pts[s * 3 + 5], C.Lumps * rs).Finer();
+                    var e = Carve(FeatureEdit.Cave, r, pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2], pts[s * 3 + 3], pts[s * 3 + 4], pts[s * 3 + 5], C.Lumps * r).Finer();
                     if (!Fits(e, mouth && Shallow ? float.MaxValue : mouth && s == 0 ? open : 0f, ground)) { Out.RemoveRange(mark, Out.Count - mark); return false; }
                     Out.Add(e);
                 }
