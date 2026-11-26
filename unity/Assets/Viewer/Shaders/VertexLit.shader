@@ -214,14 +214,16 @@ Shader "Stabby/VertexLit"
                     float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
                     float4 big = OrgNoise3(q * float3(0.5, 0.15, 0.5) + 7.3, int3(0, 0, 0)), mid = OrgRL3(q, OrgF(0), 8.3, 0), fine = OrgRL3(q, OrgF(2), 5.9, 2);
                     float fm = OrgRungW(0, fp), ff = OrgRungW(2, fp);
-                    float cover = smoothstep(0.2, 0.6, -i.peat + 0.15 * big.x + 0.05 * mid.x * fm);
-                    float3 a = _StabbyIce.rgb * (0.88 + 0.1 * big.x + 0.05 * mid.x * fm + 0.03 * fine.x * ff);
+                    float cover = smoothstep(0.12, 0.5, -i.peat + 0.2 * big.x + 0.06 * mid.x * fm);
+                    float thick = saturate(-i.peat * (0.75 + 0.35 * big.x) + 0.12 * mid.x * fm);
+                    float3 a = lerp(_StabbyIce.rgb * 1.06, _StabbyIce.rgb * float3(0.74, 0.88, 1.0), thick * thick) * (0.95 + 0.04 * mid.x * fm + 0.03 * fine.x * ff);
                     float3 grad = 0.06 * big.yzw + 0.04 * mid.yzw * fm + 0.02 * fine.yzw * ff;
                     grad -= n * dot(grad, n);
                     m.albedo = lerp(m.albedo, a, cover);
                     tmRough = lerp(tmRough, 0.15, cover);
                     tmGrass *= 1 - cover;
                     wrap = _StabbyIce.w * cover;
+                    ao = lerp(ao, 1, 0.85 * cover);
                     n = normalize(n - grad * cover);
                 }
                 [branch] if (_StabbyGrassFar.x > 0 && tmGrass > 0.01)
@@ -240,7 +242,7 @@ Shader "Stabby/VertexLit"
                 Light l = GetMainLight(TransformWorldToShadowCoord(float3(xv.x + sj.x, h, xv.y + sj.y)), float3(xv.x, h, xv.y), half4(1, 1, 1, 1));
                 l.color *= l.shadowAttenuation;
                 float3 v = normalize(_WorldSpaceCameraPos - float3(xv.x, h, xv.y));
-                float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, n.y * 0.5 + 0.5);
+                float3 ambient = lerp(_StabbyGround.rgb, _StabbySky.rgb, saturate(n.y * 0.5 + 0.5 + wrap));
                 float sky = saturate(i.sky.x);
                 float3 c = (LookColor(m.albedo, 1) * (sky * (l.color * saturate((dot(n, l.direction) + wrap) / (1 + wrap)) + ambient) + LocalLightsWrap(float3(xv.x, h, xv.y), n, i.positionCS, wrap)) + sky * LookSheen(n, v, l.direction, l.color, tmRough)) * ao;
                 return half4(MixFogColor(c, i.fog.rgb * sky, i.fog.w), 1);

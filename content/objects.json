@@ -330,6 +330,11 @@
       "placement": { "perHectare": 0, "cave": "stalagmite", "perHundredM": 18, "sizeMinM": 0.5, "sizeMaxM": 3.2, "clusterCount": 3, "clusterRadiusM": 0.9, "sink": 0.1 }
     },
     {
+      "id": "ice-mite", "name": "Ice stalagmite", "kind": "static", "material": "ice", "variants": 8,
+      "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.45, 1, 0.45] } ],
+      "placement": { "perHectare": 0, "cave": "stalagmite", "caveIce": true, "perHundredM": 20, "sizeMinM": 0.4, "sizeMaxM": 2.6, "clusterCount": 3, "clusterRadiusM": 0.8, "sink": 0.1 }
+    },
+    {
       "id": "cave-rubble", "name": "Cave rubble", "kind": "static", "material": "talus-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "cave": "rubble", "perHundredM": 40, "sizeMinM": 0.25, "sizeMaxM": 0.9, "clusterCount": 3, "clusterRadiusM": 1.2, "sink": 0.25 }
