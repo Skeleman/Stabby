@@ -244,6 +244,7 @@ namespace Stabby.Game.Editor
                 var s1 = SampleMemory(vem, draw);
                 var main = new List<double>(BenchFrames);
                 var renderMs = new List<double>(BenchFrames);
+                var dts = new List<double>(BenchFrames);
                 for (int k = 0; k < BenchFrames + 5; k++)
                 {
                     yield return null;
@@ -255,6 +256,7 @@ namespace Stabby.Game.Editor
                     if (k < 5) continue;
                     main.Add(mainRec.LastValue / 1e6);
                     renderMs.Add((r1 - r0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    dts.Add(Time.unscaledDeltaTime * 1000.0);
                 }
                 string mem = BenchMemory(vem, n);
 
@@ -272,7 +274,7 @@ namespace Stabby.Game.Editor
                 var (heldTrim, trims1) = AnimHeld(view);
                 var s3 = SampleMemory(vem, draw);
 
-                lines.Add($"N {n}: built in {frames} frames, worst arrival frame: build system {worstBuild:F2} ms, main thread {worstMain:F2} ms and dt {worstDt:F1} ms past the bench's own spawn frames; steady 1080p: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms, camera render median {Pct(renderMs, 0.5):F2} ms over {BenchFrames} frames");
+                lines.Add($"N {n}: built in {frames} frames, worst arrival frame: build system {worstBuild:F2} ms, main thread {worstMain:F2} ms and dt {worstDt:F1} ms past the bench's own spawn frames; steady 1080p: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms, camera render median {Pct(renderMs, 0.5):F2} ms, frame dt median {Pct(dts, 0.5):F1} ms, p99 {Pct(dts, 0.99):F1} ms, {dts.FindAll(d => d > 33.0).Count} over 33 ms over {BenchFrames} frames");
                 lines.Add($"  N {n}: retiered after the move in {30 + retier} frames, {CreatureBuildSystem.Count - left + n} live after build; {counts}");
                 lines.Add($"  N {n} entities: {(s1.Entities - s0.Entities) / (float)n:F2} client entities per creature (bench ghost stand-in included), chunks {(s1.Chunks - s0.Chunks) * 16f / n:F2} KiB per creature");
                 lines.Add($"  N {n} {mem}");
