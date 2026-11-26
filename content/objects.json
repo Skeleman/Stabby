@@ -336,6 +336,11 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra"], "perHectare": 0, "discovery": "wolf-den", "spacingM": 800, "chance": 0.6, "slopeMax": 0.3, "sizeMinM": 12, "sizeMaxM": 12.5, "sink": 0.002 }
     },
     {
+      "id": "overlook", "name": "Overlook", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
+      "parts": [ { "id": "site", "shape": "overlook" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra", "steppe", "shrubland", "savanna", "tropical-forest", "alpine", "cold-desert", "desert"], "perHectare": 0, "discovery": "overlook", "spacingM": 800, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 8, "sizeMaxM": 9, "sink": 0.002 }
+    },
+    {
       "id": "stalactite", "name": "Stalactite", "kind": "static", "material": "dripstone", "variants": 8,
       "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.3, 1, 0.3], "solid": "off" } ],
       "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 60, "sizeMinM": 0.4, "sizeMaxM": 8, "clusterCount": 3, "clusterRadiusM": 1.0, "sink": 0.1 }

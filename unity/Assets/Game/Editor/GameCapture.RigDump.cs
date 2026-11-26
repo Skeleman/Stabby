@@ -57,6 +57,7 @@ namespace Stabby.Game.Editor
             for (int i = 0; i < instances.Length; i++)
             {
                 var x = instances[i];
+                if (x.Group < 0) continue;
                 var b = x.Bone;
                 rows.Add($"{F(b.c0.x)} {F(b.c1.x)} {F(b.c2.x)} {F(b.c3.x)} {F(b.c0.y)} {F(b.c1.y)} {F(b.c2.y)} {F(b.c3.y)} {F(b.c0.z)} {F(b.c1.z)} {F(b.c2.z)} {F(b.c3.z)} group {x.Group}");
             }

@@ -35,17 +35,39 @@ Shader "Stabby/Creature"
         #endif
 
         #ifdef STABBY_CREATURE_BUFFER
-        struct CreaturePart { float4 fade; uint bone, fur, group, pad; };
+        struct CreaturePart { float4 fade; uint bone, fur, group, skin; };
         StructuredBuffer<CreaturePart> _Creatures;
         ByteAddressBuffer _CreatureBones;
         StructuredBuffer<float4> _CreatureFur;
         int _CreatureStart;
         CreaturePart CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
-        float4x4 CreatureMatrix(CreaturePart c)
+        float4x4 CreatureBone(uint index)
         {
-            uint o = c.bone * 48;
+            uint o = index * 48;
             float4 p1 = asfloat(_CreatureBones.Load4(o)), p2 = asfloat(_CreatureBones.Load4(o + 16)), p3 = asfloat(_CreatureBones.Load4(o + 32));
             return float4x4(p1.x, p1.w, p2.z, p3.y, p1.y, p2.x, p2.w, p3.z, p1.z, p2.y, p3.x, p3.w, 0, 0, 0, 1);
+        }
+        float4x4 CreatureMatrix(CreaturePart c) { return CreatureBone(c.bone); }
+        float4x4 CreatureSkinned(CreaturePart c, float2 w)
+        {
+            float4x4 m = CreatureBone(c.bone);
+            uint s = c.skin & 0x3fffffff;
+            [branch] if (s != 0 && w.x + w.y > 0) m = (1 - w.x - w.y) * m + w.x * CreatureBone(s) + w.y * CreatureBone(s + 1);
+            return m;
+        }
+        float3 CreatureSkinPoint(CreaturePart c, float3 p, float3 w)
+        {
+            uint s = c.skin & 0x3fffffff;
+            if (s == 0) return p;
+            if ((c.skin >> 30) == 0 || p.z < w.z) p.z = w.z;
+            float t = w.x + w.y;
+            [branch] if (t > 0)
+            {
+                float3 a = normalize(CreatureBone(c.bone)._m02_m12_m22), b = normalize(CreatureBone(w.x > w.y ? s : s + 1)._m02_m12_m22);
+                float ch = sqrt(saturate(0.5 + 0.5 * dot(a, b)));
+                p.xy *= 1 + 2 * t * (min(1.0 / max(ch, 0.1), 1.4) - 1);
+            }
+            return p;
         }
         float3 CreatureNormal(float4x4 m, float3 n)
         {
@@ -110,7 +132,7 @@ Shader "Stabby/Creature"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
             #include "Assets/Viewer/Shaders/CaveSky.hlsl"
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; CREATURE_INPUT };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 tone : TEXCOORD0; float3 skin : TEXCOORD1; CREATURE_INPUT };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
@@ -127,10 +149,11 @@ Shader "Stabby/Creature"
                 Varyings o;
                 #ifdef STABBY_CREATURE_BUFFER
                 o.creatureId = i.creatureId;
-                float4x4 m = CreatureMatrix(CreatureAt(i.creatureId));
-                o.positionWS = mul(m, float4(i.positionOS.xyz, 1)).xyz;
+                CreaturePart ci = CreatureAt(i.creatureId);
+                float4x4 m = CreatureMatrix(ci), sm = CreatureSkinned(ci, i.skin.xy);
+                o.positionWS = mul(sm, float4(CreatureSkinPoint(ci, i.positionOS.xyz, i.skin), 1)).xyz;
                 o.positionCS = TransformWorldToHClip(o.positionWS);
-                o.normalWS = CreatureNormal(m, i.normalOS);
+                o.normalWS = CreatureNormal(sm, i.normalOS);
                 #else
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_TRANSFER_INSTANCE_ID(i, o);
@@ -244,7 +267,7 @@ Shader "Stabby/Creature"
 
             float3 _LightDirection;
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; CREATURE_INPUT };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float3 skin : TEXCOORD1; CREATURE_INPUT };
             struct Varyings { float4 positionCS : SV_POSITION; CREATURE_VARY(0) };
 
             Varyings vert(Attributes i)
@@ -252,8 +275,9 @@ Shader "Stabby/Creature"
                 Varyings o;
                 #ifdef STABBY_CREATURE_BUFFER
                 o.creatureId = i.creatureId;
-                float4x4 m = CreatureMatrix(CreatureAt(i.creatureId));
-                float3 wp = mul(m, float4(i.positionOS.xyz, 1)).xyz;
+                CreaturePart ci = CreatureAt(i.creatureId);
+                float4x4 m = CreatureSkinned(ci, i.skin.xy);
+                float3 wp = mul(m, float4(CreatureSkinPoint(ci, i.positionOS.xyz, i.skin), 1)).xyz;
                 float3 wn = CreatureNormal(m, i.normalOS);
                 #else
                 UNITY_SETUP_INSTANCE_ID(i);
