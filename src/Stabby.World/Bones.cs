@@ -29,7 +29,7 @@ namespace Stabby.World
         {
             int k = rng.Range(0, 16);
             Hewn(l, rng.NextU64(), f, x, y, z, w * rng.Range(1.05f, 1.3f), w * rng.Range(0.75f, 0.9f), w * rng.Range(0.8f, 0.95f), Cos16(k) * 0.15f + 0.85f, Sin16(k) * 0.15f, lo, Tiers - 1, rng.Range(0.3f, 0.45f));
-            if (process > 0) Bone(l, rng.NextU64(), f, x, y + 0.6f * w, z, x + rng.Range(-0.08f, 0.08f), y + 0.6f * w + process, z - 0.35f * process, 0.3f * w, 0.18f * w, 0, 1);
+            if (process > 0) Bone(l, rng.NextU64(), f, x, y + 0.85f * w, z, x + rng.Range(-0.08f, 0.08f), y + 0.85f * w + process, z - 0.35f * process, 0.3f * w, 0.18f * w, 0, 1);
         }
 
         static void Bones(StructureLayout l, ulong key, in Frame f)
@@ -44,21 +44,22 @@ namespace Stabby.World
             for (int i = 0; i < pairs; i++)
             {
                 float a = mid > 0 ? (i - mid) / mid : 0;
-                float h = tall * (1 - 0.32f * a * a) * rng.Range(0.96f, 1.04f), t = rng.Range(0.38f, 0.5f);
+                float h = tall * (1 - 0.32f * a * a) * rng.Range(0.96f, 1.04f), t = rng.Range(0.8f, 1f), bow = rng.Range(0.42f, 0.5f) / h;
                 float z = back + shift + i * gap + 1.5f;
                 zs[i] = z;
                 top[i] = h * RibSin[RibSin.Length - 1];
                 float bar0 = -0.5f, bar1 = 0.5f;
                 for (int side = -1; side <= 1; side += 2)
                 {
-                    float w = h * wide * rng.Range(0.95f, 1.05f), sweep = rng.Range(-0.04f, 0.1f);
+                    float w = h * wide * rng.Range(0.95f, 1.05f), sweep = rng.Range(-0.03f, 0.03f);
                     int segs = rng.NextFloat() < 0.12f ? rng.Range(2, 4) : RibCos.Length - 1;
                     for (int j = 0; j < segs; j++)
                     {
-                        float ta = t * (1 - 0.35f * j / (RibCos.Length - 1)), tb = t * (1 - 0.35f * (j + 1) / (RibCos.Length - 1));
+                        float ta = t * (1 - 0.6f * j / (RibCos.Length - 1)), tb = t * (1 - 0.6f * (j + 1) / (RibCos.Length - 1));
                         float ya = h * RibSin[j], yb = h * RibSin[j + 1];
-                        Bone(l, rng.NextU64(), f, side * w * RibCos[j], ya, z + sweep * ya, side * w * RibCos[j + 1], yb, z + sweep * yb, ta, tb);
+                        Bone(l, rng.NextU64(), f, side * w * RibCos[j], ya, z + sweep * ya - bow * ya * ya, side * w * RibCos[j + 1], yb, z + sweep * yb - bow * yb * yb, ta, tb);
                     }
+                    Bone(l, rng.NextU64(), f, side * 0.98f * w, -0.6f, z, side * 0.5f, 0.5f, z, 0.75f * t, 0.6f * t);
                     if (segs == RibCos.Length - 1)
                     {
                         float tip = w * RibCos[RibCos.Length - 1] + 0.3f * t;
@@ -67,81 +68,79 @@ namespace Stabby.World
                     else
                     {
                         float ex = side * w * RibCos[segs], ey = h * RibSin[segs];
-                        Hewn(l, rng.NextU64(), f, ex, ey - 0.25f * t, z + sweep * ey, 0.8f * t, 0.6f * t, 0.8f * t, 1, 0, 0, 1, 0.35f);
+                        Hewn(l, rng.NextU64(), f, ex, ey - 0.25f * t, z + sweep * ey - bow * ey * ey, 0.6f * t, 0.45f * t, 0.6f * t, 1, 0, 0, 1, 0.35f);
                     }
                     float gx = side * w * RibCos[1] * 1.005f;
                     Touch(l, f, gx, 0, z, 0.7f + t);
-                    Col(l, f, gx, z, 0.45f, -1f, 2.6f);
+                    Touch(l, f, side * 0.5f * w, 0, z, 0.5f + t);
+                    Col(l, f, gx, z, 0.6f, -1f, 2.6f);
                 }
                 int before = l.Pieces.Count;
-                Box(l, rng.NextU64(), f, 0.5f * (bar0 + bar1), top[i] - 0.7f * t, z + 0.08f * top[i], bar1 - bar0, 0.75f * t, 0.75f * t, Stone, GX, 0, Tiers - 1);
+                Box(l, rng.NextU64(), f, 0.5f * (bar0 + bar1), top[i] - 0.45f * t, z - bow * top[i] * top[i], bar1 - bar0, 0.5f * t, 0.5f * t, Stone, GX, 0, Tiers - 1);
                 if (l.Pieces.Count > before) { var p = l.Pieces[before]; p.R = RoundLog; l.Pieces[before] = p; }
             }
 
             float z0 = zs[0], z1 = zs[pairs - 1];
-            int spine = (int)Math.Ceiling((z1 - z0) / 0.8f);
+            int spine = (int)Math.Ceiling((z1 - z0) / 0.9f);
             for (int k = 0; k <= spine; k++)
             {
-                float z = z0 + (z1 - z0) * k / Math.Max(1, spine), at = (z - z0) / gap;
-                int i = Math.Min(pairs - 2, (int)at);
-                float y = pairs > 1 ? top[i] + (top[i + 1] - top[i]) * Math.Min(1, at - i) : top[0];
-                Vertebra(l, ref rng, f, rng.Range(-0.04f, 0.04f), y - 0.35f, z + 0.08f * y, rng.Range(0.85f, 1f), (k & 1) == 0 ? rng.Range(0.6f, 1f) : 0);
+                float z = z0 + (z1 - z0) * k / Math.Max(1, spine), vw = rng.Range(1.1f, 1.3f);
+                Vertebra(l, ref rng, f, rng.Range(-0.05f, 0.05f), -0.4f * vw, z, vw, (k & 1) == 0 ? rng.Range(0.35f, 0.6f) : 0);
+                Touch(l, f, 0, 0, z, 0.5f + 0.6f * vw);
+                Col(l, f, 0, z, 0.5f * vw, -0.5f, 0.45f * vw);
             }
 
-            float sx = rng.Range(-1.6f, 1.6f), skullY = 1.4f, py = top[pairs - 1] - 0.1f, px = 0, pz = z1 + 0.08f * py;
+            float sx = rng.Range(-1.6f, 1.6f);
             for (int k = 1; k <= 5; k++)
             {
-                float s = k / 5f, y = skullY + (top[pairs - 1] - skullY) * (1 - s) * (1 - 0.3f * s), x = sx * s * s, z = z1 + 0.08f * py + neck * s;
-                float th = 0.62f - 0.18f * s;
-                if (py > y) Bone(l, rng.NextU64(), f, x, y, z, px, py, pz, th, th + 0.04f);
-                Vertebra(l, ref rng, f, x, y - 0.3f * th, z, th * 1.3f, 0);
-                px = x; py = y; pz = z;
+                float s = k / 5f, x = sx * s * s, z = z1 + neck * s, vw = 1.2f - 0.2f * s;
+                Vertebra(l, ref rng, f, x, -0.4f * vw, z, vw, 0);
+                Touch(l, f, x, 0, z, 0.5f + 0.6f * vw);
+                Col(l, f, x, z, 0.5f * vw, -0.5f, 0.45f * vw);
             }
 
-            py = top[0] - 0.1f; px = 0; pz = z0 + 0.08f * py;
-            float curl = rng.Range(-2.5f, 2.5f), tailY0 = py;
-            for (int k = 1; k <= 5; k++)
+            float curl = rng.Range(-2.5f, 2.5f);
+            for (int k = 1; k <= 7; k++)
             {
-                float s = k / 5f, y = tailY0 * (1 - s) * (1 - 0.4f * s) - 0.8f * s * s * s, x = curl * s * s, z = z0 - tail * s;
-                float th = Math.Max(0.22f, 0.55f - 0.28f * s);
-                if (py > y) Bone(l, rng.NextU64(), f, x, y, z, px, py, pz, th, th + 0.05f);
-                if (y > 0.6f) Vertebra(l, ref rng, f, x, y - 0.3f * th, z, th * 1.4f, 0);
-                if (y < 1.2f) { Touch(l, f, x, 0, z, 0.6f + th); Col(l, f, x, z, 0.4f, -1f, Math.Max(0.4f, y + th)); }
-                px = x; py = y; pz = z;
+                float s = k / 7f, x = curl * s * s, z = z0 - tail * s, vw = 1.1f - 0.5f * s;
+                Vertebra(l, ref rng, f, x, -0.4f * vw, z, vw, 0);
+                Touch(l, f, x, 0, z, 0.4f + 0.6f * vw);
+                Col(l, f, x, z, 0.5f * vw, -0.5f, 0.4f * vw);
             }
 
-            float sz = z1 + 0.08f * top[pairs - 1] + neck + 1.1f;
+            const float g = 2.2f;
+            float sz = z1 + neck + 1.1f * g;
             Yaw(ref rng, 0.4f, out float yc, out float ys);
             var skull = f.Child(sx, 0, sz, yc, ys);
             int head = l.Pieces.Count;
-            float cw = rng.Range(1.8f, 2.1f), ch = rng.Range(1.6f, 1.9f), cl = rng.Range(1.9f, 2.2f), snout = rng.Range(1.4f, 1.8f);
-            Hewn(l, rng.NextU64(), skull, 0, -0.8f, 0, cw, ch + 0.3f, cl, 1, 0, 0, Tiers - 1, rng.Range(0.3f, 0.4f), 0, rng.Range(-0.1f, 0.05f), 0.08f);
-            Hewn(l, rng.NextU64(), skull, rng.Range(-0.1f, 0.1f), -0.75f, 0.5f * cl + 0.45f * snout, 0.65f * cw, 0.6f * ch + 0.3f, snout, 1, 0, 0, Tiers - 1, rng.Range(0.35f, 0.45f), 0, -0.1f, 0.12f);
+            float cw = g * rng.Range(1.8f, 2.1f), ch = g * rng.Range(1.6f, 1.9f), cl = g * rng.Range(1.9f, 2.2f), snout = g * rng.Range(1.4f, 1.8f);
+            Hewn(l, rng.NextU64(), skull, 0, -0.8f * g, 0, cw, ch + 0.3f * g, cl, 1, 0, 0, Tiers - 1, rng.Range(0.3f, 0.4f), 0, rng.Range(-0.1f, 0.05f), 0.08f);
+            Hewn(l, rng.NextU64(), skull, rng.Range(-0.1f, 0.1f) * g, -0.75f * g, 0.5f * cl + 0.45f * snout, 0.65f * cw, 0.6f * ch + 0.3f * g, snout, 1, 0, 0, Tiers - 1, rng.Range(0.35f, 0.45f), 0, -0.1f, 0.12f);
             for (int side = -1; side <= 1; side += 2)
             {
-                Hewn(l, rng.NextU64(), skull, side * 0.32f * cw, ch - 0.75f, 0.25f * cl, 0.45f * cw, 0.35f, 0.5f * cl, 1, 0, 0, 1, 0.35f);
-                float hx = side * 0.38f * cw, hy = ch - 0.7f, hl = rng.Range(1.2f, 2f);
-                Bone(l, rng.NextU64(), skull, hx, hy, -0.2f * cl, hx + side * 0.7f * hl, hy + 0.55f * hl, -0.2f * cl - 0.6f * hl, 0.38f, 0.14f, 0, 1);
+                Hewn(l, rng.NextU64(), skull, side * 0.32f * cw, ch - 0.75f * g, 0.25f * cl, 0.45f * cw, 0.35f * g, 0.5f * cl, 1, 0, 0, 1, 0.35f);
+                float hx = side * 0.38f * cw, hy = ch - 0.7f * g, hl = g * rng.Range(1.2f, 2f);
+                Bone(l, rng.NextU64(), skull, hx, hy, -0.2f * cl, hx + side * 0.7f * hl, hy + 0.55f * hl, -0.2f * cl - 0.6f * hl, 0.38f * g, 0.14f * g, 0, 1);
                 for (int k = 0; k < 3; k++)
                 {
                     float tz = 0.5f * cl + snout * (0.25f + 0.28f * k), tx = side * 0.28f * cw;
-                    Bone(l, rng.NextU64(), skull, tx, -0.75f, tz, tx + side * 0.03f, rng.Range(0.5f, 0.7f), tz + 0.04f, 0.14f, 0.07f, 0, 0);
+                    Bone(l, rng.NextU64(), skull, tx, -0.75f * g, tz, tx + side * 0.03f * g, g * rng.Range(0.5f, 0.7f), tz + 0.04f * g, 0.14f * g, 0.07f * g, 0, 0);
                 }
             }
             Touch(l, skull, 0, 0, 0, 0.5f * (cw + cl));
             Touch(l, skull, 0, 0, 0.5f * cl + 0.45f * snout, 0.6f * snout);
-            Col(l, skull, 0, 0, 0.5f * cw, -0.8f, ch - 0.5f);
-            Col(l, skull, 0, 0.5f * cl + 0.45f * snout, 0.35f * cw, -0.75f, 0.6f * ch - 0.45f);
+            Col(l, skull, 0, 0, 0.5f * cw, -0.8f * g, ch - 0.5f * g);
+            Col(l, skull, 0, 0.5f * cl + 0.45f * snout, 0.35f * cw, -0.75f * g, 0.6f * ch - 0.45f * g);
 
-            float jside = rng.NextFloat() < 0.5f ? -1 : 1, jx = jside * rng.Range(1.4f, 1.9f), jz = rng.Range(0.6f, 1.2f);
+            float jside = rng.NextFloat() < 0.5f ? -1 : 1, jx = jside * g * rng.Range(1.4f, 1.9f), jz = g * rng.Range(0.6f, 1.2f);
             int jk = rng.Range(0, 16);
             var jaw = skull.Child(jx, 0, jz, Cos16(jk) * 0.2f + 0.8f, Sin16(jk) * 0.2f);
             float jl = cl + 0.8f * snout;
-            Hewn(l, rng.NextU64(), jaw, 0, -0.7f, 0, 0.6f, 1.25f, jl, 1, 0, 0, Tiers - 1, 0.4f);
+            Hewn(l, rng.NextU64(), jaw, 0, -0.7f * g, 0, 0.6f * g, 1.25f * g, jl, 1, 0, 0, Tiers - 1, 0.4f);
             for (int k = 0; k < 4; k++)
             {
                 float tz = jl * (0.1f + 0.1f * k);
-                Bone(l, rng.NextU64(), jaw, 0, 0.4f, tz, 0.02f, rng.Range(0.8f, 1f), tz + 0.05f, 0.15f, 0.07f, 0, 0);
+                Bone(l, rng.NextU64(), jaw, 0, 0.4f * g, tz, 0.02f * g, g * rng.Range(0.8f, 1f), tz + 0.05f * g, 0.15f * g, 0.07f * g, 0, 0);
             }
             Touch(l, jaw, 0, 0, 0, 0.5f * jl);
             Drape(l, head);
