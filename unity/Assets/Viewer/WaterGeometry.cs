@@ -239,7 +239,7 @@ namespace Stabby.Viewer
                 {
                     if (LakeHeight(world, x, y) == float.MinValue) continue;
                     int v00 = Corner(x, y), v01 = Corner(x, y + 1), v10 = Corner(x + 1, y), v11 = Corner(x + 1, y + 1);
-                    if (SwellOf(world, x, y) > 0) sheet.Grid(v00, v01, v10, v11, LakeSwellSplit, cm / LakeSwellSplit);
+                    if (SwellOf(world, x, y) > 0) sheet.Grid(v00, v01, v10, v11, LakeSwellSplit, cm / LakeSwellSplit, x, y);
                     else sheet.Quad(v00, v01, v10, v11);
                 }
             return sheet.Piece($"Water {cx},{cy}", LakeKind);
@@ -258,6 +258,7 @@ namespace Stabby.Viewer
             readonly List<Vector3> verts = new List<Vector3>();
             readonly List<int> tris = new List<int>();
             readonly List<Vector4> kinds = new List<Vector4>(), tints = new List<Vector4>(), swells = new List<Vector4>();
+            readonly Dictionary<long, int> edges = new Dictionary<long, int>();
 
             public int Add(Vector3 p, Vector4 kind, Vector4 tint, Vector4 swell = default)
             {
@@ -271,13 +272,19 @@ namespace Stabby.Viewer
                 tris.Add(v10); tris.Add(v01); tris.Add(v11);
             }
 
-            public void Grid(int v00, int v01, int v10, int v11, int split, float spacing)
+            public void Grid(int v00, int v01, int v10, int v11, int split, float spacing, int cx, int cy)
             {
-                int row = split + 1, start = verts.Count;
+                int row = split + 1;
+                var at = new int[row * row];
                 for (int j = 0; j <= split; j++)
                     for (int i = 0; i <= split; i++)
                     {
+                        bool edge = i == 0 || j == 0 || i == split || j == split;
+                        long key = ((long)(cx * split + i) << 40) | ((long)(cy * split + j) << 16) | (long)kinds[v00].w;
+                        if (edge && edges.TryGetValue(key, out int shared)) { at[j * row + i] = shared; continue; }
                         float u = i / (float)split, w = j / (float)split;
+                        at[j * row + i] = verts.Count;
+                        if (edge) edges[key] = verts.Count;
                         verts.Add(Bilerp(verts, v00, v10, v01, v11, u, w));
                         kinds.Add(kinds[v00]);
                         tints.Add(Bilerp(tints, v00, v10, v01, v11, u, w));
@@ -287,8 +294,8 @@ namespace Stabby.Viewer
                 for (int j = 0; j < split; j++)
                     for (int i = 0; i < split; i++)
                     {
-                        int a = start + j * row + i;
-                        Quad(a, a + row, a + 1, a + row + 1);
+                        int a = j * row + i;
+                        Quad(at[a], at[a + row], at[a + 1], at[a + row + 1]);
                     }
             }
 
