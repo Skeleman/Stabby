@@ -100,7 +100,7 @@ namespace Stabby.Game
                 if (meshInfo.IsCreated) meshInfo.Dispose();
                 if (packed.IsCreated) packed.Dispose();
                 meshInfo = new NativeArray<uint4>(groups, Allocator.Persistent);
-                packed = new NativeArray<int>(2 * groups + 1, Allocator.Persistent);
+                packed = new NativeArray<int>(2 * groups + 2, Allocator.Persistent);
             }
             for (int g = 0; g < groups; g++)
             {
@@ -111,7 +111,7 @@ namespace Stabby.Game
             furCount = anim.FurCount;
             pack = new Pack
             {
-                Parts = anim.Parts, Bones = anim.Bones, Fur = anim.Fur, Starts = anim.Starts, Counts = anim.Counts, Mesh = meshInfo, FurCount = furCount,
+                Parts = anim.Parts, Bones = anim.Bones, Fur = anim.Fur, Starts = anim.Starts, Counts = anim.Counts, Totals = anim.Totals, Mesh = meshInfo, FurCount = furCount,
                 Instances = instances.Lock(anim.Parts.Length), BonesOut = bones.Lock(anim.Bones.Length), FurOut = fur.Lock(math.max(furCount, 3)), Args = args.Lock(groups), Packed = packed,
             }.Schedule(anim.Gpu);
             JobHandle.ScheduleBatchedJobs();
@@ -127,7 +127,7 @@ namespace Stabby.Game
             packing = false;
             int groups = counts.Length;
             instances.Unlock(packed[2 * groups]);
-            bones.Unlock(packed[2 * groups]);
+            bones.Unlock(packed[2 * groups + 1]);
             fur.Unlock(furCount);
             args.Unlock(groups);
             for (int g = 0; g < groups; g++)
@@ -168,7 +168,7 @@ namespace Stabby.Game
             [ReadOnly] public NativeArray<CreaturePart> Parts;
             [ReadOnly] public NativeArray<float3x4> Bones;
             [ReadOnly] public NativeArray<float4> Fur;
-            [ReadOnly] public NativeArray<int> Starts, Counts;
+            [ReadOnly] public NativeArray<int> Starts, Counts, Totals;
             [ReadOnly] public NativeArray<uint4> Mesh;
             public int FurCount;
             public NativeArray<CreaturePart> Instances;
@@ -190,9 +190,10 @@ namespace Stabby.Game
                     Args[g] = new GraphicsBuffer.IndirectDrawIndexedArgs { indexCountPerInstance = m.x, instanceCount = (uint)c, startIndex = m.y, baseVertexIndex = m.z };
                 }
                 NativeArray<CreaturePart>.Copy(Parts, Instances, n);
-                NativeArray<float3x4>.Copy(Bones, BonesOut, n);
+                NativeArray<float3x4>.Copy(Bones, BonesOut, Totals[0]);
                 NativeArray<float4>.Copy(Fur, FurOut, FurCount);
                 Packed[2 * groups] = n;
+                Packed[2 * groups + 1] = Totals[0];
             }
         }
     }

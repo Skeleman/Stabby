@@ -6,7 +6,7 @@ namespace Stabby.Game
 {
     public static class CreatureMesh
     {
-        public const int Stride = 10;
+        public const int Stride = 12;
 
         struct RingAt
         {
@@ -72,6 +72,13 @@ namespace Stabby.Game
                         c /= l;
                         nrm[k * w + j] = math.dot(c, nrm[k * w + j]) < 0 ? -c : c;
                     }
+            var skin = new float2[n];
+            if (!trunk && !s.Sphere)
+            {
+                float len = s.Length, band = math.min(math.max(s.RadiusStart, 0.25f * len), 0.45f * len);
+                for (int k = 0; k < n; k++)
+                    skin[k] = new float2(1 - math.smoothstep(-band, band, rings[k].Z), math.smoothstep(len - band, len + band, rings[k].Z));
+            }
             for (int k = 0; k < n; k++)
                 for (int j = 0; j <= sides; j++)
                 {
@@ -84,6 +91,7 @@ namespace Stabby.Game
                     verts.Add(p.x); verts.Add(p.y); verts.Add(p.z);
                     verts.Add(nn.x); verts.Add(nn.y); verts.Add(nn.z);
                     verts.Add(s.Tone); verts.Add(accent); verts.Add(r.Along); verts.Add(s.Sphere ? 1 : 0);
+                    verts.Add(skin[k].x); verts.Add(skin[k].y);
                 }
             for (int r = 0; r + 1 < n; r++)
                 for (int j = 0; j < sides; j++)

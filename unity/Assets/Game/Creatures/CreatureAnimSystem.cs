@@ -110,6 +110,7 @@ namespace Stabby.Game
         public NativeArray<CreaturePart> Parts;
         public NativeArray<float4> Fur;
         public NativeArray<int> Starts, Counts;
+        public NativeArray<int> Totals;
         public JobHandle Gpu;
         public bool Pending;
         public int Reused, FurCount;
@@ -119,9 +120,9 @@ namespace Stabby.Game
         NativeArray<float> scratchFloor;
         NativeArray<CreatureGpu> scratchOut;
         float carry, slack;
-        int skipped, capacity;
+        int skipped, capacity, partCapacity;
         public int Trims;
-        const int SegCap = 64, PartCap = 32, OutCap = 2 * SegCap;
+        const int SegCap = 64, PartCap = 32, OutCap = 4 * SegCap;
 
         public void OnCreate(ref SystemState state)
         {
@@ -146,6 +147,7 @@ namespace Stabby.Game
             Fur = new NativeArray<float4>(3, Allocator.Persistent);
             Starts = new NativeArray<int>(1, Allocator.Persistent);
             Counts = new NativeArray<int>(1, Allocator.Persistent);
+            Totals = new NativeArray<int>(1, Allocator.Persistent);
         }
 
         public void OnDestroy(ref SystemState state)
@@ -163,6 +165,7 @@ namespace Stabby.Game
             Fur.Dispose(dep);
             Starts.Dispose(dep);
             Counts.Dispose(dep);
+            Totals.Dispose(dep);
         }
 
         static void Fit<T>(ref NativeArray<T> a, int n, JobHandle after) where T : struct
@@ -181,7 +184,7 @@ namespace Stabby.Game
 
         public long HeldBytes => (long)capacity * UnsafeUtility.SizeOf<CreatureGpu>() + (long)Bones.Length * UnsafeUtility.SizeOf<float3x4>()
             + (long)Parts.Length * UnsafeUtility.SizeOf<CreaturePart>()
-            + Fur.Length * 16L + (Starts.Length + Counts.Length) * 4L;
+            + Fur.Length * 16L + (Starts.Length + Counts.Length + Totals.Length) * 4L;
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
@@ -199,22 +202,24 @@ namespace Stabby.Game
             if (gpu)
             {
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
-                int count = roots.CalculateEntityCount();
-                slack = PoolSize.Oversized(capacity, tally.Links) ? slack + SystemAPI.Time.DeltaTime : 0;
-                bool trim = PoolSize.TrimDue(capacity, tally.Links, slack, PoolSize.TrimSeconds);
+                int count = roots.CalculateEntityCount(), need = tally.Links + tally.Links / 2;
+                slack = PoolSize.Oversized(capacity, need) ? slack + SystemAPI.Time.DeltaTime : 0;
+                bool trim = PoolSize.TrimDue(capacity, need, slack, PoolSize.TrimSeconds);
                 if (trim)
                 {
-                    capacity = PoolSize.Trimmed(tally.Links);
+                    capacity = PoolSize.Trimmed(need);
                     Shrink(ref Bones, capacity, Gpu);
-                    Shrink(ref Parts, capacity, Gpu);
+                    partCapacity = PoolSize.Trimmed(tally.Links);
+                    Shrink(ref Parts, partCapacity, Gpu);
                     Shrink(ref Fur, PoolSize.Trimmed(3 * count), Gpu);
                     slack = 0;
                     Trims++;
                 }
-                if (capacity < tally.Links) capacity = tally.Links + tally.Links / 2;
+                if (capacity < need) capacity = need + need / 2;
+                if (partCapacity < tally.Links) partCapacity = tally.Links + tally.Links / 2;
                 Gpu = new Reset { Instances = Instances, Capacity = capacity, Trim = trim }.Schedule(Gpu);
                 Fit(ref Bones, capacity, Gpu);
-                Fit(ref Parts, capacity, Gpu);
+                Fit(ref Parts, partCapacity, Gpu);
                 Fit(ref Fur, 3 * count, Gpu);
                 Fit(ref Starts, tally.Groups, Gpu);
                 Fit(ref Counts, tally.Groups, Gpu);
@@ -230,7 +235,7 @@ namespace Stabby.Game
             carry = 0;
             skipped = 0;
             if (!gpu) return;
-            state.Dependency = new Compact { Instances = Instances, Bones = Bones, Parts = Parts, Starts = Starts, Counts = Counts, Groups = tally.Groups }.Schedule(state.Dependency);
+            state.Dependency = new Compact { Instances = Instances, Bones = Bones, Parts = Parts, Starts = Starts, Counts = Counts, Totals = Totals, Groups = tally.Groups }.Schedule(state.Dependency);
             Gpu = state.Dependency;
             Pending = true;
         }
@@ -255,13 +260,14 @@ namespace Stabby.Game
             [ReadOnly] public NativeList<CreatureGpu> Instances;
             public NativeArray<float3x4> Bones;
             public NativeArray<CreaturePart> Parts;
-            public NativeArray<int> Starts, Counts;
+            public NativeArray<int> Starts, Counts, Totals;
             public int Groups;
 
             public void Execute()
             {
                 for (int g = 0; g < Counts.Length; g++) Counts[g] = 0;
-                for (int i = 0; i < Instances.Length; i++) Counts[Instances[i].Group]++;
+                for (int i = 0; i < Instances.Length; i++)
+                    if (Instances[i].Group >= 0) Counts[Instances[i].Group]++;
                 int at = 0;
                 for (int g = 0; g < Groups; g++) { Starts[g] = at; at += Counts[g]; }
                 var cursor = new NativeArray<int>(Groups, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -270,8 +276,11 @@ namespace Stabby.Game
                 {
                     var x = Instances[i];
                     Bones[i] = x.Bone;
-                    Parts[cursor[x.Group]++] = new CreaturePart { Fade = x.Fade, Bone = i, Fur = x.Fur, Group = x.Group };
+                    if (x.Group < 0) continue;
+                    int skin = i + 1 < Instances.Length && Instances[i + 1].Group < 0 ? i + 1 : 0;
+                    Parts[cursor[x.Group]++] = new CreaturePart { Fade = x.Fade, Bone = i, Fur = x.Fur, Group = x.Group, Skin = skin };
                 }
+                Totals[0] = Instances.Length;
             }
         }
 
@@ -424,7 +433,9 @@ namespace Stabby.Game
                 float contact = 0.5f * sc.Stand;
                 var trunkAt = rootPos + math.mul(rootRot, new float3(0, 0, -0.5f * sc.Length + sc.Rear));
                 float shadow = c.Shadow ? 1 : 0;
-                var records = Gpu ? Scratch(Records, OutCap, links.Length, links.Length <= OutCap) : default;
+                float bend = Gpu && highOn && !lowOn && Hold.Rigid == 0 ? Detail.Crossfade(px, rig.SkinPx / q, 1.5f * rig.SkinPx / q) : 0;
+                int room = math.max(links.Length, 3 * half);
+                var records = Gpu ? Scratch(Records, OutCap, room, room <= OutCap) : default;
                 int k = 0;
                 for (int tier = 0; tier < 2; tier++)
                 {
@@ -432,6 +443,11 @@ namespace Stabby.Game
                     int b = tier * half;
                     float x = tier == 0 ? highX : lowX;
                     Write(links[b], float4x4.TRS(trunkAt, rootRot, links[b].Scale), new float4(x, shadow, gy, contact), index, records, ref k);
+                    if (tier == 0 && bend > 0)
+                    {
+                        Skinned(ref rig, ref fit, links, half, rootPos, rootRot, pos, rot, floor, bend, new float4(x, shadow, 0, contact), index, records, ref k);
+                        continue;
+                    }
                     for (int s = 0; s < n && s + 1 < half; s++)
                         Write(links[b + s + 1], float4x4.TRS(pos[s], rot[s], links[b + s + 1].Scale), new float4(x, shadow, floor[s], contact), index, records, ref k);
                 }
@@ -463,6 +479,42 @@ namespace Stabby.Game
                     floor[part.First + part.Count - 1] = g;
                 }
                 return math.clamp(drop * ik, 0, 0.3f * stand);
+            }
+
+            static float4x4 Moved(int p, ref CreatureRig rig, ref CreatureFit fit, float3 rootPos, quaternion rootRot, NativeArray<float3> pos, NativeArray<quaternion> rot) =>
+                p < 0 ? new float4x4(rootRot, rootPos) : math.mul(new float4x4(rot[p], pos[p]), math.fastinverse(new float4x4(rig.RestRot[p], fit.RestPos[p])));
+
+            static CreatureGpu Bend(float4x4 m) => new CreatureGpu { Bone = new float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz), Group = -1 };
+
+            void Skinned(ref CreatureRig rig, ref CreatureFit fit, DynamicBuffer<CreatureLink> links, int half, float3 rootPos, quaternion rootRot,
+                NativeArray<float3> pos, NativeArray<quaternion> rot, NativeArray<float> floor, float bend, float4 f, int index, NativeArray<CreatureGpu> records, ref int k)
+            {
+                int parts = rig.Parts.Length;
+                for (int i = 0; i < parts; i++)
+                {
+                    ref var part = ref rig.Parts[i];
+                    int child = -1, kids = 0;
+                    for (int c = 0; c < parts; c++)
+                        if (rig.Parts[c].Parent == i) { child = c; kids++; }
+                    int up = part.Parent >= 0 && rig.Parts[part.Parent].Count > 0 ? rig.Parts[part.Parent].First + rig.Parts[part.Parent].Count - 1 : -1;
+                    int down = kids == 1 && rig.Parts[child].Count > 0 ? rig.Parts[child].First : -1;
+                    for (int j = 0; j < part.Count; j++)
+                    {
+                        int s = part.First + j;
+                        if (s + 1 >= half) continue;
+                        var link = links[s + 1];
+                        var m = float4x4.TRS(pos[s], rot[s], link.Scale);
+                        f.z = floor[s];
+                        Write(link, m, f, index, records, ref k);
+                        if (fit.Lengths[s] <= 0) continue;
+                        var rest = float4x4.TRS(fit.RestPos[s], rig.RestRot[s], link.Scale);
+                        var prev = math.mul(Moved(j > 0 ? s - 1 : up, ref rig, ref fit, rootPos, rootRot, pos, rot), rest);
+                        int after = j + 1 < part.Count ? s + 1 : down;
+                        var next = after >= 0 ? math.mul(Moved(after, ref rig, ref fit, rootPos, rootRot, pos, rot), rest) : m;
+                        records[k++] = Bend(m + bend * (prev - m));
+                        records[k++] = Bend(m + bend * (next - m));
+                    }
+                }
             }
 
             void Write(CreatureLink link, float4x4 m, float4 f, int index, NativeArray<CreatureGpu> records, ref int k)
