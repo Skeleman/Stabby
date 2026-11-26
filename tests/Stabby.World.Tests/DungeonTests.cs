@@ -155,4 +155,33 @@ public class DungeonTests
         public float Z, Y;
         public float HeightAt(float x, float z) => z > Z ? Y : 0;
     }
+
+    [Fact]
+    public void DungeonLayoutsAreConnectedOverlapFreeAndDeterministic()
+    {
+        int rooms = 0, most = 0;
+        for (ulong k = 1; k <= 3000; k++)
+        {
+            ulong key = Rng.Mix(k * 0x9E3779B97F4A7C15UL);
+            Assert.Null(Structures.DungeonLayoutFault(key));
+            var a = Structures.DungeonLayout(key);
+            var b = Structures.DungeonLayout(key);
+            Assert.Equal(a.Count, b.Count);
+            for (int i = 0; i < a.Count; i++) Assert.True(a[i].Shape == b[i].Shape && a[i].X == b[i].X && a[i].Z == b[i].Z && a[i].Open == b[i].Open);
+            int n = a.Count(p => p.Shape == ObjectPart.DungeonRoom);
+            Assert.InRange(n, 1, Structures.DungeonRoomsMax);
+            rooms += n;
+            most = Math.Max(most, n);
+        }
+        Assert.True(rooms >= 3000 * 3, $"layouts average {rooms / 3000f:F1} rooms");
+        Assert.True(most >= Structures.DungeonRoomsMin);
+    }
+
+    [Fact]
+    public void CryptDungeonVariantsHaveSoundLayouts()
+    {
+        var def = Objects.Objects.First(o => o.Id == "crypt-dungeon");
+        Assert.Equal(ObjectField.Dungeon, def.Placement.Discovery);
+        for (int v = 0; v < def.Variants; v++) Assert.Null(Structures.DungeonLayoutFault(ObjectMeshes.Key(def.Id, 0, v)));
+    }
 }

@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Mine = 15, Shapes = 16;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Shapes = 17;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
@@ -467,14 +467,16 @@ namespace Stabby.World
             var springs = field.SpringEdits();
             var bogs = field.BogEdits();
             var dens = field.DenEdits();
+            var vaults = field.DungeonEdits();
             discoveries = field.Discoveries();
-            if (boulders.Length + springs.Length + bogs.Length + dens.Length == 0) return Brooked(w, detail, terrain, caves);
-            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length];
+            if (boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length == 0) return Brooked(w, detail, terrain, caves);
+            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
             springs.CopyTo(all, terrain.Length + boulders.Length);
             bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
             dens.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length);
+            vaults.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length);
             return Brooked(w, detail, all, caves);
         }
 

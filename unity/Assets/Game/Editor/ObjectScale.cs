@@ -77,9 +77,37 @@ namespace Stabby.Game.Editor
         public static string Memory()
         {
             long mb = 1024 * 1024;
-            using var p = System.Diagnostics.Process.GetCurrentProcess();
-            return $"scale memory (MB): unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, process private {p.PrivateMemorySize64 / mb}";
+            var mem = new Counters { Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<Counters>() };
+            GetProcessMemoryInfo(GetCurrentProcess(), ref mem, mem.Size);
+            long meshBytes = 0, texBytes = 0, chunks = 0;
+            var meshList = Resources.FindObjectsOfTypeAll<Mesh>();
+            var groups = new Dictionary<string, long>();
+            foreach (var m in meshList)
+            {
+                long b = Profiler.GetRuntimeMemorySizeLong(m);
+                meshBytes += b;
+                var key = new string(m.name.TakeWhile(c => !char.IsDigit(c) && c != ' ' && c != '(').ToArray());
+                groups[key] = (groups.TryGetValue(key, out long had) ? had : 0) + b;
+            }
+            var top = string.Join(", ", groups.OrderByDescending(g => g.Value).Take(6).Select(g => $"'{g.Key}' {g.Value / mb}"));
+            var texList = Resources.FindObjectsOfTypeAll<Texture>();
+            foreach (var t in texList) texBytes += Profiler.GetRuntimeMemorySizeLong(t);
+            foreach (var w in Unity.Entities.World.All) chunks += w.EntityManager.UniversalQuery.CalculateChunkCountWithoutFiltering();
+            return $"scale memory (MB): unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, graphics driver {Profiler.GetAllocatedMemoryForGraphicsDriver() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, working set {(ulong)mem.WorkingSetSize / (ulong)mb}, peak working set {(ulong)mem.PeakWorkingSetSize / (ulong)mb}, peak commit {(ulong)mem.PeakPagefileUsage / (ulong)mb}; meshes {meshList.Length} {meshBytes / mb}, textures {texList.Length} {texBytes / mb}, entity chunks {chunks} {chunks * 16 / 1024}; top mesh groups {top}";
         }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct Counters
+        {
+            public uint Size, PageFaultCount;
+            public System.UIntPtr PeakWorkingSetSize, WorkingSetSize, QuotaPeakPagedPoolUsage, QuotaPagedPoolUsage, QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage, PagefileUsage, PeakPagefileUsage;
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        static extern System.IntPtr GetCurrentProcess();
+
+        [System.Runtime.InteropServices.DllImport("psapi.dll")]
+        static extern bool GetProcessMemoryInfo(System.IntPtr process, ref Counters counters, uint size);
 
         public static string Report() => $"scale density {Density}\n" + string.Join("\n", sets);
 

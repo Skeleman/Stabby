@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct StructurePiece
     {
         public ulong Key;
-        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A, Calm;
+        public float X, Y, Z, Sx, Sy, Sz, C, S, L, Q, B, T, A, Calm, Base;
         public int Lo, Hi, M, G, R;
         public bool Coursed, Flat, Mossy, Drape;
     }
@@ -48,7 +48,7 @@ namespace Stabby.World
 
         public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : KitSeat(shape);
 
-        public static float Skirt(in StructurePiece p) => p.Y <= GroundY ? SkirtShare * Math.Min(p.Sy, 0.5f * (p.Sx + p.Sz)) : 0;
+        public static float Skirt(in StructurePiece p) => p.Y - p.Base <= GroundY ? SkirtShare * Math.Min(p.Sy, 0.5f * (p.Sx + p.Sz)) : 0;
 
         public static StructureLayout Layout(int shape, ulong key, int trim = 0)
         {

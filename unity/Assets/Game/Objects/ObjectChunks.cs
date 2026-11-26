@@ -113,7 +113,6 @@ namespace Stabby.Game
             var chunk = new ContactChunk { Stamps = new UnsafeList<ContactStamp>(objects.Count, Allocator.Persistent), Rings = new UnsafeList<ContactRing>(0, Allocator.Persistent) };
             foreach (var o in objects)
             {
-                bool cave = ObjectField.IsCave(field.Library.Objects[o.Def]);
                 columns.Clear();
                 field.ContactsOf(o, columns);
                 bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
@@ -122,7 +121,7 @@ namespace Stabby.Game
                 {
                     int sides = ObjectField.StampSides(field.Library, o, c);
                     if ((sides & ObjectField.StampFloor) != 0)
-                        chunk.Stamps.Add(new ContactStamp { X = c.X, Z = c.Z, R = Math.Max(c.R, foot), Built = (byte)(built ? 1 : 0), Channel = (byte)(cave ? 2 : 0), Id = o.Id });
+                        chunk.Stamps.Add(new ContactStamp { X = c.X, Z = c.Z, R = Math.Max(c.R, foot), Built = (byte)(built ? 1 : 0), Channel = (byte)ObjectField.StampChannel(field.Library, o, c), Id = o.Id });
                     if ((sides & ObjectField.StampCeiling) != 0)
                         chunk.Stamps.Add(new ContactStamp { X = c.X, Z = c.Z, R = c.R, Channel = 3, Id = o.Id });
                 }

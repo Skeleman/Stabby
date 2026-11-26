@@ -78,6 +78,7 @@ namespace Stabby.Game.Editor
             {
                 $"walk line from {start.x:F1},{start.y:F1} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
             };
+            lines.Add($"load {MeshBudget.Report()}");
             try
             {
                 foreach (var (label, from, length, speed) in new[] { ("normal", 0f, NormalWalkM, GameSettings.WalkSpeed), ("fast", NormalWalkM, FastWalkM, FastWalkMps) })
@@ -88,6 +89,7 @@ namespace Stabby.Game.Editor
                     int gcRuns = System.GC.CollectionCount(0);
                     string profileAt = System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE");
                     bool profile = profileAt == label || label == "fast" && profileAt == "1";
+                    MeshBudget.Reset();
                     var churn0 = Churn();
                     float churnT0 = Time.realtimeSinceStartup;
                     while (along < from + length)
@@ -122,6 +124,7 @@ namespace Stabby.Game.Editor
                     if (profile) UnityEngine.Profiling.Profiler.enabled = false;
                     lines.Add(WalkReport(label, speed, length, frames));
                     lines.Add(ChurnReport(label, churn0, Churn(), Time.realtimeSinceStartup - churnT0));
+                    lines.Add($"{label} {MeshBudget.Report()}");
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
                     lines.Add(ColumnsEqual(label));
@@ -135,6 +138,7 @@ namespace Stabby.Game.Editor
                 var jeye = jfoot - jfwd * 6f + Vector3.up * 3f;
                 jeye.y = Mathf.Max(jeye.y, GroundHeight(jeye.x, jeye.z) + 1.5f);
                 cam.transform.SetPositionAndRotation(jeye, Quaternion.LookRotation(jfoot + jfwd * 20f + Vector3.up * 1.2f - jeye));
+                MeshBudget.Reset();
                 float t0 = Time.realtimeSinceStartup;
                 var fill = new List<float[]>();
                 int settled = 0;
@@ -159,6 +163,7 @@ namespace Stabby.Game.Editor
                 float filled = Time.realtimeSinceStartup - t0;
                 lines.Add($"teleport {Vector2.Distance(end, jump):F0} m to {jump.x:F0},{jump.y:F0}: view filled in {filled:F2} s ({fill.Count} frames{(settled < 3 ? ", timed out" : "")})");
                 lines.Add(WalkReport("teleport fill", 0, 0, fill));
+                lines.Add($"teleport fill {MeshBudget.Report()}");
                 for (var s = Settle(240); s.MoveNext();) yield return null;
                 var still = new List<float[]>();
                 bool profileStill = System.Environment.GetEnvironmentVariable("STABBY_WALK_PROFILE") == "still";
