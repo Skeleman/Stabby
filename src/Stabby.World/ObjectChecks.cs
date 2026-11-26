@@ -385,7 +385,7 @@ namespace Stabby.World
             if (!m.SameSurfaceAs(g)) e.Add(at + " mesh differs from the general mesher");
             if (m.SameSurfaceAs(h)) e.Add(at + " leaves the ground unchanged");
             var ground = new DetailGround { Detail = detail };
-            float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = 0.5f * (b.Ay + b.By) + b.R;
+            float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = TopAt(b, mx, mz);
             foreach (var f in list.Items) top = Math.Max(top, TopAt(f, mx, mz));
             float wx = mx, wy = top + Walk.StepUp, wz = mz;
             Walk.Step(ground, list, Features.LatticeStepM, ref wx, ref wy, ref wz, 0, 0, Walk.Reach);
@@ -425,7 +425,10 @@ namespace Stabby.World
         static float TopAlong(FeatureEdit f, float x, float z, float t)
         {
             float qx = x - f.Ax - t * (f.Bx - f.Ax), qz = z - f.Az - t * (f.Bz - f.Az), dd = f.R * f.R - qx * qx - qz * qz;
-            return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
+            if (dd <= 0) return float.NegativeInfinity;
+            float y = f.Ay + t * (f.By - f.Ay), r = f.R - f.Weathering(x, y + (float)Math.Sqrt(dd), z);
+            dd = r * r - qx * qx - qz * qz;
+            return dd > 0 ? y + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
         static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, int across, float span)

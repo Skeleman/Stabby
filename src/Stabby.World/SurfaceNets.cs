@@ -7,6 +7,7 @@ namespace Stabby.World
     {
         float Density(int i, int j, int k);
         bool Sharp(int i, int j, int k);
+        bool Round(int i, int j, int k);
         float Base(int i, int j, int k);
         float Edit(float d, float x, float y, float z);
     }
@@ -34,6 +35,7 @@ namespace Stabby.World
 
         public float Density(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
         public bool Sharp(int i, int j, int k) => false;
+        public bool Round(int i, int j, int k) => false;
         public float Base(int i, int j, int k) => Density(i, j, k);
         public float Edit(float d, float x, float y, float z) => d;
     }
@@ -534,10 +536,21 @@ namespace Stabby.World
             {
                 var f = Corners(field, ci, j, ck, s);
                 Sharpen(ref f, d0, d1, d2, d3, d4, d5, d6, d7, ref fx, ref fy, ref fz);
-                float e = QefStep;
-                gx = f.At(fx + e, fy, fz) - f.At(fx - e, fy, fz);
-                gy = f.At(fx, fy + e, fz) - f.At(fx, fy - e, fz);
-                gz = f.At(fx, fy, fz + e) - f.At(fx, fy, fz - e);
+                Gradient(ref f, fx, fy, fz, out gx, out gy, out gz);
+            }
+            else if (field.Round(ci, j, ck))
+            {
+                var f = Corners(field, ci, j, ck, s);
+                Gradient(ref f, fx, fy, fz, out gx, out gy, out gz);
+                float g2 = gx * gx + gy * gy + gz * gz;
+                if (g2 > 0)
+                {
+                    float m = 2 * QefStep * f.At(fx, fy, fz) / g2;
+                    fx = Math.Max(0f, Math.Min(1f, fx - m * gx));
+                    fy = Math.Max(0f, Math.Min(1f, fy - m * gy));
+                    fz = Math.Max(0f, Math.Min(1f, fz - m * gz));
+                    Gradient(ref f, fx, fy, fz, out gx, out gy, out gz);
+                }
             }
             else
             {
@@ -552,6 +565,14 @@ namespace Stabby.World
         }
 
         const float QefStep = 0.05f, QefDrop = 0.1f;
+
+        static void Gradient<TField>(ref CellField<TField> f, float fx, float fy, float fz, out float gx, out float gy, out float gz) where TField : struct, ISolidField
+        {
+            float e = QefStep;
+            gx = f.At(fx + e, fy, fz) - f.At(fx - e, fy, fz);
+            gy = f.At(fx, fy + e, fz) - f.At(fx, fy - e, fz);
+            gz = f.At(fx, fy, fz + e) - f.At(fx, fy, fz - e);
+        }
 
         static CellField<TField> Corners<TField>(TField field, int ci, int j, int ck, float s) where TField : struct, ISolidField
             => new CellField<TField>
