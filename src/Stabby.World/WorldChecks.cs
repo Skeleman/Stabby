@@ -716,6 +716,12 @@ namespace Stabby.World
             if (placed.Length > 0) spots.Add((placed[0].Ax, placed[0].Az));
             var pieces = NearField.Pieces(w);
             if (pieces.Count > 0) spots.Add((pieces[pieces.Count / 2].Ax, pieces[pieces.Count / 2].Az));
+            int brook = Array.FindIndex(placed, CaveBrooks.Channel);
+            if (brook >= 0)
+            {
+                spots.Add((placed[brook].Ax, placed[brook].Az));
+                if (!FineSeamsMatch(detail, grid, placed[brook], out string at)) { e.Add(at); return; }
+            }
             foreach (var (sx, sz) in spots)
                 for (int level = 0; level < NearField.NodeLevels; level++)
                 {
@@ -740,6 +746,54 @@ namespace Stabby.World
                         { e.Add($"bounds {lo:F0}..{hi:F0} miss vertex {f.Verts[v - 1]:F0},{f.Verts[v]:F0},{f.Verts[v + 1]:F0} of node {x0:F0},{z0:F0} at level {level}"); return; }
                     }
                 }
+        }
+
+        static bool FineSeamsMatch(TerrainDetail detail, EditGrid grid, FeatureEdit b, out string at)
+        {
+            at = null;
+            float s = NearField.NodeStep(0), size = NearField.NodeSize(0);
+            int n0x = (int)Math.Floor(b.MinX / size), n1x = (int)Math.Floor(b.MaxX / size), n0z = (int)Math.Floor(b.MinZ / size), n1z = (int)Math.Floor(b.MaxZ / size);
+            var ids = new List<int>();
+            var fine = new HashSet<(int, int)>();
+            grid.Near((n0x - 1) * size, (n0z - 1) * size, (n1x + 2) * size, (n1z + 2) * size, ids);
+            foreach (int q in ids)
+            {
+                var c = grid.Edits[q];
+                if (!c.Fine) continue;
+                for (int iz = (int)Math.Floor(c.MinZ / size); iz <= (int)Math.Floor(c.MaxZ / size); iz++)
+                    for (int ix = (int)Math.Floor(c.MinX / size); ix <= (int)Math.Floor(c.MaxX / size); ix++)
+                        fine.Add((ix, iz));
+            }
+            var cols = new DetailColumns { Detail = detail, StepM = s };
+            for (int fz = n0z; fz <= n1z; fz++)
+                for (int fx = n0x; fx <= n1x; fx++)
+                {
+                    var near = MeshedAt(grid, s, (fx - 1) * size, (fz - 1) * size, (fx + 2) * size, (fz + 2) * size, ids);
+                    for (int d = 0; d < 9; d++)
+                    {
+                        int nx = fx + d % 3 - 1, nz = fz + d / 3 - 1;
+                        if (fine.Contains((nx, nz))) continue;
+                        var list = MeshedAt(grid, s, nx * size, nz * size, (nx + 1) * size, (nz + 1) * size, ids);
+                        var c = new NetsChunk { X0 = nx * NearField.NodeQuads, Z0 = nz * NearField.NodeQuads, Cells = NearField.NodeQuads, StepM = s };
+                        var f = new NetsBuffers();
+                        if (list.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
+                        else SurfaceNets.Heightfield(cols, c, ref f);
+                        if (!StitchTargetsMatch(cols, near, c, f))
+                        {
+                            at = $"fine brook node {fx * size:F0},{fz * size:F0} cannot stitch to its level 0 neighbour {nx * size:F0},{nz * size:F0}";
+                            return false;
+                        }
+                    }
+                }
+            return true;
+        }
+
+        static EditArray MeshedAt(EditGrid grid, float s, float x0, float z0, float x1, float z1, List<int> ids)
+        {
+            var list = new List<FeatureEdit>();
+            grid.Near(x0 - 0.5f * s, z0 - 0.5f * s, x1 + 0.5f * s, z1 + 0.5f * s, ids);
+            foreach (int q in ids) if (grid.Edits[q].MeshedIn(s, x0, z0, x1, z1)) list.Add(grid.Edits[q].AtStep(s));
+            return new EditArray { Items = list.ToArray() };
         }
 
         static bool StitchTargetsMatch(DetailColumns cols, EditArray edits, NetsChunk c, NetsBuffers f)
