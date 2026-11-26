@@ -59,6 +59,7 @@ public class CreatureTests
         Assert.Empty(CreatureLibrary.Validate(Lib, BiomeIds));
         Assert.True(deer.FadePixels < deer.AnimPixels && deer.AnimPixels < deer.IkPixels);
         Assert.True(deer.LowPixels >= 2 * deer.FadePixels);
+        Assert.True(deer.SkinPixels > deer.LowPixels);
         Assert.All(Lib.Bodies, b => Assert.Equal(b.AnimPixels, b.ThinkPixels));
         Assert.Equal(Detail.SimulationReach(deer.Length, deer.AnimPixels), CreaturePlan.ThinkReach(deer));
         var trunk = CreatureBody.Shapes(deer, Lib)[0];
@@ -74,13 +75,13 @@ public class CreatureTests
           "bodies": [ { "id": "x", "name": "X", "biomes": ["nowhere"], "length": 0.1, "radius": 0.2, "hump": 0.7,
             "materials": { "base": "fawn-hide", "accent": "pale-fur", "dark": "no-such-fur" },
             "size": [1, 0.5], "walkSpeed": 1, "herd": [1, 20], "herdChance": 1.5,
-            "detail": { "spawnPixels": 12, "fadePixels": 10, "shadowPixels": 20, "animPixels": 5, "ikPixels": 30, "lowPixels": 15 },
+            "detail": { "spawnPixels": 12, "fadePixels": 10, "shadowPixels": 20, "animPixels": 5, "ikPixels": 30, "lowPixels": 15, "skinPixels": 10 },
             "wary": { "alertPixels": 20, "fleePixels": 15, "calmPixels": 10, "runSpeed": 0.5, "runStride": 1, "dart": 90 },
             "slots": [ { "part": "tail", "socket": [0, 0, 0] }, { "part": "leg", "parent": "head", "socket": [0, 0] } ] } ] }
         """;
         var materials = ContentLoader.LoadMaterials(Root);
         var ex = Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json, BiomeIds, "test", materials));
-        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "thinkPixels must stay above", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above", "maxSlope out of", "unknown material \"no-such-fur\"", "dart out of" })
+        foreach (var bit in new[] { "knee", "unknown biome", "shorter than its ends", "size range", "detail pixels", "unknown part", "not an earlier slot", "3 numbers", "hang from the body", "lowPixels must be", "skinPixels must be", "haunch, waist and hump", "herd above", "herdChance out of", "spawnPixels must be", "thinkPixels must stay above", "fleePixels must be above", "calmPixels must stay above", "runSpeed must be above", "maxSlope out of", "unknown material \"no-such-fur\"", "dart out of" })
             Assert.Contains(bit, ex.Message);
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseCreatures(json.Replace("\"name\"", "\"nmae\""), BiomeIds, "test", materials));
     }
