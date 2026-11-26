@@ -34,6 +34,9 @@ namespace Stabby.World
         readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream;
         readonly int[] caveCarves;
         readonly CaveLightSpot[] caveLights;
+        readonly ObjectInstance[] caveLit;
+        readonly Dictionary<int, List<int>> caveLitCells;
+        readonly float caveLitReach;
         readonly float[][] density;
         readonly float[] footprint;
         readonly PartShapes shapes;
@@ -122,6 +125,7 @@ namespace Stabby.World
                 if (pass == 0) { blockStart[0] = 0; for (int i = 1; i <= n * n; i++) blockStart[i] += blockStart[i - 1]; }
                 else blockItems = items;
             }
+            caveLit = ResolveCaveLights(out caveLitCells, out caveLitReach);
             InitSites();
         }
 

@@ -1205,12 +1205,35 @@ namespace Stabby.World
                 var c = edits[p.Edit];
                 if ((p.Kind == ObjectField.CaveSkylight) != (c.Shape == FeatureEdit.Shaft)) { e.Add($"caves: light {i} pairs a skylight with a non-shaft edit or a shaft with another light"); return; }
                 if (!field.CaveLightAt(i, out var o)) continue;
-                string fault = field.CaveFault(o);
+                string fault = field.CaveFault(o) ?? CaveLightOverlap(w, field, o);
                 if (fault != null) { e.Add(fault); return; }
                 if (p.Kind != ObjectField.CaveSkylight) continue;
                 float dx = o.X - c.Ax, dz = o.Z - c.Az;
                 if (dx * dx + dz * dz > c.HoleR * c.HoleR || o.Y > c.Ay) { e.Add($"caves: skylight light at {o.X:F0},{o.Z:F0} does not sit under its shaft"); return; }
             }
+        }
+
+        static string CaveLightOverlap(GeneratedWorld w, ObjectField field, ObjectInstance o)
+        {
+            var defs = w.Objects.Objects;
+            float reach = defs[o.Def].FootprintRadius() * o.Size, span = field.ChunkMeters, edge = 2f * reach + ObjectField.CaveColumnGapMaxM;
+            int across = field.ChunksAcross, cx = Math.Min(across - 1, (int)(o.X / span)), cz = Math.Min(across - 1, (int)(o.Z / span));
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = cx + dx, az = cz + dz;
+                    if (ax < 0 || az < 0 || ax >= across || az >= across) continue;
+                    if ((dx < 0 && o.X - cx * span > edge) || (dx > 0 && (cx + 1) * span - o.X > edge)) continue;
+                    if ((dz < 0 && o.Z - cz * span > edge) || (dz > 0 && (cz + 1) * span - o.Z > edge)) continue;
+                    foreach (var m in field.Chunk(ax, az))
+                    {
+                        int kind = defs[m.Def].Placement.Cave;
+                        if (kind != ObjectField.CaveStalagmite && kind != ObjectField.CaveColumn) continue;
+                        float gx = m.X - o.X, gz = m.Z - o.Z, keep = reach + defs[m.Def].FootprintRadius() * m.Size;
+                        if (gx * gx + gz * gz < keep * keep) return $"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} overlaps {defs[m.Def].Id} at {m.X:F0},{m.Z:F0}";
+                    }
+                }
+            return null;
         }
 
         public const float CavePoolHeadM = 1f, CavePoolSealM = 0.3f;

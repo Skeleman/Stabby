@@ -79,10 +79,46 @@ namespace Stabby.World
 
         public bool CaveLightAt(int i, out ObjectInstance o)
         {
-            o = default;
-            var p = caveLights[i];
-            int d = CaveDef(p.Kind);
-            return d >= 0 && CaveLightAt(p, d, out o);
+            o = caveLit[i];
+            return o.Def >= 0;
+        }
+
+        ObjectInstance[] ResolveCaveLights(out Dictionary<int, List<int>> cells, out float most)
+        {
+            most = 0f;
+            var lit = new ObjectInstance[caveLights.Length];
+            cells = new Dictionary<int, List<int>>();
+            for (int i = 0; i < lit.Length; i++)
+            {
+                var p = caveLights[i];
+                int d = CaveDef(p.Kind);
+                if (d < 0 || !CaveLightAt(p, d, out lit[i])) { lit[i] = new ObjectInstance { Def = -1 }; continue; }
+                most = Math.Max(most, footprint[d] * lit[i].Size);
+                int at = CaveCell(lit[i].Z) * n + CaveCell(lit[i].X);
+                if (!cells.TryGetValue(at, out var list)) cells[at] = list = new List<int>();
+                list.Add(i);
+            }
+            return lit;
+        }
+
+        int CaveCell(float m) => Math.Max(0, Math.Min(n - 1, (int)Math.Floor(m / cm)));
+
+        string CrowdsCaveLight(float x, float z, float reach)
+        {
+            if (caveLitCells.Count == 0) return null;
+            int span = (int)Math.Ceiling((caveLitReach + reach + CaveColumnKeepM) / cm), gx = CaveCell(x), gz = CaveCell(z);
+            for (int az = Math.Max(0, gz - span); az <= Math.Min(n - 1, gz + span); az++)
+                for (int ax = Math.Max(0, gx - span); ax <= Math.Min(n - 1, gx + span); ax++)
+                {
+                    if (!caveLitCells.TryGetValue(az * n + ax, out var list)) continue;
+                    foreach (int i in list)
+                    {
+                        var o = caveLit[i];
+                        float dx = o.X - x, dz = o.Z - z, keep = footprint[o.Def] * o.Size + reach + CaveColumnKeepM;
+                        if (dx * dx + dz * dz < keep * keep) return "crowds a cave light";
+                    }
+                }
+            return null;
         }
 
         bool CaveLightAt(CaveLightSpot p, int d, out ObjectInstance o)
@@ -152,10 +188,7 @@ namespace Stabby.World
             for (int i = 0; i < caveLights.Length; i++)
             {
                 var p = caveLights[i];
-                if (p.Kind != kind) continue;
-                var c = edits[p.Edit];
-                if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
-                if (!CaveLightAt(p, d, out var o)) continue;
+                if (p.Kind != kind || !CaveLightAt(i, out var o)) continue;
                 if (o.X < x0 || o.Z < z0 || o.X >= x0 + sx || o.Z >= z0 + sz) continue;
                 o.Id = ObjectIds.Make(chunk, d, ordinal++);
                 list.Add(o);
@@ -221,8 +254,9 @@ namespace Stabby.World
             return true;
         }
 
-        static string Crowded(EditSlice rock, float x, float z, float reach, bool hangs)
+        string Crowded(EditSlice rock, float x, float z, float reach, bool hangs, bool stands = false)
         {
+            if (stands && CrowdsCaveLight(x, z, reach) is string lit) return lit;
             for (int q = 0; q < rock.N; q++)
             {
                 var o = rock.Items[q];
@@ -335,7 +369,7 @@ namespace Stabby.World
                                 if (gap - size < Walk.Height + CaveMiteHeadM) continue;
                                 o.Y = floor - pl.Sink * size;
                             }
-                            if (Crowded(rock, mx, mz, foot * size, hangs) != null) continue;
+                            if (Crowded(rock, mx, mz, foot * size, hangs, kind == CaveStalagmite || kind == CaveColumn) != null) continue;
                             Yaw(qa, qb, hangs, ref o);
                         }
                         if (kind != CaveStalactite && (Walk.Solid(ground, rock, s, mx, o.Y, mz) < 0 || Walk.Solid(ground, rock, s, mx, o.Y + 0.5f * o.Size + 0.3f, mz) >= 0)) continue;
@@ -379,7 +413,7 @@ namespace Stabby.World
                 if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.5f * o.Size + 0.3f, o.Z) >= 0) return at + " is buried in rock";
             }
             if (kind == CaveRubble) return null;
-            string crowd = Crowded(rock, o.X, o.Z, reach, kind == CaveStalactite);
+            string crowd = Crowded(rock, o.X, o.Z, reach, kind == CaveStalactite, kind == CaveStalagmite || kind == CaveColumn);
             return crowd == null ? null : at + " " + crowd;
         }
 
