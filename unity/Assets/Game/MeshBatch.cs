@@ -106,7 +106,17 @@ namespace Stabby.Game
     {
         public const int Vertices = 300000, Meshes = 48;
 
-        static int frame = -1, vertices, meshes;
+        static int frame = -1, vertices, meshes, denied;
+        public static int Frames, Saturated, DeniedMax;
+        public static long DeniedTotal;
+
+        public static void Reset()
+        {
+            Frames = Saturated = DeniedMax = 0;
+            DeniedTotal = 0;
+        }
+
+        public static string Report() => $"mesh budget: {Saturated} of {Frames} applying frames saturated, queue when saturated mean {(Saturated > 0 ? DeniedTotal / (double)Saturated : 0):F1} max {DeniedMax} batches";
 
         public static bool Take(int v, int m)
         {
@@ -114,9 +124,16 @@ namespace Stabby.Game
             if (f != frame)
             {
                 frame = f;
-                vertices = meshes = 0;
+                vertices = meshes = denied = 0;
+                Frames++;
             }
-            if (meshes > 0 && (vertices + v > Vertices || meshes + m > Meshes)) return false;
+            if (meshes > 0 && (vertices + v > Vertices || meshes + m > Meshes))
+            {
+                if (denied++ == 0) Saturated++;
+                DeniedTotal++;
+                if (denied > DeniedMax) DeniedMax = denied;
+                return false;
+            }
             vertices += v;
             meshes += m;
             return true;
