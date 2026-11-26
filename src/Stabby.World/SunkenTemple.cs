@@ -4,11 +4,12 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const float TempleU = 1 / 20f, TempleTop = 0.5f, TempleStepZ = 3f, TempleStepRun = 0.8f, TempleStepRise = 0.32f, TempleWaterline = 1.3f;
+        public const float TempleU = 1 / 20f, TempleTop = 0.15f, TempleStepZ = 3f, TempleStepRun = 0.8f, TempleStepRise = 0.32f, TempleWaterline = 1.3f;
         public const int TempleSteps = 8;
         const float TempleFoot = -2.7f, TempleDrum = 0.9f;
+        public const float TempleHalfX = 4.8f * TempleU, TempleFront = TempleStepZ * TempleU, TempleBack = -5.2f * TempleU;
 
-        static readonly float[] TempleSeats = { 0, 0, 0.19f, -0.21f, -0.19f, -0.21f, 0.19f, 0.12f, -0.19f, 0.12f, 0, -0.21f };
+        static readonly float[] TempleSeats = { 0, 0, 0.19f, -0.21f, -0.19f, -0.21f, TempleHalfX, TempleFront, -TempleHalfX, TempleFront, 0, -0.21f, 0, TempleFront, TempleHalfX, -0.05f, -TempleHalfX, -0.05f };
 
         static void SunkenTemple(StructureLayout l, ulong key, in Frame f)
         {
@@ -161,7 +162,7 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float TempleShoreMinM = 5f, TempleShoreM = 11f, TempleShoreAimM = 8f, TempleDropMinM = 0.6f, TempleDropM = 1.9f, TempleDropAimM = 1.2f, TempleDryM = 6f, TempleSeekStepM = 3f, TempleReachM = 14f;
+        public const float TempleShoreMinM = 5f, TempleShoreM = 11f, TempleShoreAimM = 8f, TempleDropMinM = 0.6f, TempleDropM = 1.9f, TempleDropAimM = 1.2f, TempleDryM = 6f, TempleSeekStepM = 3f, TempleReachM = 14f, TempleCornerGapM = 0.15f;
         public const int TempleSeekRings = 4;
 
         public float TempleFit(float x, float z, out float vx, out float vz)
@@ -254,7 +255,14 @@ namespace Stabby.World
             if (shore == float.MinValue) return "has no water beside it";
             float foot = o.Y + (Structures.TempleTop - Structures.TempleStepRise * Structures.TempleSteps) * Structures.TempleU * o.Size;
             if (level <= foot) return "has steps that never reach the water";
-            if (level >= o.Y + Structures.TempleTop * Structures.TempleU * o.Size) return "is drowned above its floor";
+            float floor = o.Y + Structures.TempleTop * Structures.TempleU * o.Size;
+            if (level >= floor) return "is drowned above its floor";
+            for (int k = 0; k < 9; k++)
+            {
+                if (k == 4) continue;
+                Rotate(o, (k % 3 - 1) * Structures.TempleHalfX * o.Size, 0, (k < 3 ? Structures.TempleFront : k < 6 ? 0.5f * (Structures.TempleFront + Structures.TempleBack) : Structures.TempleBack) * o.Size, out float cx, out _, out float cz);
+                if (floor - GroundAt(detail, cm, o.X + cx, o.Z + cz) > TempleCornerGapM) return "has a platform edge above the ground";
+            }
             return null;
         }
     }
