@@ -868,7 +868,7 @@ namespace Stabby.World
             if (clock.Start("sites"))
             {
                 if (sites != null) CheckSiteFootprints(w, grid, sites, e);
-                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); }
+                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); }
             }
             if (clock.Start("objects"))
             {

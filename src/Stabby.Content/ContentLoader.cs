@@ -392,6 +392,23 @@ namespace Stabby.Content
                 lib.Objects.Add(Object(o, errors, materials, lib.Styles));
                 o.End();
             }
+            foreach (var t in root.Objects("towns"))
+            {
+                var town = new TownDef
+                {
+                    Id = t.String("id", ""), Biomes = t.Strings("biomes", new List<string>()), SeekM = t.Float("seekM", 0), ReliefM = t.Float("reliefM", 0),
+                    WaterM = t.Float("waterM", 0), PlazaM = t.Float("plazaM", 0), LaneM = t.Float("laneM", 0), LaneWidthM = t.Float("laneWidthM", 0),
+                };
+                foreach (var s in t.Objects("sites"))
+                {
+                    var count = s.Floats("count", null);
+                    if (count == null || count.Length != 2) { errors.Add("town " + town.Id + ": count needs 2 numbers"); count = new float[] { 0, 0 }; }
+                    town.Sites.Add(new TownSite { ObjectId = s.String("object", ""), Place = Array.IndexOf(TownSite.PlaceNames, s.String("place", "")), Min = (int)count[0], Max = (int)count[1] });
+                    s.End();
+                }
+                lib.Towns.Add(town);
+                t.End();
+            }
             var terrain = root.Object("terrain");
             if (terrain != null)
             {

@@ -23,6 +23,7 @@ test ChunkTests.StreamedChunksRebuildTheHostWorld 14 streams every chunk of a wo
 test ScenarioTests.ScenarioHolds 12 one case per authored scenario world
 test ObjectRegionTests.RegionsHoldTheirChunkColumnsAndCollideOnlyWhileResident 12 streams object regions across a world
 test InnTests.InnsPlaceLevelInTheTestWorld 12 places and levels every inn site in the test world
+test TownTests.TownsPlaceTheirSitesAndPassTheCheck 40 plans and checks towns in three test worlds with a wide flat-ground search
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
 test WorldTests.MountainsCastRainShadows 12 generates twenty 256 worlds in parallel and compares windward and lee rain
 test CarvedMeshTests.SkipPathMatchesFullPathInLabyrinthChunks 10 meshes two labyrinth chunks on a 512 world both ways
