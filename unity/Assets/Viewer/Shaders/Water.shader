@@ -736,18 +736,25 @@ Shader "Stabby/Water"
                     lit = lerp(lit, skyR, fres * 0.5) + l.color * pow(saturate(dot(n, h)), 90) * 0.15 * (1 - L7.w);
                     c = lerp(c, lit, opacity);
                 }
-                float film = 0;
+                float3 glow = Mixed(i, 8).rgb;
+                float molten = saturate(max(glow.r, max(glow.g, glow.b)));
+                float film = 0, seam = 0;
                 UNITY_BRANCH if (L5.w > 0.01)
                 {
-                    float2 fq = mul(Turn, xz) * 0.4 + float2(_Time.y * 0.01, 0);
-                    float fn = Noise(fq).x + 0.5 * Noise(fq * 2.3 + 7.1).x + 0.25 * Noise(xz * 3.7 + 2.9).x * saturate(2 - fp * 4);
-                    film = L5.w * smoothstep(-0.05, 0.45, fn);
-                    float3 fc = L6.rgb * (l.color * saturate(dot(n, l.direction)) * 0.8 + sky * 0.4 + lg.diffuse * 0.8) + l.color * pow(saturate(dot(n, h)), 40) * 0.08;
+                    float2 fq = mul(Turn, xz) * lerp(0.4, 1.1, molten) + _Time.y * lerp(float2(0.01, 0), float2(0.012, 0.007), molten);
+                    float fn = Noise(fq).x + 0.5 * Noise(fq * 2.3 + 7.1).x + 0.25 * Noise(xz * 3.7 + 2.9 + _Time.y * 0.02 * molten).x * saturate(2 - fp * 4);
+                    float plate = smoothstep(-0.02, 0.05 + fp * 0.2, fn - 0.02);
+                    film = L5.w * lerp(smoothstep(-0.05, 0.45, fn), plate, molten);
+                    seam = molten * (1 - smoothstep(-0.25, 0.02, fn - 0.02));
+                    float3 fc = L6.rgb * (l.color * saturate(dot(n, l.direction)) * 0.8 + sky * 0.4 + lg.diffuse * 0.8) + l.color * pow(saturate(dot(n, h)), 40) * 0.08 + lg.spec * 0.15 * molten;
+                    fc += glow * molten * 0.1 * saturate(1 - plate * 0.6 + 0.4 * Noise(fq * 5.3 + 3.3).x);
                     c = lerp(c, fc, film);
                 }
-                c += Mixed(i, 8).rgb;
+                float pulse = 1 + 0.2 * molten * Noise(xz * 0.35 + float2(_Time.y * 0.06, 1.7)).x;
+                float gm = max(glow.r, max(glow.g, glow.b));
+                c += lerp(glow, gm * float3(1, 0.72, 0.28), seam) * (1 - film) * (1 + seam) * pulse;
 
-                float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(4, L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
+                float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(lerp(4, 40, molten), L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 if (river && i.fall.y > 0) alpha *= smoothstep(0, PoolShore, depth);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
                 return half4(lerp(StabbyMixFog(c, i.positionWS, i.fog), c, clear), alpha);

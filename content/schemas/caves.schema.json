@@ -37,6 +37,9 @@
     "crystalChance": { "type": "number", "minimum": 0, "maximum": 1 },
     "iceChance": { "type": "number", "minimum": 0, "maximum": 1 },
     "iceMaxTempC": { "type": "number", "minimum": -60, "maximum": 10 },
+    "obsidianChance": { "type": "number", "minimum": 0, "maximum": 1 },
+    "obsidianMinTempC": { "type": "number", "minimum": 0, "maximum": 50 },
+    "obsidianMaxRainMm": { "type": "number", "minimum": 0, "maximum": 4000 },
     "crystalCell": { "$ref": "#/$defs/range" },
     "lights": {
       "type": "object",

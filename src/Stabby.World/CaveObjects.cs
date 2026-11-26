@@ -13,8 +13,8 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart" };
-        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8, CaveMineTimber = 9, CaveMineRail = 10, CaveMineCart = 11;
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart", "lava-glow" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8, CaveMineTimber = 9, CaveMineRail = 10, CaveMineCart = 11, CaveLava = 12;
         public const int CaveLightTries = 8;
         public const float CaveLightSideShare = 0.7f, CaveLightAlongMin = 0.15f, CaveLightAlongMax = 0.85f, SkylightJitterShare = 0.5f, SkylightFloorM = 40f;
 
@@ -25,7 +25,7 @@ namespace Stabby.World
             public ulong Seed;
         }
 
-        public static bool IsCaveLight(int kind) => kind >= CaveFungus && kind <= CaveSkylight;
+        public static bool IsCaveLight(int kind) => (kind >= CaveFungus && kind <= CaveSkylight) || kind == CaveLava;
         public static bool IsMineKind(int kind) => kind >= CaveMineTimber && kind <= CaveMineCart;
 
         static CaveLightSpot[] PlanCaveLights(GeneratedWorld w, FeatureEdit[] edits, ulong stream)
@@ -38,8 +38,9 @@ namespace Stabby.World
             for (int e = 0; e < edits.Length; e++)
             {
                 var c = edits[e];
-                if (c.Kind != FeatureEdit.Carve || (c.Shape != FeatureEdit.Shaft && !FeatureEdit.IsRoom(c.Shape))) continue;
-                int t = Features.TileOf(c, cm);
+                bool lava = LavaBasin(c);
+                if (c.Kind != FeatureEdit.Carve || (c.Shape != FeatureEdit.Shaft && !FeatureEdit.IsRoom(c.Shape) && !lava)) continue;
+                int t = lava ? Features.TileAt(c.Ax, c.Az, cm) : Features.TileOf(c, cm);
                 if (t < 0) continue;
                 if (!tiles.TryGetValue(t, out var list)) tiles[t] = list = new List<int>();
                 list.Add(e);
@@ -53,9 +54,10 @@ namespace Stabby.World
                 rooms.Clear();
                 foreach (int e in kv.Value)
                 {
-                    if (edits[e].Shape != FeatureEdit.Shaft) { rooms.Add(e); continue; }
+                    bool lava = LavaBasin(edits[e]);
+                    if (edits[e].Shape != FeatureEdit.Shaft && !lava) { rooms.Add(e); continue; }
                     if (made >= lib.LightMost) continue;
-                    spots.Add(new CaveLightSpot { Kind = CaveSkylight, Edit = e, Tile = kv.Key, Seed = rng.NextU64() });
+                    spots.Add(new CaveLightSpot { Kind = lava ? CaveLava : CaveSkylight, Edit = e, Tile = kv.Key, Seed = rng.NextU64() });
                     made++;
                 }
                 if (roll >= lib.LightChance || rooms.Count == 0) continue;
@@ -68,6 +70,8 @@ namespace Stabby.World
             }
             return spots.ToArray();
         }
+
+        public static bool LavaBasin(FeatureEdit c) => c.Obsidian && c.Kind == FeatureEdit.Carve && c.Shape == FeatureEdit.Spring;
 
         public int CaveLightCount => caveLights.Length;
         public CaveLightSpot CaveLight(int i) => caveLights[i];
@@ -130,7 +134,7 @@ namespace Stabby.World
             var ground = new DetailGround { Detail = detail };
             float s = Features.LatticeStepM, foot = footprint[d];
             var c = edits[p.Edit];
-            bool sky = p.Kind == CaveSkylight;
+            bool sky = p.Kind == CaveSkylight, lava = p.Kind == CaveLava;
             float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
             float px = len > 1e-3f ? -ez / len : 1f, pz = len > 1e-3f ? ex / len : 0f, open = c.HoleR;
             var rng = new Rng(p.Seed);
@@ -140,7 +144,15 @@ namespace Stabby.World
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
                 if (k == 0) { t = p.T; u = sky ? 0f : p.U; v = 0f; }
                 float x, z, ay, low;
-                if (sky)
+                if (lava)
+                {
+                    float jitter = k == 0 ? 0f : LavaGlowJitterM;
+                    x = c.Ax + u * jitter;
+                    z = c.Az + v * jitter;
+                    ay = Underground.BasinLevel(c) + LavaGlowAboveM;
+                    low = Underground.BasinLevel(c) - Underground.PoolMaxDepthM - LavaGlowAboveM;
+                }
+                else if (sky)
                 {
                     x = c.Ax + u * SkylightJitterShare * open;
                     z = c.Az + v * SkylightJitterShare * open;
@@ -157,7 +169,7 @@ namespace Stabby.World
                     ay -= 0.2f * open;
                 }
                 var rock = RockAt(x, z);
-                if (!sky && !Owns(rock, c, x, ay, z)) continue;
+                if (!sky && !lava && !Owns(rock, c, x, ay, z)) continue;
                 if (Walk.Solid(ground, rock, s, x, ay, z) >= 0) continue;
                 float floor = Walk.Surface(ground, rock, s, x, z, ay, low);
                 if (floor <= low) continue;
@@ -195,6 +207,7 @@ namespace Stabby.World
                 list.Add(o);
             }
         }
+        public const float LavaGlowJitterM = 0.3f, LavaGlowAboveM = 0.1f;
         public const float CrystalFloorShare = 0.4f, CrystalCeilingShare = 0.3f, CrystalJitter = 0.5f, CrystalStepM = 0.5f, CrystalLift = 0.6f;
         public const float CaveKeepShare = 2.2f, CaveColumnKeepM = 0.6f, CaveTipHeadroomM = 1f, CaveMiteHeadM = 1f, CaveWalkLineM = 0.9f, CavePairShare = 0.4f, CaveTwinScale = 0.6f;
         public const float CaveColumnGapMinM = 2.4f, CaveColumnGapMaxM = 8f, CaveColumnEmbedM = 0.4f, CaveDripPerHundredM = 10f, CaveDripSurveyM = 150f;
@@ -240,6 +253,22 @@ namespace Stabby.World
             float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
             float qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
             return (float)Math.Sqrt(qx * qx + qy * qy + qz * qz) - c.HoleR;
+        }
+
+        static bool Dripstone(int kind) => kind == CaveStalactite || kind == CaveStalagmite || kind == CaveColumn;
+
+        static bool InObsidian(EditSlice rock, float x, float y, float z)
+        {
+            float best = float.MaxValue;
+            bool glass = false;
+            for (int q = 0; q < rock.N; q++)
+            {
+                var o = rock.Items[q];
+                if (!o.CaveCarve) continue;
+                float r = Reach3(o, x, y, z);
+                if (r < best) { best = r; glass = o.Obsidian; }
+            }
+            return glass;
         }
 
         static bool Owns(EditSlice rock, FeatureEdit c, float x, float y, float z)
@@ -298,6 +327,7 @@ namespace Stabby.World
                 if (c.Shape == FeatureEdit.Mine || (c.Link && kind != CaveStalactite && kind != CaveRubble)) continue;
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
                 if (pl.CaveIce ? !c.Ice : c.Ice && (kind == CaveStalactite || kind == CaveStalagmite)) continue;
+                if (c.Obsidian && Dripstone(kind)) continue;
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
                 if (len < 1f) continue;
                 float px = -ez / len, pz = ex / len, wf = c.FloorHalf, hole = c.HoleR;
@@ -407,6 +437,7 @@ namespace Stabby.World
                 string why = MineFault(kind, o);
                 return why == null ? null : at + " " + why;
             }
+            if (Dripstone(kind) && InObsidian(rock, o.X, o.Y + (kind == CaveStalactite ? -0.5f : 0.5f) * o.Size, o.Z)) return at + " is dripstone in an obsidian cave";
             if (kind == CaveStalactite)
             {
                 if (Walk.Solid(ground, rock, s, o.X, o.Y + 0.05f * o.Size, o.Z) < 0) return at + " floats free of the ceiling";
