@@ -70,6 +70,7 @@ Shader "Stabby/Water"
             static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
             static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
+            static const float ChannelWaves = 1.5;
             static const float SlopeRange = 0.1;
             static const float MudFeather = 4, PoolFeather = 0.5, PoolShore = 1.2;
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
@@ -461,6 +462,7 @@ Shader "Stabby/Water"
                 float depth = lerp(max(0, i.positionWS.y - bed.y), field, far);
 
                 float4 wv = L2;
+                if (i.chan.y > 0 && dot(i.color.rg * 2 - 1, i.color.rg * 2 - 1) > 0.01) wv.x = max(wv.x, 1 / (ChannelWaves * 2 * i.chan.y));
                 float t = _Time.y * wv.y * (1 - 0.7 * visc);
                 float2 q = i.positionWS.xz * wv.x;
                 float2 xz = i.positionWS.xz;

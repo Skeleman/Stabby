@@ -7,8 +7,8 @@ namespace Stabby.World
     {
         public const int Spring = 0, Pool = 1, Sink = 2, Stride = 6;
         public int Graph, End, Outlet = -1;
-        public float Flow;
-        public float[] Points;
+        public float Flow, BasinX, BasinZ, BasinReach;
+        public float[] Points, Tops;
         public int[] Nodes;
 
         public int Rows => Points.Length / Stride;
@@ -18,21 +18,23 @@ namespace Stabby.World
     {
         public const float RowM = 1f, DepthM = 0.25f, MinRunM = 30f, MinRainMm = 300f, CatchmentM2 = 250000f, Infiltration = 0.3f;
         public const float HalfPerRootFlow = 12f, MinHalfM = 0.35f, MaxHalfM = 1.2f, FloorShare = 0.4f, PoolInsetM = 0.3f, PoolSkimM = 0.02f;
-        public const float TaperM = 6f, TaperFloor = 0.2f, KnotM = 7f, WidthSwing = 0.35f, WanderShare = 0.6f, BuryMinM = 0.04f, BuryMaxM = 0.22f, DryM = 0.03f, HugM = 8f, ShrinkBy = 0.7f, Spread = 1.5f;
-        const int Raw = 5, Shrinks = 3;
+        public const float TaperM = 6f, TaperFloor = 0.2f, KnotM = 7f, WidthSwing = 0.35f, WanderShare = 0.6f, BuryMinM = 0.04f, BuryMaxM = 0.22f, HugM = 8f, Spread = 1.5f;
+        public const float RecessM = 0.2f, BedM = 0.4f, BankPadM = 0.2f, BankRun = 1f, ChannelRound = 0.2f, EdgeInM = 0.05f, ChannelLumpM = 0.04f, BankOutM = 0.3f, FineStepM = 0.5f, MeshPadM = 0.02f;
+        const int Raw = 5, ChannelRows = 2;
         const float SecondsPerYear = 31557600f;
 
         public const float SinkHoleM = 0.75f, SinkOffM = 1.7f, SinkNarrow = 0.6f, SinkClearM = Underground.ClearSide + SinkHoleM + 0.15f, SinkTopM = 0.15f, SinkLeanM = 1f, SinkDeepM = 3f, SinkLumps = 0.08f, SinkProbeM = 0.5f;
 
         public static CaveBrook[] Build(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves)
         {
+            edits = Array.FindAll(edits, e => !Channel(e));
             var list = Traces(w, edits, caves);
             if (list.Count == 0) return list.ToArray();
             var floor = new Floor { Ground = new DetailGround { Detail = detail }, Grid = new EditGrid(edits, w.Config.Size * w.Config.CellMeters) };
             foreach (var s in list)
             {
                 var r = Rng.Stream(w.Config.Seed ^ Rng.Mix((ulong)s.Graph), "cave-brooks");
-                s.Points = Shape(s.Points, s.End, floor, ref r);
+                s.Points = Shape(s.Points, s.End, floor, ref r, out s.Tops);
             }
             return list.ToArray();
         }
@@ -81,6 +83,41 @@ namespace Stabby.World
                 }
             }
             return list;
+        }
+
+        public static bool Channel(FeatureEdit e) => e.Kind == FeatureEdit.Carve && e.Shape == FeatureEdit.Spring && (e.Bx != e.Ax || e.Bz != e.Az);
+
+        public static FeatureEdit[] Channels(GeneratedWorld w, CaveBrook[] brooks)
+        {
+            var list = new List<FeatureEdit>();
+            foreach (var s in brooks)
+            {
+                var r = Rng.Stream(w.Config.Seed ^ Rng.Mix((ulong)s.Graph), "cave-brook-channels");
+                float seed = r.NextFloat();
+                var q = s.Points;
+                int rows = s.Rows, st = CaveBrook.Stride;
+                float pool = s.End == CaveBrook.Pool ? q[(rows - 1) * st + 1] + PoolSkimM : float.MinValue;
+                for (int a = 0; a < rows - 1; a += ChannelRows)
+                {
+                    int b = Math.Min(a + ChannelRows, rows - 1), oa = a * st, ob = b * st;
+                    float wa = q[oa + 1], wb = q[ob + 1];
+                    float half = Math.Max(EdgeInM, Math.Min(q[oa + 3], q[ob + 3]) - EdgeInM);
+                    float rise = Math.Max(s.Tops[a] - wa, s.Tops[b] - wb);
+                    float ex = Math.Min(Math.Abs(q[oa] - s.BasinX), Math.Abs(q[ob] - s.BasinX)), ez = Math.Min(Math.Abs(q[oa + 2] - s.BasinZ), Math.Abs(q[ob + 2] - s.BasinZ));
+                    float near = s.BasinReach + ObjectField.PoolPadM + half + BankRun * Math.Max(rise, 2f * FeatureEdit.MinMeshSteps * FineStepM) + ChannelRound;
+                    float dry = ex < near && ez < near ? pool : float.MinValue;
+                    float sink = Math.Max(0f, Math.Min(Math.Min(BedM, half), Math.Min(wa, wb) - dry));
+                    rise = Math.Max(rise, 2f * FeatureEdit.MinMeshSteps * FineStepM + MeshPadM - sink);
+                    float grow = ChannelRound * (1f - Features.CaveHollow);
+                    var e = ObjectField.Disc(FeatureEdit.Carve, q[oa], q[oa + 2], wa + rise, wa - sink - grow, half + BankRun * rise, ChannelRound, -BankRun, 0f, ChannelLumpM, seed, 0f, 0f);
+                    e.W += Math.Max(0f, FeatureEdit.MinMeshSteps * FineStepM + MeshPadM - e.Thick);
+                    e.Bx = q[ob];
+                    e.Bz = q[ob + 2];
+                    e.By = e.Ay + wb - wa;
+                    list.Add(e.Finer());
+                }
+            }
+            return list.ToArray();
         }
 
         public static int CellOf(GeneratedWorld w, float x, float z)
@@ -137,6 +174,7 @@ namespace Stabby.World
             {
                 Graph = gi, End = end, Flow = flow, Points = pts.ToArray(), Nodes = nodes.ToArray(),
                 Outlet = end == CaveBrook.Spring ? CellOf(w, g.Nodes[at].X, g.Nodes[at].Z) : -1,
+                BasinX = basin.Ax, BasinZ = basin.Az, BasinReach = pooled ? Underground.BasinReach(basin) : 0f,
             };
         }
 
@@ -297,7 +335,7 @@ namespace Stabby.World
             return t * t * (3f - 2f * t);
         }
 
-        static float[] Shape(float[] raw, int end, Floor floor, ref Rng r)
+        static float[] Shape(float[] raw, int end, Floor floor, ref Rng r, out float[] tops)
         {
             int rows = raw.Length / Raw;
             var along = new float[rows];
@@ -306,11 +344,12 @@ namespace Stabby.World
                 float dx = raw[k * Raw] - raw[(k - 1) * Raw], dz = raw[k * Raw + 2] - raw[(k - 1) * Raw + 2];
                 along[k] = along[k - 1] + (float)Math.Sqrt(dx * dx + dz * dz);
             }
-            float total = along[rows - 1];
+            float total = along[rows - 1], last = raw[(rows - 1) * Raw + 1];
             int n = (int)(total / KnotM) + 2;
             var width = Knots(n, ref r);
             var wander = Knots(n, ref r);
             var pts = new float[rows * CaveBrook.Stride];
+            tops = new float[rows];
             for (int k = 0; k < rows; k++)
             {
                 int o = k * Raw, a = Math.Max(k - 1, 0) * Raw, b = Math.Min(k + 1, rows - 1) * Raw;
@@ -318,25 +357,33 @@ namespace Stabby.World
                 float px = tl > 0f ? -tz / tl : 0f, pz = tl > 0f ? tx / tl : 0f;
                 float head = along[k], tail = end == CaveBrook.Pool ? TaperM : total - along[k];
                 float ease = Ease(Math.Min(head, tail)), still = Ease(Math.Min(head, total - along[k]));
-                float surface = raw[o + 1], room = raw[o + 4];
-                float bed = floor.At(raw[o], raw[o + 2], surface, HugM);
-                if (bed < surface - DepthM - BuryMaxM && (end == CaveBrook.Spring || (end == CaveBrook.Sink && total - along[k] < SinkHoleM))) surface = bed + DepthM;
-                if (k > 0) surface = Math.Min(surface, pts[(k - 1) * CaveBrook.Stride + 1]);
+                float room = raw[o + 4];
                 float half = Spread * raw[o + 3] * (TaperFloor + (1f - TaperFloor) * ease) * (1f + WidthSwing * Smooth(width, along[k]));
                 float shift = WanderShare * Math.Max(0f, room - raw[o + 3]) * Smooth(wander, along[k]) * still;
-                float x = raw[o] + px * shift, z = raw[o + 2] + pz * shift, left = 0f, right = 0f;
-                for (int q = 0; q <= Shrinks; q++)
-                {
-                    left = floor.At(x - px * half, z - pz * half, surface);
-                    right = floor.At(x + px * half, z + pz * half, surface);
-                    if (q == Shrinks || Math.Max(left, right) < surface - DryM) break;
-                    half *= ShrinkBy;
-                }
-                float low = surface - DepthM - BuryMaxM;
                 int p = k * CaveBrook.Stride;
-                pts[p] = x; pts[p + 1] = surface; pts[p + 2] = z; pts[p + 3] = half;
-                pts[p + 4] = Math.Max(low, Math.Min(left, surface) - r.Range(BuryMinM, BuryMaxM));
-                pts[p + 5] = Math.Max(low, Math.Min(right, surface) - r.Range(BuryMinM, BuryMaxM));
+                pts[p] = raw[o] + px * shift; pts[p + 2] = raw[o + 2] + pz * shift; pts[p + 3] = half;
+            }
+            for (int k = 0; k < rows; k++)
+            {
+                int p = k * CaveBrook.Stride, a = Math.Max(k - 1, 0) * CaveBrook.Stride, b = Math.Min(k + 1, rows - 1) * CaveBrook.Stride;
+                float tx = pts[b] - pts[a], tz = pts[b + 2] - pts[a + 2], tl = (float)Math.Sqrt(tx * tx + tz * tz);
+                float px = tl > 0f ? -tz / tl : 0f, pz = tl > 0f ? tx / tl : 0f;
+                float x = pts[p], z = pts[p + 2], half = pts[p + 3], raised = raw[k * Raw + 1], low = float.MaxValue, high = float.MinValue;
+                for (int j = 0; j < 5; j++)
+                {
+                    float off = j == 0 ? 0f : (j < 3 ? half : half + BankOutM) * (j % 2 == 1 ? -1f : 1f);
+                    float f = floor.At(x + off * px, z + off * pz, raised, HugM);
+                    if (f <= raised - HugM || f >= raised + 1f) continue;
+                    low = Math.Min(low, f);
+                    high = Math.Max(high, f);
+                }
+                float surface = low < float.MaxValue ? low - RecessM : raised - DepthM - RecessM;
+                if (k > 0) surface = Math.Min(surface, pts[(k - 1) * CaveBrook.Stride + 1]);
+                if (end == CaveBrook.Pool) surface = Math.Max(surface, last);
+                pts[p + 1] = surface;
+                pts[p + 4] = surface - r.Range(BuryMinM, BuryMaxM);
+                pts[p + 5] = surface - r.Range(BuryMinM, BuryMaxM);
+                tops[k] = Math.Max(surface + RecessM, high) + BankPadM;
             }
             return pts;
         }
