@@ -501,8 +501,11 @@ namespace Stabby.World
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves) => Place(w, detail, out caves, out _);
 
-        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries)
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries) => Place(w, detail, out caves, out discoveries, out _);
+
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads)
         {
+            roads = Array.Empty<RoadSegment>();
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
@@ -516,6 +519,7 @@ namespace Stabby.World
             var dens = field.DenEdits();
             var vaults = field.DungeonEdits();
             discoveries = field.Discoveries();
+            roads = field.Roads();
             if (boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length == 0) return Brooked(w, detail, terrain, caves);
             var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length];
             terrain.CopyTo(all, 0);

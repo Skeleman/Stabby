@@ -60,6 +60,7 @@ namespace Stabby.Game
         public BlobArray<FeatureEdit> Edits;
         public BlobArray<int> EditStart, EditItems;
         public BlobArray<float2> CaveLight;
+        public BlobArray<RoadSegment> Roads;
     }
 
     public struct Ground : IComponentData, IGroundHeight
@@ -113,7 +114,7 @@ namespace Stabby.Game
         public static GroundParts Fill(GeneratedWorld w)
         {
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var caves, out var discoveries);
+            var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads);
             var c = detail.Cells;
             int n = c.N, nn = n * n;
             var b = new BlobBuilder(Allocator.Persistent);
@@ -151,7 +152,9 @@ namespace Stabby.Game
             var dark = CaveLight.Distances(edits, caves);
             var cl = b.Allocate(ref root.CaveLight, edits.Length);
             for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
-            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Brooks = CaveBrooks.Build(w, detail, edits, caves), Blob = b };
+            var rs = b.Allocate(ref root.Roads, roads.Length);
+            for (int i = 0; i < roads.Length; i++) rs[i] = roads[i];
+            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Roads = roads, Brooks = CaveBrooks.Build(w, detail, edits, caves), Blob = b };
         }
 
         public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
@@ -212,6 +215,7 @@ namespace Stabby.Game
         public TerrainDetail Detail;
         public FeatureEdit[] Edits;
         public ObjectInstance[] Discoveries;
+        public RoadSegment[] Roads;
         public CaveBrook[] Brooks;
         public BlobBuilder Blob;
     }
