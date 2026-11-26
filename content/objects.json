@@ -355,7 +355,7 @@
       "id": "skylight-moss", "name": "Skylight moss", "kind": "static", "material": "lush-turf", "variants": 8,
       "parts": [ { "id": "bed", "shape": "rock", "scale": [1.6, 0.12, 1.6], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "cave": "skylight", "perHundredM": 1, "sizeMinM": 1.2, "sizeMaxM": 1.8, "sink": 0.3 },
-      "light": { "category": "cave-glow", "material": "skylight", "intensity": 3, "radiusM": 12, "importance": 1, "liftM": 6, "daylight": true, "core": false }
+      "light": { "category": "cave-glow", "material": "skylight", "intensity": 30, "radiusM": 12, "importance": 1, "liftM": 6, "coneDeg": 70, "daylight": true, "core": false }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

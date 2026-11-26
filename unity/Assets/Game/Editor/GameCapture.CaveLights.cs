@@ -112,6 +112,15 @@ namespace Stabby.Game.Editor
                     Shot(cam, null, "warmup");
                     Shot(cam, dir, shot);
                 }
+                if (!sky) continue;
+                bool open = CaveLightEye(ground, at, 2.2f, out var pool);
+                cam.transform.SetPositionAndRotation(pool, Quaternion.LookRotation(at - pool));
+                for (var w = ShowHour(PinnedMidday); w.MoveNext();) yield return null;
+                for (var w = Settle(120); w.MoveNext();) yield return null;
+                var ps = DayNightSystem.Shown;
+                lines.Add($"cavelights-skylight-pool: light {o.X:F0},{o.Y:F1},{o.Z:F0}, eye {pool.x:F0},{pool.y:F1},{pool.z:F0}{(open ? "" : " (no clear eye)")}, pinned hour {ps.Hour:F2}, moon phase {ps.Phase:F2}, sky intensity {ps.Intensity:F2}");
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, "cavelights-skylight-pool");
             }
             GameStatus.Lines["~cavelights"] = string.Join("\n", lines);
         }

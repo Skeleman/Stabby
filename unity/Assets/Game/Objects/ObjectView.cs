@@ -214,11 +214,11 @@ namespace Stabby.Game
             if (impB != null) { impB.Release(); UnityEngine.Object.Destroy(impB); }
         }
 
-        public const float GlowBase = 0.05f, GlowSpan = 0.25f;
+        public const float GlowBase = 0.05f, GlowSpan = 0.2f, GlowPatternStep = 0.22f;
 
-        static float4 Linear(uint rgb, float tint, int shape, float glow)
+        static float4 Linear(uint rgb, float tint, int shape, float glow, int pattern)
         {
-            if (shape == ObjectPart.Crystals && glow > 0f) return new float4(Decode(rgb) * tint, GlowBase + GlowSpan * glow);
+            if (glow > 0f) return new float4(Decode(rgb) * tint, GlowBase + GlowSpan * glow + GlowPatternStep * pattern);
             if (ObjectPart.IsStone(shape)) return new float4(tint, tint, tint, 0);
             return new float4(Decode(rgb) * tint, shape);
         }
@@ -629,7 +629,7 @@ namespace Stabby.Game
                 bool both = !float.IsNaN(floorY) && !float.IsNaN(ceilY);
                 parts[i] = new ObjectSpawn
                 {
-                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape, part.Glow), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
+                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape, part.Glow, part.GlowPattern), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
                     Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = ObjectPart.IsStructure(part.Shape) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
                     Id = o.Id,
                 };
@@ -658,6 +658,7 @@ namespace Stabby.Game
                     e.FlickerHz = light.FlickerHz;
                     e.Sky = light.Daylight;
                     e.Coreless = !light.Core;
+                    e.ConeDeg = light.ConeDeg;
                     e.Phase = ((o.Id + (ulong)k) * 0x9E3779B97F4A7C15UL >> 40) / 16777216f;
                     (lights ??= new List<LightEmitter>()).Add(e);
                 }

@@ -52,6 +52,7 @@ namespace Stabby.World
         public int Solid = -1, Shadows = -1;
         public uint Color;
         public float Glow;
+        public int GlowPattern;
         public bool HasColor;
         public uint LeafColor;
         public bool HasLeafColor;
@@ -93,7 +94,7 @@ namespace Stabby.World
     {
         public string Category;
         public uint Color;
-        public float Intensity, RangeM, Importance, Flicker, FlickerHz, LiftM;
+        public float Intensity, RangeM, Importance, Flicker, FlickerHz, LiftM, ConeDeg;
         public bool Daylight, Core = true;
     }
 
@@ -102,6 +103,7 @@ namespace Stabby.World
         public string Id, Name, Kind;
         public uint Color;
         public float Glow;
+        public int GlowPattern;
         public int Variants = 1;
         public string Verb;
         public float ReachM;
@@ -276,6 +278,7 @@ namespace Stabby.World
                     if (li.Importance < 0) errors.Add(d.Id + ": light importance must not be below 0");
                     if (li.Flicker < 0 || li.Flicker > 1 || (li.Flicker > 0 && !(li.FlickerHz > 0))) errors.Add(d.Id + ": light flicker must be 0-1 and needs flickerHz above 0");
                     if (li.LiftM < 0 || li.LiftM > 20) errors.Add(d.Id + ": light liftM must be 0-20");
+                    if (li.ConeDeg < 0 || li.ConeDeg > 150) errors.Add(d.Id + ": light coneDeg must be 0-150");
                     if (d.Kind != Structure && d.Placement.Cave == 0) errors.Add(d.Id + ": lights belong only to structure and cave objects");
                     if (li.Daylight != (d.Placement.Cave == ObjectField.CaveSkylight)) errors.Add(d.Id + ": daylight lights belong to skylight objects and only to them");
                 }
