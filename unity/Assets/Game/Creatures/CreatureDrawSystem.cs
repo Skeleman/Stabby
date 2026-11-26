@@ -74,7 +74,7 @@ namespace Stabby.Game
                 material = new Material(shader) { name = "Stabby creatures instanced" };
                 material.EnableKeyword("STABBY_CREATURE_BUFFER");
             }
-            if (!packing && anim.Pending && anim.Gpu.IsCompleted) Schedule(ref anim);
+            if (!packing && anim.Pending && JobPoll.Done(anim.Gpu)) Schedule(ref anim);
             empty = !SystemAPI.TryGetSingleton<CreatureTally>(out var tally) || tally.Links == 0;
         }
 
@@ -109,10 +109,11 @@ namespace Stabby.Game
                 meshInfo[g] = known ? new uint4(meshes[m].GetIndexCount(0), meshes[m].GetIndexStart(0), meshes[m].GetBaseVertex(0), 1) : uint4.zero;
             }
             furCount = anim.FurCount;
+            anim.Room = anim.Bones.Capacity;
             pack = new Pack
             {
                 Parts = anim.Parts, Bones = anim.Bones, Fur = anim.Fur, Starts = anim.Starts, Counts = anim.Counts, Totals = anim.Totals, Mesh = meshInfo, FurCount = furCount,
-                Instances = instances.Lock(anim.Parts.Length), BonesOut = bones.Lock(anim.Bones.Length), FurOut = fur.Lock(math.max(furCount, 3)), Args = args.Lock(groups), Packed = packed,
+                Instances = instances.Lock(anim.Parts.Length), BonesOut = bones.Lock(math.max(anim.Bones.Length, 1)), FurOut = fur.Lock(math.max(furCount, 3)), Args = args.Lock(groups), Packed = packed,
             }.Schedule(anim.Gpu);
             JobHandle.ScheduleBatchedJobs();
             anim.Gpu = pack;
@@ -166,7 +167,7 @@ namespace Stabby.Game
         struct Pack : IJob
         {
             [ReadOnly] public NativeArray<CreaturePart> Parts;
-            [ReadOnly] public NativeArray<float3x4> Bones;
+            [ReadOnly] public NativeList<float3x4> Bones;
             [ReadOnly] public NativeArray<float4> Fur;
             [ReadOnly] public NativeArray<int> Starts, Counts, Totals;
             [ReadOnly] public NativeArray<uint4> Mesh;
@@ -190,7 +191,7 @@ namespace Stabby.Game
                     Args[g] = new GraphicsBuffer.IndirectDrawIndexedArgs { indexCountPerInstance = m.x, instanceCount = (uint)c, startIndex = m.y, baseVertexIndex = m.z };
                 }
                 NativeArray<CreaturePart>.Copy(Parts, Instances, n);
-                NativeArray<float3x4>.Copy(Bones, BonesOut, Totals[0]);
+                NativeArray<float3x4>.Copy(Bones.AsArray(), BonesOut, Totals[0]);
                 NativeArray<float4>.Copy(Fur, FurOut, FurCount);
                 Packed[2 * groups] = n;
                 Packed[2 * groups + 1] = Totals[0];
