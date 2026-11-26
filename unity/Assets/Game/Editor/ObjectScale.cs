@@ -90,10 +90,18 @@ namespace Stabby.Game.Editor
                 groups[key] = (groups.TryGetValue(key, out long had) ? had : 0) + b;
             }
             var top = string.Join(", ", groups.OrderByDescending(g => g.Value).Take(6).Select(g => $"'{g.Key}' {g.Value / mb}"));
+            var lakes = meshList.Where(m => m.name.StartsWith("Water ")).ToArray();
+            long lakeVerts = lakes.Sum(m => (long)m.vertexCount), lakeMax = lakes.Length > 0 ? lakes.Max(m => m.vertexCount) : 0;
+            string counters = string.Join(", ", new[] { "System Used Memory", "Total Used Memory", "Gfx Used Memory", "Mesh Memory" }.Select(c =>
+            {
+                using var r = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Memory, c);
+                return $"{c} {r.CurrentValue / mb}";
+            }));
+            int stride = lakes.Length > 0 ? lakes[0].GetVertexBufferStride(0) : 0, readable = lakes.Count(m => m.isReadable);
             var texList = Resources.FindObjectsOfTypeAll<Texture>();
             foreach (var t in texList) texBytes += Profiler.GetRuntimeMemorySizeLong(t);
             foreach (var w in Unity.Entities.World.All) chunks += w.EntityManager.UniversalQuery.CalculateChunkCountWithoutFiltering();
-            return $"scale memory (MB): unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, graphics driver {Profiler.GetAllocatedMemoryForGraphicsDriver() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, working set {(ulong)mem.WorkingSetSize / (ulong)mb}, peak working set {(ulong)mem.PeakWorkingSetSize / (ulong)mb}, peak commit {(ulong)mem.PeakPagefileUsage / (ulong)mb}; meshes {meshList.Length} {meshBytes / mb}, textures {texList.Length} {texBytes / mb}, entity chunks {chunks} {chunks * 16 / 1024}; top mesh groups {top}";
+            return $"scale memory (MB): unity allocated {Profiler.GetTotalAllocatedMemoryLong() / mb}, reserved {Profiler.GetTotalReservedMemoryLong() / mb}, graphics driver {Profiler.GetAllocatedMemoryForGraphicsDriver() / mb}, mono used {Profiler.GetMonoUsedSizeLong() / mb}, working set {(ulong)mem.WorkingSetSize / (ulong)mb}, peak working set {(ulong)mem.PeakWorkingSetSize / (ulong)mb}, peak commit {(ulong)mem.PeakPagefileUsage / (ulong)mb}; meshes {meshList.Length} {meshBytes / mb}, textures {texList.Length} {texBytes / mb}, entity chunks {chunks} {chunks * 16 / 1024}; top mesh groups {top}; lake meshes {lakes.Length}, vertices {lakeVerts} (max {lakeMax}), stride {stride} B, readable {readable}; recorders {counters}";
         }
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
