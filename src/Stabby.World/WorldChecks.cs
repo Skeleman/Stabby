@@ -418,7 +418,7 @@ namespace Stabby.World
                 {
                     float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
                     int bc = NearField.CellOf(bx, bz, cm, n);
-                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || InFall(w, bx, bz) || pools.Exists(o => NearField.InPoolWater(o, bx, bz))) continue;
+                    if (s < Erosion.MinLandHeight || w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || InFall(w, bx, bz) || pools.Exists(o => NearField.InPoolWater(o, bx, bz))) continue;
                     float h = d.Sample(bx, bz), held = Math.Min(s, Math.Min(q.Sa, q.Sb) + NearField.Rise(hw));
                     if (h < held - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {held:F1}"); return; }
                 }
@@ -1068,7 +1068,7 @@ namespace Stabby.World
                 var dry = Array.FindAll(items, q => !CaveBrooks.Channel(q));
                 foreach (var edge in g.Edges) if ((tight = Underground.Cramped(detail, dry, g, edge)) != null) break;
                 if (tight != null) e.Add(tight);
-                string why = Underground.Unreached(detail, items, g);
+                string why = Underground.Unreached(detail, dry, g);
                 if (why != null) e.Add(why);
                 if (tight != null || why != null) return;
                 var rock = new List<FeatureEdit>();
@@ -1544,7 +1544,7 @@ namespace Stabby.World
         }
 
         public const float CaveNormalDeg = 1.5f;
-        public const int CaveNormalLevels = 3, CaveCoverSteps = 4, CaveNormalMin = 8;
+        public const int CaveNormalLevels = 3, CaveCoverSteps = 4, CaveNormalMin = 16;
 
         public static void CheckCaveNormals(GeneratedWorld w, TerrainDetail detail, EditGrid grid, CaveGraph[] caves, List<string> e)
         {
@@ -1579,7 +1579,7 @@ namespace Stabby.World
                 {
                     float x = f.Verts[6 * t], y = f.Verts[6 * t + 1], z = f.Verts[6 * t + 2];
                     bool cave = false;
-                    foreach (var m in meshed) if (m.CaveCarve && m.Reach(x, y, z, out _)) { cave = true; break; }
+                    foreach (var m in meshed) if (m.CaveCarve && m.Shape != FeatureEdit.Mine && m.Reach(x, y, z, out _)) { cave = true; break; }
                     if (!cave || Math.Abs(Field(x, y, z)) > 0.75f * sm || detail.Sample(x, z) - y < CaveCoverSteps * sm) continue;
                     const float d = 0.05f;
                     float gx = Field(x + d, y, z) - Field(x - d, y, z), gy = Field(x, y + d, z) - Field(x, y - d, z), gz = Field(x, y, z + d) - Field(x, y, z - d);

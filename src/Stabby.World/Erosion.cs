@@ -147,14 +147,15 @@ namespace Stabby.World
                     for (int x = 1; x < n - 1; x++)
                     {
                         int i = y * n + x;
-                        if (!sea[i] || src[i] > -10f) continue;
+                        float blend = sea[i] ? Grid.Smoothstep(6f, 14f, -src[i]) : 0;
+                        if (blend <= 0) continue;
                         float sum = 0; int count = 0;
                         for (int k = 0; k < 8; k++)
                         {
                             int j = i + Grid.DY[k] * n + Grid.DX[k];
                             if (sea[j]) { sum += src[j]; count++; }
                         }
-                        h[i] = Math.Min(-1f, (src[i] + sum) / (1 + count));
+                        h[i] = Math.Min(-1f, src[i] + ((src[i] + sum) / (1 + count) - src[i]) * blend);
                     }
                 });
             }
