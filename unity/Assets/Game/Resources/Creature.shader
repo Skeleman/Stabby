@@ -51,12 +51,22 @@ Shader "Stabby/Creature"
         float4x4 CreatureSkinned(CreaturePart c, float2 w)
         {
             float4x4 m = CreatureBone(c.bone);
-            [branch] if (c.skin != 0 && w.x + w.y > 0) m = (1 - w.x - w.y) * m + w.x * CreatureBone(c.skin) + w.y * CreatureBone(c.skin + 1);
+            uint s = c.skin & 0x3fffffff;
+            [branch] if (s != 0 && w.x + w.y > 0) m = (1 - w.x - w.y) * m + w.x * CreatureBone(s) + w.y * CreatureBone(s + 1);
             return m;
         }
         float3 CreatureSkinPoint(CreaturePart c, float3 p, float3 w)
         {
-            if (c.skin != 0) p.z = w.z;
+            uint s = c.skin & 0x3fffffff;
+            if (s == 0) return p;
+            if ((c.skin >> 30) == 0 || p.z < w.z) p.z = w.z;
+            float t = w.x + w.y;
+            [branch] if (t > 0)
+            {
+                float3 a = normalize(CreatureBone(c.bone)._m02_m12_m22), b = normalize(CreatureBone(w.x > w.y ? s : s + 1)._m02_m12_m22);
+                float ch = sqrt(saturate(0.5 + 0.5 * dot(a, b)));
+                p.xy *= 1 + 2 * t * (min(1.0 / max(ch, 0.1), 1.4) - 1);
+            }
             return p;
         }
         float3 CreatureNormal(float4x4 m, float3 n)
