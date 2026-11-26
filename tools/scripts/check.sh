@@ -111,8 +111,8 @@ phase_unity() {
   done
   wait $up 2> /dev/null
   [ "$stuck" = ", timed out" ] && rc=1
-  n=$(grep -c "error CS" out/check/unity.log); [ "$n" = 0 ] || rc=1
-  { echo "unity: $n CS errors, $((SECONDS - s)) s$stuck"; grep "error CS" out/check/unity.log | sort -u | head -5; } > out/check/unity.sum
+  n=$(grep -c -E "error CS|Burst error" out/check/unity.log); [ "$n" = 0 ] || rc=1
+  { echo "unity: $n CS/Burst errors, $((SECONDS - s)) s$stuck"; grep -E "error CS|Burst error" out/check/unity.log | sort -u | head -5; } > out/check/unity.sum
   if [ $rc = 0 ] && [ $parity = 1 ]; then
     dotnet test -c Release --no-build --filter "FullyQualifiedName~RuntimeParity" > out/check/parity.log 2>&1 || rc=1
     echo "parity: $(grep -E "Passed!|Failed!" out/check/parity.log | sed -E 's/ - Stabby.*//' | tr -s ' ')" >> out/check/unity.sum

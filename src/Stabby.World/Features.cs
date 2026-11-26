@@ -143,33 +143,19 @@ namespace Stabby.World
 
         public const float CellRelief = 0.3f, FacetJitter = 0.2f;
 
-        static readonly float[] Faces = FaceNormals();
-
-        static float[] FaceNormals()
-        {
-            float p = 1.618034f, l = (float)Math.Sqrt(1f + p * p);
-            float a = 1f / l, b = p / l;
-            var f = new float[36];
-            int i = 0;
-            for (int s = 0; s < 4; s++)
-            {
-                float u = (s & 1) == 0 ? a : -a, v = (s & 2) == 0 ? b : -b;
-                f[i++] = 0f; f[i++] = u; f[i++] = v;
-                f[i++] = u; f[i++] = v; f[i++] = 0f;
-                f[i++] = v; f[i++] = 0f; f[i++] = u;
-            }
-            return f;
-        }
-
         float Facets(float x, float y, float z)
         {
             uint seed = RockSeed ^ 0x2545F491u;
             float ca = Unit(Hash(seed, 1, 0, 0)) - 0.5f, sa = Unit(Hash(seed, 2, 0, 0)) - 0.5f, n = (float)Math.Sqrt(ca * ca + sa * sa);
             if (n < 1e-3f) { ca = 1f; sa = 0f; } else { ca /= n; sa /= n; }
             float rx = ca * x - sa * z, rz = sa * x + ca * z, best = float.MinValue;
+            float p = 1.618034f, l = (float)Math.Sqrt(1f + p * p), a = 1f / l, b = p / l;
             for (int k = 0; k < 12; k++)
             {
-                float d = (rx * Faces[3 * k] + y * Faces[3 * k + 1] + rz * Faces[3 * k + 2]) * (1f + FacetJitter * Unit(Hash(seed, k, 3, 5)));
+                int s = k / 3, r = k - 3 * s;
+                float u = (s & 1) == 0 ? a : -a, v = (s & 2) == 0 ? b : -b;
+                float fx = r == 0 ? 0f : r == 1 ? u : v, fy = r == 0 ? u : r == 1 ? v : 0f, fz = r == 0 ? v : r == 1 ? 0f : u;
+                float d = (rx * fx + y * fy + rz * fz) * (1f + FacetJitter * Unit(Hash(seed, k, 3, 5)));
                 if (d > best) best = d;
             }
             return best;
