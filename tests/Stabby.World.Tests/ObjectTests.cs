@@ -22,6 +22,20 @@ public class ObjectTests
     });
 
     [Fact]
+    public void DungeonRoomsLightFewTorchesThroughTheFireEmitter()
+    {
+        var torch = Objects.EmitterFor(ObjectPart.WallTorch);
+        Assert.NotNull(torch);
+        Assert.Equal("wall-torch", torch.Id);
+        Assert.Equal("fire", torch.Light.Category);
+        var lit = Enumerable.Range(0, 64).Select(v => Structures.Layout(ObjectPart.DungeonRoom, ObjectMeshes.Key("structure", 0, v))).ToList();
+        Assert.All(lit, l => Assert.All(l.Lights, t => Assert.Equal(ObjectPart.WallTorch, t.Shape)));
+        Assert.All(lit, l => Assert.InRange(l.Lights.Count, 0, 2));
+        int dark = lit.Count(l => l.Lights.Count == 0);
+        Assert.True(dark > lit.Count / 2 && dark < lit.Count, $"{dark} of {lit.Count} rooms dark");
+    }
+
+    [Fact]
     public void FirePitsCarryOneLightThatCampsAndHermitagesInherit()
     {
         var pit = Objects.Objects.First(o => o.Id == "fire-pit");

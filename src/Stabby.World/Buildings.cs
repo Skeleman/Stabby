@@ -43,6 +43,7 @@ namespace Stabby.World
                 case ObjectPart.Geyser: Geyser(l, key, Frame.Root(SpringU)); break;
                 case ObjectPart.MudPot: MudPot(l, key, Frame.Root(SpringU)); break;
                 case ObjectPart.WolfDen: WolfDen(l, key, Frame.Root(WolfU)); break;
+                case ObjectPart.WallTorch: WallTorch(l, key, Frame.Root(1 / 0.7f)); break;
             }
         }
 

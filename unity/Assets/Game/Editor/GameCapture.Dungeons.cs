@@ -27,30 +27,46 @@ namespace Stabby.Game.Editor
             var centre = new Vector3(pick.X, pick.Y, pick.Z);
             float s = pick.Size / Structures.DungeonM;
             System.Func<float, float, float, Vector3> at = (x, y, z) => centre + q * new Vector3(x, y, z) * s;
-            float door = Structures.DungeonZ0, floor = Structures.DungeonFloorY, room = door + 6 * Structures.KitCellM;
-            var lamp = new GameObject("dungeon-lamp").AddComponent<Light>();
-            lamp.type = LightType.Point;
-            lamp.color = new Color(1f, 0.72f, 0.45f);
-            lamp.range = 12f;
-            lamp.intensity = 5f;
-            lamp.enabled = false;
+            float door = Structures.DungeonZ0, floor = Structures.DungeonFloorY;
+            var key = ObjectMeshes.Key(field.Library.Objects[pick.Def].Id, 0, pick.Variant);
+            var plan = Structures.DungeonLayout(key);
+            var torches = new System.Collections.Generic.List<StructureLight>();
+            field.LightsOf(pick, torches);
+            var inv = Quaternion.Inverse(q);
+            Vector3 roomAt = new Vector3(0f, floor, door + 6 * Structures.KitCellM), torch = roomAt + Vector3.forward;
+            int rooms = 0, litRooms = 0;
+            float nearest = float.MaxValue;
+            foreach (var p in plan)
+            {
+                if (p.Shape != ObjectPart.DungeonRoom) continue;
+                rooms++;
+                bool lit = false;
+                foreach (var t in torches)
+                {
+                    var lt = inv * (new Vector3(t.X, t.Y, t.Z) - centre) / s;
+                    if (Mathf.Abs(lt.x - p.X) > 0.5f * Structures.RoomM || Mathf.Abs(lt.z - p.Z) > 0.5f * Structures.RoomM) continue;
+                    lit = true;
+                    float d = p.Z - door + Mathf.Abs(p.X);
+                    if (d < nearest) { nearest = d; roomAt = new Vector3(p.X, floor, p.Z); torch = lt; }
+                }
+                if (lit) litRooms++;
+            }
+            var away = new Vector3(roomAt.x - torch.x, 0f, roomAt.z - torch.z).normalized;
+            var eye = roomAt + away * 4f;
             cam.fieldOfView = 60f;
             var poses = new[]
             {
-                ("entrance", at(5f, 2.4f, door - 11f), at(0f, 1.2f, door), false),
-                ("interior", at(-4.5f, floor + 1.7f, room - 4.5f), at(2f, floor + 1.2f, room + 4f), true),
+                ("entrance", at(5f, 2.4f, door - 11f), at(0f, 1.2f, door)),
+                ("interior", at(eye.x, floor + 1.7f, eye.z), at(torch.x, torch.y - 0.6f, torch.z)),
             };
-            foreach (var (name, eye, look, lit) in poses)
+            foreach (var (name, from, look) in poses)
             {
-                lamp.enabled = lit;
-                lamp.transform.position = at(0f, floor + 3f, room);
-                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
-                for (var w = ShowHour(PinnedMidday); w.MoveNext();) yield return null;
+                cam.transform.SetPositionAndRotation(from, Quaternion.LookRotation(look - from));
+                for (var w = ShowHour(PinnedMidday, SkyDef.FullMoon); w.MoveNext();) yield return null;
                 for (var w = Settle(60); w.MoveNext();) yield return null;
                 Shot(cam, dir, "dungeons-" + name);
             }
-            Object.Destroy(lamp.gameObject);
-            GameStatus.Lines["~dungeons"] = $"dungeons: {count} placed, nearest variant {pick.Variant} at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, {Structures.DungeonLayout(ObjectMeshes.Key(field.Library.Objects[pick.Def].Id, 0, pick.Variant)).Count} pieces, hour {PinnedMidday}, warm lamp in the first room";
+            GameStatus.Lines["~dungeons"] = $"dungeons: {count} placed, nearest variant {pick.Variant} at {pick.X:F0},{pick.Y:F0},{pick.Z:F0}, {plan.Count} pieces, {litRooms} of {rooms} rooms torch-lit, {torches.Count} torches, interior faces the nearest lit room at {roomAt.x:F0},{roomAt.z:F0}, hour {PinnedMidday}, full moon, no capture lamp";
         }
     }
 }
