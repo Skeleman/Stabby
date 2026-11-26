@@ -838,11 +838,11 @@ namespace Stabby.World
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
-                bool cave = x.Shape == FeatureEdit.Cave;
+                bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink;
                 float s = cave ? NearField.NodeStep(0) : LatticeStepM;
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
-                    if ((y.Shape == x.Shape || (x.Shape == FeatureEdit.Bridge && (y.Shape == FeatureEdit.Cave || y.Shape == FeatureEdit.CaveRoom))) && Features.TileOf(y, cm) == tile
+                    if ((y.Shape == x.Shape || (x.Shape == FeatureEdit.Bridge && FeatureEdit.IsCaveCarve(y.Shape))) && Features.TileOf(y, cm) == tile
                         && (!cave || (y.MinX < x.MaxX && y.MaxX > x.MinX && y.MinZ < x.MaxZ && y.MaxZ > x.MinZ)))
                     {
                         group.Add(y);
@@ -866,7 +866,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -928,7 +928,7 @@ namespace Stabby.World
         {
             float cm = w.Config.CellMeters;
             foreach (var x in edits)
-                if ((x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.CaveRoom) && Underground.Wet(w, x)) { e.Add($"cave at {x.Ax:F0},{x.Az:F0} breaks into the sea or a lake"); return; }
+                if (FeatureEdit.IsCaveCarve(x.Shape) && Underground.Wet(w, x)) { e.Add($"cave at {x.Ax:F0},{x.Az:F0} breaks into the sea or a lake"); return; }
             var ground = new DetailGround { Detail = detail };
             int probes = 0, settled = 0;
             foreach (var g in caves)
@@ -943,7 +943,8 @@ namespace Stabby.World
                     if (fault != null) { e.Add(fault); return; }
                 }
                 string tight = null;
-                foreach (var edge in g.Edges) if ((tight = Underground.Cramped(detail, items, g, edge)) != null) break;
+                var dry = Array.FindAll(items, q => !CaveBrooks.Channel(q));
+                foreach (var edge in g.Edges) if ((tight = Underground.Cramped(detail, dry, g, edge)) != null) break;
                 if (tight != null) e.Add(tight);
                 string why = Underground.Unreached(detail, items, g);
                 if (why != null) e.Add(why);
@@ -963,7 +964,7 @@ namespace Stabby.World
             if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
             var pools = CheckCaveObjects(w, detail, edits, e);
             var brooks = CaveBrooks.Build(w, detail, edits, caves);
-            CheckCaveBrooks(w, caves, brooks, pools, e);
+            CheckCaveBrooks(w, caves, edits, brooks, pools, e);
             CheckCaveBrookBanks(w, detail, edits, caves, brooks, e);
         }
 
@@ -1068,7 +1069,7 @@ namespace Stabby.World
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        public static void CheckCaveBrooks(GeneratedWorld w, CaveGraph[] caves, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
+        public static void CheckCaveBrooks(GeneratedWorld w, CaveGraph[] caves, FeatureEdit[] edits, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
         {
             foreach (var s in streams)
             {
@@ -1097,6 +1098,11 @@ namespace Stabby.World
                 else if (s.End == CaveBrook.Sink)
                 {
                     if (end.Entrance || CaveBrooks.Lower(w, g, s.Nodes[s.Nodes.Length - 1], s.Nodes, out _) >= 0) { e.Add(at + " sinks where it could still run downhill"); return; }
+                    bool hole = false;
+                    foreach (var x in edits)
+                        if (x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.Sink && x.Reach(ex, end.Y - CaveBrooks.SinkProbeM, ez, out float d) && x.Hole(d) < 0f
+                            && (ex - end.X) * (ex - end.X) + (ez - end.Z) * (ez - end.Z) <= (CaveBrooks.SinkOffM + StreamEndM) * (CaveBrooks.SinkOffM + StreamEndM) && ey < end.Y) hole = true;
+                    if (!hole) { e.Add(at + $" sinks at {ex:F0},{ez:F0} into no hole"); return; }
                 }
                 else { e.Add(at + " ends at no spring, pool or sink"); return; }
             }
@@ -1121,6 +1127,14 @@ namespace Stabby.World
                 if (!picked.Contains(c)) picked.Add(c);
                 if (picked.Count >= CaveObjectChunks) break;
             }
+            int gems = 0, cells = 0;
+            foreach (var x in edits)
+            {
+                if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.CrystalCell) continue;
+                int c = Math.Min(across - 1, Math.Max(0, (int)(x.Az / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(x.Ax / span)));
+                if (!picked.Contains(c)) picked.Add(c);
+                if (++cells >= CaveObjectChunks) break;
+            }
             float length = 0f;
             foreach (var x in edits)
             {
@@ -1137,10 +1151,12 @@ namespace Stabby.World
                     var def = w.Objects.Objects[o.Def];
                     if (!ObjectField.IsCave(def)) continue;
                     if (def.Placement.Cave == ObjectField.CaveStalactite) drips++;
+                    if (def.Placement.Cave == ObjectField.CaveCrystal) gems++;
                     string loose = field.ContactFault(o, contacts);
                     string fault = field.CaveFault(o) ?? (loose == null ? null : $"{def.Id} at {o.X:F0},{o.Z:F0}{loose}");
                     if (fault != null) { e.Add(fault); return pools; }
                 }
+            if (cells > 0 && gems == 0) e.Add($"caves: {cells} crystal cells hold no crystals");
             if (length >= ObjectField.CaveDripSurveyM && drips * 100f < ObjectField.CaveDripPerHundredM * length)
                 e.Add($"caves: {drips} stalactites over {length:F0} m of passage, under {ObjectField.CaveDripPerHundredM} per 100 m");
             return pools;
@@ -1208,7 +1224,7 @@ namespace Stabby.World
                 {
                     float x = f.Verts[6 * t], y = f.Verts[6 * t + 1], z = f.Verts[6 * t + 2];
                     bool cave = false;
-                    foreach (var m in meshed) if (m.Kind == FeatureEdit.Carve && (m.Shape == FeatureEdit.Cave || m.Shape == FeatureEdit.CaveRoom) && m.Reach(x, y, z, out _)) { cave = true; break; }
+                    foreach (var m in meshed) if (m.CaveCarve && m.Reach(x, y, z, out _)) { cave = true; break; }
                     if (!cave || Math.Abs(Field(x, y, z)) > 0.75f * sm || detail.Sample(x, z) - y < CaveCoverSteps * sm) continue;
                     const float d = 0.05f;
                     float gx = Field(x + d, y, z) - Field(x - d, y, z), gy = Field(x, y + d, z) - Field(x, y - d, z), gz = Field(x, y, z + d) - Field(x, y, z - d);

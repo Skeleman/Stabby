@@ -208,33 +208,25 @@ namespace Stabby.Game
             frame++;
 
             var players = new NativeList<float2>(8, Allocator.TempJob);
-            var owners = new NativeList<int>(8, Allocator.Temp);
-            foreach (var (t, owner) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
-            {
-                players.Add(t.ValueRO.Position.xz);
-                owners.Add(owner.ValueRO.NetworkId);
-            }
+            var owners = new NativeList<int>(8, Allocator.TempJob);
             var viewers = new NativeList<int2>(8, Allocator.TempJob);
-            foreach (var id in SystemAPI.Query<RefRO<NetworkId>>().WithAll<NetworkStreamInGame>())
-            {
-                int nid = id.ValueRO.Value, who = -1;
-                for (int p = 0; p < owners.Length; p++) if (owners[p] == nid) who = p;
-                viewers.Add(new int2(nid, who));
-            }
+            var gathered = new GatherPlayers { Players = players, Owners = owners }.Schedule(state.Dependency);
+            gathered = new GatherViewers { Owners = owners, Viewers = viewers }.Schedule(gathered);
+            var near = players.AsDeferredJobArray();
 
             int count = SystemAPI.QueryBuilder().WithAll<CreatureState, CreatureBrain>().Build().CalculateEntityCountWithoutFiltering();
-            var dep = new Reset { Threats = threats, Grid = grid, Live = live, Count = count + SpawnBudget }.Schedule(state.Dependency);
+            var dep = new Reset { Threats = threats, Grid = grid, Live = live, Count = count + SpawnBudget }.Schedule(gathered);
             dep = new Sense
             {
-                Players = players.AsArray(), Plan = planRef, Ecb = ecbs.CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
+                Players = near, Plan = planRef, Ecb = ecbs.CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter(),
                 Live = live.AsParallelWriter(), Threats = threats.AsParallelWriter(), Grid = grid.AsParallelWriter(),
             }.ScheduleParallel(dep);
             dep = new StepHerds { Herds = Herds, Threats = threats, Plan = planRef, Cells = cells, Hold = hold, Dt = dt, Now = now }.Schedule(dep);
             if (!hold)
-                dep = new Think { Players = players.AsArray(), Herds = Herds, Grid = grid, Plan = planRef, Cells = cells, Step = dt, Now = now, Frame = frame }.ScheduleParallel(dep);
+                dep = new Think { Players = near, Herds = Herds, Grid = grid, Plan = planRef, Cells = cells, Step = dt, Now = now, Frame = frame }.ScheduleParallel(dep);
             dep = new Spawn
             {
-                Players = players.AsArray(), Plan = planRef, Live = live, Herds = Herds, Prefab = prefab, Now = now,
+                Players = near, Plan = planRef, Live = live, Herds = Herds, Prefab = prefab, Now = now,
                 Ecb = ecbs.CreateCommandBuffer(state.WorldUnmanaged),
             }.Schedule(dep);
 
@@ -242,10 +234,10 @@ namespace Stabby.Game
             relevancy.ValueRW.GhostRelevancyMode = GhostRelevancyMode.SetIsIrrelevant;
             var set = relevancy.ValueRO.GhostRelevancySet;
             dep = new ClearRelevancy { Set = set }.Schedule(dep);
-            dep = new Relevancy { Set = set, Players = players.AsArray(), Viewers = viewers.AsArray(), Plan = planRef }.Schedule(dep);
+            dep = new Relevancy { Set = set, Players = near, Viewers = viewers.AsDeferredJobArray(), Plan = planRef }.Schedule(dep);
             players.Dispose(dep);
             viewers.Dispose(dep);
-            owners.Dispose();
+            owners.Dispose(dep);
             state.Dependency = dep;
         }
 
@@ -407,6 +399,35 @@ namespace Stabby.Game
             }
             s.Heading += (b.Turn * 0.4f + steer) * dt * s.Move;
             s.Position += fwd * (s.Move * s.WalkSpeed * dt);
+        }
+    }
+
+    [BurstCompile]
+    [WithAll(typeof(Player))]
+    partial struct GatherPlayers : IJobEntity
+    {
+        public NativeList<float2> Players;
+        public NativeList<int> Owners;
+
+        void Execute(in LocalTransform t, in GhostOwner owner)
+        {
+            Players.Add(t.Position.xz);
+            Owners.Add(owner.NetworkId);
+        }
+    }
+
+    [BurstCompile]
+    [WithAll(typeof(NetworkStreamInGame))]
+    partial struct GatherViewers : IJobEntity
+    {
+        [ReadOnly] public NativeList<int> Owners;
+        public NativeList<int2> Viewers;
+
+        void Execute(in NetworkId id)
+        {
+            int nid = id.Value, who = -1;
+            for (int p = 0; p < Owners.Length; p++) if (Owners[p] == nid) who = p;
+            Viewers.Add(new int2(nid, who));
         }
     }
 

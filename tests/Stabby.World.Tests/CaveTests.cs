@@ -22,6 +22,40 @@ public class CaveTests
 
     static readonly Dictionary<ulong, Sample> Cache = new();
 
+    static readonly Lazy<Sample> Gem = new(() =>
+    {
+        var lib = Gems();
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = Make(seed, lib);
+            if (s.Edits.Any(x => x.Shape == FeatureEdit.CrystalCell)) return s;
+        }
+        throw new Xunit.Sdk.XunitException("no crystal cell in seeds 1..8");
+    });
+
+    static CaveLibrary Gems()
+    {
+        var lib = ContentLoader.LoadCaves(Root);
+        lib.CrystalChance = 1f;
+        return lib;
+    }
+
+    static Sample Make(ulong seed, CaveLibrary caves)
+    {
+        var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 512, CellMeters = WorldConfig.CellMetersFor(512) }, Biomes, Materials, null, null, Objects, caves);
+        var d = new TerrainDetail(w);
+        var edits = Features.Place(w, d, out var graphs);
+        return new Sample { W = w, Detail = d, Edits = edits, Graphs = graphs };
+    }
+
+    static (Sample, ObjectField, ObjectInstance) FindCrystal()
+    {
+        var s = Gem.Value;
+        var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        foreach (var o in CaveObjects(s, field)) if (s.W.Objects.Objects[o.Def].Placement.Cave == ObjectField.CaveCrystal) return (s, field, o);
+        throw new Xunit.Sdk.XunitException("no crystal");
+    }
+
     static Sample At(ulong seed)
     {
         lock (Cache)
@@ -151,7 +185,7 @@ public class CaveTests
         var p = edge.Points;
         int m = (p.Length / 6) * 3;
         float mx = p[m], my = p[m + 1] + edge.R * 0.3f, mz = p[m + 2];
-        var kept = s.Edits.Where(x => !((x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.CaveRoom) && Near(x, mx, my, mz))).ToArray();
+        var kept = s.Edits.Where(x => !(FeatureEdit.IsCaveCarve(x.Shape) && Near(x, mx, my, mz))).ToArray();
         Assert.True(kept.Length < s.Edits.Length);
         Assert.Contains(Check(s, kept, s.Graphs), v => v.Contains("not walkable from an entrance"));
     }
@@ -198,7 +232,7 @@ public class CaveTests
         var found = new List<ObjectInstance>();
         foreach (var x in s.Edits)
         {
-            if (x.Kind != FeatureEdit.Carve || (x.Shape != FeatureEdit.Cave && x.Shape != FeatureEdit.CaveRoom)) continue;
+            if (!x.CaveCarve) continue;
             for (float t = 0f; t <= 1f; t += 0.25f)
             {
                 float px = x.Ax + (x.Bx - x.Ax) * t, pz = x.Az + (x.Bz - x.Az) * t;
@@ -232,8 +266,8 @@ public class CaveTests
             var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
             graphs += s.Graphs.Length;
             var e = new List<string>();
-            WorldChecks.CheckCaveBrooks(s.W, s.Graphs, streams, null, e);
-            Assert.Empty(e);
+            WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, streams, null, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
             foreach (var x in streams)
             {
                 ends[x.End]++;
@@ -255,14 +289,33 @@ public class CaveTests
         Assert.NotEmpty(streams);
         var x = streams[0];
         var up = new CaveBrook { Graph = x.Graph, End = x.End, Outlet = x.Outlet, Flow = x.Flow, Nodes = x.Nodes, Points = (float[])x.Points.Clone() };
-        up.Points[up.Points.Length - CaveBrook.Stride + 1] += 1f;
+        up.Points[up.Points.Length - CaveBrook.Stride + 1] = up.Points[1] + 1f;
         var e = new List<string>();
-        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, new[] { up }, null, e);
+        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, new[] { up }, null, e);
         Assert.Contains(e, m => m.Contains("flows uphill"));
         var lost = new CaveBrook { Graph = x.Graph, End = 7, Outlet = -1, Flow = x.Flow, Nodes = x.Nodes, Points = x.Points };
         e.Clear();
-        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, new[] { lost }, null, e);
+        WorldChecks.CheckCaveBrooks(s.W, s.Graphs, s.Edits, new[] { lost }, null, e);
         Assert.Contains(e, m => m.Contains("no spring, pool or sink"));
+    }
+
+    [Fact]
+    public void SinkWithoutItsHoleFails()
+    {
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            foreach (var x in CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs))
+            {
+                if (x.End != CaveBrook.Sink) continue;
+                var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
+                var e = new List<string>();
+                WorldChecks.CheckCaveBrooks(s.W, s.Graphs, bare, new[] { x }, null, e);
+                Assert.Contains(e, m => m.Contains("into no hole"));
+                return;
+            }
+        }
+        throw new Xunit.Sdk.XunitException("no sink brook in seeds 1-8");
     }
 
     [Fact]
@@ -331,7 +384,7 @@ public class CaveTests
                 if (kind == ObjectField.CaveStalactite) drips++;
                 else if (kind == ObjectField.CaveStalagmite) mites++;
                 else if (kind == ObjectField.CaveColumn) columns++;
-                else rubble++;
+                else if (kind == ObjectField.CaveRubble) rubble++;
                 string fault = field.CaveFault(o) ?? field.ContactFault(o, contacts);
                 Assert.True(fault == null, fault);
             }
@@ -395,6 +448,61 @@ public class CaveTests
         var (_, field, o) = FindCave(ObjectField.CaveStalactite);
         o.Y -= 0.6f * o.Size;
         Assert.Contains("floats free of the ceiling", field.CaveFault(o) ?? "");
+    }
+
+    [Fact]
+    public void CrystalCavesCarveFacetedCellsLinedWithCrystals()
+    {
+        var s = Gem.Value;
+        var cells = s.Edits.Where(x => x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.CrystalCell).ToArray();
+        Assert.NotEmpty(cells);
+        Assert.Empty(Check(s, s.Edits, s.Graphs));
+        var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        int floor = 0, wall = 0, ceiling = 0;
+        var contacts = new List<ObjectColumn>();
+        foreach (var o in CaveObjects(s, field))
+        {
+            if (s.W.Objects.Objects[o.Def].Placement.Cave != ObjectField.CaveCrystal) continue;
+            float up = 1f - 2f * (o.Qx * o.Qx + o.Qz * o.Qz);
+            if (up > 0.7f) floor++; else if (up < -0.7f) ceiling++; else wall++;
+            string fault = field.CaveFault(o) ?? field.ContactFault(o, contacts);
+            Assert.True(fault == null, fault);
+        }
+        Assert.True(floor > 0 && wall > 0 && ceiling > 0, $"crystals: {floor} floor, {wall} wall, {ceiling} ceiling");
+        Assert.Contains(s.Graphs, x => x.Crystal);
+    }
+
+    [Fact]
+    public void CrystalCellWallsAreFaceted()
+    {
+        var s = Gem.Value;
+        var c = s.Edits.First(x => x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.CrystalCell);
+        var round = c;
+        round.Shape = FeatureEdit.CaveRoom;
+        float most = 0f;
+        for (int k = 0; k < 64; k++)
+        {
+            float a = k * 0.0981748f, x = 0.6f * c.R * Fold(a), z = 0.6f * c.R * Fold(a + 1.5707963f);
+            c.Reach(c.Ax + x, c.Ay + 0.3f * c.R, c.Az + z, out float df);
+            round.Reach(c.Ax + x, c.Ay + 0.3f * c.R, c.Az + z, out float dr);
+            most = Math.Max(most, Math.Abs(df - dr));
+        }
+        Assert.True(most > 0.05f * c.R, $"faceted cell differs from a round room by only {most:F2} m");
+    }
+
+    static float Fold(float a) => MathF.Cos(a);
+
+    [Fact]
+    public void CrystalOffItsRockOrOutsideItsCellFails()
+    {
+        var (_, field, o) = FindCrystal();
+        float ax = 2f * (o.Qx * o.Qy - o.Qw * o.Qz), ay = 1f - 2f * (o.Qx * o.Qx + o.Qz * o.Qz), az = 2f * (o.Qy * o.Qz + o.Qw * o.Qx);
+        var free = o;
+        free.X += ax * 1.5f; free.Y += ay * 1.5f; free.Z += az * 1.5f;
+        Assert.Contains("floats free of the rock", field.CaveFault(free) ?? "");
+        var buried = o;
+        buried.X -= ax * 3f; buried.Y -= ay * 3f; buried.Z -= az * 3f;
+        Assert.Contains("is buried in rock", field.CaveFault(buried) ?? "");
     }
 
     [Fact]

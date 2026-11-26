@@ -332,6 +332,11 @@
       "id": "dripstone-column", "name": "Dripstone column", "kind": "static", "material": "dripstone", "variants": 8,
       "parts": [ { "id": "body", "shape": "dripstone-column", "scale": [0.45, 1, 0.45] } ],
       "placement": { "perHectare": 0, "cave": "column", "perHundredM": 15, "sizeMinM": 2.4, "sizeMaxM": 8.8, "sink": 0 }
+    },
+    {
+      "id": "cave-crystal", "name": "Cave crystal", "kind": "static", "material": "cave-crystal", "variants": 8,
+      "parts": [ { "id": "body", "shape": "crystal-cluster", "scale": [0.8, 1.3, 0.8], "solid": "off" } ],
+      "placement": { "perHectare": 0, "cave": "crystal", "perHundredM": 140, "sizeMinM": 0.4, "sizeMaxM": 2.2, "clusterCount": 5, "clusterRadiusM": 1.4, "sink": 0.15 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

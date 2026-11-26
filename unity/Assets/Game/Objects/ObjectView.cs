@@ -214,8 +214,11 @@ namespace Stabby.Game
             if (impB != null) { impB.Release(); UnityEngine.Object.Destroy(impB); }
         }
 
-        static float4 Linear(uint rgb, float tint, int shape)
+        public const float GlowBase = 0.05f, GlowSpan = 0.25f;
+
+        static float4 Linear(uint rgb, float tint, int shape, float glow)
         {
+            if (shape == ObjectPart.Crystals && glow > 0f) return new float4(Decode(rgb) * tint, GlowBase + GlowSpan * glow);
             if (ObjectPart.IsStone(shape)) return new float4(tint, tint, tint, 0);
             return new float4(Decode(rgb) * tint, shape);
         }
@@ -626,7 +629,7 @@ namespace Stabby.Game
                 bool both = !float.IsNaN(floorY) && !float.IsNaN(ceilY);
                 parts[i] = new ObjectSpawn
                 {
-                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
+                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape, part.Glow), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
                     Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = ObjectPart.IsStructure(part.Shape) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
                     Id = o.Id,
                 };
