@@ -54,7 +54,7 @@ namespace Stabby.World
         public ObjectField(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, ObjectLibrary lib)
         {
             this.w = w; this.detail = detail; this.lib = lib;
-            this.edits = edits ?? Array.Empty<FeatureEdit>();
+            this.edits = Array.FindAll(edits ?? Array.Empty<FeatureEdit>(), e => !e.Link);
             n = w.Config.Size; cm = w.Config.CellMeters; worldM = n * cm;
             across = WorldChunks.Across(n);
             chunks = new ObjectInstance[across * across][];

@@ -146,6 +146,19 @@ namespace Stabby.World
             }
         }
 
+        public static bool Breach(GeneratedWorld w, TerrainDetail detail, CaveClass c, CaveNode start, float seal, float roof, float grain, ref Rng r, ref Rng width, List<FeatureEdit> output, out CaveGraph graph)
+        {
+            int mark = output.Count;
+            var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = mark, C = c, R = r, Width = width, Mouths = new List<int>(), Grain = grain, RoomShape = FeatureEdit.CaveRoom, Roof = roof, Seal = seal, Shallow = true };
+            b.G = new CaveGraph { Class = c.Id };
+            bool ok = b.Breach(start);
+            r = b.R;
+            width = b.Width;
+            graph = ok ? b.G : null;
+            if (!ok) output.RemoveRange(mark, output.Count - mark);
+            return ok;
+        }
+
         public static float EntranceTempC(GeneratedWorld w, CaveGraph g)
         {
             if (w.Climate == null) return float.PositiveInfinity;
@@ -194,11 +207,13 @@ namespace Stabby.World
             public float Grain;
             public int RoomShape;
             public float CellMin, CellMax;
+            public float Roof = Features.CaveRoof, Seal = float.NaN;
+            public bool Shallow;
             readonly List<int> parents = new List<int>();
 
             float Ground(float x, float z) => Detail.HeightAt(x / Cm, z / Cm);
 
-            bool Covered(float x, float cy, float z, float r) => Ground(x, z) >= cy + r + Features.CaveRoof;
+            bool Covered(float x, float cy, float z, float r) => Ground(x, z) >= cy + r + Roof;
 
             public bool Build()
             {
@@ -208,10 +223,23 @@ namespace Stabby.World
                 Mouths.RemoveAt(first);
                 G.Nodes.Add(m);
                 float len = R.Range(C.EdgeMin, C.EdgeMax), grade = R.Range(-0.3f, 1f) * Grade;
-                len = Math.Max(len, C.RadiusMax + Features.CaveRoof + MouthM + PieceM * 0.5f);
+                len = Math.Max(len, C.RadiusMax + Roof + MouthM + PieceM * 0.5f);
                 var n1 = new CaveNode { X = m.X + m.Hx * len, Z = m.Z + m.Hz * len, Y = m.Y - len * grade, Hx = m.Hx, Hz = m.Hz };
                 if (!Link(0, n1, true)) return false;
                 if (C.Hall) return BuildHall();
+                return Branch(true);
+            }
+
+            public bool Breach(CaveNode m)
+            {
+                G.Nodes.Add(m);
+                float len = Math.Max(R.Range(C.EdgeMin, C.EdgeMax), C.RadiusMax + Roof + MouthM + PieceM * 0.5f);
+                var n1 = new CaveNode { X = m.X + m.Hx * len, Z = m.Z + m.Hz * len, Y = m.Y - len * 0.95f * Grade, Hx = m.Hx, Hz = m.Hz };
+                return Link(0, n1, true) && Branch(false);
+            }
+
+            bool Branch(bool entrances)
+            {
                 int want = C.MinNodes + (int)(R.NextFloat() * (C.MaxNodes - C.MinNodes + 1));
                 var kids = new List<int> { 0, 0 };
                 for (int tries = want * Tries; G.Nodes.Count - 1 < want && tries > 0; tries--)
@@ -240,7 +268,7 @@ namespace Stabby.World
                     if (d < 0.6f * C.EdgeMin || d > 1.6f * C.EdgeMax || Math.Abs(a.Y - b.Y) > 0.9f * Grade * d) continue;
                     if (Edge(i, j, false)) made++;
                 }
-                for (int tries = (C.Entrances - 1) * Tries, made = 1; made < C.Entrances && tries > 0 && Mouths.Count > 0; tries--)
+                for (int tries = entrances ? (C.Entrances - 1) * Tries : 0, made = 1; made < C.Entrances && tries > 0 && Mouths.Count > 0; tries--)
                     if (Entrance(false)) made++;
                 return true;
             }
@@ -403,7 +431,7 @@ namespace Stabby.World
                 var b = G.Nodes[ib];
                 float dx = b.X - a.X, dz = b.Z - a.Z, len = (float)Math.Sqrt(dx * dx + dz * dz);
                 if (len <= 1f || Math.Abs(b.Y - a.Y) > Grade * len) return false;
-                float r = Width.Range(C.RadiusMin, C.RadiusMax), px = -dz / len, pz = dx / len, open = r + Features.CaveRoof, ground = mouth ? Ground(a.X, a.Z) : 0f;
+                float r = Width.Range(C.RadiusMin, C.RadiusMax), px = -dz / len, pz = dx / len, open = r + Roof, ground = mouth ? (float.IsNaN(Seal) ? Ground(a.X, a.Z) : Seal) : 0f;
                 var ts = new List<float> { 0f };
                 float t0 = 0f;
                 if (mouth)
@@ -426,7 +454,7 @@ namespace Stabby.World
                 for (int s = 0; s + 1 < ts.Count; s++)
                 {
                     var e = Carve(FeatureEdit.Cave, r, pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2], pts[s * 3 + 3], pts[s * 3 + 4], pts[s * 3 + 5], C.Lumps * r).Finer();
-                    if (!Fits(e, mouth && s == 0 ? open : 0f, ground)) { Out.RemoveRange(mark, Out.Count - mark); return false; }
+                    if (!Fits(e, mouth && Shallow ? float.MaxValue : mouth && s == 0 ? open : 0f, ground)) { Out.RemoveRange(mark, Out.Count - mark); return false; }
                     Out.Add(e);
                 }
                 G.Edges.Add(new CaveEdge { A = ia, B = ib, R = r, Points = pts });
