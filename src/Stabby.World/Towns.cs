@@ -206,7 +206,7 @@ namespace Stabby.World
             if (water > t.WaterM) return float.MaxValue;
             foreach (var f in edits)
             {
-                if (f.Shape == FeatureEdit.Boulder) continue;
+                if (f.Shape == FeatureEdit.Boulder || f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Vault || f.Link) continue;
                 float ext = f.Crusts ? f.CrustExtent : 0f;
                 float cx = Math.Max(Math.Min(f.MinX, f.Ax - ext), Math.Min(x, Math.Max(f.MaxX, f.Ax + ext)));
                 float cz = Math.Max(Math.Min(f.MinZ, f.Az - ext), Math.Min(z, Math.Max(f.MaxZ, f.Az + ext)));
