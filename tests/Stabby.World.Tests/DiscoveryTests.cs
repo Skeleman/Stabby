@@ -229,6 +229,27 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void LoneInnsStandOnRoadShouldersFarFromTowns()
+    {
+        int inn = Objects.Objects.FindIndex(o => o.Id == "lone-inn");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var all = field.Discoveries();
+        var inns = all.Where(o => o.Def == inn).ToArray();
+        output.WriteLine($"budget: {inns.Length} lone inns, discoveries {sw.ElapsedMilliseconds} ms " + string.Join(" ", inns.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:road {field.RoadSide(c.X, c.Z, out _, out _):F1}")));
+        Assert.NotEmpty(inns);
+        foreach (var c in inns)
+        {
+            Assert.Null(field.LoneInnFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var t in field.Towns)
+                Assert.True(Math.Sqrt((t.X * w.Config.CellMeters - c.X) * (t.X * w.Config.CellMeters - c.X) + (t.Y * w.Config.CellMeters - c.Z) * (t.Y * w.Config.CellMeters - c.Z)) >= ObjectField.TownClearM);
+            foreach (var o in all.Where(o => o.Def != inn))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void HotSpringsSitInHotspots()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;

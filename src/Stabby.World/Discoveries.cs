@@ -7,9 +7,9 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "lone-inn" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-lone-inn" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, LoneInn = 14;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
@@ -74,7 +74,7 @@ namespace Stabby.World
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
-            if (pl.Discovery == Shrine) { PlaceShrines(d, root, list); return; }
+            if (pl.Discovery == Shrine || pl.Discovery == LoneInn) { PlaceBesideRoads(d, root, list); return; }
             float step = DiscoveryStep(worldM, pl.SpacingM), inset = DiscoveryInset * step;
             int cells = (int)Math.Round(worldM / step);
             var drawn = new DiscoveryTry[cells * cells][];
@@ -262,10 +262,13 @@ namespace Stabby.World
             return any;
         }
 
-        void PlaceShrines(int d, ulong root, List<ObjectInstance> list)
+        void PlaceBesideRoads(int d, ulong root, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
+            bool inn = pl.Discovery == LoneInn;
+            float near = inn ? LoneInnRoadMinM : ShrineRoadMinM, far = inn ? LoneInnRoadM : ShrineRoadM;
+            int tries = inn ? LoneInnTries : DiscoveryTries;
             var segs = Roads();
             float walked = 0, lx = float.NaN, lz = float.NaN;
             int station = 0;
@@ -285,9 +288,9 @@ namespace Stabby.World
                     bool any = false;
                     float best = float.MinValue;
                     ObjectInstance pick = default;
-                    for (int t = 0; t < DiscoveryTries; t++)
+                    for (int t = 0; t < tries; t++)
                     {
-                        float along = (DiscoveryInset - 0.5f + rng.NextFloat() * (1 - 2 * DiscoveryInset)) * pl.SpacingM, off = (rng.NextFloat() < 0.5f ? -1 : 1) * rng.Range(ShrineRoadMinM, ShrineRoadM);
+                        float along = (DiscoveryInset - 0.5f + rng.NextFloat() * (1 - 2 * DiscoveryInset)) * pl.SpacingM, off = (rng.NextFloat() < 0.5f ? -1 : 1) * rng.Range(near, far);
                         float px = cx + ux * along - uz * off, pz = cz + uz * along + ux * off;
                         float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * rng.NextFloat(), qa = 1f, qb = 0f;
                         int variant = (int)(rng.NextU32() % (uint)def.Variants);
@@ -314,11 +317,11 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == LoneInn ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null)) break;
+                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != LoneInn || LoneInnFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -859,7 +862,7 @@ namespace Stabby.World
             if (kind == Overlook) return OverlookFit(x, z, out _, out _);
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
             if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
-            float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
+            float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == LoneInn ? LoneInnProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
             for (int k = 0; k < 8; k++)
             {
                 FanDir(k, 0.70710678f, out float ux, out float uz);
@@ -888,6 +891,12 @@ namespace Stabby.World
                 float d = RoadSide(x, z, out _, out _);
                 if (relief > ShrineReliefM) return float.MinValue;
                 return d >= ShrineRoadMinM && d <= ShrineRoadM ? -Math.Abs(d - ShrineRoadAimM) / ShrineRoadM - 0.1f * relief : float.MinValue;
+            }
+            if (kind == LoneInn)
+            {
+                float d = RoadSide(x, z, out _, out _);
+                if (relief > LoneInnReliefM) return float.MinValue;
+                return d >= LoneInnRoadMinM && d <= LoneInnRoadM ? -Math.Abs(d - LoneInnRoadAimM) / LoneInnRoadM - 0.1f * relief : float.MinValue;
             }
             if (Pooled(kind))
             {
