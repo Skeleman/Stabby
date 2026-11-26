@@ -237,10 +237,11 @@ namespace Stabby.World
             return null;
         }
 
-        string StepFault(float x0, float z0, float x1, float z1, out bool ford)
+        string StepFault(float x0, float z0, float x1, float z1, out bool ford) => StepFault(x0, z0, x1, z1, GroundAt(detail, cm, x0, z0), GroundAt(detail, cm, x1, z1), out ford);
+
+        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford)
         {
             ford = false;
-            float h0 = GroundAt(detail, cm, x0, z0), h1 = GroundAt(detail, cm, x1, z1);
             float len = (float)Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
             if (Math.Abs(h1 - h0) > RoadGrade * len) return "is too steep";
             int last = -1;
@@ -328,7 +329,16 @@ namespace Stabby.World
             var cost = new float[size];
             var from = new int[size];
             var done = new bool[size];
+            int hw = 2 * bw;
+            var height = new float[4 * size];
             for (int i = 0; i < size; i++) { cost[i] = float.MaxValue; from[i] = -1; }
+            for (int i = 0; i < 4 * size; i++) height[i] = float.NaN;
+            float Lattice(int hx, int hz)
+            {
+                int k = (hz - 2 * z0) * hw + hx - 2 * x0;
+                if (float.IsNaN(height[k])) height[k] = GroundAt(detail, cm, 0.5f * hx * cm, 0.5f * hz * cm);
+                return height[k];
+            }
             var heap = new List<(float f, int i)>();
             int start = (sz - z0) * bw + (sx - x0), goal = (tz - z0) * bw + (tx - x0);
             cost[start] = 0;
@@ -349,9 +359,22 @@ namespace Stabby.World
                         int j = (nz - z0) * bw + (nx - x0);
                         if (done[j]) continue;
                         float ax = cx * cm, az = cz * cm, bx = nx * cm, bz = nz * cm;
-                        if (RoadFault(ax, az, bx, bz, out bool ford) != null) continue;
                         float len = (dx != 0 && dz != 0 ? 1.41421356f : 1f) * cm;
-                        float grade = Math.Abs(GroundAt(detail, cm, bx, bz) - GroundAt(detail, cm, ax, az)) / len;
+                        float ha = Lattice(2 * cx, 2 * cz), hb = Lattice(2 * nx, 2 * nz), rise = Math.Abs(hb - ha);
+                        if (rise > RoadGrade * len) continue;
+                        bool ford;
+                        string why;
+                        if (dx != 0 && dz != 0)
+                        {
+                            float hm = Lattice(2 * cx + dx, 2 * cz + dz), mx = (cx + 0.5f * dx) * cm, mz = (cz + 0.5f * dz) * cm;
+                            why = StepFault(ax, az, mx, mz, ha, hm, out bool f0);
+                            bool f1 = false;
+                            if (why == null) why = StepFault(mx, mz, bx, bz, hm, hb, out f1);
+                            ford = why == null && (f0 || f1);
+                        }
+                        else why = StepFault(ax, az, bx, bz, ha, hb, out ford);
+                        if (why != null) continue;
+                        float grade = rise / len;
                         float c = cost[cur] + len * (1 + RoadClimb * grade) * (ford ? FordCost : 1f);
                         if (c >= cost[j]) continue;
                         cost[j] = c; from[j] = cur;
