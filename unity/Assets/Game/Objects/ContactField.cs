@@ -30,6 +30,8 @@ namespace Stabby.Game
         float radius;
         int builds, removedSeen, across;
         long convertMs;
+        readonly List<long> chunkMs = new List<long>();
+        string firstLine;
 
         public bool Built => builds > 0 && !splat.Busy && converting == null;
         public ContactWindow Window => window;
@@ -116,15 +118,31 @@ namespace Stabby.Game
                 return;
             }
             pending = next;
-            converting = StartConvert(field, missing.ToArray(), across);
+            converting = StartConvert(field, missing.ToArray(), across, chunkMs);
         }
 
-        static Task<List<(int chunk, ContactChunk table)>> StartConvert(ObjectField field, int[] list, int n) => Task.Run(() =>
+        static async Task<List<(int chunk, ContactChunk table)>> StartConvert(ObjectField field, int[] list, int n, List<long> times)
         {
+            var ms = new long[list.Length];
+            var work = new Task<ContactChunk>[list.Length];
+            for (int k = 0; k < list.Length; k++)
+            {
+                int i = k, c = list[k];
+                work[k] = Task.Run(() =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    var t = ObjectChunks.Contacts(field, c % n, c / n);
+                    ms[i] = sw.ElapsedMilliseconds;
+                    return t;
+                });
+            }
+            var tables = await Task.WhenAll(work).ConfigureAwait(false);
             var made = new List<(int chunk, ContactChunk table)>(list.Length);
-            foreach (int c in list) made.Add((c, ObjectChunks.Contacts(field, c % n, c / n)));
+            for (int k = 0; k < list.Length; k++) made.Add((list[k], tables[k]));
+            times.Clear();
+            times.AddRange(ms);
             return made;
-        });
+        }
 
         void Schedule(ContactWindow w)
         {
@@ -145,6 +163,8 @@ namespace Stabby.Game
             texture.Apply(false, false);
             float span = Res * window.TexelM;
             Shader.SetGlobalVector("_StabbyContactUV", new Vector4(1f / span, -window.X0 / span, -window.Z0 / span, 1));
+            if (builds == 0) firstLine = $"{World.Name}: first contact build at {UnityEngine.Time.realtimeSinceStartup:F1} s: {ms} ms, {convertMs} ms converting, per chunk {string.Join("/", chunkMs)} ms";
+            GameStatus.Lines[World.Name + "~contact0"] = firstLine;
             GameStatus.Lines[World.Name + "~contact"] = $"{World.Name}: ground contact build {++builds}: {columnCount.Value} columns, {span:F0} m window at {window.TexelM:F2} m texels around {window.X0 + 0.5f * span:F0},{window.Z0 + 0.5f * span:F0} in {ms} ms ({chunks.Count} chunk tables, {convertMs} ms converting), upload {sw.Elapsed.TotalMilliseconds:F1} ms";
         }
     }
