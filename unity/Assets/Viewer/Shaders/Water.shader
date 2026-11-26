@@ -742,7 +742,7 @@ Shader "Stabby/Water"
                 {
                     float mot = Noise(xz * 0.9 + 2.7).x + 0.5 * Noise(mul(Turn, xz) * 3.1 + 6.1).x;
                     float3 mc = lerp(L1.rgb, L0.rgb, saturate(0.45 + 0.6 * mot));
-                    mc = lerp(mc, grd * (0.8 + 0.06 * mot), gw);
+                    mc = lerp(mc, grd * (0.9 + 0.06 * mot), gw);
                     mc *= 1 + 0.3 * saturate(bub.x);
                     float3 lit = mc * (l.color * saturate(dot(n, l.direction)) * 0.9 + sky * 0.45 + lg.diffuse * 0.9);
                     lit = lerp(lit, skyR, fres * 0.5) + l.color * pow(saturate(dot(n, h)), 90) * 0.15 * (1 - L7.w);
