@@ -210,6 +210,25 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void BonesLieOnSteadyDryGround()
+    {
+        int bones = Objects.Objects.FindIndex(o => o.Id == "bones");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == bones).ToArray();
+        output.WriteLine($"default: {found.Length} bones " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.True(found.Length > 0, "TestWorlds.Default placed no bones");
+        foreach (var c in found)
+        {
+            Assert.True(field.Fitness(ObjectField.Bones, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.BonesFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != bones))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void HotSpringsSitInHotspots()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;
