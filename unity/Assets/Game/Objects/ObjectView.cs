@@ -36,12 +36,10 @@ namespace Stabby.Game
 
     public struct ObjectSpawn
     {
-        public float4x4 M;
-        public float4 Color, Leaf;
-        public int Mesh, Def;
-        public float Radius, Ground, Size;
-        public bool Shadow;
+        public float3x4 M;
         public ulong Id;
+        public float Tint, LeafTint, Hue, Radius, Ground, Size;
+        public int Mesh, Def;
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
@@ -85,6 +83,7 @@ namespace Stabby.Game
         struct ChunkParts
         {
             public int Chunk;
+            public float Base, Ms;
             public NativeArray<long> Keys;
             public NativeArray<int3> Ranges;
             public NativeArray<ObjectSpawn> Parts;
@@ -117,12 +116,20 @@ namespace Stabby.Game
         Material material, foliageMaterial;
         BatchMaterialID materialId, foliageMaterialId;
         Entity castPrefab, flatPrefab, castFoliagePrefab, flatFoliagePrefab;
-        bool[] foliageMesh;
+        bool[] foliageMesh, shadowMesh;
+        NativeArray<float4> colorNative, leafNative;
+        NativeArray<bool> shadowNative;
         Task<LeafAtlas.Pixels> atlasTask;
         Texture2D atlas;
         RenderTexture impA, impB;
         readonly List<Task<ChunkParts>> chunkTasks = new List<Task<ChunkParts>>();
         bool[] collectingChunk;
+        float[] heldBase, blockedSince;
+        int[] blockedFrame;
+        float3 lastPos;
+        bool settled;
+        int recollects;
+        float firstMaxMs, recollectMaxMs, partsWaitMax;
         static readonly int Collectors = math.max(1, Environment.ProcessorCount / 4);
         NativeArray<DefLod> defLods;
         NativeArray<BatchMeshID> meshIdsNative;
@@ -157,6 +164,10 @@ namespace Stabby.Game
         public static bool ReadyAround(float3 p, float within) => readyFrame >= UnityEngine.Time.frameCount - 2 && math.distance(readyAt, p) <= within;
         public static int LiveEntities { get; private set; }
         public static int PartsHeld { get; private set; }
+        public static int Recollects { get; private set; }
+        public static float FirstCollectMaxMs { get; private set; }
+        public static float RecollectMaxMs { get; private set; }
+        public static float PartsWaitMaxMs { get; private set; }
         public static int ChunksHeld { get; private set; }
         public static int ChunksUnloaded { get; private set; }
         public static float LastMs { get; private set; }
@@ -201,6 +212,9 @@ namespace Stabby.Game
             if (meshIdsNative.IsCreated) meshIdsNative.Dispose();
             if (boundsNative.IsCreated) boundsNative.Dispose();
             if (slotsNative.IsCreated) slotsNative.Dispose();
+            if (colorNative.IsCreated) colorNative.Dispose();
+            if (leafNative.IsCreated) leafNative.Dispose();
+            if (shadowNative.IsCreated) shadowNative.Dispose();
             if (ranges.IsCreated) ranges.Dispose();
             if (spawned.IsCreated) spawned.Dispose();
             if (tileEntities.IsCreated) tileEntities.Dispose();
@@ -216,13 +230,15 @@ namespace Stabby.Game
 
         public const float GlowBase = 0.05f, GlowSpan = 0.2f, GlowPatternStep = 0.22f, IceBase = 0.48f, IceSpan = 0.015f;
 
-        static float4 Linear(uint rgb, float tint, int shape, float glow, int pattern, float translucency)
+        static float4 ColorBase(ObjectPart part)
         {
-            if (translucency > 0f) return new float4(Decode(rgb) * tint, IceBase + IceSpan * translucency);
-            if (glow > 0f) return new float4(Decode(rgb) * tint, GlowBase + GlowSpan * glow + GlowPatternStep * pattern);
-            if (ObjectPart.IsStone(shape)) return new float4(tint, tint, tint, 0);
-            return new float4(Decode(rgb) * tint, shape);
+            if (part.Translucency > 0f) return new float4(Decode(part.Color), IceBase + IceSpan * part.Translucency);
+            if (part.Glow > 0f) return new float4(Decode(part.Color), GlowBase + GlowSpan * part.Glow + GlowPatternStep * part.GlowPattern);
+            if (ObjectPart.IsStone(part.Shape)) return new float4(1, 1, 1, 0);
+            return new float4(Decode(part.Color), part.Shape);
         }
+
+        static float4 LeafBase(ObjectPart part) => ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor), 2) : float4.zero;
 
         static float3 Decode(uint rgb)
         {
@@ -246,6 +262,10 @@ namespace Stabby.Game
             chunkKeys = new NativeArray<long>[across * across];
             chunkLights = new List<Entity>[across * across];
             collectingChunk = new bool[across * across];
+            heldBase = new float[across * across];
+            blockedSince = new float[across * across];
+            blockedFrame = new int[across * across];
+            for (int i = 0; i < blockedSince.Length; i++) blockedSince[i] = -1f;
             float minTile = cm * 0.5f;
             int defs = lib.Objects.Count, count = 0;
             meshBase = new int[defs][];
@@ -259,6 +279,9 @@ namespace Stabby.Game
             var keys = new List<ulong>();
             var parts = new List<ObjectPart>();
             var impostors = new List<bool>();
+            var colorBase = new List<float4>();
+            var leafBase = new List<float4>();
+            var shadows = new List<bool>();
             for (int d = 0; d < defs; d++)
             {
                 var def = lib.Objects[d];
@@ -271,6 +294,7 @@ namespace Stabby.Game
                     {
                         shapes.Add(def.Parts[p].Shape); parts.Add(def.Parts[p]); keys.Add(ObjectMeshes.Key(def.Id, p, v));
                         impostors.Add(kind.ImpostorPixels > 0 && ObjectPart.IsFoliage(def.Parts[p].Shape));
+                        colorBase.Add(ColorBase(def.Parts[p])); leafBase.Add(LeafBase(def.Parts[p])); shadows.Add(lib.PartShadows(def, def.Parts[p]));
                         count++;
                     }
                 }
@@ -287,6 +311,10 @@ namespace Stabby.Game
             doomedKeys = new NativeList<long>(256, Allocator.Persistent);
             wantKeys = new NativeList<long>(256, Allocator.Persistent);
             foliageMesh = new bool[shapes.Count];
+            shadowMesh = shadows.ToArray();
+            colorNative = new NativeArray<float4>(colorBase.ToArray(), Allocator.Persistent);
+            leafNative = new NativeArray<float4>(leafBase.ToArray(), Allocator.Persistent);
+            shadowNative = new NativeArray<bool>(shadowMesh, Allocator.Persistent);
             bool anyFoliage = false;
             for (int k = 0; k < shapes.Count; k++) anyFoliage |= foliageMesh[k] = ObjectPart.IsFoliage(shapes[k]);
             meshTask = Task.Run(() => BuildMeshes(shapes, parts, keys, impostors));
@@ -585,17 +613,27 @@ namespace Stabby.Game
 
         [System.ThreadStatic] static List<StructureLight> anchorScratch;
 
-        ChunkParts Collect(int c)
+        ChunkParts Collect(int c, float minBase, bool lights)
         {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             var placed = ListPool.Rent<ObjectInstance>();
-            try { return Collect(c, placed); }
+            try
+            {
+                var r = Collect(c, placed, minBase, lights);
+                r.Ms = Since(t0);
+                return r;
+            }
             finally { ListPool.Return(placed); }
         }
 
-        ChunkParts Collect(int c, List<ObjectInstance> placed)
+        ChunkParts Collect(int c, List<ObjectInstance> placed, float minBase, bool lights)
         {
             int cx = c % across, cz = c / across;
             field.PlaceInto(cx, cz, placed);
+            var emitters = lights ? LightsIn(placed) : null;
+            int kept = 0;
+            for (int i = 0; i < placed.Count; i++) if (baseReach[placed[i].Def] >= minBase) placed[kept++] = placed[i];
+            placed.RemoveRange(kept, placed.Count - kept);
             int n = 0;
             for (int i = 0; i < placed.Count; i++) n += lib.Objects[placed[i].Def].Parts.Count;
             var order = new NativeArray<SortKey>(n, Allocator.Persistent);
@@ -625,18 +663,18 @@ namespace Stabby.Game
                 var local = float4x4.TRS(new float3(part.OffsetX, part.OffsetY, part.OffsetZ) * o.Size, quaternion.identity, scale);
                 float leafTint = 0.88f + 0.24f * math.frac(o.Variant * 0.381966f + o.Z * 0.0171f + o.Size * 1.3f);
                 float hue = 2f * math.frac(o.Variant * 0.7548777f + o.X * 0.0093f + o.Z * 0.0061f) - 1f;
-                var leaf = ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor) * leafTint * (1f + hue * new float3(0.16f, 0.06f, -0.13f)), 2) : float4.zero;
+                var m = math.mul(root, local);
                 ObjectField.ContactEnds(lib, o, out float floorY, out float ceilY);
                 bool both = !float.IsNaN(floorY) && !float.IsNaN(ceilY);
                 parts[i] = new ObjectSpawn
                 {
-                    M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape, part.Glow, part.GlowPattern, part.Translucency), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
-                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = part.Shape == ObjectPart.Dungeon ? o.Y + Structures.DungeonFloorY : ObjectPart.IsStructure(part.Shape) && !ObjectField.IsCave(def) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
+                    M = new float3x4(m.c0.xyz, m.c1.xyz, m.c2.xyz, m.c3.xyz), Tint = tint, LeafTint = leafTint, Hue = hue, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
+                    Radius = 0.5f * math.cmax(scale), Ground = part.Shape == ObjectPart.Dungeon ? o.Y + Structures.DungeonFloorY : ObjectPart.IsStructure(part.Shape) && !ObjectField.IsCave(def) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
                     Id = o.Id,
                 };
             }
             order.Dispose();
-            return new ChunkParts { Chunk = c, Keys = keys, Ranges = spans, Parts = parts, Lights = LightsIn(placed) };
+            return new ChunkParts { Chunk = c, Base = minBase, Keys = keys, Ranges = spans, Parts = parts, Lights = emitters };
         }
 
         List<LightEmitter> LightsIn(List<ObjectInstance> placed)
@@ -697,11 +735,28 @@ namespace Stabby.Game
                 if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
                 var r = task.Result;
                 collectingChunk[r.Chunk] = false;
+                bool again = loaded[r.Chunk];
+                if (again) recollectMaxMs = math.max(recollectMaxMs, r.Ms);
+                else firstMaxMs = math.max(firstMaxMs, r.Ms);
+                if (blockedSince[r.Chunk] >= 0f)
+                {
+                    if (blockedFrame[r.Chunk] >= UnityEngine.Time.frameCount - 1) partsWaitMax = math.max(partsWaitMax, (UnityEngine.Time.realtimeSinceStartup - blockedSince[r.Chunk]) * 1000f);
+                    blockedSince[r.Chunk] = -1f;
+                }
+                if (again)
+                {
+                    DropParts(r.Chunk);
+                    recollects++;
+                }
                 for (int i = 0; i < r.Keys.Length; i++)
                     if (!ranges.TryAdd(r.Keys[i], r.Ranges[i])) r.Keys[i] = -1;
                 r.Ranges.Dispose();
                 chunkParts[r.Chunk] = r.Parts;
                 chunkKeys[r.Chunk] = r.Keys;
+                heldBase[r.Chunk] = r.Base;
+                partsHeld += r.Parts.Length;
+                peakParts = math.max(peakParts, partsHeld);
+                if (again) continue;
                 loaded[r.Chunk] = true;
                 if (r.Lights != null)
                 {
@@ -716,42 +771,76 @@ namespace Stabby.Game
                 }
                 chunksLoaded++;
                 chunksHeld++;
-                partsHeld += r.Parts.Length;
-                peakParts = math.max(peakParts, partsHeld);
                 peakChunks = math.max(peakChunks, chunksHeld);
             }
+            float q = math.max(reachQuality, 1e-3f), ring = maxReach + span;
             for (int c = 0; c < loaded.Length; c++)
             {
-                if (!loaded[c] || RectDistance(cam, (c % across) * span, (c / across) * span, span) <= maxReach * UnloadReach) continue;
-                foreach (long key in chunkKeys[c]) if (key >= 0) ranges.Remove(key);
-                partsHeld -= chunkParts[c].Length;
-                chunkParts[c].Dispose();
-                chunkKeys[c].Dispose();
+                if (!loaded[c] || collectingChunk[c]) continue;
+                float dist = RectDistance(cam, (c % across) * span, (c / across) * span, span);
+                if (dist <= ring * UnloadReach)
+                {
+                    float want = Need(dist, q);
+                    if ((Grows(dist, q, heldBase[c]) || want > heldBase[c] * ShrinkAt) && SameSet(heldBase[c], want)) heldBase[c] = want;
+                    continue;
+                }
+                DropParts(c);
                 DestroyLights(chunkLights[c]);
                 chunkLights[c] = null;
                 loaded[c] = false;
                 chunksHeld--;
                 chunksUnloaded++;
             }
-            int best = 0;
-            while (best >= 0 && chunkTasks.Count < Collectors)
+            bool unserved = false;
+            while (true)
             {
-                best = -1;
-                float bestD = maxReach;
+                int best = -1;
+                float bestD = ring, bestShrink = float.MaxValue;
+                int shrink = -1;
                 for (int c = 0; c < loaded.Length; c++)
                 {
-                    if (loaded[c] || collectingChunk[c]) continue;
+                    if (collectingChunk[c]) continue;
                     float d = RectDistance(cam, (c % across) * span, (c / across) * span, span);
+                    if (loaded[c])
+                    {
+                        if (Grows(d, q, heldBase[c])) { if (d < bestD) { bestD = d; best = c; } }
+                        else if (Need(d, q) > heldBase[c] * ShrinkAt && d < bestShrink) { bestShrink = d; shrink = c; }
+                        continue;
+                    }
                     if (d < bestD) { bestD = d; best = c; }
                 }
-                if (best < 0) break;
-                collectingChunk[best] = true;
-                chunkTasks.Add(StartCollect(best));
+                int pick = best >= 0 ? best : shrink;
+                if (pick < 0) break;
+                if (chunkTasks.Count >= Collectors) { unserved = best >= 0; break; }
+                collectingChunk[pick] = true;
+                float minBase = Need(RectDistance(cam, (pick % across) * span, (pick / across) * span, span), q);
+                chunkTasks.Add(StartCollect(pick, minBase, !loaded[pick]));
             }
-            Pending = best >= 0 || chunkTasks.Count > 0 ? 1 : 0;
+            Pending = unserved || chunkTasks.Count > 0 ? 1 : 0;
         }
 
-        Task<ChunkParts> StartCollect(int c) => Task.Run(() => Collect(c));
+        const float ShrinkAt = 2f;
+
+        float Need(float dist, float q) => math.max(0f, dist - span) / (q * UnloadReach);
+
+        bool Grows(float dist, float q, float held) => math.max(0f, dist - span) / q < held;
+
+        bool SameSet(float a, float b)
+        {
+            float lo = math.min(a, b), hi = math.max(a, b);
+            foreach (float r in baseReach) if (r >= lo && r < hi) return false;
+            return true;
+        }
+
+        void DropParts(int c)
+        {
+            foreach (long key in chunkKeys[c]) if (key >= 0) ranges.Remove(key);
+            partsHeld -= chunkParts[c].Length;
+            chunkParts[c].Dispose();
+            chunkKeys[c].Dispose();
+        }
+
+        Task<ChunkParts> StartCollect(int c, float minBase, bool lights) => Task.Run(() => Collect(c, minBase, lights));
 
         public const float StreamMs = 2.5f;
 
@@ -780,7 +869,9 @@ namespace Stabby.Game
 
         int Spawn(long t0)
         {
-            int budget = SpawnBudget, waiting = 0;
+            int budget = SpawnBudget, waiting = 0, frame = UnityEngine.Time.frameCount;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            bool watch = settled && !GameStatus.AfterTool;
             writes = new NativeList<SpawnWrite>(256, Allocator.TempJob);
             for (int i = 0; i < wantKeys.Length; i++)
             {
@@ -789,7 +880,16 @@ namespace Stabby.Game
                 int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
                 float t = tile[d];
                 int c = math.min(across - 1, (int)(tz * t / span)) * across + math.min(across - 1, (int)(tx * t / span));
-                if (!loaded[c]) { waiting++; continue; }
+                if (!loaded[c] || baseReach[d] < heldBase[c])
+                {
+                    waiting++;
+                    if (watch && blockedFrame[c] != frame)
+                    {
+                        if (blockedSince[c] < 0f || blockedFrame[c] < frame - 1) blockedSince[c] = now;
+                        blockedFrame[c] = frame;
+                    }
+                    continue;
+                }
                 if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
                 if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
                 SpawnTile(key, chunkParts[range.z], range);
@@ -798,7 +898,7 @@ namespace Stabby.Game
             if (writes.Length > 0)
                 Dependency = new SpawnJob
                 {
-                    Writes = writes.AsArray(), Defs = defLods, Ids = meshIdsNative, Bounds = boundsNative, Slots = slotsNative,
+                    Writes = writes.AsArray(), Defs = defLods, Ids = meshIdsNative, Bounds = boundsNative, Slots = slotsNative, ColorBase = colorNative, LeafBase = leafNative, Shadows = shadowNative,
                     Material = materialId, Foliage = foliageMaterialId,
                     Ltw = GetComponentLookup<LocalToWorld>(), Rb = GetComponentLookup<RenderBounds>(), Mmi = GetComponentLookup<MaterialMeshInfo>(),
                     Color = GetComponentLookup<ObjectColor>(), Fade = GetComponentLookup<ObjectFade>(), Leaf = GetComponentLookup<ObjectLeaf>(), Lod = GetComponentLookup<ObjectLod>(),
@@ -896,6 +996,8 @@ namespace Stabby.Game
             [ReadOnly] public NativeArray<BatchMeshID> Ids;
             [ReadOnly] public NativeArray<AABB> Bounds;
             [ReadOnly] public NativeArray<int> Slots;
+            [ReadOnly] public NativeArray<float4> ColorBase, LeafBase;
+            [ReadOnly] public NativeArray<bool> Shadows;
             public BatchMaterialID Material, Foliage;
             [NativeDisableParallelForRestriction] public ComponentLookup<LocalToWorld> Ltw;
             [NativeDisableParallelForRestriction] public ComponentLookup<RenderBounds> Rb;
@@ -912,14 +1014,20 @@ namespace Stabby.Game
                 var k = Defs[s.Def];
                 int m = s.Mesh * Stride;
                 bool imp = w.Foliage && k.Impostor > 0 && Slots[s.Mesh] >= 0;
-                Ltw[w.E] = new LocalToWorld { Value = s.M };
+                bool shadow = Shadows[s.Mesh];
+                var c = ColorBase[s.Mesh];
+                Ltw[w.E] = new LocalToWorld { Value = new float4x4(new float4(s.M.c0, 0), new float4(s.M.c1, 0), new float4(s.M.c2, 0), new float4(s.M.c3, 1)) };
                 Rb[w.E] = new RenderBounds { Value = Bounds[s.Mesh] };
                 Mmi[w.E] = new MaterialMeshInfo(w.Foliage ? Foliage : Material, Ids[m]);
-                Color[w.E] = new ObjectColor { Value = s.Color };
-                Fade[w.E] = new ObjectFade { Value = new float4(1, s.Shadow ? 1 : 0, s.Ground, s.Size) };
-                if (w.Foliage) Leaf[w.E] = new ObjectLeaf { Value = s.Leaf };
+                Color[w.E] = new ObjectColor { Value = new float4(c.xyz * s.Tint, c.w) };
+                Fade[w.E] = new ObjectFade { Value = new float4(1, shadow ? 1 : 0, s.Ground, s.Size) };
+                if (w.Foliage)
+                {
+                    var l = LeafBase[s.Mesh];
+                    Leaf[w.E] = new ObjectLeaf { Value = new float4(l.xyz * s.LeafTint * (1f + s.Hue * new float3(0.16f, 0.06f, -0.13f)), l.w) };
+                }
                 var rule = k.Rule;
-                if (!s.Shadow) rule.ShadowCascadePixels = rule.ShadowPixels = Detail.Never;
+                if (!shadow) rule.ShadowCascadePixels = rule.ShadowPixels = Detail.Never;
                 Lod[w.E] = new ObjectLod
                 {
                     L0 = Ids[m], L1 = Ids[m + math.min(1, k.Lods - 1)], L2 = Ids[m + math.min(2, k.Lods - 1)], Rule = rule, Radius = s.Radius,
@@ -928,7 +1036,7 @@ namespace Stabby.Game
             }
         }
 
-        int Group(in ObjectSpawn s) => (s.Shadow ? 1 : 0) + (foliageMaterial != null && foliageMesh[s.Mesh] ? 2 : 0);
+        int Group(in ObjectSpawn s) => (shadowMesh[s.Mesh] ? 1 : 0) + (foliageMaterial != null && foliageMesh[s.Mesh] ? 2 : 0);
 
         bool Warm()
         {
@@ -966,17 +1074,24 @@ namespace Stabby.Game
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
             if (!scanned) { Pending = 1; scanAt = pos; scan = Scan(pos); scanned = true; return; }
+            if (math.distance(pos, lastPos) > span) settled = false;
+            lastPos = pos;
             using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
             using (DespawnMarker.Auto()) Despawn();
             int waiting;
             using (SpawnMarker.Auto()) waiting = Spawn(t0);
             if (waiting > 0) Pending = 1;
+            if (waiting == 0 && GameStatus.TerrainBuilt) settled = true;
             if (Pending == 0) { readyAt = scanAt; readyFrame = UnityEngine.Time.frameCount; }
             scanAt = pos;
             scan = Scan(pos);
             scanned = true;
             LiveEntities = liveEntities;
             PartsHeld = partsHeld;
+            Recollects = recollects;
+            FirstCollectMaxMs = firstMaxMs;
+            RecollectMaxMs = recollectMaxMs;
+            PartsWaitMaxMs = partsWaitMax;
             ChunksHeld = chunksHeld;
             ChunksUnloaded = chunksUnloaded;
             liveByDefShared = liveByDef;
@@ -986,7 +1101,7 @@ namespace Stabby.Game
             if (!GameStatus.Live.ContainsKey("~objects view")) GameStatus.Live["~objects view"] = Status;
         }
 
-        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}); worst view update after terrain built {worstUpdate:F1} ms";
+        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}), {recollects} re-collects, slowest first collect {firstMaxMs:F0} ms, slowest re-collect {recollectMaxMs:F0} ms, worst wait for parts in view {partsWaitMax:F0} ms; worst view update after terrain built {worstUpdate:F1} ms";
     }
 
     [BurstCompile]

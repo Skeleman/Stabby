@@ -340,6 +340,27 @@ public static class ContentLoader
         public TerrainEntry? Terrain { get; set; }
         public FoliageEntry? Foliage { get; set; }
         public QualityEntry? Quality { get; set; }
+        public List<TownEntry> Towns { get; set; } = new();
+    }
+
+    sealed class TownEntry
+    {
+        public string Id { get; set; } = "";
+        public List<string> Biomes { get; set; } = new();
+        public float SeekM { get; set; }
+        public float ReliefM { get; set; }
+        public float WaterM { get; set; }
+        public float PlazaM { get; set; }
+        public float LaneM { get; set; }
+        public float LaneWidthM { get; set; }
+        public List<TownSiteEntry> Sites { get; set; } = new();
+    }
+
+    sealed class TownSiteEntry
+    {
+        public string Object { get; set; } = "";
+        public string Place { get; set; } = "";
+        public float[]? Count { get; set; }
     }
 
     sealed class QualityEntry
@@ -600,6 +621,17 @@ public static class ContentLoader
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
             lib.Objects.Add(def);
+        }
+        foreach (var t in file.Towns)
+        {
+            var town = new TownDef { Id = t.Id, Biomes = t.Biomes, SeekM = t.SeekM, ReliefM = t.ReliefM, WaterM = t.WaterM, PlazaM = t.PlazaM, LaneM = t.LaneM, LaneWidthM = t.LaneWidthM };
+            foreach (var st in t.Sites)
+            {
+                var count = st.Count is { Length: 2 } ? st.Count : new float[] { 0, 0 };
+                if (st.Count is not { Length: 2 }) errors.Add("town " + town.Id + ": count needs 2 numbers");
+                town.Sites.Add(new TownSite { ObjectId = st.Object, Place = Array.IndexOf(TownSite.PlaceNames, st.Place), Min = (int)count[0], Max = (int)count[1] });
+            }
+            lib.Towns.Add(town);
         }
         if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels, ColumnFadePixels = file.Terrain.ColumnFadePixels, ColumnFullPixels = file.Terrain.ColumnFullPixels, ShadowTexels = file.Terrain.ShadowTexels };
         if (file.Foliage != null)
