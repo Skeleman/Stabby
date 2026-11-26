@@ -53,8 +53,8 @@ namespace Stabby.Game.Editor
             var lip = new Vector3(fall.Points[l0], fall.Points[l0 + 1], fall.Points[l0 + 2]);
             float drop = lip.y - pool.y, near = Near(fall);
             var light = lights.Count == 0 ? default : lights.OrderBy(l => Vector3.Distance(l.at, pool)).First();
-            bool clear = FallEye(ground, lip, out var eye);
             var look = Vector3.Lerp(lip, pool, 0.6f);
+            bool clear = FallEye(ground, fall, lip, look, out var eye);
             cam.fieldOfView = 60f;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
             var torch = new GameObject("cavefalls-torch").AddComponent<Light>();
@@ -80,23 +80,35 @@ namespace Stabby.Game.Editor
             GameStatus.Lines["~cavefalls"] = string.Join("\n", lines);
         }
 
-        static bool FallEye(Ground ground, Vector3 lip, out Vector3 eye)
+        static bool FallEye(Ground ground, CaveBrook b, Vector3 lip, Vector3 look, out Vector3 eye)
         {
+            int st = CaveBrook.Stride;
+            var tries = new List<Vector3>();
+            for (int i = b.Fall - 2; i >= Mathf.Max(0, b.Fall - 10); i--)
+                foreach (float lift in FallEyeLifts) tries.Add(new Vector3(b.Points[i * st], b.Points[i * st + 1] + lift, b.Points[i * st + 2]));
             foreach (float d in new[] { 6f, 8f, 5f, 10f, 4f, 12f })
                 for (int a = 0; a < 16; a++)
                 {
                     float t = a * (2f * Mathf.PI / 16f);
-                    eye = lip + new Vector3(Mathf.Cos(t) * d, 1.7f, Mathf.Sin(t) * d);
-                    bool clear = true;
-                    for (int k = 0; k <= 6 && clear; k++) clear = OpenAt(ground, Vector3.Lerp(eye, lip + Vector3.up * 0.4f, k / 8f));
-                    for (int k = 0; k < 6 && clear; k++) clear = OpenAt(ground, eye + FallEyeRoom[k] * FallEyeClearM);
-                    if (clear) return true;
+                    tries.Add(lip + new Vector3(Mathf.Cos(t) * d, 1.7f, Mathf.Sin(t) * d));
                 }
             eye = lip + Vector3.up * 1.7f;
+            int best = -1;
+            foreach (var p in tries)
+            {
+                bool seen = true;
+                for (int k = 0; k <= 6 && seen; k++) seen = OpenAt(ground, Vector3.Lerp(p, look, k / 8f));
+                if (!seen) continue;
+                int room = 0;
+                for (int k = 0; k < 6; k++) if (OpenAt(ground, p + FallEyeRoom[k] * FallEyeClearM)) room++;
+                if (room == 6) { eye = p; return true; }
+                if (room > best) { best = room; eye = p; }
+            }
             return false;
         }
 
-        const float FallEyeClearM = 1.2f;
+        const float FallEyeClearM = 0.8f;
+        static readonly float[] FallEyeLifts = { 1.2f, 0.9f, 1.6f };
         static readonly Vector3[] FallEyeRoom = { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
     }
 }
