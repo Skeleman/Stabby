@@ -1086,7 +1086,7 @@ namespace Stabby.World
             var pools = CheckCaveObjects(w, detail, edits, e);
             var brooks = CaveBrooks.Build(w, detail, edits, caves);
             CheckCaveBrooks(w, caves, edits, brooks, pools, e);
-            CheckCaveFalls(edits, brooks, pools, e);
+            CheckCaveFalls(detail, edits, brooks, pools, e);
             CheckCaveBrookBanks(w, detail, edits, caves, brooks, e);
         }
 
@@ -1233,8 +1233,9 @@ namespace Stabby.World
 
         public const float FallMinM = 3f, FallAirM = 0.1f, FallRimOutM = 0.5f, FallBasinM = 1f, FallWaterM = 0.5f;
 
-        public static void CheckCaveFalls(FeatureEdit[] edits, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
+        public static void CheckCaveFalls(TerrainDetail detail, FeatureEdit[] edits, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
         {
+            var air = new Hollow { Ground = new DetailGround { Detail = detail }, Field = new EditArray { Items = edits } };
             const float Diag = 0.70710678f;
             float[] ring = { 1f, 0f, Diag, Diag, 0f, 1f, -Diag, Diag, -1f, 0f, -Diag, -Diag, 0f, -1f, Diag, -Diag };
             foreach (var s in streams)
@@ -1251,15 +1252,15 @@ namespace Stabby.World
                 if (d < 1e-3f) { e.Add(at + " has no fall direction"); return; }
                 dx /= d; dz /= d;
                 float th = Hydrology.FallThrow(drop), fx = lx + dx * th, fz = lz + dz * th;
-                if (!Air(edits, lx, ly + FallAirM, lz) || !Air(edits, lx + 0.7f * dx * th, ly - 0.5f * drop, lz + 0.7f * dz * th) || !Air(edits, fx, py + FallAirM, fz))
+                if (!air.At(lx, ly + FallAirM, lz) || !air.At(lx + 0.7f * dx * th, ly - 0.5f * drop, lz + 0.7f * dz * th) || !air.At(fx, py + FallAirM, fz))
                 {
                     e.Add(at + $" at {lx:F0},{lz:F0} leaves its carve");
                     return;
                 }
                 bool floor = false;
-                for (float y = py - FallAirM; y >= py - CaveBrooks.PlungeHoleM - FallBasinM && !floor; y -= 0.25f) floor = !Air(edits, fx, y, fz);
+                for (float y = py - FallAirM; y >= py - CaveBrooks.PlungeHoleM - FallBasinM && !floor; y -= 0.25f) floor = !air.At(fx, y, fz);
                 bool rim = true;
-                for (int k = 0; k < ring.Length && rim; k += 2) rim = !Air(edits, cx + ring[k] * (s.PoolR + FallRimOutM), py - FallAirM, cz + ring[k + 1] * (s.PoolR + FallRimOutM));
+                for (int k = 0; k < ring.Length && rim; k += 2) rim = !air.At(cx + ring[k] * (s.PoolR + FallRimOutM), py - FallAirM, cz + ring[k + 1] * (s.PoolR + FallRimOutM));
                 if (!floor || !rim) { e.Add(at + $" at {lx:F0},{lz:F0} has no pool or basin under it"); return; }
                 if (pools != null && !Watered(pools, fx, fz, py)) { e.Add(at + $" at {lx:F0},{lz:F0} drops into no water"); return; }
             }
@@ -1276,11 +1277,12 @@ namespace Stabby.World
             return false;
         }
 
-        static bool Air(FeatureEdit[] edits, float x, float y, float z)
+        struct Hollow
         {
-            foreach (var x0 in edits)
-                if (x0.Kind == FeatureEdit.Carve && x0.Apply(1f, x, y, z) < 0f) return true;
-            return false;
+            public DetailGround Ground;
+            public EditArray Field;
+
+            public bool At(float x, float y, float z) => Walk.Solid(Ground, Field, LatticeStepM, x, y, z) <= 0f;
         }
 
         public const int CaveObjectChunks = 6;

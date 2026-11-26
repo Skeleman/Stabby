@@ -515,7 +515,7 @@ namespace Stabby.World
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
-            terrain = Sunk(terrain, CaveBrooks.Sinks(w, terrain, caves));
+            terrain = Sunk(terrain, CaveBrooks.Sinks(w, detail, terrain, caves));
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
             var field = new ObjectField(w, detail, terrain, w.Objects);
