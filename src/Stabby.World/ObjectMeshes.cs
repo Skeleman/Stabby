@@ -35,13 +35,13 @@ namespace Stabby.World
             if (p.Shape == ObjectPart.Log && p.ScaleX > 0) aspect = 0.5f * (p.ScaleY + p.ScaleZ) / p.ScaleX;
             if (p.Shape == ObjectPart.Stump && p.ScaleY > 0) aspect = 0.5f * (p.ScaleX + p.ScaleZ) / p.ScaleY;
             if (p.Shape == ObjectPart.Dripstone && p.ScaleY > 0) aspect = 0.5f * (p.ScaleX + p.ScaleZ) / p.ScaleY;
-            return Build(p.Shape, key, lod, aspect, p.Ends);
+            return Build(p.Shape, key, lod, aspect, p.Ends, p.Trim);
         }
 
-        public static ObjectMesh Build(int shape, ulong key, int lod, float aspect = 0, int ends = 0)
+        public static ObjectMesh Build(int shape, ulong key, int lod, float aspect = 0, int ends = 0, int trim = 0)
         {
             lod = Math.Max(0, Math.Min(MaxLods - 1, lod));
-            if (ObjectPart.IsStructure(shape)) return Structures.Build(shape, key, lod);
+            if (ObjectPart.IsStructure(shape)) return Structures.Build(shape, key, lod, trim);
             if (shape == ObjectPart.Shrub) return ObjectFoliage.Shrub(key, lod);
             if (shape == ObjectPart.Reed) return ObjectFoliage.Reed(key, lod);
             if (shape == ObjectPart.Broadleaf) return ObjectFoliage.Broadleaf(key, lod);

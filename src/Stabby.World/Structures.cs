@@ -50,11 +50,12 @@ namespace Stabby.World
 
         public static float Skirt(in StructurePiece p) => p.Y <= GroundY ? SkirtShare * Math.Min(p.Sy, 0.5f * (p.Sx + p.Sz)) : 0;
 
-        public static StructureLayout Layout(int shape, ulong key)
+        public static StructureLayout Layout(int shape, ulong key, int trim = 0)
         {
             var l = new StructureLayout();
             if (shape == ObjectPart.Wall) Wall(key, l);
             else if (shape == ObjectPart.Cairn) Cairn(key, l);
+            else if (ObjectPart.IsDungeon(shape)) Dungeon(shape, key, l, trim > 0 ? trim : Iron);
             else Built(shape, key, l);
             return l;
         }
@@ -65,7 +66,7 @@ namespace Stabby.World
         [ThreadStatic] static List<StructurePiece> buildUsed;
         [ThreadStatic] static List<int> buildStarts;
 
-        public static ObjectMesh Build(int shape, ulong key, int lod)
+        public static ObjectMesh Build(int shape, ulong key, int lod, int trim = 0)
         {
             int tier = Math.Max(0, Math.Min(Tiers - 1, lod));
             var b = new ObjectMeshes.Builder { P = buildP ??= new List<float>(), I = buildI ??= new List<int>() };
@@ -73,7 +74,7 @@ namespace Stabby.World
             var used = buildUsed ??= new List<StructurePiece>();
             var starts = buildStarts ??= new List<int>();
             b.P.Clear(); b.I.Clear(); tones.Clear(); used.Clear(); starts.Clear();
-            foreach (var p in Layout(shape, key).Pieces)
+            foreach (var p in Layout(shape, key, trim).Pieces)
             {
                 if (tier < p.Lo || tier > p.Hi) continue;
                 used.Add(p);

@@ -37,10 +37,11 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, Shapes = 37;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Shapes = 43;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
-        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen;
+        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || IsDungeon(shape);
+        public static bool IsDungeon(int shape) => shape >= DungeonCorridor && shape <= DungeonCollapse;
         public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || shape == DripColumn || IsStructure(shape);
         public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5;
         public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn" };
@@ -57,6 +58,13 @@ namespace Stabby.World
         public uint LeafColor;
         public bool HasLeafColor;
         public int Ends;
+        public int Trim;
+    }
+
+    public sealed class ArchStyle
+    {
+        public string Id, Name, Stone, Trim;
+        public uint StoneColor;
     }
 
     public sealed class ObjectPlacement
@@ -106,7 +114,7 @@ namespace Stabby.World
         public float Glow, Translucency;
         public int GlowPattern;
         public int Variants = 1;
-        public string Verb;
+        public string Verb, Style;
         public float ReachM;
         public List<ObjectPart> Parts = new List<ObjectPart>();
         public ObjectPlacement Placement = new ObjectPlacement();
@@ -156,6 +164,7 @@ namespace Stabby.World
         public TerrainViewDef Terrain = new TerrainViewDef();
         public FoliageDef Foliage = new FoliageDef();
         public QualityDef Quality = new QualityDef();
+        public List<ArchStyle> Styles = new List<ArchStyle>();
 
         public ObjectKind KindOf(ObjectDef d)
         {
@@ -249,6 +258,13 @@ namespace Stabby.World
                 if (!lights.Contains(k.Light ?? "")) errors.Add(k.Id + ": light " + k.Light + " is not defined");
                 if (k.ImpostorPixels != 0 && (k.ImpostorPixels <= k.FadePixels || k.LodPixels == null || k.LodPixels.Length == 0 || 1.5f * k.ImpostorPixels >= k.LodPixels[k.LodPixels.Length - 1])) errors.Add(k.Id + ": impostorPixels must sit above fadePixels and 1.5x below the last lodPixels");
             }
+            var styles = new HashSet<string>();
+            foreach (var st in lib.Styles)
+            {
+                if (string.IsNullOrEmpty(st.Id)) errors.Add("style without id");
+                else if (!styles.Add(st.Id)) errors.Add("duplicate style " + st.Id);
+                if (Array.IndexOf(MaterialLibrary.KitNames, st.Trim ?? "") < 0) errors.Add("style " + st.Id + ": trim " + st.Trim + " is not a kit material");
+            }
             var ids = new HashSet<string>();
             foreach (var d in lib.Objects)
             {
@@ -260,12 +276,14 @@ namespace Stabby.World
                 if (d.Kind == Interactive && (Array.IndexOf(Verbs, d.Verb ?? "") < 0 || d.ReachM <= 0 || d.ReachM > 10))
                     errors.Add(d.Id + ": interactive objects need interact verb take/cut and reachM above 0, at most 10");
                 if (d.Kind != Interactive && !string.IsNullOrEmpty(d.Verb)) errors.Add(d.Id + ": only interactive objects take interact");
+                if (d.Style != null && (!styles.Contains(d.Style) || d.Kind != Structure)) errors.Add(d.Id + ": style " + d.Style + " must name a defined style on a structure");
                 foreach (var p in d.Parts)
                 {
                     if (p.Shape < 0 || p.Shape >= ObjectPart.Shapes) errors.Add(d.Id + ": part " + p.Id + " has an unknown shape");
                     if (ObjectPart.IsFoliage(p.Shape) && !p.HasLeafColor) errors.Add(d.Id + ": part " + p.Id + " needs a leafMaterial");
                     if (p.ScaleX <= 0 || p.ScaleY <= 0 || p.ScaleZ <= 0) errors.Add(d.Id + ": part " + p.Id + " scale must be above 0");
                     if (ObjectPart.IsStructure(p.Shape) != (d.Kind == Structure)) errors.Add(d.Id + ": structure shapes belong only to structure objects");
+                    if (p.Trim < 0 || p.Trim > MaterialLibrary.KitNames.Length) errors.Add(d.Id + ": part " + p.Id + " has an unknown trim");
                     if (p.Ends < 0 || p.Ends >= ObjectPart.EndNames.Length) errors.Add(d.Id + ": part " + p.Id + " has unknown ends");
                     else if (p.Ends != ObjectPart.EndsAuto && p.Shape != ObjectPart.Log && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " ends belong only to logs and stumps");
                     else if ((p.Ends == ObjectPart.EndsRooted || p.Ends == ObjectPart.EndsWorn) && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " " + ObjectPart.EndNames[p.Ends] + " ends belong only to logs");
