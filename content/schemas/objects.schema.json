@@ -153,6 +153,38 @@
         }
       }
     },
+    "towns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "biomes", "seekM", "reliefM", "waterM", "plazaM", "laneM", "laneWidthM", "sites"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+          "biomes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "seekM": { "type": "number", "minimum": 0 },
+          "reliefM": { "type": "number", "exclusiveMinimum": 0 },
+          "waterM": { "type": "number", "exclusiveMinimum": 0 },
+          "plazaM": { "type": "number", "exclusiveMinimum": 0 },
+          "laneM": { "type": "number", "minimum": 0 },
+          "laneWidthM": { "type": "number", "exclusiveMinimum": 0 },
+          "sites": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["object", "place", "count"],
+              "additionalProperties": false,
+              "properties": {
+                "object": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+                "place": { "enum": ["centre", "plaza", "lane"] },
+                "count": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 2, "maxItems": 2 }
+              }
+            }
+          }
+        }
+      }
+    },
     "objects": {
       "type": "array",
       "items": {
@@ -202,7 +234,7 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "house"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },

@@ -5,21 +5,23 @@ namespace Stabby.World
     public static partial class Structures
     {
         public const float SiteInnZ = -0.12f, SiteInnScale = 0.63f;
-        public const float InnU = 1 / 12f, Fy = 0.55f;
+        public const float InnU = 1 / 12f, HouseU = 1 / 8f, Fy = 0.55f;
         const float YardU = 1 / 19f, Plate = 3.3f;
 
         static readonly float[] InnSeat = { 0, 0, 0.4f, 0.25f, -0.4f, 0.25f, 0.4f, -0.25f, -0.4f, -0.25f };
         static readonly float[] YardSeat = { 0, 0, 0.35f, 0.35f, -0.35f, 0.35f, 0.35f, -0.35f, -0.35f, -0.35f };
         static readonly float[] WaysideSeats = { 0, 0, 0.24f, -0.09f, -0.24f, -0.09f, 0, -0.16f, 0.1f, -0.16f, -0.1f, -0.16f, 0, 0.15f, 0, 0.3f };
+        static readonly float[] HouseSeat = { 0, 0, 0.4f, 0.3f, -0.4f, 0.3f, 0.4f, -0.3f, -0.4f, -0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
             switch (shape)
             {
                 case ObjectPart.Inn: Inn(l, key, Frame.Root(InnU)); break;
+                case ObjectPart.House: House(l, key, Frame.Root(HouseU)); break;
                 case ObjectPart.InnYard: Yard(l, key, Frame.Root(YardU)); break;
                 case ObjectPart.Table: Table(l, key, Frame.Root(1 / 1.6f)); break;
                 case ObjectPart.Bench: Bench(l, key, Frame.Root(1 / 1.4f)); break;
@@ -111,6 +113,80 @@ namespace Stabby.World
             Hearth(l, key, ref rng, f, sc, hx);
             Interior(l, ref rng, f, sc, hx, hz, dx);
             Porch(l, key, front, dx);
+
+            for (int w = 0; w < 4; w++)
+            {
+                var wf = w == 0 ? front : w == 1 ? back : w == 2 ? east : west;
+                float h = w < 2 ? hx : hz;
+                for (float x = -h; x <= h + 0.01f; x += 0.4f)
+                    if (w != 0 || Math.Abs(x - dx) >= 0.95f) Col(l, wf, x, 0, 0.25f, -0.35f, Plate);
+            }
+            for (float x = -hx + 0.4f; x < hx; x += 0.8f)
+                for (float z = -hz + 0.4f; z < hz; z += 0.8f)
+                    Col(l, f, x, z, 0.5f, -0.35f, Fy);
+            Col(l, f, sc * (hx + 0.45f), 0, 0.55f, -0.35f, ytop);
+        }
+
+        static void House(StructureLayout l, ulong key, in Frame f)
+        {
+            var rng = Rng.Stream(key, "house");
+            float hx = rng.Range(2.6f, 3.4f), hz = rng.Range(2.0f, 2.4f), rr = rng.Range(1.0f, 1.2f), verge = rng.Range(0.45f, 0.55f);
+            float sc = rng.NextFloat() < 0.5f ? -1 : 1;
+            float y0 = Plate - 0.7f * rr, y1 = Plate + hz * rr, ytop = y1 + 0.8f;
+            int nf = Math.Max(3, (int)Math.Round(2 * hx / 2.0f)), ns = 2;
+            int door = rng.Range(0, nf);
+            float dx = -hx + 2 * hx * (door + 0.5f) / nf;
+            l.DoorX = f.U * dx;
+            l.DoorZ = f.U * hz;
+
+            var front = f.Child(0, 0, hz, 1, 0);
+            var back = f.Child(0, 0, -hz, -1, 0);
+            var east = f.Child(hx, 0, 0, 0, -1);
+            var west = f.Child(-hx, 0, 0, 0, 1);
+            var kf = new int[nf];
+            var kb = new int[nf];
+            var ke = new int[ns];
+            var kw = new int[ns];
+            for (int i = 0; i < nf; i++)
+            {
+                kf[i] = i == door ? 1 : rng.NextFloat() < 0.7f ? 2 : 0;
+                kb[i] = rng.NextFloat() < 0.3f ? 2 : 0;
+            }
+            for (int i = 0; i < ns; i++)
+            {
+                ke[i] = sc < 0 && rng.NextFloat() < 0.5f ? 2 : 0;
+                kw[i] = sc > 0 && rng.NextFloat() < 0.5f ? 2 : 0;
+            }
+
+            InnWall(l, key, ref rng, front, 2 * hx, kf);
+            InnWall(l, key, ref rng, back, 2 * hx, kb);
+            InnWall(l, key, ref rng, east, 2 * hz, ke);
+            InnWall(l, key, ref rng, west, 2 * hz, kw);
+            Plinth(l, key, ref rng, front, 2 * hx);
+            Plinth(l, key, ref rng, back, 2 * hx);
+            Plinth(l, key, ref rng, east, 2 * hz);
+            Plinth(l, key, ref rng, west, 2 * hz);
+            Box(l, key, f, 0, -0.35f, 0, 2 * hx + 0.35f, 0.7f, 2 * hz + 0.35f, Stone, GX, 1, 2);
+            Box(l, key, f, 0, 0.35f, 0, 2 * hx + 0.2f, Plate - 0.35f, 2 * hz + 0.2f, Plaster, GX, 2, 2);
+            for (int i = 0; i < 4; i++)
+            {
+                float px = (i & 1) == 0 ? -hx : hx, pz = (i & 2) == 0 ? -hz : hz;
+                Box(l, key, f, px, 0.35f, pz, 0.3f, Plate - 0.35f, 0.3f, Timber, GV, 0, 1);
+            }
+            Box(l, key, f, 0, 0.5f, 0, 2 * hx - 0.3f, 0.05f, 2 * hz - 0.3f, Plank, GX, 0, 0);
+
+            Roof(l, key, ref rng, f, hx, hz, rr, y0, y1, verge, nf);
+            Gables(l, key, f, hx, hz, rr, sc);
+            Chimney(l, key, ref rng, f, sc * (hx + 0.45f), y1, ytop);
+            Hearth(l, key, ref rng, f, sc, hx);
+            var r = f.Child(0, 0, 0, 1, 0, 0, 0);
+            Seating(l, ref rng, r, -sc * (hx - 1.4f), -hz + 1.1f);
+            Crate(l, rng.NextU64(), r.Child(-sc * (hx - 0.5f), Fy, hz - 0.5f));
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Box(l, key, front, dx + s * 0.32f, -0.1f, 0.3f, 0.62f, 0.45f, 0.4f, Stone, GX, 0, 1);
+                Col(l, front, dx + s * 0.32f, 0.3f, 0.3f, -0.1f, 0.35f);
+            }
 
             for (int w = 0; w < 4; w++)
             {

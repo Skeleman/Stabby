@@ -16,6 +16,13 @@
   "styles": [
     { "id": "crypt", "name": "Crypt", "stone": "ruin-stone", "trim": "iron" }
   ],
+  "towns": [
+    {
+      "id": "village", "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "seekM": 280, "reliefM": 12, "waterM": 400,
+      "plazaM": 13, "laneM": 46, "laneWidthM": 5,
+      "sites": [ { "object": "well", "place": "centre", "count": [1, 1] }, { "object": "inn", "place": "plaza", "count": [1, 1] }, { "object": "house", "place": "lane", "count": [5, 9] } ]
+    }
+  ],
   "objects": [
     {
       "id": "small-rock", "name": "Small rock", "kind": "static", "material": "fieldstone-grey", "variants": 6,
@@ -174,6 +181,11 @@
       "id": "inn", "name": "Inn", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "inn", "shape": "inn", "offset": [0, 0, -0.12], "scale": [0.63, 0.63, 0.63] }, { "id": "yard", "shape": "inn-yard" } ],
       "placement": { "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "perHectare": 0.02, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
+    },
+    {
+      "id": "house", "name": "House", "kind": "structure", "material": "fieldstone-grey", "variants": 4,
+      "parts": [ { "id": "house", "shape": "house" } ],
+      "placement": { "biomes": ["steppe", "temperate-forest", "shrubland", "savanna"], "perHectare": 0, "slopeMax": 0.1, "sizeMinM": 8, "sizeMaxM": 8, "sink": 0.005, "alignToSlope": 0 }
     },
     {
       "id": "table", "name": "Table", "kind": "structure", "material": "fieldstone-grey", "variants": 3,

@@ -126,6 +126,7 @@ namespace Stabby.World
                 else blockItems = items;
             }
             caveLit = ResolveCaveLights(out caveLitCells, out caveLitReach);
+            InitTowns();
             InitSites();
         }
 
@@ -249,6 +250,7 @@ namespace Stabby.World
                     if (!builtOnly && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitCave(d, chunk, x0, z0, sx, sz, list, ref ordinal);
                     continue;
                 }
+                if (townMember[d] && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
                 if (pl.PerHectare <= 0 || (solidOnly && !AnySolid(d)) || (boulders != null && pl.EditMinSizeM <= 0)) continue;
                 bool foot = pl.FootRiseM > 0, built = seats[d] != null;
                 var rng = new Rng(Rng.Mix((boulders != null ? boulderStream : built ? structureStream : foot ? footStream : stream) ^ chunkKey ^ key[d]));
@@ -362,7 +364,7 @@ namespace Stabby.World
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
             var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
             var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
-            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0)) return;
+            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
             boulders.Add(a);
             boulders.Add(b);
         }
@@ -440,13 +442,14 @@ namespace Stabby.World
             return b >= 0 && density[d][b] > 0;
         }
 
-        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false)
+        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false)
         {
             o = default;
             if (!bank && !Open(d, x, z)) return false;
             var pl = lib.Objects[d].Placement;
             int gx = Cell(x), gz = Cell(z), i = gz * n + gx;
             float r = footprint[d] * size;
+            if (!town && !bank && pl.Cave <= 0 && InTownGround(x, z, r, seats[d] != null)) return false;
             float y = GroundAt(detail, cm, x, z);
             float s = SlopeStepM;
             float gxs = (GroundAt(detail, cm, x + s, z) - GroundAt(detail, cm, x - s, z)) / (2 * s);
@@ -455,7 +458,7 @@ namespace Stabby.World
             if (slope < pl.SlopeMin || slope > pl.SlopeMax) return false;
             float hard = strata.Hardness(i, y) / contrast;
             if (hard < pl.HardnessMin || hard > pl.HardnessMax) return false;
-            if (!Clear(i, gx, gz, x, y, z, r, bank, pl.Discovery)) return false;
+            if (!Clear(i, gx, gz, x, y, z, r, bank, pl.Discovery, town)) return false;
             float nx = -gxs * pl.AlignToSlope, nz = -gzs * pl.AlignToSlope, nl = (float)Math.Sqrt(nx * nx + 1 + nz * nz);
             nx /= nl; nz /= nl;
             float ny = 1f / nl;
@@ -500,7 +503,7 @@ namespace Stabby.World
             }
         }
 
-        bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank, int site = 0)
+        bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank, int site = 0, bool town = false)
         {
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
@@ -518,6 +521,7 @@ namespace Stabby.World
                 if (item < 0)
                 {
                     var f = edits[~item];
+                    if (town && (f.Shape == FeatureEdit.Boulder || f.Shape == FeatureEdit.Spring)) continue;
                     if (site > 0 && (f.Shape == FeatureEdit.Spring || ((site == WolfDen || Pooled(site)) && f.Shape == FeatureEdit.Boulder))) continue;
                     if (f.Shape == FeatureEdit.Vault && (site > 0 || y > f.MaxY)) continue;
                     if (x + r >= f.MinX && x - r <= f.MaxX && z + r >= f.MinZ && z - r <= f.MaxZ) return false;

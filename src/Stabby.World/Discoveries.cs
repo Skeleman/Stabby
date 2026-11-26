@@ -58,7 +58,7 @@ namespace Stabby.World
             var f = new ObjectField(w, detail, edits, lib);
             f.discoveries = Discoveries();
             f.bogPools = BogPools();
-            f.sketch = sketch; f.towns = towns; f.hotspots = hotspots; f.treeCover = treeCover; f.routes = routes;
+            f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover; f.routes = routes;
             return f;
         }
 
