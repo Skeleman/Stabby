@@ -118,7 +118,7 @@ Goals (Zach 11-24): caves from a single chamber to labyrinths; special caves wit
 | R1 roads (b/roads-1): network between towns, key landmarks and mines; slope-cost routing with switchbacks; road surface as a terrain coat | after towns |
 | R2 tunnels (b/roads-tunnel): where a route through a ridge costs less than over it, a tunnel from the cave graph with variety sockets every 100-200 m (river alongside, camp chamber, pool, grove under a skylight, roots, vines, mineral veins, columns, ruin entrance) | after R1 + U3 |
 | D1 dungeon kit (b/dungeon-kit): grid modules (corridor, room, stairs, door, pillar, collapse) with architecture styles as data (materials and trim per style); first style proven end to end | after U1 |
-| D2 dungeon layouts: overworld structures and small entrances that expand underground, room graph from their own stream; ruins reuse the kit | after D1 |
+| D2 dungeon layouts: overworld structures and small entrances that expand underground, room graph from their own stream; ruins reuse the kit | now (b/dungeon-layouts: crypt-dungeon discovery (entrance stairs into up to 8 rooms on the kit grid), floor collision, layout check) |
 | D3 interfaces: dungeon breaches into caves and cave links into dungeons through shared connector sockets; more architectures | after D2 + U1 |
 
 Zach 11-24: objects in caves and dungeons get the surface contact treatment (rule 11): vertices darken toward the contact colour where they meet rock, buried skirts and contact stamps apply on floors, walls and ceilings alike (hanging stalactites darken at their roots), and kit pieces darken seams, gaps and downward faces as structures do; the contact check covers underground placements. Applies to U2, U5 and D1.

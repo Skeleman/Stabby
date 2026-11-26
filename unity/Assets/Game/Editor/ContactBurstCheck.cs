@@ -346,11 +346,10 @@ namespace Stabby.Game.Editor
                         field.ContactsOf(o, columnList);
                         bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
                         float foot = built ? Structures.FootReach * o.Size : 0f;
-                        bool cave = ObjectField.IsCave(field.Library.Objects[o.Def]);
                         foreach (var c in columnList)
                         {
                             int sides = ObjectField.StampSides(field.Library, o, c);
-                            if ((sides & ObjectField.StampFloor) != 0) { Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot), built, cave ? 2 : 0); count++; }
+                            if ((sides & ObjectField.StampFloor) != 0) { Stamp(data, x0, z0, texelM, c.X, c.Z, Math.Max(c.R, foot), built, ObjectField.StampChannel(field.Library, o, c)); count++; }
                             if ((sides & ObjectField.StampCeiling) != 0) { Stamp(data, x0, z0, texelM, c.X, c.Z, c.R, false, 3); count++; }
                         }
                         lushList.Clear();
