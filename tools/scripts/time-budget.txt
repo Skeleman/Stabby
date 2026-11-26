@@ -31,6 +31,7 @@ test RoadTests.RoadsAreDeterministicAndMatchThePlacedWorld 40 routes roads twice
 test RoadTests.RoadTunnelsOnSeed2At1024AreWalkableAndMeetTheirRoads 40 builds a 1024 test world with road tunnels and checks them
 test TownTests.TownsPlaceTheirSitesAndPassTheCheck 40 plans and checks towns in three test worlds with a wide flat-ground search
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
+test DiscoveryTests.SunkenTemplesStepDownIntoLakes 10 checks temples on seed 3 at 256, the default world has no lake shore that fits
 test WorldTests.MountainsCastRainShadows 12 generates twenty 256 worlds in parallel and compares windward and lee rain
 test CarvedMeshTests.SkipPathMatchesFullPathInLabyrinthChunks 10 meshes two labyrinth chunks on a 512 world both ways
 test WorldTests.TerrainStageSkipsClimateAndBiomes 8 runs every check on a terrain-only world
