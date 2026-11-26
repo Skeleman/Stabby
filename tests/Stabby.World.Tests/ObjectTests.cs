@@ -572,4 +572,50 @@ public class ObjectTests
         foreach (var id in ids) Assert.True(perDef[Objects.Objects.FindIndex(o => o.Id == id)] > 0, report);
         Assert.Empty(WorldChecks.Run(w));
     }
+
+    [Fact]
+    public void DriftwoodWashesUpAtRiverAndLakeWaterlines()
+    {
+        var p = TestWorlds.Default;
+        var (w, field, detail) = (p.W, p.Field, p.Detail);
+        int n = w.Config.Size;
+        float cm = w.Config.CellMeters;
+        var ids = new[] { "driftwood", "drift-fork", "drift-pile" };
+        var defs = ids.Select(id => Objects.Objects.FindIndex(o => o.Id == id)).ToArray();
+        var perDef = new int[ids.Length];
+        int lake = 0, outer = 0, inner = 0;
+        foreach (var o in Enumerable.Range(0, field.ChunksAcross * field.ChunksAcross).SelectMany(c => field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross)))
+        {
+            int k = Array.IndexOf(defs, o.Def);
+            if (k < 0) continue;
+            perDef[k]++;
+            float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
+            bool river = BankSites.Nearest(detail.Cells, o.X, o.Z, out var q, out float d, out float t);
+            float hw = river ? q.Wa + (q.Wb - q.Wa) * t : 0, rise = river ? ground - (q.Sa + (q.Sb - q.Sa) * t) : 0;
+            bool onRiver = river && d <= hw + NearField.Bank(hw) + BankSites.ReachPadM && BankSites.InBand(BankSites.Drift, rise);
+            if (!onRiver)
+            {
+                int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f));
+                bool shore = false;
+                for (int dz = -1; dz <= 1; dz++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int ax = gx + dx, az = gz + dz;
+                        if (ax < 0 || az < 0 || ax >= n || az >= n) continue;
+                        int l = w.Water.LakeId[az * n + ax];
+                        if (l >= 0 && BankSites.InBand(BankSites.Drift, ground - w.Water.Lakes[l].Level)) shore = true;
+                    }
+                Assert.True(shore, $"{ids[k]} at {o.X:F0},{o.Z:F0} is off every waterline");
+                lake++;
+                continue;
+            }
+            float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, el = MathF.Sqrt(ex * ex + ez * ez);
+            float lat = el > 1e-3f ? ((o.Z - q.Az) * ex - (o.X - q.Ax) * ez) / el : 0, bend = (q.Ka + (q.Kb - q.Ka) * t) * lat;
+            if (bend < 0) outer++; else inner++;
+        }
+        string report = string.Join(", ", ids.Select((id, k) => id + " " + perDef[k])) + $"; lake {lake}, outer {outer}, inner {inner}";
+        Assert.All(perDef, c => Assert.True(c > 0, report));
+        Assert.True(lake > 0, report);
+        Assert.True(outer > 0 && inner > 0, report);
+    }
 }

@@ -239,6 +239,16 @@
       "placement": { "perHectare": 0, "bank": "drift", "perHundredM": 1.2, "slopeMax": 1.2, "sizeMinM": 3, "sizeMaxM": 6.5, "sink": 0.08, "alignToSlope": 1 }
     },
     {
+      "id": "drift-fork", "name": "Forked driftwood", "kind": "static", "material": "bleached-wood", "variants": 6,
+      "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.1, 0.1], "ends": "forked" } ],
+      "placement": { "perHectare": 0, "bank": "drift", "perHundredM": 2.5, "slopeMax": 1.2, "sizeMinM": 2, "sizeMaxM": 5, "sink": 0.06, "alignToSlope": 1 }
+    },
+    {
+      "id": "drift-pile", "name": "Driftwood tangle", "kind": "static", "material": "bleached-wood", "variants": 6,
+      "parts": [ { "id": "trunk", "shape": "log", "scale": [1, 0.07, 0.07], "ends": "worn" } ],
+      "placement": { "perHectare": 0, "bank": "drift", "perHundredM": 2, "slopeMax": 1, "sizeMinM": 0.8, "sizeMaxM": 2.2, "clusterCount": 7, "clusterRadiusM": 0.9, "sink": 0.04, "alignToSlope": 1 }
+    },
+    {
       "id": "river-gravel", "name": "River gravel", "kind": "static", "material": "wet-gravel", "variants": 6,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.6, 1], "solid": "off", "shadows": "off" } ],
       "placement": { "perHectare": 0, "bank": "bar", "perHundredM": 640, "slopeMax": 1.4, "sizeMinM": 0.08, "sizeMaxM": 0.26, "clusterCount": 20, "clusterRadiusM": 3, "sink": 0.08, "alignToSlope": 0.95 }

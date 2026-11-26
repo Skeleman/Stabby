@@ -44,8 +44,8 @@ namespace Stabby.World
         public static bool IsDungeon(int shape) => shape >= DungeonCorridor && shape <= Dungeon;
         public static bool IsMine(int shape) => shape >= MineTimber && shape <= MineCart;
         public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || shape == DripColumn || IsStructure(shape);
-        public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5;
-        public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn" };
+        public const int EndsAuto = 0, EndsTorn = 1, EndsSawn = 2, EndsRooted = 3, EndsSnapped = 4, EndsWorn = 5, EndsForked = 6;
+        public static readonly string[] EndNames = { "auto", "torn", "sawn", "rooted", "snapped", "worn", "forked" };
 
         public string Id;
         public int Shape;
@@ -304,7 +304,7 @@ namespace Stabby.World
                     if (p.Trim < 0 || p.Trim > MaterialLibrary.KitNames.Length) errors.Add(d.Id + ": part " + p.Id + " has an unknown trim");
                     if (p.Ends < 0 || p.Ends >= ObjectPart.EndNames.Length) errors.Add(d.Id + ": part " + p.Id + " has unknown ends");
                     else if (p.Ends != ObjectPart.EndsAuto && p.Shape != ObjectPart.Log && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " ends belong only to logs and stumps");
-                    else if ((p.Ends == ObjectPart.EndsRooted || p.Ends == ObjectPart.EndsWorn) && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " " + ObjectPart.EndNames[p.Ends] + " ends belong only to logs");
+                    else if ((p.Ends == ObjectPart.EndsRooted || p.Ends == ObjectPart.EndsWorn || p.Ends == ObjectPart.EndsForked) && p.Shape != ObjectPart.Log) errors.Add(d.Id + ": part " + p.Id + " " + ObjectPart.EndNames[p.Ends] + " ends belong only to logs");
                     else if (p.Ends == ObjectPart.EndsSnapped && p.Shape != ObjectPart.Stump) errors.Add(d.Id + ": part " + p.Id + " snapped ends belong only to stumps");
                 }
                 if (d.Light != null)

@@ -31,7 +31,7 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, lakeDriftStream, sinterStream, caveStream;
         readonly int[] caveCarves;
         readonly CaveLightSpot[] caveLights;
         readonly ObjectInstance[] caveLit;
@@ -71,6 +71,7 @@ namespace Stabby.World
             chainStream = Rng.Stream(w.Config.Seed, "structures-chain").NextU64();
             bankStream = Rng.Stream(w.Config.Seed, "objects-bank").NextU64();
             lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
+            lakeDriftStream = Rng.Stream(w.Config.Seed, "objects-lake-drift").NextU64();
             sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
             caveStream = Rng.Stream(w.Config.Seed, "objects-cave").NextU64();
             caveCarves = CaveCarves(solid);
@@ -156,6 +157,7 @@ namespace Stabby.World
 
         public static float GroundAt(TerrainDetail d, float cellMeters, float x, float z) => d.HeightAt(x / cellMeters, z / cellMeters);
         public float GroundAt(float x, float z) => GroundAt(detail, cm, x, z);
+        public bool OnLakeShore(float x, float z) => MarginLake(Cell(x), Cell(z)) >= 0;
 
         public int ChunksAcross => across;
         public ObjectLibrary Library => lib;

@@ -65,6 +65,7 @@ namespace Stabby.World
                     if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
                     if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
                     if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
+                    if (!seen[9] && site == BankSites.Drift && field.InTownGround(o.X, o.Z, r, false)) Fail(9, " washed up inside a town");
                     if (!seen[4])
                     {
                         grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
@@ -465,7 +466,7 @@ namespace Stabby.World
                 float hw = q.Wa + (q.Wb - q.Wa) * t;
                 if (d <= hw + NearField.Bank(hw) + BankSites.ReachPadM && BankSites.InBand(site, ground - (q.Sa + (q.Sb - q.Sa) * t))) return true;
             }
-            if (site != BankSites.Reed) return false;
+            if (site != BankSites.Reed && site != BankSites.Drift) return false;
             int n = w.Config.Size;
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)

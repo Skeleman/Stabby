@@ -241,7 +241,7 @@
                 "shadows": { "enum": ["", "on", "off"] },
                 "material": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
                 "leafMaterial": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
-                "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped", "worn"] }
+                "ends": { "enum": ["auto", "torn", "sawn", "rooted", "snapped", "worn", "forked"] }
               }
             }
           },

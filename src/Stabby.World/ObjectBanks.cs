@@ -12,6 +12,7 @@ namespace Stabby.World
 
         public static int Of(string name) => Array.IndexOf(Names, name);
         public static bool InBand(int site, float rise) => rise >= -Below[site] && rise <= Above[site];
+        public static float DriftWeight(RiverPiece q) => (0.35f + 1.3f * Math.Max(Math.Abs(q.Ka), Math.Abs(q.Kb))) * Math.Max(0.5f, Math.Min(1.75f, 0.125f * (q.Wa + q.Wb)));
 
         public static bool Nearest<T>(T c, float x, float z, out RiverPiece q, out float d, out float t) where T : struct, INearCells
         {
@@ -81,7 +82,7 @@ namespace Stabby.World
                 if (el < 1e-3f) continue;
                 float fx = ex / el, fz = ez / el;
                 var rng = new Rng(Rng.Mix(bankStream ^ chunkKey ^ key[d] ^ Rng.Mix((ulong)p + 1)));
-                float expected = pl.PerHundredM * el / 100f / pl.ClusterCount;
+                float expected = pl.PerHundredM * el / 100f / pl.ClusterCount * (site == BankSites.Drift ? BankSites.DriftWeight(q) : 1f);
                 int clusters = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
                 for (int m0 = 0; m0 < clusters; m0++)
                 {
@@ -91,7 +92,7 @@ namespace Stabby.World
                     Members(d, site, pl, ref rng, ax, az, fx, fz, chunk, x0, z0, sx, sz, ref ordinal, near, list);
                 }
             }
-            if (site == BankSites.Reed) LakeReeds(d, pl, chunk, x0, z0, sx, sz, ref ordinal, near, list);
+            if (site == BankSites.Reed || site == BankSites.Drift) LakeReeds(d, pl, chunk, x0, z0, sx, sz, ref ordinal, near, list);
         }
 
         void Members(int d, int site, ObjectPlacement pl, ref Rng rng, float ax, float az, float fx, float fz, int chunk, float x0, float z0, float sx, float sz, ref int ordinal, SiteIndex near, List<ObjectInstance> list)
@@ -104,8 +105,9 @@ namespace Stabby.World
                 if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz || keep >= Density(d, px, pz)) continue;
                 float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t;
                 float ground = GroundAt(detail, cm, px, pz);
-                if (fx == 0 && fz == 0 ? !LakeSite(px, pz, ground) : !RiverSite(site, px, pz, ground, size)) continue;
-                if (site == BankSites.Drift)
+                if (fx == 0 && fz == 0 ? !LakeSite(site, px, pz, ground) : !RiverSite(site, px, pz, ground, size)) continue;
+                if (site == BankSites.Drift && InTownGround(px, pz, footprint[d] * size, false)) continue;
+                if (site == BankSites.Drift && (fx != 0 || fz != 0))
                 {
                     float ux = fx + qa * 0.6f * -fz, uz = fz + qa * 0.6f * fx;
                     if (turn < 0.2f) { float s = ux; ux = -uz; uz = s; }
@@ -142,10 +144,10 @@ namespace Stabby.World
             }
         }
 
-        bool LakeSite(float x, float z, float ground)
+        bool LakeSite(int site, float x, float z, float ground)
         {
             int lake = MarginLake(Cell(x), Cell(z));
-            return lake >= 0 && BankSites.InBand(BankSites.Reed, ground - w.Water.Lakes[lake].Level);
+            return lake >= 0 && BankSites.InBand(site, ground - w.Water.Lakes[lake].Level);
         }
 
         int MarginLake(int gx, int gz)
@@ -172,12 +174,12 @@ namespace Stabby.World
                 {
                     int i = gz * n + gx;
                     if (w.Sea[i] || MarginLake(gx, gz) < 0) continue;
-                    var rng = new Rng(Rng.Mix(lakeReedStream ^ key[d] ^ Rng.Mix((ulong)i + 1)));
+                    var rng = new Rng(Rng.Mix((bankSite[d] == BankSites.Drift ? lakeDriftStream : lakeReedStream) ^ key[d] ^ Rng.Mix((ulong)i + 1)));
                     int clusters = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
                     for (int k = 0; k < clusters; k++)
                     {
                         float ax = (gx + rng.Range(-0.5f, 0.5f)) * cm, az = (gz + rng.Range(-0.5f, 0.5f)) * cm;
-                        Members(d, BankSites.Reed, pl, ref rng, ax, az, 0, 0, chunk, x0, z0, sx, sz, ref ordinal, near, list);
+                        Members(d, bankSite[d], pl, ref rng, ax, az, 0, 0, chunk, x0, z0, sx, sz, ref ordinal, near, list);
                     }
                 }
         }

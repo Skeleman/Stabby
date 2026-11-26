@@ -658,7 +658,7 @@ namespace Stabby.World
             var jr = new Rng(Rng.Mix(key ^ 0x7A3D5E1F0C2B4968UL ^ (ulong)seg));
             float h = 0.5f * Math.Max(aspect, 0.01f), half = 0.5f / h;
             var w = WoodBuilder.New(h, 0.5f, 0.5f, 0.5f);
-            bool rooted = ends == ObjectPart.EndsRooted, sawn = ends == ObjectPart.EndsSawn, worn = ends == ObjectPart.EndsWorn;
+            bool rooted = ends == ObjectPart.EndsRooted, sawn = ends == ObjectPart.EndsSawn, forked = ends == ObjectPart.EndsForked, worn = forked || ends == ObjectPart.EndsWorn;
             float code = rng.NextFloat() < 0.5f ? CodeOak : CodeSpruce;
             float moss = rng.NextFloat() < 0.65f ? rng.Range(0.4f, 1f) : 0f, age = rng.NextFloat();
             if (worn) { code = CodeGrain; moss = 0; age = 0.15f + 0.35f * age; }
@@ -757,6 +757,16 @@ namespace Stabby.World
                     if (tip.Y < -0.9f + stubRad[i]) tip = new ObjectFoliage.V(tip.X, -0.9f + stubRad[i], tip.Z);
                     Branch(ref w, ref jr, start, tip, stubRad[i], limb ? 0.35f : 0.75f, code, moss, age, limb);
                 }
+            }
+            if (forked)
+            {
+                float u = rng.Range(0.55f, 0.75f), b = 4 * u * (1 - u), side = rng.NextFloat() < 0.5f ? -1f : 1f;
+                float rad = 1 + (taper - 1) * u, fr = rng.Range(0.55f, 0.75f) * rad, len = rng.Range(0.35f, 0.5f) * 2 * half;
+                var c0 = new ObjectFoliage.V(-half + 2 * half * u, sag * b, bow * b + wave * b * (2 * u - 1));
+                var start = c0 + new ObjectFoliage.V(0, 0, side * 0.5f * rad);
+                var tip = start + new ObjectFoliage.V(1, 0, side * rng.Range(0.35f, 0.6f)).Norm() * len;
+                tip = new ObjectFoliage.V(tip.X, -1 + 0.4f * fr, tip.Z);
+                Branch(ref w, ref jr, start, tip, fr, 0.4f, code, moss, age, false);
             }
             if (rooted) Plate(ref w, ref rng, ref jr, seg, lod, -half, rp, yc, thick, moss, age);
             return w.Finish();
