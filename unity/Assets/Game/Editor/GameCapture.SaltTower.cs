@@ -31,7 +31,7 @@ namespace Stabby.Game.Editor
             var all = job.Result.Where(o => o.Def == def).ToArray();
             if (all.Length == 0) { GameStatus.Lines["~salt"] = GameStatus.Failure = "salt: none placed in this world"; yield break; }
             var s = all.OrderBy(o => new Vector2(o.X - home.x, o.Z - home.z).sqrMagnitude).First();
-            float baseY = ground.HeightAt(s.X, s.Z);
+            float baseY = ground.HeightAt(s.X, s.Z), fit = field.SaltFit(s.X, s.Z);
             var rot = new Quaternion(s.Qx, s.Qy, s.Qz, s.Qw);
             var fwd = rot * Vector3.forward;
             fwd.y = 0;
@@ -51,7 +51,7 @@ namespace Stabby.Game.Editor
             cam.transform.SetPositionAndRotation(far, Quaternion.LookRotation(centre + Vector3.up * 2f - far));
             for (var w = Settle(120); w.MoveNext();) yield return null;
             var sky = DayNightSystem.Shown;
-            GameStatus.Lines["~salt"] = $"salt: {all.Length} placed, shown {s.X:F0},{s.Z:F0} size {s.Size:F1} variant {s.Variant}, ground {baseY:F2} fit {field.SaltFit(s.X, s.Z):F2}, GV {WorldConfig.GeneratorVersion}, pinned hour {sky.Hour:F2}";
+            GameStatus.Lines["~salt"] = $"salt: {all.Length} placed, shown {s.X:F0},{s.Z:F0} size {s.Size:F1} variant {s.Variant}, ground {baseY:F2} fit {fit:F2} at placement, {field.SaltFit(s.X, s.Z):F2} after shots, GV {WorldConfig.GeneratorVersion}, pinned hour {sky.Hour:F2}";
             Shot(cam, dir, "salt-basin");
         }
     }
