@@ -522,6 +522,7 @@ namespace Stabby.Content
                     def.ThinkPixels = detail.Float("thinkPixels", def.ThinkPixels);
                     def.IkPixels = detail.Float("ikPixels", def.IkPixels);
                     def.LowPixels = detail.Float("lowPixels", def.LowPixels);
+                    def.SkinPixels = detail.Float("skinPixels", def.SkinPixels);
                     detail.End();
                 }
                 var wary = b.Object("wary");

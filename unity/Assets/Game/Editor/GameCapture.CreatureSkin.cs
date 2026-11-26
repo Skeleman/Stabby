@@ -135,6 +135,13 @@ namespace Stabby.Game.Editor
             var s1 = SampleMemory(vem, draw);
             Shot(cam, null, "warmup");
             Shot(cam, dir, $"skin-crowd-{path}");
+            CreatureView.Current = new CreatureView { Override = 1, Move = 1, Phase = 0.3f, Rigid = 1 };
+            for (int k = 0; k < 10; k++) yield return null;
+            measure = SkinMeasure(cam, mainRec, times);
+            while (measure.MoveNext()) yield return null;
+            var t2 = times[0];
+            var rigidAnim = TimeSystems(view, anim, BenchSamples);
+            CreatureView.Current = new CreatureView { Override = 1, Move = 1, Phase = 0.3f };
 
             int built = frames;
             vem.DestroyEntity(bench);
@@ -154,6 +161,16 @@ namespace Stabby.Game.Editor
             var closerCounts = TierCounts(view, ground);
             Shot(cam, null, "warmup");
             Shot(cam, dir, $"skin-closer-{path}");
+            PlaceBench(view, close, cam, length, stand, nearPx * 6f, ground);
+            for (int k = 0; k < 30; k++) yield return null;
+            var closestCounts = TierCounts(view, ground);
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, $"skin-closest-{path}");
+            CreatureView.Current = new CreatureView { Override = 1, Move = 1, Phase = 0.3f, Rigid = 1 };
+            for (int k = 0; k < 10; k++) yield return null;
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, $"skin-closest-rigid-{path}");
+            CreatureView.Current = new CreatureView { Override = 1, Move = 1, Phase = 0.3f };
             vem.DestroyEntity(close);
             close.Dispose();
 
@@ -164,9 +181,10 @@ namespace Stabby.Game.Editor
                 $"frame ms (median of {SkinFrames}): {t1.Frame:F2} (baseline {t0.Frame:F2}, +{t1.Frame - t0.Frame:F2}); main thread {t1.Main:F2} (baseline {t0.Main:F2}, +{t1.Main - t0.Main:F2})",
                 $"render ms, camera render plus GPU sync: {t1.Render:F2} (baseline {t0.Render:F2}, +{t1.Render - t0.Render:F2})",
                 $"anim systems: {animTime:F3} ms (baseline {animBase:F3}, +{animTime - animBase:F3})",
+                $"same crowd forced rigid: frame {t2.Frame:F2}, main thread {t2.Main:F2}, render {t2.Render:F2}, anim systems {rigidAnim:F3} ms",
                 $"entities: {(s1.Entities - s0.Entities) / (float)SkinCount:F2} client entities per creature, {s1.Entities - s0.Entities} total, chunks {(s1.Chunks - s0.Chunks) * 16f / SkinCount:F2} KiB per creature",
                 $"memory per creature: native {Per(s1.Native - s0.Native, SkinCount)}, managed {Per(s1.Managed - s0.Managed, SkinCount)}, instance GPU buffers {Per(s1.Gpu - s0.Gpu, SkinCount)}, graphics driver {Per(s1.Driver - s0.Driver, SkinCount)}",
-                $"close shots, 3 creatures at {nearPx:F0} px: {closeCounts}; at {nearPx * 2f:F0} px: {closerCounts}",
+                $"close shots, 3 creatures at {nearPx:F0} px: {closeCounts}; at {nearPx * 2f:F0} px: {closerCounts}; at {nearPx * 6f:F0} px (skinned, then forced rigid): {closestCounts}",
             };
             CreatureView.Current = default;
             FreezeCreatures(false);
