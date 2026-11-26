@@ -32,7 +32,7 @@ namespace Stabby.Game.Editor
             if (++frame < Frames) return false;
             var parts = new List<string> { $"view system {Avg(view):F3} avg / {view.Max():F2} max" };
             foreach (var (name, _, ms) in recs) if (ms.Max() > 0) parts.Add($"{name} {Avg(ms):F3} avg / {ms.Max():F2} max");
-            sets.Add($"scale {label} over {Frames} frames (ms): {string.Join(", ", parts)}; {ObjectViewSystem.LiveEntities} object entities, {ObjectViewSystem.PartsHeld} parts held in {ObjectViewSystem.ChunksHeld} chunks");
+            sets.Add($"scale {label} over {Frames} frames (ms): {string.Join(", ", parts)}; {ObjectViewSystem.LiveEntities} object entities, {ObjectViewSystem.PartsHeld} parts held in {ObjectViewSystem.ChunksHeld} chunks, {ObjectViewSystem.Recollects} re-collects, slowest first collect {ObjectViewSystem.FirstCollectMaxMs:F0} ms, slowest re-collect {ObjectViewSystem.RecollectMaxMs:F0} ms, worst wait for parts in view {ObjectViewSystem.PartsWaitMaxMs:F0} ms");
             frame = -1;
             return true;
         }
