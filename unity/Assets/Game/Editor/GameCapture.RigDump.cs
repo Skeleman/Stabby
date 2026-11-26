@@ -66,7 +66,7 @@ namespace Stabby.Game.Editor
 
         static System.Collections.IEnumerator RigDump(Camera cam, string dir)
         {
-            string path = System.Environment.GetEnvironmentVariable(BenchFlag) ?? "entity";
+            string path = CreaturePath.Instanced ? "instanced" : "entity";
             var view = ViewWorld();
             if (view == null) { GameStatus.Lines["~rig dump"] = "rig dump: no view world"; yield break; }
             var vem = view.EntityManager;

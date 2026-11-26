@@ -334,7 +334,7 @@ namespace Stabby.Viewer
 
         static int LakeOf(Hydrology hy, int i) => hy.LakeId[i] >= 0 || hy.LakeCover == null ? hy.LakeId[i] : hy.LakeCover[i];
 
-        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].SprayAmount > 0);
+        static bool Sprays(GeneratedWorld world, int liquid) => world.Materials == null || (world.Materials.Liquids[liquid].Spray != LiquidDef.SprayNone && world.Materials.Liquids[liquid].Spray != LiquidDef.SprayShimmer && world.Materials.Liquids[liquid].SprayAmount > 0);
 
         static float SprayAmount(GeneratedWorld world, int liquid) => world.Materials == null ? 1 : world.Materials.Liquids[liquid].SprayAmount;
 
@@ -767,21 +767,51 @@ namespace Stabby.Viewer
                     buf.Clear();
                 }
                 var q = b.Points;
-                int rows = b.Rows, st = CaveBrook.Stride;
+                int rows = b.Rows, st = CaveBrook.Stride, cut = b.Fall > 0 ? b.Fall : rows;
                 float s = 0;
                 for (int k = 0; k < rows; k++)
                 {
-                    int a = Mathf.Max(k - 1, 0) * st, z = Mathf.Min(k + 1, rows - 1) * st, o = k * st;
+                    int a = Mathf.Max(k - 1, k < cut ? 0 : cut) * st, z = Mathf.Min(k + 1, (k < cut ? cut : rows) - 1) * st, o = k * st;
                     float run = new Vector2(q[z] - q[a], q[z + 2] - q[a + 2]).magnitude, drop = q[a + 1] - q[z + 1];
                     var dir = new Vector3(q[z] - q[a], 0, q[z + 2] - q[a + 2]).normalized;
+                    float sl = s;
                     if (k > 0) s += new Vector2(q[o] - q[o - st], q[o + 2] - q[o - st + 2]).magnitude;
                     float slope = run > 0 ? drop / run : 0, half = q[o + 3];
                     buf.Tint = Flowing(Tint(default), Current(Stabby.World.CaveBrooks.DepthM, slope));
+                    if (k == b.Fall) { CaveFall(buf, b, k, sl, liquid); break; }
                     buf.Row(new Vector3(q[o], q[o + 1], q[o + 2]), dir, half, q[o + 4], q[o + 5], Mathf.Clamp01(slope / SlopeRange), new Vector4(0, 0, s, liquid), NoPool, k > 0);
                 }
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Cave brooks {pieces.Count}"));
             return pieces;
+        }
+
+        static void CaveFall(RiverBuffers buf, CaveBrook b, int k, float sl, int liquid)
+        {
+            var q = b.Points;
+            int st = CaveBrook.Stride, l = (k - 1) * st, o = k * st, up = buf.Verts.Count - 3;
+            var fd = new Vector3(q[o] - q[l], 0, q[o + 2] - q[l + 2]).normalized;
+            float drop = q[l + 1] - q[o + 1], th = FallThrowAt(drop), width = 2f * q[l + 3];
+            var f = new FallCurtain
+            {
+                K = k - 1, LipX = q[l], LipZ = q[l + 2], LipY = q[l + 1],
+                BaseX = q[l] + fd.x * th, BaseZ = q[l + 2] + fd.z * th, BaseY = q[o + 1],
+                Width = width, DirX = fd.x, DirZ = fd.z, PoolRadius = b.PoolR,
+                Discharge = width * Stabby.World.CaveBrooks.DepthM, Liquid = liquid, U0 = -1, U1 = 1,
+            };
+            var reach = new Vector4(0, 0, sl, liquid);
+            var lip = new List<int>();
+            var foot = new List<int>();
+            th += buf.Curtain(f, 1, reach, NoPool, sl, null, null, lip, foot);
+            buf.Fan(up, up + 2, lip, true);
+            foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
+            var pool = new Vector4(sl + th, drop, b.PoolR, 0);
+            foreach (int v in foot)
+            {
+                buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
+                buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, 0, 0);
+                buf.Curt[v] = Vector4.zero;
+            }
         }
 
         public static MeshParts Sea(int size, float cm)

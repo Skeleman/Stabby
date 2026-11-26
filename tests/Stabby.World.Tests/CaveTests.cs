@@ -263,7 +263,7 @@ public class CaveTests
     [Fact]
     public void StreamsRunDownhillToSpringsPoolsOrSinks()
     {
-        var ends = new int[3];
+        var ends = new int[4];
         int graphs = 0;
         for (ulong seed = 1; seed <= 8; seed++)
         {
@@ -281,8 +281,8 @@ public class CaveTests
                 for (int k = 1; k < x.Nodes.Length; k++) Assert.True(g.Nodes[x.Nodes[k]].Y < g.Nodes[x.Nodes[k - 1]].Y);
             }
         }
-        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}");
-        Assert.True(ends[0] + ends[1] + ends[2] >= graphs / 3, $"only {ends[0] + ends[1] + ends[2]} streams in {graphs} cave graphs");
+        Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}, falls {ends[3]}");
+        Assert.True(ends.Sum() >= graphs / 3, $"only {ends.Sum()} streams in {graphs} cave graphs");
         Assert.True(ends[0] > 0 && ends[2] > 0);
     }
 
@@ -321,6 +321,36 @@ public class CaveTests
             }
         }
         throw new Xunit.Sdk.XunitException("no sink brook in seeds 1-8");
+    }
+
+    [Fact]
+    public void CaveFallsDropIntoTheirShaftPools()
+    {
+        int falls = 0, brooks = 0;
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var s = At(seed);
+            var all = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
+            brooks += all.Length;
+            var pools = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
+            var e = new List<string>();
+            WorldChecks.CheckCaveFalls(s.Edits, all, pools, e);
+            Assert.True(e.Count == 0, string.Join("; ", e));
+            foreach (var x in all)
+            {
+                if (x.End != CaveBrook.Plunge) continue;
+                falls++;
+                var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
+                e.Clear();
+                WorldChecks.CheckCaveFalls(bare, new[] { x }, null, e);
+                Assert.Contains(e, m => m.Contains("leaves its carve") || m.Contains("no pool or basin"));
+                e.Clear();
+                WorldChecks.CheckCaveFalls(s.Edits, new[] { x }, Array.Empty<LiquidPool>(), e);
+                Assert.Contains(e, m => m.Contains("drops into no water"));
+            }
+        }
+        Console.WriteLine($"cave falls {falls} of {brooks} brooks");
+        Assert.True(falls > 0 && falls * 3 <= brooks, $"{falls} falls in {brooks} brooks");
     }
 
     [Fact]
@@ -562,6 +592,84 @@ public class CaveTests
         var s = Make(1, lib);
         Assert.DoesNotContain(s.Graphs, g => g.Ice);
         Assert.DoesNotContain(s.Edits, x => x.Ice);
+    }
+
+    const ulong LavaSeed = 13;
+    static readonly Lazy<Sample> Lava = new(() => At(LavaSeed));
+
+    [Fact]
+    public void ObsidianCavesFormInHotDryGroundWithLavaPools()
+    {
+        var s = Lava.Value;
+        Assert.True(s.Graphs.Any(g => g.Obsidian), $"seed {LavaSeed} no longer grows an obsidian cave; pin a new LavaSeed");
+        var e = new List<string>();
+        WorldChecks.CheckCaveObsidian(s.W, s.Edits, s.Graphs, e);
+        Assert.Empty(e);
+        var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        float span = Features.TileCells * s.W.Config.CellMeters;
+        int lava = 0, glow = 0, drips = 0;
+        foreach (var p in field.CavePools())
+        {
+            int tile = (int)Math.Floor(p.Z / span) * 65536 + (int)Math.Floor(p.X / span);
+            Assert.Equal(s.Graphs.Any(x => x.Tile == tile && x.Obsidian), field.LavaPool(p));
+            if (field.LavaPool(p)) lava++;
+        }
+        Assert.True(lava > 0, $"seed {LavaSeed} no longer holds a lava pool; pin a new LavaSeed");
+        for (int i = 0; i < field.CaveLightCount; i++)
+            if (field.CaveLight(i).Kind == ObjectField.CaveLava && field.CaveLightAt(i, out _)) glow++;
+        Assert.True(glow > 0, $"seed {LavaSeed}: {lava} lava pools but no lava glow");
+        WorldChecks.CheckCaveLights(s.W, s.Edits, field, e);
+        Assert.Empty(e);
+        float cs = field.ChunkMeters;
+        var seen = new HashSet<int>();
+        foreach (var x in s.Edits)
+        {
+            if (!x.Obsidian || !x.CaveCarve) continue;
+            int c = (int)(0.5f * (x.Az + x.Bz) / cs) * field.ChunksAcross + (int)(0.5f * (x.Ax + x.Bx) / cs);
+            if (!seen.Add(c)) continue;
+            foreach (var o in field.Chunk(c % field.ChunksAcross, c / field.ChunksAcross))
+            {
+                int kind = s.W.Objects.Objects[o.Def].Placement.Cave;
+                if (kind != ObjectField.CaveStalactite && kind != ObjectField.CaveStalagmite && kind != ObjectField.CaveColumn) continue;
+                string fault = field.CaveFault(o);
+                Assert.True(fault == null || !fault.Contains("obsidian"), fault);
+                if (fault == null) drips++;
+            }
+        }
+        output.WriteLine($"{lava} lava pools, {glow} lava glows, {drips} dripstones beside obsidian");
+    }
+
+    [Fact]
+    public void LavaPoolOnAPassageFails()
+    {
+        var s = Lava.Value;
+        var rooms = s.Edits.Where(x => x.Kind == FeatureEdit.Carve && FeatureEdit.IsRoom(x.Shape)).ToList();
+        int i = Array.FindIndex(s.Edits, x => x.Obsidian && Underground.PoolBasin(rooms, x));
+        Assert.True(i >= 0, $"seed {LavaSeed} no longer holds a lava pool; pin a new LavaSeed");
+        var room = rooms.First(r => Underground.InChamber(new[] { r }, s.Edits[i].Ax, Underground.BasinTop(s.Edits[i]), s.Edits[i].Az));
+        var tunnel = s.Edits.First(x => x.Shape == FeatureEdit.Cave && (Near(x.Ax, x.Az, room.Ax, room.Az) || Near(x.Bx, x.Bz, room.Ax, room.Az)));
+        float tx = Near(tunnel.Ax, tunnel.Az, room.Ax, room.Az) ? tunnel.Ax : tunnel.Bx, tz = tx == tunnel.Ax ? tunnel.Az : tunnel.Bz;
+        var moved = (FeatureEdit[])s.Edits.Clone();
+        moved[i].Ax = tx;
+        moved[i].Az = tz;
+        moved[i].Bx = moved[i].Ax;
+        moved[i].Bz = moved[i].Az;
+        var e = new List<string>();
+        WorldChecks.CheckCaveObsidian(s.W, moved, s.Graphs, e);
+        Assert.Contains(e, m => m.Contains("blocks a cave passage"));
+    }
+
+    static bool Near(float ax, float az, float bx, float bz) => Math.Abs(ax - bx) < 1e-2f && Math.Abs(az - bz) < 1e-2f;
+
+    [Fact]
+    public void WetWorldsGrowNoObsidianCaves()
+    {
+        var lib = ContentLoader.LoadCaves(Root);
+        lib.ObsidianChance = 1f;
+        lib.ObsidianMaxRainMm = 0f;
+        var s = Make(1, lib);
+        Assert.DoesNotContain(s.Graphs, g => g.Obsidian);
+        Assert.DoesNotContain(s.Edits, x => x.Obsidian);
     }
 
     [Fact]

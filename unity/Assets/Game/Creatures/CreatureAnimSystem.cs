@@ -200,15 +200,14 @@ namespace Stabby.Game
             {
                 if (Pending) { Reused++; carry += SystemAPI.Time.DeltaTime; skipped++; return; }
                 int count = roots.CalculateEntityCount();
-                int want = tally.Links + tally.Links / 2;
-                slack = capacity > 2 * want + 1024 ? slack + SystemAPI.Time.DeltaTime : 0;
-                bool trim = slack > 2f;
+                slack = PoolSize.Oversized(capacity, tally.Links) ? slack + SystemAPI.Time.DeltaTime : 0;
+                bool trim = PoolSize.TrimDue(capacity, tally.Links, slack, PoolSize.TrimSeconds);
                 if (trim)
                 {
-                    capacity = math.max(want, 64);
+                    capacity = PoolSize.Trimmed(tally.Links);
                     Shrink(ref Bones, capacity, Gpu);
                     Shrink(ref Parts, capacity, Gpu);
-                    Shrink(ref Fur, 3 * count + 3 * count / 2, Gpu);
+                    Shrink(ref Fur, PoolSize.Trimmed(3 * count), Gpu);
                     slack = 0;
                     Trims++;
                 }
