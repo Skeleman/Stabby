@@ -990,7 +990,7 @@ namespace Stabby.World
                     string fault = Underground.DripFault(ground, field, LatticeStepM, q, bare, 0, bare.Length, Underground.PassM);
                     if (fault != null) { e.Add(fault); return; }
                 }
-                Underground.SettledFloor(detail, bare, ref probes, ref settled);
+                Underground.SettledFloor(detail, Array.FindAll(bare, q => !CaveBrooks.Channel(q)), ref probes, ref settled);
             }
             if (probes > 0 && settled < Underground.SettledShare * probes) e.Add($"cave floors are not settled: {settled} of {probes} side probes sit within {Underground.SettledM:F1} m of the passage centre");
             var pools = CheckCaveObjects(w, detail, edits, e);
@@ -1263,7 +1263,7 @@ namespace Stabby.World
         }
 
         public const float CaveNormalDeg = 1.5f;
-        public const int CaveNormalLevels = 3, CaveCoverSteps = 4;
+        public const int CaveNormalLevels = 3, CaveCoverSteps = 4, CaveNormalMin = 8;
 
         public static void CheckCaveNormals(GeneratedWorld w, TerrainDetail detail, EditGrid grid, CaveGraph[] caves, List<string> e)
         {
@@ -1307,7 +1307,7 @@ namespace Stabby.World
                     float dot = -(gx * f.Verts[6 * t + 3] + gy * f.Verts[6 * t + 4] + gz * f.Verts[6 * t + 5]) / gl;
                     miss.Add(Math.Acos(Math.Max(-1f, Math.Min(1f, dot))) * 180 / Math.PI);
                 }
-                if (miss.Count == 0) continue;
+                if (miss.Count < CaveNormalMin) continue;
                 miss.Sort();
                 double mid = miss[miss.Count / 2];
                 if (mid > CaveNormalDeg)
