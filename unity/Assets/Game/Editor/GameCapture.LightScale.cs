@@ -13,7 +13,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        static readonly int[] ScaleLights = { 100, 1000, 10000 };
+        static readonly int[] ScaleLights = { 0, 100, 1000, 10000 };
         const int ScaleFrames = 300, ScaleDirect = 30;
         const float ScaleRadius = 250f;
 
@@ -51,17 +51,21 @@ namespace Stabby.Game.Editor
             var caps = stateQuery.GetSingleton<LightBudgetState>().Caps;
             int size = UnsafeUtility.SizeOf<LightEmitter>();
             int preexisting = emitterQuery.CalculateEntityCount();
-            var target = new RenderTexture(1920, 1080, 24);
+            var args = System.Environment.GetCommandLineArgs();
+            int resAt = System.Array.IndexOf(args, "-stabbyWalkRes");
+            int rows = resAt >= 0 && resAt + 1 < args.Length && int.TryParse(args[resAt + 1], out int rr) ? rr : 1080;
+            var target = new RenderTexture(rows * 16 / 9, rows, 24);
             cam.targetTexture = target;
             var lines = new List<string>
             {
-                $"light scale bench at {target.width}x{target.height} (camera target), night hour {DayNightSystem.Shown.Hour:F2}, caps shadowed {caps.Shadowed}, unshadowed {caps.Unshadowed}, glow {caps.Glow}; {preexisting} world emitters already present; emitters scattered over a {ScaleRadius:F0} m disc around the eye; LightEmitter {size} B; the budget gathers changed chunks and ranks in Burst jobs, the presenter writes only the ranked set",
+                $"light scale bench at {target.width}x{target.height} (camera target), night hour {DayNightSystem.Shown.Hour:F2}, moon phase {DayNightSystem.Shown.Phase:F2}, caps shadowed {caps.Shadowed}, unshadowed {caps.Unshadowed}, glow {caps.Glow}; {preexisting} world emitters already present; emitters scattered over a {ScaleRadius:F0} m disc around the eye; LightEmitter {size} B; the budget gathers changed chunks and ranks in Burst jobs, the presenter writes only the ranked set",
             };
             for (var w = SetLights(stateQuery, presenter, false, true); w.MoveNext();) yield return null;
 
             using var budgetRec = new SystemMarker(MarkerName(world, typeof(LightBudgetSystem)), 4);
             using var presenterRec = new SystemMarker(MarkerName(world, typeof(LightPresenterSystem)), 4);
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
+            using var glowRec = new SystemMarker("LightPresenter.GlowUpload", 4);
 
             foreach (int n in ScaleLights)
             {
@@ -86,14 +90,27 @@ namespace Stabby.Game.Editor
                 var pMs = new List<double>(ScaleFrames);
                 var main = new List<double>(ScaleFrames);
                 var dt = new List<double>(ScaleFrames);
+                var up = new List<double>(ScaleFrames);
                 for (int k = 0; k < ScaleFrames; k++)
                 {
                     yield return null;
+                    if (glowRec.LastValue > 0) up.Add(glowRec.LastValue / 1e6);
                     bMs.Add(budgetRec.LastValue / 1e6);
                     pMs.Add(presenterRec.LastValue / 1e6);
                     main.Add(mainRec.LastValue / 1e6);
                     dt.Add(Time.unscaledDeltaTime * 1000.0);
                 }
+
+                for (var w = SetLights(stateQuery, presenter, true, true); w.MoveNext();) yield return null;
+                var offDt = new List<double>(ScaleFrames);
+                var offMain = new List<double>(ScaleFrames);
+                for (int k = 0; k < ScaleFrames; k++)
+                {
+                    yield return null;
+                    offMain.Add(mainRec.LastValue / 1e6);
+                    offDt.Add(Time.unscaledDeltaTime * 1000.0);
+                }
+                for (var w = SetLights(stateQuery, presenter, false, true); w.MoveNext();) yield return null;
 
                 var bDirect = new List<double>(ScaleDirect);
                 var pDirect = new List<double>(ScaleDirect);
@@ -119,6 +136,8 @@ namespace Stabby.Game.Editor
                 lines.Add($"N {n} ({total} emitters live): " + TierLine(stateQuery, presenter));
                 lines.Add($"  LightBudgetSystem main thread: frame marker median {Pct(bMs, 0.5):F3} ms, p99 {Pct(bMs, 0.99):F3} ms; direct update median {Pct(bDirect, 0.5):F3} ms, p99 {Pct(bDirect, 0.99):F3} ms; main thread excludes the scheduled gather and rank jobs; GC {bGc / (double)ScaleDirect:F0} B per update; no per-update copy of the {total * size} B emitter set");
                 lines.Add($"  LightPresenterSystem main thread: frame marker median {Pct(pMs, 0.5):F3} ms, p99 {Pct(pMs, 0.99):F3} ms; direct update median {Pct(pDirect, 0.5):F3} ms, p99 {Pct(pDirect, 0.99):F3} ms; GC {pGc / (double)ScaleDirect:F0} B per update; no emitter copy; glow upload {(presenter.Cores + presenter.Glows) * 32} B per finished rank");
+                lines.Add($"  glow upload (GraphicsBuffer.SetData): {up.Count} of {ScaleFrames} frames uploaded, median {Pct(up, 0.5):F3} ms, max {Pct(up, 1):F3} ms when uploading; {up.Count * Pct(up, 0.5) / ScaleFrames:F4} ms per frame averaged");
+                lines.Add($"  lights hidden (no real lights, no glows): dt median {Pct(offDt, 0.5):F2} ms, p99 {Pct(offDt, 0.99):F2} ms; main thread median {Pct(offMain, 0.5):F2} ms; shown minus hidden dt median {Pct(dt, 0.5) - Pct(offDt, 0.5):F2} ms is the receiver shading plus glow draw cost");
                 lines.Add($"  frame: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms; dt median {Pct(dt, 0.5):F2} ms, p99 {Pct(dt, 0.99):F2} ms over {ScaleFrames} frames");
                 em.DestroyEntity(spawned);
                 for (int k = 0; k < 10; k++) yield return null;
