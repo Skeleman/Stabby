@@ -124,9 +124,12 @@ namespace Stabby.Game
         RenderTexture impA, impB;
         readonly List<Task<ChunkParts>> chunkTasks = new List<Task<ChunkParts>>();
         bool[] collectingChunk;
-        float[] heldBase;
+        float[] heldBase, blockedSince;
+        int[] blockedFrame;
+        float3 lastPos;
+        bool settled;
         int recollects;
-        float collectMaxMs;
+        float firstMaxMs, recollectMaxMs, partsWaitMax;
         static readonly int Collectors = math.max(1, Environment.ProcessorCount / 4);
         NativeArray<DefLod> defLods;
         NativeArray<BatchMeshID> meshIdsNative;
@@ -162,7 +165,9 @@ namespace Stabby.Game
         public static int LiveEntities { get; private set; }
         public static int PartsHeld { get; private set; }
         public static int Recollects { get; private set; }
-        public static float CollectMaxMs { get; private set; }
+        public static float FirstCollectMaxMs { get; private set; }
+        public static float RecollectMaxMs { get; private set; }
+        public static float PartsWaitMaxMs { get; private set; }
         public static int ChunksHeld { get; private set; }
         public static int ChunksUnloaded { get; private set; }
         public static float LastMs { get; private set; }
@@ -258,6 +263,9 @@ namespace Stabby.Game
             chunkLights = new List<Entity>[across * across];
             collectingChunk = new bool[across * across];
             heldBase = new float[across * across];
+            blockedSince = new float[across * across];
+            blockedFrame = new int[across * across];
+            for (int i = 0; i < blockedSince.Length; i++) blockedSince[i] = -1f;
             float minTile = cm * 0.5f;
             int defs = lib.Objects.Count, count = 0;
             meshBase = new int[defs][];
@@ -727,8 +735,14 @@ namespace Stabby.Game
                 if (task.IsFaulted) { GameStatus.Failure = task.Exception.ToString(); continue; }
                 var r = task.Result;
                 collectingChunk[r.Chunk] = false;
-                collectMaxMs = math.max(collectMaxMs, r.Ms);
                 bool again = loaded[r.Chunk];
+                if (again) recollectMaxMs = math.max(recollectMaxMs, r.Ms);
+                else firstMaxMs = math.max(firstMaxMs, r.Ms);
+                if (blockedSince[r.Chunk] >= 0f)
+                {
+                    if (blockedFrame[r.Chunk] >= UnityEngine.Time.frameCount - 1) partsWaitMax = math.max(partsWaitMax, (UnityEngine.Time.realtimeSinceStartup - blockedSince[r.Chunk]) * 1000f);
+                    blockedSince[r.Chunk] = -1f;
+                }
                 if (again)
                 {
                     DropParts(r.Chunk);
@@ -759,15 +773,15 @@ namespace Stabby.Game
                 chunksHeld++;
                 peakChunks = math.max(peakChunks, chunksHeld);
             }
-            float q = math.max(reachQuality, 1e-3f);
+            float q = math.max(reachQuality, 1e-3f), ring = maxReach + span;
             for (int c = 0; c < loaded.Length; c++)
             {
                 if (!loaded[c] || collectingChunk[c]) continue;
                 float dist = RectDistance(cam, (c % across) * span, (c / across) * span, span);
-                if (dist <= maxReach * UnloadReach)
+                if (dist <= ring * UnloadReach)
                 {
-                    float want = dist / (q * UnloadReach);
-                    if ((dist / q < heldBase[c] * GrowAt || want > heldBase[c] * ShrinkAt) && SameSet(heldBase[c], want)) heldBase[c] = want;
+                    float want = Need(dist, q);
+                    if ((Grows(dist, q, heldBase[c]) || want > heldBase[c] * ShrinkAt) && SameSet(heldBase[c], want)) heldBase[c] = want;
                     continue;
                 }
                 DropParts(c);
@@ -781,7 +795,7 @@ namespace Stabby.Game
             while (true)
             {
                 int best = -1;
-                float bestD = maxReach, bestShrink = float.MaxValue;
+                float bestD = ring, bestShrink = float.MaxValue;
                 int shrink = -1;
                 for (int c = 0; c < loaded.Length; c++)
                 {
@@ -789,8 +803,8 @@ namespace Stabby.Game
                     float d = RectDistance(cam, (c % across) * span, (c / across) * span, span);
                     if (loaded[c])
                     {
-                        if (d / q < heldBase[c] * GrowAt) { if (d < bestD) { bestD = d; best = c; } }
-                        else if (d / (q * UnloadReach) > heldBase[c] * ShrinkAt && d < bestShrink) { bestShrink = d; shrink = c; }
+                        if (Grows(d, q, heldBase[c])) { if (d < bestD) { bestD = d; best = c; } }
+                        else if (Need(d, q) > heldBase[c] * ShrinkAt && d < bestShrink) { bestShrink = d; shrink = c; }
                         continue;
                     }
                     if (d < bestD) { bestD = d; best = c; }
@@ -799,13 +813,17 @@ namespace Stabby.Game
                 if (pick < 0) break;
                 if (chunkTasks.Count >= Collectors) { unserved = best >= 0; break; }
                 collectingChunk[pick] = true;
-                float minBase = RectDistance(cam, (pick % across) * span, (pick / across) * span, span) / (q * UnloadReach);
+                float minBase = Need(RectDistance(cam, (pick % across) * span, (pick / across) * span, span), q);
                 chunkTasks.Add(StartCollect(pick, minBase, !loaded[pick]));
             }
             Pending = unserved || chunkTasks.Count > 0 ? 1 : 0;
         }
 
-        const float GrowAt = 1.2f, ShrinkAt = 2f;
+        const float ShrinkAt = 2f;
+
+        float Need(float dist, float q) => math.max(0f, dist - span) / (q * UnloadReach);
+
+        bool Grows(float dist, float q, float held) => math.max(0f, dist - span) / q < held;
 
         bool SameSet(float a, float b)
         {
@@ -851,7 +869,9 @@ namespace Stabby.Game
 
         int Spawn(long t0)
         {
-            int budget = SpawnBudget, waiting = 0;
+            int budget = SpawnBudget, waiting = 0, frame = UnityEngine.Time.frameCount;
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            bool watch = settled && !GameStatus.AfterTool;
             writes = new NativeList<SpawnWrite>(256, Allocator.TempJob);
             for (int i = 0; i < wantKeys.Length; i++)
             {
@@ -860,7 +880,16 @@ namespace Stabby.Game
                 int d = (int)(key >> 40), tx = (int)((key >> 20) & 0xFFFFF), tz = (int)(key & 0xFFFFF);
                 float t = tile[d];
                 int c = math.min(across - 1, (int)(tz * t / span)) * across + math.min(across - 1, (int)(tx * t / span));
-                if (!loaded[c] || baseReach[d] < heldBase[c]) { waiting++; continue; }
+                if (!loaded[c] || baseReach[d] < heldBase[c])
+                {
+                    waiting++;
+                    if (watch && blockedFrame[c] != frame)
+                    {
+                        if (blockedSince[c] < 0f || blockedFrame[c] < frame - 1) blockedSince[c] = now;
+                        blockedFrame[c] = frame;
+                    }
+                    continue;
+                }
                 if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
                 if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
                 SpawnTile(key, chunkParts[range.z], range);
@@ -1045,11 +1074,14 @@ namespace Stabby.Game
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
             if (!scanned) { Pending = 1; scanAt = pos; scan = Scan(pos); scanned = true; return; }
+            if (math.distance(pos, lastPos) > span) settled = false;
+            lastPos = pos;
             using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
             using (DespawnMarker.Auto()) Despawn();
             int waiting;
             using (SpawnMarker.Auto()) waiting = Spawn(t0);
             if (waiting > 0) Pending = 1;
+            if (waiting == 0 && GameStatus.TerrainBuilt) settled = true;
             if (Pending == 0) { readyAt = scanAt; readyFrame = UnityEngine.Time.frameCount; }
             scanAt = pos;
             scan = Scan(pos);
@@ -1057,7 +1089,9 @@ namespace Stabby.Game
             LiveEntities = liveEntities;
             PartsHeld = partsHeld;
             Recollects = recollects;
-            CollectMaxMs = collectMaxMs;
+            FirstCollectMaxMs = firstMaxMs;
+            RecollectMaxMs = recollectMaxMs;
+            PartsWaitMaxMs = partsWaitMax;
             ChunksHeld = chunksHeld;
             ChunksUnloaded = chunksUnloaded;
             liveByDefShared = liveByDef;
@@ -1067,7 +1101,7 @@ namespace Stabby.Game
             if (!GameStatus.Live.ContainsKey("~objects view")) GameStatus.Live["~objects view"] = Status;
         }
 
-        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}), {recollects} re-collects, slowest collect {collectMaxMs:F1} ms; worst view update after terrain built {worstUpdate:F1} ms";
+        string Status() => $"objects: {liveEntities} entities in {spawned.Count()} tiles, {meshes.Length} meshes; chunks {chunksHeld} held (peak {peakChunks}), {chunksLoaded} loaded, {chunksUnloaded} unloaded; parts {partsHeld} held (peak {peakParts}), {recollects} re-collects, slowest first collect {firstMaxMs:F0} ms, slowest re-collect {recollectMaxMs:F0} ms, worst wait for parts in view {partsWaitMax:F0} ms; worst view update after terrain built {worstUpdate:F1} ms";
     }
 
     [BurstCompile]
