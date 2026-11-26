@@ -484,7 +484,7 @@ namespace Stabby.World
             List<float> pts = null;
             foreach (var p in def.Parts)
             {
-                if (!ObjectPart.IsStructure(p.Shape)) continue;
+                if (!ObjectPart.IsStructure(p.Shape) || ObjectPart.IsMine(p.Shape)) continue;
                 pts = pts ?? new List<float>();
                 var seat = Structures.Seat(p.Shape);
                 for (int k = 0; k < seat.Length; k += 2) { pts.Add(p.OffsetX + seat[k] * p.ScaleX); pts.Add(p.OffsetZ + seat[k + 1] * p.ScaleZ); }
@@ -585,7 +585,7 @@ namespace Stabby.World
                 Rotate(o, 0, 1, 0, out _, out float up, out _);
                 return up < 0 ? StampCeiling : StampFloor;
             }
-            return cave == CaveStalactite ? StampCeiling : cave == CaveColumn ? StampFloor | StampCeiling : StampFloor;
+            return cave == CaveStalactite ? StampCeiling : cave == CaveColumn || cave == CaveMineTimber ? StampFloor | StampCeiling : StampFloor;
         }
 
         public static void ContactEnds(ObjectLibrary lib, ObjectInstance o, out float floor, out float ceiling)
@@ -593,6 +593,12 @@ namespace Stabby.World
             float sink = lib.Objects[o.Def].Placement.Sink * o.Size;
             int needs = StampNeeds(lib, o);
             bool spans = needs == (StampFloor | StampCeiling);
+            if (lib.Objects[o.Def].Placement.Cave == CaveMineTimber)
+            {
+                floor = o.Y;
+                ceiling = o.Y + o.Size / Structures.KitCellM * Structures.MineCapTopM;
+                return;
+            }
             floor = (needs & StampFloor) != 0 ? o.Y + (spans ? CaveColumnEmbedM : sink) : float.NaN;
             ceiling = (needs & StampCeiling) != 0 ? (spans ? o.Y + o.Size - CaveColumnEmbedM : o.Y - sink) : float.NaN;
         }

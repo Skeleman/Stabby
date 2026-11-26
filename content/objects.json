@@ -414,6 +414,21 @@
       "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
     },
     {
+      "id": "mine-timber", "name": "Mine timber set", "kind": "structure", "material": "wet-timber", "variants": 3,
+      "parts": [ { "id": "module", "shape": "mine-timber" } ],
+      "placement": { "perHectare": 0, "cave": "mine-timber", "perHundredM": 18, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
+      "id": "mine-rail", "name": "Mine rails", "kind": "structure", "material": "wrought-iron", "variants": 2,
+      "parts": [ { "id": "module", "shape": "mine-rail" } ],
+      "placement": { "perHectare": 0, "cave": "mine-rail", "perHundredM": 25, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
+      "id": "mine-cart", "name": "Mine cart", "kind": "structure", "material": "wrought-iron", "variants": 2,
+      "parts": [ { "id": "module", "shape": "mine-cart" } ],
+      "placement": { "perHectare": 0, "cave": "mine-cart", "perHundredM": 25, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
       "id": "crypt-dungeon", "name": "Crypt dungeon", "kind": "structure", "style": "crypt", "variants": 4,
       "parts": [ { "id": "site", "shape": "dungeon" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland"], "perHectare": 0, "discovery": "dungeon", "spacingM": 1200, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 16, "sink": 0 }
