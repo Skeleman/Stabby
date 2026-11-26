@@ -332,8 +332,9 @@ public class CaveTests
             var s = At(seed);
             var all = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
             brooks += all.Length;
+            var pools = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
             var e = new List<string>();
-            WorldChecks.CheckCaveFalls(s.Edits, all, e);
+            WorldChecks.CheckCaveFalls(s.Edits, all, pools, e);
             Assert.True(e.Count == 0, string.Join("; ", e));
             foreach (var x in all)
             {
@@ -341,8 +342,11 @@ public class CaveTests
                 falls++;
                 var bare = Array.FindAll(s.Edits, f => f.Shape != FeatureEdit.Sink);
                 e.Clear();
-                WorldChecks.CheckCaveFalls(bare, new[] { x }, e);
+                WorldChecks.CheckCaveFalls(bare, new[] { x }, null, e);
                 Assert.Contains(e, m => m.Contains("leaves its carve") || m.Contains("no pool or basin"));
+                e.Clear();
+                WorldChecks.CheckCaveFalls(s.Edits, new[] { x }, Array.Empty<LiquidPool>(), e);
+                Assert.Contains(e, m => m.Contains("drops into no water"));
             }
         }
         Console.WriteLine($"cave falls {falls} of {brooks} brooks");

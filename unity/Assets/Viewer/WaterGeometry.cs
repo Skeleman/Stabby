@@ -769,7 +769,6 @@ namespace Stabby.Viewer
                 var q = b.Points;
                 int rows = b.Rows, st = CaveBrook.Stride, cut = b.Fall > 0 ? b.Fall : rows;
                 float s = 0;
-                var pool = NoPool;
                 for (int k = 0; k < rows; k++)
                 {
                     int a = Mathf.Max(k - 1, k < cut ? 0 : cut) * st, z = Mathf.Min(k + 1, (k < cut ? cut : rows) - 1) * st, o = k * st;
@@ -779,15 +778,15 @@ namespace Stabby.Viewer
                     if (k > 0) s += new Vector2(q[o] - q[o - st], q[o + 2] - q[o - st + 2]).magnitude;
                     float slope = run > 0 ? drop / run : 0, half = q[o + 3];
                     buf.Tint = Flowing(Tint(default), Current(Stabby.World.CaveBrooks.DepthM, slope));
-                    if (k == b.Fall) pool = CaveFall(buf, b, k, sl, liquid);
-                    buf.Row(new Vector3(q[o], q[o + 1], q[o + 2]), dir, half, q[o + 4], q[o + 5], Mathf.Clamp01(slope / SlopeRange), new Vector4(0, 0, s, liquid), pool, k > 0);
+                    if (k == b.Fall) { CaveFall(buf, b, k, sl, liquid); break; }
+                    buf.Row(new Vector3(q[o], q[o + 1], q[o + 2]), dir, half, q[o + 4], q[o + 5], Mathf.Clamp01(slope / SlopeRange), new Vector4(0, 0, s, liquid), NoPool, k > 0);
                 }
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Cave brooks {pieces.Count}"));
             return pieces;
         }
 
-        static Vector4 CaveFall(RiverBuffers buf, CaveBrook b, int k, float sl, int liquid)
+        static void CaveFall(RiverBuffers buf, CaveBrook b, int k, float sl, int liquid)
         {
             var q = b.Points;
             int st = CaveBrook.Stride, l = (k - 1) * st, o = k * st, up = buf.Verts.Count - 3;
@@ -813,11 +812,6 @@ namespace Stabby.Viewer
                 buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, 0, 0);
                 buf.Curt[v] = Vector4.zero;
             }
-            var at = new Vector3(f.LipX, f.BaseY, f.LipZ) + fd * (th + FootGap);
-            float dx = at.x - q[o], dz = at.z - q[o + 2], half = Mathf.Max(0.5f * width, Mathf.Sqrt(Mathf.Max(0, b.PoolR * b.PoolR - dx * dx - dz * dz)));
-            buf.Row(at, fd, half, at.y, at.y, 0, new Vector4(0, 0, sl + th + FootGap, liquid), pool, false);
-            buf.Fan(buf.Verts.Count - 3, buf.Verts.Count - 1, foot, false);
-            return pool;
         }
 
         public static MeshParts Sea(int size, float cm)

@@ -245,6 +245,15 @@ namespace Stabby.World
             return true;
         }
 
+        public static bool PlungeShaft(FeatureEdit e) => e.Kind == FeatureEdit.Carve && e.Shape == FeatureEdit.Sink && e.R == PlungeHoleM / Features.CaveHollow && e.N == PlungeLumpM;
+
+        public static bool InShaft(IList<FeatureEdit> near, float x, float y, float z)
+        {
+            foreach (var e in near)
+                if (PlungeShaft(e) && e.Apply(1f, x, y, z) < 0f) return true;
+            return false;
+        }
+
         static FeatureEdit Shaft(GeneratedWorld w, int gi, float x, float z, float pool)
         {
             float r = PlungeHoleM / Features.CaveHollow;

@@ -1058,7 +1058,7 @@ namespace Stabby.World
             var pools = CheckCaveObjects(w, detail, edits, e);
             var brooks = CaveBrooks.Build(w, detail, edits, caves);
             CheckCaveBrooks(w, caves, edits, brooks, pools, e);
-            CheckCaveFalls(edits, brooks, e);
+            CheckCaveFalls(edits, brooks, pools, e);
             CheckCaveBrookBanks(w, detail, edits, caves, brooks, e);
         }
 
@@ -1203,9 +1203,9 @@ namespace Stabby.World
             }
         }
 
-        public const float FallMinM = 3f, FallAirM = 0.1f, FallRimOutM = 0.5f, FallBasinM = 1f;
+        public const float FallMinM = 3f, FallAirM = 0.1f, FallRimOutM = 0.5f, FallBasinM = 1f, FallWaterM = 0.5f;
 
-        public static void CheckCaveFalls(FeatureEdit[] edits, CaveBrook[] streams, List<string> e)
+        public static void CheckCaveFalls(FeatureEdit[] edits, CaveBrook[] streams, LiquidPool[] pools, List<string> e)
         {
             const float Diag = 0.70710678f;
             float[] ring = { 1f, 0f, Diag, Diag, 0f, 1f, -Diag, Diag, -1f, 0f, -Diag, -Diag, 0f, -1f, Diag, -Diag };
@@ -1233,7 +1233,19 @@ namespace Stabby.World
                 bool rim = true;
                 for (int k = 0; k < ring.Length && rim; k += 2) rim = !Air(edits, cx + ring[k] * (s.PoolR + FallRimOutM), py - FallAirM, cz + ring[k + 1] * (s.PoolR + FallRimOutM));
                 if (!floor || !rim) { e.Add(at + $" at {lx:F0},{lz:F0} has no pool or basin under it"); return; }
+                if (pools != null && !Watered(pools, fx, fz, py)) { e.Add(at + $" at {lx:F0},{lz:F0} drops into no water"); return; }
             }
+        }
+
+        static bool Watered(LiquidPool[] pools, float x, float z, float level)
+        {
+            foreach (var p in pools)
+            {
+                if (p.Kind != ObjectField.CavePool || Math.Abs(p.Level - level) > FallWaterM) continue;
+                int i = (int)Math.Round(x / ObjectField.PoolStepM) - p.I0, j = (int)Math.Round(z / ObjectField.PoolStepM) - p.J0;
+                if (i >= 0 && j >= 0 && i < p.Nx && j < p.Nz && p.Wet[j * p.Nx + i]) return true;
+            }
+            return false;
         }
 
         static bool Air(FeatureEdit[] edits, float x, float y, float z)
@@ -1442,7 +1454,7 @@ namespace Stabby.World
                     if (!p.Wet[k]) continue;
                     float x = p.NodeX(k % p.Nx), z = p.NodeZ(k / p.Nx), head = p.Level + CavePoolHeadM;
                     if (Walk.Solid(ground, list, s, x, p.Ground[k] - CavePoolSealM, z) < 0) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} drains through its floor at {x:F1},{z:F1}"); return; }
-                    if (Walk.Solid(ground, list, s, x, head, z) >= 0 || !Underground.InChamber(near, x, head, z)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} spills outside its carved chamber at {x:F1},{z:F1}"); return; }
+                    if (Walk.Solid(ground, list, s, x, head, z) >= 0 || !Underground.InChamber(near, x, head, z) && !CaveBrooks.InShaft(near, x, head, z)) { e.Add($"cave pool at {p.X:F0},{p.Z:F0} spills outside its carved chamber at {x:F1},{z:F1}"); return; }
                 }
             }
         }
