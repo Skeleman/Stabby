@@ -71,7 +71,7 @@ namespace Stabby.World
             for (int gi = 0; gi < caves.Length; gi++)
             {
                 var g = caves[gi];
-                if (Mines.IsMine(g) || DungeonLinks.IsLink(g)) continue;
+                if (Mines.IsMine(g) || DungeonLinks.IsLink(g) || ObjectField.IsTunnel(g)) continue;
                 var order = new List<int>();
                 for (int k = 0; k < g.Nodes.Count; k++) if (!g.Nodes[k].Entrance) order.Add(k);
                 order.Sort((a, b) => g.Nodes[b].Y.CompareTo(g.Nodes[a].Y) != 0 ? g.Nodes[b].Y.CompareTo(g.Nodes[a].Y) : a.CompareTo(b));

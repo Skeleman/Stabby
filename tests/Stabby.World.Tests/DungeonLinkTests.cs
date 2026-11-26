@@ -57,8 +57,9 @@ public class DungeonLinkTests
         WorldChecks.CheckCaves(w, d, edits, graphs, e);
         Assert.Empty(e);
         var dark = CaveLight.Distances(edits, graphs);
+        var bored = graphs.Where(ObjectField.IsTunnel).Select(g => g.Tile).ToHashSet();
         for (int q = 0; q < edits.Length; q++)
-            if (edits[q].Link && !edits.Any(x => !x.Link && x.CaveCarve && Features.TileOf(x, w.Config.CellMeters) == Features.TileOf(edits[q], w.Config.CellMeters)))
+            if (edits[q].Link && !bored.Contains(Features.TileOf(edits[q], w.Config.CellMeters)) && !edits.Any(x => !x.Link && x.CaveCarve && Features.TileOf(x, w.Config.CellMeters) == Features.TileOf(edits[q], w.Config.CellMeters)))
                 Assert.Equal(CaveLight.Unlit, Math.Min(dark[2 * q], dark[2 * q + 1]));
         Assert.DoesNotContain(new ObjectField(w, d, edits, w.Objects).Discoveries(), o => !sites.Any(s => s.Def == o.Def && s.X == o.X && s.Z == o.Z));
     }
@@ -68,7 +69,8 @@ public class DungeonLinkTests
     {
         var (w, d, edits, graphs, sites) = Make(1);
         var link = graphs.First(DungeonLinks.IsLink);
-        int i = Array.FindIndex(edits, x => x.Link);
+        var bored = graphs.Where(ObjectField.IsTunnel).Select(g => g.Tile).ToHashSet();
+        int i = Array.FindIndex(edits, x => x.Link && !bored.Contains(Features.TileOf(x, w.Config.CellMeters)));
         var raised = (FeatureEdit[])edits.Clone();
         raised[i].Ay += 200f;
         raised[i].By += 200f;

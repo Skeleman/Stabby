@@ -239,6 +239,30 @@ namespace Stabby.World
                 return Link(0, n1, true) && Branch(false);
             }
 
+            public bool Bore(float ax, float az, float bx, float bz, float socketM, float spanM)
+            {
+                float dx = bx - ax, dz = bz - az, len = (float)Math.Sqrt(dx * dx + dz * dz);
+                if (len <= 1f) return false;
+                float hx = dx / len, hz = dz / len, sink = 0.05f * (C.RadiusMin + C.RadiusMax) * Features.CaveHollow;
+                float ya = Ground(ax, az) - sink, yb = Ground(bx, bz) - sink;
+                int seg = Math.Max(2, (int)Math.Round(len / spanM));
+                for (int k = 0; k <= seg; k++)
+                {
+                    float t = k / (float)seg;
+                    G.Nodes.Add(new CaveNode { X = ax + dx * t, Y = ya + (yb - ya) * t, Z = az + dz * t, Hx = k == seg ? -hx : hx, Hz = k == seg ? -hz : hz, Entrance = k == 0 || k == seg });
+                }
+                if (!Edge(0, 1, true)) return false;
+                for (int k = 1; k + 1 < seg; k++) if (!Edge(k, k + 1, false)) return false;
+                if (!Edge(seg, seg - 1, true)) return false;
+                if (len < socketM) return true;
+                for (int k = 1; k < seg; k++)
+                {
+                    float side = k % 2 == 0 ? 1f : -1f, big = R.Range(C.ChamberMin, C.ChamberMax);
+                    Room(G.Nodes[k], -hz * side, hx * side, big * 0.6f, big);
+                }
+                return true;
+            }
+
             bool Branch(bool entrances)
             {
                 int want = C.MinNodes + (int)(R.NextFloat() * (C.MaxNodes - C.MinNodes + 1));
@@ -961,6 +985,49 @@ namespace Stabby.World
                 return $"{g.Class} cave chamber at {n.X:F0},{n.Z:F0} is not walkable from an entrance ({stop ?? "no tunnel reaches it"})";
             }
             return null;
+        }
+
+        public static string Through(TerrainDetail detail, FeatureEdit[] edits, CaveGraph g)
+        {
+            var ground = new DetailGround { Detail = detail };
+            var list = new EditArray { Items = edits };
+            var open = new List<int>[g.Nodes.Count];
+            for (int k = 0; k < open.Length; k++) open[k] = new List<int>();
+            string stop = null;
+            foreach (var edge in g.Edges)
+            {
+                string why = WalkEdge(ground, list, Features.LatticeStepM, edge);
+                if (why == null) { open[edge.A].Add(edge.B); open[edge.B].Add(edge.A); }
+                else stop = stop ?? why;
+            }
+            int first = g.Nodes.FindIndex(m => m.Entrance);
+            if (first < 0) return $"{g.Class} tunnel has no portal";
+            var reached = new bool[g.Nodes.Count];
+            var queue = new Queue<int>();
+            reached[first] = true;
+            queue.Enqueue(first);
+            while (queue.Count > 0)
+                foreach (int k in open[queue.Dequeue()])
+                    if (!reached[k]) { reached[k] = true; queue.Enqueue(k); }
+            for (int k = 0; k < g.Nodes.Count; k++)
+                if (!reached[k]) return $"{g.Class} tunnel at {g.Nodes[k].X:F0},{g.Nodes[k].Z:F0} is not walkable from its portal ({stop ?? "no edge reaches it"})";
+            return null;
+        }
+
+        public static bool Bore(GeneratedWorld w, TerrainDetail detail, CaveClass c, float ax, float az, float bx, float bz, float roof, float socketM, float spanM, ref Rng r, List<FeatureEdit> output, out CaveGraph graph)
+        {
+            int mark = output.Count;
+            var width = new Rng(r.NextU64());
+            var drip = new Rng(r.NextU64());
+            var flow = new Rng(r.NextU64());
+            var b = new Builder { W = w, Detail = detail, Cm = w.Config.CellMeters, Out = output, Start = mark, C = c, R = r, Width = width, Mouths = new List<int>(), Grain = r.NextFloat(), RoomShape = FeatureEdit.CaveRoom, Roof = roof, Shallow = true };
+            b.G = new CaveGraph { Class = c.Id };
+            bool ok = b.Bore(ax, az, bx, bz, socketM, spanM);
+            r = b.R;
+            graph = ok ? b.G : null;
+            if (!ok) output.RemoveRange(mark, output.Count - mark);
+            else Speleothems(detail, w.Config.CellMeters, ref drip, ref flow, output, mark);
+            return ok;
         }
 
         static string WalkEdge(DetailGround ground, EditArray list, float s, CaveEdge edge)

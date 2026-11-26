@@ -28,4 +28,15 @@ public class RoadTests
         Features.Place(w, detail, out _, out _, out var placed);
         Assert.Equal(field.Roads(), placed);
     }
+
+    [Fact]
+    public void RoadTunnelsAreWalkableAndMeetTheirRoads()
+    {
+        var (w, detail, _, _) = TestWorlds.Get(2, 1024);
+        var edits = Features.Place(w, detail, out var caves, out _, out var roads);
+        var errors = new List<string>();
+        WorldChecks.CheckRoadTunnels(w, detail, edits, caves, roads, errors);
+        Assert.True(errors.Count == 0, string.Join("; ", errors));
+        Assert.Contains(roads, s => s.Kind == RoadSegment.Tunnel);
+    }
 }

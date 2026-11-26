@@ -861,7 +861,7 @@ namespace Stabby.World
             if (!surface && !caved && !sited && !objects) return;
             clock.Time("features");
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var caves, out var sites);
+            var edits = Features.Place(w, detail, out var caves, out var sites, out var roads);
             float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
             var field = (sited || objects) && w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects) : null;
@@ -883,6 +883,7 @@ namespace Stabby.World
                 CheckCaves(w, detail, edits, caves, e);
                 CheckMines(w, detail, edits, caves, e);
                 CheckDungeonLinks(w, detail, edits, caves, sites, e);
+                CheckRoadTunnels(w, detail, edits, caves, roads, e);
                 CheckCaveIce(w, edits, caves, e);
                 CheckCaveNormals(w, detail, grid, caves, e);
             }
@@ -1233,7 +1234,56 @@ namespace Stabby.World
                 if (q.Shape == FeatureEdit.Mine && q.Kind != FeatureEdit.Carve) { e.Add($"mines: edit at {q.Ax:F0},{q.Az:F0} is not a carve"); return; }
         }
 
-        public const float LinkSocketM = 0.5f;
+        public const float LinkSocketM = 0.5f, TunnelPortalM = 1f;
+
+        public static void CheckRoadTunnels(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, RoadSegment[] roads, List<string> e)
+        {
+            if (caves == null || roads == null) return;
+            float cm = w.Config.CellMeters;
+            var bores = new List<CaveGraph>();
+            var tiles = new HashSet<int>();
+            foreach (var g in caves)
+            {
+                if (!ObjectField.IsTunnel(g)) continue;
+                string at = $"road tunnels: tunnel in tile {g.Tile}";
+                if (!tiles.Add(g.Tile)) { e.Add(at + " shares its tile with another tunnel"); return; }
+                int ends = 0;
+                foreach (var nd in g.Nodes) if (nd.Entrance) ends++;
+                if (ends != 2) { e.Add($"{at} has {ends} portals, not 2"); return; }
+                var near = new List<FeatureEdit>();
+                foreach (var q in edits) if (Features.TileOf(q, cm) == g.Tile) near.Add(q);
+                var items = near.ToArray();
+                string why = Underground.Through(detail, items, g);
+                if (why != null) { e.Add($"{at}: {why}"); return; }
+                float width = DungeonLinks.Width(detail, items, g);
+                if (!DungeonLinks.Fits(width)) { e.Add($"{at} averages {width:F1} m wide at 1 m, outside {DungeonLinks.WidthMin:F0}-{DungeonLinks.WidthMax:F1} m"); return; }
+                bores.Add(g);
+            }
+            int count = 0;
+            foreach (var s in roads)
+            {
+                if (s.Kind != RoadSegment.Tunnel) continue;
+                count++;
+                string at = $"road tunnels: tunnel road {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0}";
+                if (!bores.Exists(g => Portal(g, s.X0, s.Z0) && Portal(g, s.X1, s.Z1))) { e.Add(at + " has no bored tunnel between its ends"); return; }
+                if (!Meets(roads, s.X0, s.Z0) || !Meets(roads, s.X1, s.Z1)) { e.Add(at + " has a portal that no road reaches"); return; }
+            }
+            if (count != bores.Count) e.Add($"road tunnels: {bores.Count} bored tunnels but {count} tunnel roads");
+        }
+
+        static bool Portal(CaveGraph g, float x, float z)
+        {
+            foreach (var nd in g.Nodes)
+                if (nd.Entrance && Math.Abs(nd.X - x) < TunnelPortalM && Math.Abs(nd.Z - z) < TunnelPortalM) return true;
+            return false;
+        }
+
+        static bool Meets(RoadSegment[] roads, float x, float z)
+        {
+            foreach (var s in roads)
+                if (s.Kind != RoadSegment.Tunnel && ((Math.Abs(s.X0 - x) < TunnelPortalM && Math.Abs(s.Z0 - z) < TunnelPortalM) || (Math.Abs(s.X1 - x) < TunnelPortalM && Math.Abs(s.Z1 - z) < TunnelPortalM))) return true;
+            return false;
+        }
 
         public static void CheckDungeonLinks(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, ObjectInstance[] sites, List<string> e)
         {
@@ -1241,11 +1291,13 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var tiles = new HashSet<int>();
             var sockets = new List<CaveNode>();
+            var bored = new HashSet<int>();
+            foreach (var g in caves) if (ObjectField.IsTunnel(g)) bored.Add(g.Tile);
             if (sites != null && w.Objects != null)
                 foreach (var o in sites)
                     if (ObjectField.IsDungeon(w.Objects, o) && ObjectField.BreachOf(w.Objects, o, out var m)) sockets.Add(m);
             foreach (var q in edits)
-                for (int t = 0; q.Link && t <= 2; t++)
+                for (int t = 0; q.Link && !bored.Contains(Features.TileOf(q, cm)) && t <= 2; t++)
                 {
                     float f = 0.5f * t, x = q.Ax + (q.Bx - q.Ax) * f, z = q.Az + (q.Bz - q.Az) * f, top = q.Ay + (q.By - q.Ay) * f + q.R * (1f - Features.CaveHollow);
                     if (detail.HeightAt(x / cm, z / cm) < top) { e.Add($"dungeon links: link carve at {x:F0},{z:F0} opens to the surface"); return; }
@@ -1270,6 +1322,7 @@ namespace Stabby.World
             {
                 if (!q.Link) continue;
                 int tile = Features.TileOf(q, cm);
+                if (bored.Contains(tile)) continue;
                 if ((!q.CaveCarve && !(q.Kind == FeatureEdit.Add && q.Shape == FeatureEdit.Speleothem)) || !tiles.Contains(tile)) { e.Add($"dungeon links: edit at {q.Ax:F0},{q.Az:F0} is not a carve of a link cave"); return; }
             }
         }

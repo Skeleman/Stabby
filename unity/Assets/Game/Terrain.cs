@@ -649,6 +649,7 @@ namespace Stabby.Game
             for (int f = 0; f < g.Roads.Length; f++)
             {
                 var r = g.Roads[f];
+                if (r.Kind == RoadSegment.Tunnel) continue;
                 float pad = r.HalfWidth + 2 * RoadFadeM;
                 if (math.max(r.X0, r.X1) + pad > x0m && math.min(r.X0, r.X1) - pad < x1m && math.max(r.Z0, r.Z1) + pad > z0m && math.min(r.Z0, r.Z1) - pad < z1m) roads.Add(r);
             }

@@ -152,7 +152,7 @@ public class CaveTests
     {
         var widths = new HashSet<float>();
         for (ulong seed = 1; seed <= 8; seed++)
-            foreach (var g in At(seed).Graphs.Where(g => !Mines.IsMine(g) && !DungeonLinks.IsLink(g)))
+            foreach (var g in At(seed).Graphs.Where(g => !Mines.IsMine(g) && !DungeonLinks.IsLink(g) && !ObjectField.IsTunnel(g)))
                 foreach (var edge in g.Edges)
                 {
                     var c = Caves.Find(g.Class)!;
