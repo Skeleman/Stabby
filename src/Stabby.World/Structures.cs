@@ -56,6 +56,7 @@ namespace Stabby.World
             if (shape == ObjectPart.Wall) Wall(key, l);
             else if (shape == ObjectPart.Cairn) Cairn(key, l);
             else if (ObjectPart.IsDungeon(shape)) Dungeon(shape, key, l, trim > 0 ? trim : Iron);
+            else if (ObjectPart.IsMine(shape)) Mine(shape, key, l);
             else Built(shape, key, l);
             return l;
         }

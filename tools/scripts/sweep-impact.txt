@@ -35,6 +35,8 @@ src/Stabby.World/Landforms.cs objects,surface,meshing
 src/Stabby.World/Object*.cs objects,sites,surface
 src/Stabby.World/Objects.cs objects,sites,surface
 src/Stabby.World/CaveObjects.cs objects,sites,surface,caves
+src/Stabby.World/Mines.cs caves,objects
+src/Stabby.World/MineKit.cs objects,caves
 content/objects.json objects,sites,surface
 src/Stabby.World/Bogs.cs sites,surface
 src/Stabby.World/Pools.cs sites

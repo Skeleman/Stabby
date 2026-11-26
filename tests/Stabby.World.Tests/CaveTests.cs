@@ -152,7 +152,7 @@ public class CaveTests
     {
         var widths = new HashSet<float>();
         for (ulong seed = 1; seed <= 8; seed++)
-            foreach (var g in At(seed).Graphs)
+            foreach (var g in At(seed).Graphs.Where(g => !Mines.IsMine(g)))
                 foreach (var edge in g.Edges)
                 {
                     var c = Caves.Find(g.Class)!;
@@ -381,7 +381,7 @@ public class CaveTests
         {
             var s = At(seed);
             var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
-            tiles += s.Graphs.Length;
+            foreach (var g in s.Graphs) if (!Mines.IsMine(g)) tiles++;
             foreach (var x in s.Edits) if (x.Shape == FeatureEdit.Speleothem && x.T == 0f) flows++;
             foreach (var o in CaveObjects(s, field))
             {

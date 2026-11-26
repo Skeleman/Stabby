@@ -631,7 +631,7 @@ namespace Stabby.Game
                 parts[i] = new ObjectSpawn
                 {
                     M = math.mul(root, local), Color = Linear(part.Color, tint, part.Shape, part.Glow, part.GlowPattern, part.Translucency), Leaf = leaf, Mesh = meshBase[o.Def][p] + o.Variant, Def = o.Def,
-                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = part.Shape == ObjectPart.Dungeon ? o.Y + Structures.DungeonFloorY : ObjectPart.IsStructure(part.Shape) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
+                    Radius = 0.5f * math.cmax(scale), Shadow = lib.PartShadows(def, part), Ground = part.Shape == ObjectPart.Dungeon ? o.Y + Structures.DungeonFloorY : ObjectPart.IsStructure(part.Shape) && !ObjectField.IsCave(def) ? field.GroundAt(o.X, o.Z) : float.IsNaN(floorY) ? ceilY : floorY, Size = both ? floorY - ceilY : o.Size,
                     Id = o.Id,
                 };
             }
