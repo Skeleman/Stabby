@@ -62,11 +62,12 @@ namespace Stabby.Game
             Add(name, new MeshPiece { Id = id, Vertex = vertex, VertexCount = vertices.Length / floats, Floats = floats, Index = index, IndexCount = indices.Length, Attr = attr, AttrCount = attrCount });
         }
 
-        public void Add(MeshParts d, int id)
+        public void Add(MeshParts d, int id, bool lean = false)
         {
             int attr = Attrs.Length, floats = 3;
+            var norms = lean ? null : d.Norms;
             Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Position));
-            if (d.Norms != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Normal)); floats += 3; }
+            if (norms != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Normal)); floats += 3; }
             if (d.Cols != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4)); floats += 4; }
             if (d.Uvs != null) { Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2)); floats += 2; }
             var extra = new[] { d.Uv1, d.Uv2, d.Uv3, d.Uv4 };
@@ -79,7 +80,7 @@ namespace Stabby.Game
             {
                 var p = d.Verts[v];
                 dst[o++] = p.x; dst[o++] = p.y; dst[o++] = p.z;
-                if (d.Norms != null) { var n = d.Norms[v]; dst[o++] = n.x; dst[o++] = n.y; dst[o++] = n.z; }
+                if (norms != null) { var n = norms[v]; dst[o++] = n.x; dst[o++] = n.y; dst[o++] = n.z; }
                 if (d.Cols != null) { var c = d.Cols[v]; dst[o++] = c.r; dst[o++] = c.g; dst[o++] = c.b; dst[o++] = c.a; }
                 if (d.Uvs != null) { var t = d.Uvs[v]; dst[o++] = t.x; dst[o++] = t.y; }
                 for (int u = 0; u < 4; u++)
@@ -184,9 +185,14 @@ namespace Stabby.Game
         readonly List<Mesh> made = new List<Mesh>();
         JobSlot slot;
         Mesh.MeshDataArray data;
+        readonly bool gpuOnly;
         int next, first, count, cost;
 
-        public MeshBatch(MeshPack pack) => this.pack = pack;
+        public MeshBatch(MeshPack pack, bool gpuOnly = false)
+        {
+            this.pack = pack;
+            this.gpuOnly = gpuOnly;
+        }
 
         public bool Done => next >= pack.Count && !slot.Busy;
 
@@ -204,7 +210,11 @@ namespace Stabby.Game
                     ids.Add(pack.Pieces[first + i].Id);
                 }
                 Mesh.ApplyAndDisposeWritableMeshData(data, made);
-                foreach (var m in made) m.bounds = m.GetSubMesh(0).bounds;
+                foreach (var m in made)
+                {
+                    m.bounds = m.GetSubMesh(0).bounds;
+                    if (gpuOnly) m.UploadMeshData(true);
+                }
                 meshes.AddRange(made);
                 made.Clear();
                 got = true;

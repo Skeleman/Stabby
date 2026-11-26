@@ -13,8 +13,8 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight" };
-        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8;
+        public static readonly string[] CaveNames = { "", "stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart" };
+        public const int CaveStalactite = 1, CaveStalagmite = 2, CaveRubble = 3, CaveColumn = 4, CaveCrystal = 5, CaveFungus = 6, CaveCrystalLight = 7, CaveSkylight = 8, CaveMineTimber = 9, CaveMineRail = 10, CaveMineCart = 11;
         public const int CaveLightTries = 8;
         public const float CaveLightSideShare = 0.7f, CaveLightAlongMin = 0.15f, CaveLightAlongMax = 0.85f, SkylightJitterShare = 0.5f, SkylightFloorM = 40f;
 
@@ -25,7 +25,8 @@ namespace Stabby.World
             public ulong Seed;
         }
 
-        public static bool IsCaveLight(int kind) => kind >= CaveFungus;
+        public static bool IsCaveLight(int kind) => kind >= CaveFungus && kind <= CaveSkylight;
+        public static bool IsMineKind(int kind) => kind >= CaveMineTimber && kind <= CaveMineCart;
 
         static CaveLightSpot[] PlanCaveLights(GeneratedWorld w, FeatureEdit[] edits, ulong stream)
         {
@@ -286,6 +287,7 @@ namespace Stabby.World
             int kind = pl.Cave;
             if (kind == CaveCrystal) { EmitCrystal(d, chunk, x0, z0, sx, sz, list, ref ordinal); return; }
             if (IsCaveLight(kind)) { EmitCaveLights(d, chunk, x0, z0, sx, sz, list, ref ordinal); return; }
+            if (IsMineKind(kind)) { EmitMine(d, chunk, x0, z0, sx, sz, list, ref ordinal); return; }
             var ground = new DetailGround { Detail = detail };
             float s = Features.LatticeStepM, foot = footprint[d];
             var seenX = caveSeenX ?? (caveSeenX = new List<float>());
@@ -293,6 +295,7 @@ namespace Stabby.World
             foreach (int e in caveCarves)
             {
                 var c = edits[e];
+                if (c.Shape == FeatureEdit.Mine) continue;
                 if (c.MaxX < x0 || c.MinX >= x0 + sx || c.MaxZ < z0 || c.MinZ >= z0 + sz) continue;
                 if (pl.CaveIce ? !c.Ice : c.Ice && (kind == CaveStalactite || kind == CaveStalagmite)) continue;
                 float ex = c.Bx - c.Ax, ez = c.Bz - c.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -397,6 +400,11 @@ namespace Stabby.World
             if (IsCaveLight(kind))
             {
                 string why = CaveLightFault(o, rock, reach);
+                return why == null ? null : at + " " + why;
+            }
+            if (IsMineKind(kind))
+            {
+                string why = MineFault(kind, o);
                 return why == null ? null : at + " " + why;
             }
             if (kind == CaveStalactite)
