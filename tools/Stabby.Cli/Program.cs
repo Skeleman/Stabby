@@ -191,13 +191,7 @@ int Sweep()
         times.Add((genMs, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
         if (!checks) return;
         var spent = new Dictionary<string, double>();
-        var found = WorldChecks.Run(w, groups, spent);
-        if (groups == null || groups.Contains("creatures"))
-        {
-            var cw = Stopwatch.StartNew();
-            found.AddRange(WorldChecks.Creatures(w, creatures));
-            spent["creatures"] = cw.Elapsed.TotalMilliseconds;
-        }
+        var found = WorldChecks.Run(w, groups, spent, creatures);
         foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value));
         foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
         perSeed[c.Seed] = found;
