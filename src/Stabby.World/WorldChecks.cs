@@ -881,6 +881,7 @@ namespace Stabby.World
             {
                 CheckCavePaths(w, detail, edits, e);
                 CheckCaves(w, detail, edits, caves, e);
+                CheckMines(w, detail, edits, caves, e);
                 CheckCaveIce(w, edits, caves, e);
                 CheckCaveNormals(w, detail, grid, caves, e);
             }
@@ -899,7 +900,7 @@ namespace Stabby.World
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
-                bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink;
+                bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink || x.Shape == FeatureEdit.Mine;
                 float s = cave || x.Shape == FeatureEdit.Shaft ? NearField.NodeStep(0) : LatticeStepM;
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
@@ -927,7 +928,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : x.Shape == FeatureEdit.Mine ? "mine" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -1201,6 +1202,36 @@ namespace Stabby.World
 
         public const int CaveObjectChunks = 6;
 
+        public static void CheckMines(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, CaveGraph[] caves, List<string> e)
+        {
+            float cm = w.Config.CellMeters;
+            int count = 0;
+            foreach (var g in caves)
+            {
+                if (!Mines.IsMine(g)) continue;
+                if (++count > Mines.Most) { e.Add($"mines: more than {Mines.Most} mines"); return; }
+                if (g.Nodes.Count == 0 || !g.Nodes[0].Entrance) { e.Add($"mines: mine in tile {g.Tile} has no entrance"); return; }
+                var near = new List<FeatureEdit>();
+                foreach (var q in edits) if (Features.TileOf(q, cm) == g.Tile) near.Add(q);
+                var items = near.ToArray();
+                int own = 0;
+                foreach (var q in items)
+                {
+                    if (q.Shape != FeatureEdit.Mine) continue;
+                    own++;
+                    if (Mines.Vertical(q)) continue;
+                    float gx = q.Ax / Structures.KitCellM, gz = q.Az / Structures.KitCellM;
+                    if (Math.Abs(q.Ax - q.Bx) > 0.01f && Math.Abs(q.Az - q.Bz) > 0.01f) { e.Add($"mines: passage at {q.Ax:F0},{q.Az:F0} leaves the kit grid"); return; }
+                    if (Math.Abs(q.Ax - q.Bx) > 0.01f ? Math.Abs(gz - Math.Round(gz)) > 0.001f : Math.Abs(gx - Math.Round(gx)) > 0.001f) { e.Add($"mines: passage at {q.Ax:F0},{q.Az:F0} is off the kit grid"); return; }
+                    string why = Underground.PathFault(detail, items, q);
+                    if (why != null) { e.Add($"mines: passage at {q.Ax:F0},{q.Az:F0} {why}"); return; }
+                }
+                if (own == 0) { e.Add($"mines: mine in tile {g.Tile} carves nothing"); return; }
+            }
+            foreach (var q in edits)
+                if (q.Shape == FeatureEdit.Mine && q.Kind != FeatureEdit.Carve) { e.Add($"mines: edit at {q.Ax:F0},{q.Az:F0} is not a carve"); return; }
+        }
+
         public static LiquidPool[] CheckCaveObjects(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, List<string> e)
         {
             if (w.Objects == null) return null;
@@ -1218,7 +1249,15 @@ namespace Stabby.World
                 if (!picked.Contains(c)) picked.Add(c);
                 if (picked.Count >= CaveObjectChunks) break;
             }
-            int gems = 0, cells = 0;
+            int gems = 0, cells = 0, mineEdits = 0, timbers = 0;
+            foreach (var x in edits)
+            {
+                if (x.Shape != FeatureEdit.Mine || Mines.Vertical(x)) continue;
+                mineEdits++;
+                float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz);
+                int c = Math.Min(across - 1, Math.Max(0, (int)(mz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(mx / span)));
+                if (!picked.Contains(c)) picked.Add(c);
+            }
             foreach (var x in edits)
             {
                 if (x.Kind != FeatureEdit.Carve || x.Shape != FeatureEdit.CrystalCell) continue;
@@ -1243,11 +1282,13 @@ namespace Stabby.World
                     if (!ObjectField.IsCave(def)) continue;
                     if (def.Placement.Cave == ObjectField.CaveStalactite) drips++;
                     if (def.Placement.Cave == ObjectField.CaveCrystal) gems++;
+                    if (def.Placement.Cave == ObjectField.CaveMineTimber) timbers++;
                     string loose = field.ContactFault(o, contacts);
                     string fault = field.CaveFault(o) ?? (loose == null ? null : $"{def.Id} at {o.X:F0},{o.Z:F0}{loose}");
                     if (fault != null) { e.Add(fault); return pools; }
                 }
             if (cells > 0 && gems == 0) e.Add($"caves: {cells} crystal cells hold no crystals");
+            if (mineEdits > 0 && timbers == 0) e.Add($"mines: {mineEdits} passages hold no timber supports");
             if (length >= ObjectField.CaveDripSurveyM && drips * 100f < ObjectField.CaveDripPerHundredM * length)
                 e.Add($"caves: {drips} stalactites over {length:F0} m of passage, under {ObjectField.CaveDripPerHundredM} per 100 m");
             CheckCaveLights(w, edits, field, e);

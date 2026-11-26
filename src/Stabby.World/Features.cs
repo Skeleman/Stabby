@@ -6,9 +6,9 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Shapes = 15;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Mine = 15, Shapes = 16;
 
-        public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell;
+        public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
         public static bool IsRoom(int shape) => shape == CaveRoom || shape == CrystalCell;
 
@@ -135,13 +135,13 @@ namespace Stabby.World
             float wall = (cell ? Facets(qx, sy, qz) : (float)Math.Sqrt(qx * qx + sy * sy + qz * qz)) - Fill * hole;
             if (N > 0f) wall += N * Lump(x, y, z);
             float k = Math.Min(1f, hole / RockRefM), band = Math.Abs(wall - hole);
-            if (band < RockBand * k) wall += (cell ? CellRelief : 1f) * k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
+            if (band < RockBand * k) wall += (cell ? CellRelief : Shape == Mine ? MineRelief : 1f) * k * Relief(x, y, z) * Math.Min(1f, (RockBand * k - band) / (RockFade * k));
             floor = -qy;
             if (Math.Abs(floor - hole) < DebrisBand * k) floor += k * Debris(x, z);
             return Math.Max(wall, floor);
         }
 
-        public const float CellRelief = 0.3f, FacetJitter = 0.2f;
+        public const float CellRelief = 0.3f, MineRelief = 0.3f, FacetJitter = 0.2f;
 
         float Facets(float x, float y, float z)
         {
@@ -429,7 +429,7 @@ namespace Stabby.World
                 var e = edits.At(q);
                 if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
                 {
-                    if (e.Fine && (e.Shape != FeatureEdit.Cave || s < NearField.NodeStep(0))) return false;
+                    if (e.Fine && ((e.Shape != FeatureEdit.Cave && e.Shape != FeatureEdit.Mine) || s < NearField.NodeStep(0))) return false;
                     any = true;
                 }
             }
@@ -557,6 +557,7 @@ namespace Stabby.World
                     if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
                     from = list.Count;
                 }
+            Mines.Place(w, detail, strata, list, caves);
             return list.ToArray();
         }
 

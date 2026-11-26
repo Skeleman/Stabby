@@ -11,6 +11,8 @@ test CaveTests.TunnelsAreNarrowFineAndVaried 24 carves and meshes cave tunnels o
 test ObjectTests.ObjectsStayInTheirBiomes 21 checks every placed object against its biome
 test CaveTests.HallsBuildAtFullSize 21 builds and meshes full-size cave halls
 test CaveTests.CaveLightsAreSporadicAndPass 30 places and checks cave lights on four worlds
+test MineTests.MinesAreWalkableGridAlignedAndTimbered 20 carves mines on full worlds, walks each from its entrance and places its timber
+test MineTests.FloatingTimberIsCaught 8 builds one world and checks a lifted timber fails
 test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places boulders over a world and splits large ones into solid edits
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
