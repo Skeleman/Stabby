@@ -70,7 +70,7 @@ Shader "Stabby/Water"
             static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
             static const float2x2 Veer = float2x2(0.96, -0.28, 0.28, 0.96);
             static const float FlowPeriod = 3;
-            static const float ChannelWaves = 1.5;
+            static const float ChannelWaves = 1.5, ChurnLo = 0.3, ChurnHi = 1.3;
             static const float SlopeRange = 0.1;
             static const float MudFeather = 4, PoolFeather = 0.5, PoolShore = 1.2;
             static const float CurtainPxLo = 6, CurtainPxHi = 24, LipPx = 1.5;
@@ -461,7 +461,8 @@ Shader "Stabby/Water"
                 float depth = lerp(max(0, i.positionWS.y - bed.y), field, far);
 
                 float4 wv = L2;
-                if (i.chan.y > 0 && dot(i.color.rg * 2 - 1, i.color.rg * 2 - 1) > 0.01) wv.x = max(wv.x, 1 / (ChannelWaves * 2 * i.chan.y));
+                float slope = i.color.b * SlopeRange;
+                if (i.chan.y > 0 && dot(i.color.rg * 2 - 1, i.color.rg * 2 - 1) > 0.01) wv.x = lerp(max(wv.x, 1 / (ChannelWaves * 2 * i.chan.y)), wv.x, smoothstep(ChurnLo, ChurnHi, slope * L4.y));
                 float t = _Time.y * wv.y * (1 - 0.7 * visc);
                 float2 q = i.positionWS.xz * wv.x;
                 float2 xz = i.positionWS.xz;
@@ -471,10 +472,9 @@ Shader "Stabby/Water"
                 float fade = saturate(1.5 - fp * wv.x * 10);
                 float ripple = saturate(1.5 - fp * wv.x * (i.color.a >= 0.99 ? 4 : 1.6));
                 float2 flow = i.color.rg * 2 - 1;
-                float slope = i.color.b * SlopeRange;
                 float plunge = i.chan.w * SlopeRange * L4.y;
                 float white = max(smoothstep(1, 2.25, slope * L4.y), 0.85 * smoothstep(0.9, 2.1, plunge));
-                float churn = max(smoothstep(0.3, 1.3, slope * L4.y), 0.8 * smoothstep(0.3, 1.3, plunge));
+                float churn = max(smoothstep(ChurnLo, ChurnHi, slope * L4.y), 0.8 * smoothstep(ChurnLo, ChurnHi, plunge));
                 bool river = i.chan.y > 0.5 && dot(flow, flow) > 0.01;
                 float2 fd = river ? normalize(flow) : float2(1, 0), sd = float2(fd.y, -fd.x);
                 float2 cw = float2(i.along, i.chan.x * i.chan.y);

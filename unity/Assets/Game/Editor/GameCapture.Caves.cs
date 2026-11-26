@@ -381,6 +381,31 @@ namespace Stabby.Game.Editor
                 Shot(cam, null, "warmup");
                 ExposedShot(cam, dir, "caves-brook-close-debug-exposure", CaveDebugExposure);
                 GeometryShot(cam, dir, "caves-brook-close-debug-unlit");
+                CaveBrook steep = null;
+                int lip = 0;
+                float drop = 0;
+                foreach (var b in brooks)
+                    for (int r = 3; r + 2 < b.Rows; r++)
+                    {
+                        if (b != brook && drop > 0.5f) break;
+                        var rp = b.Points;
+                        float dx = rp[(r + 1) * st] - rp[r * st], dz = rp[(r + 1) * st + 2] - rp[r * st + 2], dy = rp[r * st + 1] - rp[(r + 1) * st + 1];
+                        float g = dy / Mathf.Max(0.25f, Mathf.Sqrt(dx * dx + dz * dz));
+                        if (g > drop && (b == brook || drop < 0.5f)) { drop = g; steep = b; lip = r; }
+                    }
+                if (steep != null)
+                {
+                    var lq = steep.Points;
+                    var up = new Vector3(lq[(lip - 3) * st], lq[(lip - 3) * st + 1], lq[(lip - 3) * st + 2]);
+                    var lp = new Vector3(lq[lip * st], lq[lip * st + 1], lq[lip * st + 2]);
+                    eye = up + Vector3.up * 0.5f;
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(lp + Vector3.down * 0.5f - eye));
+                    for (var w = Settle(120); w.MoveNext();) yield return null;
+                    lines.Add($"brook lip: drop {drop:F2} m per m at {lp.x:F0},{lp.y:F1},{lp.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}");
+                    Shot(cam, null, "warmup");
+                    ExposedShot(cam, dir, "caves-brook-lip-debug-exposure", CaveDebugExposure);
+                    GeometryShot(cam, dir, "caves-brook-lip-debug-unlit");
+                }
                 CaveBrook spring = null;
                 foreach (var b in brooks) if (b.End == CaveBrook.Spring && (spring == null || b.Rows > spring.Rows)) spring = b;
                 if (spring != null)
