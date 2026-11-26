@@ -810,6 +810,16 @@ namespace Stabby.World
                 {
                     if (i != 0 && k != 0 && i != c.Cells && k != c.Cells && (i + k) % 7 != 0) continue;
                     int col = k * w + i;
+                    bool crossed = false;
+                    for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
+                    {
+                        if (!SurfaceNets.CrossingVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z, out float nx, out float ny, out float nz)) continue;
+                        crossed = true;
+                        int v = 6 * (f.ColumnBase(col) + j - f.ColumnStart(col));
+                        if (x != f.Verts[v] || y != f.Verts[v + 1] || z != f.Verts[v + 2]) return false;
+                        if (nx != f.Verts[v + 3] || ny != f.Verts[v + 4] || nz != f.Verts[v + 5]) return false;
+                    }
+                    if (crossed) continue;
                     for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
                     {
                         int cell = SurfaceNets.CoarseVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z, out float nx, out float ny, out float nz);
