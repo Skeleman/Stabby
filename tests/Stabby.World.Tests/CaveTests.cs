@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Xunit.Abstractions;
 using System.Text.Json;
 using Stabby.Content;
@@ -23,9 +24,12 @@ public class CaveTests
         public TerrainDetail Detail = null!;
         public FeatureEdit[] Edits = null!;
         public CaveGraph[] Graphs = null!;
+        ObjectField? placed;
+        public ObjectField Field => LazyInitializer.EnsureInitialized(ref placed, () => new ObjectField(W, Detail, Edits, W.Objects));
     }
 
-    static readonly Dictionary<ulong, Sample> Cache = new();
+    static readonly ConcurrentDictionary<ulong, Lazy<Sample>> Cache = new();
+    static readonly Lazy<bool> Warm = new(() => { Parallel.For(1, 9, seed => Built((ulong)seed)); return true; });
 
     static readonly Lazy<Sample> Gem = new(() =>
     {
@@ -56,22 +60,18 @@ public class CaveTests
     static (Sample, ObjectField, ObjectInstance) FindCrystal()
     {
         var s = Gem.Value;
-        var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        var field = s.Field;
         foreach (var o in CaveObjects(s, field)) if (s.W.Objects.Objects[o.Def].Placement.Cave == ObjectField.CaveCrystal) return (s, field, o);
         throw new Xunit.Sdk.XunitException("no crystal");
     }
 
     static Sample At(ulong seed)
     {
-        lock (Cache)
-        {
-            if (Cache.TryGetValue(seed, out var s)) return s;
-            var w = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 512, CellMeters = WorldConfig.CellMetersFor(512) }, Biomes, Materials, null, null, Objects, Caves);
-            var d = new TerrainDetail(w);
-            var edits = Features.Place(w, d, out var graphs);
-            return Cache[seed] = new Sample { W = w, Detail = d, Edits = edits, Graphs = graphs };
-        }
+        if (seed <= 8) _ = Warm.Value;
+        return Built(seed);
     }
+
+    static Sample Built(ulong seed) => Cache.GetOrAdd(seed, k => new Lazy<Sample>(() => Make(k, Caves))).Value;
 
     static (Sample, CaveGraph) Find(Func<CaveGraph, bool> want)
     {
@@ -254,7 +254,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var s = At(seed);
-            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var field = s.Field;
             foreach (var o in CaveObjects(s, field)) if (s.W.Objects.Objects[o.Def].Placement.Cave == kind) return (s, field, o);
         }
         throw new Xunit.Sdk.XunitException("no cave object of kind " + kind);
@@ -332,7 +332,7 @@ public class CaveTests
             var s = At(seed);
             var all = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
             brooks += all.Length;
-            var pools = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
+            var pools = s.Field.CavePools();
             var e = new List<string>();
             WorldChecks.CheckCaveFalls(s.Detail, s.Edits, all, pools, e);
             Assert.True(e.Count == 0, string.Join("; ", e));
@@ -361,7 +361,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var s = At(seed);
-            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var field = s.Field;
             var e = new List<string>();
             var found = field.CavePools();
             WorldChecks.CheckCavePools(s.W, s.Detail, s.Edits, found, e);
@@ -386,7 +386,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var s = At(seed);
-            var found = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects).CavePools();
+            var found = s.Field.CavePools();
             if (found.Length == 0) continue;
             var p = found[0];
             var leak = new LiquidPool { X = p.X, Z = p.Z, Reach = p.Reach, Level = p.Level, Floor = p.Floor, Kind = p.Kind, I0 = p.I0, J0 = p.J0, Nx = p.Nx, Nz = p.Nz, WetCount = p.WetCount, Leaks = true, Ground = p.Ground, Wet = p.Wet };
@@ -410,7 +410,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var s = At(seed);
-            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var field = s.Field;
             foreach (var g in s.Graphs) if (!Mines.IsMine(g) && !DungeonLinks.IsLink(g)) tiles++;
             foreach (var x in s.Edits) if (x.Shape == FeatureEdit.Speleothem && x.T == 0f) flows++;
             foreach (var o in CaveObjects(s, field))
@@ -438,7 +438,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var s = At(seed);
-            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var field = s.Field;
             tiles += s.Graphs.Length;
             var e = new List<string>();
             WorldChecks.CheckCaveLights(s.W, s.Edits, field, e);
@@ -470,7 +470,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var s = At(seed);
-            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var field = s.Field;
             for (int i = 0; i < field.CaveLightCount; i++)
             {
                 if (!field.CaveLightAt(i, out var o)) continue;
@@ -524,7 +524,7 @@ public class CaveTests
         for (ulong seed = 1; seed <= 4 && hits.Count < kinds.Length; seed++)
         {
             var s = At(seed);
-            foreach (var o in CaveObjects(s, new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects)))
+            foreach (var o in CaveObjects(s, s.Field))
             {
                 int k = s.W.Objects.Objects[o.Def].Placement.Cave;
                 if (Array.IndexOf(kinds, k) >= 0 && !hits.ContainsKey(k)) hits[k] = (s, o);
@@ -567,7 +567,7 @@ public class CaveTests
                 Assert.True(Underground.EntranceTempC(s.W, g) <= Caves.IceMaxTempC);
             }
             if (!s.Graphs.Any(g => g.Ice)) continue;
-            var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+            var field = s.Field;
             foreach (var o in CaveObjects(s, field))
             {
                 var pl = s.W.Objects.Objects[o.Def].Placement;
@@ -605,7 +605,7 @@ public class CaveTests
         var e = new List<string>();
         WorldChecks.CheckCaveObsidian(s.W, s.Edits, s.Graphs, e);
         Assert.Empty(e);
-        var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        var field = s.Field;
         float span = Features.TileCells * s.W.Config.CellMeters;
         int lava = 0, glow = 0, drips = 0;
         foreach (var p in field.CavePools())
@@ -679,7 +679,7 @@ public class CaveTests
         var cells = s.Edits.Where(x => x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.CrystalCell).ToArray();
         Assert.NotEmpty(cells);
         Assert.Empty(Check(s, s.Edits, s.Graphs));
-        var field = new ObjectField(s.W, s.Detail, s.Edits, s.W.Objects);
+        var field = s.Field;
         int floor = 0, wall = 0, ceiling = 0;
         var contacts = new List<ObjectColumn>();
         foreach (var o in CaveObjects(s, field))
