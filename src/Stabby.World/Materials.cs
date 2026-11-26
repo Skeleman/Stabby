@@ -181,7 +181,7 @@ namespace Stabby.World
         public string Id;
         public List<string> Biomes = new List<string>();
         public uint DeepColor, ShallowColor, FilmColor, EmissionColor;
-        public float ClarityM, ShoreM, FoamWidthM;
+        public float ClarityM, ShoreM, FoamWidthM, OpaqueDepthM = 0.25f;
         public float WaveScaleM, WaveSpeed, WaveStrength;
         public float SwellScaleM, SwellStrength, LakeSwell;
         public float FlowSpeed, RapidsSlope, BedFieldM;
@@ -427,6 +427,7 @@ namespace Stabby.World
                     if (lib.Liquid(n) != i) errors.Add($"liquids: duplicate id {n}");
                     if (!(w.ClarityM >= 0.1f && w.ClarityM <= 100)) errors.Add($"{n}.clarityM {w.ClarityM} outside 0.1..100");
                     if (!(w.ShoreM >= 0.01f && w.ShoreM <= 5)) errors.Add($"{n}.shoreM {w.ShoreM} outside 0.01..5");
+                    if (!(w.OpaqueDepthM >= 0 && w.OpaqueDepthM <= 5)) errors.Add($"{n}.opaqueDepthM {w.OpaqueDepthM} outside 0..5");
                     if (!(w.FoamWidthM >= 0 && w.FoamWidthM <= 50)) errors.Add($"{n}.foamWidthM {w.FoamWidthM} outside 0..50");
                     Len(errors, n + ".waveScaleM", w.WaveScaleM);
                     Len(errors, n + ".swellScaleM", w.SwellScaleM);

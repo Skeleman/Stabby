@@ -419,7 +419,8 @@ Shader "Stabby/Water"
                 UNITY_BRANCH if (i.color.a > 0.25 && i.fall.z > 0 && i.fall.x > 0 && _StabbyWaterLookOff < 0.5)
                 {
                     float4 p = SwellParamsOf(kind);
-                    p.x *= i.fall.x;
+                    float visc = Liquid(i.reach.w, 5).y;
+                    p.x *= i.fall.x * (1 - visc);
                     float2 fuv = wp.xz * _StabbyFieldUV.x + _StabbyFieldUV.y;
                     float d = wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyBed, sampler_StabbyBed, fuv, 0).r;
                     float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, fuv, 0).rg;
@@ -430,7 +431,7 @@ Shader "Stabby/Water"
                     {
                         float2 gr;
                         float cr;
-                        lift = w * Swell(p, wp.xz, _Time.y, d, d / SwShoreSlope, sl / max(sm, 1e-4), i.fall.z, 4, gr, cr);
+                        lift = w * Swell(p, wp.xz, _Time.y * (1 - 0.7 * visc), d, d / SwShoreSlope, sl / max(sm, 1e-4), i.fall.z, 4, gr, cr);
                         wp.y += lift;
                     }
                 }
@@ -453,7 +454,7 @@ Shader "Stabby/Water"
             half4 Sheet(Varyings i, float3 v, float dist, float2 uv)
             {
                 float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L2 = Mixed(i, 2), L3 = Mixed(i, 3), L4 = Mixed(i, 4), L5 = Mixed(i, 5), L6 = Mixed(i, 6), L7 = Mixed(i, 7);
-                float opacity = L5.x, visc = L5.y;
+                float opacity = L5.x, visc = L5.y, pace = 1 - 0.7 * visc;
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float3 bed = _WorldSpaceCameraPos - v * (dist * scene / max(surface, 0.001));
@@ -465,7 +466,7 @@ Shader "Stabby/Water"
                 float4 wv = L2;
                 float slope = i.color.b * SlopeRange;
                 if (i.chan.y > 0 && dot(i.color.rg * 2 - 1, i.color.rg * 2 - 1) > 0.01) wv.x = lerp(max(wv.x, 1 / (ChannelWaves * 2 * i.chan.y)), wv.x, smoothstep(ChurnLo, ChurnHi, slope * L4.y));
-                float t = _Time.y * wv.y * (1 - 0.7 * visc);
+                float t = _Time.y * wv.y * pace;
                 float2 q = i.positionWS.xz * wv.x;
                 float2 xz = i.positionWS.xz;
                 float hot = 1 - L6.w;
@@ -481,7 +482,7 @@ Shader "Stabby/Water"
                 float2 fd = river ? normalize(flow) : float2(1, 0), sd = float2(fd.y, -fd.x);
                 float2 cw = float2(i.along, i.chan.x * i.chan.y);
                 bool look = _StabbyWaterLookOff < 0.5;
-                float speed = look && i.tint.w > 0 ? L4.x * i.tint.w : L4.x * (0.8 + 20 * slope);
+                float speed = (look && i.tint.w > 0 ? L4.x * i.tint.w : L4.x * (0.8 + 20 * slope)) * pace;
                 float ph = frac(_Time.y / FlowPeriod), wab = abs(1 - 2 * ph);
                 float crest = 0, swH = 0;
                 float2 swGrad = 0;
@@ -492,9 +493,9 @@ Shader "Stabby/Water"
                 float swDepth = max(0, field - i.swell.y);
                 UNITY_BRANCH if (look && !river && i.color.a > 0.25)
                 {
-                    swp.x *= i.swell.x;
+                    swp.x *= i.swell.x * (1 - visc);
                     float spx = max(fpa * _ScreenParams.y / 1080, 1e-3);
-                    swH = Swell(swp, xz, _Time.y, swDepth, swDepth / SwShoreSlope, sdir, spx, 3, swGrad, crest);
+                    swH = Swell(swp, xz, _Time.y * pace, swDepth, swDepth / SwShoreSlope, sdir, spx, 3, swGrad, crest);
                     float cb = CrestShare * 0.5 * SwShoreLength(swp, swDepth) * SwShoreSlope / max(slm, 1e-3);
                     crest *= smoothstep(CrestPxLo, CrestPxHi, cb / spx);
                 }
@@ -707,7 +708,7 @@ Shader "Stabby/Water"
                 float lw = slow * saturate(1.8 * inner - 0.1) * saturate(2.5 - fp * 3);
                 UNITY_BRANCH if (river && lw > 0.01)
                 {
-                    float la = _Time.y * L4.x;
+                    float la = _Time.y * L4.x * pace;
                     float2 lp = float2((i.along - 0.6 * la) * 0.19, cw.y * 0.5);
                     float3 wn = Noise(lp * float2(0.8, 0.22) + 7.3);
                     lp.y += 1.6 * wn.x + 1.5 * Noise(float2(i.along * 0.025, cw.y * 0.08) + 19.1).x;
@@ -756,8 +757,8 @@ Shader "Stabby/Water"
                 float gm = max(glow.r, max(glow.g, glow.b));
                 c += lerp(glow, gm * float3(1, 0.72, 0.28), seam) * (1 - film) * (1 + seam) * pulse;
 
-                float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(lerp(4, 40, molten), L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
-                if (river && i.fall.y > 0) alpha *= smoothstep(0, PoolShore, depth);
+                float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), (L3.w < 0 ? saturate(depth * 1e4) : saturate(depth * min(lerp(L3.w, 40, molten), L1.w)) * saturate((1 - i.chan.z) * MudFeather)), opacity);
+                if (river && i.fall.y > 0 && L3.w >= 0) alpha *= smoothstep(0, PoolShore, depth);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
                 return half4(lerp(StabbyMixFog(c, i.positionWS, i.fog), c, clear), alpha);
             }

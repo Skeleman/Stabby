@@ -101,6 +101,7 @@ public static class ContentLoader
         public FallEntry? Fall { get; set; }
         public float ClarityM { get; set; }
         public float ShoreM { get; set; }
+        public float OpaqueDepthM { get; set; } = 0.25f;
         public float FoamWidthM { get; set; }
         public float WaveScaleM { get; set; }
         public float WaveSpeed { get; set; }
@@ -284,7 +285,7 @@ public static class ContentLoader
         Spray = e.Fall == null ? -1 : Array.IndexOf(LiquidDef.SprayNames, e.Fall.Spray),
         FallSpeed = e.Fall?.Speed ?? 0, SheetOpacity = e.Fall?.SheetOpacity ?? 0,
         SprayColor = e.Fall == null ? 0 : Hex(e.Fall.SprayColor, path, e.Id + ".fall.sprayColor"), SprayAmount = e.Fall?.SprayAmount ?? 0, Froth = e.Fall?.Froth ?? 0,
-        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
+        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM, OpaqueDepthM = e.OpaqueDepthM,
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
         FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope, BedFieldM = e.BedFieldM,

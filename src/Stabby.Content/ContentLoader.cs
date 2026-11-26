@@ -281,7 +281,7 @@ namespace Stabby.Content
                 ShallowColor = Hex(e.String("shallowColor", ""), path, id + ".shallowColor"),
                 FilmColor = Hex(e.String("filmColor", ""), path, id + ".filmColor"),
                 EmissionColor = Hex(e.String("emissionColor", ""), path, id + ".emissionColor"),
-                ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0),
+                ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0), OpaqueDepthM = e.Float("opaqueDepthM", 0.25f),
                 WaveScaleM = e.Float("waveScaleM", 0), WaveSpeed = e.Float("waveSpeed", 0), WaveStrength = e.Float("waveStrength", 0),
                 SwellScaleM = e.Float("swellScaleM", 0), SwellStrength = e.Float("swellStrength", 0), LakeSwell = e.Float("lakeSwell", 0),
                 FlowSpeed = e.Float("flowSpeed", 0), RapidsSlope = e.Float("rapidsSlope", 0), BedFieldM = e.Float("bedFieldM", 0),

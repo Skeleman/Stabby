@@ -7,7 +7,7 @@ namespace Stabby.World
     {
         public const int QuicksandPool = -3;
         public const float QuicksandChance = 0.8f, QuicksandSpreadM = 30f, QuicksandMinR = 1.5f, QuicksandMaxR = 5f;
-        public const float QuicksandMinDepthM = 0.6f, QuicksandMaxDepthM = 0.9f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 0.1f, QuicksandDipM = 0.04f;
+        public const float QuicksandMinDepthM = 0.25f, QuicksandMaxDepthM = 0.35f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 0.1f, QuicksandDipM = 0.025f, QuicksandGapM = 0.025f, QuicksandBank = 3f;
         readonly object quicksandLock = new object();
         float[] quicksandPools;
 
@@ -122,7 +122,7 @@ namespace Stabby.World
             var b = QuicksandPools();
             for (int k = 0; k < b.Length; k += BogStride)
             {
-                float reach = BogReach(b[k + 2], b[k + 3], b[k + 5] + BogHeadM) + BogGapM;
+                float reach = BogReach(b[k + 2], b[k + 3], b[k + 5] + BogHeadM, QuicksandBank) + BogGapM;
                 if (e.MinX < b[k] + reach && e.MaxX > b[k] - reach && e.MinZ < b[k + 1] + reach && e.MaxZ > b[k + 1] - reach) return true;
             }
             return false;
@@ -133,7 +133,7 @@ namespace Stabby.World
             var b = QuicksandPools();
             var list = new FeatureEdit[b.Length / BogStride];
             for (int k = 0, e = 0; k < b.Length; k += BogStride, e++)
-                list[e] = SoftEdit(b[k], b[k + 1], b[k + 2], b[k + 3], b[k + 4], b[k + 5] + BogHeadM, 0f).Finer();
+                list[e] = SoftEdit(b[k], b[k + 1], b[k + 2], b[k + 3], b[k + 4], b[k + 5] + BogHeadM, 0f, QuicksandBank).Finer();
             return list;
         }
     }

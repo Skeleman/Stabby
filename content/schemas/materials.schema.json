@@ -96,6 +96,7 @@
           "emissionColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
           "clarityM": { "type": "number", "minimum": 0.1, "maximum": 100 },
           "shoreM": { "type": "number", "minimum": 0.01, "maximum": 5 },
+          "opaqueDepthM": { "type": "number", "minimum": 0, "maximum": 5 },
           "foamWidthM": { "type": "number", "minimum": 0, "maximum": 50 },
           "waveScaleM": { "type": "number", "minimum": 0.01, "maximum": 1000 },
           "waveSpeed": { "type": "number", "minimum": 0, "maximum": 10 },
