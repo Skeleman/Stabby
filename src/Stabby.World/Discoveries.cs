@@ -58,7 +58,7 @@ namespace Stabby.World
             var f = new ObjectField(w, detail, edits, lib);
             f.discoveries = Discoveries();
             f.bogPools = BogPools();
-            f.sketch = sketch; f.towns = towns; f.hotspots = hotspots; f.treeCover = treeCover; f.routes = routes;
+            f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover; f.routes = routes;
             return f;
         }
 
@@ -358,7 +358,7 @@ namespace Stabby.World
                 float dx = l.X * cm - x, dz = l.Y * cm - z;
                 if (dx * dx + dz * dz < TownClearM * TownClearM) return false;
             }
-            return true;
+            return !InTownGround(x, z, r, true);
         }
 
         bool ApartFromOthers(int d, float x, float z, List<ObjectInstance> list)

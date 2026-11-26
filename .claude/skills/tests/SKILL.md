@@ -38,6 +38,15 @@ Rules:
 - No `System.Random`, wall clock or file order dependence in tests.
 - Keep the suite under about a minute; a slow test is a bug.
 
+## Scope
+
+A test builds only what it asserts. Place solids only when it checks solids,
+only the chunks under the thing it checks, and look up neighbours through
+`EditGrid` or chunk bins instead of scanning every edit or object. Before
+handing back a generation change, run the sweep groups it touches (`check.sh`
+sweeps) as well as its own tests, so a group budget breaks in the lane, not
+at merge.
+
 ## Time budgets
 
 Every test has a budget (CLAUDE.md rule 14): 10 s, or the ceiling its line in
