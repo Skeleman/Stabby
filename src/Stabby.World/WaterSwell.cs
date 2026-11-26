@@ -25,7 +25,7 @@ namespace Stabby.World
         public static readonly float[] TrainPhase = { 0f, 0.37f, 0.71f, 0.19f, 0.53f, 0.83f, 0.29f };
         public const float GroupDepth = 0.3f, GroupX = 0.8f, GroupZ = 0.6f, GroupLength = 260f, GroupSpeed = 4f;
         public const float WarpGain = 0.25f, WarpAX = 0.6f, WarpAZ = 0.8f, WarpALength = 3100f, WarpBX = -0.8f, WarpBZ = 0.6f, WarpBLength = 2700f;
-        public const float ShoreStart = 12f, ShoreFull = 4f, ShoreRef = 8f, Breaking = 0.39f, SharpDepth = 6f, MinDepth = 0.05f, MinSlope = 0.03f;
+        public const float ShoreStart = 12f, ShoreFull = 4f, ShoreRef = 8f, Breaking = 0.39f, SharpDepth = 6f, MinSlope = 0.03f, ShoreEase = 0.125f;
 
         public static readonly SwellParams Sea = new SwellParams(0.5f, 44f, 7f, 0.22f);
         public static readonly SwellParams Lake = new SwellParams(0.07f, 28f, 3f, 0.07f);
@@ -57,7 +57,14 @@ namespace Stabby.World
             return Math.Min(grown, Breaking * depth) * ShoreWeight(depth);
         }
 
-        public static float ShoreWavelength(in SwellParams p, float depth) => p.ShorePeriod * (float)Math.Sqrt(Gravity * Math.Max(depth, MinDepth));
+        public static float ShoreWavelength(in SwellParams p) => p.ShorePeriod * (float)Math.Sqrt(Gravity * ShoreFull);
+
+        public static float ShorePhaseDistance(float shoreDist, out float rate)
+        {
+            float sd = Math.Max(shoreDist, 0), near = Math.Max(0, 1 - sd);
+            rate = 1 + 2 * ShoreEase * near;
+            return sd - ShoreEase * near * near;
+        }
 
         public static float Height(in SwellParams p, float x, float z, float t, float depth, float shoreDist) =>
             Sample(p, x, z, t, depth, shoreDist, 0, 0, out _, out _);
@@ -94,11 +101,12 @@ namespace Stabby.World
             float amp = ShoreAmplitude(p, depth);
             if (amp > 0)
             {
-                float c = p.ShorePeriod * (float)Math.Sqrt(Gravity * Math.Max(depth, MinDepth));
+                float c = ShoreWavelength(p), u = ShorePhaseDistance(shoreDist, out float rate);
                 float sharp = Saturate(1 - depth / SharpDepth);
-                h += amp * Wave(2 * Math.Max(shoreDist, 0) / c + t / p.ShorePeriod, sharp, out float ds);
-                dhdx -= 2 * amp * ds * shoreDirX / c;
-                dhdz -= 2 * amp * ds * shoreDirZ / c;
+                h += amp * Wave(2 * u / c + t / p.ShorePeriod, sharp, out float ds);
+                float k = 2 * amp * ds * rate / c;
+                dhdx -= k * shoreDirX;
+                dhdz -= k * shoreDirZ;
             }
             return h;
         }
