@@ -16,7 +16,7 @@ namespace Stabby.World
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
         public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 4f, DenProbeM = 6f, DenSeekM = 50f, DenRiverM = 40f, DenWoods = 0.25f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
-        public const int DenSeekRings = 3, DiscoveryTries = 16, ClimbSteps = 12;
+        public const int DenSeekRings = 3, DiscoveryTries = 16, ClimbSteps = 12, FitBatch = 4;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
         readonly object discoveryLock = new object();
         ObjectInstance[] discoveries;
@@ -259,12 +259,44 @@ namespace Stabby.World
                 ref var r = ref tries[q];
                 FaceDownhill(r.X, r.Z, ref r.Qa, ref r.Qb);
                 r.Fit = Fitness(pl.Discovery, r.X, r.Z);
-                r.Pass = ApartFromOthers(d, r.X, r.Z, list) && SiteFits(d, r.Variant, r.X, r.Z, r.Size, r.Qa, r.Qb, out r.O);
             });
+            var order = new List<int>(count);
+            bool nan = false;
             for (int q = 0; q < count; q++)
             {
-                if (tries[q].Fit <= best || !tries[q].Pass) continue;
-                best = tries[q].Fit; pick = tries[q].O; any = true;
+                nan |= float.IsNaN(tries[q].Fit);
+                if (tries[q].Fit > best) order.Add(q);
+            }
+            if (nan)
+            {
+                Parallel.For(0, count, q =>
+                {
+                    ref var r = ref tries[q];
+                    r.Pass = ApartFromOthers(d, r.X, r.Z, list) && SiteFits(d, r.Variant, r.X, r.Z, r.Size, r.Qa, r.Qb, out r.O);
+                });
+                for (int q = 0; q < count; q++)
+                {
+                    if (tries[q].Fit <= best || !tries[q].Pass) continue;
+                    best = tries[q].Fit; pick = tries[q].O; any = true;
+                }
+                if (any) list.Add(pick);
+                return any;
+            }
+            order.Sort((a, b) => tries[a].Fit != tries[b].Fit ? tries[b].Fit.CompareTo(tries[a].Fit) : a.CompareTo(b));
+            for (int start = 0; start < order.Count && !any; start += FitBatch)
+            {
+                int end = Math.Min(order.Count, start + FitBatch);
+                Parallel.For(start, end, k =>
+                {
+                    ref var r = ref tries[order[k]];
+                    r.Pass = ApartFromOthers(d, r.X, r.Z, list) && SiteFits(d, r.Variant, r.X, r.Z, r.Size, r.Qa, r.Qb, out r.O);
+                });
+                for (int k = start; k < end; k++)
+                {
+                    if (!tries[order[k]].Pass) continue;
+                    pick = tries[order[k]].O; any = true;
+                    break;
+                }
             }
             if (any) list.Add(pick);
             return any;
