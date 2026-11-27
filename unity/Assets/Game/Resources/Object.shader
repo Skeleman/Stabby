@@ -498,10 +498,14 @@ Shader "Stabby/Object"
                 else if (mat == 11)
                 {
                     float4 lp = OrgRP3(q, OrgF(1), sd + 1.7, 1);
-                    float wet = smoothstep(-0.3, 0.7, big.x + 0.6 * mid.x * fm) * 0.55 + (1 - open) * 0.45;
-                    a = lerp(_StabbyKit[39].rgb, _StabbyKit[40].rgb, saturate(wet)) * (0.8 + 0.14 * fib.x * ff + 0.1 * big.x);
+                    float wet = smoothstep(0.1, -0.7, mid.x * fm + 0.4 * big.x) * 0.5 + (1 - open) * 0.4;
+                    a = lerp(_StabbyKit[39].rgb, _StabbyKit[41].rgb, 0.35 + 0.25 * big.x) * (0.9 + 0.14 * fib.x * ff + 0.1 * big.x);
+                    a = lerp(a, _StabbyKit[40].rgb, saturate(wet));
                     float grit = smoothstep(0.5, 0.85, lp.x + 0.35 * fib.x * ff) * fs;
-                    a = lerp(a, _StabbyKit[41].rgb, 0.5 * grit);
+                    a = lerp(a, _StabbyKit[41].rgb * 1.2, 0.5 * grit);
+                    float3 cc = ContactColor(wp.xz, wp.y);
+                    a = lerp(a, a * saturate(dot(cc, 1) / max(dot(a, 1), 1e-3)), 0.35 + 0.4 * (1 - open));
+                    a = lerp(a, cc, 0.12);
                     grad = 0.26 * mid.yzw * fm + 0.16 * lp.yzw * fs + 0.1 * fib.yzw * ff;
                     shade = 0.35 * smoothstep(0.0, -0.6, mid.x) * fm;
                 }
