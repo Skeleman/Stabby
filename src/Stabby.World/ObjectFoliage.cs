@@ -454,6 +454,82 @@ namespace Stabby.World
             return Leaves(key, lod, limbs, ConiferStyle);
         }
 
+        public static ObjectMesh DatePalm(ulong key, int lod)
+        {
+            int[] pairs = { 14, 8, 4 }, trunkSides = { 7, 5, 4 }, ribSides = { 3, 0, 0 };
+            lod = Math.Max(0, Math.Min(pairs.Length - 1, lod));
+            var rng = new Rng(Rng.Mix(key ^ 0x8A5CD789635D2DFFUL));
+            var form = new Rng(Rng.Mix(key ^ 0x121FD2155C472F96UL));
+            var heavy = Flat(ref form);
+            float lean = form.Range(0.1f, 0.45f), rise = form.Range(0.5f, 0.9f);
+            var trunk = Grow(ref rng, new V(0, 0, 0), (new V(0, 1, 0) + heavy * lean).Norm(), 1f, 22, TrunkRadius * 1.3f, TrunkRadius * 0.85f, 0.015f, new V(0, rise, 0), 0, 0.2f, rng.NextFloat(), 0);
+            for (int i = 0; i < trunk.R.Count; i++) trunk.R[i] *= (i & 1) == 0 ? 1.06f : 0.92f;
+            trunk.R[0] *= 1.25f;
+            var top = trunk.P[trunk.P.Count - 1];
+            var limbs = new List<Limb> { trunk };
+            var fronds = new List<Limb>();
+            int count = rng.Range(14, 21), dead = form.Range(3, 7);
+            var spin = Flat(ref rng);
+            float scaleLen = form.Range(0.85f, 1.15f);
+            for (int k = 0; k < count; k++)
+            {
+                var side = Around(spin, (k + rng.Range(-0.3f, 0.3f)) / count);
+                float age = rng.NextFloat(), len = rng.Range(0.3f, 0.4f) * scaleLen;
+                var d = (side + new V(0, 1.1f - 1.3f * age, 0)).Norm();
+                var frond = Tip(Grow(ref rng, top, d, len, 6, TrunkRadius * 0.3f, 0.002f, 0.05f, new V(0, -0.6f - 0.8f * age, 0), trunk.Bend(1), 0.6f + 0.4f * age, rng.NextFloat(), 1));
+                frond.Leafy = 0;
+                limbs.Add(frond);
+                fronds.Add(frond);
+            }
+            for (int k = 0; k < dead; k++)
+            {
+                var side = Around(spin, (k + form.Range(0f, 0.8f)) / dead);
+                var at = trunk.At(form.Range(0.93f, 0.99f), out _);
+                var d = (side * form.Range(0.3f, 0.6f) + new V(0, -1, 0)).Norm();
+                var husk = Tip(Grow(ref form, at, d, form.Range(0.12f, 0.2f), 4, TrunkRadius * 0.35f, 0.002f, 0.08f, new V(0, -0.5f, 0), trunk.Bend(1), 0.5f, form.NextFloat(), 1));
+                husk.Bare = true;
+                limbs.Add(husk);
+            }
+            float crownH = 0, crownV = 0;
+            foreach (var f in fronds)
+                foreach (var p in f.P)
+                {
+                    var d = p - top;
+                    crownH = Math.Max(crownH, d.Flat);
+                    crownV = Math.Max(crownV, Math.Abs(d.Y));
+                }
+            var o = Out.Shared();
+            foreach (var l in limbs) Tube(o, l, l.Depth == 0 ? trunkSides[lod] : ribSides[lod], false);
+            float grow = (float)Math.Sqrt(pairs[0] / (float)pairs[lod]);
+            var nrm = new Rng(Rng.Mix(key ^ 0x2F7B6E1D93C4A580UL));
+            var upY = new V(0, 1, 0);
+            for (int f = 0; f < fronds.Count; f++)
+            {
+                var l = fronds[f];
+                float len = l.Length(), phase = l.Phase;
+                var wobble = Unit(ref nrm) * 0.25f;
+                int n = pairs[lod];
+                for (int i = 0; i < n; i++)
+                {
+                    float t = 0.12f + 0.86f * (i + 0.5f) / n, shape = 0.3f + 2.8f * t * (1 - t);
+                    var at = l.At(t, out var dir);
+                    var across = V.Cross(dir, upY).Norm();
+                    float jig = phase * 13.7f + i * 0.618f;
+                    jig -= (float)Math.Floor(jig);
+                    for (int s = -1; s <= 1; s += 2)
+                    {
+                        var up = (across * s + dir * 0.55f + new V(0, -0.25f - 0.3f * t, 0)).Norm();
+                        var face = V.Cross(up, dir).Norm();
+                        float size = len * 0.32f * shape * (0.85f + 0.3f * jig) * Math.Min(1.5f, grow);
+                        Card(o, at, up, face, size, 0.35f * Math.Min(1.6f, grow), Reeds, s > 0, top, crownH + 0.05f, crownV + 0.05f, l.Bend(t), phase, jig, 0.3f, wobble);
+                    }
+                }
+            }
+            float maxY = 0;
+            foreach (var l in limbs) foreach (var p in l.P) maxY = Math.Max(maxY, p.Y);
+            return o.Finish(1f / Math.Max(0.5f, maxY + 0.05f));
+        }
+
         static ObjectMesh Leaves(ulong key, int lod, List<Limb> limbs, Style st)
         {
             lod = Math.Max(0, Math.Min(st.Counts.Length - 1, lod));

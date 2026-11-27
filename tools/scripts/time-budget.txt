@@ -63,3 +63,4 @@ sweep 512 caves 19626 56979 cave paths, caves, mines, dungeon links, cave normal
 sweep 512 sites 22000 40000 site footprints, sites, structures and discoveries per seed
 sweep 512 objects 23846 29431 objects, landforms, arches and boulders per seed
 sweep 512 creatures 3100 5100 creature checks per seed
+test DiscoveryTests.OasesHoldWaterAmongPalms 8 checks oasis pools, ring and palms on the shared default world

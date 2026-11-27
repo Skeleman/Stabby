@@ -65,7 +65,8 @@ namespace Stabby.World
                     if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
                     if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
                     if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
-                    if (!seen[4])
+                    bool oasis = def.Placement.Oasis != null;
+                    if (!seen[4] && !oasis)
                     {
                         grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                         if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
@@ -83,9 +84,10 @@ namespace Stabby.World
                         if (bx * bx + bz * bz < reach * reach) Fail(12, $" stands in the quicksand margin at {sands[k]:F0},{sands[k + 1]:F0}");
                     }
                     float foot = ground;
+                    if (oasis) foot = field.OasisFoot(o.X, o.Z);
                     if (ObjectPart.IsDungeon(def.Parts[0].Shape)) ObjectField.SeatRange(detail, cm, ObjectField.Seats(def), o, out foot, out _);
                     if (!seen[5] && (o.Y > foot + 0.05f || o.Y < foot - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {foot:F2})");
-                    if (!seen[8])
+                    if (!seen[8] && !oasis)
                     {
                         float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
                         float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);
@@ -339,7 +341,7 @@ namespace Stabby.World
                 float x = m.Verts[v], y = m.Verts[v + 1], z = m.Verts[v + 2], ny = m.Verts[v + 4];
                 float px = x - b.Ax, py = y - b.Ay, pz = z - b.Az;
                 float u = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
-                float qx = px - u * ex, qy = py - u * ey, qz = pz - u * ez, d = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+                float qx = px - u * ex, qy = Math.Max(0f, py - u * ey), qz = pz - u * ez, d = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
                 if (d <= 0f || Math.Abs(d - b.R) > 0.5f * s + b.N || y - cols.Height((int)Math.Round(x / s), (int)Math.Round(z / s)) < 0.5f * s) continue;
                 float ty = qy / d;
                 if (ty > BoulderSteepNy || ty < BoulderLowNy) continue;
@@ -352,7 +354,25 @@ namespace Stabby.World
             }
             return bad > Math.Max(BoulderNormalFloor, BoulderNormalShare * steep) ? $" tilts {bad} of {steep} steep-face normals upward" : null;
         }
-        public const int BoulderMeshSamples = 12;
+        public const int BoulderMeshSamples = 12, BoulderFootColumns = 12;
+        public const float BoulderFootStep = 0.08f, BoulderFootSkin = 0.05f;
+
+        static void CheckBoulderFoot(TerrainDetail detail, float cm, FeatureEdit b, List<string> e)
+        {
+            for (int j = 0; j <= BoulderFootColumns; j++)
+                for (int i = 0; i <= BoulderFootColumns; i++)
+                {
+                    float x = b.MinX + (b.MaxX - b.MinX) * i / BoulderFootColumns, z = b.MinZ + (b.MaxZ - b.MinZ) * j / BoulderFootColumns;
+                    float ground = ObjectField.GroundAt(detail, cm, x, z);
+                    bool air = false;
+                    for (float y = ground + BoulderFootSkin; y <= b.MaxY; y += BoulderFootStep * b.R)
+                    {
+                        if (!b.Reach(x, y, z, out _)) { air = true; continue; }
+                        if (air) { e.Add($"boulder at {x:F1},{z:F1} leaves an overhang gap {y - ground:F2} m above its base"); return; }
+                        break;
+                    }
+                }
+        }
 
         static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
@@ -387,7 +407,8 @@ namespace Stabby.World
             {
                 var b = edits[boulders[(int)((long)k * boulders.Count / samples)]];
                 int before = e.Count;
-                CheckBoulderMesh(detail, grid, b, e);
+                CheckBoulderFoot(detail, cm, b, e);
+                if (e.Count == before) CheckBoulderMesh(detail, grid, b, e);
                 if (e.Count == before) CheckBoulderFade(detail, grid, b, e);
                 if (e.Count > before) return;
             }

@@ -548,12 +548,19 @@ namespace Stabby.Game
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
-                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Carve || e.F > -0.5f || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
+                if (e.Shape != FeatureEdit.Spring || e.Kind != FeatureEdit.Carve || e.F > -0.5f || e.F <= -ObjectField.OasisTag || p.x < e.MinX || p.x > e.MaxX || p.z < e.MinZ || p.z > e.MaxZ) continue;
                 float edge = ObjectField.BogMargin(-e.F), d = math.length(new float2(p.x - e.Ax, p.z - e.Az));
                 d += ObjectField.BogPeatFadeM * (0.5f + 0.5f * noise.snoise(new float2(p.x, p.z) * 0.3f + e.S * 97f));
                 peat = math.max(peat, 1 - math.smoothstep(edge - ObjectField.BogPeatFadeM, edge, d));
             }
             return peat;
+        }
+
+        static float Fertile(NativeEdits fertile, float3 p)
+        {
+            float g = 0;
+            for (int q = 0; q < fertile.Count; q++) g = math.max(g, fertile.Items[q].Fertile(p.x, p.z));
+            return g;
         }
 
         const float RoadFadeM = 0.8f, RoadUp = 0.6f;
@@ -606,6 +613,14 @@ namespace Stabby.Game
                 if (!e.Crusts) continue;
                 float ext = e.CrustExtent;
                 if (e.Ax + ext > x0m && e.Ax - ext < x1m && e.Az + ext > z0m && e.Az - ext < z1m) crusts.Items.Add(e);
+            }
+            var fertile = new NativeEdits { Items = new NativeList<FeatureEdit>(Allocator.Temp) };
+            for (int f = 0; f < g.Edits.Length; f++)
+            {
+                var e = g.Edits[f];
+                if (!e.Oasis) continue;
+                float ext = e.FertileExtent;
+                if (e.Ax + ext > x0m && e.Ax - ext < x1m && e.Az + ext > z0m && e.Az - ext < z1m) fertile.Items.Add(e);
             }
             var roads = new NativeList<RoadSegment>(Allocator.Temp);
             for (int f = 0; f < g.Roads.Length; f++)
@@ -710,7 +725,8 @@ namespace Stabby.Game
                 float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y);
                 p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), cover, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
                 float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover, false), glass = peat > 0 || ice > 0.01f ? 0 : Ice(edits, light, p.Pos, cover, true), coat = math.max(ice, glass);
-                p.Stitch.w = math.floor(p.Stitch.w) + (boulder ? TerrainTree.BoulderBit : 0) + (glass > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : 0.5f * peat);
+                float green = peat > 0 || coat > 0.01f ? 0 : Fertile(fertile, p.Pos);
+                p.Stitch.w = math.floor(p.Stitch.w) + (boulder ? TerrainTree.BoulderBit : 0) + (glass > 0.01f || green > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : green > 0.01f ? 0.5f * green : 0.5f * peat);
                 float dark = Dark(edits, light, p.Pos, cover);
                 p.Dark = new half2(new float2(dark, dark));
                 if (stitch)
@@ -1142,11 +1158,19 @@ namespace Stabby.Game
             public int Steam, Pools;
             public LoadTimes Times;
 
+            readonly List<(MeshParts, int, bool)> queued = new List<(MeshParts, int, bool)>();
+
             public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast, bool lean = false)
             {
                 if (part == null) return;
-                Pack.Add(part, Kinds.Count, lean);
+                queued.Add((part, Kinds.Count, lean));
                 Kinds.Add((mat, pad, cast));
+            }
+
+            public void Flush()
+            {
+                Pack.Add(queued);
+                queued.Clear();
             }
 
             public void Dispose()
@@ -1899,6 +1923,7 @@ namespace Stabby.Game
             try
             {
                 fill(sp);
+                sp.Flush();
                 sp.Batch = new MeshBatch(sp.Pack, true);
             }
             catch
