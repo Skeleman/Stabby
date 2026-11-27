@@ -62,6 +62,36 @@ public class WorldTests
     }
 
     [Fact]
+    public void SplitFallsKeepOrderedLipRunsInsideTheirSheet()
+    {
+        var w = Gen(12);
+        var e = new List<string>();
+        int split = 0;
+        RiverFall bent = default;
+        RiverSegment bentRiver = null!;
+        foreach (var s in w.Water.Rivers)
+            foreach (var f in s.Falls)
+            {
+                WorldChecks.CheckFallRuns(s, f, e);
+                if (Hydrology.LipRuns(f).Count < 4) continue;
+                split++;
+                bent = f;
+                bentRiver = s;
+            }
+        Assert.True(split > 0, "seed 12 has no split falls");
+        Assert.Empty(e);
+        var p = (float[])bent.LipPts!.Clone();
+        for (int k = 0; k < p.Length / 2; k += 2)
+        {
+            int j = p.Length - 2 - k;
+            (p[k], p[j]) = (p[j], p[k]);
+            (p[k + 1], p[j + 1]) = (p[j + 1], p[k + 1]);
+        }
+        bent.LipPts = p;
+        Assert.True(WorldChecks.CheckFallRuns(bentRiver, bent, e), "reversed lip passed the run check");
+    }
+
+    [Fact]
     public void DrySeedsRaiseMesasAndButtes()
     {
         int mesas = 0, buttes = 0, lips = 0;

@@ -3034,6 +3034,9 @@ namespace Stabby.Game.Editor
             return true;
         }
 
+        const float LowSunTargetM = 30f, LowSunPitch = 14f, LowSunStepM = 8f;
+        const int LowSunSteps = 40;
+
         static System.Collections.IEnumerator CastTour(Camera cam, string dir)
         {
             foreach (var (label, pos, rot) in poses)
@@ -3071,10 +3074,24 @@ namespace Stabby.Game.Editor
                 GameStatus.Line("terrain", out t);
                 GameStatus.Lines["~bench " + label + " sunk nodes"] = $"bench {label} sunk nodes drawn/hidden (ms, full): 1080p {sunk[0]:F2}/{sunk[1]:F2}, 4K {sunk[2]:F2}/{sunk[3]:F2}; {t}";
             }
+            Ground ground = default;
+            bool hasGround = false;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                if (w.Name != GameSettings.ViewClient) continue;
+                var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (q.CalculateEntityCount() != 1) continue;
+                ground = q.GetSingleton<Ground>();
+                hasGround = true;
+                break;
+            }
             foreach (var (name, pos, rot) in lows)
             {
                 cam.transform.SetPositionAndRotation(pos, rot);
-                DayNightSystem.LightOverride = name == "rock" ? (Quaternion?)null : Quaternion.Euler(name == "grass" ? 6f : 14f, rot.eulerAngles.y + (name == "grass" ? 160f : 100f), 0);
+                float yaw = rot.eulerAngles.y + (name == "grass" ? 160f : 100f);
+                if (name.StartsWith("cliff") && hasGround && SunBlocked(ground, pos, rot, rot.eulerAngles.y - 100f) < SunBlocked(ground, pos, rot, yaw))
+                    yaw = rot.eulerAngles.y - 100f;
+                DayNightSystem.LightOverride = name == "rock" ? (Quaternion?)null : Quaternion.Euler(name == "grass" ? 6f : 14f, yaw, 0);
                 for (var w = Settle(180); w.MoveNext();) yield return null;
                 string[] tags = name == "rock" ? new[] { "-nocast", "-cast", "-detailoff", "-nojoints" } : new[] { "-low-nocast", "-low", "-low-detailoff", "-low-nojoints" };
                 var rockB = Shader.GetGlobalVector("_StabbyRockB");
@@ -3093,6 +3110,20 @@ namespace Stabby.Game.Editor
             }
             DayNightSystem.LightOverride = null;
             TerrainViewSystem.Casting = true;
+        }
+
+        static int SunBlocked(Ground ground, Vector3 pos, Quaternion rot, float yaw)
+        {
+            var at = pos + rot * Vector3.forward * LowSunTargetM;
+            at.y = ground.HeightAt(at.x, at.z) + 1f;
+            var sun = -(Quaternion.Euler(LowSunPitch, yaw, 0) * Vector3.forward);
+            int blocked = 0;
+            for (int i = 1; i <= LowSunSteps; i++)
+            {
+                var p = at + sun * (i * LowSunStepM);
+                if (ground.HeightAt(p.x, p.z) > p.y) blocked++;
+            }
+            return blocked;
         }
 
         static string ShadowBench(Camera cam, string label, bool blades)
