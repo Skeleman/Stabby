@@ -264,7 +264,8 @@
           "kind": {
             "enum": [
               "peak",
-              "plateau"
+              "plateau",
+              "dry-plateau"
             ]
           },
           "x": {

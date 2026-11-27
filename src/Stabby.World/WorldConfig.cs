@@ -4,7 +4,7 @@ namespace Stabby.World
 
     public sealed class WorldConfig
     {
-        public const int GeneratorVersion = 182;
+        public const int GeneratorVersion = 185;
 
         public ulong Seed = 1;
         public const float MapMeters = 23040f;
@@ -27,6 +27,7 @@ namespace Stabby.World
         public float PondRadiusMin = 0.035f, PondRadiusMax = 0.07f;
 
         public float SeaLevelTempC = 9f, LapseRatePerMeter = 0.014f;
+        public float DryChance = 0.5f, DryWarmC = 22f, DryRainMm = 120f, DryInner = 1f, DryOuter = 1.7f;
         public Wind PrevailingWind = Wind.FromWest;
         public float BaseRainMm = 750f, OrographicRainMm = 25000f, MaxRainMm = 4000f;
         public float RainoutMm = 2.4e7f, SeaRecharge = 0.25f, LandRecharge = 0.01f, UpwindMeters = 300f;

@@ -37,7 +37,7 @@ namespace Stabby.Content
             foreach (var h in s.Shores) Spot(w, h.Cliff ? "cliff" : "beach", h.X, h.Y, h.Radius);
             w.EndArray();
             w.Key("highlands").BeginArray();
-            foreach (var h in s.Highlands) Spot(w, h.Plateau ? "plateau" : "peak", h.X, h.Y, h.Radius);
+            foreach (var h in s.Highlands) Spot(w, h.Plateau ? (h.Dry ? "dry-plateau" : "plateau") : "peak", h.X, h.Y, h.Radius);
             w.EndArray();
             return w.EndObject().ToString();
         }
@@ -121,7 +121,7 @@ namespace Stabby.Content
             if (ranges.Exists(r => r.Strength == null)) errors.Add("ranges need strength");
             if (corridors.Exists(r => r.Strength != null)) errors.Add("corridors have no strength");
             if (shores.Exists(h => h.Kind != "cliff" && h.Kind != "beach")) errors.Add("shore kind is cliff or beach");
-            if (highlands.Exists(h => h.Kind != "peak" && h.Kind != "plateau")) errors.Add("highland kind is peak or plateau");
+            if (highlands.Exists(h => h.Kind != "peak" && h.Kind != "plateau" && h.Kind != "dry-plateau")) errors.Add("highland kind is peak, plateau or dry-plateau");
             if (errors.Count > 0) throw new InvalidDataException(string.Join("; ", errors));
 
             c.Seed = seed; c.Size = size; c.CellMeters = cell;
@@ -129,7 +129,7 @@ namespace Stabby.Content
             foreach (var r in ranges) s.Ranges.Add(new RangeSketch { X = r.X, Y = r.Y, Width = r.Width, Strength = r.Strength.Value });
             foreach (var r in corridors) s.Corridors.Add(new CorridorSketch { X = r.X, Y = r.Y, Width = r.Width });
             foreach (var h in shores) s.Shores.Add(new ShoreSketch { Cliff = h.Kind == "cliff", X = h.X, Y = h.Y, Radius = h.Radius });
-            foreach (var h in highlands) s.Highlands.Add(new HighlandSketch { Plateau = h.Kind == "plateau", X = h.X, Y = h.Y, Radius = h.Radius });
+            foreach (var h in highlands) s.Highlands.Add(new HighlandSketch { Plateau = h.Kind != "peak", Dry = h.Kind == "dry-plateau", X = h.X, Y = h.Y, Radius = h.Radius });
             s.Build(c);
             return s;
         }

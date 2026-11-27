@@ -1850,6 +1850,17 @@ namespace Stabby.World
             var s = w.Sketch;
             var hy = w.Water;
 
+            foreach (var hl in s.Highlands)
+            {
+                if (!hl.Dry) continue;
+                if (!hl.Plateau) { e.Add("dry highland is not a plateau"); continue; }
+                if (w.Climate == null || s.Size != n || w.Config.UniformRainMm > 0) continue;
+                int ci = (int)hl.Y * n + (int)hl.X;
+                if (w.Sea[ci]) continue;
+                float t = w.Climate.TemperatureC[ci], p = w.Climate.PrecipitationMm[ci];
+                if (t < 10f || p >= 300f) e.Add($"dry plateau centre {ci} is {t:F1} C, {p:F0} mm, not hot desert climate");
+            }
+
             var island = Components(n, w.Sea);
             for (int k = 0; k < s.Landmasses.Count; k++)
             {

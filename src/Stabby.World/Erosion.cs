@@ -239,7 +239,7 @@ namespace Stabby.World
             };
             float half = (f - 1) * 0.5f, area = f * f;
             foreach (var hl in s.Highlands)
-                cs.Highlands.Add(new HighlandSketch { Plateau = hl.Plateau, X = (hl.X - half) / f, Y = (hl.Y - half) / f, Radius = hl.Radius / f });
+                cs.Highlands.Add(new HighlandSketch { Plateau = hl.Plateau, Dry = hl.Dry, X = (hl.X - half) / f, Y = (hl.Y - half) / f, Radius = hl.Radius / f });
             Parallel.For(0, m, cy =>
             {
                 for (int cx = 0; cx < m; cx++)

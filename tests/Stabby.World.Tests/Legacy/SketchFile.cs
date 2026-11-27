@@ -50,7 +50,7 @@ public static class SketchFile
         Landmarks = s.Landmarks.Select(l => new LandmarkDto { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
         Lakes = s.Lakes.Select(ToDto).ToList(),
         Shores = s.Shores.Select(h => new ShoreDto { Kind = h.Cliff ? "cliff" : "beach", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
-        Highlands = s.Highlands.Select(h => new ShoreDto { Kind = h.Plateau ? "plateau" : "peak", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
+        Highlands = s.Highlands.Select(h => new ShoreDto { Kind = h.Plateau ? (h.Dry ? "dry-plateau" : "plateau") : "peak", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
     }, Options);
 
     public static WorldSketch Read(string json, WorldConfig c)
@@ -64,7 +64,7 @@ public static class SketchFile
         if (d.Ranges.Any(r => r.Strength is null)) errors.Add("ranges need strength");
         if (d.Corridors.Any(r => r.Strength is not null)) errors.Add("corridors have no strength");
         if (d.Shores.Any(h => h.Kind != "cliff" && h.Kind != "beach")) errors.Add("shore kind is cliff or beach");
-        if (d.Highlands.Any(h => h.Kind != "peak" && h.Kind != "plateau")) errors.Add("highland kind is peak or plateau");
+        if (d.Highlands.Any(h => h.Kind != "peak" && h.Kind != "plateau" && h.Kind != "dry-plateau")) errors.Add("highland kind is peak, plateau or dry-plateau");
         if (errors.Count > 0) throw new InvalidDataException(string.Join("; ", errors));
 
         c.Seed = d.Seed; c.Size = d.Size; c.CellMeters = d.CellMeters;
@@ -78,7 +78,7 @@ public static class SketchFile
             Landmarks = d.Landmarks.Select(l => new LandmarkSketch { Kind = l.Kind, X = l.X, Y = l.Y }).ToList(),
             Lakes = d.Lakes.Select(FromDto).ToList(),
             Shores = d.Shores.Select(h => new ShoreSketch { Cliff = h.Kind == "cliff", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
-            Highlands = d.Highlands.Select(h => new HighlandSketch { Plateau = h.Kind == "plateau", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
+            Highlands = d.Highlands.Select(h => new HighlandSketch { Plateau = h.Kind != "peak", Dry = h.Kind == "dry-plateau", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
         };
         s.Build(c);
         return s;

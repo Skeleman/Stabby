@@ -66,7 +66,7 @@ namespace Stabby.World
 
     public sealed class HighlandSketch
     {
-        public bool Plateau;
+        public bool Plateau, Dry;
         public float X, Y, Radius;
     }
 
@@ -473,7 +473,7 @@ namespace Stabby.World
                 float tx = dx * 0.92387953f - dy * 0.38268343f;
                 dy = dx * 0.38268343f + dy * 0.92387953f; dx = tx;
             }
-            if (bestR > 0) s.Highlands.Add(new HighlandSketch { Plateau = true, X = bestX, Y = bestY, Radius = bestR });
+            if (bestR > 0) s.Highlands.Add(new HighlandSketch { Plateau = true, Dry = Rng.Stream(c.Seed, "drylands").NextFloat() < c.DryChance, X = bestX, Y = bestY, Radius = bestR });
         }
 
         static LandmassSketch ValleyLake(int n, LandmassSketch m, CorridorSketch cor, float[] inland, float size, ref Rng rng)

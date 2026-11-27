@@ -54,7 +54,7 @@ namespace Stabby.World
             f.Mix((ulong)k.Shores.Count);
             foreach (var r in k.Shores) { f.Mix(r.Cliff ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
             f.Mix((ulong)k.Highlands.Count);
-            foreach (var r in k.Highlands) { f.Mix(r.Plateau ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
+            foreach (var r in k.Highlands) { f.Mix(r.Plateau ? 1UL : 2UL); f.Mix(r.Dry ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
             f.Bs(k.Land); f.Fs(k.Uplift); f.Bs(k.Landmark); f.Fs(k.Valley); f.Fs(k.Coast);
             f.Fs(k.ValleyRun); f.Fs(k.Cliff); f.Fs(k.Beach); f.Fs(k.Plateau);
             return f.H;
@@ -127,7 +127,7 @@ namespace Stabby.World
             Erosion.CarveLakes(c, sketch, h);
             Mesas.Raise(c, sketch, sea, h, terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea));
             stage?.Invoke("erosion");
-            var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
+            var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea, sketch);
             stage?.Invoke("climate");
             Erosion.DeepenNearShore(c, sea, h);
             var water = Hydrology.Build(c, h, sea, climate.PrecipitationMm, sketch.Landmark);
