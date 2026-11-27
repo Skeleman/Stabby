@@ -427,15 +427,16 @@ Shader "Stabby/Water"
                             float bowA = (ah - 0.55 * rad) / (0.7 * rad + 0.1), bowB = bs / (1.1 * rad + 0.1);
                             float bow = exp(-bowA * bowA - bowB * bowB);
                             float sideA = ah / (1.2 * rad + 0.1), sideB = (bs - 1.15 * rad) / (0.35 * rad + 0.08);
-                            hk += (bow - 0.6 * exp(-sideA * sideA - sideB * sideB)) * 0.11 * gn.y * min(s, 3) * saturate(1.5 - fp / (0.7 * rad + 0.1));
+                            hk += (bow - 0.6 * exp(-sideA * sideA - sideB * sideB)) * 0.13 * gn.y * min(s, 3) * saturate(1.5 - fp / (0.7 * rad + 0.1));
                             float u = max(-ah + 0.4 * rad, 0);
                             float spread = lerp(0.62, 0.36, saturate(s * 0.5));
                             float da = bs - rad * 0.9 - u * spread;
                             float decay = exp(-u / trail) * saturate(u / (rad + 0.2));
-                            float arm = exp(-(da * da) / (lam * lam * 0.6)) * cos(kw * (da * 1.3 + u * 0.45) - t * 0.6);
+                            float wob = Noise(float2(bs, u) * 0.7 + k * 3.1).x;
+                            float arm = exp(-(da * da) / (lam * lam * 0.6)) * cos(kw * (da * 1.3 + u * 0.45) - t * 0.6 + wob * 1.2);
                             float inside = smoothstep(0.3, -0.6 * lam, da);
-                            float trans = inside * cos(kw * u - t * 0.4) * 0.45;
-                            hk += (arm + trans) * decay * 0.08 * gn.y * saturate(s * 1.2) * saturate(1.5 - fp * 3 / lam);
+                            float trans = inside * cos(kw * u - t * 0.4 + wob * 2) * 0.25 * (0.7 + 0.3 * wob);
+                            hk += (arm + trans) * decay * 0.11 * gn.y * saturate(s * 1.2) * saturate(1.5 - fp * 3 / lam);
                         }
                         h += hk * wet * lerp(1, gn.z, bend);
                     }
