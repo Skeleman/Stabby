@@ -3,6 +3,7 @@ test WorldTests.GameScaleWorldPlacesFeaturesAndPassesChecks 100 builds and check
 test FineGridTests.FourKCellsPlaceFeaturesOnTheGrid 55 places features over a 4K-cell fine grid
 test ObjectTests.RiverBanksGrowReedsBarsDriftAndWetStones 50 places every bank object along all rivers of a world
 test DiscoveryTests.RuinsAppearOnSteadyGround 45 runs discovery placement on full worlds
+test DiscoveryTests.SaltTowersStandOnDryBasinFloors 20 runs discovery placement on the default world
 test ObjectTests.TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse 40 scans every cliff foot of a world for talus
 test CaveTests.CaveObjectsAreCommonAndPass 40 places cave objects over full worlds and runs their checks
 test CaveTests.SeedsGrowEveryClassAndPass 30 grows every cave class over several seeds and runs the cave checks

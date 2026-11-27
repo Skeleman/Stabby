@@ -145,6 +145,7 @@
     { "id": "mossy-stone",      "name": "Mossy stone",      "color": "#6c7363" },
     { "id": "ruin-stone",       "name": "Ruin stone",       "color": "#7d786e" },
     { "id": "sinter-crust",     "name": "Sinter crust",     "color": "#d8d0bc" },
+    { "id": "salt-crust",       "name": "Salt crust",       "color": "#e4ddd1" },
     { "id": "vent-mud",         "name": "Vent mud",         "color": "#74685a" },
     { "id": "dark-bark",        "name": "Dark bark",        "color": "#574a3d" },
     { "id": "grey-bark",        "name": "Grey bark",        "color": "#5f5246" },
