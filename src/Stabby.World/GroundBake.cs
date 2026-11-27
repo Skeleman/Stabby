@@ -108,12 +108,16 @@ namespace Stabby.World
             if (o != head.Left) throw new FormatException($"ground bake sections need {o} bytes, {head.Left} remain");
             int pos = head.Position;
             for (int s = 0; s < Sections; s++) { start[s] = pos; pos += len[s]; }
-            var parts = new byte[Sections][];
+            var bake = new GroundBake { Key = key, Detail = new DetailArrays() };
+            var d = bake.Detail;
+            byte[] placedPack = null;
+            int[] placedAt = null, placedRaw = null;
+            ulong[] placedSum = null;
             try
             {
                 Parallel.For(0, Sections, s =>
                 {
-                    if (s == Stored) return;
+                    if (s == Stored) { var i3 = new In(data, start[Stored], len[Stored]); placedPack = i3.Raw<byte>(); i3.End(); return; }
                     var b = new byte[raw[s]];
                     int got = 0;
                     using (var z = new DeflateStream(new MemoryStream(data, start[s], len[s], false), CompressionMode.Decompress))
@@ -122,7 +126,16 @@ namespace Stabby.World
                         if (got < b.Length || z.ReadByte() >= 0) throw new FormatException($"ground bake section {s} inflates to the wrong length");
                     }
                     if (WorldChunks.Checksum(b) != sum[s]) throw new FormatException($"ground bake section {s} fails its checksum");
-                    parts[s] = b;
+                    var i = new In(b);
+                    switch (s)
+                    {
+                        case 0: d.Amp = i.Raw<float>(); break;
+                        case 1: d.Offsets = i.Raw<float>(); break;
+                        case 2: d.Start = i.Raw<int>(); d.Items = i.Raw<int>(); d.Bands = i.Raw<float>(); d.Period = i.Float(); d.Pieces = i.Raw<RiverPiece>(); break;
+                        case 4: placedAt = i.Raw<int>(); placedRaw = i.Raw<int>(); placedSum = i.Raw<ulong>(); break;
+                        default: bake.Rest(i); break;
+                    }
+                    i.End();
                 });
             }
             catch (AggregateException e)
@@ -130,17 +143,7 @@ namespace Stabby.World
                 var f = e.Flatten().InnerExceptions[0];
                 throw f is FormatException ? (FormatException)f : new FormatException($"ground bake is corrupt: {f.Message}", f);
             }
-            times?.Mark("ground inflate");
-            var bake = new GroundBake { Key = key, Detail = new DetailArrays() };
-            var d = bake.Detail;
-            var i0 = new In(parts[0]); d.Amp = i0.Raw<float>(); i0.End();
-            var i1 = new In(parts[1]); d.Offsets = i1.Raw<float>(); i1.End();
-            var i2 = new In(parts[2]); d.Start = i2.Raw<int>(); d.Items = i2.Raw<int>(); d.Bands = i2.Raw<float>(); d.Period = i2.Float(); d.Pieces = i2.Raw<RiverPiece>(); i2.End();
-            var i3 = new In(data, start[Stored], len[Stored]); var placedPack = i3.Raw<byte>(); i3.End();
-            var i4 = new In(parts[4]); var placedAt = i4.Raw<int>(); var placedRaw = i4.Raw<int>(); var placedSum = i4.Raw<ulong>(); i4.End();
-            times?.Mark("ground detail and placed");
-            var i5 = new In(parts[5]); bake.Rest(i5); i5.End();
-            times?.Mark("ground rest");
+            times?.Mark("inflate and parse");
             if ((placedAt == null) != (placedPack == null) || (placedAt == null) != (placedRaw == null) || (placedAt == null) != (placedSum == null)
                 || placedAt != null && (bake.Field == null || !Ascending(placedAt, placedPack.Length) || placedRaw.Length != placedAt.Length - 1 || placedSum.Length != placedRaw.Length || Array.Exists(placedRaw, r => r < 0)))
                 throw new FormatException("ground bake placed objects do not fit their chunk table");

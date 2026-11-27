@@ -154,8 +154,15 @@ namespace Stabby.World
                 throw new FormatException("world file chunk is corrupt: " + inner.Message, inner);
             }
             times?.Mark("chunks");
-            if (groundLen > 0) bake.Ground = GroundBake.Read(data, o, groundLen, times);
-            WorldChunks.Relink(w, times);
+            var tint = Task.Run(() => WaterTint.Field(w));
+            var groundTimes = times == null ? null : new LoadTimes();
+            int groundAt = o;
+            var ground = groundLen > 0 ? Task.Run(() => GroundBake.Read(data, groundAt, groundLen, groundTimes)) : null;
+            Hydrology.Relink(w.Config, w.Height, w.Sea, w.Water, times);
+            WaterTint.Apply(w, tint.GetAwaiter().GetResult());
+            times?.Mark("tint");
+            if (ground != null) bake.Ground = ground.GetAwaiter().GetResult();
+            times?.Add("ground", groundTimes);
             w.Bake = bake;
             return w;
         }
