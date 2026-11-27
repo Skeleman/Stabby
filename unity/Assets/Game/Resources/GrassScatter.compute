@@ -95,7 +95,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float4 col = ca * w + cb * u + cc * v;
         float4 st = sa * w + sb * u + sc * v;
         float3 color = col.rgb, n = fn;
-        float mix = st.y, f = saturate(st.z);
+        float mix = st.y, f = saturate(FieldShare(sa.z) * w + FieldShare(sb.z) * u + FieldShare(sc.z) * v);
         if (f > 0)
         {
             float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xa * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).rg;
