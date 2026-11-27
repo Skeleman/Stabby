@@ -219,7 +219,7 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
         }
     }
     float hr = TmRockRelief(q.xz + orgO.xz, q.y + off + wb.x, wb.yz, hard, fp, layered, bk, jw, g, bed, bedF);
-    float ck = smoothstep(0.3, 0.7, nl) * (layered + 0.7 * stone) * _StabbyRockC.z * (1 - smoothstep(0.15, 0.6, tmRoof));
+    float ck = smoothstep(0.6, 0.9, nl) * (layered + 0.7 * stone) * _StabbyRockC.z * (1 - smoothstep(0.15, 0.6, tmRoof));
     float3 crg = 0;
     float cav = 0, ctone = 0, streak = 0;
     [branch] if (ck > 0) TmCrag(q.xz + orgO.xz, q.y, n, hard, mass, fp, crg, cav, ctone, streak);
