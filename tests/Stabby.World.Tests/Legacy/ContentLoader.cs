@@ -20,6 +20,7 @@ public static class ContentLoader
         public SinterEntry? Sinter { get; set; }
         public MudEntry? Mud { get; set; }
         public PeatEntry? Peat { get; set; }
+        public WakeEntry Wakes { get; set; } = new();
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
         public List<MaterialEntry> Materials { get; set; } = new();
@@ -56,6 +57,21 @@ public static class ContentLoader
         public string Clay { get; set; } = "";
         public string Grey { get; set; } = "";
         public float Roughness { get; set; }
+    }
+
+    sealed class WakeEntry
+    {
+        public float FadePixels { get; set; } = 4f;
+        public float FullPixels { get; set; } = 12f;
+        public float RingAmplitude { get; set; } = 1f;
+        public float VAmplitude { get; set; } = 1f;
+        public float NormalStrength { get; set; } = 1.5f;
+        public float RefSpeedMps { get; set; } = 1.6f;
+        public float RefSizeM { get; set; } = 1.2f;
+        public float SpeedExponent { get; set; } = 0.5f;
+        public float SizeExponent { get; set; } = 0.5f;
+        public float MaxGain { get; set; } = 3f;
+        public float SpeedSmoothS { get; set; } = 0.25f;
     }
 
     sealed class PeatEntry
@@ -252,6 +268,12 @@ public static class ContentLoader
             {
                 Wet = Hex(file.Peat.Wet, path, "peat.wet"), Dark = Hex(file.Peat.Dark, path, "peat.dark"),
                 Fibre = Hex(file.Peat.Fibre, path, "peat.fibre"), Roughness = file.Peat.Roughness,
+            },
+            Wakes = new WakeDef
+            {
+                FadePixels = file.Wakes.FadePixels, FullPixels = file.Wakes.FullPixels, RingAmplitude = file.Wakes.RingAmplitude, VAmplitude = file.Wakes.VAmplitude, NormalStrength = file.Wakes.NormalStrength,
+                RefSpeedMps = file.Wakes.RefSpeedMps, RefSizeM = file.Wakes.RefSizeM, SpeedExponent = file.Wakes.SpeedExponent, SizeExponent = file.Wakes.SizeExponent,
+                MaxGain = file.Wakes.MaxGain, SpeedSmoothS = file.Wakes.SpeedSmoothS,
             },
             Look = file.Look == null ? null! : new LookDef
             {
