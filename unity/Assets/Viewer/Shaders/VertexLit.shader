@@ -80,13 +80,18 @@ Shader "Stabby/VertexLit"
             {
                 float3 n = normalize(i.normalWS);
                 float3 color = i.color.rgb;
-                float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1), fw = fwidth(i.foot.x);
+                float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1), fw = fwidth(i.foot.x), foot = 0;
                 float3 fq = float3(i.xz.x, i.strata.z, i.xz.y), ff = cross(ddy(fq), ddx(fq));
                 [branch] if (i.foot.y > 0)
                 {
                     float3 fn = normalize(ff);
                     fn = dot(fn, n) < 0 ? -fn : fn;
                     n = normalize(lerp(n, fn, i.foot.y * saturate((n.y - fn.y) * 4) * (1 - smoothstep(0.6, 0.9, fn.y)) * (1 - smoothstep(0.8, 1.6, i.foot.x))));
+                    float2 xa = i.xz + OrgOrigin(_WorldSpaceCameraPos);
+                    foot = i.foot.y * smoothstep(0, min(0.9, (0.04 + 1.5 * fw) * (1 + 0.4 * OrgNoise2(xa * 2.3 + 1.9).x)), i.foot.x);
+                    f = min(f, 1 - foot);
+                    stone = max(stone, foot);
+                    mix = max(mix, foot);
                 }
                 if (f > 0)
                 {
@@ -102,9 +107,7 @@ Shader "Stabby/VertexLit"
                         fc = ToLinear(bo.rgb);
                         fr = saturate((slope - 0.25) / 0.35) * (1 - shore);
                     }
-                    float bw = 1;
-                    [branch] if (i.foot.y > 0) bw = lerp(1, 1 - smoothstep(0, min(0.9, (0.04 + 1.5 * fw) * (1 + 0.4 * OrgNoise2(xa * 2.3 + 1.9).x)), i.foot.x), i.foot.y);
-                    n = normalize(lerp(n, fn, f * i.field * bw));
+                    n = normalize(lerp(n, fn, f * i.field * (1 - foot)));
                     color = lerp(color, fc, f);
                     off = lerp(off, bo.a, f);
                     mix = lerp(mix, fr, f);
