@@ -565,10 +565,15 @@ namespace Stabby.World
         bool Hangs(FeatureEdit e)
         {
             int c = WorldChecks.BoulderFootColumns;
+            float lo = float.MaxValue, hi = float.MinValue;
             for (int j = 0; j <= c; j++)
                 for (int i = 0; i <= c; i++)
-                    if (GroundAt(detail, cm, e.MinX + (e.MaxX - e.MinX) * i / c, e.MinZ + (e.MaxZ - e.MinZ) * j / c) < e.MinY + WorldChecks.BoulderFootSkin) return true;
-            return false;
+                {
+                    float g = GroundAt(detail, cm, e.MinX + (e.MaxX - e.MinX) * i / c, e.MinZ + (e.MaxZ - e.MinZ) * j / c);
+                    if (g < e.MinY + WorldChecks.BoulderFootSkin) return true;
+                    lo = Math.Min(lo, g); hi = Math.Max(hi, g);
+                }
+            return hi - lo > WorldChecks.BoulderFootRise * e.R;
         }
 
         static bool Within(FeatureEdit e, float x0, float z0, float sx, float sz) => e.MinX >= x0 && e.MaxX < x0 + sx && e.MinZ >= z0 && e.MaxZ < z0 + sz;
