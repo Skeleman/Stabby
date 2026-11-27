@@ -10,6 +10,7 @@ public class DiscoveryTests
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
     const ulong VolcanoSeed = 16;
+    static readonly string[] SitesGroup = { "sites" };
     readonly ITestOutputHelper output;
 
     public DiscoveryTests(ITestOutputHelper output) => this.output = output;
@@ -493,6 +494,13 @@ public class DiscoveryTests
         output.WriteLine($"{oases} oases");
         Assert.True(oases > 0, "no oasis in seed 3");
         Assert.Null(WorldChecks.OasisFault(p.W, p.Field));
+    }
+
+    [Fact]
+    public void VentPoolsHoldWaterOnSeed2At2048()
+    {
+        var w = WorldGenerator.Generate(new WorldConfig { Seed = 2, Size = 2048, CellMeters = WorldConfig.CellMetersFor(2048) }, Biomes, ContentLoader.LoadMaterials(Root), null, null, Objects, ContentLoader.LoadCaves(Root));
+        Assert.Empty(WorldChecks.Run(w, SitesGroup, null));
     }
 
     [Fact]
