@@ -135,36 +135,12 @@ namespace Stabby.World
                 Box(l, rng.NextU64(), f, bx - 0.3f * sl + rng.Range(0.25f, 0.8f), by + rr * br * c - 0.08f, rr * bz * s, sl, rng.Range(0.1f, 0.2f), rng.Range(0.12f, 0.3f), Timber, GX, 0, 0, 1, 0, 0, 0, 0.6f);
             }
 
-            float top = 0.55f * TreeSz, sr = top / 0.88f, hb = rng.Range(0.4f, 0.7f), ux = Math.Max(-half - 0.15f, -9.9f + 1.12f * sr), uz = -(bz + 0.8f + 1.05f * sr);
+            float top = 0.55f * TreeSz, sr = top / 0.88f, ux = Math.Max(-half - 0.15f, -9.9f + 1.12f * sr), uz = -(bz + 0.8f + 1.05f * sr);
             int stump = l.Pieces.Count;
-            Round(l, rng.NextU64(), f, ux, -0.3f, uz, 2 * sr, hb + 0.3f, 2 * sr * rng.Range(0.94f, 1f), Timber, GV, RoundStem, 0, 2);
-            Mossy(l, stump);
-            int jag = rng.Range(20, 27);
-            float turn = rng.Range(0f, 16f), tall = rng.Range(0.9f, 1.3f);
             Arc(rng.Range(0f, 1f), out float hc, out float hs);
-            for (int i = 0; i < jag; i++)
-            {
-                Arc((turn + (i + rng.Range(-0.3f, 0.3f)) * 16f / jag) / 16f, out float c, out float s);
-                float w = 0.5f * (1 + c * hc + s * hs), h = 0.2f + (tall - 0.2f) * w * w * w * rng.Range(0.6f, 1.1f) + rng.Range(0f, 0.15f);
-                float wb = h * rng.Range(0.17f, 0.24f), tx = rng.Range(0.1f, 0.16f), rr = top - 0.5f * tx, lean = rng.Range(0f, 0.1f), sy = h + 0.15f;
-                int at = l.Pieces.Count;
-                Round(l, rng.NextU64(), f, ux + rr * c, hb - 0.15f, uz + rr * s, tx, sy, 0.5f * (wb + 0.03f), Timber, GV, RoundStem, 0, 1, c, s);
-                if (at < l.Pieces.Count)
-                {
-                    var p = l.Pieces[at];
-                    p.T = (wb - 0.03f) / (2 * sy); p.L = lean; p.Mossy = true;
-                    l.Pieces[at] = p;
-                }
-                float iy = 0.8f * h + 0.1f, iw = 0.8f * wb, ir = rr - 0.5f * tx;
-                Box(l, rng.NextU64(), f, ux + ir * c, hb - 0.1f, uz + ir * s, 0.06f, iy, 0.5f * (iw + 0.02f), Timber, GV, 0, 1, c, s, lean, 0, (iw - 0.02f) / (2 * iy));
-            }
-            int core = rng.Range(7, 11);
-            for (int i = 0; i < core; i++)
-            {
-                Arc(rng.Range(0f, 1f), out float c, out float s);
-                float rr = top * rng.Range(0f, 0.75f), ch = rng.Range(0.08f, 0.3f) * (0.6f + 0.6f * rr / top) + 0.05f, cw = rng.Range(0.1f, 0.22f);
-                Box(l, rng.NextU64(), f, ux + rr * c, hb - 0.05f, uz + rr * s, rng.Range(0.12f, 0.3f), ch, cw, Timber, GV, 0, 1, c, s, 0, 0, 0.85f * cw / ch);
-            }
+            float sd = 2 * StumpR * rng.Range(0.98f, 1.02f);
+            Round(l, rng.NextU64(), f, ux, -StumpSink, uz, sd, StumpH, sd * rng.Range(0.96f, 1f), Timber, GV, RoundStump, 0, 2, hc, hs);
+            Mossy(l, stump);
             int lumps = rng.Range(3, 6);
             for (int i = 0; i < lumps; i++)
             {
@@ -190,7 +166,7 @@ namespace Stabby.World
                 Col(l, f, x, TreeWallZ, 0.32f, 0, 2.8f);
                 Col(l, f, x, -TreeWallZ, 0.32f, 0, 2.8f);
             }
-            Col(l, f, ux, uz, top, 0, hb + 0.3f);
+            Col(l, f, ux, uz, top, 0, StumpSink + 0.8f);
             for (int i = 0; i < 10; i++)
             {
                 Arc(i / 10f, out float c, out float s);
