@@ -18,6 +18,7 @@ namespace Stabby.World
         public const float MaxSlope = 0.7002075f, ClearM = 0.01f, SlopeMargin = 0.012f;
         public const int MaxRegions = 255;
         const float BarchanRadius = 6f, BarchanLee = 0.3f, BarchanHollow = 0.5f, BarchanAlong = 1.5f, Jitter = 0.1f;
+        const float RampShare = 0.5f;
         const float LinearJitter = 0.3f, LinearWander = 0.1f, LinearCrest = 0.1f;
 
         const float Room = MaxSlope - SlopeMargin - SlipSlope * 1.01f - FlatHi;
@@ -83,8 +84,8 @@ namespace Stabby.World
             {
                 float s = rng.Range(-VeerMax, VeerMax), c = (float)Math.Sqrt(1 - s * s);
                 float spacing = rng.Range(SpacingMin, SpacingMax), ratio = rng.Range(HeightPerSpacingLo, HeightPerSpacingHi);
-                float fade = Math.Min(FadeM, deep[r] - edge);
-                float height = Math.Min(Math.Min(HeightMax, spacing * ratio), Room * fade / 1.5f);
+                float fade = Math.Min(FadeM, RampShare * (deep[r] - edge));
+                float height = Math.Min(Math.Min(HeightMax, spacing * ratio), Room * fade);
                 spacing = Math.Max(SpacingMin, Math.Min(spacing, height / ratio));
                 int linear = rng.NextFloat() < LinearShare ? 1 : 0;
                 float side = rng.NextFloat() < 0.5f ? -1f : 1f;
@@ -108,7 +109,7 @@ namespace Stabby.World
             {
                 int r = label[i] == 0 ? 0 : slot[label[i]];
                 if (r == 0) continue;
-                int wt = (int)Math.Round(255f * Grid.Smoothstep(edge, edge + fades[label[i] - 1], d[i]));
+                int wt = (int)Math.Round(255f * Math.Min(1f, (d[i] - edge) / fades[label[i] - 1]));
                 if (wt > 0) pack[i] = (ushort)(r << 8 | wt);
             }
         }
