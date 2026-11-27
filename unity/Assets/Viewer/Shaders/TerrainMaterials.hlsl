@@ -561,6 +561,13 @@ TmOut TmSnow(float3 wp, float3 n, float3 base, float fp, float4 A, float4 B, flo
     float e = 0.02 + 0.35 * saturate(1.5 * fp);
     float lie = smoothstep(-e, e, sv + 0.42);
     float3 snow = TmSnowAlbedo(saturate(hollow) * (0.5 + B.w * 4)) * (1 + A.z * fg * grain.x * 0.5);
+    float w5 = OrgFade(OrgF(-5), fp), w4 = OrgFade(OrgF(-4), fp);
+    float3 s5 = OrgLN2(p, OrgF(-5), 91.3, w5);
+    float3 s4 = OrgN2(float2(dot(pa, wind) * 0.35, dot(pa, side)) * OrgF(-4) + 9.3, w4);
+    float scour = saturate(1.2 * w5 * s5.x + 0.8 * w4 * (0.5 - abs(s4.x)) - 6 * tmCurv - 1.5 * dot(n.xz, wind));
+    float pool = saturate(-1.2 * w5 * s5.x + 6 * tmCurv);
+    snow *= lerp(1, float3(0.87, 0.89, 0.92), scour);
+    snow *= lerp(1, float3(0.88, 0.95, 1.04), pool);
     float ft = OrgFade(1.7, fp), fh = OrgFade(0.33, fp), f1 = OrgFade(0.9, fp), f2 = OrgRungW(0, fp), f3 = OrgRungW(1, fp);
     float3 tuft = OrgLN2(p, 1.7, 44.1, ft);
     float hv = OrgLN2(p, 0.33, 46.7, fh).x, m1 = OrgLN2(p, 0.9, 51.3, f1).x, m2 = OrgLN2(p, OrgF(0), 53.9, f2).x, m3 = OrgLN2(p, OrgF(1), 57.1, f3).x;
@@ -570,7 +577,7 @@ TmOut TmSnow(float3 wp, float3 n, float3 base, float fp, float4 A, float4 B, flo
     heath *= (1 + B.w * 3 * ft * tuft.x) * (1 + 0.16 * f3 * m3) * (1 + A.z * fg * grain.x * 0.3);
     heath = TmLichen(p, heath, fp, 0.22);
     float2 gh = 0.5 * drift.yz + 0.4 * B.x * ft * tuft.yz + 0.3 * A.z * fg * grain.yz;
-    float2 gs = drift.yz + B.x * fs * sg + 0.3 * A.z * fg * grain.yz;
+    float2 gs = drift.yz + B.x * fs * sg + 0.3 * A.z * fg * grain.yz + 0.07 * w5 * s5.yz + 0.04 * w4 * (s4.y * 0.35 * wind + s4.z * side);
     float2 g = lerp(gh, gs, lie);
     TmOut o;
     o.grad = float3(g.x, 0, g.y);
@@ -792,8 +799,15 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float3 jn = OrgN2(wa * 0.27 + 41.7, fj);
     float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
     float f6 = OrgF(-6), f5 = OrgF(-5), f4 = OrgF(-4);
-    float2 sw = 0.3 / f6 * OrgLN2(wa, f6, 61.7, 1).yz + 0.3 / f5 * OrgFade(f5, fp) * OrgLN2(wa, f5, 63.9, 1).yz + 0.3 / f4 * OrgFade(f4, fp) * OrgLN2(wa, f4, 67.1, 1).yz;
-    float4 cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, (wa + sw) * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    float2 cq = wa * _StabbyCoatUV.x + _StabbyCoatUV.y, cd = 40 * _StabbyCoatUV.x;
+    float near = cw.w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + cd, 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq - cd, 0).w
+        + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(cd.x, -cd.y), 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(-cd.x, cd.y), 0).w;
+    float4 cs = cw;
+    [branch] if (near > 0)
+    {
+        float2 sw = 0.3 / f6 * OrgLN2(wa, f6, 61.7, 1).yz + 0.3 / f5 * OrgFade(f5, fp) * OrgLN2(wa, f5, 63.9, 1).yz + 0.3 / f4 * OrgFade(f4, fp) * OrgLN2(wa, f4, 67.1, 1).yz;
+        cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, (wa + sw) * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    }
     cw = lerp(cw, cs, saturate(4 * (cw.w + cs.w)));
     float hw = wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
     float sh = wp.y + 0.15 * OrgLN2(wp.xz, 0.035, 19.3, step(wp.y, 3)).x;
@@ -809,7 +823,8 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     cw = lerp(cw, float4(0, 0, 1, 0), sb);
     float fk = OrgFade(1.3, fp);
     float3 jk = OrgN2(wa * 1.3 + 13.9, fk);
-    float br = 0.12 * fj * jn.x + 0.35 * fk * jk.x + cw.w * (0.3 * OrgLN2(wa, f6, 71.3, 1).x + 0.25 * OrgFade(f5, fp) * OrgLN2(wa, f5, 73.9, 1).x + 0.2 * OrgFade(f4, fp) * OrgLN2(wa, f4, 77.1, 1).x);
+    float br = 0.12 * fj * jn.x + 0.35 * fk * jk.x;
+    [branch] if (cw.w > 0) br += cw.w * (0.3 * OrgLN2(wa, f6, 71.3, 1).x + 0.25 * OrgFade(f5, fp) * OrgLN2(wa, f5, 73.9, 1).x + 0.2 * OrgFade(f4, fp) * OrgLN2(wa, f4, 77.1, 1).x);
     float sl = n.y;
     float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
     float2 fl2 = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo, fp);
