@@ -77,7 +77,7 @@ namespace Stabby.World
             if (clock.Start("core")) CheckCore(w, e);
             if (clock.Start("hydrology")) CheckHydrology(w, e);
             if (clock.Start("biomes")) CheckBiomes(w, e);
-            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); }
+            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); CheckGlacial(w, e); }
             if (clock.Start("surface")) { CheckDetail(w, e); CheckNearField(w, e); CheckGeometry(w, e); }
             CheckFeatures(w, e, clock, creatures);
             clock.Stop();
@@ -959,6 +959,7 @@ namespace Stabby.World
                 CheckCenotes(w, detail, edits, field, e);
                 CheckArches(w, edits, e);
                 if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
+                if (field != null) CheckGlacialGround(w, detail, grid, field, e);
             }
             if (clock.Start("caves"))
             {

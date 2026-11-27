@@ -125,7 +125,9 @@ namespace Stabby.World
             Erosion.Run(c, sketch, materials, h, (rc, rh, rs) => (terrainOnly ? ClimateField.Uniform(rc, rh, rc.UniformRainMm) : ClimateField.Compute(rc, rh, rs)).PrecipitationMm);
             Erosion.FlattenTableland(c, sketch, h);
             Erosion.CarveLakes(c, sketch, h);
-            Mesas.Raise(c, sketch, sea, h, terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea));
+            var early = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
+            Mesas.Raise(c, sketch, sea, h, early);
+            Glacial.Raise(c, sketch, sea, h, early);
             stage?.Invoke("erosion");
             var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             stage?.Invoke("climate");

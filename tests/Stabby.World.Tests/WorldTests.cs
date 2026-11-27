@@ -40,6 +40,21 @@ public class WorldTests
     }
 
     [Fact]
+    public void ColdLandRaisesMoraineWithKettlePonds()
+    {
+        var p = TestWorlds.Default;
+        int n = p.W.Config.Size, moraines = p.W.Sketch.Moraines.Count, kettles = 0, wet = 0;
+        float cm = p.W.Config.CellMeters;
+        foreach (var m in p.W.Sketch.Moraines)
+            for (int k = 0; k < m.Kettles.Count; k += 4)
+            {
+                kettles++;
+                if (p.W.Water.LakeId[(int)Math.Round(m.Kettles[k + 1] / cm) * n + (int)Math.Round(m.Kettles[k] / cm)] >= 0) wet++;
+            }
+        Assert.True(moraines >= 1 && kettles >= 1 && wet == kettles, $"{moraines} moraines, {kettles} kettles, {wet} holding water");
+    }
+
+    [Fact]
     public void DrySeedsRaiseMesasAndButtes()
     {
         int mesas = 0, buttes = 0, lips = 0;

@@ -99,6 +99,7 @@ namespace Stabby.World
                     float rr = ring == 0 ? r + OasisLipM : ring == 1 ? probe : OasisRiverM, px = x + ux * rr, pz = z + uz * rr;
                     if (RiverGap(px, pz) <= OasisRiverM - rr) return false;
                     if (ring == 2) continue;
+                    if (w.Water.LakeId[Cell(pz) * n + Cell(px)] >= 0) return false;
                     float g = GroundAt(detail, cm, px, pz);
                     low = Math.Min(low, g); high = Math.Max(high, g);
                 }
