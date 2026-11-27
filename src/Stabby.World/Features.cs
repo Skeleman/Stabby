@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Cenote = 18, Shapes = 19;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Cenote = 18, SeaStack = 19, Shapes = 20;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
@@ -67,8 +67,8 @@ namespace Stabby.World
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
-        public float MinY => Shape == Butte ? Ay - H - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
-        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Math.Max(Ay, By) + R + H;
+        public float MinY => Shape == Butte || Shape == SeaStack ? Ay - H - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
+        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Shape == SeaStack ? By + F + StackBand + 1f : Math.Max(Ay, By) + R + H;
         public float MinZ => Math.Min(Az, Bz) - R - Spread;
         public float MaxZ => Math.Max(Az, Bz) + R + Spread;
 
@@ -89,6 +89,7 @@ namespace Stabby.World
             if (!Contains(x, y, z)) return false;
             if (Shape == Spring) return Basin(x, y, z, out dist);
             if (Shape == Butte) return Mesa(x, y, z, out dist);
+            if (Shape == SeaStack) return Stack(x, y, z, out dist);
             if (Shape == Cenote) return Pit(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
@@ -180,6 +181,38 @@ namespace Stabby.World
         }
 
         static float Groove(float dv) => Math.Max(0f, 1f - Sq(dv / ButteGrooveW));
+
+        public const float StackBand = 2f, StackLobe = 0.22f, StackLobeM = 11f, StackFluteM = 0.9f, StackLumpM = 1.1f, StackLedgeM = 0.7f, StackNotchM = 1.8f, StackNotchY = 0.7f, StackNotchW = 1.6f, StackFootM = 2.5f, StackShoulderM = 1.2f, StackHoleRough = 0.12f;
+
+        public static float StackReach(float d) => d * (1f + StackLobe) + StackFluteM + StackLumpM + StackFootM + StackBand + 1f;
+
+        bool Stack(float x, float y, float z, out float dist)
+        {
+            uint seed = Seed;
+            float ex = Bx - Ax, ez = Bz - Az, px = x - Ax, pz = z - Az, ll = ex * ex + ez * ez;
+            float t = ll > 0f ? Math.Max(0f, Math.Min(1f, (px * ex + pz * ez) / ll)) : 0f;
+            float qx = px - t * ex, qz = pz - t * ez, rh = (float)Math.Sqrt(qx * qx + qz * qz);
+            float u = Math.Max(0f, Math.Min(1f, y / Math.Max(1f, By))), k = Math.Min(1f, D / 8f);
+            float rim = D * (1f + StackLobe * (2f * Value(seed, x / StackLobeM, y / (2f * StackLobeM), z / StackLobeM) - 1f)) * (1f - N * u);
+            rim += StackFluteM * k * (2f * Value(seed ^ 0x3C6EF372u, x / 3.5f, y / 15f, z / 3.5f) - 1f);
+            rim += StackLumpM * k * (2f * Value(seed ^ 0x510E527Fu, x / 5f, y / 5f, z / 5f) - 1f);
+            rim -= StackLedgeM * k * Sq(Value(seed ^ 0x1F83D9ABu, x / 40f, y / 2.6f, z / 40f));
+            rim -= StackNotchM * k * Math.Max(0f, 1f - Sq((y - StackNotchY) / StackNotchW)) * (0.6f + 0.4f * Value(seed ^ 0x9B05688Cu, x / 6f, 0f, z / 6f));
+            rim += StackFootM * k * Smooth(-1f, -9f, y);
+            float top = By + F * (2f * Value(seed ^ 0x6A09E667u, x / 6f, 0f, z / 6f) - 1f) - StackShoulderM * k * Smooth(-4f, 0f, rh - rim);
+            float s = Math.Max(rh - rim, Math.Max(y - top, Ay - H - y));
+            if (P > 0f)
+            {
+                float len = (float)Math.Sqrt(ll), hx = x - Ax - 0.5f * ex, hz = z - Az - 0.5f * ez;
+                float a = len > 0f ? (hx * ex + hz * ez) / len : hx, dy = (y - T) * (y > T ? 0.8f : 1.25f);
+                float hr = P * (1f + StackHoleRough * (2f * Value(seed ^ 0xA54FF53Au, x / 3f, y / 3f, z / 3f) - 1f));
+                s = Math.Max(s, hr - (float)Math.Sqrt(a * a + dy * dy));
+            }
+            dist = R + s;
+            return s < StackBand;
+        }
+
+        public bool StackOpen(float x, float y, float z) => !Reach(x, y, z, out float dist) || dist >= R;
 
         float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
         {
@@ -795,6 +828,7 @@ namespace Stabby.World
                 }
             Mines.Place(w, detail, strata, list, caves);
             Cenotes.Place(w, detail, list);
+            SeaStacks.Place(w, detail, list);
             return list.ToArray();
         }
 
