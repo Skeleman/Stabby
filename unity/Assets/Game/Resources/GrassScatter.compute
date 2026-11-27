@@ -107,7 +107,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
             n = normalize(lerp(n, gn, f));
         }
         float jn = OrgNoise2(xa * 0.27 + 41.7).x;
-        float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+        float4 cw = TmCoatAt(xa, max(d * _Eye.w, 1e-4), 2);
         float shore = smoothstep(5.5, 2.5, p.y);
         cw = lerp(cw, float4(0, 0, 1, 0), shore);
         cw = saturate(cw * (1 + 0.2 * (1 - shore) * float4(jn, -jn, jn * 0.3, -jn)));

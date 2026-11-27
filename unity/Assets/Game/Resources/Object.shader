@@ -682,7 +682,7 @@ Shader "Stabby/Object"
                     {
                         float2 o2 = OrgOrigin(_WorldSpaceCameraPos);
                         orgO = float3(o2.x, 0, o2.y);
-                        float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wp.xz * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+                        float4 cw = TmCoatAt(wp.xz, fp, 3);
                         float4 cwn = cw / max(dot(cw, 1), 1e-3);
                         float surf = 1;
                         [branch] if (_StabbyFieldUV.x > 0) surf = smoothstep(6, 2, ContactBed(wp.xz) - wp.y);

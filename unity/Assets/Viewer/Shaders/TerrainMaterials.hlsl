@@ -323,6 +323,24 @@ float TmChroma(float3 c)
     return (hi - min(c.r, min(c.g, c.b))) / max(hi, 1e-3);
 }
 
+float4 TmCoatAt(float2 wa, float fp, int octaves)
+{
+    float2 cq = wa * _StabbyCoatUV.x + _StabbyCoatUV.y, cd = 40 * _StabbyCoatUV.x;
+    float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq, 0);
+    float near = cw.w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + cd, 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq - cd, 0).w
+        + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(cd.x, -cd.y), 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(-cd.x, cd.y), 0).w;
+    float4 cs = cw;
+    [branch] if (near > 0)
+    {
+        float f6 = OrgF(-6), f5 = OrgF(-5), f4 = OrgF(-4);
+        float2 sw = 0.3 / f6 * OrgLN2(wa, f6, 61.7, 1).yz;
+        if (octaves > 1) sw += 0.3 / f5 * OrgFade(f5, fp) * OrgLN2(wa, f5, 63.9, 1).yz;
+        if (octaves > 2) sw += 0.3 / f4 * OrgFade(f4, fp) * OrgLN2(wa, f4, 67.1, 1).yz;
+        cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, (wa + sw) * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    }
+    return lerp(cw, cs, saturate(4 * (cw.w + cs.w)));
+}
+
 float TmCoatF() { return OrgF(-2); }
 
 float3 TmCoatBump(float2 p, float fp) { return OrgFbm2(p, TmCoatF(), 1, 3, fp); }
@@ -797,18 +815,8 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float2 wa = wp.xz + orgO.xz;
     float fj = OrgFade(0.27, fp);
     float3 jn = OrgN2(wa * 0.27 + 41.7, fj);
-    float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    float4 cw = TmCoatAt(wa, fp, 3);
     float f6 = OrgF(-6), f5 = OrgF(-5), f4 = OrgF(-4);
-    float2 cq = wa * _StabbyCoatUV.x + _StabbyCoatUV.y, cd = 40 * _StabbyCoatUV.x;
-    float near = cw.w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + cd, 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq - cd, 0).w
-        + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(cd.x, -cd.y), 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(-cd.x, cd.y), 0).w;
-    float4 cs = cw;
-    [branch] if (near > 0)
-    {
-        float2 sw = 0.3 / f6 * OrgLN2(wa, f6, 61.7, 1).yz + 0.3 / f5 * OrgFade(f5, fp) * OrgLN2(wa, f5, 63.9, 1).yz + 0.3 / f4 * OrgFade(f4, fp) * OrgLN2(wa, f4, 67.1, 1).yz;
-        cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, (wa + sw) * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
-    }
-    cw = lerp(cw, cs, saturate(4 * (cw.w + cs.w)));
     float hw = wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
     float sh = wp.y + 0.15 * OrgLN2(wp.xz, 0.035, 19.3, step(wp.y, 3)).x;
     float shore = smoothstep(2.1, 0.9, sh);
