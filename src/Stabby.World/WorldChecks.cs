@@ -751,17 +751,22 @@ namespace Stabby.World
         }
 
         public const float StitchReachSteps = 3f;
+        public const int StitchSampleCols = 4;
 
         static void CheckArchStitch(TerrainDetail detail, EditGrid grid, List<string> e)
         {
             var placed = grid.Edits;
             int a = Array.FindIndex(placed, x => x.Shape == FeatureEdit.Arch);
             if (a < 0) return;
-            float minX = placed[a].MinX, maxX = placed[a].MaxX, minZ = placed[a].MinZ, maxZ = placed[a].MaxZ;
-            for (int b = a + 1; b < placed.Length && placed[b].Shape == FeatureEdit.Arch && placed[b].Ax == placed[b - 1].Bx && placed[b].Az == placed[b - 1].Bz; b++)
+            int end = a;
+            while (end + 1 < placed.Length && placed[end + 1].Shape == FeatureEdit.Arch && placed[end + 1].Ax == placed[end].Bx && placed[end + 1].Az == placed[end].Bz) end++;
+            int mid = (a + end) / 2;
+            float ax = (placed[mid].Ax + placed[mid].Bx) / 2, az = (placed[mid].Az + placed[mid].Bz) / 2;
+            bool Near(float x, float z, float r)
             {
-                minX = Math.Min(minX, placed[b].MinX); maxX = Math.Max(maxX, placed[b].MaxX);
-                minZ = Math.Min(minZ, placed[b].MinZ); maxZ = Math.Max(maxZ, placed[b].MaxZ);
+                for (int b = a; b <= end; b++)
+                    if (x >= placed[b].MinX - r && x <= placed[b].MaxX + r && z >= placed[b].MinZ - r && z <= placed[b].MaxZ + r) return true;
+                return false;
             }
             var ids = new List<int>();
             int m = NearField.NodeQuads, w = m + 1;
@@ -770,34 +775,32 @@ namespace Stabby.World
                 float s = NearField.NodeStep(level), size = NearField.NodeSize(level), reach = StitchReachSteps * 2 * s;
                 var cols = new DetailColumns { Detail = detail, StepM = s };
                 var coarse = new DetailColumns { Detail = detail, StepM = 2 * s };
-                for (int nz = (int)Math.Floor(minZ / size); nz <= (int)Math.Floor(maxZ / size); nz++)
-                    for (int nx = (int)Math.Floor(minX / size); nx <= (int)Math.Floor(maxX / size); nx++)
+                int nx = (int)Math.Floor(ax / size), nz = (int)Math.Floor(az / size);
+                float x0 = nx * size, z0 = nz * size, x1 = x0 + size, z1 = z0 + size;
+                var list = MeshedAt(grid, s, x0, z0, x1, z1, ids);
+                if (list.Count == 0) continue;
+                var near = MeshedAt(grid, 2 * s, x0 - m * s, z0 - m * s, x1 + m * s, z1 + m * s, ids);
+                var c = new NetsChunk { X0 = nx * m, Z0 = nz * m, Cells = m, StepM = s };
+                var f = new NetsBuffers();
+                SurfaceNets.Edited(cols, list, c, ref f);
+                var used = new bool[f.Verts.Count / 6];
+                foreach (int t in f.Tris) used[t] = true;
+                for (int k = 0; k < w; k++)
+                    for (int i = 0; i < w; i++)
                     {
-                        float x0 = nx * size, z0 = nz * size, x1 = x0 + size, z1 = z0 + size;
-                        var list = MeshedAt(grid, s, x0, z0, x1, z1, ids);
-                        if (list.Count == 0) continue;
-                        var near = MeshedAt(grid, 2 * s, x0 - m * s, z0 - m * s, x1 + m * s, z1 + m * s, ids);
-                        var c = new NetsChunk { X0 = nx * m, Z0 = nz * m, Cells = m, StepM = s };
-                        var f = new NetsBuffers();
-                        SurfaceNets.Edited(cols, list, c, ref f);
-                        var used = new bool[f.Verts.Count / 6];
-                        foreach (int t in f.Tris) used[t] = true;
-                        for (int k = 0; k < w; k++)
-                            for (int i = 0; i < w; i++)
-                            {
-                                int col = k * w + i;
-                                for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
-                                {
-                                    int v = f.ColumnBase(col) + j - f.ColumnStart(col);
-                                    if (!used[v]) continue;
-                                    float px = i == 0 ? x0 : i == m ? x1 : f.Verts[6 * v], py = f.Verts[6 * v + 1], pz = k == 0 ? z0 : k == m ? z1 : f.Verts[6 * v + 2];
-                                    if (px < minX - reach || px > maxX + reach || pz < minZ - reach || pz > maxZ + reach) continue;
-                                    if ((i == 0 || k == 0 || i == m || k == m) && LodStitch.Open(list, px, pz)) py = detail.Sample(px, pz);
-                                    if (!LodStitch.Target(coarse, near, 2 * s, c.X0, c.Z0, m, i, j, k, py, out var p)) continue;
-                                    float dx = p.X - px, dy = p.Y - py, dz = p.Z - pz, d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                                    if (d > reach) { e.Add($"arch node {x0:F0},{z0:F0} at level {level} stitches vertex {px:F0},{py:F0},{pz:F0} {d:F0} m away to {p.X:F0},{p.Y:F0},{p.Z:F0}"); return; }
-                                }
-                            }
+                        if (i % StitchSampleCols != 0 && k % StitchSampleCols != 0 && i != m && k != m) continue;
+                        int col = k * w + i;
+                        for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
+                        {
+                            int v = f.ColumnBase(col) + j - f.ColumnStart(col);
+                            if (!used[v]) continue;
+                            float px = i == 0 ? x0 : i == m ? x1 : f.Verts[6 * v], py = f.Verts[6 * v + 1], pz = k == 0 ? z0 : k == m ? z1 : f.Verts[6 * v + 2];
+                            if (!Near(px, pz, reach)) continue;
+                            if ((i == 0 || k == 0 || i == m || k == m) && LodStitch.Open(list, px, pz)) py = detail.Sample(px, pz);
+                            if (!LodStitch.Target(coarse, near, 2 * s, c.X0, c.Z0, m, i, j, k, py, out var p)) continue;
+                            float dx = p.X - px, dy = p.Y - py, dz = p.Z - pz, d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                            if (d > reach) { e.Add($"arch node {x0:F0},{z0:F0} at level {level} stitches vertex {px:F0},{py:F0},{pz:F0} {d:F0} m away to {p.X:F0},{p.Y:F0},{p.Z:F0}"); return; }
+                        }
                     }
             }
         }
