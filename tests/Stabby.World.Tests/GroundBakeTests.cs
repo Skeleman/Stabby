@@ -2,9 +2,14 @@ using Stabby.World;
 
 namespace Stabby.World.Tests;
 
-public class GroundBakeTests
+public class GroundBakeTests : IClassFixture<GroundBakeTests.Bakes>
 {
     const int Every = 5;
+
+    public sealed class Bakes
+    {
+        public Bakes() => _ = Baked.Value;
+    }
 
     static readonly Lazy<(GroundBake Bake, TerrainDetail Detail, byte[] File)> Baked = new(() =>
     {
