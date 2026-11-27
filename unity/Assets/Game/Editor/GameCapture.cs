@@ -167,14 +167,14 @@ namespace Stabby.Game.Editor
             if (!ready) return;
             if (settle == -1) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
             if (settle > 0 && --settle > 0) return;
-            if (phase == 0 && Loading()) { if (firstStep == 0) chaseWait++; return; }
+            if (phase == 0 && Loading()) { if (firstStep == 0) { chaseWait++; ChaseWhy(); } return; }
 
             if (dir == null) { dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game")); Directory.CreateDirectory(dir); }
             var cam = Camera.main;
             if (phase == 0 && firstStep == 0)
             {
                 Shot(cam, null, "warmup");
-                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain and objects";
+                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain and objects (s: terrain behind {chaseWhy[0]:F1}, regions {chaseWhy[1]:F1}, objects pending {chaseWhy[2]:F1} (collecting {pendWhy[0]:F1}, unserved {pendWhy[1]:F1}, despawn {pendWhy[2]:F1}, chunk {pendWhy[3]:F1}, spawn budget {pendWhy[4]:F1}, spawn time {pendWhy[5]:F1}, scan busy {pendWhy[6]:F1}, preparing {pendWhy[7]:F1}, rescan {pendWhy[8]:F1}, mesh build {pendWhy[9]:F1}, leaf atlas {pendWhy[10]:F1}, mesh upload {pendWhy[11]:F1}), objects stale {chaseWhy[3]:F1})";
                 Shot(cam, dir, "chase");
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
@@ -208,7 +208,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : only == "lightbudget" ? 540 : only == "waterlook" ? 550 : only == "lightreceivers" ? 560 : only == "firelight" ? 570 : only == "caves" ? 580 : only == "lightscale" ? 590 : only == "oceandetail" ? 600 : only == "waterlights" ? 610 : only == "creaturememory" ? 620 : only == "rigdump" ? 630 : only == "creatureskin" ? 640 : only == "cavemouth" ? 650 : only == "cavelights" ? 660 : only == "caveice" ? 670 : only == "dungeon" ? 680 : only == "dungeons" ? 690 : only == "mines" ? 700 : only == "dungeonlinks" ? 710 : only == "towns" ? 720 : only == "roads" ? 730 : only == "cavelava" ? 740 : only == "cavefalls" ? 750 : only == "overlook" ? 760 : only == "wallheads" ? 770 : only == "bones" ? 820 : only == "creaturesyoung" ? 900 : only == "boulder" ? 780 : only == "salttower" ? 800 : only == "fallsmist" ? 910 : only == "oceannormals" ? 920 : only == "fallsseam" ? 930 : only == "mouthedge" ? 940 : only == "cliffstripes" ? 950 : only == "wakes" ? 870 : only == "quicksand" ? 830 : only == "playtest" ? 970 : only == "kittour" ? 960 : only == "coastfall" ? 980 : only == "oasis" ? 860 : only == "fallentree" ? 850 : only == "loneinn" ? 810 : only == "monument" ? 990 : only == "butte" ? 1000 : 1;
+                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : only == "lightbudget" ? 540 : only == "waterlook" ? 550 : only == "lightreceivers" ? 560 : only == "firelight" ? 570 : only == "caves" ? 580 : only == "lightscale" ? 590 : only == "oceandetail" ? 600 : only == "waterlights" ? 610 : only == "creaturememory" ? 620 : only == "rigdump" ? 630 : only == "creatureskin" ? 640 : only == "cavemouth" ? 650 : only == "cavelights" ? 660 : only == "caveice" ? 670 : only == "dungeon" ? 680 : only == "dungeons" ? 690 : only == "mines" ? 700 : only == "dungeonlinks" ? 710 : only == "towns" ? 720 : only == "roads" ? 730 : only == "cavelava" ? 740 : only == "cavefalls" ? 750 : only == "overlook" ? 760 : only == "wallheads" ? 770 : only == "bones" ? 820 : only == "creaturesyoung" ? 900 : only == "boulder" ? 780 : only == "salttower" ? 800 : only == "fallsmist" ? 910 : only == "oceannormals" ? 920 : only == "fallsseam" ? 930 : only == "mouthedge" ? 940 : only == "cliffstripes" ? 950 : only == "wakes" ? 870 : only == "quicksand" ? 830 : only == "playtest" ? 970 : only == "kittour" ? 960 : only == "coastfall" ? 980 : only == "oasis" ? 860 : only == "fallentree" ? 850 : only == "loneinn" ? 810 : only == "monument" ? 990 : only == "butte" ? 1000 : only == "shipwreck" ? 1020 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -572,6 +572,7 @@ namespace Stabby.Game.Editor
             if (phase == 800) { if (job == null) job = SaltTowerTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 980) { if (job == null) job = CoastFallTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 990) { if (job == null) job = MonumentTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 1020) { if (job == null) job = ShipwreckTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 630) { if (job == null) job = RigDump(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 50)
             {
@@ -2984,6 +2985,26 @@ namespace Stabby.Game.Editor
         static readonly System.Text.StringBuilder loadWaits = new System.Text.StringBuilder();
 
         static double LoadWaitTotal() => loadTotal + (loadSince >= 0 ? EditorApplication.timeSinceStartup - loadSince : 0);
+
+        static readonly double[] chaseWhy = new double[4], pendWhy = new double[12];
+        static double chaseLast = -1;
+
+        static void ChaseWhy()
+        {
+            double now = EditorApplication.timeSinceStartup, dt = chaseLast < 0 ? 0 : now - chaseLast;
+            chaseLast = now;
+            bool columns = true;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient) columns = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Settled ?? false;
+            var cam = Camera.main;
+            if (GameStatus.TerrainBehind > 0) chaseWhy[0] += dt;
+            if (!columns) chaseWhy[1] += dt;
+            if (cam != null && !ObjectViewSystem.ReadyAround(cam.transform.position, ReadyWithin))
+            {
+                chaseWhy[ObjectViewSystem.Pending != 0 ? 2 : 3] += dt;
+                for (int b = 0; b < pendWhy.Length; b++) if ((ObjectViewSystem.PendingWhy & (1 << b)) != 0) pendWhy[b] += dt;
+            }
+        }
 
         static bool Loading()
         {
