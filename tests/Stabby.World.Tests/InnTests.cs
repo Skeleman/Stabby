@@ -106,10 +106,8 @@ public class InnTests
         int d = Objects.Objects.FindIndex(o => o.Id == "inn"), seen = 0;
         var seat = ObjectField.Seats(Objects.Objects[d]);
         int across = field.ChunksAcross;
-        var chunks = new ObjectInstance[across * across][];
-        Parallel.For(0, chunks.Length, c => chunks[c] = field.Place(c % across, c / across, true));
-        foreach (var chunk in chunks)
-            foreach (var o in chunk)
+        for (int c = 0; c < across * across; c++)
+            foreach (var o in field.Sites(c % across, c / across))
             {
                 if (o.Def != d) continue;
                 seen++;
