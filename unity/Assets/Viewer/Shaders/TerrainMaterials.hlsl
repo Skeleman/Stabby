@@ -513,7 +513,7 @@ TmOut TmSand(float3 wp, float3 n, float3 v, float3 base, float fp, float shore, 
 {
     float2 p = wp.xz, wind = _StabbySurface.zw;
     float f = B.y * 0.3, k0 = frac(dot(orgO.xz, wind) * f);
-    float calm = saturate((n.y - 0.85) / 0.1) * OrgFade(f * 4, fp);
+    float calm = saturate((n.y - 0.85) / 0.1) * saturate(1 - 6 * max(0, dot(n.xz, wind))) * OrgFade(f * 4, fp);
     float3 warp = OrgN2((p + orgO.xz) * f * 0.1 + 13.1, calm);
     float3 patch = OrgLN2(p, 0.15, 17.3, 1);
     float dune = smoothstep(0.5, 3.2, hw + 1.3 * OrgLN2(p, 0.045, 23.9, 1).x + 0.5 * patch.x) * (1 - 0.6 * shore);

@@ -17,7 +17,7 @@ test CaveTests.CaveLightsAreSporadicAndPass 30 places and checks cave lights on 
 test CaveTests.ObsidianCavesFormInHotDryGroundWithLavaPools 10 builds the pinned seed-13 512 world and checks its lava pools, glow and dripstone
 test CaveTests.LavaPoolOnAPassageFails 10 reuses the pinned seed-13 world and moves its lava pool onto a passage
 test MineTests.MinesAreWalkableGridAlignedAndTimbered 20 carves mines on full worlds, walks each from its entrance and places its timber
-test MineTests.FloatingTimberIsCaught 8 builds one world and checks a lifted timber fails
+test MineTests.FloatingTimberIsCaught 2 checks a lifted timber fails on the cached default world, built by the class fixture
 test DungeonLinkTests.LinksJoinDungeonsToWalkableDarkCaves 25 builds two worlds, checks their dungeon link caves and cave darkness
 test DungeonLinkTests.SurfacedOrStrayLinksAreCaught 12 builds one world and checks raised and moved link caves fail
 test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places boulders over a world and splits large ones into solid edits
@@ -70,4 +70,5 @@ sweep 512 sites 22000 40000 site footprints, sites, structures and discoveries p
 sweep 512 objects 23846 29431 objects, landforms, arches and boulders per seed
 sweep 512 creatures 3100 5100 creature checks per seed
 test DiscoveryTests.OasesHoldWaterAmongPalms 8 checks oasis pools, ring and palms on the shared default world
+test DuneTests.DesertGrowsDuneFieldsThatPassChecks 30 generates seed 11 with a forced plateau desert and runs every check, since no natural seed has hot desert
 test ObjectTests.SeaStacksStandInSeaAcrossSeaLevelWithAnOpenArch 8 checks sea stack clusters and the sea arch on the cached default world
