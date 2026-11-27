@@ -24,23 +24,27 @@ namespace Stabby.Viewer
         public static (GeneratedWorld, string) LoadOrGenerate(string path, WorldConfig c, IReadOnlyList<BiomeDef> defs, MaterialLibrary materials, bool save)
         {
             var sw = Stopwatch.StartNew();
+            var times = new LoadTimes();
             string why = "no map file";
             ulong hash = ContentHash();
+            times.Mark("content hash");
             if (File.Exists(path))
             {
                 try
                 {
                     var bytes = File.ReadAllBytes(path);
+                    times.Mark("file read");
                     int v = WorldFile.GeneratorVersionOf(bytes);
                     if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}, this build runs {WorldConfig.GeneratorVersion}";
                     else if (WorldFile.ContentHashOf(bytes) != hash) why = "map file baked from other biomes.json or materials.json";
                     else
                     {
-                        var w = WorldFile.Read(bytes, materials);
+                        times.Mark("version and hash checks");
+                        var w = WorldFile.Read(bytes, materials, times);
                         if (w.Config.Seed == c.Seed && w.Config.Size == c.Size)
                         {
-                            w.Sketch = WorldSketch.Generate(w.Config);
-                            return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms");
+                            w.SketchInBackground();
+                            return (w, $"loaded map file in {sw.ElapsedMilliseconds} ms ({times} ms)");
                         }
                         why = "map file has another seed or size";
                     }

@@ -175,7 +175,7 @@ namespace Stabby.World
             }
         }
 
-        public static void Relink(WorldConfig c, float[] h, bool[] sea, Hydrology hy)
+        public static void Relink(WorldConfig c, float[] h, bool[] sea, Hydrology hy, LoadTimes times = null)
         {
             int n = c.Size;
             hy.Lakes.Clear();
@@ -190,9 +190,13 @@ namespace Stabby.World
                 lake.Level = hy.WaterSurface[i];
                 if (hy.LakeId[hy.Receiver[i]] != id) { lake.Outlet = i; lake.Below = hy.Receiver[i]; lake.Outflow = hy.DischargeM3s[i]; }
             }
+            times?.Mark("lakes");
             BuildSegments(c, sea, hy);
+            times?.Mark("segments");
             Shelves(c, h, sea, hy);
+            times?.Mark("shelves");
             Cover(c, h, sea, hy);
+            times?.Mark("cover");
         }
 
         static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy)

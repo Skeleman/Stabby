@@ -87,7 +87,7 @@ namespace Stabby.World
             return m2.ToArray();
         }
 
-        public static GroundBake Read(byte[] data, int at, int count)
+        public static GroundBake Read(byte[] data, int at, int count, LoadTimes times = null)
         {
             var head = new In(data, at, count);
             if (head.Int() != Format) throw new FormatException("ground bake has another format");
@@ -130,6 +130,7 @@ namespace Stabby.World
                 var f = e.Flatten().InnerExceptions[0];
                 throw f is FormatException ? (FormatException)f : new FormatException($"ground bake is corrupt: {f.Message}", f);
             }
+            times?.Mark("ground inflate");
             var bake = new GroundBake { Key = key, Detail = new DetailArrays() };
             var d = bake.Detail;
             var i0 = new In(parts[0]); d.Amp = i0.Raw<float>(); i0.End();
@@ -137,7 +138,9 @@ namespace Stabby.World
             var i2 = new In(parts[2]); d.Start = i2.Raw<int>(); d.Items = i2.Raw<int>(); d.Bands = i2.Raw<float>(); d.Period = i2.Float(); d.Pieces = i2.Raw<RiverPiece>(); i2.End();
             var i3 = new In(data, start[Stored], len[Stored]); var placedPack = i3.Raw<byte>(); i3.End();
             var i4 = new In(parts[4]); var placedAt = i4.Raw<int>(); var placedRaw = i4.Raw<int>(); var placedSum = i4.Raw<ulong>(); i4.End();
+            times?.Mark("ground detail and placed");
             var i5 = new In(parts[5]); bake.Rest(i5); i5.End();
+            times?.Mark("ground rest");
             if ((placedAt == null) != (placedPack == null) || (placedAt == null) != (placedRaw == null) || (placedAt == null) != (placedSum == null)
                 || placedAt != null && (bake.Field == null || !Ascending(placedAt, placedPack.Length) || placedRaw.Length != placedAt.Length - 1 || placedSum.Length != placedRaw.Length || Array.Exists(placedRaw, r => r < 0)))
                 throw new FormatException("ground bake placed objects do not fit their chunk table");

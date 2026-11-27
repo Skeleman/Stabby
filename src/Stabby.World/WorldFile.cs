@@ -86,7 +86,7 @@ namespace Stabby.World
             return h;
         }
 
-        public static GeneratedWorld Read(byte[] data, MaterialLibrary materials)
+        public static GeneratedWorld Read(byte[] data, MaterialLibrary materials, LoadTimes times = null)
         {
             if (data.Length < HeaderBytes || !HasMagic(data)) throw new FormatException("not a Stabby world file");
             int o = 4;
@@ -133,7 +133,9 @@ namespace Stabby.World
             o = (int)at;
             int groundLen = Next(data, ref o);
             if (groundLen < 0 || (long)o + groundLen != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {(long)o + groundLen}");
+            times?.Mark("table");
             var w = Empty(c, biomeIds, materials);
+            times?.Mark("empty");
             var pool = new ConcurrentBag<byte[][]>();
             try
             {
@@ -151,8 +153,9 @@ namespace Stabby.World
                 var inner = e.Flatten().InnerException;
                 throw new FormatException("world file chunk is corrupt: " + inner.Message, inner);
             }
-            if (groundLen > 0) bake.Ground = GroundBake.Read(data, o, groundLen);
-            WorldChunks.Relink(w);
+            times?.Mark("chunks");
+            if (groundLen > 0) bake.Ground = GroundBake.Read(data, o, groundLen, times);
+            WorldChunks.Relink(w, times);
             w.Bake = bake;
             return w;
         }

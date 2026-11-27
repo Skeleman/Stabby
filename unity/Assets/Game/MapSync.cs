@@ -485,7 +485,7 @@ namespace Stabby.Game
                     var ids = new string[defs.Count];
                     for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
                     w = WorldFile.Empty(new WorldConfig { Seed = hs, Size = n, CellMeters = WorldConfig.CellMetersFor(n) }, ids, lib);
-                    w.Sketch = WorldSketch.Generate(w.Config);
+                    w.SketchInBackground();
                     w.Objects = objects;
                     w.Caves = ContentFiles.Caves();
                 }
