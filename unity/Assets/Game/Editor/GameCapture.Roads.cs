@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float RoadShotHour = 15f, RoadEyeBack = 26f, RoadEyeUp = 9f, RoadLookM = 40f, PortalEyeBack = 34f, PortalEyeUp = 7f, PortalLookUp = 4f;
+        const float RoadShotHour = 15.5f, RoadShotMoon = 0.5f, RoadSideM = 20f, RoadMinM = 20f, RoadEyeBack = 26f, RoadEyeUp = 9f, RoadLookM = 40f, PortalEyeBack = 34f, PortalEyeUp = 7f, PortalLookUp = 4f;
 
         static System.Collections.IEnumerator RoadsTour(Camera cam, string dir)
         {
@@ -30,11 +30,11 @@ namespace Stabby.Game.Editor
             var roads = job.Result;
             var dirt = roads.Where(s => s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel).ToArray();
             if (dirt.Length == 0) { GameStatus.Lines["~roads"] = GameStatus.Failure = $"roads: no road links in this world ({roads.Length} lanes)"; yield break; }
-            var seg = dirt.OrderBy(s => new Vector2((s.X0 + s.X1) * 0.5f - home.x, (s.Z0 + s.Z1) * 0.5f - home.z).sqrMagnitude).First();
+            var seg = dirt.Where(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude >= RoadMinM).DefaultIfEmpty(dirt[0]).OrderByDescending(s => CrossSlope(ground, s)).First();
             float km = dirt.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude) / 1000f;
             int fords = dirt.Count(s => s.Kind == RoadSegment.Ford);
             cam.fieldOfView = 60f;
-            for (var w = ShowHour(RoadShotHour); w.MoveNext();) yield return null;
+            for (var w = ShowHour(RoadShotHour, RoadShotMoon); w.MoveNext();) yield return null;
             var u = new Vector3(seg.X1 - seg.X0, 0, seg.Z1 - seg.Z0).normalized;
             var mid = new Vector3((seg.X0 + seg.X1) * 0.5f, 0, (seg.Z0 + seg.Z1) * 0.5f);
             var eye = mid - u * RoadEyeBack;
@@ -44,7 +44,7 @@ namespace Stabby.Game.Editor
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
             for (var w = Settle(180); w.MoveNext();) yield return null;
             var sky = DayNightSystem.Shown;
-            GameStatus.Lines["~roads"] = $"roads: {dirt.Length} segments, {km:F1} km, {fords} fords, {field.TownPlans().Length} towns, GV {WorldConfig.GeneratorVersion}\nsegment {seg.X0:F0},{seg.Z0:F0} to {seg.X1:F0},{seg.Z1:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}, pinned hour {sky.Hour:F2}";
+            GameStatus.Lines["~roads"] = $"roads: {dirt.Length} segments, {km:F1} km, {fords} fords, {field.TownPlans().Length} towns, cross rise {CrossSlope(ground, seg):F1} m, GV {WorldConfig.GeneratorVersion}\nsegment {seg.X0:F0},{seg.Z0:F0} to {seg.X1:F0},{seg.Z1:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}, pinned hour {sky.Hour:F2}";
             Shot(cam, null, "warmup");
             Shot(cam, dir, "roads-link");
             var bores = roads.Where(s => s.Kind == RoadSegment.Tunnel).ToArray();
@@ -60,6 +60,13 @@ namespace Stabby.Game.Editor
             float tkm = bores.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude) / 1000f;
             GameStatus.Lines["~tunnels"] = $"tunnels: {bores.Length} bores, {tkm:F2} km, portal {t.X0:F0},{t.Z0:F0}, eye {from.x:F0},{from.y:F1},{from.z:F0}";
             Shot(cam, dir, "roads-tunnel");
+        }
+
+        static float CrossSlope(Ground ground, RoadSegment s)
+        {
+            float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, len = Mathf.Max(1e-3f, Mathf.Sqrt(dx * dx + dz * dz));
+            float px = -dz / len * RoadSideM, pz = dx / len * RoadSideM, mx = (s.X0 + s.X1) * 0.5f, mz = (s.Z0 + s.Z1) * 0.5f;
+            return Mathf.Abs(ground.HeightAt(mx + px, mz + pz) - ground.HeightAt(mx - px, mz - pz));
         }
     }
 }
