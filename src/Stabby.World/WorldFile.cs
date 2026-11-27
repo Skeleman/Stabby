@@ -1,33 +1,67 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Stabby.World
 {
+    public sealed class WorldBake
+    {
+        public const int NotRaised = -2;
+        public int Mound = NotRaised;
+        public ulong[] Sums;
+        public byte[] Packed;
+        public int[] At, Len;
+        public GroundBake Ground;
+        public bool Raised => Mound != NotRaised;
+    }
+
     public static class WorldFile
     {
-        public const int Version = 1, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256;
+        public const int Version = 2, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256;
         static readonly byte[] Magic = { (byte)'S', (byte)'T', (byte)'B', (byte)'W' };
+        static readonly int Full = WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes;
 
-        public static byte[] Write(GeneratedWorld w)
+        public static byte[] Write(GeneratedWorld w) => Write(w, WorldBake.NotRaised, null);
+
+        public static byte[] Write(GeneratedWorld w, int mound, GroundBake ground)
         {
             var c = w.Config;
-            int a = WorldChunks.Across(c.Size);
+            int a = WorldChunks.Across(c.Size), count = a * a;
             var head = new List<byte>(Magic);
             Int(head, Version); Int(head, WorldConfig.GeneratorVersion); Int(head, WorldChunks.Version);
             Long(head, c.Seed); Int(head, c.Size); Int(head, BitConverter.SingleToInt32Bits(c.CellMeters));
             Int(head, w.BiomeIds == null ? -1 : w.BiomeIds.Length);
             if (w.BiomeIds != null)
                 foreach (var id in w.BiomeIds) { var b = Encoding.UTF8.GetBytes(id); Int(head, b.Length); head.AddRange(b); }
-            var chunks = new byte[a * a][];
-            long total = head.Count;
-            for (int k = 0; k < chunks.Length; k++) { chunks[k] = WorldChunks.Pack(w, k % a, k / a); total += chunks[k].Length; }
-            var data = new byte[total];
-            head.CopyTo(data);
-            int o = head.Count;
-            foreach (var ch in chunks) { Buffer.BlockCopy(ch, 0, data, o, ch.Length); o += ch.Length; }
-            return data;
+            Int(head, mound);
+            var sums = new ulong[count];
+            var packed = new byte[count][];
+            var pool = new ConcurrentBag<byte[][]>();
+            Parallel.For(0, count, () => pool.TryTake(out var u) ? u : new[] { new byte[Full], new byte[Full] }, (k, _, u) =>
+            {
+                int len = WorldChunks.Pack(w, k % a, k / a, u[0], 0);
+                sums[k] = WorldChunks.Checksum(u[0], len);
+                packed[k] = ChunkZip.Deflate(u[0], len, u[1]);
+                return u;
+            }, pool.Add);
+            var g = ground?.Write();
+            var m = new MemoryStream();
+            m.Write(head.ToArray(), 0, head.Count);
+            var cell = new byte[12];
+            for (int k = 0; k < count; k++)
+            {
+                BitConverter.TryWriteBytes(cell.AsSpan(0, 8), sums[k]);
+                BitConverter.TryWriteBytes(cell.AsSpan(8, 4), packed[k].Length);
+                m.Write(cell, 0, 12);
+            }
+            foreach (var p in packed) m.Write(p, 0, p.Length);
+            BitConverter.TryWriteBytes(cell.AsSpan(0, 4), g == null ? 0 : g.Length);
+            m.Write(cell, 0, 4);
+            if (g != null) m.Write(g, 0, g.Length);
+            return m.ToArray();
         }
 
         public static int GeneratorVersionOf(byte[] data) => data.Length >= 12 && HasMagic(data) ? GetInt(data, 8) : -1;
@@ -58,14 +92,47 @@ namespace Stabby.World
                     o += len;
                 }
             }
-            long expected = o + (long)c.Size * c.Size * WorldChunks.CellBytes;
-            if (expected != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {expected}");
+            int a = WorldChunks.Across(c.Size), count = a * a;
+            if (o + 4 + 12L * count > data.Length) throw new FormatException("world file ends inside its chunk table");
+            int mound = Next(data, ref o);
+            if (mound < WorldBake.NotRaised || mound >= c.Size * c.Size) throw new FormatException($"world file mound {mound} outside the map");
+            var bake = new WorldBake { Mound = mound, Sums = new ulong[count], Packed = data, At = new int[count], Len = new int[count] };
+            long at = o + 12L * count;
+            for (int k = 0; k < count; k++)
+            {
+                bake.Sums[k] = BitConverter.ToUInt64(data, o);
+                int len = BitConverter.ToInt32(data, o + 8);
+                o += 12;
+                if (len <= 0 || at + len > data.Length) throw new FormatException($"world file chunk {k} has bad length {len}");
+                bake.At[k] = (int)at;
+                bake.Len[k] = len;
+                at += len;
+            }
+            if (at + 4 > data.Length) throw new FormatException("world file ends before its ground section");
+            o = (int)at;
+            int groundLen = Next(data, ref o);
+            if (groundLen < 0 || (long)o + groundLen != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {(long)o + groundLen}");
             var w = Empty(c, biomeIds, materials);
-            int a = WorldChunks.Across(c.Size);
-            var at = new int[a * a];
-            for (int k = 0; k < a * a; k++) { at[k] = o; o += WorldChunks.Bytes(c.Size, k % a, k / a); }
-            Parallel.For(0, a * a, k => WorldChunks.Unpack(w, k % a, k / a, data, at[k]));
+            var pool = new ConcurrentBag<byte[][]>();
+            try
+            {
+                Parallel.For(0, count, () => pool.TryTake(out var u) ? u : new[] { new byte[Full], new byte[Full] }, (k, _, u) =>
+                {
+                    int cx = k % a, cy = k / a, bytes = WorldChunks.Bytes(c.Size, cx, cy);
+                    ChunkZip.Inflate(data, bake.At[k], bake.Len[k], bytes, u[1], u[0]);
+                    if (WorldChunks.Checksum(u[0], bytes) != bake.Sums[k]) throw new InvalidDataException($"chunk {cx},{cy} fails its checksum");
+                    WorldChunks.Unpack(w, cx, cy, u[0], 0);
+                    return u;
+                }, pool.Add);
+            }
+            catch (AggregateException e)
+            {
+                var inner = e.Flatten().InnerException;
+                throw new FormatException("world file chunk is corrupt: " + inner.Message, inner);
+            }
+            if (groundLen > 0) bake.Ground = GroundBake.Read(data, o, groundLen);
             WorldChunks.Relink(w);
+            w.Bake = bake;
             return w;
         }
 

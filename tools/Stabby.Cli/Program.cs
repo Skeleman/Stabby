@@ -73,16 +73,33 @@ int Bake()
     var w = WorldGenerator.Generate(c, biomes, materials, null, null, objects, caves);
     long genMs = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
-    var bytes = WorldFile.Write(w);
+    sw.Restart();
+    var raised = WorldFile.Read(WorldFile.Write(w), materials);
+    int mound = Mound.Raise(raised);
+    var played = WorldFile.Read(WorldFile.Write(raised, mound, null), materials);
+    played.Objects = objects;
+    played.Caves = caves;
+    var ground = GroundBake.Run(played, BakeKey(), true, out _);
+    long groundMs = sw.ElapsedMilliseconds;
+    var bytes = WorldFile.Write(played, mound, ground);
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
     File.WriteAllBytes(path, bytes);
     sw.Restart();
     var back = WorldFile.Read(File.ReadAllBytes(path), materials);
     long readMs = sw.ElapsedMilliseconds;
-    bool same = WorldChunks.Checksums(back).SequenceEqual(WorldChunks.Checksums(w));
-    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
+    bool same = back.Bake.Sums.SequenceEqual(WorldChunks.Checksums(played)) && back.Bake.Mound == mound && back.Bake.Ground != null
+        && back.Bake.Ground.Edits.Length == ground.Edits.Length && back.Bake.Ground.Field != null;
+    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, mound and ground in {groundMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return same && violations.Count == 0 ? 0 : 1;
+}
+
+ulong BakeKey()
+{
+    var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+    var files = new List<byte[]>();
+    foreach (var f in "biomes.json materials.json objects.json caves.json".Split(' ')) files.Add(File.ReadAllBytes(Path.Combine(root, f)));
+    return GroundBake.KeyOf(files, 1f);
 }
 
 int RunScenarios()

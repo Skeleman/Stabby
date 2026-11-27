@@ -16,6 +16,7 @@ namespace Stabby.World
         public MaterialLibrary Materials;
         public ObjectLibrary Objects;
         public CaveLibrary Caves;
+        public WorldBake Bake;
 
         public ulong Fingerprint()
         {

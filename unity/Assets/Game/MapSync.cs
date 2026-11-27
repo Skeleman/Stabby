@@ -18,41 +18,7 @@ namespace Stabby.Game
     {
         public static WorldConfig Config(ulong seed) => new WorldConfig { Seed = seed, Size = GameSettings.Size, CellMeters = WorldConfig.CellMetersFor(GameSettings.Size) };
 
-        public static int RaiseMound(GeneratedWorld w, float rise = 5f, int radius = 10)
-        {
-            int n = w.Config.Size, s = WorldChunks.Size, best = -1;
-            long bestD = long.MaxValue;
-            for (int y = s; y < n; y += s)
-                for (int x = s; x < n; x += s)
-                {
-                    long d = (long)(x - n / 2) * (x - n / 2) + (long)(y - n / 2) * (y - n / 2);
-                    if (d < bestD && Dry(w, x, y, radius)) { bestD = d; best = y * n + x; }
-                }
-            if (best < 0) return -1;
-            int cx = best % n, cy = best / n;
-            for (int y = cy - radius; y <= cy + radius; y++)
-                for (int x = cx - radius; x <= cx + radius; x++)
-                {
-                    float f = 1f - (float)Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / radius;
-                    if (f <= 0) continue;
-                    w.Height[y * n + x] += rise * f;
-                    w.Water.WaterSurface[y * n + x] += rise * f;
-                }
-            return best;
-        }
-
-        static bool Dry(GeneratedWorld w, int cx, int cy, int r)
-        {
-            int n = w.Config.Size;
-            for (int y = cy - r; y <= cy + r; y++)
-                for (int x = cx - r; x <= cx + r; x++)
-                {
-                    if (x < 0 || y < 0 || x >= n || y >= n) return false;
-                    int i = y * n + x;
-                    if (w.Sea[i] || w.Water.LakeId[i] >= 0 || w.Water.IsRiver[i] || w.Height[i] < 2f) return false;
-                }
-            return true;
-        }
+        public static int RaiseMound(GeneratedWorld w) => Mound.Raise(w);
     }
 
     public static class WorldStore
@@ -177,17 +143,20 @@ namespace Stabby.Game
                 var (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(GameSettings.ActiveSeed), defs, lib, true);
                 w.Objects = objects;
                 w.Caves = ContentFiles.Caves();
-                var p = new Prepared { Map = w, Mound = MapGen.RaiseMound(w) };
+                var baked = w.Bake != null && w.Bake.Raised ? w.Bake : null;
+                if (baked == null) w.Bake = null;
+                var p = new Prepared { Map = w, Mound = baked != null ? baked.Mound : MapGen.RaiseMound(w) };
                 p.Fill = Task.Run(() =>
                 {
                     var g = Ground.Fill(w);
                     p.FillMs = sw.ElapsedMilliseconds;
                     return g;
                 });
-                var sums = WorldChunks.Checksums(w);
+                var sums = baked != null ? baked.Sums : WorldChunks.Checksums(w);
                 p.Entry = WorldStore.Offer(w, sums, path);
                 long sumsMs = sw.ElapsedMilliseconds;
-                p.Packed = Pack(w, sums);
+                p.Packed = baked != null ? Stored(w, baked) : Pack(w, sums);
+                if (baked != null) source += ", baked mound and chunks" + (baked.Ground != null && baked.Ground.Key == ContentFiles.BakeKey() ? " and ground" : "");
                 p.Fill.ContinueWith(_ => Shed(w));
                 p.Source = $"{source}, checksums at {sumsMs} ms, deflated at {sw.ElapsedMilliseconds} ms, {sums.Length} chunks";
                 return p;
@@ -206,6 +175,23 @@ namespace Stabby.Game
             w.Climate = null;
             w.Water.Receiver = null;
             w.Water.DischargeM3s = null;
+            w.Bake = null;
+        }
+
+        static BlobBuilder Stored(GeneratedWorld w, WorldBake k)
+        {
+            int count = k.Sums.Length, first = k.At[0], total = k.At[count - 1] + k.Len[count - 1] - first;
+            var b = new BlobBuilder(Allocator.Persistent);
+            ref var root = ref b.ConstructRoot<PackedChunks>();
+            root.Seed = w.Config.Seed;
+            root.Size = w.Config.Size;
+            var s = b.Allocate(ref root.Sums, count);
+            var r = b.Allocate(ref root.Ranges, count);
+            for (int i = 0; i < count; i++) { s[i] = k.Sums[i]; r[i] = new int2(k.At[i] - first, k.Len[i]); }
+            var bytes = b.Allocate(ref root.Bytes, total);
+            var src = k.Packed;
+            for (int j = 0; j < total; j++) bytes[j] = src[first + j];
+            return b;
         }
 
         static BlobBuilder Pack(GeneratedWorld w, ulong[] sums)
@@ -457,7 +443,7 @@ namespace Stabby.Game
                 source = note;
                 w.Objects = objects;
                 w.Caves = ContentFiles.Caves();
-                return (w, WorldChunks.Checksums(w), null);
+                return (w, w.Bake?.Sums ?? WorldChunks.Checksums(w), null);
             });
         }
 
@@ -507,8 +493,8 @@ namespace Stabby.Game
                     return u;
                 }, pool.Add);
                 w.Config.Seed = hs;
-                if (got.Count > 0) WorldChunks.Relink(w);
-                var sums = WorldChunks.Checksums(w);
+                if (got.Count > 0) { WorldChunks.Relink(w); w.Bake = null; }
+                var sums = w.Bake?.Sums ?? WorldChunks.Checksums(w);
                 int bad = 0;
                 for (int k = 0; k < sums.Length; k++) if (sums[k] != host[k]) bad++;
                 if (bad != 0) return (bad, null, null, w);

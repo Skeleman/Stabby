@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="../../unity/Assets/Game/ChunkZip.cs" Link="Linked/ChunkZip.cs" />
     <Compile Include="../../unity/Assets/Game/PoolSize.cs" Link="Linked/PoolSize.cs" />
   </ItemGroup>
 

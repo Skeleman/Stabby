@@ -28,6 +28,7 @@ namespace Stabby.World
         ObjectInstance[][] roadSites;
         Dictionary<int, List<int>> siteCells;
         List<ObjectInstance> siteList;
+        int[] siteChunkOf;
         HashSet<long> tunnelBan;
         HashSet<int> tunnelTiles, tunnelBlocked;
         List<FeatureEdit> tunnelEdits = new List<FeatureEdit>();
@@ -234,10 +235,9 @@ namespace Stabby.World
 
         void PlaceRoadSites()
         {
-            var bins = new ObjectInstance[across * across][];
             var all = new List<ObjectInstance>();
+            var chunks = new List<int>();
             var scratch = new List<ObjectInstance>();
-            var cells = new Dictionary<int, List<int>>();
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 if (!RoadSite(d)) continue;
@@ -245,15 +245,26 @@ namespace Stabby.World
                 {
                     scratch.Clear();
                     PlaceInto(c % across, c / across, false, scratch, null, false, false, d);
-                    if (scratch.Count == 0) continue;
-                    var bin = bins[c];
-                    int at = bin == null ? 0 : bin.Length;
-                    Array.Resize(ref bin, at + scratch.Count);
-                    scratch.CopyTo(bin, at);
-                    bins[c] = bin;
                     all.AddRange(scratch);
+                    for (int k = 0; k < scratch.Count; k++) chunks.Add(c);
                 }
             }
+            IndexSites(all, chunks.ToArray());
+        }
+
+        void IndexSites(List<ObjectInstance> all, int[] chunks)
+        {
+            var bins = new ObjectInstance[across * across][];
+            var count = new int[across * across];
+            foreach (int c in chunks) count[c]++;
+            var fill = new int[across * across];
+            for (int k = 0; k < all.Count; k++)
+            {
+                int c = chunks[k];
+                var bin = bins[c] ?? (bins[c] = new ObjectInstance[count[c]]);
+                bin[fill[c]++] = all[k];
+            }
+            var cells = new Dictionary<int, List<int>>();
             for (int k = 0; k < all.Count; k++)
             {
                 var o = all[k];
@@ -269,6 +280,7 @@ namespace Stabby.World
             }
             roadSites = bins;
             siteList = all;
+            siteChunkOf = chunks;
             siteCells = cells;
         }
 
