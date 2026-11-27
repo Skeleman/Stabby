@@ -7,9 +7,9 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree", "discoveries-lone-inn" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16, LoneInn = 17;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn", "monument" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree", "discoveries-lone-inn", "discoveries-monument" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16, LoneInn = 17, Monument = 18;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
@@ -324,11 +324,11 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o, site: true)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree || kind == LoneInn ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree || kind == LoneInn || kind == Monument ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != Bones || BonesFault(o) == null) && (kind != SaltTower || SaltFault(o) == null) && (kind != FallenTree || TreeFault(o) == null) && (kind != LoneInn || LoneInnFault(o) == null)) break;
+                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != Bones || BonesFault(o) == null) && (kind != SaltTower || SaltFault(o) == null) && (kind != FallenTree || TreeFault(o) == null) && (kind != LoneInn || LoneInnFault(o) == null) && (kind != Monument || MonumentFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -875,6 +875,7 @@ namespace Stabby.World
             }
             if (kind == Bones) return BonesFit(x, z);
             if (kind == SaltTower) return SaltFit(x, z);
+            if (kind == Monument) return MonumentFit(x, z);
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
             if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == LoneInn ? LoneInnProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
