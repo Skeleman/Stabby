@@ -808,7 +808,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     cw = lerp(cw, float4(0, 0, 1, 0), sb);
     float fk = OrgFade(1.3, fp);
     float3 jk = OrgN2(wa * 1.3 + 13.9, fk);
-    float br = 0.12 * fj * jn.x + 0.35 * fk * jk.x;
+    float br = 0.12 * fj * jn.x + 0.35 * fk * jk.x + cw.w * (0.3 * OrgLN2(wa, f6, 71.3, 1).x + 0.25 * OrgFade(f5, fp) * OrgLN2(wa, f5, 73.9, 1).x + 0.2 * OrgFade(f4, fp) * OrgLN2(wa, f4, 77.1, 1).x);
     float sl = n.y;
     float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
     float2 fl2 = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo, fp);
