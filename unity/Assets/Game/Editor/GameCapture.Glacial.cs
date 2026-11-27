@@ -9,7 +9,7 @@ namespace Stabby.Game.Editor
     public static partial class GameCapture
     {
         const string GlacialAtVariable = "STABBY_GLACIAL_AT";
-        const float GlacialHour = 15f, GlacialMoon = 0.5f, ErraticMinR = 6f;
+        const float GlacialHour = 15f, GlacialMoon = 0.5f, ErraticMinR = 2.5f;
 
         static System.Collections.IEnumerator GlacialTour(Camera cam, string dir)
         {
