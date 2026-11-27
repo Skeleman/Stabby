@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -10,10 +12,17 @@ namespace Stabby.World
         public const float QuicksandMinDepthM = 0.5f, QuicksandMaxDepthM = 0.6f, QuicksandRiverM = 3f, QuicksandWetM = 40f, QuicksandShoreM = 2f, QuicksandSteadyM = 0.1f, QuicksandDipM = 0.025f, QuicksandGapM = 0.025f;
         readonly object quicksandLock = new object();
         float[] quicksandPools;
+        bool[] sandBiomes;
 
         public float[] QuicksandPools()
         {
-            lock (quicksandLock) return quicksandPools ?? (quicksandPools = PlaceQuicksand());
+            var q = Volatile.Read(ref quicksandPools);
+            if (q != null) return q;
+            lock (quicksandLock)
+            {
+                if (quicksandPools == null) Volatile.Write(ref quicksandPools, PlaceQuicksand());
+                return quicksandPools;
+            }
         }
 
         public bool SandAt(float x, float z)
@@ -21,7 +30,17 @@ namespace Stabby.World
             if (w.Materials == null || w.Biome == null) return false;
             int c = Cell(z) * n + Cell(x);
             if (w.Sea[c] || w.Biome[c] < 0) return false;
-            return w.Materials.Surface.CoatOf(w.BiomeIds[w.Biome[c]]) == SurfaceDetail.Sand || GroundAt(detail, cm, x, z) <= QuicksandShoreM;
+            return SandBiomes()[w.Biome[c]] || GroundAt(detail, cm, x, z) <= QuicksandShoreM;
+        }
+
+        bool[] SandBiomes()
+        {
+            var s = Volatile.Read(ref sandBiomes);
+            if (s != null) return s;
+            s = new bool[w.BiomeIds.Length];
+            for (int b = 0; b < s.Length; b++) s[b] = w.Materials.Surface.CoatOf(w.BiomeIds[b]) == SurfaceDetail.Sand;
+            Volatile.Write(ref sandBiomes, s);
+            return s;
         }
 
         public bool DampAt(float x, float z)
@@ -47,7 +66,10 @@ namespace Stabby.World
             for (int k = 0; k < bogs.Length; k += BogStride) { keep.Add(bogs[k]); keep.Add(bogs[k + 1]); keep.Add(BogReach(bogs[k + 2], bogs[k + 3], bogs[k + 5] + BogHeadM)); }
             ulong stream = Rng.Stream(w.Config.Seed, "quicksand-pools").NextU64();
             var near = WetNear((int)Math.Ceiling(QuicksandWetM / cm) + 1);
-            for (int cz = 0; cz < n; cz++)
+            var rows = new List<float>[n];
+            Parallel.For(0, n, cz =>
+            {
+                List<float> row = null;
                 for (int cx = 0; cx < n; cx++)
                 {
                     float ox = (cx + 0.5f) * cm, oz = (cz + 0.5f) * cm;
@@ -59,10 +81,19 @@ namespace Stabby.World
                     {
                         float x = ox + rng.Range(-QuicksandSpreadM, QuicksandSpreadM), z = oz + rng.Range(-QuicksandSpreadM, QuicksandSpreadM);
                         float r = rng.Range(QuicksandMinR, QuicksandMaxR), depth = rng.Range(QuicksandMinDepthM, QuicksandMaxDepthM);
-                        if (x < 0 || z < 0 || x >= worldM || z >= worldM || !DampAt(x, z) || !SandRing(x, z, r)) continue;
-                        SoftAt(QuicksandPool, x, z, r, depth, c => true, QuicksandRiverM, QuicksandSteadyM, QuicksandDipM, true, keep, list);
+                        if (x < 0 || z < 0 || x >= worldM || z >= worldM) continue;
+                        row ??= new List<float>();
+                        row.Add(x); row.Add(z); row.Add(r); row.Add(depth);
                     }
                 }
+                rows[cz] = row;
+            });
+            var tries = new List<float>();
+            foreach (var row in rows) if (row != null) tries.AddRange(row);
+            var fits = new bool[tries.Count / 4];
+            Parallel.For(0, fits.Length, t => fits[t] = DampAt(tries[4 * t], tries[4 * t + 1]) && SandRing(tries[4 * t], tries[4 * t + 1], tries[4 * t + 2]));
+            for (int t = 0; t < fits.Length; t++)
+                if (fits[t]) SoftAt(QuicksandPool, tries[4 * t], tries[4 * t + 1], tries[4 * t + 2], tries[4 * t + 3], c => true, QuicksandRiverM, QuicksandSteadyM, QuicksandDipM, true, keep, list);
             return list.ToArray();
         }
 

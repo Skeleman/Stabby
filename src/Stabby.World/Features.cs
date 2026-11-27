@@ -519,6 +519,7 @@ namespace Stabby.World
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
             var field = new ObjectField(w, detail, terrain, w.Objects);
+            field.QuicksandPools();
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
             var bog = field.BogEdits();
