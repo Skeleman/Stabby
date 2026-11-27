@@ -7,7 +7,7 @@ namespace Stabby.World.Tests.Legacy;
 public static class ContentLoader
 {
     public const int BiomeSchemaVersion = 1;
-    public const int MaterialSchemaVersion = 5;
+    public const int MaterialSchemaVersion = 6;
 
     sealed class MaterialFile
     {
@@ -169,7 +169,6 @@ public static class ContentLoader
     {
         public List<string> Biomes { get; set; } = new();
         public float BumpAmp { get; set; }
-        public float BumpWavelengthM { get; set; }
         public float? GrainAmp { get; set; }
         public float FeatureAmp { get; set; }
         public float FeatureWavelengthM { get; set; }
@@ -342,7 +341,7 @@ public static class ContentLoader
             d.Coats[k] = c == null ? null! : new CoatDef
             {
                 Id = SurfaceDetail.CoatKinds[k], Biomes = c.Biomes,
-                BumpAmp = c.BumpAmp, BumpWavelengthM = c.BumpWavelengthM,
+                BumpAmp = c.BumpAmp,
                 GrainAmp = c.GrainAmp ?? float.NaN,
                 FeatureAmp = c.FeatureAmp, FeatureWavelengthM = c.FeatureWavelengthM,
                 Parallax = c.Parallax, AlbedoVar = c.AlbedoVar ?? float.NaN, Roughness = c.Roughness ?? float.NaN,

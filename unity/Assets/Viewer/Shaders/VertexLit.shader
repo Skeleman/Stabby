@@ -25,7 +25,7 @@ Shader "Stabby/VertexLit"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
             float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre, _StabbyIce, _StabbyRoad, _StabbyRut, _StabbyObsidian, _StabbyFertile, _StabbyFertileDamp;
-            float _StabbyStrataPeriod, _StabbyCellMeters, _StabbyCaveDarkOff;
+            float _StabbyStrataPeriod, _StabbyCellMeters, _StabbyCaveDarkOff, _StabbyMudCrustOff;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
             TEXTURE2D(_StabbySlope);
@@ -194,12 +194,18 @@ Shader "Stabby/VertexLit"
                     float4 big = OrgNoise3(q * 0.9 + 5.3, int3(0, 0, 0)), mid = OrgRL3(q, OrgF(0), 1.3, 0), fine = OrgRL3(q, OrgF(2), 8.9, 2);
                     float fm = OrgRungW(0, fp), ff = OrgRungW(2, fp);
                     float cover = smoothstep(0.3, 0.7, -i.sinter + 0.3 * big.x + 0.12 * mid.x * fm);
-                    float wet = smoothstep(0.75, 1, -i.sinter + 0.15 * big.x);
-                    float crack = smoothstep(0.08, 0, abs(fine.x + 0.3 * mid.x)) * ff * (1 - wet);
+                    float crust = cover * smoothstep(0.55, 0.85, ng.y + 0.1 * big.x) * (1 - _StabbyMudCrustOff);
+                    float wet = smoothstep(0.75, 1, -i.sinter + 0.15 * big.x) * (1 - crust);
+                    float crack = smoothstep(0.08, 0, abs(fine.x + 0.3 * mid.x)) * ff * (1 - wet) * (1 - crust);
+                    float4 pc = OrgRL3(q + 0.15 * float3(mid.x, 0, big.x), OrgF(1), 37.3, 1);
+                    float fc = OrgRungW(1, fp), pv = pc.x + 0.25 * fine.x * ff, pw = 0.07 + 0.02 * fine.x * ff;
+                    float pk = saturate(abs(pv) / pw), seam = (1 - pk * pk * (3 - 2 * pk)) * fc * crust;
                     float3 a = lerp(_StabbyMudGrey.rgb, _StabbyMudClay.rgb, smoothstep(-0.4, 0.5, big.x + 0.5 * mid.x * fm));
                     a *= 0.92 + 0.08 * fine.x * ff - 0.25 * crack;
                     a = lerp(a, _StabbyMudSurface.rgb, 0.7 * wet);
-                    float3 grad = 0.06 * mid.yzw * fm + 0.05 * fine.yzw * ff;
+                    a = lerp(a, lerp(a, _StabbyMudGrey.rgb * 1.15, 0.5) * (1 - 0.4 * seam), crust);
+                    float3 grad = (0.06 * mid.yzw * fm + 0.05 * fine.yzw * ff) * (1 - crust) + (0.012 * fine.yzw * ff + 0.024 * pk * (1 - pk) * sign(pv) / pw * OrgF(1) * pc.yzw * fc) * crust;
+                    n = normalize(lerp(n, ng, crust));
                     grad -= n * dot(grad, n);
                     m.albedo = lerp(m.albedo, a, cover);
                     tmRough = lerp(tmRough, lerp(0.9, _StabbyMudSurface.w, wet), cover);

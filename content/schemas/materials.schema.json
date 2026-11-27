@@ -11,12 +11,11 @@
     "depth": { "type": "number", "minimum": 0, "maximum": 2 },
     "coat": {
       "type": "object",
-      "required": ["biomes", "bumpAmp", "bumpWavelengthM", "featureAmp", "featureWavelengthM", "parallax"],
+      "required": ["biomes", "bumpAmp", "featureAmp", "featureWavelengthM", "parallax"],
       "additionalProperties": false,
       "properties": {
         "biomes": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z-]*$" }, "uniqueItems": true },
         "bumpAmp": { "$ref": "#/$defs/amp" },
-        "bumpWavelengthM": { "$ref": "#/$defs/length" },
         "grainAmp": { "$ref": "#/$defs/amp" },
         "featureAmp": { "$ref": "#/$defs/amp" },
         "featureWavelengthM": { "$ref": "#/$defs/length" },
@@ -27,7 +26,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "const": 5 },
+    "schemaVersion": { "const": 6 },
     "offsetAmplitudeM": { "type": "number", "minimum": 0 },
     "offsetWavelengthM": { "type": "number", "exclusiveMinimum": 0 },
     "tiltPerKm": { "type": "number", "minimum": 0 },

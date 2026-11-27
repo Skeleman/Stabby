@@ -556,15 +556,19 @@ namespace Stabby.World
             boulders.Add(b);
         }
 
-        void Settle(ref FeatureEdit e) => e.H = Math.Max(0f, e.MinY - FootLow(e));
+        void Settle(ref FeatureEdit e) => e.H = Math.Max(0f, e.MinY - Foot(e, out _));
 
-        float FootLow(FeatureEdit e)
+        float Foot(FeatureEdit e, out float hi)
         {
             int c = WorldChecks.BoulderFootColumns;
             float lo = float.MaxValue;
+            hi = float.MinValue;
             for (int j = 0; j <= c; j++)
                 for (int i = 0; i <= c; i++)
-                    lo = Math.Min(lo, GroundAt(detail, cm, e.MinX + (e.MaxX - e.MinX) * i / c, e.MinZ + (e.MaxZ - e.MinZ) * j / c));
+                {
+                    float g = GroundAt(detail, cm, e.MinX + (e.MaxX - e.MinX) * i / c, e.MinZ + (e.MaxZ - e.MinZ) * j / c);
+                    lo = Math.Min(lo, g); hi = Math.Max(hi, g);
+                }
             return lo;
         }
 
@@ -574,7 +578,11 @@ namespace Stabby.World
             return w.Sea[i] || (w.Water != null && w.Water.LakeId[i] >= 0);
         }
 
-        bool Hangs(FeatureEdit e) => FootLow(e) < e.MinY + WorldChecks.BoulderFootSkin;
+        bool Hangs(FeatureEdit e)
+        {
+            float lo = Foot(e, out float hi);
+            return lo < e.MinY + WorldChecks.BoulderFootSkin || hi - lo > WorldChecks.BoulderFootRise * e.R;
+        }
 
         static bool Within(FeatureEdit e, float x0, float z0, float sx, float sz) => e.MinX >= x0 && e.MaxX < x0 + sx && e.MinZ >= z0 && e.MaxZ < z0 + sz;
 

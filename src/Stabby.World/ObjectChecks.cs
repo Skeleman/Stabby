@@ -356,7 +356,7 @@ namespace Stabby.World
             return bad > Math.Max(BoulderNormalFloor, BoulderNormalShare * steep) ? $" tilts {bad} of {steep} steep-face normals upward" : null;
         }
         public const int BoulderMeshSamples = 12, BoulderFootColumns = 12;
-        public const float BoulderFootStep = 0.08f, BoulderFootSkin = 0.05f;
+        public const float BoulderFootStep = 0.08f, BoulderFootSkin = 0.05f, BoulderFootRise = 2.25f;
 
         static void CheckBoulderFoot(TerrainDetail detail, float cm, FeatureEdit b, List<string> e)
         {
