@@ -415,8 +415,9 @@ namespace Stabby.World
                     float x = f.Verts[v], y = f.Verts[v + 1], z = f.Verts[v + 2], wy = y + 0.5f;
                     Walk.Step(ground, none, LatticeStepM, ref x, ref wy, ref z, 0, 0, Walk.Reach);
                     float h = d.Sample(x, z), s = NearStepM;
-                    float bend = Math.Max(Math.Abs(d.Sample(x + s, z) + d.Sample(x - s, z) - 2 * h), Math.Abs(d.Sample(x, z + s) + d.Sample(x, z - s) - 2 * h));
-                    if (Math.Abs(wy - h) > SeamEpsilonM && wy > y + 0.5f - Walk.Reach + SeamEpsilonM || Math.Abs(h - y) > MeshTolerance + 0.25f * bend && !InFall(w, x, z, true)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
+                    float he = d.Sample(x + s, z), hw = d.Sample(x - s, z), hn = d.Sample(x, z + s), hs = d.Sample(x, z - s);
+                    float bend = Math.Max(Math.Abs(he + hw - 2 * h), Math.Abs(hn + hs - 2 * h)), gx = (he - hw) / (2 * s), gz = (hn - hs) / (2 * s);
+                    if (Math.Abs(wy - h) > SeamEpsilonM && wy > y + 0.5f - Walk.Reach + SeamEpsilonM || Math.Abs(h - y) / (float)Math.Sqrt(1 + gx * gx + gz * gz) > MeshTolerance + 0.25f * bend && !InFall(w, x, z, true)) { e.Add($"collision height {wy:F2} differs from mesh height {y:F2} at {x:F0},{z:F0}"); return; }
                 }
             }
 
