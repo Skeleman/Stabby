@@ -22,6 +22,7 @@ tools/Stabby.Cli/* all
 src/Stabby.World/Detail.cs surface,meshing,caves,sites,objects
 src/Stabby.World/Features.cs surface,meshing,caves,sites,objects
 src/Stabby.World/EditGrid.cs surface,meshing,caves,sites,objects
+src/Stabby.World/LodStitch.cs surface,meshing,caves,sites,objects
 src/Stabby.World/SurfaceNets.cs surface,meshing,caves,sites,objects
 src/Stabby.World/NearField.cs surface,hydrology
 src/Stabby.World/Walk.cs surface,caves
