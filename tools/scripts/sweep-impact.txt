@@ -69,6 +69,7 @@ src/Stabby.World/FallenTree.cs sites,surface
 src/Stabby.World/Bones.cs sites,surface
 src/Stabby.World/SaltTower.cs sites,surface
 src/Stabby.World/Monument.cs sites,surface
+src/Stabby.World/Shipwreck.cs sites,surface
 src/Stabby.World/MesaChecks.cs sketch
 src/Stabby.World/TintChecks.cs biomes
 src/Stabby.World/WaterTint.cs biomes
