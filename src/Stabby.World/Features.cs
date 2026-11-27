@@ -691,6 +691,8 @@ namespace Stabby.World
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
             var buttes = Landforms.BiomeMask(w, Mesas.Biomes);
+            var craters = new List<FeatureEdit>();
+            if (w.Sketch != null) foreach (var v in w.Sketch.Volcanoes) craters.Add(Volcanoes.Crater(detail, v));
             int from = 0;
             var tile = new List<FeatureEdit>();
             for (int ty = 0; ty < tiles; ty++)
@@ -700,45 +702,47 @@ namespace Stabby.World
                     var r = new Rng(Rng.Mix(ro + t));
                     tile.Clear();
                     Overhang(w, detail, tx, ty, ref r, tile);
-                    Keep(w, tile, list);
+                    Keep(w, tile, list, craters);
                     r = new Rng(Rng.Mix(ra + t));
                     tile.Clear();
                     Arch(w, detail, tx, ty, ref r, tile);
-                    Keep(w, tile, list);
+                    Keep(w, tile, list, craters);
                     r = new Rng(Rng.Mix(rc + t));
                     tile.Clear();
                     var width = new Rng(Rng.Mix(rw + t));
                     Underground.Tile(w, detail, w.Caves, tx, ty, ref r, ref width, Rng.Mix(rk + t), Rng.Mix(rd + t), Rng.Mix(rf + t), Rng.Mix(rp + t), Rng.Mix(rg + t), Rng.Mix(ri + t), Rng.Mix(rv + t), Rng.Mix(rs + t), list.GetRange(from, list.Count - from), tile, out var graph);
-                    if (Keep(w, tile, list) && graph != null) caves.Add(graph);
+                    if (Keep(w, tile, list, craters) && graph != null) caves.Add(graph);
                     r = new Rng(Rng.Mix(ru + t));
                     tile.Clear();
                     Undercut(w, detail, strata, tx, ty, ref r, tile);
-                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
+                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list, craters);
                     r = new Rng(Rng.Mix(rb + t));
                     tile.Clear();
                     Landforms.Butte(w, detail, strata, buttes, tx, ty, ref r, tile);
-                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list, craters);
                     r = new Rng(Rng.Mix(rt + t));
                     tile.Clear();
                     Landforms.Tor(w, detail, strata, tors, tx, ty, ref r, tile);
-                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list, craters);
                     r = new Rng(Rng.Mix(rh + t));
                     tile.Clear();
                     Landforms.Hoodoo(w, detail, strata, hoodoos, tx, ty, ref r, tile);
-                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list, craters);
                     r = new Rng(Rng.Mix(rl + t));
                     tile.Clear();
                     Mesas.Lip(w, detail, lips, tx, ty, ref r, tile);
-                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
+                    if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list, craters);
                     from = list.Count;
                 }
             Mines.Place(w, detail, strata, list, caves);
+            foreach (var crater in craters)
+                if (!Overlaps(crater, list, 0)) list.Add(crater);
             return list.ToArray();
         }
 
-        static bool Keep(GeneratedWorld w, List<FeatureEdit> tile, List<FeatureEdit> list)
+        static bool Keep(GeneratedWorld w, List<FeatureEdit> tile, List<FeatureEdit> list, List<FeatureEdit> craters)
         {
-            foreach (var e in tile) if (!Inside(e, w.Config.CellMeters)) return false;
+            foreach (var e in tile) if (!Inside(e, w.Config.CellMeters) || Overlaps(e, craters, 0)) return false;
             list.AddRange(tile);
             return true;
         }

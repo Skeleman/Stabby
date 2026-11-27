@@ -61,6 +61,7 @@ namespace Stabby.World
                 list.Add(Pool(OasisPool, water, oa[k], oa[k + 1], OasisReach(oa[k + 2], oa[k + 3], top), oa[k + 3], oa[k + 4] - OasisHeadM, top));
             }
             list.AddRange(CavePools());
+            list.AddRange(VolcanoPools());
             return list.ToArray();
         }
 

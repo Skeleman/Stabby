@@ -31,6 +31,7 @@ test ChunkTests.StreamedChunksRebuildTheHostWorld 14 streams every chunk of a wo
 test ScenarioTests.ScenarioHolds 12 one case per authored scenario world
 test ObjectRegionTests.RegionsHoldTheirChunkColumnsAndCollideOnlyWhileResident 12 streams object regions across a world
 test InnTests.InnsPlaceLevelInTheTestWorld 12 places and levels every inn site in the test world
+test DiscoveryTests.VolcanoHoldsACraterPoolBelowItsRim 12 places seed 16, the default seed has no volcano
 test DiscoveryTests.FallenTreesLieInTheWoods 5 checks fallen-tree sites on the cached default world
 test DiscoveryTests.MonumentsStandLevelOnHighGround 8 checks monument sites on the cached default world
 test DiscoveryTests.ShipwrecksLieOnSeaShores 8 checks shipwreck sites on the cached default world

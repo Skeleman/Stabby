@@ -636,6 +636,7 @@ namespace Stabby.World
             float r = footprint[d] * size;
             if (!town && !bank && pl.Cave <= 0 && InTownGround(x, z, r, seats[d] != null)) return false;
             if (!town && pl.Cave <= 0 && OnRoad(x, z, r)) return false;
+            if (pl.Cave <= 0 && InCrater(x, z, r)) return false;
             if (!town && !bank && !site && !(built && seats[d] != null) && pl.Cave <= 0 && InOasis(x, z, r)) return false;
             float y = GroundAt(detail, cm, x, z);
             float s = SlopeStepM;

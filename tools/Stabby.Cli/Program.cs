@@ -81,6 +81,7 @@ int Bake()
     var played = WorldFile.Read(WorldFile.Write(raised, hash, mound, null), materials);
     played.Objects = objects;
     played.Caves = caves;
+    played.SketchInBackground();
     var ground = GroundBake.Run(played, GroundBake.KeyOf(files, 1f), true, out _);
     long groundMs = sw.ElapsedMilliseconds;
     var bytes = WorldFile.Write(played, hash, mound, ground);
@@ -251,7 +252,7 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
         ["kmAcross"] = n * w.Config.CellMeters / 1000f, ["ms"] = ms, ["fingerprint"] = w.Fingerprint().ToString("x16", CultureInfo.InvariantCulture),
         ["landPercent"] = MathF.Round(100f * land / (n * n), 1), ["islands"] = w.Sketch.Landmasses.Count,
         ["ranges"] = w.Sketch.Ranges.Count, ["corridors"] = w.Sketch.Corridors.Count, ["landmarks"] = w.Sketch.Landmarks.Count,
-        ["sketchLakes"] = w.Sketch.Lakes.Count,
+        ["sketchLakes"] = w.Sketch.Lakes.Count, ["volcanoes"] = w.Sketch.Volcanoes.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Z:F0}")).ToArray(),
         ["peakM"] = MathF.Round(w.Height.Max()), ["lakes"] = w.Water.Lakes.Count,
         ["largestLakeKm2"] = MathF.Round(w.Water.Lakes.Select(l => l.Cells.Count).DefaultIfEmpty(0).Max() * w.Config.CellMeters * w.Config.CellMeters / 1e6f, 2),
         ["riverSegments"] = w.Water.Rivers.Count, ["riverKm"] = MathF.Round(riverKm, 1),

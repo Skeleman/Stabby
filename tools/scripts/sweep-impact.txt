@@ -90,3 +90,6 @@ src/Stabby.World/Scenarios.cs core
 content/sky.json core
 content/scenarios/* core
 src/*.meta core
+src/Stabby.World/Volcanoes.cs all
+src/Stabby.World/VolcanoChecks.cs sketch,sites
+src/Stabby.World/VolcanoPools.cs sites

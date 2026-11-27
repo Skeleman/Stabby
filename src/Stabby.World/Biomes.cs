@@ -36,30 +36,36 @@ namespace Stabby.World
             for (int i = 0; i < count; i++)
             {
                 if (water[i]) { result[i] = -1; continue; }
-                float t = climate.TemperatureC[i], p = climate.PrecipitationMm[i];
-                int best = -1; float bestScore = float.MinValue;
-                for (int b = 0; b < defs.Count; b++)
-                {
-                    var d = defs[b];
-                    if (!d.Conditional) continue;
-                    if (!float.IsNaN(d.HeightMinM) && height[i] < d.HeightMinM) continue;
-                    if (!float.IsNaN(d.HeightMaxM) && height[i] > d.HeightMaxM) continue;
-                    if (!float.IsNaN(d.WaterWithinM) && toWater[i] > d.WaterWithinM) continue;
-                    if (!float.IsNaN(d.WaterRiseM) && height[i] - waterLevel[i] > d.WaterRiseM) continue;
-                    if (!float.IsNaN(d.CoastWithinM) && toCoast[i] > d.CoastWithinM) continue;
-                    float score = Score(d, t, p);
-                    if (score >= 0 && score > bestScore) { bestScore = score; best = b; }
-                }
-                if (best < 0)
-                    for (int b = 0; b < defs.Count; b++)
-                    {
-                        if (defs[b].Conditional) continue;
-                        float score = Score(defs[b], t, p);
-                        if (score > bestScore) { bestScore = score; best = b; }
-                    }
+                float inf = float.PositiveInfinity;
+                int best = Pick(defs, climate.TemperatureC[i], climate.PrecipitationMm[i], height[i], toWater == null ? inf : toWater[i], waterLevel == null ? inf : height[i] - waterLevel[i], toCoast == null ? inf : toCoast[i]);
                 result[i] = Math.Max(0, best);
             }
             return result;
+        }
+
+        public static int Pick(IReadOnlyList<BiomeDef> defs, float t, float p, float height, float toWater, float waterRise, float toCoast)
+        {
+            int best = -1; float bestScore = float.MinValue;
+            for (int b = 0; b < defs.Count; b++)
+            {
+                var d = defs[b];
+                if (!d.Conditional) continue;
+                if (!float.IsNaN(d.HeightMinM) && height < d.HeightMinM) continue;
+                if (!float.IsNaN(d.HeightMaxM) && height > d.HeightMaxM) continue;
+                if (!float.IsNaN(d.WaterWithinM) && toWater > d.WaterWithinM) continue;
+                if (!float.IsNaN(d.WaterRiseM) && waterRise > d.WaterRiseM) continue;
+                if (!float.IsNaN(d.CoastWithinM) && toCoast > d.CoastWithinM) continue;
+                float score = Score(d, t, p);
+                if (score >= 0 && score > bestScore) { bestScore = score; best = b; }
+            }
+            if (best < 0)
+                for (int b = 0; b < defs.Count; b++)
+                {
+                    if (defs[b].Conditional) continue;
+                    float score = Score(defs[b], t, p);
+                    if (score > bestScore) { bestScore = score; best = b; }
+                }
+            return best;
         }
 
         static float Score(BiomeDef d, float t, float p)
