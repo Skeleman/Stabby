@@ -28,6 +28,7 @@ test ObjectRegionTests.RegionsHoldTheirChunkColumnsAndCollideOnlyWhileResident 1
 test InnTests.InnsPlaceLevelInTheTestWorld 12 places and levels every inn site in the test world
 test RoadTests.RoadsLinkTownsAndPassTheCheck 40 routes and checks roads between towns in three test worlds
 test RoadTests.RoadsAreDeterministicAndMatchThePlacedWorld 40 routes roads twice and reruns feature placement on one test world
+test RoadTests.RoadTunnelsOnSeed2At1024AreWalkableAndMeetTheirRoads 40 builds a 1024 test world with road tunnels and checks them
 test TownTests.TownsPlaceTheirSitesAndPassTheCheck 40 plans and checks towns in three test worlds with a wide flat-ground search
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
 test WorldTests.MountainsCastRainShadows 12 generates twenty 256 worlds in parallel and compares windward and lee rain
@@ -45,15 +46,15 @@ sweep 256 meshing 981 4721 mesher comparison per edit shape and cave roofs per s
 sweep 256 caves 13000 32000 cave paths, caves, mines, dungeon links, cave normals and cave objects per seed
 sweep 256 sites 22500 36673 site footprints, sites, structures and discoveries per seed
 sweep 256 objects 20291 50950 objects, landforms, arches and boulders per seed
-sweep 256 creatures 485 1969 creature checks per seed
+sweep 256 creatures 1650 4500 creature checks per seed
 sweep 512 features 11747 19579 shared feature, edit grid and object field setup per seed
 sweep 512 core 100 150 border, sea level, drainage and receivers per seed
 sweep 512 hydrology 3291 5693 river beds, lakes, mouths, outlets, falls and river shape per seed
 sweep 512 biomes 100 100 coverage, tint and lake cover per seed
 sweep 512 sketch 279 992 sketch, shores and mesas per seed
 sweep 512 surface 27017 61597 detail, near field, geometry, chunk bounds, cliff foot per seed
-sweep 512 meshing 1808 4930 mesher comparison per edit shape and cave roofs per seed
+sweep 512 meshing 2800 6000 mesher comparison per edit shape and cave roofs per seed
 sweep 512 caves 19626 56979 cave paths, caves, mines, dungeon links, cave normals and cave objects per seed
-sweep 512 sites 14831 21557 site footprints, sites, structures and discoveries per seed
+sweep 512 sites 22000 40000 site footprints, sites, structures and discoveries per seed
 sweep 512 objects 23846 29431 objects, landforms, arches and boulders per seed
-sweep 512 creatures 1496 2213 creature checks per seed
+sweep 512 creatures 3100 5100 creature checks per seed

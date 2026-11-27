@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float RoadShotHour = 15f, RoadEyeBack = 26f, RoadEyeUp = 9f, RoadLookM = 40f;
+        const float RoadShotHour = 15f, RoadEyeBack = 26f, RoadEyeUp = 9f, RoadLookM = 40f, PortalEyeBack = 34f, PortalEyeUp = 7f, PortalLookUp = 4f;
 
         static System.Collections.IEnumerator RoadsTour(Camera cam, string dir)
         {
@@ -28,7 +28,7 @@ namespace Stabby.Game.Editor
             while (!job.IsCompleted) yield return null;
             if (job.IsFaulted) { GameStatus.Lines["~roads"] = GameStatus.Failure = "roads: " + job.Exception; yield break; }
             var roads = job.Result;
-            var dirt = roads.Where(s => s.Kind != RoadSegment.Lane).ToArray();
+            var dirt = roads.Where(s => s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel).ToArray();
             if (dirt.Length == 0) { GameStatus.Lines["~roads"] = GameStatus.Failure = $"roads: no road links in this world ({roads.Length} lanes)"; yield break; }
             var seg = dirt.OrderBy(s => new Vector2((s.X0 + s.X1) * 0.5f - home.x, (s.Z0 + s.Z1) * 0.5f - home.z).sqrMagnitude).First();
             float km = dirt.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude) / 1000f;
@@ -47,6 +47,19 @@ namespace Stabby.Game.Editor
             GameStatus.Lines["~roads"] = $"roads: {dirt.Length} segments, {km:F1} km, {fords} fords, {field.TownPlans().Length} towns, GV {WorldConfig.GeneratorVersion}\nsegment {seg.X0:F0},{seg.Z0:F0} to {seg.X1:F0},{seg.Z1:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}, pinned hour {sky.Hour:F2}";
             Shot(cam, null, "warmup");
             Shot(cam, dir, "roads-link");
+            var bores = roads.Where(s => s.Kind == RoadSegment.Tunnel).ToArray();
+            if (bores.Length == 0) { GameStatus.Lines["~tunnels"] = "tunnels: none in this world"; yield break; }
+            var t = bores.OrderBy(s => new Vector2(s.X0 - home.x, s.Z0 - home.z).sqrMagnitude).First();
+            var tu = new Vector3(t.X1 - t.X0, 0, t.Z1 - t.Z0).normalized;
+            var portal = new Vector3(t.X0, 0, t.Z0);
+            portal.y = ground.HeightAt(portal.x, portal.z) + PortalLookUp;
+            var from = portal - tu * PortalEyeBack;
+            from.y = ground.HeightAt(from.x, from.z) + PortalEyeUp;
+            cam.transform.SetPositionAndRotation(from, Quaternion.LookRotation(portal - from));
+            for (var w = Settle(180); w.MoveNext();) yield return null;
+            float tkm = bores.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude) / 1000f;
+            GameStatus.Lines["~tunnels"] = $"tunnels: {bores.Length} bores, {tkm:F2} km, portal {t.X0:F0},{t.Z0:F0}, eye {from.x:F0},{from.y:F1},{from.z:F0}";
+            Shot(cam, dir, "roads-tunnel");
         }
     }
 }

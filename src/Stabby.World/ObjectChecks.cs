@@ -146,7 +146,7 @@ namespace Stabby.World
             foreach (var s in segs)
             {
                 string at = $"road {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0}";
-                if (s.Kind != RoadSegment.Lane)
+                if (s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel)
                 {
                     string f = field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford);
                     if (f != null) { e.Add($"{at} {f}"); return; }
@@ -156,8 +156,11 @@ namespace Stabby.World
                 int z0 = Math.Max(0, (int)((Math.Min(s.Z0, s.Z1) - s.HalfWidth) / span)), z1 = Math.Min(across - 1, (int)((Math.Max(s.Z0, s.Z1) + s.HalfWidth) / span));
                 for (int cz = z0; cz <= z1; cz++) for (int cx = x0; cx <= x1; cx++) chunks.Add(cz * across + cx);
             }
+            var bored = new HashSet<int>();
+            field.TunnelEdits(out var bores);
+            foreach (var g in bores) bored.Add(g.Tile);
             foreach (var f in grid.Edits)
-                if (f.Link && field.OnRoad(0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ), 0.5f * (float)Math.Sqrt((f.MaxX - f.MinX) * (f.MaxX - f.MinX) + (f.MaxZ - f.MinZ) * (f.MaxZ - f.MinZ)))) { e.Add($"dungeon link edit at {f.Ax:F0},{f.Az:F0} meets a road"); return; }
+                if (f.Link && !bored.Contains(Features.TileOf(f, w.Config.CellMeters)) && field.OnRoad(0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ), 0.5f * (float)Math.Sqrt((f.MaxX - f.MinX) * (f.MaxX - f.MinX) + (f.MaxZ - f.MinZ) * (f.MaxZ - f.MinZ)))) { e.Add($"dungeon link edit at {f.Ax:F0},{f.Az:F0} meets a road"); return; }
             foreach (int c in chunks)
                 foreach (var o in field.Chunk(c % across, c / across))
                 {
@@ -385,7 +388,7 @@ namespace Stabby.World
             if (!m.SameSurfaceAs(g)) e.Add(at + " mesh differs from the general mesher");
             if (m.SameSurfaceAs(h)) e.Add(at + " leaves the ground unchanged");
             var ground = new DetailGround { Detail = detail };
-            float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = 0.5f * (b.Ay + b.By) + b.R;
+            float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = TopAt(b, mx, mz);
             foreach (var f in list.Items) top = Math.Max(top, TopAt(f, mx, mz));
             float wx = mx, wy = top + Walk.StepUp, wz = mz;
             Walk.Step(ground, list, Features.LatticeStepM, ref wx, ref wy, ref wz, 0, 0, Walk.Reach);
@@ -425,7 +428,10 @@ namespace Stabby.World
         static float TopAlong(FeatureEdit f, float x, float z, float t)
         {
             float qx = x - f.Ax - t * (f.Bx - f.Ax), qz = z - f.Az - t * (f.Bz - f.Az), dd = f.R * f.R - qx * qx - qz * qz;
-            return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
+            if (dd <= 0) return float.NegativeInfinity;
+            float y = f.Ay + t * (f.By - f.Ay), r = f.R - f.Weathering(x, y + (float)Math.Sqrt(dd), z);
+            dd = r * r - qx * qx - qz * qz;
+            return dd > 0 ? y + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
         static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, int across, float span)
