@@ -62,6 +62,35 @@ public class WorldTests
     }
 
     [Fact]
+    public void SomeLargeRiversSplitIntoDeltas()
+    {
+        int deltas = 0, channels = 0, first = int.MaxValue;
+        var errors = new System.Collections.Concurrent.ConcurrentBag<string>();
+        Parallel.For(1, 21, s =>
+        {
+            var w = Gen((ulong)s);
+            var e = new List<string>();
+            WorldChecks.CheckDeltas(w, e);
+            foreach (var v in e) errors.Add($"seed {s}: {v}");
+            foreach (var d in w.Water.Deltas) { Interlocked.Increment(ref deltas); Interlocked.Add(ref channels, d.Heads.Count + 1); }
+            if (w.Water.Deltas.Count > 0) lock (errors) first = Math.Min(first, s);
+        });
+        Assert.Empty(errors);
+        Assert.True(deltas >= 2 && channels >= 2 * deltas, $"{deltas} deltas with {channels} distributaries in 20 seeds");
+
+        var broken = TestWorlds.Fresh((ulong)first, 256);
+        var hy = broken.Water;
+        string before = string.Join(";", hy.Deltas.ConvertAll(d => d.Apex + ":" + string.Join(",", d.Heads) + "/" + string.Join(",", d.Branches)));
+        WorldChunks.Relink(broken);
+        Assert.Equal(before, string.Join(";", hy.Deltas.ConvertAll(d => d.Apex + ":" + string.Join(",", d.Heads) + "/" + string.Join(",", d.Branches))));
+        int cell = hy.Deltas[0].Heads[0];
+        broken.Height[cell] = hy.WaterSurface[cell] + 2;
+        var found = new List<string>();
+        WorldChecks.CheckDeltas(broken, found);
+        Assert.Contains(found, v => v.Contains("islet crosses"));
+    }
+
+    [Fact]
     public void SplitFallsKeepOrderedLipRunsInsideTheirSheet()
     {
         var w = Gen(12);

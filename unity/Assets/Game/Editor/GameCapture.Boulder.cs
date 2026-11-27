@@ -1,3 +1,4 @@
+using System.Linq;
 using Stabby.Viewer;
 using Stabby.World;
 using UnityEngine;
@@ -23,10 +24,13 @@ namespace Stabby.Game.Editor
                 break;
             }
             if (!found) { GameStatus.Lines["~boulder"] = GameStatus.Failure = "boulder: no ground"; yield break; }
-            int at = LargestBoulder(ground, out var b);
+            var near = System.Environment.GetEnvironmentVariable("STABBY_BOULDER_NEAR")?.Split(',').Select(v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            int at = near != null && near.Length == 2 ? NearestBoulder(ground, near[0], near[1], out var b) : LargestBoulder(ground, out b);
             if (at < 0) { GameStatus.Lines["~boulder"] = GameStatus.Failure = "boulder: none placed"; yield break; }
             var mid = new Vector3(0.5f * (b.Ax + b.Bx), 0.5f * (b.Ay + b.By), 0.5f * (b.Az + b.Bz));
             var side = new Vector3(-(b.Bz - b.Az), 0, b.Bx - b.Ax).normalized;
+            if (near != null && near.Length == 2) side = new Vector3(near[0] - mid.x, 0, near[1] - mid.z).normalized;
+            if (side == Vector3.zero) side = Vector3.right;
             cam.fieldOfView = 60f;
             for (var w = ShowHour(BoulderHour, BoulderMoon); w.MoveNext();) yield return null;
             var eye = mid + side * 3.2f * b.R;
@@ -75,6 +79,22 @@ namespace Stabby.Game.Editor
             gx = (ground.HeightAt(x + 3f, z) - ground.HeightAt(x - 3f, z)) / 6f;
             gz = (ground.HeightAt(x, z + 3f) - ground.HeightAt(x, z - 3f)) / 6f;
             return Mathf.Sqrt(gx * gx + gz * gz);
+        }
+
+        static int NearestBoulder(Ground ground, float x, float z, out FeatureEdit b)
+        {
+            ref var g = ref ground.Blob.Value;
+            int at = -1;
+            float best = float.MaxValue;
+            for (int k = 0; k < g.Edits.Length; k++)
+            {
+                var e = g.Edits[k];
+                if (e.Shape != FeatureEdit.Boulder || e.Kind != FeatureEdit.Add) continue;
+                float dx = 0.5f * (e.Ax + e.Bx) - x, dz = 0.5f * (e.Az + e.Bz) - z, d = dx * dx + dz * dz;
+                if (d < best) { best = d; at = k; }
+            }
+            b = at < 0 ? default : g.Edits[at];
+            return at;
         }
 
         static int LargestBoulder(Ground ground, out FeatureEdit b)

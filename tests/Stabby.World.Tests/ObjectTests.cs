@@ -692,6 +692,17 @@ public class ObjectTests
     }
 
     [Fact]
+    public void BouldersLeaveNoFootGapOnSeed1At2048()
+    {
+        var w = WorldGenerator.Generate(new WorldConfig { Seed = 1, Size = 2048, CellMeters = WorldConfig.CellMetersFor(2048) }, Biomes, Materials, null, null, Objects, ContentLoader.LoadCaves(Root));
+        var d = new TerrainDetail(w);
+        var edits = Features.Place(w, d, out _);
+        var e = new List<string>();
+        WorldChecks.CheckBoulders(w, d, new EditGrid(edits, w.Config.Size * w.Config.CellMeters), e);
+        Assert.DoesNotContain(e, m => !m.Contains(" steep-face normals upward"));
+    }
+
+    [Fact]
     public void ObjectsStayInTheirBiomes()
     {
         var w = TestWorlds.Default.W;

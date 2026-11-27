@@ -61,6 +61,7 @@ namespace Stabby.World
         public int[] LakeCover;
         public List<Lake> Lakes = new List<Lake>();
         public List<RiverSegment> Rivers = new List<RiverSegment>();
+        public List<RiverDelta> Deltas = new List<RiverDelta>();
         public bool[] IsRiver;
 
         const float SecondsPerYear = 31557600f;
@@ -102,6 +103,8 @@ namespace Stabby.World
             hy.IsRiver = new bool[n * n];
             for (int i = 0; i < n * n; i++)
                 hy.IsRiver[i] = !sea[i] && hy.LakeId[i] < 0 && hy.DischargeM3s[i] >= c.RiverMinDischarge;
+            RiverDeltas.Carve(c, h, sea, hy, runoff, keepDry);
+            foreach (var lake in hy.Lakes) if (lake.Outlet >= 0) lake.Outflow = hy.DischargeM3s[lake.Outlet];
             BuildSegments(c, sea, hy);
             CarveBeds(c, h, sea, hy);
             Shelves(c, h, sea, hy);
@@ -206,10 +209,14 @@ namespace Stabby.World
             for (int i = 0; i < n * n; i++)
                 if (hy.IsRiver[i] && hy.Receiver[i] != i) riverDonors[hy.Receiver[i]]++;
 
+            var apexOf = new int[n * n];
+            RiverDeltas.Find(cfg, sea, hy, apexOf);
+            var isApex = new bool[n * n];
+            foreach (var d in hy.Deltas) isApex[d.Apex] = true;
             var startOf = new Dictionary<int, int>();
             var heads = new List<int>();
             for (int i = 0; i < n * n; i++)
-                if (hy.IsRiver[i] && riverDonors[i] != 1) heads.Add(i);
+                if (hy.IsRiver[i] && (riverDonors[i] != 1 || isApex[i])) heads.Add(i);
 
             foreach (int head in heads)
             {
@@ -217,15 +224,24 @@ namespace Stabby.World
                 startOf[head] = seg.Id;
                 hy.Rivers.Add(seg);
                 int c = head;
+                if (apexOf[head] >= 0) Add(cfg, seg, hy, apexOf[head]);
                 while (true)
                 {
                     Add(cfg, seg, hy, c);
                     int r = hy.Receiver[c];
                     if (sea[r]) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Sea; break; }
                     if (hy.LakeId[r] >= 0) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Lake; seg.LakeId = hy.LakeId[r]; break; }
-                    if (riverDonors[r] >= 2) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Junction; seg.Downstream = r; break; }
+                    if (riverDonors[r] >= 2 || isApex[r]) { Add(cfg, seg, hy, r); seg.End = RiverEnd.Junction; seg.Downstream = r; break; }
                     c = r;
                 }
+            }
+            foreach (var d in hy.Deltas)
+            {
+                d.Main = startOf[d.Apex];
+                foreach (int head in d.Heads) d.Branches.Add(startOf[head]);
+                foreach (int id in d.Branches) hy.Rivers[id].Discharge[0] = hy.Rivers[id].Discharge[1];
+                var main = hy.Rivers[d.Main];
+                if (main.Cells.Count > 1) main.Discharge[0] = main.Discharge[1];
             }
             uint meander = Rng.Stream(cfg.Seed, "meander").NextU32();
             uint wobble = Rng.Stream(cfg.Seed, "riverwobble").NextU32();
@@ -404,7 +420,7 @@ namespace Stabby.World
                     }
                     float baseY = stage[e], bx = lx + dx * FallBaseOffsetM, bz = lz + dz * FallBaseOffsetM;
                     if (Wet(c, sea, hy, bx, bz)) baseY = Math.Max(baseY, hy.WaterSurface[CellAt(c, bx, bz)]);
-                    if (t < 0 || stage[k] - baseY < FallMinDrop || InJunction(c, seg, hy, e, lx, lz)) { k = e - 1; continue; }
+                    if (t < 0 || stage[k] - baseY < FallMinDrop || InJunction(c, seg, hy, lx, lz)) { k = e - 1; continue; }
                     drop = stage[k] - baseY;
                     float q = seg.Discharge[big], w = seg.Width[big];
                     float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
@@ -599,12 +615,24 @@ namespace Stabby.World
             return false;
         }
 
-        static bool InJunction(WorldConfig c, RiverSegment seg, Hydrology hy, int e, float x, float z)
+        static bool InJunction(WorldConfig c, RiverSegment seg, Hydrology hy, float x, float z)
         {
             int last = seg.Cells.Count - 1;
-            if (seg.End != RiverEnd.Junction || e != last) return false;
-            float hw = 0.5f * hy.Rivers[seg.Downstream].Width[0], dx = seg.X[last] * c.CellMeters - x, dz = seg.Y[last] * c.CellMeters - z, r = hw + NearField.Bank(hw);
-            return dx * dx + dz * dz < r * r;
+            if (seg.End != RiverEnd.Junction) return false;
+            float cm = c.CellMeters, hw = 0.5f * hy.Rivers[seg.Downstream].Width[0], dx = seg.X[last] * cm - x, dz = seg.Y[last] * cm - z, r = hw + NearField.Bank(hw);
+            if (dx * dx + dz * dz < r * r) return true;
+            foreach (var o in hy.Rivers)
+            {
+                if (o == seg || (o.Id != seg.Downstream && (o.End != RiverEnd.Junction || o.Downstream != seg.Downstream))) continue;
+                for (int k = 0; k + 1 < o.Cells.Count; k++)
+                {
+                    float ax = o.X[k] * cm, az = o.Y[k] * cm, ex = o.X[k + 1] * cm - ax, ez = o.Y[k + 1] * cm - az, ee = ex * ex + ez * ez;
+                    float t = ee > 0 ? Math.Max(0, Math.Min(1, ((x - ax) * ex + (z - az) * ez) / ee)) : 0, px = ax + ex * t - x, pz = az + ez * t - z;
+                    float h = 0.5f * Math.Max(o.Width[k], o.Width[k + 1]), rr = h + NearField.Bank(h);
+                    if (px * px + pz * pz < rr * rr) return true;
+                }
+            }
+            return false;
         }
 
         static int CellAt(WorldConfig c, float x, float z)

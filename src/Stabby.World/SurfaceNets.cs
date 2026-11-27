@@ -468,7 +468,11 @@ namespace Stabby.World
                 double ex = e.Bx - e.Ax, ey = e.By - e.Ay, ez = e.Bz - e.Az, px = x0 + 0.5 * s - e.Ax, py = y0 + 0.5 * s - e.Ay, pz = z0 + 0.5 * s - e.Az;
                 double ll = ex * ex + ey * ey + ez * ez, t = ll > 0 ? Math.Max(0.0, Math.Min(1.0, (px * ex + py * ey + pz * ez) / ll)) : 0.0;
                 double qx = px - t * ex, qy = py - t * ey, qz = pz - t * ez;
-                if (e.Shape == FeatureEdit.Boulder && qy < 0) qy = 0;
+                if (e.Shape == FeatureEdit.Boulder)
+                {
+                    double hl = ex * ex + ez * ez, th = hl > 0 ? Math.Max(0.0, Math.Min(1.0, (px * ex + pz * ez) / hl)) : 0.0;
+                    if (py - th * ey < 0) { qx = px - th * ex; qy = 0; qz = pz - th * ez; }
+                }
                 double cd = Math.Sqrt(qx * qx + qy * qy + qz * qz);
                 if (cd >= e.R + half + 0.01) continue;
                 if (e.Kind == FeatureEdit.Add) return false;
