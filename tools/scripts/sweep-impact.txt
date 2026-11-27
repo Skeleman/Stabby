@@ -58,6 +58,7 @@ src/Stabby.World/Dungeon.cs sites
 src/Stabby.World/DungeonLayout.cs sites
 src/Stabby.World/WolfDen.cs sites,surface
 src/Stabby.World/Overlook.cs sites,surface
+src/Stabby.World/Bones.cs sites,surface
 src/Stabby.World/SaltTower.cs sites,surface
 src/Stabby.World/MesaChecks.cs sketch
 src/Stabby.World/TintChecks.cs biomes

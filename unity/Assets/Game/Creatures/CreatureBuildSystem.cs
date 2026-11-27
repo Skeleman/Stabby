@@ -323,7 +323,7 @@ namespace Stabby.Game
         static Arrival Prepare(Kit k, Arrival a)
         {
             var def = k.Lib.Bodies[a.State.Body];
-            var body = CreatureBody.Assemble(def, k.Lib, a.State.BodySeed);
+            var body = CreatureBody.Assemble(def, k.Lib, a.State.BodySeed, a.State.Age);
             int first = k.First[a.State.Body], shapeCount = k.Shapes.Count, per = 1 + body.Segments.Count;
             a.Def = def;
             a.Body = body;

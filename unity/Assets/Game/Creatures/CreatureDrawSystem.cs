@@ -78,6 +78,8 @@ namespace Stabby.Game
             empty = !SystemAPI.TryGetSingleton<CreatureTally>(out var tally) || tally.Links == 0;
         }
 
+        public static bool BenchSkipDraw;
+
         public void Submit()
         {
             Flush();
@@ -144,7 +146,7 @@ namespace Stabby.Game
         void Draw()
         {
             Drawn = 0;
-            if (args.Current == null || build == null) return;
+            if (args.Current == null || build == null || BenchSkipDraw) return;
             var meshes = build.Meshes;
             var bounds = new Bounds(Vector3.zero, Vector3.one * 1e6f);
             for (int g = 0; g < counts.Length; g++)

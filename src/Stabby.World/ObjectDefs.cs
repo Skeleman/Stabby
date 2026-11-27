@@ -37,10 +37,10 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, WallHead = 49, Overlook = 50, SaltTower = 51, Shapes = 52;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "salt-tower" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, WallHead = 49, Overlook = 50, Bones = 51, SaltTower = 52, Shapes = 53;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "bones", "salt-tower" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
-        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || shape == House || shape == Overlook || shape == SaltTower || IsDungeon(shape) || IsMine(shape);
+        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || shape == House || shape == WallHead || shape == Overlook || shape == Bones || shape == SaltTower || IsDungeon(shape) || IsMine(shape);
         public static bool IsDungeon(int shape) => shape >= DungeonCorridor && shape <= Dungeon;
         public static bool IsMine(int shape) => shape >= MineTimber && shape <= MineCart;
         public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || shape == DripColumn || IsStructure(shape);
@@ -84,6 +84,7 @@ namespace Stabby.World
         public float EditMinSizeM;
         public int ChainMin = 1, ChainMax = 1;
         public float ChainCorner, ChainGate;
+        public string ChainHead;
         public string Bank;
         public float PerHundredM;
         public int Discovery;
@@ -334,6 +335,8 @@ namespace Stabby.World
                 if (pl.ChainCorner < 0 || pl.ChainCorner > 1 || pl.ChainGate < 0 || pl.ChainGate > 1) errors.Add(d.Id + ": chainCorner and chainGate must be 0-1");
                 if ((pl.ChainMax > 1 || pl.ChainCorner > 0 || pl.ChainGate > 0) && !(d.Kind == Structure && d.Parts.Count == 1 && d.Parts[0].Shape == ObjectPart.Wall))
                     errors.Add(d.Id + ": chains belong only to single-part wall structures");
+                if (pl.ChainHead != null && (pl.ChainMax < 2 || !lib.Objects.Exists(h => h.Id == pl.ChainHead && h.Kind == Structure && h.Placement.PerHectare <= 0 && h.Parts.Count == 1 && h.Parts[0].Shape == ObjectPart.WallHead)))
+                    errors.Add(d.Id + ": chainHead must name an unplaced wall-head structure, on a chain");
                 if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
                 if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
                 if (pl.FanM < 0 || pl.FanM > 30 || (pl.FanM > 0 && pl.FootRiseM <= 0)) errors.Add(d.Id + ": fanM must be 0-30 and needs footRiseM");
