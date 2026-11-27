@@ -73,16 +73,35 @@ int Bake()
     var w = WorldGenerator.Generate(c, biomes, materials, null, null, objects, caves);
     long genMs = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
-    var bytes = WorldFile.Write(w);
+    sw.Restart();
+    var files = ContentBytes();
+    ulong hash = WorldFile.ContentHash(files[0], files[1]);
+    var raised = WorldFile.Read(WorldFile.Write(w), materials);
+    int mound = Mound.Raise(raised);
+    var played = WorldFile.Read(WorldFile.Write(raised, hash, mound, null), materials);
+    played.Objects = objects;
+    played.Caves = caves;
+    var ground = GroundBake.Run(played, GroundBake.KeyOf(files, 1f), true, out _);
+    long groundMs = sw.ElapsedMilliseconds;
+    var bytes = WorldFile.Write(played, hash, mound, ground);
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
     File.WriteAllBytes(path, bytes);
     sw.Restart();
     var back = WorldFile.Read(File.ReadAllBytes(path), materials);
     long readMs = sw.ElapsedMilliseconds;
-    bool same = WorldChunks.Checksums(back).SequenceEqual(WorldChunks.Checksums(w));
-    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
+    bool same = back.Bake.Sums.SequenceEqual(WorldChunks.Checksums(played)) && back.Bake.Mound == mound && back.Bake.Ground != null
+        && back.Bake.Ground.Edits.Length == ground.Edits.Length && back.Bake.Ground.Field != null;
+    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, mound and ground in {groundMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return same && violations.Count == 0 ? 0 : 1;
+}
+
+List<byte[]> ContentBytes()
+{
+    var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+    var files = new List<byte[]>();
+    foreach (var f in "biomes.json materials.json objects.json caves.json".Split(' ')) files.Add(File.ReadAllBytes(Path.Combine(root, f)));
+    return files;
 }
 
 int RunScenarios()
@@ -160,7 +179,7 @@ int Sweep()
         if (unknown.Length > 0) { Console.WriteLine($"unknown check groups: {string.Join(",", unknown)} (known: {string.Join(",", WorldChecks.Groups)})"); return 2; }
         groups.Add("core");
     }
-    var groupTimes = new System.Collections.Concurrent.ConcurrentBag<(string, double)>();
+    var groupTimes = new System.Collections.Concurrent.ConcurrentBag<(string, double, ulong)>();
     var lowWhile = Opt("low-while", "");
     if (lowWhile != "" && File.Exists(lowWhile))
     {
@@ -192,7 +211,7 @@ int Sweep()
         if (!checks) return;
         var spent = new Dictionary<string, double>();
         var found = WorldChecks.Run(w, groups, spent, creatures);
-        foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value));
+        foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value, c.Seed));
         foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
         perSeed[c.Seed] = found;
         Mark("checks");
@@ -210,8 +229,8 @@ int Sweep()
     if (checks) Console.WriteLine($"  check groups: {(groups == null ? "all" : string.Join(",", WorldChecks.Groups.Where(groups.Contains)))}");
     foreach (var g in groupTimes.GroupBy(s => s.Item1).OrderBy(g => g.Key == "features" ? -1 : Array.IndexOf(WorldChecks.Groups, g.Key)))
     {
-        var ms = g.Select(s => s.Item2).OrderBy(x => x).ToArray();
-        Console.WriteLine($"    {g.Key,-10} median {ms[ms.Length / 2],8:F1} ms, max {ms[^1],8:F1} ms");
+        var ms = g.OrderBy(s => s.Item2).ToArray();
+        Console.WriteLine($"    {g.Key,-10} median {ms[ms.Length / 2].Item2,8:F1} ms, max {ms[^1].Item2,8:F1} ms (seed {ms[^1].Item3})");
     }
     foreach (var f in failures.OrderBy(x => x).Take(30)) Console.WriteLine("  " + f);
     var list = Opt("violations", "");

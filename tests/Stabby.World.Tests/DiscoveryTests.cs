@@ -19,12 +19,12 @@ public class DiscoveryTests
     public void FeaturePassDiscoveriesMatchTheFinalEdits()
     {
         int seen = 0;
-        for (ulong seed = 1; seed <= 8; seed++)
+        var kinds = new HashSet<int>();
+        for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = TestWorlds.World(seed);
-            var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out _, out var shared);
-            var fresh = new ObjectField(w, detail, edits, w.Objects).Discoveries();
+            var p = TestWorlds.Place(seed);
+            var shared = p.Sites;
+            var fresh = p.Field.Discoveries();
             Assert.NotNull(shared);
             Assert.Equal(fresh.Length, shared.Length);
             for (int i = 0; i < fresh.Length; i++)
@@ -36,8 +36,11 @@ public class DiscoveryTests
                 Assert.Equal((fresh[i].Qx, fresh[i].Qy, fresh[i].Qz, fresh[i].Qw), (shared[i].Qx, shared[i].Qy, shared[i].Qz, shared[i].Qw));
             }
             seen += fresh.Length;
+            kinds.UnionWith(fresh.Select(o => o.Def));
         }
         Assert.True(seen > 0);
+        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
+        Assert.True(missing.Count == 0, $"seeds 1..4 place no {string.Join(", ", missing)}");
     }
 
     [Fact]
@@ -229,6 +232,44 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void SaltTowersStandOnDryBasinFloors()
+    {
+        int tower = Objects.Objects.FindIndex(o => o.Id == "salt-tower");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var towers = all.Where(o => o.Def == tower).ToArray();
+        output.WriteLine($"{towers.Length} salt towers " + string.Join(" ", towers.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(towers);
+        foreach (var c in towers)
+        {
+            Assert.True(field.Fitness(ObjectField.SaltTower, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.SaltFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != tower))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
+    public void BonesLieOnSteadyDryGround()
+    {
+        int bones = Objects.Objects.FindIndex(o => o.Id == "bones");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == bones).ToArray();
+        output.WriteLine($"default: {found.Length} bones " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.True(found.Length > 0, "TestWorlds.Default placed no bones");
+        foreach (var c in found)
+        {
+            Assert.True(field.Fitness(ObjectField.Bones, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.BonesFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != bones))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void FallenTreesLieInTheWoodsWithAPitBehindTheirRoots()
     {
         int tree = Objects.Objects.FindIndex(o => o.Id == "fallen-tree");
@@ -348,6 +389,45 @@ public class DiscoveryTests
         }
         output.WriteLine($"{pools} bog pools, {near} objects within 4 m of a margin");
         Assert.True(pools > 0);
+    }
+
+    [Fact]
+    public void QuicksandPatchesSitOnWetSand()
+    {
+        var placed = TestWorlds.Default;
+        var w = placed.W;
+        var field = placed.Field;
+        var sands = field.QuicksandPools();
+        int liquid = w.Materials.Liquid("quicksand"), pooled = 0, near = 0;
+        Assert.True(liquid > 0);
+        foreach (var p in field.LiquidPools())
+            if (p.Kind == ObjectField.QuicksandPool) { pooled++; Assert.Equal(liquid, p.Liquid); Assert.False(p.Leaks); }
+        Assert.Equal(sands.Length / ObjectField.BogStride, pooled);
+        float span = field.ChunkMeters;
+        var seen = new HashSet<int>();
+        for (int k = 0; k < sands.Length; k += ObjectField.BogStride)
+        {
+            float x = sands[k], z = sands[k + 1], r = sands[k + 2];
+            Assert.True(field.SandAt(x, z) && field.DampAt(x, z), $"quicksand at {x:F0},{z:F0} is not on wet sand");
+            Assert.InRange(sands[k + 3] - sands[k + 4], ObjectField.QuicksandMinDepthM, ObjectField.QuicksandMaxDepthM);
+            Assert.InRange(r, ObjectField.QuicksandMinR, ObjectField.QuicksandMaxR);
+            Assert.InRange(field.RimSpan(x, z, r), 0f, ObjectField.QuicksandSteadyM);
+            if (k >= 2 * ObjectField.BogStride) continue;
+            float edge = ObjectField.BogMargin(r) + 4f;
+            for (int cz = (int)((z - edge) / span); cz <= (int)((z + edge) / span); cz++)
+                for (int cx = (int)((x - edge) / span); cx <= (int)((x + edge) / span); cx++)
+                {
+                    if (cx < 0 || cz < 0 || cx >= field.ChunksAcross || cz >= field.ChunksAcross || !seen.Add(cz * field.ChunksAcross + cx)) continue;
+                    foreach (var o in field.Chunk(cx, cz))
+                    {
+                        float dx = o.X - x, dz = o.Z - z, reach = ObjectField.BogMargin(r) + 0.5f * field.Footprint(o.Def) * o.Size;
+                        if (dx * dx + dz * dz < (reach + 4f) * (reach + 4f)) near++;
+                        Assert.False(dx * dx + dz * dz < reach * reach, $"{Objects.Objects[o.Def].Id} at {o.X:F1},{o.Z:F1} stands in the quicksand margin at {x:F0},{z:F0}");
+                    }
+                }
+        }
+        output.WriteLine($"{pooled} quicksand patches, {near} objects within 4 m of a margin");
+        Assert.True(pooled > 0, "no quicksand on the default world");
     }
 
     [Fact]

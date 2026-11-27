@@ -113,8 +113,13 @@ namespace Stabby.Game
 
         public static GroundParts Fill(GeneratedWorld w)
         {
-            var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads);
+            var g = w.Bake?.Ground;
+            TerrainDetail detail;
+            ObjectField live = null;
+            if (g != null && g.Key == Stabby.Viewer.ContentFiles.BakeKey()) detail = new TerrainDetail(w, g.Detail);
+            else g = GroundBake.Run(w, 0, false, out detail, out live);
+            var edits = g.Edits;
+            var roads = g.Roads;
             var c = detail.Cells;
             int n = c.N, nn = n * n;
             var b = new BlobBuilder(Allocator.Persistent);
@@ -149,12 +154,12 @@ namespace Stabby.Game
             for (int i = 0; i < cellStart.Length; i++) es[i] = cellStart[i];
             var ei = b.Allocate(ref root.EditItems, cellItems.Length);
             for (int i = 0; i < cellItems.Length; i++) ei[i] = cellItems[i];
-            var dark = CaveLight.Distances(edits, caves);
+            var dark = CaveLight.Distances(edits, g.Caves);
             var cl = b.Allocate(ref root.CaveLight, edits.Length);
             for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
             var rs = b.Allocate(ref root.Roads, roads.Length);
             for (int i = 0; i < roads.Length; i++) rs[i] = roads[i];
-            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Roads = roads, Brooks = CaveBrooks.Build(w, detail, edits, caves), Blob = b };
+            return new GroundParts { Detail = detail, Edits = edits, Discoveries = g.Discoveries, Roads = roads, Brooks = g.Brooks, Caves = g.Caves, Field = g.Field, Live = live, Blob = b };
         }
 
         public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
@@ -217,6 +222,11 @@ namespace Stabby.Game
         public ObjectInstance[] Discoveries;
         public RoadSegment[] Roads;
         public CaveBrook[] Brooks;
+        public CaveGraph[] Caves;
+        public FieldCaches Field;
+        public ObjectField Live;
+
+        public ObjectField Objects(GeneratedWorld w, ObjectLibrary lib) => Live != null ? Live.Fresh(Edits, Discoveries) : new ObjectField(w, Detail, Edits, lib, Discoveries).Adopt(Field);
         public BlobBuilder Blob;
     }
 

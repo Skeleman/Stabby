@@ -244,7 +244,10 @@ public class WorldTests
             Same(liquid, l);
             Same(liquid.GetProperty("properties").GetProperty("fall"), l.GetProperty("fall"));
         }
+        Same(top.GetProperty("properties").GetProperty("wakes"), data.RootElement.GetProperty("wakes"));
         var lib = ContentLoader.LoadMaterials(root);
+        Assert.True(lib.Wakes.FullPixels > lib.Wakes.FadePixels && lib.Wakes.MaxGain >= 1);
+        Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Wakes = new WakeDef { FullPixels = 1 }, Liquids = { lib.Water } }), e => e.Contains("wakes: fullPixels"));
         Assert.True(lib.Surface.StrataWobbleM > 0 && lib.Surface.Rock.BedSpacingM > 0);
         Assert.True(lib.Water.DeepColor != 0 && lib.Water.ShoreM > 0 && lib.Water.FoamWidthM > 0);
         Assert.Contains(MaterialLibrary.Validate(new MaterialLibrary { Surface = lib.Surface, Strata = lib.Strata, OffsetWavelengthM = 1, Liquids = { new LiquidDef { Id = "water" } } }), e => e.Contains("water.shoreM"));

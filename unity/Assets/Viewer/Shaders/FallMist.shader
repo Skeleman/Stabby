@@ -7,6 +7,7 @@ Shader "Stabby/FallMist"
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         #include "Assets/Game/Grass/Wind.hlsl"
+        #include "Assets/Viewer/Shaders/Clock.hlsl"
 
         float4 _StabbySky;
         float _StabbyMistOff;
@@ -15,7 +16,7 @@ Shader "Stabby/FallMist"
         float4 _StabbyShadowPx;
         float4 _StabbyShadowEye;
         float _StabbyClock;
-        float4 _StabbyLiquid[80];
+        float4 _StabbyLiquid[160];
 
         static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
         static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6, SteamPeriod = 6.5, SteamOpacity = 0.14, JetPeriod = 1.7, ColumnSteamPeriod = 5.5, JetRamp = 1.5, SteamLinger = 9, JetOpacity = 0.75, JetStretch = 3.2, ColumnSteamOpacity = 0.3, JetCover = 0.1, SteamCover = 0.12;
@@ -52,7 +53,7 @@ Shader "Stabby/FallMist"
             float3 wp = TransformObjectToWorld(i.positionOS.xyz);
             float2 fd = normalize(i.color.rg * 2 - 1);
             float3 f3 = float3(fd.x, 0, fd.y), s3 = float3(fd.y, 0, -fd.x);
-            float ph = i.color.a, kind = i.corner.z, tm = _Time.y;
+            float ph = i.color.a, kind = i.corner.z, tm = StabbyTime;
             float2 c = i.corner.xy, wind = WindPush(wp.xz, tm, ph);
             UNITY_BRANCH if (kind > 3.5)
             {
@@ -98,65 +99,46 @@ Shader "Stabby/FallMist"
                 wp += (right * c.x + up * c.y) * size;
                 puff = float4(t, smoothstep(0, 0.2, t) * (1 - smoothstep(0.35, 1, t)), rad, kind);
             }
-            else if (kind < 1.5)
-            {
-                float rad = i.size.x, h = i.size.y;
-                bool spray = kind < 0.5;
-                float period = (spray ? SprayPeriod : MistPeriod) * (0.75 + 0.5 * frac(ph * 7.31));
-                float t = frac(tm / period + ph);
-                float3 dr = Noise(float2(ph * 17.3, tm * 0.15 + ph * 5.1));
-                float rise = spray ? rad * (0.1 + 0.8 * t * (2 - t)) : rad * 0.3 + min(h * MistRise, rad * MistReach) * t;
-                float ahead = spray ? rad * (0.2 + 0.9 * t) : rad * (0.5 * t + 0.15 * dr.x);
-                wp += float3(0, rise, 0) + f3 * ahead + s3 * (rad * 0.35 * dr.y) + float3(wind.x, 0, wind.y) * (rad * WindDrift * t);
-                float size = rad * (spray ? 0.45 + 0.6 * t : 0.6 + 0.7 * t);
-                float px = ScreenPx(rad, length(eye - wp), focal);
-                size *= px < _StabbyMistPx.x ? 0 : 1;
-                wp += (right * c.x + up * c.y) * size;
-                puff = float4(t, smoothstep(0, 0.15, t) * (1 - smoothstep(0.45, 1, t)), rad, kind);
-            }
             else
             {
-                float hw = i.size.x, tall = i.size.y, vy = c.y * 0.5 + 0.5;
-                float px = ScreenPx(tall, length(eye - wp), focal);
-                wp += (s3 * (c.x * hw) + float3(0, vy * tall, 0) + float3(wind.x, 0, wind.y) * (vy * vy * tall * 0.4)) * (px < _StabbyMistPx.x ? 0 : 1);
-                puff = float4(hw / max(tall, 0.01), 1, tall, kind);
+                float rad = i.size.x * (0.65 + 0.7 * frac(ph * 13.7)), h = i.size.y;
+                bool spray = kind < 0.5;
+                float period = (spray ? SprayPeriod : MistPeriod) * (0.6 + 0.8 * frac(ph * 7.31));
+                float cy = tm / period + ph, t = frac(cy), k = floor(cy) * 3.71 + ph * 17.3;
+                float ease = t * (2 - t), lift = 0.6 + 0.8 * frac(ph * 3.17 + k * 0.37);
+                float d1 = Noise(float2(k, t * 1.7 + ph * 5.1)).x, d2 = Noise(float2(k * 1.9 + 4.3, t * 3.9 + 2.2)).x, d3 = Noise(float2(k * 0.7 - 2.9, t * 2.6 + 7.7)).x;
+                float rise = spray ? rad * (0.1 + 0.8 * ease) * lift : rad * 0.2 + min(h * MistRise, rad * MistReach) * ease * lift;
+                float ahead = spray ? rad * (0.2 + 0.9 * t + 0.4 * d1) : rad * (0.4 * ease + 0.5 * d1);
+                float2 drift = _StabbyWind.xy * (_StabbyWind.z + _StabbyGust.z * WindGust(wp.xz + ph * 9.1, tm));
+                wp += float3(0, rise + rad * 0.5 * d3 * t, 0) + f3 * ahead + s3 * (rad * 0.9 * d2 * (0.3 + t)) + float3(drift.x, 0, drift.y) * (rad * WindDrift * t);
+                float size = rad * (spray ? 0.45 + 0.6 * t : 0.5 + 0.8 * ease);
+                float px = ScreenPx(rad, length(eye - wp), focal);
+                size *= px > _StabbyMistPx.x ? 1 : 0;
+                wp += (right * c.x + up * c.y) * size;
+                puff = float4(t, smoothstep(0, 0.15, t) * (1 - smoothstep(0.4, 1, t)), rad, kind);
             }
             return wp;
         }
 
-        bool Empty(float4 puff, float2 p) { return (puff.w < 1.5 || puff.w > 2.5) && (dot(p, p) >= 1 || puff.y <= 0); }
+        bool Empty(float4 puff, float2 p) { return dot(p, p) >= 1 || puff.y <= 0; }
 
-        float Density(float4 puff, float4 color, float2 p, float3 v, out float n, out float op)
+        float Density(float4 puff, float4 color, float2 p, out float n, out float op)
         {
-            float kind = puff.w, ph = color.a, flowQ = color.b, tm = _Time.y, e2 = dot(p, p);
+            float kind = puff.w, ph = color.a, flowQ = color.b, tm = StabbyTime, e2 = dot(p, p);
             float dens;
-            UNITY_BRANCH if (kind < 1.5 || kind > 2.5)
-            {
-                float t = puff.x;
-                float2 q = p * 1.4 + ph * 31.7 + float2(tm * 0.13, -tm * 0.21 - t * 1.5);
-                float3 n1 = Noise(q);
-                float2 pw = p + 0.25 * n1.yz;
-                n = n1.x;
-                UNITY_BRANCH if (kind < 3.5) n += 0.5 * Noise(mul(Turn, pw) * 2.9 + ph * 13.1 + float2(-tm * 0.37, tm * 0.19)).x;
-                UNITY_BRANCH if (kind < 0.5) n += 0.3 * Noise(mul(pw, Turn) * 6.3 + float2(ph * 5.3, -tm * 0.9)).x;
-                dens = kind > 2.5 && kind < 3.5
-                    ? saturate((1.3 * n - 0.2 - 0.9 * dot(pw, pw)) * 2.2) * saturate((1 - e2) * 4)
-                    : saturate((0.7 - dot(pw, pw) + 1.2 * n) * 1.6) * saturate((1 - e2) * 2.5);
-                dens *= dens * puff.y;
-                op = kind > 3.5 ? (flowQ < 0.5 ? JetOpacity : ColumnSteamOpacity) : kind > 2.5 ? SteamOpacity : kind < 0.5 ? 0.5 + 0.25 * flowQ : 0.3 + 0.15 * flowQ;
-            }
-            else
-            {
-                float vy = p.y * 0.5 + 0.5;
-                float2 q = float2(p.x * 2.4 * puff.x, vy * 2.4) + ph * 7.1 + float2(0, -tm * 0.7);
-                float3 n1 = Noise(q);
-                float3 n2 = Noise(float2(q.x * 2.3 + 0.5 * n1.y, q.y * 1.4 - tm * 0.5) + 5.1);
-                n = n1.x + 0.55 * n2.x;
-                float edge = 1 - p.x * p.x * p.x * p.x;
-                dens = saturate((1 - vy) * (1 - vy) * 1.3 - 0.25 + 1.1 * n) * edge * smoothstep(0, 0.1, vy);
-                float2 fd = normalize(color.rg * 2 - 1);
-                op = (0.3 + 0.15 * flowQ) * saturate(abs(dot(v.xz, fd)) * 1.6 + 0.15);
-            }
+            float t = puff.x;
+            float2 q = p * 1.4 + ph * 31.7 + float2(tm * 0.13, -tm * 0.21 - t * 1.5);
+            float3 n1 = Noise(q);
+            float2 pw = p + 0.25 * n1.yz;
+            n = n1.x;
+            UNITY_BRANCH if (kind < 3.5) n += 0.5 * Noise(mul(Turn, pw) * 2.9 + ph * 13.1 + float2(-tm * 0.37, tm * 0.19)).x;
+            UNITY_BRANCH if (kind < 1.5) n += (kind < 0.5 ? 0.3 : 0.4) * Noise(mul(pw, Turn) * 6.3 + float2(ph * 5.3, -tm * 0.9)).x;
+            dens = kind > 2.5 && kind < 3.5
+                ? saturate((1.3 * n - 0.2 - 0.9 * dot(pw, pw)) * 2.2) * saturate((1 - e2) * 4)
+                : kind > 0.5 && kind < 1.5 ? saturate((0.55 - 1.1 * dot(pw, pw) + 1.5 * n) * 1.5) * saturate((1 - e2) * 2.5)
+                : saturate((0.7 - dot(pw, pw) + 1.2 * n) * 1.6) * saturate((1 - e2) * 2.5);
+            dens *= dens * puff.y;
+            op = kind > 3.5 ? (flowQ < 0.5 ? JetOpacity : ColumnSteamOpacity) : kind > 2.5 ? SteamOpacity : kind < 0.5 ? 0.4 + 0.2 * flowQ : 0.3 + 0.14 * flowQ;
             return dens;
         }
 
@@ -212,7 +194,7 @@ Shader "Stabby/FallMist"
                 float kind = i.puff.w, rad = i.puff.z, flowQ = i.color.b;
                 UNITY_BRANCH if (Empty(i.puff, p)) return half4(0, 0, 0, 0);
                 float n, op;
-                float dens = Density(i.puff, i.color, p, v, n, op);
+                float dens = Density(i.puff, i.color, p, n, op);
                 float scene = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
                 float surface = LinearEyeDepth(i.positionCS.z, _ZBufferParams);
                 float soft = saturate((scene - surface) / min(rad * 0.35, 2.5));
@@ -224,7 +206,7 @@ Shader "Stabby/FallMist"
                 float3 c = _StabbySky.rgb * 0.9 + 0.12 + l.color * sun * (0.6 + 0.9 * fwd);
                 c *= (0.88 + 0.12 * saturate(n * 0.5 + 0.5)) * (1 - 0.18 * dens);
                 c *= kind > 3.5 && flowQ < 0.5 ? 1.08 : 1;
-                c *= kind < 2.5 ? _StabbyLiquid[clamp((int)round(i.corner.z), 0, 7) * 10 + 9].rgb : 1;
+                c *= kind < 2.5 ? _StabbyLiquid[clamp((int)round(i.corner.z), 0, 15) * 10 + 9].rgb : 1;
                 return half4(MixFog(c, i.fog), dens * soft * near * px * op);
             }
             ENDHLSL
@@ -285,7 +267,7 @@ Shader "Stabby/FallMist"
                 float2 p = i.corner.xy;
                 clip(Empty(i.puff, p) ? -1 : i.corner.z - 0.001);
                 float n, op;
-                float dens = Density(i.puff, i.color, p, _LightDirection, n, op);
+                float dens = Density(i.puff, i.color, p, n, op);
                 float px = WindowPx(i.puff, length(_StabbyShadowEye.xyz - i.positionWS), _StabbyShadowPx.x);
                 clip(saturate(dens * op * px * i.corner.z * _StabbyShadowPx.w) - Bayer(i.positionCS.xy));
                 return 0;

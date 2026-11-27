@@ -85,7 +85,7 @@ namespace Stabby.World
                 var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
                 float tv = tr.Range(-1f, 1f) * (1 - p.Calm), th = tr.Range(-1f, 1f) * (1 - p.Calm), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
-                bool cut = p.Q >= Faceted && p.M == 0 && !p.Coursed;
+                bool cut = p.R == 0 && p.Q >= Faceted && p.M == 0 && !p.Coursed;
                 float[] u, lift = null;
                 int[] idx;
                 if (p.R > 0)

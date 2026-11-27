@@ -7,9 +7,9 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "fallen-tree" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-fallen-tree" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, FallenTree = 14;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
@@ -52,11 +52,14 @@ namespace Stabby.World
             }
         }
 
-        public ObjectField Fresh()
+        public ObjectField Fresh() => Fresh(edits, Discoveries());
+
+        public ObjectField Fresh(FeatureEdit[] placed, ObjectInstance[] found)
         {
-            var f = new ObjectField(w, detail, edits, lib);
-            f.discoveries = Discoveries();
+            var f = new ObjectField(w, detail, placed, lib);
+            f.discoveries = found;
             f.bogPools = BogPools();
+            f.quicksandPools = QuicksandPools();
             f.roads = Roads(); f.roadStart = roadStart; f.roadItems = roadItems; f.roadSites = roadSites; f.siteCells = siteCells; f.siteList = siteList; f.tunnelEdits = tunnelEdits; f.tunnelGraphs = tunnelGraphs;
             f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover;
             return f;
@@ -127,6 +130,7 @@ namespace Stabby.World
             {
                 if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
             }
+            if (pl.Discovery == SaltTower && !SeekSalt(ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == Overlook && !SeekOverlook(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
             if (pl.Discovery == FallenTree) FaceDownhill(px, pz, ref qa, ref qb);
@@ -272,7 +276,7 @@ namespace Stabby.World
             int station = 0;
             foreach (var s in segs)
             {
-                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel) { lx = float.NaN; continue; }
+                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel || s.Kind == RoadSegment.Bridge) { lx = float.NaN; continue; }
                 if (s.X0 != lx || s.Z0 != lz) walked = 0;
                 lx = s.X1; lz = s.Z1;
                 float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
@@ -315,11 +319,11 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == FallenTree ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != FallenTree || TreeFault(o) == null)) break;
+                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != Bones || BonesFault(o) == null) && (kind != SaltTower || SaltFault(o) == null) && (kind != FallenTree || TreeFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -863,6 +867,8 @@ namespace Stabby.World
                 float wd = Woods(x, z);
                 if (!(wd >= TreeWoods)) return float.MinValue;
             }
+            if (kind == Bones) return BonesFit(x, z);
+            if (kind == SaltTower) return SaltFit(x, z);
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
             if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;

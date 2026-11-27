@@ -8,7 +8,7 @@ public class InnTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.House, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen, ObjectPart.Overlook, ObjectPart.FallenTree, ObjectPart.WallTorch };
+    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.House, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen, ObjectPart.Overlook, ObjectPart.SaltTower, ObjectPart.FallenTree, ObjectPart.WallTorch };
 
     [Fact]
     public void BuiltMeshesAreDeterministicFallPerTierAndStayInBounds()
@@ -126,10 +126,8 @@ public class InnTests
         int d = Objects.Objects.FindIndex(o => o.Id == "inn"), seen = 0;
         var seat = ObjectField.Seats(Objects.Objects[d]);
         int across = field.ChunksAcross;
-        var chunks = new ObjectInstance[across * across][];
-        Parallel.For(0, chunks.Length, c => chunks[c] = field.Place(c % across, c / across, true));
-        foreach (var chunk in chunks)
-            foreach (var o in chunk)
+        for (int c = 0; c < across * across; c++)
+            foreach (var o in field.Sites(c % across, c / across))
             {
                 if (o.Def != d) continue;
                 seen++;

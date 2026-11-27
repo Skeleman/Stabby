@@ -20,10 +20,128 @@ namespace Stabby.World
         public static int Ordinal(ulong id) => (int)(uint)id;
     }
 
+    sealed class PackedObjects
+    {
+        const int Fields = 10;
+        readonly int chunk, count;
+        readonly ObjectInstance[] raw;
+        readonly int[] lo;
+        readonly byte[] width;
+        readonly byte[][] lanes;
+
+        public PackedObjects(int chunk, ObjectInstance[] o)
+        {
+            this.chunk = chunk;
+            count = o.Length;
+            lo = new int[Fields];
+            width = new byte[Fields];
+            lanes = new byte[Fields][];
+            for (int f = 0; f < Fields; f++)
+            {
+                long min = 0, max = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    long v = Bits(o[i], f);
+                    if (i == 0 || v < min) min = v;
+                    if (i == 0 || v > max) max = v;
+                }
+                long range = max - min;
+                int w = range <= 0xff ? 1 : range <= 0xffff ? 2 : range <= 0xffffff ? 3 : 4;
+                lo[f] = (int)min;
+                width[f] = (byte)w;
+                var lane = lanes[f] = new byte[count * w];
+                for (int i = 0; i < count; i++)
+                {
+                    uint d = (uint)(Bits(o[i], f) - min);
+                    for (int k = 0; k < w; k++) lane[i * w + k] = (byte)(d >> (8 * k));
+                }
+            }
+            if (Exact(o)) return;
+            raw = o;
+            lanes = null;
+        }
+
+        static long Bits(in ObjectInstance o, int f)
+        {
+            switch (f)
+            {
+                case 0: return o.Def;
+                case 1: return o.Variant;
+                case 2: return BitConverter.SingleToInt32Bits(o.X);
+                case 3: return BitConverter.SingleToInt32Bits(o.Y);
+                case 4: return BitConverter.SingleToInt32Bits(o.Z);
+                case 5: return BitConverter.SingleToInt32Bits(o.Qx);
+                case 6: return BitConverter.SingleToInt32Bits(o.Qy);
+                case 7: return BitConverter.SingleToInt32Bits(o.Qz);
+                case 8: return BitConverter.SingleToInt32Bits(o.Qw);
+                default: return BitConverter.SingleToInt32Bits(o.Size);
+            }
+        }
+
+        int Lane(int f, int i)
+        {
+            var lane = lanes[f];
+            int w = width[f], at = i * w;
+            uint d = lane[at];
+            if (w > 1) d |= (uint)lane[at + 1] << 8;
+            if (w > 2) d |= (uint)lane[at + 2] << 16;
+            if (w > 3) d |= (uint)lane[at + 3] << 24;
+            return unchecked(lo[f] + (int)d);
+        }
+
+        float Float(int f, int i) => BitConverter.Int32BitsToSingle(Lane(f, i));
+
+        bool Exact(ObjectInstance[] o)
+        {
+            Span<int> ord = stackalloc int[256];
+            for (int i = 0; i < count; i++)
+            {
+                var r = o[i];
+                if (r.Def < 0 || r.Def > 255) return false;
+                var q = Get(i, ord);
+                if (q.Def != r.Def || q.Variant != r.Variant || q.Id != r.Id || !Same(q.X, r.X) || !Same(q.Y, r.Y) || !Same(q.Z, r.Z)
+                    || !Same(q.Qx, r.Qx) || !Same(q.Qy, r.Qy) || !Same(q.Qz, r.Qz) || !Same(q.Qw, r.Qw) || !Same(q.Size, r.Size)) return false;
+            }
+            return true;
+        }
+
+        static bool Same(float a, float b) => BitConverter.SingleToInt32Bits(a) == BitConverter.SingleToInt32Bits(b);
+
+        ObjectInstance Get(int i, Span<int> ord)
+        {
+            int d = Lane(0, i);
+            return new ObjectInstance
+            {
+                Def = d, Variant = Lane(1, i),
+                X = Float(2, i), Y = Float(3, i), Z = Float(4, i),
+                Qx = Float(5, i), Qy = Float(6, i), Qz = Float(7, i), Qw = Float(8, i),
+                Size = Float(9, i),
+                Id = ObjectIds.Make(chunk, d, ord[d]++),
+            };
+        }
+
+        public void AddTo(List<ObjectInstance> list)
+        {
+            if (raw != null) { list.AddRange(raw); return; }
+            if (list.Capacity < list.Count + count) list.Capacity = list.Count + count;
+            Span<int> ord = stackalloc int[256];
+            for (int i = 0; i < count; i++) list.Add(Get(i, ord));
+        }
+
+        public ObjectInstance[] ToArray()
+        {
+            if (raw != null) return (ObjectInstance[])raw.Clone();
+            var r = new ObjectInstance[count];
+            Span<int> ord = stackalloc int[256];
+            for (int i = 0; i < count; i++) r[i] = Get(i, ord);
+            return r;
+        }
+    }
+
     public sealed partial class ObjectField
     {
         public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f, CrustThin = 0.85f;
-        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
+        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f, BoulderRelief = 0.12f;
 
         readonly GeneratedWorld w;
         readonly TerrainDetail detail;
@@ -41,13 +159,17 @@ namespace Stabby.World
         readonly float[] footprint;
         readonly PartShapes shapes;
         readonly float[][] seats;
+        readonly bool[] rooted;
         readonly int[] chainHead;
         readonly ulong[] key;
         readonly int[] blockStart, blockItems, bankSite, bankStart, bankItems;
         readonly FeatureEdit[] edits;
         readonly FeatureEdit[] solid;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
-        readonly ObjectInstance[][] chunks;
+        readonly PackedObjects[] chunks;
+        byte[] pack;
+        int[] packAt, packRaw;
+        ulong[] packSum;
         readonly object[] chunkGates;
         int chunkComputes;
 
@@ -60,7 +182,7 @@ namespace Stabby.World
             this.edits = Array.FindAll(solid, e => !e.Link);
             n = w.Config.Size; cm = w.Config.CellMeters; worldM = n * cm;
             across = WorldChunks.Across(n);
-            chunks = new ObjectInstance[across * across][];
+            chunks = new PackedObjects[across * across];
             chunkGates = new object[across * across];
             stream = Rng.Stream(w.Config.Seed, "objects").NextU64();
             footStream = Rng.Stream(w.Config.Seed, "objects-foot").NextU64();
@@ -81,6 +203,7 @@ namespace Stabby.World
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
             shapes = PartShapes.Of(lib);
             seats = new float[defs][];
+            rooted = new bool[defs];
             density = new float[defs][];
             footprint = new float[defs];
             key = new ulong[defs];
@@ -100,6 +223,7 @@ namespace Stabby.World
                 footprint[d] = def.FootprintRadius();
                 key[d] = Key(def.Id);
                 seats[d] = Seats(def);
+                rooted[d] = def.Parts.Exists(p => p.Shape == ObjectPart.Log && p.Ends == ObjectPart.EndsRooted);
                 chainHead[d] = def.Placement.ChainHead == null ? -1 : lib.Objects.FindIndex(h => h.Id == def.Placement.ChainHead);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
             }
@@ -173,7 +297,9 @@ namespace Stabby.World
 
         public int ChunkComputes => chunkComputes;
 
-        public ObjectInstance[] Chunk(int cx, int cz)
+        public ObjectInstance[] Chunk(int cx, int cz) => Packed(cx, cz).ToArray();
+
+        PackedObjects Packed(int cx, int cz)
         {
             int c = cz * across + cx;
             var s = Volatile.Read(ref chunks[c]);
@@ -183,11 +309,23 @@ namespace Stabby.World
             {
                 s = chunks[c];
                 if (s != null) return s;
-                s = Place(cx, cz);
-                Interlocked.Increment(ref chunkComputes);
+                var packed = Volatile.Read(ref pack);
+                var baked = packed != null && packAt[c + 1] > packAt[c] ? PlacedPack.TryUnpack(packed, packAt[c], packAt[c + 1] - packAt[c], packRaw[c], packSum[c], c) : null;
+                if (baked != null) s = new PackedObjects(c, baked);
+                else
+                {
+                    s = new PackedObjects(c, Place(cx, cz));
+                    Interlocked.Increment(ref chunkComputes);
+                }
                 Volatile.Write(ref chunks[c], s);
                 return s;
             }
+        }
+
+        bool HasBake(int cx, int cz)
+        {
+            int c = cz * across + cx;
+            return Volatile.Read(ref pack) != null && packAt[c + 1] > packAt[c];
         }
 
         [ThreadStatic] static List<ObjectInstance> scratch;
@@ -203,17 +341,15 @@ namespace Stabby.World
         public void SolidInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
-            if (cached != null) list.AddRange(cached);
+            var cached = Volatile.Read(ref chunks[cz * across + cx]) ?? (HasBake(cx, cz) ? Packed(cx, cz) : null);
+            if (cached != null) cached.AddTo(list);
             else PlaceInto(cx, cz, true, list, null);
         }
 
         public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
-            if (cached != null) list.AddRange(cached);
-            else PlaceInto(cx, cz, false, list, null);
+            Packed(cx, cz).AddTo(list);
         }
 
         public FeatureEdit[] Boulders()
@@ -258,6 +394,11 @@ namespace Stabby.World
                     continue;
                 }
                 if (townMember[d] && stageDef < 0 && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
+                if (d == BridgeDef())
+                {
+                    if (stageDef < 0 && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitBridges(d, chunk, list, ref ordinal);
+                    continue;
+                }
                 if (stageDef < 0 && RoadSite(d))
                 {
                     if (boulders == null && (!solidOnly || AnySolid(d))) EmitRoadSites(d, chunk, list, ref ordinal);
@@ -294,8 +435,7 @@ namespace Stabby.World
                         float size = (pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t) * grade;
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
                         if (!built && Cleared(near, px, pz, footprint[d] * size * (boulders != null ? BoulderReach : 1f))) continue;
-                        if (!Accept(d, px, pz, size, qa, qb, out var o)) continue;
-                        o.Variant = variant;
+                        if (!Accept(d, px, pz, size, qa, qb, out var o, variant: variant)) continue;
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
@@ -401,9 +541,9 @@ namespace Stabby.World
             float ux = yw * yw - yy * yy, uz = 2 * yw * yy, side = (o.Variant & 1) == 0 ? 1f : -1f;
             float r = BoulderMainR * reach, h = BoulderLength * reach, y = o.Y + BoulderLift * r;
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
-            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
-            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
-            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
+            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, N = BoulderRelief * r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
+            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, N = BoulderRelief * r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
+            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || NearQuicksand(a) || NearQuicksand(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
             boulders.Add(a);
             boulders.Add(b);
         }
@@ -481,7 +621,7 @@ namespace Stabby.World
             return b >= 0 && density[d][b] > 0;
         }
 
-        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false)
+        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false, int variant = 0)
         {
             o = default;
             if (!bank && !Open(d, x, z)) return false;
@@ -508,10 +648,11 @@ namespace Stabby.World
             float yw = ql > 1e-4f ? qa / ql : 1f, yy = ql > 1e-4f ? qb / ql : 0f;
             o = new ObjectInstance
             {
-                Def = d, X = x, Z = z, Size = size,
+                Def = d, Variant = variant, X = x, Z = z, Size = size,
                 Y = y - pl.Sink * size - slope * r * 0.5f * (1 - pl.AlignToSlope),
                 Qx = tx * yw - tz * yy, Qy = tw * yy, Qz = tz * yw + tx * yy, Qw = tw * yw,
             };
+            if (rooted[d] && PitFloat(lib, detail, cm, o) > 0) return false;
             if (seats[d] == null) return true;
             SeatRange(detail, cm, seats[d], o, out float lo, out float hi);
             if (hi - lo > Structures.SeatM) return false;
@@ -524,7 +665,7 @@ namespace Stabby.World
             List<float> pts = null;
             foreach (var p in def.Parts)
             {
-                if (!ObjectPart.IsStructure(p.Shape) || ObjectPart.IsMine(p.Shape)) continue;
+                if (!ObjectPart.IsStructure(p.Shape) || ObjectPart.IsMine(p.Shape) || p.Shape == ObjectPart.Bridge) continue;
                 pts = pts ?? new List<float>();
                 var seat = Structures.Seat(p.Shape);
                 for (int k = 0; k < seat.Length; k += 2) { pts.Add(p.OffsetX + seat[k] * p.ScaleX); pts.Add(p.OffsetZ + seat[k + 1] * p.ScaleZ); }
@@ -541,6 +682,30 @@ namespace Stabby.World
                 float g = GroundAt(detail, cellMeters, o.X + rx, o.Z + rz);
                 lo = Math.Min(lo, g); hi = Math.Max(hi, g);
             }
+        }
+
+        public const float PitFloatShare = 0.6f;
+
+        public static float PitFloat(ObjectLibrary lib, TerrainDetail detail, float cellMeters, ObjectInstance o)
+        {
+            var def = lib.Objects[o.Def];
+            float worst = float.NegativeInfinity;
+            for (int pi = 0; pi < def.Parts.Count; pi++)
+            {
+                var p = def.Parts[pi];
+                if (p.Shape != ObjectPart.Log || p.Ends != ObjectPart.EndsRooted) continue;
+                ObjectMeshes.RootPlate(ObjectMeshes.Key(def.Id, pi, o.Variant), out float rp, out _, out float thick);
+                ObjectMeshes.PitReach(rp, thick, out float pcx, out float rr);
+                float rad = 0.5f * p.ScaleY * o.Size, radZ = 0.5f * p.ScaleZ * o.Size, allow = PitFloatShare * ObjectMeshes.PitSkirt * rad;
+                float bx = (p.OffsetX - 0.5f * p.ScaleX) * o.Size + pcx * rad, by = (p.OffsetY + 0.5f * p.ScaleY) * o.Size + ObjectMeshes.PitRimY * rad;
+                for (int k = 0; k < 8; k++)
+                {
+                    FanDir(k, 0.7071f, out float c, out float s);
+                    Rotate(o, bx + 0.7f * rr * c * rad, by, p.OffsetZ * o.Size + rr * s * radZ, out float rx, out float ry, out float rz);
+                    worst = Math.Max(worst, o.Y + ry - GroundAt(detail, cellMeters, o.X + rx, o.Z + rz) - allow);
+                }
+            }
+            return worst;
         }
 
         bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank, int site = 0, bool town = false)

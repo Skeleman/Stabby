@@ -17,6 +17,7 @@ Shader "Stabby/GrassBlade"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
+            #include "Assets/Viewer/Shaders/Clock.hlsl"
             #include "Assets/Viewer/Shaders/Look.hlsl"
             #include "Assets/Viewer/Shaders/LocalLights.hlsl"
             #include "Assets/Viewer/Shaders/CaveSky.hlsl"
@@ -51,7 +52,7 @@ Shader "Stabby/GrassBlade"
                 float2 nxz = float2((b.q.w >> 16) & 0xff, b.q.w >> 24) * (2.0 / 255) - 1;
                 float3 gn = float3(nxz.x, sqrt(saturate(1 - dot(nxz, nxz))), nxz.y);
                 float2 face = float2(cos(angle), sin(angle)), across = float2(-face.y, face.x);
-                float2 push = WindPush(b.p0.xz, _Time.y, seed) + face * _GrassLook.x * (head ? 0.3 : 0.3 + 1.4 * bend);
+                float2 push = WindPush(b.p0.xz, StabbyTime, seed) + face * _GrassLook.x * (head ? 0.3 : 0.3 + 1.4 * bend);
                 float lean = length(push);
                 float2 off = push * t * t * h;
                 float rise = h * t * rsqrt(1 + lean * lean * t * t);

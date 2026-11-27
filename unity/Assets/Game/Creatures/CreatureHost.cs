@@ -80,7 +80,7 @@ namespace Stabby.Game
                 {
                     var lib = ContentFiles.Creatures(biomes);
                     var objects = ContentFiles.Objects(biomes);
-                    System.Func<ObjectField> make = () => new ObjectField(map, parts.Detail, parts.Edits, objects, parts.Discoveries);
+                    System.Func<ObjectField> make = () => parts.Objects(map, objects);
                     var field = await (entry == null ? Task.Run(make) : WorldStore.Objects(entry, make));
                     var spawns = CreaturePlan.Build(map, parts.Detail.Cells, lib, CreaturePlan.Pools(field, parts.Brooks), out var drinks);
                     return new Built { Spawns = spawns, Drinks = drinks, Lib = lib, Across = CreaturePlan.SitesAcross(map.Config.Size), SiteMeters = CreaturePlan.SiteCells * map.Config.CellMeters, Ground = CreaturePlan.Ground(map) };

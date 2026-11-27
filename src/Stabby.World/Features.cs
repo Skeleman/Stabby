@@ -38,6 +38,7 @@ namespace Stabby.World
             e.R += grow;
             e.Ay -= grow;
             e.By -= grow;
+            e.N = 0f;
             return e;
         }
 
@@ -47,7 +48,7 @@ namespace Stabby.World
         public float D, F, N, S;
         public float Coarse;
 
-        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f;
+        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f, Grain = 4.7f, GrainShare = 0.2f;
 
         public float Thick => R + Math.Min(W, H);
 
@@ -96,10 +97,24 @@ namespace Stabby.World
                 dist = Rock(x, y, z, qx, qy, qz, out floor);
                 return dist < R;
             }
-            dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
-            if (P > 0f) dist += R * Profile(t);
-            if (N > 0f) dist += N * Lump(x, y, z);
+            dist = Shell(x, y, z, qx, qy, qz, t);
             return dist < R;
+        }
+
+        float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
+        {
+            float dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+            if (P > 0f) dist += R * Profile(t);
+            if (N > 0f) dist += Weathering(x, y, z);
+            return dist;
+        }
+
+        public float BoulderDistance(float x, float y, float z)
+        {
+            float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
+            float ll = ex * ex + ey * ey + ez * ez;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
+            return Shell(x, y, z, px - t * ex, py - t * ey, pz - t * ez, t);
         }
 
         public const float Fill = 0.35f, RockBand = 6f, RockFade = 3f, DebrisBand = 4.5f, RockRefM = 10f, RockFineM = 2f;
@@ -239,6 +254,14 @@ namespace Stabby.World
             float k = 1f / (Wave * R);
             uint seed = Seed;
             return 0.65f * Value(seed, x * k, y * k, z * k) + 0.35f * Value(seed ^ 0x68E31DA4u, 2.1f * k * x, 2.1f * k * y, 2.1f * k * z);
+        }
+
+        public float Weathering(float x, float y, float z)
+        {
+            if (N <= 0f) return 0f;
+            if (Shape != Boulder) return N * Lump(x, y, z);
+            float k = Grain / (Wave * R);
+            return N * ((1f - GrainShare) * Lump(x, y, z) + GrainShare * Value(Seed ^ 0x2545F491u, k * x, k * y, k * z));
         }
 
         static uint Hash(uint seed, int x, int y, int z)
@@ -416,9 +439,10 @@ namespace Stabby.World
 
         public float Density(int i, int j, int k) => Features.Apply(Columns, Edits, Columns.Height(i, k) - j * StepM, i, j, k, StepM);
         public bool Sharp(int i, int j, int k) => Features.Covers(Edits, i * StepM, j * StepM, k * StepM, StepM);
+        public bool Round(int i, int j, int k) => Features.Rounds(Edits, i * StepM, j * StepM, k * StepM, StepM);
         public float Base(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
 
-        public float Edit(float d, float x, float y, float z) => Features.Edit(Edits, d, x, y, z);
+        public float Edit(float d, float x, float y, float z) => Features.Edit(Edits, d, x, y, z, true);
     }
 
     public static class Features
@@ -436,13 +460,17 @@ namespace Stabby.World
         public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
             => Edit(edits, Level(columns, d, i, k, s), i * s, j * s, k * s);
 
-        public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z) where TEdits : struct, IEditList
+        public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z, bool smooth = false) where TEdits : struct, IEditList
         {
             float hole = float.MaxValue, low = float.MaxValue, k = 0f;
             for (int q = 0, n = edits.Count; q < n; q++)
             {
                 var e = edits.At(q);
-                if (!e.Reach(x, y, z, out float dist, out float floor)) continue;
+                if (!e.Reach(x, y, z, out float dist, out float floor))
+                {
+                    if (smooth && hole == float.MaxValue && e.Kind == FeatureEdit.Add && e.Shape == FeatureEdit.Boulder) d = Math.Max(d, e.R - e.BoulderDistance(x, y, z));
+                    continue;
+                }
                 if (e.Kind == FeatureEdit.Add)
                 {
                     if (hole < float.MaxValue) { d = FeatureEdit.Cut(d, Math.Max(hole, low), k); hole = low = float.MaxValue; k = 0f; }
@@ -477,10 +505,22 @@ namespace Stabby.World
                 if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
                 {
                     if (e.Fine && ((e.Shape != FeatureEdit.Cave && e.Shape != FeatureEdit.Mine) || s < NearField.NodeStep(0))) return false;
+                    if (e.Shape == FeatureEdit.Boulder && s <= NearField.NodeStep(0)) return false;
                     any = true;
                 }
             }
             return any;
+        }
+
+        public static bool Rounds<TEdits>(TEdits edits, float x, float y, float z, float s) where TEdits : struct, IEditList
+        {
+            if (s > NearField.NodeStep(0)) return false;
+            for (int q = 0, n = edits.Count; q < n; q++)
+            {
+                var e = edits.At(q);
+                if (e.Shape == FeatureEdit.Boulder && !e.Fine && e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
+            }
+            return false;
         }
 
         public static int TileAt(float x, float z, float cellMeters)
@@ -509,19 +549,27 @@ namespace Stabby.World
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries) => Place(w, detail, out caves, out discoveries, out _);
 
-        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads)
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads) => Place(w, detail, out caves, out discoveries, out roads, out _);
+
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads, out ObjectField field)
         {
             roads = Array.Empty<RoadSegment>();
+            field = null;
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
             terrain = Sunk(terrain, CaveBrooks.Sinks(w, detail, terrain, caves));
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
-            var field = new ObjectField(w, detail, terrain, w.Objects);
+            field = new ObjectField(w, detail, terrain, w.Objects);
+            field.QuicksandPools();
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
-            var bogs = field.BogEdits();
+            var bog = field.BogEdits();
+            var sand = field.QuicksandEdits();
+            var bogs = new FeatureEdit[bog.Length + sand.Length];
+            bog.CopyTo(bogs, 0);
+            sand.CopyTo(bogs, bog.Length);
             var dens = field.DenEdits();
             var trees = field.TreeEdits();
             var vaults = field.DungeonEdits();

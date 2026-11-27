@@ -106,19 +106,44 @@ public class WaterSwellTests
     }
 
     [Fact]
-    public void ShallowerWavesAreShorter()
+    public void CrestSpeedStaysNearlyConstantToTheShore()
     {
-        foreach (var p in Both)
+        const float beach = 0.04f, dt = 0.05f;
+        foreach (var p in ShoreOnly)
         {
-            float last = float.MaxValue;
-            for (float d = 10; d > 0.2f; d -= 0.5f)
+            float v0 = WaterSwell.ShoreWavelength(p) / (2 * p.ShorePeriod);
+            int near = 0;
+            for (int k = 0; k < 60; k++)
             {
-                float w = WaterSwell.ShoreWavelength(p, d);
-                Assert.True(w < last);
-                last = w;
+                float t = k * p.ShorePeriod / 60;
+                var after = UpCrossings(p, t + dt, beach);
+                foreach (float s in UpCrossings(p, t, beach))
+                {
+                    if (s < 0.2f || s > 55) continue;
+                    float want = s - v0 * dt, best = float.MaxValue;
+                    foreach (float a in after)
+                        if (Math.Abs(a - want) < Math.Abs(best - want)) best = a;
+                    float r = (s - best) / (dt * v0);
+                    if (s < 1) near++;
+                    Assert.True(s < 1 ? r > 0.75f && r < 1.02f : Math.Abs(r - 1) < 0.02f, $"crest at {s} m moves at {r:F3} of the band speed");
+                }
             }
-            Assert.True(WaterSwell.ShoreWavelength(p, 0.5f) < 0.3f * WaterSwell.ShoreWavelength(p, 8));
+            Assert.True(near > 0);
         }
+    }
+
+    static List<float> UpCrossings(in SwellParams p, float t, float beach)
+    {
+        const float step = 0.002f;
+        var list = new List<float>();
+        float prev = WaterSwell.Height(p, 0, 0, t, 0.1f * beach, 0.1f);
+        for (int i = 1; i < 30000; i++)
+        {
+            float s = 0.1f + i * step, h = WaterSwell.Height(p, 0, 0, t, s * beach, s);
+            if (prev < 0 && h >= 0) list.Add(s - step * h / (h - prev));
+            prev = h;
+        }
+        return list;
     }
 
     [Fact]
@@ -140,7 +165,7 @@ public class WaterSwellTests
     public void ShoreWavesMoveTowardTheShore()
     {
         var p = ShoreOnly[0];
-        float d = 2, dt = 0.2f, shift = WaterSwell.ShoreWavelength(p, d) * dt / (2 * p.ShorePeriod);
+        float d = 2, dt = 0.2f, shift = WaterSwell.ShoreWavelength(p) * dt / (2 * p.ShorePeriod);
         for (int k = 0; k < 200; k++)
         {
             float s = 20 + k * 0.37f, t = k * 0.13f;
@@ -156,7 +181,7 @@ public class WaterSwellTests
         foreach (var p in ShoreOnly)
             for (int k = 0; k < 300; k++)
             {
-                float d = 1 + k * 0.01f, s = 30 + k * 0.29f, t = k * 0.21f, e = 1e-3f;
+                float d = 1 + k * 0.01f, s = k < 100 ? 0.01f + k * 0.0098f : 30 + k * 0.29f, t = k * 0.21f, e = 1e-3f;
                 WaterSwell.Sample(p, 0, 0, t, d, s, 1, 0, out float gx, out _);
                 float fx = (WaterSwell.Height(p, 0, 0, t, d, s - e) - WaterSwell.Height(p, 0, 0, t, d, s + e)) / (2 * e);
                 Assert.True(Math.Abs(gx - fx) < 0.02f * Math.Max(1, Math.Abs(fx)), $"{gx} vs {fx} at {s}");
