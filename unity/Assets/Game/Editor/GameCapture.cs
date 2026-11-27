@@ -119,6 +119,7 @@ namespace Stabby.Game.Editor
         static void Poll()
         {
             long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            PinClock(true);
             PollBody();
             double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             if (ms >= 10) GameStatus.ToolFrame = Time.frameCount;
@@ -988,6 +989,7 @@ namespace Stabby.Game.Editor
         static void Finish(int code)
         {
             EditorApplication.update -= Poll;
+            PinClock(false);
             SpikeProbe.Stop();
             SystemCost.Stop();
             SessionState.EraseBool(Key);
