@@ -20,7 +20,7 @@ namespace Stabby.World
         public const float GapM = 3000f, LandmarkGapM = 1200f, RoadGapM = 500f, CoastPadM = 300f, RiverPadM = 300f, MesaPadM = 200f, SampleM = 20f;
         public const float CarveShare = 0.85f, CarveRound = 1.5f, CarveTaper = -1.4f, CarveP = -0.15f, CarveN = 0.3f, MinDepthM = 4f, MaxDepthM = 10f, RingPadM = 2f, TopPadM = 2f;
         public const float NoneChance = 0.3f, OneChance = 0.75f, RainPadMm = 120f;
-        public const float BigMinRoM = 600f, BigMaxRoM = 1300f, StratoSearchM = 4000f, SpineJitterM = 250f, IslandSearchM = 400f, IslandPadM = 150f, LiftShare = 1.5f, SkirtSlope = 0.35f, MaxCarveM = 60f, CinderReachM = 6000f;
+        public const float BigMinRoM = 600f, BigMaxRoM = 1300f, StratoSearchM = 4000f, SpineJitterM = 250f, IslandSearchM = 400f, IslandPadM = 150f, LiftShare = 1.5f, ToeShare = 0.5f, FadeSpan = 3f, MaxCarveM = 60f, CinderReachM = 6000f;
         public const int BigTries = 400, MaxClosed = 2, Tries = 1500, RimDirs = 256, RingDirs = 48, ReachPasses = 4;
         const ulong CraterTag = 0xC4A7E5D1B3F29A61UL;
 
@@ -52,11 +52,11 @@ namespace Stabby.World
                         px = spine[2 * j]; pz = spine[2 * j + 1];
                     }
                     var b = Shape(px + (2f * v[0] - 1f) * reach, pz + (2f * v[1] - 1f) * reach, v, BigMinRoM, BigMaxRoM);
-                    if (!Site(c, s, sea, h, null, b, island ? IslandPadM : CoastPadM, out float skirt)) continue;
+                    if (!Site(c, s, sea, h, null, b, island ? IslandPadM : CoastPadM, out float drop)) continue;
                     flow ??= Mesas.Flow(c, sea, h);
                     if (Mesas.Wet(c, flow, b.X, b.Z, b.Rc + RiverPadM)) continue;
                     b.RimLow = Low(b);
-                    Stamp(c, s, sea, h, b, skirt);
+                    Stamp(c, s, sea, h, b, drop);
                     s.Volcanoes.Add(b);
                     break;
                 }
@@ -236,9 +236,9 @@ namespace Stabby.World
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        static bool Site(WorldConfig c, WorldSketch s, bool[] sea, float[] h, bool[] open, VolcanoSketch b, float pad, out float skirt)
+        static bool Site(WorldConfig c, WorldSketch s, bool[] sea, float[] h, bool[] open, VolcanoSketch b, float pad, out float drop)
         {
-            skirt = 0f;
+            drop = 0f;
             bool big = open == null;
             int n = c.Size;
             float cm = c.CellMeters;
@@ -303,8 +303,8 @@ namespace Stabby.World
             {
                 b.Base = Math.Max(lo, core - CoreShare * b.H);
                 if (b.Base - lo > LiftShare * b.H) return false;
-                skirt = b.Base > lo ? (b.Base - lo) / SkirtSlope + cm : 0f;
-                int far = (int)Math.Ceiling((b.Ro + skirt) / cm);
+                drop = b.Base - lo;
+                int far = (int)Math.Ceiling(Reach(b, drop) / cm) + 1;
                 return cx - far >= 0 && cy - far >= 0 && cx + far < n && cy + far < n;
             }
             if (core - lo > CoreShare * b.H || hi - lo > ReliefShare * b.H) return false;
@@ -312,10 +312,10 @@ namespace Stabby.World
             return true;
         }
 
-        static void Stamp(WorldConfig c, WorldSketch s, bool[] sea, float[] h, VolcanoSketch b, float skirt)
+        static void Stamp(WorldConfig c, WorldSketch s, bool[] sea, float[] h, VolcanoSketch b, float drop)
         {
             int n = c.Size;
-            float cm = c.CellMeters, ext = b.Ro + skirt;
+            float cm = c.CellMeters, ext = Reach(b, drop) + cm;
             int x0 = Math.Max(0, (int)Math.Floor((b.X - ext) / cm)), x1 = Math.Min(n - 1, (int)Math.Ceiling((b.X + ext) / cm));
             int y0 = Math.Max(0, (int)Math.Floor((b.Z - ext) / cm)), y1 = Math.Min(n - 1, (int)Math.Ceiling((b.Z + ext) / cm));
             for (int y = y0; y <= y1; y++)
@@ -324,10 +324,14 @@ namespace Stabby.World
                     int i = y * n + x;
                     if (sea[i]) continue;
                     float g = Profile(b, x * cm, y * cm);
-                    if (g == float.MinValue && skirt > 0f)
+                    if (drop > 0f)
                     {
-                        float k = Math.Min(1f, Math.Max(0f, (LakeGap(s, x, y) * cm - RiverPadM) / RiverPadM)), sk = Skirt(b, x * cm, y * cm, skirt);
-                        if (sk > h[i]) g = h[i] + (sk - h[i]) * k;
+                        float under = Math.Max(h[i], g), sk = Skirt(b, x * cm, y * cm, drop);
+                        if (sk > float.MinValue)
+                        {
+                            float k = Math.Min(1f, Math.Max(0f, Math.Min((LakeGap(s, x, y) * cm - RiverPadM) / (FadeSpan * RiverPadM), (s.Coast[i] * cm - CoastPadM) / CoastPadM)));
+                            g = under + (sk - under) * k;
+                        }
                     }
                     h[i] = Math.Max(h[i], g);
                 }
@@ -340,12 +344,27 @@ namespace Stabby.World
             return best;
         }
 
-        static float Skirt(VolcanoSketch v, float x, float z, float skirt)
+        static float Skirt(VolcanoSketch v, float x, float z, float drop)
         {
             float dx = x - v.X, dz = z - v.Z, rr = (float)Math.Sqrt(dx * dx + dz * dz);
-            Radii(v, dx / rr, dz / rr, out float rd, out _, out _, out float ad, out _, out _);
-            float d = rr - rd - ad;
-            return d < 0f || d > skirt ? float.MinValue : v.Base - SkirtSlope * d;
+            if (rr < 1e-3f) return float.MinValue;
+            Radii(v, dx / rr, dz / rr, out float rd, out _, out _, out float ad, out _, out float apron);
+            float m = 2f * apron / ad, l = SkirtLength(apron, ad, drop), t = rr - rd;
+            return t < 0f || t > l ? float.MinValue : v.Base + apron - m * t + m * (1f - ToeShare) * t * t / (2f * l);
+        }
+
+        static float SkirtLength(float apron, float ad, float drop) => (apron + drop) * ad / (apron * (1f + ToeShare));
+
+        static float Reach(VolcanoSketch v, float drop)
+        {
+            float far = v.Ro;
+            for (int k = 0; k < RimDirs; k++)
+            {
+                Ring(k, RimDirs, out float ux, out float uz);
+                Radii(v, ux, uz, out float rd, out _, out _, out float ad, out _, out float apron);
+                far = Math.Max(far, rd + SkirtLength(apron, ad, drop));
+            }
+            return far;
         }
 
         public static float Near(WorldSketch s, float x, float z)
