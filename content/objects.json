@@ -69,6 +69,11 @@
         "biomeDensity": [ { "biome": "desert", "scale": 0.6 }, { "biome": "wetland", "scale": 0.1 }, { "biome": "mangrove", "scale": 0.1 } ] }
     },
     {
+      "id": "erratic", "name": "Erratic boulder", "kind": "static", "material": "lichen-grey", "variants": 8,
+      "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.8, 1] } ],
+      "placement": { "biomes": ["tundra", "boreal", "alpine"], "perHectare": 0.004, "slopeMax": 0.35, "hardnessMin": 0.2, "sizeMinM": 8, "sizeMaxM": 14, "editMinSizeM": 8, "sink": 0.12, "alignToSlope": 0.1 }
+    },
+    {
       "id": "boulder-cluster", "name": "Boulder cluster", "kind": "static", "material": "lichen-grey", "variants": 4,
       "parts": [
         { "id": "big", "shape": "rock", "scale": [1, 0.9, 1] },

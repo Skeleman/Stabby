@@ -53,7 +53,7 @@ sweep 256 hydrology 8142 17122 river beds, lakes, mouths, outlets, falls and riv
 sweep 256 biomes 100 707 coverage, tint and lake cover per seed
 sweep 256 sketch 100 1229 sketch, shores and mesas per seed
 sweep 256 surface 11039 73197 detail, near field, geometry, chunk bounds, cliff foot per seed
-sweep 256 meshing 981 4721 mesher comparison per edit shape and cave roofs per seed
+sweep 256 meshing 1400 5000 mesher comparison per edit shape and cave roofs per seed
 sweep 256 caves 13000 32000 cave paths, caves, mines, dungeon links, cave normals and cave objects per seed
 sweep 256 sites 22500 36673 site footprints, sites, structures and discoveries per seed
 sweep 256 objects 20291 50950 objects, landforms, arches and boulders per seed

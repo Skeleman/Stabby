@@ -83,6 +83,7 @@ namespace Stabby.World
         public List<ShoreSketch> Shores = new List<ShoreSketch>();
         public List<HighlandSketch> Highlands = new List<HighlandSketch>();
         public List<MesaSketch> Mesas = new List<MesaSketch>();
+        public List<MoraineSketch> Moraines = new List<MoraineSketch>();
         public List<VolcanoSketch> Volcanoes = new List<VolcanoSketch>();
         public List<HotspotSketch> Hotspots = new List<HotspotSketch>();
 
