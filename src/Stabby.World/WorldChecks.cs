@@ -339,13 +339,27 @@ namespace Stabby.World
                     }
         }
 
+        public static bool CheckFallRuns(RiverSegment s, in RiverFall f, List<string> e)
+        {
+            var runs = Hydrology.LipRuns(f);
+            float lim = f.SheetHalf + IsleTolerance;
+            for (int r = 0; r < runs.Count; r += 2)
+            {
+                bool bad = runs[r] < -lim || runs[r + 1] > lim || runs[r + 1] < runs[r] || r > 0 && runs[r] <= runs[r - 1];
+                if (!bad) continue;
+                e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has lip runs out of order or outside its sheet: run {runs[r]:F1} to {runs[r + 1]:F1}, half {f.SheetHalf:F1}");
+                return true;
+            }
+            return false;
+        }
+
         static void CheckFalls(GeneratedWorld w, List<string> e)
         {
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var hy = w.Water;
-            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false, centre = false;
+            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false, centre = false, runOrder = false;
             foreach (var s in hy.Rivers)
                 foreach (var f in s.Falls)
                 {
@@ -362,6 +376,7 @@ namespace Stabby.World
                         edge = true;
                         e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has no lip above its base: drop {f.Drop:F1}, ground {up:F1} above to {down:F1} below");
                     }
+                    if (!runOrder) runOrder = CheckFallRuns(s, f, e);
                     if (wetBase || f.BaseY < Erosion.MinLandHeight + FallPoolDepthM) continue;
                     float cx = f.LipX + f.DirX * f.PoolCentre, cz = f.LipZ + f.DirZ * f.PoolCentre, g = d.Sample(cx, cz);
                     if (!pool && g > f.BaseY - FallPoolDepthM)
