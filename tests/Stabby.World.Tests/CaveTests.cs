@@ -168,7 +168,7 @@ public class CaveTests
     [Fact]
     public void PinchedTunnelIsTooNarrow()
     {
-        var (s, g) = Find(g => g.Edges.Count >= 2);
+        var (s, g) = Find(g => g.Edges.Count >= 2 && !Mines.IsMine(g) && !DungeonLinks.IsLink(g) && !ObjectField.IsTunnel(g));
         var edge = g.Edges[g.Edges.Count - 1];
         var p = edge.Points;
         int m = (p.Length / 6) * 3;
@@ -290,8 +290,9 @@ public class CaveTests
     [Fact]
     public void UphillOrStrandedStreamFails()
     {
-        var s = At(1);
-        var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);
+        Sample s = null!;
+        var streams = Array.Empty<CaveBrook>();
+        for (ulong seed = 1; seed <= 8 && streams.Length == 0; seed++) streams = CaveBrooks.Build((s = At(seed)).W, s.Detail, s.Edits, s.Graphs);
         Assert.NotEmpty(streams);
         var x = streams[0];
         var up = new CaveBrook { Graph = x.Graph, End = x.End, Outlet = x.Outlet, Flow = x.Flow, Nodes = x.Nodes, Points = (float[])x.Points.Clone() };
