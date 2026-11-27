@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class SlotCanyons
     {
         public const float MinW = 0.9f, MaxW = 2.4f, CheckMinW = 0.75f, CheckMaxW = 2.5f, MinDepth = 15f, MaxDepth = 40f, MinLen = 150f, MaxLen = 500f;
-        public const float StepM = 16f, ScanM = 40f, ProbeM = 4f, MinSlope = 0.1f, FlatSlope = 0.035f, MinGrade = 0.03f, MaxGrade = 0.07f, MaxRise = 0.3f, MouthCut = 0.4f, OpenM = 24f, OpenRiseM = 1f, OpenDrop = 0.25f, SkinM = 0.6f;
+        public const float StepM = 16f, ScanM = 40f, ProbeM = 4f, MinSlope = 0.1f, FlatSlope = 0.035f, MinGrade = 0.03f, MaxGrade = 0.07f, MaxRise = 0.15f, LoopM = 32f, MouthCut = 0.4f, OpenM = 24f, OpenRiseM = 1f, OpenDrop = 0.25f, SkinM = 0.6f;
         public const float Blend = 1.2f, DryM = 150f, GapM = 1500f, ClearM = 12f, RimPad = 3f, HeadRoomM = 0.6f, StoneTopM = 0.9f, ChockChance = 0.3f;
         public const int Tries = 300;
         public static readonly string[] Biomes = { "desert", "cold-desert", "steppe", "shrubland" };
@@ -71,6 +71,8 @@ namespace Stabby.World
                 x += dx * StepM;
                 z += dz * StepM;
                 arc += StepM;
+                for (int j = 0; j + 3 < xs.Count; j++)
+                    if ((xs[j] - x) * (xs[j] - x) + (zs[j] - z) * (zs[j] - z) < LoopM * LoopM) return false;
                 if (arc >= MinLen && (before - Ground(detail, x, z, cm)) / StepM < FlatSlope && Open(detail, x, z, dx, dz, cm)) { xs.Add(x); zs.Add(z); open = true; break; }
             }
             if (!open) return false;
@@ -86,7 +88,7 @@ namespace Stabby.World
             {
                 float low = float.MaxValue;
                 for (int m = 1; m <= 4; m++) low = Math.Min(low, Ground(detail, xs[k - 1] + (xs[k] - xs[k - 1]) * m / 4f, zs[k - 1] + (zs[k] - zs[k - 1]) * m / 4f, cm));
-                float prev = floors[k - 1], f = Math.Max(prev + grade * StepM, low - MaxDepth);
+                float prev = floors[k - 1], f = Math.Min(Math.Max(prev + grade * StepM, low - MaxDepth), prev + MaxRise * StepM);
                 f = Math.Min(f, StepM * k > OpenM ? low - SkinM : low);
                 if (Math.Abs(f - prev) > MaxRise * StepM) break;
                 bool ok = true;
