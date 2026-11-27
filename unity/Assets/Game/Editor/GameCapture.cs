@@ -467,7 +467,7 @@ namespace Stabby.Game.Editor
             if (phase == 470) { if (job == null) job = ShadowTiersTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 430) { if (job == null) job = DesireShots(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 420) { if (job == null) job = BrainOnly(dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
-            if (phase == 350) { if (job == null) job = ControlsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 350) { if (job == null) job = ControlsTour(cam, dir); if (job.MoveNext()) return; GameStatus.Lines["~spikes"] = SpikeProbe.Report(); File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 500) { if (job == null) job = DetailTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 450) { if (job == null) job = WaterfallTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 460) { if (job == null) job = SitingTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
