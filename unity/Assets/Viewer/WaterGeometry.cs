@@ -313,9 +313,9 @@ namespace Stabby.Viewer
             void Reserve(int vertCount, int triCount, int cornerCount)
             {
                 verts.Clear(); tris.Clear(); kinds.Clear(); tints.Clear(); swells.Clear(); edges.Clear();
-                if (verts.Capacity < vertCount) { verts.Capacity = vertCount; kinds.Capacity = vertCount; tints.Capacity = vertCount; swells.Capacity = vertCount; }
-                if (tris.Capacity < triCount) tris.Capacity = triCount;
-                if (Corners.Length < cornerCount) Corners = new int[cornerCount];
+                if (verts.Capacity < vertCount) { int grow = Mathf.Max(vertCount, 2 * verts.Capacity); verts.Capacity = grow; kinds.Capacity = grow; tints.Capacity = grow; swells.Capacity = grow; }
+                if (tris.Capacity < triCount) tris.Capacity = Mathf.Max(triCount, 2 * tris.Capacity);
+                if (Corners.Length < cornerCount) Corners = new int[Mathf.Max(cornerCount, 2 * Corners.Length)];
                 for (int k = 0; k < cornerCount; k++) Corners[k] = -1;
             }
 
