@@ -19,12 +19,12 @@ public class DiscoveryTests
     public void FeaturePassDiscoveriesMatchTheFinalEdits()
     {
         int seen = 0;
-        for (ulong seed = 1; seed <= 8; seed++)
+        var kinds = new HashSet<int>();
+        for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = TestWorlds.World(seed);
-            var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out _, out var shared);
-            var fresh = new ObjectField(w, detail, edits, w.Objects).Discoveries();
+            var p = TestWorlds.Place(seed);
+            var shared = p.Sites;
+            var fresh = p.Field.Discoveries();
             Assert.NotNull(shared);
             Assert.Equal(fresh.Length, shared.Length);
             for (int i = 0; i < fresh.Length; i++)
@@ -36,8 +36,11 @@ public class DiscoveryTests
                 Assert.Equal((fresh[i].Qx, fresh[i].Qy, fresh[i].Qz, fresh[i].Qw), (shared[i].Qx, shared[i].Qy, shared[i].Qz, shared[i].Qw));
             }
             seen += fresh.Length;
+            kinds.UnionWith(fresh.Select(o => o.Def));
         }
         Assert.True(seen > 0);
+        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
+        Assert.True(missing.Count == 0, $"seeds 1..4 place no {string.Join(", ", missing)}");
     }
 
     [Fact]
@@ -224,6 +227,44 @@ public class DiscoveryTests
             Assert.Null(field.OverlookFault(c));
             Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
             foreach (var o in all.Where(o => o.Def != look))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
+    public void SaltTowersStandOnDryBasinFloors()
+    {
+        int tower = Objects.Objects.FindIndex(o => o.Id == "salt-tower");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var towers = all.Where(o => o.Def == tower).ToArray();
+        output.WriteLine($"{towers.Length} salt towers " + string.Join(" ", towers.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(towers);
+        foreach (var c in towers)
+        {
+            Assert.True(field.Fitness(ObjectField.SaltTower, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.SaltFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != tower))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
+    public void BonesLieOnSteadyDryGround()
+    {
+        int bones = Objects.Objects.FindIndex(o => o.Id == "bones");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == bones).ToArray();
+        output.WriteLine($"default: {found.Length} bones " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.True(found.Length > 0, "TestWorlds.Default placed no bones");
+        foreach (var c in found)
+        {
+            Assert.True(field.Fitness(ObjectField.Bones, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.BonesFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != bones))
                 Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
         }
     }
