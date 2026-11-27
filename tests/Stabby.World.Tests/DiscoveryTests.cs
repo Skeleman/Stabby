@@ -210,6 +210,63 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void OverlooksAppearOnOpenRims()
+    {
+        int look = Objects.Objects.FindIndex(o => o.Id == "overlook");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var looks = all.Where(o => o.Def == look).ToArray();
+        output.WriteLine($"{looks.Length} overlooks " + string.Join(" ", looks.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(looks);
+        foreach (var c in looks)
+        {
+            Assert.True(field.Fitness(ObjectField.Overlook, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.OverlookFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != look))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
+    public void SaltTowersStandOnDryBasinFloors()
+    {
+        int tower = Objects.Objects.FindIndex(o => o.Id == "salt-tower");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var towers = all.Where(o => o.Def == tower).ToArray();
+        output.WriteLine($"{towers.Length} salt towers " + string.Join(" ", towers.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(towers);
+        foreach (var c in towers)
+        {
+            Assert.True(field.Fitness(ObjectField.SaltTower, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.SaltFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != tower))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
+    public void BonesLieOnSteadyDryGround()
+    {
+        int bones = Objects.Objects.FindIndex(o => o.Id == "bones");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == bones).ToArray();
+        output.WriteLine($"default: {found.Length} bones " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.True(found.Length > 0, "TestWorlds.Default placed no bones");
+        foreach (var c in found)
+        {
+            Assert.True(field.Fitness(ObjectField.Bones, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.BonesFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            foreach (var o in all.Where(o => o.Def != bones))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void HotSpringsSitInHotspots()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;

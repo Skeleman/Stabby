@@ -397,6 +397,21 @@ namespace Stabby.World
             return cell;
         }
 
+        public static bool CrossingVertex<TCols, TEdits>(TCols columns, TEdits edits, float s, int ci, int j, int ck, out float x, out float y, out float z, out float nx, out float ny, out float nz)
+            where TCols : struct, IColumnField where TEdits : struct, IEditList
+        {
+            float h00 = columns.Height(ci, ck), h10 = columns.Height(ci + 1, ck), h01 = columns.Height(ci, ck + 1), h11 = columns.Height(ci + 1, ck + 1);
+            float l00 = Features.Slope(h10, columns.Height(ci - 1, ck), h01, columns.Height(ci, ck - 1), s);
+            float l10 = Features.Slope(columns.Height(ci + 2, ck), h00, h11, columns.Height(ci + 1, ck - 1), s);
+            float l01 = Features.Slope(h11, columns.Height(ci - 1, ck + 1), columns.Height(ci, ck + 2), h00, s);
+            float l11 = Features.Slope(columns.Height(ci + 2, ck + 1), h01, columns.Height(ci + 1, ck + 2), h10, s);
+            var sink = new PointSink();
+            bool hit = Emit(ref sink, new EditedSolid<TCols, TEdits> { Columns = columns, Edits = edits, StepM = s }, edits, ci, j, ck, s, h00, h10, h01, h11, l00, l10, l01, l11, false);
+            x = sink.X; y = sink.Y; z = sink.Z;
+            nx = sink.NX; ny = sink.NY; nz = sink.NZ;
+            return hit;
+        }
+
         struct PointSink : INetsSink
         {
             public float X, Y, Z, NX, NY, NZ;
