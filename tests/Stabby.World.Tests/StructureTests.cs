@@ -8,7 +8,7 @@ public class StructureTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly int[] Shapes = { ObjectPart.Wall, ObjectPart.Cairn };
+    static readonly int[] Shapes = { ObjectPart.Wall, ObjectPart.Cairn, ObjectPart.WallHead };
 
     [Fact]
     public void StructureMeshesMergePiecesPerTierAndStayInBounds()
@@ -146,6 +146,7 @@ public class StructureTests
         var (w, detail, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int seen = 0;
         var walls = new List<ObjectInstance>();
+        var heads = new List<ObjectInstance>();
         int across = field.ChunksAcross;
         var chunks = new ObjectInstance[across * across][];
         Parallel.For(0, chunks.Length, c => chunks[c] = field.Place(c % across, c / across, true));
@@ -157,6 +158,7 @@ public class StructureTests
                 if (seat == null) continue;
                 seen++;
                 if (Objects.Objects[o.Def].Parts[0].Shape == ObjectPart.Wall) walls.Add(o);
+                if (Objects.Objects[o.Def].Parts[0].Shape == ObjectPart.WallHead) heads.Add(o);
                 ObjectField.SeatRange(detail, w.Config.CellMeters, seat, o, out float lo, out float hi);
                 Assert.True(hi - lo <= Structures.SeatM && o.Y <= lo, $"{o.X:F0},{o.Z:F0}: seats {lo:F2}..{hi:F2}, y {o.Y:F2}");
                 Assert.Equal(0f, o.Qx);
@@ -166,6 +168,16 @@ public class StructureTests
         int linked = walls.Count(a => walls.Count(b => a.Id != b.Id && ObjectIds.Chunk(a.Id) == ObjectIds.Chunk(b.Id)
             && (a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z) <= Math.Pow(Structures.WallSpan * Math.Max(a.Size, b.Size), 2)) >= 2);
         Assert.True(linked > 5, $"{linked} of {walls.Count} wall sections sit inside a run of three");
+        int ends = 0, capped = 0;
+        foreach (var a in walls)
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float ux = 1 - 2 * a.Qy * a.Qy, uz = -2 * a.Qw * a.Qy, reach = 0.5f * Structures.WallSpan * a.Size;
+                float ex = a.X + side * ux * reach, ez = a.Z + side * uz * reach, near = 0.15f * a.Size;
+                ends++;
+                if (heads.Exists(h => (h.X - ex) * (h.X - ex) + (h.Z - ez) * (h.Z - ez) <= near * near)) capped++;
+            }
+        Assert.True(capped >= 0.9f * ends, $"{capped} of {ends} wall ends carry a wall head");
     }
 
     struct Flat : IGroundHeight
