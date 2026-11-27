@@ -357,6 +357,7 @@ namespace Stabby.World
 
         public const float FallMinDrop = 4f, FallPoolCentre = 0.8f, FallBaseOffsetM = 0.3f;
         public const float FallSheetMinM = 12f, FallThrowK = 1.5f;
+        public const int FallCoastCells = 3;
         public static float SheetWidth(float width) => Math.Max(width, FallSheetMinM);
         public static float FallThrow(float drop) => FallThrowK * (float)Math.Sqrt(2 * Math.Max(drop, 0) / 9.81f);
         const float FallSheetMarginM = 1f;
@@ -603,6 +604,18 @@ namespace Stabby.World
             int n = c.Size;
             int cx = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(x / c.CellMeters + 0.5f))), cz = Math.Max(0, Math.Min(n - 1, (int)Math.Floor(z / c.CellMeters + 0.5f)));
             return cz * n + cx;
+        }
+
+        public static bool NearSea(WorldConfig c, bool[] sea, float x, float z)
+        {
+            int n = c.Size, i = CellAt(c, x, z), cx = i % n, cz = i / n;
+            for (int dz = -FallCoastCells; dz <= FallCoastCells; dz++)
+                for (int dx = -FallCoastCells; dx <= FallCoastCells; dx++)
+                {
+                    int px = cx + dx, pz = cz + dz;
+                    if (px >= 0 && px < n && pz >= 0 && pz < n && sea[pz * n + px]) return true;
+                }
+            return false;
         }
 
         static bool Wet(WorldConfig c, bool[] sea, Hydrology hy, float x, float z)
