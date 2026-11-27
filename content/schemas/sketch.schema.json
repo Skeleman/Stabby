@@ -16,7 +16,8 @@
     "landmarks",
     "lakes",
     "shores",
-    "highlands"
+    "highlands",
+    "hotspots"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -103,7 +104,7 @@
   },
   "properties": {
     "schemaVersion": {
-      "const": 5
+      "const": 6
     },
     "seed": {
       "type": "integer",
@@ -276,6 +277,38 @@
           "radius": {
             "type": "number",
             "exclusiveMinimum": 0
+          }
+        }
+      }
+    },
+    "hotspots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "x",
+          "y",
+          "radius"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "arc",
+              "plume",
+              "ocean"
+            ]
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 0
           }
         }
       }
