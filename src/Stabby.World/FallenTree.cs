@@ -146,47 +146,45 @@ namespace Stabby.World
             var rim = RoundNoise(ref rng, 16, 0.8f, 1.12f);
             for (int i = 0; i < 16; i++) rim[i] *= TreePlateR;
             int plate = l.Pieces.Count;
-            for (int ring = 0; ring < 4; ring++)
+            for (int ring = 0; ring < 6; ring++)
             {
-                int count = 7 + 5 * ring;
+                int count = 6 + 6 * ring;
+                float rf = 0.18f + 0.16f * ring;
                 for (int i = 0; i < count; i++)
                 {
                     float a = (i + 0.5f * ring + rng.Range(-0.08f, 0.08f)) * 16f / count;
                     Arc(a / 16f, out float c, out float s);
-                    float edge = rim[((int)(a + 16.5f)) & 15], r = (0.3f + 0.22f * ring) * edge + rng.Range(-0.1f, 0.1f) + (ring == 3 ? rng.Range(-0.15f, 0.2f) : 0);
-                    float w = 1.7f * Math.Max(6.2832f * (0.3f + 0.22f * ring) / count, 0.22f) * edge * rng.Range(1f, 1.15f);
-                    float yc = TreePlateY + TreePlateSq * r * c, top = yc + 0.5f * w * rng.Range(0.95f, 1.1f);
+                    float edge = rim[((int)(a + 16.5f)) & 15], r = rf * edge + rng.Range(-0.08f, 0.08f) + (ring == 5 ? rng.Range(-0.1f, 0.15f) : 0);
+                    float w = 1.7f * Math.Max(6.2832f * rf / count, 0.16f) * edge * rng.Range(1f, 1.15f);
+                    float yc = TreePlateY + TreePlateSq * r * c, top = yc + 0.5f * w * rng.Range(0.95f, 1.05f);
                     if (top < 0.1f) continue;
-                    float y = Math.Max(-0.9f, yc - 0.5f * w), x = xp + 0.05f * ring + rng.Range(-0.08f, 0.08f);
-                    int yawk = rng.Range(-1, 2);
-                    Clod(l, rng.NextU64(), f, x - TreeTilt * y, y, r * s, rng.Range(0.55f, 0.75f) - 0.05f * ring, top - y, w * rng.Range(0.95f, 1.1f), Cos16(yawk), Sin16(yawk), 0, ring < 2 ? 1 : 0);
+                    float y = Math.Max(-0.9f, yc - 0.5f * w), x = xp + 0.06f * (5 - ring) + rng.Range(-0.03f, 0.03f);
+                    Clod(l, rng.NextU64(), f, x - TreeTilt * y, y, r * s, rng.Range(0.38f, 0.5f), top - y, w * rng.Range(0.95f, 1.1f), 1, 0, 0, ring < 3 ? 1 : 0);
                     Sheared(l, l.Pieces.Count - 1, -TreeTilt, 0);
                     if (y < 0.1f) Touch(l, f, x, 0, r * s, 0.6f);
                 }
             }
-            int stones = rng.Range(5, 9);
-            for (int i = 0; i < stones; i++)
-            {
-                Arc(rng.Range(0f, 16f) / 16f, out float c, out float s);
-                float r = rng.Range(1.6f, 0.85f * TreePlateR), sz = rng.Range(0.25f, 0.5f), y = TreePlateY + TreePlateSq * r * c;
-                if (y < 0.2f) continue;
-                Rock(l, rng.NextU64(), f, xp - 0.45f - TreeTilt * y, y - 0.4f * sz, r * s, 0.7f * sz, 0.8f * sz, sz, 1, 0, 0, 0);
-            }
             int roots = rng.Range(12, 17);
             for (int i = 0; i < roots; i++)
             {
-                float a = i * 16f / roots + rng.Range(-0.35f, 0.35f), edge = rim[((int)(a + 16.5f)) & 15], r = rng.Range(0.62f, 0.8f) * edge, reach = rng.Range(1.4f, 2.6f), d = rng.Range(0.3f, 0.45f), x = xp - 0.45f;
-                float wrap = ((a % 16f) + 16f) % 16f, bend = rng.Range(2.9f, 5.1f) * (wrap < 8f ? 1 : -1) / 5f, da = a + rng.Range(-0.4f, 0.4f);
+                float a = i * 16f / roots + rng.Range(-0.35f, 0.35f), edge = rim[((int)(a + 16.5f)) & 15], r = rng.Range(1.02f, 1.12f) * edge, reach = rng.Range(1.3f, 2.2f), d = rng.Range(0.3f, 0.42f), x = xp - 0.25f;
+                float wrap = ((a % 16f) + 16f) % 16f, bend = rng.Range(2.9f, 5.1f) * (wrap < 8f ? 1 : -1) / 8f, da = a + rng.Range(-0.3f, 0.3f);
                 Arc(a / 16f, out float c, out float s);
-                float y = TreePlateY + TreePlateSq * r * c, z = r * s;
-                for (int k = 1; k <= 5; k++)
+                float y = TreePlateY + TreePlateSq * (r - 0.6f) * c, z = (r - 0.6f) * s, dp = d;
+                for (int k = 1; k <= 8; k++)
                 {
-                    float t = k / 5f;
+                    float t = k / 8f, step = (k == 1 ? 0.6f : 0) + reach / 8f;
                     da += bend;
                     Arc(da / 16f, out float ck, out float sk);
-                    float yk = y + 0.2f * reach * TreePlateSq * ck, zk = z + 0.2f * reach * sk, xk = x - 0.1f * t, dk = Math.Max(0.06f, d * (1 - 0.8f * t));
-                    if (yk > -0.25f || y > -0.25f) Twig(l, rng.NextU64(), f, x - TreeTilt * y, y, z, xk - TreeTilt * yk, yk, zk, dk, k < 3 ? 1 : 0);
-                    x = xk; y = yk; z = zk;
+                    float yk = y + step * TreePlateSq * ck, zk = z + step * sk, xk = x - 0.012f * k, dk = Math.Max(0.025f, d * (1 - t) * (1 - t) + 0.025f);
+                    if (yk > -0.25f || y > -0.25f) Twig(l, rng.NextU64(), f, x - TreeTilt * y, y, z, xk - TreeTilt * yk, yk, zk, 0.5f * (dp + dk), k < 4 ? 1 : 0);
+                    if (k >= 2 && k <= 6 && yk > 0.4f && rng.NextFloat() < 0.4f)
+                    {
+                        float hang = rng.Range(0.35f, 0.8f), lz = zk + rng.Range(-0.15f, 0.15f), ld = rng.Range(0.035f, 0.055f);
+                        Twig(l, rng.NextU64(), f, xk - TreeTilt * yk, yk, zk, xk - 0.04f - TreeTilt * (yk - 0.5f * hang), yk - 0.5f * hang, lz, ld, 0);
+                        Twig(l, rng.NextU64(), f, xk - 0.04f - TreeTilt * (yk - 0.5f * hang), yk - 0.5f * hang, lz, xk - 0.06f - TreeTilt * (yk - hang), Math.Max(-0.2f, yk - hang), lz + rng.Range(-0.1f, 0.1f), 0.5f * ld, 0);
+                    }
+                    x = xk; y = yk; z = zk; dp = dk;
                 }
             }
             int trail = rng.Range(4, 8);
