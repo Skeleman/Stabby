@@ -129,7 +129,8 @@ namespace Stabby.World
                     }
             var raw = new float[cells * 3];
             float cm = w.Config.CellMeters;
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x, k = w.Biome[i];
@@ -150,7 +151,9 @@ namespace Stabby.World
                     raw[i * 3 + 1] = cover * needle / sum;
                     raw[i * 3 + 2] = wets[k];
                 }
-            for (int y = 0; y < n; y++)
+            });
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                 {
                     int i = y * n + x;
@@ -168,6 +171,7 @@ namespace Stabby.World
                     }
                     px[i * 4 + 3] = 255;
                 }
+            });
             return px;
         }
 
