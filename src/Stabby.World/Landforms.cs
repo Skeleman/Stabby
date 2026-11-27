@@ -14,11 +14,13 @@ namespace Stabby.World
         public static readonly string[] TorBiomes = { "tundra", "boreal", "shrubland", "alpine" };
         public static readonly string[] HoodooBiomes = { "desert", "steppe" };
 
-        public static bool Of(int shape) => shape == FeatureEdit.Tor || shape == FeatureEdit.Hoodoo;
+        public const float ButteChance = 0.4f, ButteMinCap = 28f, ButteMaxCap = 40f, ButteMinRise = 50f, ButteMaxRise = 80f, ButteMinSlope = 0.35f, ButteMaxSlope = 0.45f, ButteApron = 0.9f, ButteSink = 4f, ButteReliefM = 14f, ButteClearM = 600f, ButteGrooveGap = 8f;
+
+        public static bool Of(int shape) => shape == FeatureEdit.Tor || shape == FeatureEdit.Hoodoo || shape == FeatureEdit.Butte;
 
         public const int TileBudget = 12;
 
-        public static string Name(int shape) => shape == FeatureEdit.Tor ? "tor" : "hoodoo";
+        public static string Name(int shape) => shape == FeatureEdit.Tor ? "tor" : shape == FeatureEdit.Butte ? "butte" : "hoodoo";
 
         public static bool Fits(List<FeatureEdit> tile, List<FeatureEdit> list, int from)
         {
@@ -83,6 +85,83 @@ namespace Stabby.World
                     score = v; best = i;
                 }
             return best;
+        }
+
+        public static float ButteReach(float cap, float apron) => cap * (1f + FeatureEdit.ButteLobe) + apron + FeatureEdit.ButteLumpM + FeatureEdit.ButteFluteM + FeatureEdit.ButteBand + 1f;
+
+        public static int ButteSite(GeneratedWorld w, StrataField strata, bool[] biomes, int tx, int ty, float reachM, float rise)
+        {
+            int n = w.Config.Size, pad = Pad(w, reachM), best = -1, t = Features.TileCells;
+            float cm = w.Config.CellMeters, score = float.MinValue;
+            int reach = Math.Max(1, (int)Math.Ceiling(reachM / cm)), dry = reach + 2;
+            for (int y = ty * t + pad; y < (ty + 1) * t - pad; y++)
+                for (int x = tx * t + pad; x < (tx + 1) * t - pad; x++)
+                {
+                    int i = y * n + x, b = w.Biome[i];
+                    if (b < 0 || !biomes[b] || !Features.Dry(w, i)) continue;
+                    float lo = float.MaxValue, hi = float.MinValue;
+                    for (int dy = -reach; dy <= reach; dy++)
+                        for (int dx = -reach; dx <= reach; dx++)
+                        {
+                            float h = w.Height[i + dy * n + dx];
+                            lo = Math.Min(lo, h); hi = Math.Max(hi, h);
+                        }
+                    if (hi - lo > ButteReliefM) continue;
+                    float v = strata.Hardness(i, w.Height[i] + 0.8f * rise) - (hi - lo) / ButteReliefM;
+                    if (v <= score || Crowded(w, x * cm, y * cm, reachM) || !DryAround(w, x, y, dry)) continue;
+                    score = v; best = i;
+                }
+            return best;
+        }
+
+        static bool Crowded(GeneratedWorld w, float x, float z, float reachM)
+        {
+            var sketch = w.Sketch;
+            if (sketch == null) return false;
+            float cm = w.Config.CellMeters;
+            foreach (var l in sketch.Landmarks)
+            {
+                float dx = l.X * cm - x, dz = l.Y * cm - z;
+                if (dx * dx + dz * dz < ButteClearM * ButteClearM) return true;
+            }
+            foreach (var m in sketch.Mesas) if (Mesas.Dist(m, x, z) - reachM < Mesas.Toe(m, 0.8f)) return true;
+            return false;
+        }
+
+        public static void Butte(GeneratedWorld w, TerrainDetail detail, StrataField strata, bool[] biomes, int tx, int ty, ref Rng r, List<FeatureEdit> output)
+        {
+            float roll = r.NextFloat(), cap = r.Range(ButteMinCap, ButteMaxCap), rise = r.Range(ButteMinRise, ButteMaxRise), slope = r.Range(ButteMinSlope, ButteMaxSlope), seed = r.NextFloat();
+            if (roll >= ButteChance) return;
+            float apron = ButteApron * slope * rise, reach = ButteReach(cap, apron);
+            int site = ButteSite(w, strata, biomes, tx, ty, reach, rise);
+            if (site < 0) return;
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, cx = site % n, cz = site / n, foot = float.MaxValue;
+            for (int ring = 0; ring <= 4; ring++)
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = k * (float)Math.PI / 8f, d = reach * ring / 4f / cm;
+                    foot = Math.Min(foot, detail.HeightAt(cx + d * (float)Math.Cos(a), cz + d * (float)Math.Sin(a)));
+                }
+            int pick = (int)(slope * rise), lo = (int)(ButteMinSlope * rise), hi = (int)(ButteMaxSlope * rise);
+            float jump = float.MinValue;
+            for (int v = lo; v <= hi; v++)
+            {
+                float j = strata.Hardness(site, foot + v + 3f) - strata.Hardness(site, foot + v - 3f);
+                if (j > jump) { jump = j; pick = v; }
+            }
+            float soft = float.MaxValue, second = float.MaxValue, p = pick + 0.5f * (rise - pick), q = p;
+            for (float v = pick + 6f; v <= rise - 6f; v += 1f)
+            {
+                float h = strata.Hardness(site, foot + v);
+                if (h < soft) { soft = h; p = v; }
+            }
+            for (float v = pick + 6f; v <= rise - 6f; v += 1f)
+            {
+                float h = strata.Hardness(site, foot + v);
+                if (Math.Abs(v - p) >= ButteGrooveGap && h < second) { second = h; q = v; }
+            }
+            output.Add(new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Butte, R = reach, H = ButteSink, D = cap, F = pick, P = p, T = q, N = apron * pick / (slope * rise), S = seed, Ax = cx * cm, Bx = cx * cm, Az = cz * cm, Bz = cz * cm, Ay = foot, By = foot + rise });
         }
 
         static float Foot(TerrainDetail detail, float cx, float cz, float r, float cm)
