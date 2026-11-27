@@ -116,8 +116,7 @@ namespace Stabby.World
                     qb = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
                 }
                 if (Cleared(near, px, pz, footprint[d] * size)) continue;
-                if (!Accept(d, px, pz, size, qa, qb, out var o, true)) continue;
-                o.Variant = variant;
+                if (!Accept(d, px, pz, size, qa, qb, out var o, true, variant: variant)) continue;
                 o.Id = ObjectIds.Make(chunk, d, ordinal++);
                 list.Add(o);
             }
