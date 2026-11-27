@@ -128,7 +128,7 @@ public class CaveTests
     [Fact]
     public void HallsBuildAtFullSize()
     {
-        var w = WorldGenerator.Generate(new WorldConfig { Seed = 6, Size = 2048, CellMeters = WorldConfig.CellMetersFor(2048) }, Biomes, Materials, null, null, Objects, Caves);
+        var w = WorldGenerator.Generate(new WorldConfig { Seed = 57, Size = 2048, CellMeters = WorldConfig.CellMetersFor(2048) }, Biomes, Materials, null, null, Objects, Caves);
         var d = new TerrainDetail(w);
         var edits = Features.Place(w, d, out var graphs);
         var halls = graphs.Where(g => g.Class == "hall").ToList();

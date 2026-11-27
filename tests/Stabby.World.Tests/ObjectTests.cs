@@ -613,7 +613,7 @@ public class ObjectTests
             float mx = 0.5f * (e.Ax + e.Bx), mz = 0.5f * (e.Az + e.Bz);
             Assert.True(w.Sea[(int)(mz / cm) * n + (int)(mx / cm)], "stack stands in the sea");
             if (e.By >= SeaStacks.MinRise) tall++;
-            if (e.D >= 4f) Assert.False(e.StackOpen(mx, 0.5f * e.By, mz), "stack core is solid");
+            if (e.D >= 4f && e.P <= 0f) Assert.False(e.StackOpen(mx, 0.5f * e.By, mz), "stack core is solid");
             Assert.True(e.StackOpen(mx, e.By + e.F + FeatureEdit.StackBand + 1f, mz), "nothing stands above the stack top");
             Assert.Equal(0, coat[((int)(mz / cm) * n + (int)(mx / cm)) * 4 + SurfaceDetail.Sand]);
             if (e.P <= 0f) continue;

@@ -551,7 +551,7 @@ namespace Stabby.World
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
             var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, N = BoulderRelief * r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
             var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, N = BoulderRelief * r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
-            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || NearQuicksand(a) || NearQuicksand(b) || NearOasis(a) || NearOasis(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
+            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || Hangs(a) || Hangs(b) || NearBog(a) || NearBog(b) || NearQuicksand(a) || NearQuicksand(b) || NearOasis(a) || NearOasis(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
             boulders.Add(a);
             boulders.Add(b);
         }
@@ -560,6 +560,15 @@ namespace Stabby.World
         {
             int i = Cell(0.5f * (e.MinZ + e.MaxZ)) * n + Cell(0.5f * (e.MinX + e.MaxX));
             return w.Sea[i] || (w.Water != null && w.Water.LakeId[i] >= 0);
+        }
+
+        bool Hangs(FeatureEdit e)
+        {
+            int c = WorldChecks.BoulderFootColumns;
+            for (int j = 0; j <= c; j++)
+                for (int i = 0; i <= c; i++)
+                    if (GroundAt(detail, cm, e.MinX + (e.MaxX - e.MinX) * i / c, e.MinZ + (e.MaxZ - e.MinZ) * j / c) < e.MinY + WorldChecks.BoulderFootSkin) return true;
+            return false;
         }
 
         static bool Within(FeatureEdit e, float x0, float z0, float sx, float sz) => e.MinX >= x0 && e.MaxX < x0 + sx && e.MinZ >= z0 && e.MaxZ < z0 + sz;

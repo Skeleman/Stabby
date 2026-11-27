@@ -244,6 +244,11 @@ namespace Stabby.World
             if (wet > 3) return false;
             foreach (var lake in s.Lakes)
                 if (lake.Gap(cx, cy, 1) < core / cm) return false;
+            foreach (var o in s.Volcanoes)
+            {
+                float gap = o.Ro + reach + Volcanoes.MesaPadM;
+                if ((o.X - b.X) * (o.X - b.X) + (o.Z - b.Z) * (o.Z - b.Z) < gap * gap) return false;
+            }
             int step = Math.Max(1, coast / 24);
             for (int dy = -coast; dy <= coast; dy += step)
                 for (int dx = -coast; dx <= coast; dx += step)
