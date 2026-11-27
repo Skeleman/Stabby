@@ -758,6 +758,7 @@ Shader "Stabby/Water"
 
                 float alpha = lerp(saturate(max(saturate(depth * L1.w), foam * 0.7 * saturate(depth / 0.04))), saturate(depth * min(lerp(4, 40, molten), L1.w)) * saturate((1 - i.chan.z) * MudFeather), opacity);
                 if (river && i.fall.y > 0) alpha *= smoothstep(0, PoolShore, depth);
+                if (i.curt.x < 0.001) alpha *= 1 - saturate(i.curt.w);
                 float clear = dot(trans, 1.0 / 3) * (1 - fres) * (1 - foam * 0.7) * (1 - opacity) * (1 - film);
                 return half4(lerp(StabbyMixFog(c, i.positionWS, i.fog), c, clear), alpha);
             }

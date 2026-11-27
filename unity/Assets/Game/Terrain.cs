@@ -1153,6 +1153,7 @@ namespace Stabby.Game
     {
         TerrainViewDef quads = new TerrainViewDef();
         const int LakeCells = 32;
+        const float SunkClarities = 10f;
         public int ApplyVertices = 300000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
@@ -1405,7 +1406,7 @@ namespace Stabby.Game
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
             var lib = ContentFiles.Materials(materials);
             p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
-            p.Deep = lib.Water == null ? float.NegativeInfinity : -math.max(lib.Water.ClarityM, lib.Water.ShoreM);
+            p.Deep = lib.Water == null ? float.NegativeInfinity : -SunkClarities * math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
             var lake = p.Look.Allocate(ref root.Lake, n * n);
