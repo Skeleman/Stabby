@@ -8,7 +8,7 @@ public class InnTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.House, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen, ObjectPart.Overlook, ObjectPart.WallTorch };
+    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.House, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen, ObjectPart.Overlook, ObjectPart.FallenTree, ObjectPart.WallTorch };
 
     [Fact]
     public void BuiltMeshesAreDeterministicFallPerTierAndStayInBounds()
@@ -96,6 +96,26 @@ public class InnTests
             float x = 10, y = 0, z = sz;
             for (int k = 0; k < 60; k++) Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, -0.1f, 0, 1);
             Assert.True(x > 5, $"walked from the side to {x:F2},{z:F2}");
+        }
+    }
+
+    [Fact]
+    public void FallenTreeHollowLetsWalkersThroughButNotAcross()
+    {
+        int d = Objects.Objects.FindIndex(o => o.Id == "fallen-tree");
+        var shapes = PartShapes.Of(Objects);
+        var o = new ObjectInstance { Def = d, Variant = 0, X = 0, Y = 0, Z = 0, Qw = 1, Size = 18 };
+        var list = new List<ObjectColumn>();
+        ObjectField.AddColumns(Objects, shapes, o, list);
+        var cols = ColumnRegions.Whole(list);
+        float x = -14, y = 0, z = 0;
+        for (int k = 0; k < 300; k++) Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0.1f, 0, 1);
+        Assert.True(x > 10, $"stuck in the hollow at {x:F2},{z:F2}");
+        for (float sx = -6f; sx <= 6f; sx += 1f)
+        {
+            x = sx; y = 0; z = 5;
+            for (int k = 0; k < 100; k++) Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0, -0.1f, 1);
+            Assert.True(z > 1, $"walked over the trunk to {x:F2},{z:F2}");
         }
     }
 
