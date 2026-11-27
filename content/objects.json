@@ -497,6 +497,11 @@
       "id": "bones", "name": "Giant bones", "kind": "structure", "material": "aged-bone", "variants": 6,
       "parts": [ { "id": "site", "shape": "bones" } ],
       "placement": { "biomes": ["steppe", "savanna", "shrubland", "desert", "cold-desert"], "perHectare": 0, "discovery": "bones", "spacingM": 1000, "chance": 1, "slopeMax": 0.25, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.002 }
+    },
+    {
+      "id": "lone-inn", "name": "Roadside inn", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
+      "parts": [ { "id": "inn", "shape": "inn", "offset": [0, 0, -0.12], "scale": [0.63, 0.63, 0.63] }, { "id": "yard", "shape": "inn-yard" }, { "id": "roadside", "shape": "inn-roadside" } ],
+      "placement": { "biomes": ["steppe", "temperate-forest", "temperate-rain", "boreal", "shrubland", "savanna"], "perHectare": 0, "discovery": "lone-inn", "spacingM": 300, "chance": 1, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
