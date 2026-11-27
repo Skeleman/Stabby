@@ -158,6 +158,7 @@
     { "id": "dry-wood",         "name": "Dry wood",         "color": "#6b553d" },
     { "id": "split-wood",       "name": "Split wood",       "color": "#7a6247" },
     { "id": "bleached-wood",    "name": "Bleached wood",    "color": "#a69e90" },
+    { "id": "aged-bone",        "name": "Aged bone",        "color": "#cfc4ab" },
     { "id": "weathered-root",   "name": "Weathered root",   "color": "#8a7f70" },
     { "id": "reed-brown",       "name": "Reed brown",       "color": "#5a3b24" },
     { "id": "bush-leaf",        "name": "Bush leaf",        "color": "#5a6c3e" },
