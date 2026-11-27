@@ -104,7 +104,7 @@ namespace Stabby.World
                 if (w.Sea[i]) continue;
                 int r = hy.Receiver[i];
                 if (!Grid.Adjacent(n, i, r)) { e.Add($"cell {i} drains to non-neighbour {r}"); break; }
-                if (hy.DischargeM3s[r] + 1e-6f < hy.DischargeM3s[i] && !w.Sea[r])
+                if (hy.DischargeM3s[r] + 1e-6f < hy.DischargeM3s[i] && !w.Sea[r] && !IsDeltaApex(hy, i))
                 { e.Add($"discharge drops from {i} to {r}"); break; }
             }
         }
@@ -167,6 +167,46 @@ namespace Stabby.World
             CheckFalls(w, e);
             CheckCoastSteps(w, e);
             CheckRiverShape(w, e);
+            CheckDeltas(w, e);
+        }
+
+        static bool IsDeltaApex(Hydrology hy, int i)
+        {
+            foreach (var d in hy.Deltas) if (d.Apex == i) return true;
+            return false;
+        }
+
+        public static void CheckDeltas(GeneratedWorld w, List<string> e)
+        {
+            int n = w.Config.Size;
+            var hy = w.Water;
+            foreach (var d in hy.Deltas)
+            {
+                if (!hy.IsRiver[d.Apex]) { e.Add($"delta apex {d.Apex} is not a river"); continue; }
+                if (d.Heads.Count == 0 || d.Main < 0 || d.Branches.Count != d.Heads.Count) e.Add($"delta {d.Apex} has {d.Heads.Count} heads, {d.Branches.Count} branches, main {d.Main}");
+                var starts = new List<int>(d.Heads) { hy.Receiver[d.Apex] };
+                foreach (int start in starts)
+                {
+                    if (!Grid.Adjacent(n, d.Apex, start)) { e.Add($"delta {d.Apex} distributary {start} is not connected"); continue; }
+                    int i = start, steps = 0;
+                    float surf = hy.WaterSurface[d.Apex];
+                    for (; !w.Sea[i] && steps < n * n; i = hy.Receiver[i], steps++)
+                    {
+                        if (!hy.IsRiver[i]) { e.Add($"delta {d.Apex} distributary {start} leaves the river at {i}"); break; }
+                        if (hy.WaterSurface[i] > surf + SurfaceTolerance) { e.Add($"delta {d.Apex} distributary {start} flows uphill at {i}"); break; }
+                        if (w.Height[i] > hy.WaterSurface[i] + SurfaceTolerance) { e.Add($"delta {d.Apex} islet crosses distributary {start} at {i}"); break; }
+                        surf = hy.WaterSurface[i];
+                    }
+                    if (!w.Sea[i]) e.Add($"delta {d.Apex} distributary {start} never reaches the sea");
+                }
+                foreach (int b in d.Branches)
+                {
+                    var r = hy.Rivers[b];
+                    if (r.Cells[0] != d.Apex) e.Add($"delta {d.Apex} branch river {b} does not start at the apex");
+                    for (int k = 0; r.End == RiverEnd.Junction && k < hy.Rivers.Count; k++) r = hy.Rivers[r.Downstream];
+                    if (r.End != RiverEnd.Sea) e.Add($"delta {d.Apex} branch river {b} ends at {r.End}, not the sea");
+                }
+            }
         }
 
         static void CheckBiomes(GeneratedWorld w, List<string> e)

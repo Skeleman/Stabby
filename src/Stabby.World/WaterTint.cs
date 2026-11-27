@@ -111,6 +111,7 @@ namespace Stabby.World
                 if (r == i) continue;
                 mix[r].A += mix[i].A; mix[r].B += mix[i].B; mix[r].C += mix[i].C;
             }
+            foreach (var d in hy.Deltas) SplitDelta(w, d, mix);
             for (int i = 0; i < n * n; i++)
             {
                 float q = hy.DischargeM3s[i];
@@ -120,6 +121,36 @@ namespace Stabby.World
                 mix[i] = sum > 1 ? WaterMix.Lerp(default, m, 1 / sum) : m;
             }
             return mix;
+        }
+
+        static void SplitDelta(GeneratedWorld w, RiverDelta d, WaterMix[] mix)
+        {
+            var hy = w.Water;
+            var q = hy.DischargeM3s;
+            int n = w.Config.Size;
+            float apexQ = q[d.Apex];
+            if (apexQ <= 0) return;
+            var src = mix[d.Apex];
+            float moved = 0;
+            foreach (int head in d.Heads)
+            {
+                float inflow = 0;
+                int x = head % n, y = head / n;
+                for (int k = 0; k < 8; k++)
+                {
+                    int j = (y + Grid.DY[k]) * n + x + Grid.DX[k];
+                    if (!w.Sea[j] && hy.Receiver[j] == head) inflow += q[j];
+                }
+                float f = Math.Max(0, q[head] - inflow) / apexQ;
+                moved += f;
+                for (int i = head; !w.Sea[i]; i = hy.Receiver[i]) Add(ref mix[i], src, f);
+            }
+            for (int i = hy.Receiver[d.Apex]; !w.Sea[i]; i = hy.Receiver[i]) Add(ref mix[i], src, -moved);
+        }
+
+        static void Add(ref WaterMix m, WaterMix s, float f)
+        {
+            m.A = Math.Max(0, m.A + f * s.A); m.B = Math.Max(0, m.B + f * s.B); m.C = Math.Max(0, m.C + f * s.C);
         }
 
         public static void Apply(GeneratedWorld w, WaterMix[] mix)
