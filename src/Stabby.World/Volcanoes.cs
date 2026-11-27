@@ -324,15 +324,20 @@ namespace Stabby.World
                     int i = y * n + x;
                     if (sea[i]) continue;
                     float g = Profile(b, x * cm, y * cm);
-                    if (g == float.MinValue && skirt > 0f && !NearLake(s, x, y, RiverPadM / cm)) g = Skirt(b, x * cm, y * cm, skirt);
+                    if (g == float.MinValue && skirt > 0f)
+                    {
+                        float k = Math.Min(1f, Math.Max(0f, (LakeGap(s, x, y) * cm - RiverPadM) / RiverPadM)), sk = Skirt(b, x * cm, y * cm, skirt);
+                        if (sk > h[i]) g = h[i] + (sk - h[i]) * k;
+                    }
                     h[i] = Math.Max(h[i], g);
                 }
         }
 
-        static bool NearLake(WorldSketch s, int x, int y, float pad)
+        static float LakeGap(WorldSketch s, int x, int y)
         {
-            foreach (var lake in s.Lakes) if (lake.Gap(x, y, 1) < pad) return true;
-            return false;
+            float best = float.MaxValue;
+            foreach (var lake in s.Lakes) best = Math.Min(best, lake.Gap(x, y, 1));
+            return best;
         }
 
         static float Skirt(VolcanoSketch v, float x, float z, float skirt)
