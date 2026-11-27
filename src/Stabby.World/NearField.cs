@@ -53,6 +53,8 @@ namespace Stabby.World
         int PieceStart(int cell);
         int PieceAt(int k);
         RiverPiece Piece(int p);
+        int Dune(int i);
+        DuneSpec DuneRegion(int r);
     }
 
     public static class NearField
@@ -455,7 +457,7 @@ namespace Stabby.World
                 {
                     int cell = k * n + i;
                     float h = c.Height(cell);
-                    lo = Math.Min(lo, h); hi = Math.Max(hi, h); amp = Math.Max(amp, c.Amp(cell));
+                    lo = Math.Min(lo, h); hi = Math.Max(hi, h + Dunes.Top(c, cell)); amp = Math.Max(amp, c.Amp(cell));
                     for (int q = c.PieceStart(cell), e = c.PieceStart(cell + 1); q < e; q++)
                     {
                         var p = c.Piece(c.PieceAt(q));
@@ -524,6 +526,7 @@ namespace Stabby.World
                 float m = Noise.Fbm(c.Seed, x / MacroM, z / MacroM, MacroOctaves);
                 h += fade * (a * Math.Max(-1f, Math.Min(1f, m)) + Fine(c, x, z, b, a, tx, tz, ax, az, bx, bz));
             }
+            h += Dunes.At(c, x, z);
             if (!near) return isles ? Isles(c, s0, s1, x, z, h) : h;
             if (falls) h = Carve(c, s0, s1, x, z, h, f);
 

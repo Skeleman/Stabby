@@ -21,3 +21,4 @@ unity/* -> LintTests|ChunkZipTests|RuntimeParityTests|PoolSizeTests
 tools/scripts/* -> TestImpactTests
 fallback -> Feature|Object|Discover
 src/Stabby.World/DungeonLinks.cs -> DungeonLinkTests|DungeonTests|CaveTests|ObjectTests|DiscoveryTests
+src/Stabby.World/Dune*.cs tests/Stabby.World.Tests/DuneTests.cs -> DuneTests|DetailTests

@@ -213,6 +213,7 @@ namespace Stabby.World
                     if (x > 0 && y > 0 && x < n - 2 && y < n - 2 && OpenSea(w, i) && d.HeightAt(x + 0.5f, y + 0.5f) > 0 && !InFall(w, (x + 0.5f) * w.Config.CellMeters, (y + 0.5f) * w.Config.CellMeters, true))
                     { e.Add($"detail raises open sea above the water near cell {i}"); return; }
                 }
+            CheckDunes(w, d, e);
             float toe = ShoreToeBend(w, d, out int pairs);
             if (pairs >= ShoreToeMinPairs && toe > ShoreToeMaxBend) e.Add($"beach shore toe creases: median bend {toe:F2} over {pairs} coasts");
         }
@@ -956,7 +957,7 @@ namespace Stabby.World
             if (clock.Start("sites"))
             {
                 if (sites != null) CheckSiteFootprints(w, grid, sites, e);
-                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); CheckRoads(w, grid, field, e); }
+                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); CheckRoads(w, grid, field, e); CheckDuneSites(detail, field, e); }
             }
             if (clock.Start("objects"))
             {
