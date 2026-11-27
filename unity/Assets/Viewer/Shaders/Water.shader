@@ -527,7 +527,7 @@ Shader "Stabby/Water"
                 o.warm = i.reach.w;
                 o.tint = float4(round(i.reach.w) == 0 ? saturate(i.tint.xyz) : 0, i.tint.w);
                 o.ground = round(i.reach.w) == 0 ? 0 : saturate(i.tint.xyz);
-                o.swell = float4(i.color.a > 0.25 && i.fall.z > 0 ? i.fall.x : 0, lift, kind, 0);
+                o.swell = float4(i.color.a > 0.25 && i.fall.z > 0 ? i.fall.x : 0, lift, kind, i.color.a < 0.99 && i.chan.y <= 0 && i.fall.y > 0 ? i.fall.y - 1 : -1);
                 o.fall = i.fall;
                 o.curt = i.curt;
                 return o;
@@ -716,7 +716,7 @@ Shader "Stabby/Water"
                 float cave = CaveSky(i.positionWS);
                 l.color *= cave;
                 float3 sky = _StabbySky.rgb * cave;
-                float dk = 1 - exp(-path * L0.w * 0.3);
+                float dk = 1 - exp(-(i.swell.w >= 0 ? i.swell.w / max(v.y, 0.05) : path) * L0.w * 0.3);
                 float3 silt = float3(0.5, 0.44, 0.3) * dot(shallowC, 1.0 / 3);
                 float3 teal = shallowC * lerp(float3(0.26, 0.4, 0.42), 0.7, hot);
                 float3 tint = lerp(lerp(silt, teal, saturate(dk * 2.2 + hot)), deepC, smoothstep(0.25, 1, dk));
