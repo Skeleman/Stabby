@@ -290,6 +290,7 @@
               "chainHead": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "oasis": { "enum": ["palm", "reeds", "grass", "shrub"] },
+              "perCenote": { "type": "integer", "minimum": 0, "maximum": 40 },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
               "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn", "monument", "shipwreck"] },
               "cave": { "enum": ["stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart", "lava-glow"] },

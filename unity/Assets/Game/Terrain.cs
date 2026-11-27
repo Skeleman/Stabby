@@ -507,6 +507,7 @@ namespace Stabby.Game
                 {
                     float cover = columns.At(p.x, p.z) - p.y;
                     if (e.Shape == FeatureEdit.Boulder) { stone = Lift(math.min(cover, 0)); boulderBase = e.Ay - ObjectField.BoulderLift * e.R; boulder = true; }
+                    else if (e.Shape == FeatureEdit.Cenote) { stone = e.CenoteScree(p.x, p.y, p.z); boulderBase = p.y; }
                     return cover;
                 }
             }
@@ -723,7 +724,7 @@ namespace Stabby.Game
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase, out bool boulder), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y);
-                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), cover, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, math.max(lift, stone)), cover, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
                 float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover, false), glass = peat > 0 || ice > 0.01f ? 0 : Ice(edits, light, p.Pos, cover, true), coat = math.max(ice, glass);
                 float green = peat > 0 || coat > 0.01f ? 0 : Fertile(fertile, p.Pos);
                 p.Stitch.w = math.floor(p.Stitch.w) + (boulder ? TerrainTree.BoulderBit : 0) + (glass > 0.01f || green > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : green > 0.01f ? 0.5f * green : 0.5f * peat);
@@ -736,7 +737,7 @@ namespace Stabby.Game
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
                     float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _, out _), sLift = Lift(sCover);
-                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, sLift)));
+                    p.StitchNormal = new half4(new float4(sn, math.max(sc.w, math.max(sLift, sStone))));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover) + sStone));
                     p.Dark.y = (half)Dark(near, nearLight, p.Stitch.xyz, sCover);
                 }
@@ -1418,7 +1419,7 @@ namespace Stabby.Game
             t.Mark("color blob");
             var lib = ContentFiles.Materials(materials);
             t.Mark("materials");
-            p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
+            p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null, edits);
             t.Mark("strata");
             p.Deep = lib.Water == null ? float.NegativeInfinity : -SunkClarities * math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);

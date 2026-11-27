@@ -82,7 +82,7 @@ namespace Stabby.World
             return -1;
         }
 
-        public byte[] CoatWeights(GeneratedWorld w)
+        public byte[] CoatWeights(GeneratedWorld w, FeatureEdit[] edits = null)
         {
             int cells = w.Height.Length;
             var kind = new int[w.BiomeIds == null ? 0 : w.BiomeIds.Length];
@@ -93,7 +93,49 @@ namespace Stabby.World
                 int k = w.Sea[i] || w.Biome == null || w.Biome[i] < 0 ? Sand : kind[w.Biome[i]];
                 px[i * 4 + (k < 0 ? 0 : k)] = 255;
             }
+            if (edits != null && w.Biome != null) StackTops(w, edits, kind, px);
             return px;
+        }
+
+        const int StackLandCells = 48;
+
+        static void StackTops(GeneratedWorld w, FeatureEdit[] edits, int[] kind, byte[] px)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            foreach (var e in edits)
+            {
+                if (e.Shape != FeatureEdit.SeaStack) continue;
+                int cx = (int)(0.5f * (e.Ax + e.Bx) / cm), cz = (int)(0.5f * (e.Az + e.Bz) / cm), k = -1;
+                for (int r = 1; r <= StackLandCells && k < 0; r++)
+                    for (int dz = -r; dz <= r && k < 0; dz++)
+                        for (int dx = -r; dx <= r; dx++)
+                        {
+                            if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;
+                            int x = cx + dx, z = cz + dz;
+                            if (x < 0 || z < 0 || x >= n || z >= n) continue;
+                            int i = z * n + x;
+                            if (w.Sea[i] || w.Biome[i] < 0) continue;
+                            k = Math.Max(0, kind[w.Biome[i]]);
+                            if (k == Sand) k = 1;
+                            break;
+                        }
+                if (k < 0) k = 1;
+                float reach = FeatureEdit.StackReach(e.D), ex = e.Bx - e.Ax, ez = e.Bz - e.Az, ll = ex * ex + ez * ez;
+                int x0 = Math.Max(0, (int)Math.Floor((Math.Min(e.Ax, e.Bx) - reach) / cm)), x1 = Math.Min(n - 1, (int)Math.Ceiling((Math.Max(e.Ax, e.Bx) + reach) / cm));
+                int z0 = Math.Max(0, (int)Math.Floor((Math.Min(e.Az, e.Bz) - reach) / cm)), z1 = Math.Min(n - 1, (int)Math.Ceiling((Math.Max(e.Az, e.Bz) + reach) / cm));
+                for (int z = z0; z <= z1; z++)
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        float qx = x * cm - e.Ax, qz = z * cm - e.Az, t = ll > 0f ? Math.Max(0f, Math.Min(1f, (qx * ex + qz * ez) / ll)) : 0f;
+                        qx -= t * ex; qz -= t * ez;
+                        if (qx * qx + qz * qz > (reach + cm) * (reach + cm)) continue;
+                        int i = z * n + x;
+                        if (!w.Sea[i]) continue;
+                        px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = px[i * 4 + 3] = 0;
+                        px[i * 4 + k] = 255;
+                    }
+            }
         }
 
         public static byte[] ForestWeights(GeneratedWorld w, ObjectLibrary objects, IReadOnlyList<BiomeDef> defs)

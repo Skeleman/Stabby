@@ -16,11 +16,11 @@ namespace Stabby.World
 
         public const float ButteChance = 0.4f, ButteMinCap = 28f, ButteMaxCap = 40f, ButteMinRise = 50f, ButteMaxRise = 80f, ButteMinSlope = 0.35f, ButteMaxSlope = 0.45f, ButteApron = 0.9f, ButteSink = 4f, ButteReliefM = 14f, ButteClearM = 600f, ButteGrooveGap = 8f;
 
-        public static bool Of(int shape) => shape == FeatureEdit.Tor || shape == FeatureEdit.Hoodoo || shape == FeatureEdit.Butte;
+        public static bool Of(int shape) => shape == FeatureEdit.Tor || shape == FeatureEdit.Hoodoo || shape == FeatureEdit.Butte || shape == FeatureEdit.Cenote;
 
         public const int TileBudget = 12;
 
-        public static string Name(int shape) => shape == FeatureEdit.Tor ? "tor" : shape == FeatureEdit.Butte ? "butte" : "hoodoo";
+        public static string Name(int shape) => shape == FeatureEdit.Tor ? "tor" : shape == FeatureEdit.Butte ? "butte" : shape == FeatureEdit.Cenote ? "cenote" : "hoodoo";
 
         public static bool Fits(List<FeatureEdit> tile, List<FeatureEdit> list, int from)
         {
@@ -38,9 +38,9 @@ namespace Stabby.World
             return mask;
         }
 
-        static int Pad(GeneratedWorld w, float reachM) => Features.MarginCells + (int)Math.Ceiling(reachM / w.Config.CellMeters);
+        internal static int Pad(GeneratedWorld w, float reachM) => Features.MarginCells + (int)Math.Ceiling(reachM / w.Config.CellMeters);
 
-        static bool DryAround(GeneratedWorld w, int x, int y, int reach)
+        internal static bool DryAround(GeneratedWorld w, int x, int y, int reach)
         {
             int n = w.Config.Size;
             for (int dy = -reach; dy <= reach; dy++)
@@ -114,7 +114,7 @@ namespace Stabby.World
             return best;
         }
 
-        static bool Crowded(GeneratedWorld w, float x, float z, float reachM)
+        internal static bool Crowded(GeneratedWorld w, float x, float z, float reachM)
         {
             var sketch = w.Sketch;
             if (sketch == null) return false;

@@ -33,6 +33,7 @@ src/Stabby.World/CavePools.cs caves,sites
 src/Stabby.World/CaveBrooks.cs caves
 content/caves.json caves,surface,meshing
 src/Stabby.World/Landforms.cs objects,surface,meshing
+src/Stabby.World/Cenotes.cs objects,surface,meshing,sites
 src/Stabby.World/SeaStacks.cs objects,surface,meshing
 src/Stabby.World/Object*.cs objects,sites,surface
 src/Stabby.World/Objects.cs objects,sites,surface

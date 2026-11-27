@@ -7,7 +7,8 @@ namespace Stabby.World
     {
         public const float MinOffM = 20f, MaxOffM = 200f, MaxDepthM = 50f, BeachM = 4f, CliffM = 15f, CliffReachM = 45f, ReliefM = 30f, ReliefReachM = 140f;
         public const float ClearM = 250f, CheckClearM = 150f, ClusterGapM = 3000f, SpreadM = 70f, SinkM = 4f;
-        public const float MinD = 2.5f, MaxD = 12.5f, MinRise = 8f, MaxRise = 40f, StumpMaxRise = 4f, ArchChance = 0.7f;
+        public const float MinD = 2.5f, MaxD = 12.5f, MinRise = 8f, MaxRise = 40f, StumpMaxRise = 4f;
+        public const float ArchOffM = 40f, ArchMinD = 10f, ArchMaxD = 13f, ArchMinP = 6.5f, ArchDeckM = 7f;
         public const int MaxClusters = 4, MinStacks = 2, MaxStacks = 6, Tries = 8;
 
         public static bool Beachy(GeneratedWorld w, int i)
@@ -34,6 +35,27 @@ namespace Stabby.World
                     if (w.Water.IsRiver[i] || w.Water.LakeId[i] >= 0 || Beachy(w, i)) return false;
                 }
             return true;
+        }
+
+        public static bool Offshore(GeneratedWorld w, float x, float z, float reachM)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            int r = (int)Math.Ceiling(reachM / cm), cx = (int)(x / cm), cz = (int)(z / cm);
+            for (int v = cz - r; v <= cz + r; v++)
+                for (int u = cx - r; u <= cx + r; u++)
+                {
+                    float dx = (u + 0.5f) * cm - x, dz = (v + 0.5f) * cm - z;
+                    if (dx * dx + dz * dz > reachM * reachM) continue;
+                    if (u < 0 || v < 0 || u >= n || v >= n || !w.Sea[v * n + u]) return false;
+                }
+            return true;
+        }
+
+        public static float ArchReach(FeatureEdit e)
+        {
+            float len = (float)Math.Sqrt((e.Bx - e.Ax) * (e.Bx - e.Ax) + (e.Bz - e.Az) * (e.Bz - e.Az));
+            return 0.5f * len + e.D * (1f + FeatureEdit.StackLobe) + FeatureEdit.StackFootM + ArchOffM;
         }
 
         public static bool Wet(GeneratedWorld w, TerrainDetail detail, float x, float z, float reachM)
@@ -74,7 +96,7 @@ namespace Stabby.World
                 sites[k] = sites[j]; sites[j] = t;
             }
             var centres = new List<int>();
-            bool arch = r.NextFloat() < ArchChance;
+            bool arch = true;
             var cluster = new List<FeatureEdit>();
             foreach (int i in sites)
             {
@@ -107,7 +129,7 @@ namespace Stabby.World
                 bool stump = k >= stacks, hole = arch && k == 0;
                 for (int t = 0; t < Tries; t++)
                 {
-                    float d = stump ? r.Range(MinD, 4f) : hole ? r.Range(8f, MaxD) : r.Range(k == 0 ? 6f : MinD + 1f, k == 0 ? MaxD : 9f);
+                    float d = stump ? r.Range(MinD, 4f) : hole ? r.Range(ArchMinD, ArchMaxD) : r.Range(k == 0 ? 6f : MinD + 1f, k == 0 ? MaxD : 9f);
                     float rise = stump ? r.Range(1.5f, StumpMaxRise) : r.Range(Math.Max(MinRise, d * 1.2f), Math.Min(MaxRise, 8f + d * 3f));
                     float along = k == 0 && t == 0 ? 0f : r.Range(-1f, 1f) * SpreadM, out_ = k == 0 && t == 0 ? 0f : r.Range(-0.6f, 1f) * SpreadM;
                     float x = cx + tx * along + ox * out_, z = cz + tz * along + oz * out_;
@@ -119,10 +141,11 @@ namespace Stabby.World
                     };
                     if (hole)
                     {
-                        e.P = r.Range(0.45f, 0.6f) * d;
+                        e.P = Math.Max(ArchMinP, r.Range(0.6f, 0.72f) * d);
                         e.T = 0.3f * e.P;
-                        rise = Math.Max(rise, e.T + e.P + 8f);
+                        rise = Math.Max(rise, e.T + 1.25f * e.P + ArchDeckM);
                     }
+                    if (hole && !Offshore(w, 0.5f * (e.Ax + e.Bx), 0.5f * (e.Az + e.Bz), ArchReach(e))) continue;
                     if (!Site(w, detail, src, ref e, rise)) continue;
                     if (hole && e.Ay > e.T - e.P - 1f) continue;
                     if (!Features.Inside(e, w.Config.CellMeters) || Features.Overlaps(e, list, 0) || Features.Overlaps(e, output, 0)) continue;
