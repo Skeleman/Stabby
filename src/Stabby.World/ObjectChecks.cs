@@ -343,7 +343,10 @@ namespace Stabby.World
                 float px = x - b.Ax, py = y - b.Ay, pz = z - b.Az;
                 float u = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
                 float qx = px - u * ex, qy = Math.Max(0f, py - u * ey), qz = pz - u * ez, d = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
-                if (d <= 0f || Math.Abs(d - b.R) > 0.5f * s + b.N || y - cols.Height((int)Math.Round(x / s), (int)Math.Round(z / s)) < 0.5f * s) continue;
+                int ci = (int)Math.Floor(x / s), ck = (int)Math.Floor(z / s);
+                float fx = x / s - ci, fz = z / s - ck;
+                float ground = (1 - fz) * ((1 - fx) * cols.Height(ci, ck) + fx * cols.Height(ci + 1, ck)) + fz * ((1 - fx) * cols.Height(ci, ck + 1) + fx * cols.Height(ci + 1, ck + 1));
+                if (d <= 0f || Math.Abs(d - b.R) > 0.5f * s + b.N || y - ground < 0.5f * s) continue;
                 float ty = qy / d;
                 if (ty > BoulderSteepNy || ty < BoulderLowNy) continue;
                 bool shared = false;
@@ -475,7 +478,7 @@ namespace Stabby.World
 
         static void CheckBoulderMesh(TerrainDetail detail, EditGrid grid, FeatureEdit b, List<string> e)
         {
-            float s = BoulderStepM;
+            float s = b.Fine ? 0.5f * NearField.NodeStep(0) : BoulderStepM;
             string at = $"boulder at {b.Ax:F0},{b.Az:F0}";
             if (!b.MeshedIn(s, b.MinX, b.MinZ, b.MaxX, b.MaxZ)) { e.Add(at + " is too small to mesh at the finest step"); return; }
             var c = BoulderChunk(b, s);
@@ -502,7 +505,7 @@ namespace Stabby.World
                     for (int dy = -1; dy <= 1; dy++)
                         for (int dx = -1; dx <= 1; dx++)
                         {
-                            float d = Walk.Solid(ground, list, Features.LatticeStepM, vx + dx * s, vy + dy * s, vz + dz * s);
+                            float d = Walk.Solid(ground, list, Features.LatticeStepM, vx + dx * Features.LatticeStepM, vy + dy * Features.LatticeStepM, vz + dz * Features.LatticeStepM);
                             solid |= d >= 0; open |= d < 0;
                         }
                 if (!(solid && open)) { e.Add(at + $" collision misses mesh vertex {vx:F1},{vy:F1},{vz:F1}"); return; }
