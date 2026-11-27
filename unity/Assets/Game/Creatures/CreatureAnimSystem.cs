@@ -389,7 +389,7 @@ namespace Stabby.Game
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
                 if (!visible) return;
-                c.Shadow = d.Casts;
+                c.Shadow = d.Casts && Detail.Holds(px, rig.ShadowPx / q, c.Shadow);
                 if (Gpu)
                 {
                     if (!c.Shadow && Frustum.Outside(centre, sc.Length)) return;
