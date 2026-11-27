@@ -56,7 +56,7 @@ namespace Stabby.World
                     flow ??= Mesas.Flow(c, sea, h);
                     if (Mesas.Wet(c, flow, b.X, b.Z, b.Rc + RiverPadM)) continue;
                     b.RimLow = Low(b);
-                    Stamp(c, sea, h, b, skirt);
+                    Stamp(c, s, sea, h, b, skirt);
                     s.Volcanoes.Add(b);
                     break;
                 }
@@ -98,7 +98,7 @@ namespace Stabby.World
                     flow ??= Mesas.Flow(c, sea, h);
                     if (Mesas.Wet(c, flow, b.X, b.Z, b.Ro + RiverPadM)) continue;
                     b.RimLow = Low(b);
-                    Stamp(c, sea, h, b, 0f);
+                    Stamp(c, s, sea, h, b, 0f);
                     s.Volcanoes.Add(b);
                     break;
                 }
@@ -312,7 +312,7 @@ namespace Stabby.World
             return true;
         }
 
-        static void Stamp(WorldConfig c, bool[] sea, float[] h, VolcanoSketch b, float skirt)
+        static void Stamp(WorldConfig c, WorldSketch s, bool[] sea, float[] h, VolcanoSketch b, float skirt)
         {
             int n = c.Size;
             float cm = c.CellMeters, ext = b.Ro + skirt;
@@ -324,9 +324,15 @@ namespace Stabby.World
                     int i = y * n + x;
                     if (sea[i]) continue;
                     float g = Profile(b, x * cm, y * cm);
-                    if (g == float.MinValue && skirt > 0f) g = Skirt(b, x * cm, y * cm, skirt);
+                    if (g == float.MinValue && skirt > 0f && !NearLake(s, x, y, RiverPadM / cm)) g = Skirt(b, x * cm, y * cm, skirt);
                     h[i] = Math.Max(h[i], g);
                 }
+        }
+
+        static bool NearLake(WorldSketch s, int x, int y, float pad)
+        {
+            foreach (var lake in s.Lakes) if (lake.Gap(x, y, 1) < pad) return true;
+            return false;
         }
 
         static float Skirt(VolcanoSketch v, float x, float z, float skirt)
@@ -361,6 +367,7 @@ namespace Stabby.World
                     float g = detail.Sample(v.X + ux * (reach + RingPadM), v.Z + uz * (reach + RingPadM));
                     hi = Math.Max(hi, g); lo = Math.Min(lo, g);
                 }
+                depth = Math.Max(depth, lo - v.RimLow + TopPadM + MinDepthM);
                 float need = -CarveTaper * (hi - lo + TopPadM + depth - 2f * CarveRound) + CarveRound * (1f + (float)Math.Sqrt(1f + CarveTaper * CarveTaper));
                 if (need <= r) break;
                 r = need;

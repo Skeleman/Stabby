@@ -48,7 +48,7 @@ namespace Stabby.World
                         int x = cx + dx, z = cz + dz;
                         if (x < 0 || z < 0 || x >= n || z >= n || (dx * dx + dz * dz) * cm * cm > v.R * v.R) continue;
                         int i = z * n + x;
-                        if (w.Water != null && w.Water.IsRiver[i] && (!big || (dx * dx + dz * dz) * cm * cm <= v.Rc * v.Rc)) river = true;
+                        if (w.Water != null && w.Water.IsRiver[i] && (!big || ((dx * dx + dz * dz) * cm * cm <= v.Rc * v.Rc && w.Height[i] < v.RimLow - Volcanoes.TopPadM))) river = true;
                         summit = Math.Max(summit, w.Height[i]);
                         if (w.Biome == null || w.BiomeIds == null || w.Biome[i] < 0) continue;
                         cells++;
