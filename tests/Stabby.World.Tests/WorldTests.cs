@@ -40,18 +40,25 @@ public class WorldTests
     }
 
     [Fact]
-    public void ColdLandRaisesMoraineWithKettlePonds()
+    public void ColdSeedsRaiseMorainesWithKettlePonds()
     {
-        var p = TestWorlds.Default;
-        int n = p.W.Config.Size, moraines = p.W.Sketch.Moraines.Count, kettles = 0, wet = 0;
-        float cm = p.W.Config.CellMeters;
-        foreach (var m in p.W.Sketch.Moraines)
-            for (int k = 0; k < m.Kettles.Count; k += 4)
+        int moraines = 0, kettles = 0, wet = 0;
+        Parallel.For(1, 21, s =>
+        {
+            var w = Gen((ulong)s);
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            foreach (var m in w.Sketch.Moraines)
             {
-                kettles++;
-                if (p.W.Water.LakeId[(int)Math.Round(m.Kettles[k + 1] / cm) * n + (int)Math.Round(m.Kettles[k] / cm)] >= 0) wet++;
+                Interlocked.Increment(ref moraines);
+                for (int k = 0; k < m.Kettles.Count; k += 4)
+                {
+                    Interlocked.Increment(ref kettles);
+                    if (w.Water.LakeId[(int)Math.Round(m.Kettles[k + 1] / cm) * n + (int)Math.Round(m.Kettles[k] / cm)] >= 0) Interlocked.Increment(ref wet);
+                }
             }
-        Assert.True(moraines >= 1 && kettles >= 1 && wet == kettles, $"{moraines} moraines, {kettles} kettles, {wet} holding water");
+        });
+        Assert.True(moraines >= 4 && kettles >= moraines && wet == kettles, $"{moraines} moraines, {kettles} kettles, {wet} holding water in 20 seeds");
     }
 
     [Fact]
