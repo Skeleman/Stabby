@@ -152,6 +152,40 @@ namespace Stabby.World
             return (uy - cy) * (uy - cy) + uz * uz < 0.56f * k * k;
         }
 
+        static float[] SurfaceTris(StructureLayout l)
+        {
+            var t = new System.Collections.Generic.List<float>();
+            foreach (var p in l.Pieces)
+            {
+                if (p.Lo > 0) continue;
+                float[] u;
+                int[] idx;
+                if (p.R > 0) u = RoundMesh(p.Key, p.R, 0, out idx, out _);
+                else if ((p.M > 0 && p.M != Soil) || p.Coursed) { u = UnitBox; idx = UnitBoxIdx; }
+                else continue;
+                foreach (int i in idx)
+                {
+                    float y = 0.5f * (u[3 * i + 1] + 1) * p.Sy, dy = y - 0.5f * p.Sy, x = 0.5f * u[3 * i] * p.Sx + p.L * dy, z = 0.5f * u[3 * i + 2] * (p.Sz - 2 * p.T * dy) + p.B * dy;
+                    t.Add(p.X + p.C * x - p.S * z); t.Add(p.Y + y); t.Add(p.Z + p.S * x + p.C * z);
+                }
+            }
+            return t.ToArray();
+        }
+
+        static float SurfaceTop(float[] t, in Frame f, float x, float z, float below)
+        {
+            float px = f.X + f.U * (f.C * x - f.S * z), pz = f.Z + f.U * (f.S * x + f.C * z), lim = f.Y + f.U * below, best = float.NegativeInfinity;
+            for (int k = 0; k < t.Length; k += 9)
+            {
+                float ax = t[k] - px, az = t[k + 2] - pz, bx = t[k + 3] - px, bz = t[k + 5] - pz, cx = t[k + 6] - px, cz = t[k + 8] - pz;
+                float wa = bx * cz - bz * cx, wb = cx * az - cz * ax, wc = ax * bz - az * bx, sum = wa + wb + wc;
+                if (Math.Abs(sum) < 1e-9f || (wa < 0 || wb < 0 || wc < 0) && (wa > 0 || wb > 0 || wc > 0)) continue;
+                float y = (wa * t[k + 1] + wb * t[k + 4] + wc * t[k + 7]) / sum;
+                if (y < lim && y > best) best = y;
+            }
+            return (best - f.Y) / f.U;
+        }
+
         static float[] TubeMesh(ref Rng rng, int tier, out int[] idx, out float[] lift)
         {
             int sides = tier < 1 ? 32 : tier < 2 ? 16 : 8, rings = tier < 1 ? 13 : tier < 2 ? 7 : 3, wall = rings * sides, rim = 2 * wall;
