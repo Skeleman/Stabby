@@ -460,7 +460,7 @@ Shader "Stabby/Water"
                 float3 bed = _WorldSpaceCameraPos - v * (dist * scene / max(surface, 0.001));
                 float2 fuv = i.positionWS.xz * _StabbyFieldUV.x + _StabbyFieldUV.y;
                 float field = max(0, i.positionWS.y - SAMPLE_TEXTURE2D(_StabbyBed, sampler_StabbyBed, fuv).r);
-                float far = i.color.a > 0.25 ? saturate(dist * L3.z - 1) : 0;
+                float far = max(i.color.a > 0.25 ? saturate(dist * L3.z - 1) : 0, saturate(i.curt.z));
                 float depth = lerp(max(0, i.positionWS.y - bed.y), field, far);
 
                 float4 wv = L2;
@@ -769,7 +769,7 @@ Shader "Stabby/Water"
                 float dist = length(toCam);
                 float3 v = toCam / dist;
                 float2 uv = i.screen.xy / i.screen.w;
-                float b = i.curt.x;
+                float b = smoothstep(0, 1, i.curt.x);
                 UNITY_BRANCH if (b > 0.999) return Curtain(i, v, dist, uv);
                 half4 s = Sheet(i, v, dist, uv);
                 UNITY_BRANCH if (b > 0.001) s = lerp(s, Curtain(i, v, dist, uv), b);
