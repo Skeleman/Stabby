@@ -63,6 +63,7 @@ namespace Stabby.World
     {
         public int[] Start;
         public DrinkSpot[] Spots;
+        public float[] Pools;
 
         public int First(int site) => Start[site];
         public DrinkSpot Spot(int k) => Spots[k];

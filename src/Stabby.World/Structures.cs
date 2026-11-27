@@ -42,11 +42,12 @@ namespace Stabby.World
         };
         static readonly float[] WallSeat = { -0.45f, 0, -0.225f, 0, 0, 0, 0.225f, 0, 0.45f, 0 };
         static readonly float[] CairnSeat = { 0, 0, 0.4f, 0, -0.4f, 0, 0, 0.4f, 0, -0.4f };
+        static readonly float[] HeadSeat = { 0, 0, 0.065f, 0, -0.065f, 0, 0, 0.085f, 0, -0.085f };
 
         internal static float Cos16(int k) => Dir[k & 15];
         internal static float Sin16(int k) => Dir[(k + 12) & 15];
 
-        public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : KitSeat(shape);
+        public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : shape == ObjectPart.WallHead ? HeadSeat : KitSeat(shape);
 
         public static float Skirt(in StructurePiece p) => p.Y - p.Base <= GroundY ? SkirtShare * Math.Min(p.Sy, 0.5f * (p.Sx + p.Sz)) : 0;
 
@@ -55,6 +56,7 @@ namespace Stabby.World
             var l = new StructureLayout();
             if (shape == ObjectPart.Wall) Wall(key, l);
             else if (shape == ObjectPart.Cairn) Cairn(key, l);
+            else if (shape == ObjectPart.WallHead) WallHead(key, l);
             else if (ObjectPart.IsDungeon(shape)) Dungeon(shape, key, l, trim > 0 ? trim : Iron);
             else if (ObjectPart.IsMine(shape)) Mine(shape, key, l);
             else Built(shape, key, l);
@@ -479,6 +481,37 @@ namespace Stabby.World
             }
         }
 
+        public const float HeadLong = 0.13f, HeadWide = 0.17f;
+
+        static void WallHead(ulong key, StructureLayout l)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0x5851F42D4C957F2DUL));
+            float h = rng.Range(0.29f, 0.32f), cap = rng.Range(0.026f, 0.034f), body = h - cap;
+            int count = rng.Range(4, 6);
+            float y = 0, step = body / count;
+            for (int j = 0; j < count; j++)
+            {
+                float ch = j == count - 1 ? body - y : step * rng.Range(0.9f, 1.1f);
+                float shrink = 1 - 0.06f * (y + 0.5f * ch) / body + (j == 0 ? 0.04f : 0);
+                float sx = HeadLong * shrink, sz = HeadWide * shrink, cut = rng.Range(0.42f, 0.58f);
+                bool across = ((j + (int)(key & 1)) & 1) == 0;
+                for (int b = 0; b < 2; b++)
+                {
+                    float share = b == 0 ? cut : 1 - cut, off = b == 0 ? -0.5f * (1 - cut) : 0.5f * cut;
+                    Yaw(ref rng, FaceYaw, out float c, out float s);
+                    float bx = across ? 0 : off * sx, bz = across ? off * sz : 0;
+                    float lx = across ? sx : share * sx - 0.002f, lz = across ? share * sz - 0.002f : sz;
+                    Add(l, key, bx + rng.Range(-0.002f, 0.002f), y, bz + rng.Range(-0.002f, 0.002f), lx, ch * rng.Range(0.97f, 1f), lz, c, s, 0, 1, StoneSquare);
+                }
+                y += ch;
+            }
+            Add(l, key, 0, 0, 0, HeadLong, body, HeadWide, 1, 0, 2, 2, StoneSquare, 0, 0, 0.03f * HeadWide / body);
+            Yaw(ref rng, 0.03f, out float cc, out float cs);
+            Add(l, key, 0, body - 0.002f, 0, HeadLong + 0.02f, cap, HeadWide + 0.02f, cc, cs, 0, 2, SlabSquare, rng.Range(-0.04f, 0.04f));
+            Calm(l);
+            l.Columns.Add(new ObjectColumn { X = 0, Z = 0, R = 0.5f * HeadWide, Bottom = 0, Top = h });
+        }
+
         const float CopeCalm = 0.67f;
         const float Unworn = 0.985f, WornSpan = 0.075f, MaxRound = 0.09f, RoundCos = 0.92388f, RoundSin = 0.38268f, RoundSkew = 0.12f;
         const float StoneSquare = 0.98f, SlabSquare = 0.94f, Faceted = 0.9f, FaceTilt = 0.025f, FaceYaw = 0.012f, Proud = 0.003f;
@@ -572,7 +605,9 @@ namespace Stabby.World
             }
         }
 
-        static void Cairn(ulong key, StructureLayout l)
+        static void Cairn(ulong key, StructureLayout l) => Cairn(l, key, Frame.Root(1));
+
+        static void Cairn(StructureLayout l, ulong key, in Frame f)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x7F4A7C159E3779B9UL));
             int layers = rng.Range(4, 7);
@@ -586,12 +621,12 @@ namespace Stabby.World
                 {
                     int k = off + i * 16 / count;
                     float dx = Cos16(k), dz = Sin16(k), rr = r * rng.Range(0.92f, 1.06f);
-                    Add(l, key, dx * rr, y, dz * rr, s * rng.Range(1f, 1.35f), sy * rng.Range(0.9f, 1.1f), s * rng.Range(0.75f, 0.95f), -dz, dx, 0, 1);
+                    Hewn(l, key, f, dx * rr, y, dz * rr, s * rng.Range(1f, 1.35f), sy * rng.Range(0.9f, 1.1f), s * rng.Range(0.75f, 0.95f), -dz, dx, 0, 1, Squareness);
                 }
-                Add(l, key, 0, y, 0, 1.8f * r, 0.9f * sy, 1.8f * r, 1, 0, 0, 1);
+                Hewn(l, key, f, 0, y, 0, 1.8f * r, 0.9f * sy, 1.8f * r, 1, 0, 0, 1, Squareness);
                 int pd = rng.Range(0, 16);
-                Add(l, key, 0, y, 0, 2 * r + 0.9f * s, sy, 2 * r + 0.9f * s, Cos16(pd), Sin16(pd), 2, 2);
-                l.Columns.Add(new ObjectColumn { X = 0, Z = 0, R = r + 0.4f * s, Bottom = 0, Top = y + sy });
+                Hewn(l, key, f, 0, y, 0, 2 * r + 0.9f * s, sy, 2 * r + 0.9f * s, Cos16(pd), Sin16(pd), 2, 2, Squareness);
+                Col(l, f, 0, 0, r + 0.4f * s, 0, y + sy);
                 y += 0.82f * sy;
                 r *= 0.72f;
                 s *= 0.86f;
@@ -599,14 +634,14 @@ namespace Stabby.World
             bool standing = rng.NextFloat() < 0.5f;
             float tx = s * (standing ? 0.7f : 1.5f), tz = s * (standing ? 0.5f : 1.3f), ty = s * (standing ? 1.8f : 0.5f);
             int td = rng.Range(0, 16);
-            Add(l, key, 0, y, 0, tx, ty, tz, Cos16(td), Sin16(td), 0, 2);
-            l.Columns.Add(new ObjectColumn { X = 0, Z = 0, R = 0.5f * Math.Min(tx, tz), Bottom = 0, Top = y + ty });
+            Hewn(l, key, f, 0, y, 0, tx, ty, tz, Cos16(td), Sin16(td), 0, 2, Squareness);
+            Col(l, f, 0, 0, 0.5f * Math.Min(tx, tz), 0, y + ty);
             int loose = rng.Range(3, 7);
             for (int k = 0; k < loose; k++)
             {
                 int dir = rng.Range(0, 16), yd = rng.Range(0, 16);
                 float rr = rng.Range(0.38f, 0.43f), ss = rng.Range(0.05f, 0.09f), sy = 0.7f * ss;
-                Add(l, key, Cos16(dir) * rr, -0.2f * sy, Sin16(dir) * rr, 1.4f * ss, sy, ss, Cos16(yd), Sin16(yd), 0, 0);
+                Hewn(l, key, f, Cos16(dir) * rr, -0.2f * sy, Sin16(dir) * rr, 1.4f * ss, sy, ss, Cos16(yd), Sin16(yd), 0, 0, Squareness);
             }
         }
     }

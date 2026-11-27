@@ -192,7 +192,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : only == "lightbudget" ? 540 : only == "waterlook" ? 550 : only == "lightreceivers" ? 560 : only == "firelight" ? 570 : only == "caves" ? 580 : only == "lightscale" ? 590 : only == "oceandetail" ? 600 : only == "waterlights" ? 610 : only == "creaturememory" ? 620 : only == "rigdump" ? 630 : only == "creatureskin" ? 640 : only == "cavemouth" ? 650 : only == "cavelights" ? 660 : only == "caveice" ? 670 : only == "dungeon" ? 680 : only == "dungeons" ? 690 : only == "mines" ? 700 : only == "dungeonlinks" ? 710 : only == "towns" ? 720 : only == "roads" ? 730 : only == "cavelava" ? 740 : only == "cavefalls" ? 750 : 1;
+                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : only == "lightbudget" ? 540 : only == "waterlook" ? 550 : only == "lightreceivers" ? 560 : only == "firelight" ? 570 : only == "caves" ? 580 : only == "lightscale" ? 590 : only == "oceandetail" ? 600 : only == "waterlights" ? 610 : only == "creaturememory" ? 620 : only == "rigdump" ? 630 : only == "creatureskin" ? 640 : only == "cavemouth" ? 650 : only == "cavelights" ? 660 : only == "caveice" ? 670 : only == "dungeon" ? 680 : only == "dungeons" ? 690 : only == "mines" ? 700 : only == "dungeonlinks" ? 710 : only == "towns" ? 720 : only == "roads" ? 730 : only == "cavelava" ? 740 : only == "cavefalls" ? 750 : only == "overlook" ? 760 : only == "wallheads" ? 770 : only == "creaturesyoung" ? 900 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -341,6 +341,21 @@ namespace Stabby.Game.Editor
                 wait = 0;
                 phase++;
             }
+            while (phase >= 760 && phase < 760 + OverlookShots.Length)
+            {
+                string name = OverlookShots[phase - 760];
+                if (wait == 0)
+                {
+                    if (!AimSite(cam, phase - 760, ObjectPart.Overlook, Structures.OverlookU, OverlookShots, "overlook", new Vector3(-1f, 0.15f, 3.5f), 12f)) { GameStatus.Lines["~" + name] = "no overlook placed"; phase++; continue; }
+                    wait = 180;
+                    return;
+                }
+                if (--wait > 0 || Loading()) return;
+                Shot(cam, null, "warmup");
+                Shot(cam, dir, name);
+                wait = 0;
+                phase++;
+            }
             if (phase >= 320 && phase < 320 + VentShots.Length)
             {
                 string name = VentShots[phase - 320];
@@ -398,7 +413,7 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "arch" && phase > 1) || (only == "spring" && phase >= 270 + SpringShots.Length) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length) || (only == "wolfden" && phase >= 400 + DenShots.Length))
+            if ((only == "arch" && phase > 1) || (only == "spring" && phase >= 270 + SpringShots.Length) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length) || (only == "wolfden" && phase >= 400 + DenShots.Length) || (only == "overlook" && phase >= 760 + OverlookShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -475,6 +490,8 @@ namespace Stabby.Game.Editor
             if (phase == 720) { if (job == null) job = TownsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 730) { if (job == null) job = RoadsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 750) { if (job == null) job = CaveFallsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 770) { if (job == null) job = WallHeadsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 900) { if (job == null) job = CreaturesYoung(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 740) { if (job == null) job = LavaCaveTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 710) { if (job == null) job = DungeonLinksTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 630) { if (job == null) job = RigDump(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
@@ -1724,6 +1741,7 @@ namespace Stabby.Game.Editor
         static readonly string[] SpringShots = { "spring-close", "spring" };
         static readonly string[] FairyShots = { "fairyring-close", "fairyring-mid" };
         static readonly string[] DenShots = { "wolfden-close", "wolfden-mid" };
+        static readonly string[] OverlookShots = { "overlook-view", "overlook-site" };
         static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot", "geyser-cone", "mudpot-rim" };
 
         static bool AimVent(Camera cam, int mode)
@@ -1878,7 +1896,9 @@ namespace Stabby.Game.Editor
                 var across = q * Vector3.forward;
                 var along = q * Vector3.right;
                 Vector3 eye, target;
-                if (mode == 0) { target = centre + across * focusZ * u + Vector3.up * 0.5f * u; eye = centre + (across * close.x + along * close.y) * close.z * u + Vector3.up * 1.7f; }
+                if (shape == ObjectPart.Overlook && mode == 0) { eye = centre - across * 3.2f + along * 0.6f + Vector3.up * 3.4f; target = centre + across * 30f - Vector3.up * 9f; }
+                else if (shape == ObjectPart.Overlook) { eye = centre + along * 32f - across * 6f + Vector3.up * 10f; target = centre + across * 3f; }
+                else if (mode == 0) { target = centre + across * focusZ * u + Vector3.up * 0.5f * u; eye = centre + (across * close.x + along * close.y) * close.z * u + Vector3.up * 1.7f; }
                 else { target = centre + Vector3.up * 0.6f * u; eye = centre + (across * 0.8f + along * 0.6f).normalized * 16f * u + Vector3.up * 6f * u; }
                 var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
