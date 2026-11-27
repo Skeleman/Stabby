@@ -90,7 +90,7 @@ namespace Stabby.World
                 int[] idx;
                 if (p.R > 0)
                     u = RoundMesh(p.Key, p.R, tier, out idx, out lift);
-                else if (p.M > 0 || p.Coursed)
+                else if ((p.M > 0 && p.M != Soil) || p.Coursed)
                 {
                     u = UnitBox;
                     idx = UnitBoxIdx;

@@ -51,7 +51,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
-            float4 _StabbyKit[39], _StabbyKitSrgb[39];
+            float4 _StabbyKit[42], _StabbyKitSrgb[42];
             float _StabbyClock;
             static float3 emberGlow;
             static float iceWrap;
@@ -494,6 +494,26 @@ Shader "Stabby/Object"
                         a *= lerp(0.75, 1.25, yf);
                         grad = 0.1 * str.yzw * fs + 0.08 * fib.yzw * ff;
                     }
+                }
+                else if (mat == 11)
+                {
+                    float4 lp = OrgRP3(q, OrgF(1), sd + 1.7, 1);
+                    float wet = smoothstep(-0.3, 0.7, big.x + 0.6 * mid.x * fm) * 0.55 + (1 - open) * 0.45;
+                    a = lerp(_StabbyKit[39].rgb, _StabbyKit[40].rgb, saturate(wet)) * (0.8 + 0.14 * fib.x * ff + 0.1 * big.x);
+                    float grit = smoothstep(0.5, 0.85, lp.x + 0.35 * fib.x * ff) * fs;
+                    a = lerp(a, _StabbyKit[41].rgb, 0.5 * grit);
+                    grad = 0.26 * mid.yzw * fm + 0.16 * lp.yzw * fs + 0.1 * fib.yzw * ff;
+                    shade = 0.35 * smoothstep(0.0, -0.6, mid.x) * fm;
+                }
+                else if (mat == 1 && th.x > 2.5 && th.x < 3.5)
+                {
+                    float rot = smoothstep(-0.3, 0.6, big.x + 0.5 * mid.x * fm);
+                    a = lerp(_StabbyKit[5].rgb, _StabbyKit[0].rgb, 0.5 * rot) * (0.5 + 0.14 * str.x * fs + 0.12 * fib.x * ff);
+                    float pith = smoothstep(0.75, 0.95, 1 - abs(fib.x + 0.3 * str.x)) * ff;
+                    a *= 1 - 0.4 * pith;
+                    a = lerp(a, _StabbyKit[40].rgb * (0.9 + 0.2 * mid.x), 0.55 * smoothstep(0.35, 0.9, n.y + 0.3 * big.x));
+                    grad = 0.18 * str.yzw * fs + 0.16 * fib.yzw * ff + 0.05 * mid.yzw * fm;
+                    shade = 0.3 * pith;
                 }
                 else if (side && mat == 1)
                 {

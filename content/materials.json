@@ -220,7 +220,10 @@
     { "id": "crystal-light",    "name": "Crystal light",    "color": "#b4a2f0" },
     { "id": "skylight",         "name": "Skylight",         "color": "#dfe6ee" },
     { "id": "dirt-road",        "name": "Dirt road",        "color": "#8a7860" },
-    { "id": "rut-dirt",         "name": "Rut dirt",         "color": "#5e5040" }
+    { "id": "rut-dirt",         "name": "Rut dirt",         "color": "#5e5040" },
+    { "id": "loam",             "name": "Loam",             "color": "#33271c" },
+    { "id": "wet-loam",         "name": "Wet loam",         "color": "#1e1711" },
+    { "id": "loam-grit",        "name": "Loam grit",        "color": "#4e3f2f" }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],
@@ -232,7 +235,8 @@
     "ash": ["charcoal", "hearth-ash", "ember-crack", "soot", "hearth-ring"],
     "fungus": ["red-cap", "brown-cap", "tan-cap", "ochre-cap", "cap-rim", "cap-wart", "dark-gill", "pale-gill", "fungus-stem", "stem-base"],
     "turf": ["roof-turf", "turf-sprout"],
-    "ember": ["ember-glow", "ember-core"]
+    "ember": ["ember-glow", "ember-core"],
+    "soil": ["loam", "wet-loam", "loam-grit"]
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },

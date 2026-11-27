@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9;
+        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11;
         const int GX = 0, GV = 1, GZ = 2;
         const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5;
         static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };
@@ -145,33 +145,31 @@ namespace Stabby.World
 
         static float[] TubeMesh(ref Rng rng, int tier, out int[] idx, out float[] lift)
         {
-            int sides = tier < 1 ? 32 : tier < 2 ? 16 : 8, rings = tier < 2 ? 5 : 2, wall = rings * sides, rim = 2 * wall;
+            int sides = tier < 1 ? 32 : tier < 2 ? 16 : 8, rings = tier < 1 ? 13 : tier < 2 ? 7 : 3, wall = rings * sides, rim = 2 * wall;
             var dc = new float[sides];
             var ds = new float[sides];
             for (int i = 0; i < sides; i++) RoundDir(i, sides, out dc[i], out ds[i]);
-            float bend = rng.Range(-0.05f, 0.05f), sway = rng.Range(-0.05f, 0.05f), taper = rng.Range(0.02f, 0.05f);
+            float sway = rng.Range(-0.08f, 0.08f), wob = rng.Range(-0.05f, 0.05f);
             var w = new float[3 * (rim + 4 * sides)];
             lift = new float[rim + 4 * sides];
             var rag = new float[2][];
-            for (int e = 0; e < 2; e++)
-            {
-                rag[e] = RoundNoise(ref rng, sides, 0f, 0.12f);
-                for (int i = 0; i < sides; i++) rag[e][i] += 0.05f * rng.NextFloat();
-            }
+            rag[0] = RoundNoise(ref rng, sides, 0f, 0.05f);
+            rag[1] = new float[sides];
+            for (int i = 0; i < sides; i++) rag[1][i] = 0.01f + (rng.NextFloat() < 0.4f ? rng.Range(0.06f, 0.15f) : rng.Range(0f, 0.04f));
+            var outer = RoundNoise(ref rng, sides, 0.93f, 1f);
+            var inner = RoundNoise(ref rng, sides, 0.78f, 0.84f);
             for (int j = 0; j < rings; j++)
             {
-                float t = 2f * j / (rings - 1) - 1, k = 1 - taper * 0.5f * (t + 1), cy = bend * (1 - t * t), cz = sway * (1 - t * t);
-                var outer = RoundNoise(ref rng, sides, 0.92f, 1f);
-                var inner = RoundNoise(ref rng, sides, 0.78f, 0.84f);
+                float t = 2f * j / (rings - 1) - 1, k = 1 - TreeTaper * 0.5f * (t + 1), cy = -TreeSag * (1 - t * t) - TreeDrop * (1 - k), cz = sway * (1 - t * t) + wob * t * (1 - t * t);
                 bool end = j == 0 || j == rings - 1;
                 for (int i = 0; i < sides; i++)
                 {
-                    float x = j == 0 ? -1 + rag[0][i] : j == rings - 1 ? 1 - rag[1][i] : t, ro = outer[i] * k * (end ? 1 - 0.04f * rng.NextFloat() : 1), ri = inner[i] * k;
-                    float xi = end ? x - t * rng.Range(0.02f, 0.08f) : x;
+                    float x = j == 0 ? -1 + rag[0][i] : j == rings - 1 ? 1 - rag[1][i] : t, ro = outer[i] * k * (1 - 0.025f * rng.NextFloat()), ri = inner[i] * k * (1 - 0.03f * rng.NextFloat());
+                    float xi = end ? x - t * rng.Range(0.02f, 0.06f) : x;
                     int o = j * sides + i, n = wall + o;
                     w[3 * o] = x; w[3 * o + 1] = cy + ro * dc[i]; w[3 * o + 2] = cz + ro * ds[i];
                     w[3 * n] = xi; w[3 * n + 1] = cy + ri * dc[i]; w[3 * n + 2] = cz + ri * ds[i];
-                    lift[o] = 8; lift[n] = 5;
+                    lift[o] = 8; lift[n] = 3;
                     if (!end) continue;
                     int b = rim + (j == 0 ? 0 : 2 * sides) + i;
                     Array.Copy(w, 3 * o, w, 3 * b, 3);
