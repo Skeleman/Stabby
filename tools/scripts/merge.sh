@@ -3,7 +3,7 @@
 # in the background (full tests take minutes). Pushes only if every check passes.
 . "$(dirname "$0")/env.sh"; cd "$ROOT"
 br="$1"; sum="${2:-}"; [ -n "$br" ] || { echo "usage: merge.sh <branch> [summary]"; exit 2; }
-dry="${MERGE_DRY_RUN:-}"; cap="${QUIET_MAX:-900}"
+dry="${MERGE_DRY_RUN:-}"; cap="${QUIET_MAX:-0}"
 if [ -n "$dry" ]; then echo "dry run: no merge, no push"; git fetch -q origin || exit 2
 else
   [ "$(git branch --show-current)" = main ] || { echo "not on main"; exit 2; }
