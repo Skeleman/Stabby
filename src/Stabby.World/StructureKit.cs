@@ -170,6 +170,7 @@ namespace Stabby.World
                 for (int i = 0; i < sides; i++) rag[e][i] = 0.01f + 0.25f * tear[(i + sides - 1) % sides] + 0.5f * tear[i] + 0.25f * tear[(i + 1) % sides];
             }
             var outer = RoundNoise(ref rng, sides, 0.93f, 1f);
+            float floor = 2 * (TreeFloorM - TreeCy) / TreeSy;
             var inner = RoundNoise(ref rng, sides, 0.78f, 0.84f);
             for (int j = 0; j < rings; j++)
             {
@@ -182,7 +183,7 @@ namespace Stabby.World
                     float xi = end ? x - t * rng.Range(0.02f, 0.06f) : x;
                     int o = j * sides + i, n = wall + o;
                     w[3 * o] = x; w[3 * o + 1] = cy + ro * dc[i]; w[3 * o + 2] = cz + ro * ds[i];
-                    w[3 * n] = xi; w[3 * n + 1] = cy + ri * dc[i]; w[3 * n + 2] = cz + ri * ds[i];
+                    w[3 * n] = xi; w[3 * n + 1] = Math.Max(cy + ri * dc[i], floor); w[3 * n + 2] = cz + ri * ds[i];
                     lift[o] = 9; lift[n] = 3;
                     if (!end) continue;
                     int b = rim + (j == 0 ? 0 : 2 * sides) + i;

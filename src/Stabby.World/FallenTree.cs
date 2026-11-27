@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const float TreeU = 1 / 18f, TreeCy = 1.05f, TreeSy = 3.2f, TreeSz = 3.05f, TreeTaper = 0.3f, TreeSag = 0.05f, TreeDrop = 0.8f, TreeWallZ = 1.15f, TreeRoofM = 2.25f, TreeSeatZ = 1.1f;
+        public const float TreeU = 1 / 18f, TreeCy = 1.05f, TreeSy = 3.2f, TreeSz = 3.05f, TreeTaper = 0.3f, TreeSag = 0.05f, TreeDrop = 0.8f, TreeWallZ = 1.15f, TreeRoofM = 2.25f, TreeSeatZ = 1.1f, TreeFloorM = 0.45f;
         static readonly float[] TreeSeats =
         {
             -7.5f / 18, 1.1f / 18, -5f / 18, 1.1f / 18, -2.5f / 18, 1.1f / 18, 0, 1.1f / 18, 2.5f / 18, 1.1f / 18, 5f / 18, 1.1f / 18, 7.5f / 18, 1.1f / 18,
@@ -19,14 +19,6 @@ namespace Stabby.World
         {
             float t = 2 * x / len;
             return TreeCy - 0.5f * TreeSy * (TreeSag * (1 - t * t) + TreeDrop * TreeTaper * 0.5f * (t + 1));
-        }
-
-        static void Sheared(StructureLayout l, int at, float lean, float batter)
-        {
-            if (at >= l.Pieces.Count) return;
-            var p = l.Pieces[at];
-            p.L = lean; p.B = batter;
-            l.Pieces[at] = p;
         }
 
         static void FallenTree(StructureLayout l, ulong key, in Frame f)
@@ -55,9 +47,9 @@ namespace Stabby.World
             {
                 int k = (rng.NextFloat() < 0.5f ? -1 : 1) * rng.Range(2, 4);
                 Arc((k + rng.Range(-0.3f, 0.3f)) / 16f, out float c, out float s);
-                float x = rng.Range(half - 3.2f, half - 0.6f), r = TreeRad(x, len, TreeSy), rz = TreeRad(x, len, TreeSz), sl = rng.Range(0.5f, 1.1f), d = rng.Range(0.28f, 0.42f), y0 = TreeMid(x, len) + 0.85f * r * c, z0 = 0.85f * rz * s;
-                Round(l, rng.NextU64(), f, x, y0, z0 + 0.5f * sl * s, d, sl * c, d * rng.Range(0.85f, 1.1f), Timber, GV, RoundStem, 0, 1);
-                Sheared(l, l.Pieces.Count - 1, rng.Range(0.3f, 0.6f), s / c);
+                float x = rng.Range(half - 3.2f, half - 0.6f), r = TreeRad(x, len, TreeSy), rz = TreeRad(x, len, TreeSz), sl = rng.Range(0.3f, 0.6f), d = rng.Range(0.28f, 0.42f), y0 = TreeMid(x, len) + 0.85f * r * c, z0 = 0.85f * rz * s;
+                float up = 0.6f + 0.4f * c, reach = 0.15f * r + sl, ax = rng.Range(-0.25f, 0.25f);
+                Bone(l, rng.NextU64(), f, x, y0, z0, x + ax * reach, y0 + up * reach, z0 + s * reach, d, 0.55f * d, 0, 1, Timber);
             }
 
             int moss = l.Pieces.Count;
