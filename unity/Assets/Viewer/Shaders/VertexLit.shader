@@ -149,8 +149,8 @@ Shader "Stabby/VertexLit"
                     float4 bump = OrgFbm3(qm + (qw - q), ra.w, 1, 3, fp);
                     float gw = OrgRungW(0, fp), fw2 = OrgRungW(1, fp), fw3 = OrgRungW(2, fp);
                     float4 grain = SinterN(qw, ra.y, 71.3, gw);
-                    float3 qf = qw + float3(grain.y, 0, grain.w) * (0.4 / ra.y);
-                    float4 fine = SinterN(qf, OrgF(1), 77.9, fw2), micro = SinterN(qf + float3(fine.w, 0, fine.y) * (0.25 / ra.y), OrgF(2), 83.1, fw3);
+                    float3 qf = qw + float3(grain.y, 0, grain.w) * (0.1 / ra.y);
+                    float4 fine = SinterN(qf, OrgF(1), 77.9, fw2), micro = SinterN(qf + float3(fine.w, 0, fine.y) * (0.06 / ra.y), OrgF(2), 83.1, fw3);
                     float bv = bump.x * ra.w;
                     float bleach = smoothstep(0, 0.3, s * (1 + 0.6 * zone.x + 0.25 * bv));
                     float crust = smoothstep(0.42, 0.72, s + 0.22 * zone.x + 0.1 * bv + 0.05 * gw * grain.x);
