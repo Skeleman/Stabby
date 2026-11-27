@@ -74,6 +74,7 @@ namespace Stabby.Game.Editor
             var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 1);
             var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 1);
             var allocCountRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocation In Frame Count", 1);
+            var gfx = new GfxMemory();
             var lines = new List<string>
             {
                 $"walk line from {start.x:F1},{start.y:F1} along {d.x:F2},{d.y:F2}: {land * 100:F0}% land, relief {relief:F0} m, FOV {cam.fieldOfView:F0}, {target.width}x{target.height}, quality {DetailView.Current.Quality:F2}, {recs.Count} system markers over {Unity.Entities.World.All.Count} worlds",
@@ -91,6 +92,7 @@ namespace Stabby.Game.Editor
                     bool profile = profileAt == label || label == "fast" && profileAt == "1";
                     MeshBudget.Reset();
                     var churn0 = Churn();
+                    var gfx0 = gfx.Snap();
                     float churnT0 = Time.realtimeSinceStartup;
                     while (along < from + length)
                     {
@@ -123,7 +125,7 @@ namespace Stabby.Game.Editor
                     }
                     if (profile) UnityEngine.Profiling.Profiler.enabled = false;
                     lines.Add(WalkReport(label, speed, length, frames));
-                    lines.Add(ChurnReport(label, churn0, Churn(), Time.realtimeSinceStartup - churnT0));
+                    lines.Add(ChurnReport(label, churn0, Churn(), Time.realtimeSinceStartup - churnT0) + "; " + GfxMemory.Delta(gfx0, gfx.Snap()));
                     lines.Add($"{label} {MeshBudget.Report()}");
                     for (var s = Settle(120); s.MoveNext();) yield return null;
                     lines.Add(Resident(view, label));
@@ -191,7 +193,7 @@ namespace Stabby.Game.Editor
                 lines.Add(ColumnsEqual("after teleport"));
                 var mem = new MemoryCounters { Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MemoryCounters>() };
                 GetProcessMemoryInfo(GetCurrentProcess(), ref mem, mem.Size);
-                lines.Add($"memory: process peak working set {(ulong)mem.PeakWorkingSetSize / 1e9:F2} GB, now {(ulong)mem.WorkingSetSize / 1e9:F2} GB, peak commit {(ulong)mem.PeakPagefileUsage / 1e9:F2} GB; Unity reserved {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1e9:F2} GB, allocated {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1e9:F2} GB, graphics driver {UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver() / 1e9:F2} GB");
+                lines.Add($"memory: process peak working set {(ulong)mem.PeakWorkingSetSize / 1e9:F2} GB, now {(ulong)mem.WorkingSetSize / 1e9:F2} GB, peak commit {(ulong)mem.PeakPagefileUsage / 1e9:F2} GB; Unity reserved {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1e9:F2} GB, allocated {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1e9:F2} GB, {GfxMemory.Report(gfx.Snap())}");
             }
             finally
             {
@@ -201,6 +203,7 @@ namespace Stabby.Game.Editor
                 mainRec.Dispose();
                 allocRec.Dispose();
                 allocCountRec.Dispose();
+                gfx.Dispose();
             }
             GameStatus.Lines["~walk"] = string.Join("\n", lines);
         }
@@ -213,6 +216,40 @@ namespace Stabby.Game.Editor
             int chunks = Mathf.Max(1, b.chunks - a.chunks);
             float minutes = Mathf.Max(seconds, 1e-3f) / 60f;
             return $"terrain churn {label}: {b.chunks - a.chunks} chunks applied in {seconds:F1} s, managed {(b.bytes - a.bytes) / (double)chunks:F0} B/chunk, native {(b.allocs - a.allocs) / (double)chunks:F2} allocs and {(b.native - a.native) / 1024.0 / chunks:F0} KB/chunk, meshes made {b.made - a.made} ({(b.made - a.made) / minutes:F1}/min), destroyed {b.destroyed - a.destroyed}";
+        }
+
+        sealed class GfxMemory : System.IDisposable
+        {
+            static readonly string[] Names = { "Gfx Used Memory", "Gfx Reserved Memory", "System Used Memory" };
+            readonly ProfilerRecorder[] recs = new ProfilerRecorder[Names.Length];
+
+            public GfxMemory()
+            {
+                for (int i = 0; i < Names.Length; i++) recs[i] = ProfilerRecorder.StartNew(ProfilerCategory.Memory, Names[i]);
+            }
+
+            public long[] Snap()
+            {
+                var v = new long[Names.Length + 1];
+                v[0] = UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver();
+                for (int i = 0; i < Names.Length; i++) v[i + 1] = recs[i].Valid ? recs[i].CurrentValue : -1;
+                return v;
+            }
+
+            static string Mb(long b) => b < 0 ? "n/a" : $"{b / 1e6:F0} MB";
+
+            public static string Report(long[] v) => $"graphics driver {Mb(v[0])}, gfx used {Mb(v[1])}, gfx reserved {Mb(v[2])}, system used {Mb(v[3])}";
+
+            public static string Delta(long[] a, long[] b)
+            {
+                string D(int i) => a[i] < 0 || b[i] < 0 ? "n/a" : $"{(b[i] - a[i]) / 1e6:+0;-0;0} MB";
+                return $"graphics driver {D(0)}, gfx used {D(1)}, gfx reserved {D(2)}, system used {D(3)} (now {Report(b)})";
+            }
+
+            public void Dispose()
+            {
+                for (int i = 0; i < recs.Length; i++) recs[i].Dispose();
+            }
         }
 
         static void WalkProfile(int segment)
