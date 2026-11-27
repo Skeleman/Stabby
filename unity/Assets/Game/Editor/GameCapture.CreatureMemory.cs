@@ -273,7 +273,10 @@ namespace Stabby.Game.Editor
 
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
             using var buildRec = new SystemMarker(MarkerName(view, typeof(CreatureBuildSystem)), 4);
-            var hd = new RenderTexture(1920, 1080, 24);
+            int.TryParse(System.Environment.GetEnvironmentVariable("STABBY_BENCH_GPU"), out int gpuMode);
+            Shader.SetGlobalInteger("_CreatureBench", gpuMode);
+            int div = System.Environment.GetEnvironmentVariable("STABBY_BENCH_HALF") == "1" ? 2 : 1;
+            var hd = new RenderTexture(1920 / div, 1080 / div, 24);
             for (int r = 0; r < MemoryCounts.Length; r++)
             {
                 int n = MemoryCounts[r];
@@ -331,6 +334,36 @@ namespace Stabby.Game.Editor
                         if (k >= 5) spread.Sample(Time.unscaledDeltaTime * 1000.0);
                     }
                     profile.AddRange(spread.Report($"N {n}", 14));
+                    if (System.Environment.GetEnvironmentVariable("STABBY_BENCH_AB") == "1")
+                    {
+                        string[] ab = { "off", "base", "bind", "flat", "half", "halfoff", "upload" };
+                        var gpu = new List<double>[ab.Length];
+                        for (int a = 0; a < ab.Length; a++) gpu[a] = new List<double>();
+                        var small = new RenderTexture(960, 540, 24);
+                        using var gpuRec = ProfilerRecorder.StartNew(ProfilerCategory.Render, "GPU Frame Time");
+                        for (int round = 0; round < 8; round++)
+                            for (int a = 0; a < ab.Length; a++)
+                            {
+                                draw.Enabled = a != 0 && a != 5;
+                                CreatureDrawSystem.BenchSkipDraw = a == 6;
+                                Shader.SetGlobalInteger("_CreatureBench", a == 2 ? 1 : a == 3 ? 2 : 0);
+                                for (int k = 0; k < 14; k++)
+                                {
+                                    yield return null;
+                                    cam.targetTexture = a >= 4 ? small : hd;
+                                    cam.Render();
+                                    cam.targetTexture = null;
+                                    if (k >= 6) gpu[a].Add(gpuRec.LastValue / 1e6);
+                                }
+                            }
+                        draw.Enabled = true;
+                        CreatureDrawSystem.BenchSkipDraw = false;
+                        Shader.SetGlobalInteger("_CreatureBench", gpuMode);
+                        Object.DestroyImmediate(small);
+                        var parts = new List<string>();
+                        for (int a = 0; a < ab.Length; a++) parts.Add($"{ab[a]} {Pct(gpu[a], 0.5):F2}");
+                        profile.Add($"N {n} interleaved GPU frame time median ms: " + string.Join(", ", parts));
+                    }
                 }
                 int trimsBefore = AnimHeld(view).trims;
 

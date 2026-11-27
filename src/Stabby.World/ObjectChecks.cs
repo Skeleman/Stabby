@@ -312,6 +312,31 @@ namespace Stabby.World
         }
 
         public const float BoulderStepM = 1f, BoulderTolerance = 1f;
+        public const float BoulderSteepNy = 0.5f, BoulderLowNy = -0.3f, BoulderNormalLift = 0.3f, BoulderNormalShare = 0.1f, BoulderNormalFloor = 2f;
+
+        public static string BoulderNormalFault<TCols>(TCols cols, NetsBuffers m, FeatureEdit b, FeatureEdit[] near, float s) where TCols : struct, IColumnField
+        {
+            int steep = 0, bad = 0;
+            float ex = b.Bx - b.Ax, ey = b.By - b.Ay, ez = b.Bz - b.Az, ll = ex * ex + ey * ey + ez * ez;
+            foreach (int t in new HashSet<int>(m.Tris))
+            {
+                int v = t * 6;
+                float x = m.Verts[v], y = m.Verts[v + 1], z = m.Verts[v + 2], ny = m.Verts[v + 4];
+                float px = x - b.Ax, py = y - b.Ay, pz = z - b.Az;
+                float u = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
+                float qx = px - u * ex, qy = py - u * ey, qz = pz - u * ez, d = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+                if (d <= 0f || Math.Abs(d - b.R) > 0.5f * s + b.N || y - cols.Height((int)Math.Round(x / s), (int)Math.Round(z / s)) < 0.5f * s) continue;
+                float ty = qy / d;
+                if (ty > BoulderSteepNy || ty < BoulderLowNy) continue;
+                bool shared = false;
+                foreach (var f in near)
+                    shared |= (f.Ax != b.Ax || f.Ay != b.Ay || f.Az != b.Az) && f.Kind == FeatureEdit.Add && f.Shape == FeatureEdit.Boulder && f.BoulderDistance(x, y, z) < f.R + s;
+                if (shared) continue;
+                steep++;
+                if (ny - ty > BoulderNormalLift) bad++;
+            }
+            return bad > Math.Max(BoulderNormalFloor, BoulderNormalShare * steep) ? $" tilts {bad} of {steep} steep-face normals upward" : null;
+        }
         public const int BoulderMeshSamples = 12;
 
         static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
@@ -412,8 +437,10 @@ namespace Stabby.World
             MeshBoulder(detail, list, c, out var m, out var g, out var h);
             if (!m.SameSurfaceAs(g)) e.Add(at + " mesh differs from the general mesher");
             if (m.SameSurfaceAs(h)) e.Add(at + " leaves the ground unchanged");
+            string tilt = BoulderNormalFault(new DetailColumns { Detail = detail, StepM = s }, m, b, list.Items, s);
+            if (tilt != null) e.Add(at + tilt);
             var ground = new DetailGround { Detail = detail };
-            float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = 0.5f * (b.Ay + b.By) + b.R;
+            float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = TopAt(b, mx, mz);
             foreach (var f in list.Items) top = Math.Max(top, TopAt(f, mx, mz));
             float wx = mx, wy = top + Walk.StepUp, wz = mz;
             Walk.Step(ground, list, Features.LatticeStepM, ref wx, ref wy, ref wz, 0, 0, Walk.Reach);
@@ -453,7 +480,10 @@ namespace Stabby.World
         static float TopAlong(FeatureEdit f, float x, float z, float t)
         {
             float qx = x - f.Ax - t * (f.Bx - f.Ax), qz = z - f.Az - t * (f.Bz - f.Az), dd = f.R * f.R - qx * qx - qz * qz;
-            return dd > 0 ? f.Ay + t * (f.By - f.Ay) + (float)Math.Sqrt(dd) : float.NegativeInfinity;
+            if (dd <= 0) return float.NegativeInfinity;
+            float y = f.Ay + t * (f.By - f.Ay), r = f.R - f.Weathering(x, y + (float)Math.Sqrt(dd), z);
+            dd = r * r - qx * qx - qz * qz;
+            return dd > 0 ? y + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
         static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, int across, float span)
