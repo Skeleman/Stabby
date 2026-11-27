@@ -166,7 +166,7 @@ namespace Stabby.World
                 Col(l, f, x, TreeWallZ, 0.32f, 0, 2.8f);
                 Col(l, f, x, -TreeWallZ, 0.32f, 0, 2.8f);
             }
-            Col(l, f, ux, uz, top, 0, StumpSink + 0.8f);
+            Col(l, f, ux, uz, top, 0, StumpSink + 1.1f);
             for (int i = 0; i < 10; i++)
             {
                 Arc(i / 10f, out float c, out float s);

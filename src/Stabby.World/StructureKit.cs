@@ -7,7 +7,7 @@ namespace Stabby.World
         public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11;
         const int GX = 0, GV = 1, GZ = 2;
         const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5, RoundStump = 6;
-        const float StumpR = 0.55f * TreeSz, StumpH = 1.75f, StumpSink = 0.3f;
+        const float StumpR = 0.55f * TreeSz, StumpH = 2.2f, StumpSink = 0.3f;
         static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };
         static readonly float[] DomeLowR = { 1f, 0.8f }, DomeLowY = { -0.8f, 0.3f };
 
@@ -159,36 +159,36 @@ namespace Stabby.World
             var dc = new float[n];
             var ds = new float[n];
             for (int i = 0; i < n; i++) RoundDir(i, n, out dc[i], out ds[i]);
-            float hi = rng.Range(1f, 1.3f), lo = rng.Range(0.4f, 0.7f), top = Math.Max(lo, hi - 0.3f), th = rng.Range(0.08f, 0.12f) / StumpR;
+            float hi = rng.Range(1.4f, 1.8f), lo = rng.Range(0.7f, 1f), top = Math.Max(lo, hi - 0.05f), th = rng.Range(0.08f, 0.12f) / StumpR, tap = rng.Range(0.03f, 0.05f) / StumpR;
             int k0 = rng.Range(0, n), np = rng.Range(3, 6);
             var h = new float[n];
             var peak = new bool[n];
             for (int i = 0; i < n; i++)
             {
                 float a = 0.5f * (1 + dc[i] * dc[k0] + ds[i] * ds[k0]);
-                h[i] = lo + (top - lo) * a * a + rng.Range(-0.1f, 0.03f);
+                h[i] = lo + (top - lo) * a * a + rng.Range(-0.08f, 0.03f);
             }
             for (int p = 0; p < np; p++)
             {
                 int k = ((k0 + (int)Math.Round(((p + 0.5f) / np - 0.5f) * 0.6f * n + rng.Range(-0.6f, 0.6f))) % n + n) % n;
                 if (peak[k]) continue;
                 peak[k] = true;
-                h[k] = Math.Min(1.35f, h[k] + rng.Range(0.25f, 0.45f));
+                h[k] = Math.Min(1.9f, h[k] + rng.Range(0.25f, 0.45f));
             }
             for (int i = 0; i < n; i++)
                 if (!peak[i] && (peak[(i + 1) % n] || peak[(i + n - 1) % n])) h[i] -= rng.Range(0.04f, 0.12f);
             float low = float.MaxValue;
-            for (int i = 0; i < n; i++) { h[i] = Math.Max(0.3f, h[i]); low = Math.Min(low, h[i]); }
+            for (int i = 0; i < n; i++) { h[i] = Math.Max(0.6f, h[i]); low = Math.Min(low, h[i]); }
             float yd = StumpY(low - 0.04f);
             var ro = RoundNoise(ref rng, n, 0.95f, 1f);
             var w = new float[3 * total];
             lift = new float[total];
             for (int i = 0; i < n; i++)
             {
-                float r = ro[i], ri = r - th * (peak[i] ? 0.5f : rng.Range(0.85f, 1.15f)), y = StumpY(h[i]), yi = peak[i] ? StumpY(h[i] - 0.06f) : y;
+                float r = ro[i], ot = 0.98f * r - tap, ri = ot - th * (peak[i] ? 0.5f : rng.Range(0.85f, 1.15f)), y = StumpY(h[i]), yi = peak[i] ? StumpY(h[i] - 0.06f) : y;
                 Set(w, i, 1.04f * r * dc[i], -1, 1.04f * r * ds[i]); lift[i] = 9;
-                Set(w, n + i, 0.98f * r * dc[i], y, 0.98f * r * ds[i]); lift[n + i] = 9;
-                Set(w, 2 * n + i, 0.98f * r * dc[i], y, 0.98f * r * ds[i]);
+                Set(w, n + i, ot * dc[i], y, ot * ds[i]); lift[n + i] = 9;
+                Set(w, 2 * n + i, ot * dc[i], y, ot * ds[i]);
                 Set(w, 3 * n + i, ri * dc[i], yi, ri * ds[i]);
                 Set(w, 4 * n + i, ri * dc[i], yi, ri * ds[i]);
                 Set(w, 5 * n + i, ri * dc[i], yd, ri * ds[i]);
@@ -207,7 +207,7 @@ namespace Stabby.World
             for (int k = 0; k < spl; k++)
             {
                 int o = sp0 + 5 * k, q = rng.Range(0, n);
-                float pr = rng.Range(0f, 0.65f), px = pr * dc[q], pz = pr * ds[q], e = rng.Range(0.06f, 0.12f) / StumpR, sh = rng.Range(0.1f, 0.3f);
+                float pr = rng.Range(0f, 0.65f), px = pr * dc[q], pz = pr * ds[q], e = rng.Range(0.08f, 0.15f) / StumpR, sh = rng.Range(0.25f, 0.5f);
                 for (int c = 0; c < 4; c++)
                 {
                     float ee = e * rng.Range(0.7f, 1.3f);
