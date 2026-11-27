@@ -20,7 +20,7 @@ namespace Stabby.World
         public const float GapM = 3000f, LandmarkGapM = 1200f, RoadGapM = 500f, CoastPadM = 300f, RiverPadM = 300f, MesaPadM = 200f, SampleM = 20f;
         public const float CarveShare = 0.85f, CarveRound = 1.5f, CarveTaper = -1.4f, CarveP = -0.15f, CarveN = 0.3f, MinDepthM = 4f, MaxDepthM = 10f, RingPadM = 2f, TopPadM = 2f;
         public const float NoneChance = 0.3f, OneChance = 0.75f, RainPadMm = 120f;
-        public const int MaxClosed = 2, Tries = 1500, RimDirs = 256, RingDirs = 48;
+        public const int MaxClosed = 2, Tries = 1500, RimDirs = 256, RingDirs = 48, ReachPasses = 4;
         const ulong CraterTag = 0xC4A7E5D1B3F29A61UL;
 
         public static void Raise(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate, IReadOnlyList<BiomeDef> biomes)
@@ -257,14 +257,20 @@ namespace Stabby.World
 
         public static FeatureEdit Crater(TerrainDetail detail, VolcanoSketch v)
         {
-            float r = CarveRadius(v), hi = float.MinValue, lo = float.MaxValue;
-            for (int k = 0; k < RingDirs; k++)
+            float r = CarveRadius(v), hi = float.MinValue, lo = float.MaxValue, depth = Math.Max(MinDepthM, Math.Min(MaxDepthM, 0.25f * r)), reach = r;
+            for (int pass = 0; pass < ReachPasses; pass++)
             {
-                Ring(k, RingDirs, out float ux, out float uz);
-                float g = detail.Sample(v.X + ux * (r + RingPadM), v.Z + uz * (r + RingPadM));
-                hi = Math.Max(hi, g); lo = Math.Min(lo, g);
+                for (int k = 0; k < RingDirs; k++)
+                {
+                    Ring(k, RingDirs, out float ux, out float uz);
+                    float g = detail.Sample(v.X + ux * (reach + RingPadM), v.Z + uz * (reach + RingPadM));
+                    hi = Math.Max(hi, g); lo = Math.Min(lo, g);
+                }
+                float need = -CarveTaper * (hi - lo + TopPadM + depth - 2f * CarveRound) + CarveRound * (1f + (float)Math.Sqrt(1f + CarveTaper * CarveTaper));
+                if (need <= r) break;
+                r = need;
+                reach = Math.Max(reach, r);
             }
-            float depth = Math.Max(MinDepthM, Math.Min(MaxDepthM, 0.25f * r));
             float seed = (float)((Rng.Mix(((ulong)(uint)(int)(v.X * 64f) << 32 | (uint)(int)(v.Z * 64f)) ^ CraterTag) >> 40) / 16777216.0);
             return ObjectField.Disc(FeatureEdit.Carve, v.X, v.Z, hi + TopPadM, lo - depth, r, CarveRound, CarveTaper, CarveP, CarveN, seed, 0f, 0f);
         }
