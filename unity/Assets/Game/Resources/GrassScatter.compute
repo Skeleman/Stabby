@@ -153,7 +153,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         float3 root = color;
         [branch] if (_StabbyDetailOff <= 0)
         {
-            TmOut g = TmGrass(lp, color, fp, _StabbyCoatA[0], _StabbyCoatB[0]);
+            TmOut g = TmGrass(lp, color, fp, _StabbyCoatA[0], _StabbyCoatB[0], TmCoatBump(lp.xz, fp));
             root = lerp(TmGrassGreen(color), g.albedo, 0.45 * up);
         }
         root = lerp(root, root * root * 2.2, 0.5 * wd.y) * (1 - 0.3 * wd.y);

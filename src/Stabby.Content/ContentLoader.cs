@@ -9,7 +9,7 @@ namespace Stabby.Content
     public static class ContentLoader
     {
         public const int BiomeSchemaVersion = 1;
-        public const int MaterialSchemaVersion = 5;
+        public const int MaterialSchemaVersion = 6;
         public const int ObjectSchemaVersion = 6;
         public const int CreatureSchemaVersion = 2;
         public const int SkySchemaVersion = 1;
@@ -349,7 +349,7 @@ namespace Stabby.Content
                 d.Coats[k] = new CoatDef
                 {
                     Id = SurfaceDetail.CoatKinds[k], Biomes = c.Strings("biomes", new List<string>()),
-                    BumpAmp = c.Float("bumpAmp", 0), BumpWavelengthM = c.Float("bumpWavelengthM", 0),
+                    BumpAmp = c.Float("bumpAmp", 0),
                     GrainAmp = Nan(c, "grainAmp"),
                     FeatureAmp = c.Float("featureAmp", 0), FeatureWavelengthM = c.Float("featureWavelengthM", 0),
                     Parallax = c.Float("parallax", 0), AlbedoVar = Nan(c, "albedoVar"), Roughness = Nan(c, "roughness"),
