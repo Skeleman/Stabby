@@ -443,18 +443,20 @@ namespace Stabby.Viewer
                 else { Tris.Add(row[m]); Tris.Add(l); Tris.Add(r); }
             }
 
-            int Band(FallCurtain f, int prev, int cols, float y, float h, float blend, float[] off, int o0, int o1, float t, Color flow, Vector4 reach, Vector4 fall, bool both, float foot = 1, float ahead = 0)
+            int Band(FallCurtain f, int prev, int cols, float y, float h, float blend, float[] off, int o0, int o1, float t, Color flow, Color top, Vector4 reach, Vector4 fall, bool both, float foot = 1, float ahead = 0)
             {
                 float half = 0.5f * f.Width;
                 var fwd = new Vector3(f.DirX, 0, f.DirZ);
                 var side = new Vector3(f.DirZ, 0, -f.DirX) * half;
                 var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
-                var curt = new Vector4((blend > 0 ? Mathf.Clamp01(y / blend) : 0) * foot, y / h, h, f.Discharge);
+                float w = blend > 0 ? Mathf.Clamp01(y / blend) : 0;
+                var curt = new Vector4(w * foot, y / h, h, f.Discharge);
+                var col = Color.Lerp(top, flow, w);
                 int b = Verts.Count;
                 for (int c = 0; c < cols; c++)
                 {
                     float sc = f.SideAt(c, cols), o = Mathf.Lerp(off[o0 + c], off[o1 + c], t) + ahead;
-                    Add(lip + side * sc + fwd * (f.Bow * sc * sc + o) - Vector3.up * y, flow, new Vector2(2f * c / (cols - 1) - 1, half * f.Span), reach, fall, curt);
+                    Add(lip + side * sc + fwd * (f.Bow * sc * sc + o) - Vector3.up * y, col, Vector2.Lerp(new Vector2(sc, half), new Vector2(2f * c / (cols - 1) - 1, half * f.Span), w), reach, fall, curt);
                     if (c == 0) continue;
                     int v = b + c, a = prev + c;
                     Tris.Add(a - 1); Tris.Add(v - 1); Tris.Add(a);
@@ -486,8 +488,8 @@ namespace Stabby.Viewer
                 var off = CurtainOffsets(f, detail);
                 int prev = Verts.Count;
                 for (int c = 0; c < cols; c++)
-                    lip.Add(Add(new Vector3(f.LipX, f.LipY, f.LipZ) + side * f.SideAt(c, cols), top, new Vector2(2f * c / (cols - 1) - 1, half * f.Span), reach, pool, new Vector4(0, 0, h, f.Discharge)));
-                if (f.Bow > 0) prev = Band(f, prev, cols, 0, h, 0, off, 0, 0, 0, top, reach, fall, false);
+                    lip.Add(Add(new Vector3(f.LipX, f.LipY, f.LipZ) + side * f.SideAt(c, cols), top, new Vector2(f.SideAt(c, cols), half), reach, pool, new Vector4(0, 0, h, f.Discharge)));
+                if (f.Bow > 0) prev = Band(f, prev, cols, 0, h, 0, off, 0, 0, 0, top, top, reach, fall, false);
                 float ext = Mathf.Clamp(FootBendPerDrop * f.Drop, FootBendMin, FootBendMax), yb = f.Drop - Mathf.Min(ext, 0.5f * f.Drop);
                 ext = f.Drop - yb;
                 float far = float.MinValue, lean;
@@ -501,13 +503,13 @@ namespace Stabby.Viewer
                 {
                     float u1 = j / (rows - 1f), y = u1 * u1 * h;
                     if (y > yb - 0.05f * ext) break;
-                    prev = Band(f, prev, cols, y, h, blend, off, j * cols, j * cols, 0, flow, reach, fall, true);
+                    prev = Band(f, prev, cols, y, h, blend, off, j * cols, j * cols, 0, flow, top, reach, fall, true);
                 }
                 for (int s = 0; s <= FootBendRows; s++)
                 {
                     float q = s / (float)FootBendRows, y = yb + ext * q;
                     int j = FootRowOf(y, h, rows);
-                    prev = Band(f, prev, cols, y, h, blend, off, (j - 1) * cols, j * cols, FootRowT(y, h, rows, j), flow, reach, fall, true, Mathf.Clamp01((1 - q) / FootFade), lean * (1 - Mathf.Sqrt(Mathf.Max(0, 1 - q * q))));
+                    prev = Band(f, prev, cols, y, h, blend, off, (j - 1) * cols, j * cols, FootRowT(y, h, rows, j), flow, top, reach, fall, true, Mathf.Clamp01((1 - q) / FootFade), lean * (1 - Mathf.Sqrt(Mathf.Max(0, 1 - q * q))));
                     for (int c = 0; c < cols; c++) bend.Add(prev + c);
                 }
                 for (int c = 0; c < cols; c++) foot.Add(prev + c);
