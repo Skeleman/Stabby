@@ -7,10 +7,16 @@ namespace Stabby.World
     {
         public static List<string> Creatures(GeneratedWorld w, CreatureLibrary lib)
         {
+            var detail = new TerrainDetail(w);
+            return Creatures(w, lib, detail, CreaturePlan.Pools(w, detail));
+        }
+
+        public static List<string> Creatures(GeneratedWorld w, CreatureLibrary lib, TerrainDetail detail, float[] pools)
+        {
             var e = new List<string>();
-            var cells = new TerrainDetail(w).Cells;
-            var a = CreaturePlan.Build(w, cells, lib, out var drinks);
-            var b = CreaturePlan.Build(w, cells, lib, out var again);
+            var cells = detail.Cells;
+            var a = CreaturePlan.Build(w, cells, lib, pools, out var drinks);
+            var b = CreaturePlan.Build(w, cells, lib, pools, out var again);
             if (drinks.Count != again.Count) e.Add("drink spot count differs between runs");
             else
                 for (int i = 0; i < drinks.Count; i++)
@@ -74,12 +80,34 @@ namespace Stabby.World
                     if (h.Value < def.HerdMin || h.Value > def.HerdMax) e.Add("creature site " + kv.Key + " herd of " + h.Value + " " + def.Id);
                 }
             }
+            YoungHaveAdults(lib, a, e);
             FleeStaysAshore(w, lib, a, e);
             RoutesStayAshore(w, cells, lib, a, e);
-            NeedsHold(w, cells, lib, a, e);
+            NeedsHold(w, cells, lib, a, pools, e);
             DrivesStayBounded(lib, a, e);
             DrinkSpotsHold(w, cells, lib, a, drinks, e);
             return e;
+        }
+
+        public static void YoungHaveAdults(CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        {
+            var byId = new Dictionary<int, CreatureSpawn>();
+            foreach (var s in plan) byId[s.Id] = s;
+            var adults = new HashSet<int>();
+            foreach (var s in plan) if (s.Lead < 0) adults.Add(CreaturePlan.HerdOf(s.Id));
+            foreach (var s in plan)
+            {
+                int herd = CreaturePlan.HerdOf(s.Id);
+                if (!adults.Contains(herd)) e.Add("creature herd " + herd + " has no adult");
+                bool adult = s.Age == CreatureBody.AdultAge;
+                if (adult != (s.Lead < 0)) { e.Add("creature " + s.Id + " age and lead disagree"); continue; }
+                if (adult) continue;
+                if (!(s.Age >= CreatureBody.YoungAgeMin && s.Age <= CreatureBody.YoungAgeMax)) e.Add("young creature " + s.Id + " age out of range");
+                if (!(lib.Bodies[s.Body].YoungShare > 0)) e.Add("young creature " + s.Id + " belongs to a species without young");
+                if (!byId.TryGetValue(s.Lead, out var lead) || CreaturePlan.HerdOf(lead.Id) != herd || lead.Lead >= 0) { e.Add("young creature " + s.Id + " has no adult in its herd"); continue; }
+                float dx = s.X - lead.X, dz = s.Z - lead.Z;
+                if (dx * dx + dz * dz > (CreaturePlan.YoungNearMax + 0.01f) * (CreaturePlan.YoungNearMax + 0.01f)) e.Add("young creature " + s.Id + " wakes " + (int)Math.Sqrt(dx * dx + dz * dz) + " m from its adult");
+            }
         }
 
         public const float RouteStepSeconds = 2f;
@@ -123,7 +151,7 @@ namespace Stabby.World
             if (done.Count >= 4 && moving * 2 < done.Count) e.Add("only " + moving + " of " + done.Count + " creature herds have a grazing route");
         }
 
-        static void NeedsHold(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, List<CreatureSpawn> plan, List<string> e)
+        static void NeedsHold(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, List<CreatureSpawn> plan, float[] pools, List<string> e)
         {
             var wet = new WorldWet { World = w };
             int n = w.Config.Size;
@@ -149,7 +177,7 @@ namespace Stabby.World
                 if (needs.Can(Drives.Drink))
                 {
                     drinkers++;
-                    if (!CreaturePlan.AtShore(w, cells, def, needs)) e.Add("creature herd " + herd + " drinks away from a walkable lake or river edge at " + (int)needs.DrinkX + "," + (int)needs.DrinkZ);
+                    if (!CreaturePlan.AtShore(w, cells, def, needs, pools)) e.Add("creature herd " + herd + " drinks away from a walkable lake, river or pool edge at " + (int)needs.DrinkX + "," + (int)needs.DrinkZ);
                 }
             }
             if (done.Count >= 8 && drinkers * 10 < done.Count) e.Add("only " + drinkers + " of " + done.Count + " creature herds have water to drink");
@@ -162,6 +190,7 @@ namespace Stabby.World
             foreach (var def in lib.Bodies) top = Math.Max(top, Footing.Grade(def.MaxSlope));
             if (spots.Start == null || spots.Start.Length != across * across + 1 || spots.Start[0] != 0 || spots.Start[across * across] != spots.Count) { e.Add("drink spot site index does not cover the spot list"); return; }
             var keys = new HashSet<long>();
+            var pooled = new List<DrinkSpot>();
             for (int site = 0; site < across * across; site++)
                 for (int k = spots.Start[site]; k < spots.Start[site + 1]; k++)
                 {
@@ -171,10 +200,17 @@ namespace Stabby.World
                     if (w.Sea[c]) e.Add("drink spot on sea" + at);
                     if (CreaturePlan.Wet(w, c)) e.Add("drink spot is not dry" + at);
                     if (c % n / CreaturePlan.SiteCells + c / n / CreaturePlan.SiteCells * across != site) e.Add("drink spot filed under the wrong site" + at);
-                    if (!CreaturePlan.Bank(w, s.X, s.Z, s.WaterX, s.WaterZ)) e.Add("drink spot is not beside drinkable water" + at);
+                    bool bank = CreaturePlan.Bank(w, s.X, s.Z, s.WaterX, s.WaterZ);
+                    if (!bank && !CreaturePlan.AtPool(w, cells, spots.Pools, s.X, s.Z, s.WaterX, s.WaterZ)) e.Add("drink spot is not beside drinkable water" + at);
                     if (!s.Fits(top) || Footing.SlopeSq(cells, s.X, s.Z) != s.Steep) e.Add("drink spot is not walkable" + at);
                     if (!(s.Cost >= 0)) e.Add("drink spot cost below zero" + at);
-                    if (!keys.Add((long)c * 4 + (s.WaterX + 2 * s.WaterZ > 0 ? 1 : 0) * 2 + (s.WaterX != 0 ? 1 : 0))) e.Add("drink spot repeats a bank" + at);
+                    if (bank && !keys.Add((long)c * 4 + (s.WaterX + 2 * s.WaterZ > 0 ? 1 : 0) * 2 + (s.WaterX != 0 ? 1 : 0))) e.Add("drink spot repeats a bank" + at);
+                    if (!bank)
+                    {
+                        foreach (var q in pooled)
+                            if ((q.X - s.X) * (q.X - s.X) + (q.Z - s.Z) * (q.Z - s.Z) < cm * cm) { e.Add("pool drink spots crowd each other" + at); break; }
+                        pooled.Add(s);
+                    }
                 }
             int banks = 0;
             for (int z = 1; z < n - 1; z++)
@@ -253,7 +289,7 @@ namespace Stabby.World
         }
 
         static bool Same(CreatureSpawn a, CreatureSpawn b) =>
-            a.Id == b.Id && a.Body == b.Body && a.X == b.X && a.Z == b.Z && a.Heading == b.Heading
+            a.Id == b.Id && a.Body == b.Body && a.X == b.X && a.Z == b.Z && a.Heading == b.Heading && a.Age == b.Age && a.Lead == b.Lead
             && a.WalkSpeed == b.WalkSpeed && a.BodySeed == b.BodySeed && a.Seed == b.Seed && a.HerdSeed == b.HerdSeed
             && a.Route.X0 == b.Route.X0 && a.Route.Z0 == b.Route.Z0 && a.Route.X1 == b.Route.X1 && a.Route.Z1 == b.Route.Z1
             && a.Route.X2 == b.Route.X2 && a.Route.Z2 == b.Route.Z2 && a.Route.X3 == b.Route.X3 && a.Route.Z3 == b.Route.Z3

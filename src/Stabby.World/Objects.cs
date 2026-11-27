@@ -23,7 +23,7 @@ namespace Stabby.World
     public sealed partial class ObjectField
     {
         public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f, CrustThin = 0.85f;
-        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
+        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f, BoulderRelief = 0.12f;
 
         readonly GeneratedWorld w;
         readonly TerrainDetail detail;
@@ -41,6 +41,7 @@ namespace Stabby.World
         readonly float[] footprint;
         readonly PartShapes shapes;
         readonly float[][] seats;
+        readonly int[] chainHead;
         readonly ulong[] key;
         readonly int[] blockStart, blockItems, bankSite, bankStart, bankItems;
         readonly FeatureEdit[] edits;
@@ -83,6 +84,7 @@ namespace Stabby.World
             density = new float[defs][];
             footprint = new float[defs];
             key = new ulong[defs];
+            chainHead = new int[defs];
             float maxR = 0;
             for (int d = 0; d < defs; d++)
             {
@@ -98,6 +100,7 @@ namespace Stabby.World
                 footprint[d] = def.FootprintRadius();
                 key[d] = Key(def.Id);
                 seats[d] = Seats(def);
+                chainHead[d] = def.Placement.ChainHead == null ? -1 : lib.Objects.FindIndex(h => h.Id == def.Placement.ChainHead);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
             }
             BankIndex(detail, lib, across, cm, out bankSite, out bankStart, out bankItems);
@@ -232,6 +235,7 @@ namespace Stabby.World
             int chunk = cz * across + cx;
             ulong chunkKey = Rng.Mix((ulong)chunk + 1);
             var near = sitesOnly || stageDef >= 0 ? null : SitesNear(cx, cz);
+            int heads = 0;
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 if (stageDef >= 0 && d != stageDef) continue;
@@ -295,23 +299,27 @@ namespace Stabby.World
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
-                        if (pl.ChainMax > 1 && boulders == null) Chain(d, o, chunk, chunkKey, x0, z0, sx, sz, ref ordinal, list);
+                        if (pl.ChainMax > 1 && boulders == null) Chain(d, o, chunk, chunkKey, x0, z0, sx, sz, ref ordinal, ref heads, list);
                     }
                 }
             }
         }
 
-        void Chain(int d, ObjectInstance o, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, ref int ordinal, List<ObjectInstance> list)
+        void Chain(int d, ObjectInstance o, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, ref int ordinal, ref int heads, List<ObjectInstance> list)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
-            var rng = new Rng(Rng.Mix(chainStream ^ chunkKey ^ key[d] ^ ((ulong)ordinal * 0x9E3779B97F4A7C15UL)));
-            int count = rng.Range(pl.ChainMin, pl.ChainMax + 1) - 1;
+            ulong chainKey = Rng.Mix(chainStream ^ chunkKey ^ key[d] ^ ((ulong)ordinal * 0x9E3779B97F4A7C15UL));
+            var rng = new Rng(chainKey);
+            int count = rng.Range(pl.ChainMin, pl.ChainMax + 1) - 1, h = chainHead[d], cap = 0;
             float size = o.Size, span = Structures.WallSpan * size, thick = Structures.WallBase * size;
             Rotate(o, 1, 0, 0, out float ux, out _, out float uz);
             float ex = o.X + ux * 0.5f * span, ez = o.Z + uz * 0.5f * span;
+            bool open = true;
+            if (h >= 0) Head(h, chunk, chainKey, cap++, o.X - ux * 0.5f * span, o.Z - uz * 0.5f * span, size, ux, uz, x0, z0, sx, sz, ref heads, list);
             for (int k = 0; k < count; k++)
             {
+                float ox = ex, oz = ez, odx = ux, odz = uz;
                 float roll = rng.NextFloat(), turn = rng.NextFloat() < 0.5f ? -1f : 1f, wander = rng.Range(-0.1f, 0.1f);
                 int variant = (int)(rng.NextU32() % (uint)def.Variants);
                 bool gate = rng.NextFloat() < pl.ChainGate, corner = roll < pl.ChainCorner;
@@ -338,7 +346,13 @@ namespace Stabby.World
                     ux /= ul; uz /= ul;
                     bx -= ux * Structures.WallOverlap * size; bz -= uz * Structures.WallOverlap * size;
                 }
-                if (gate) { ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span; continue; }
+                if (gate)
+                {
+                    if (h >= 0 && open) Head(h, chunk, chainKey, cap++, ox, oz, size, odx, odz, x0, z0, sx, sz, ref heads, list);
+                    open = false;
+                    ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span;
+                    continue;
+                }
                 bool placed = false;
                 float ax = ux, az = uz, sbx = bx, sbz = bz;
                 for (int tries = 0; tries < (corner ? 1 : 3) && !placed; tries++)
@@ -356,11 +370,28 @@ namespace Stabby.World
                     s.Variant = variant;
                     s.Id = ObjectIds.Make(chunk, d, ordinal++);
                     list.Add(s);
+                    if (h >= 0) Head(h, chunk, chainKey, cap++, bx, bz, size, ux, uz, x0, z0, sx, sz, ref heads, list);
                     ex = fx; ez = fz;
                     placed = true;
                 }
-                if (!placed) return;
+                if (!placed)
+                {
+                    if (h >= 0 && open) Head(h, chunk, chainKey, cap++, ox, oz, size, odx, odz, x0, z0, sx, sz, ref heads, list);
+                    return;
+                }
+                open = true;
             }
+            if (h >= 0 && open) Head(h, chunk, chainKey, cap, ex, ez, size, ux, uz, x0, z0, sx, sz, ref heads, list);
+        }
+
+        void Head(int h, int chunk, ulong chainKey, int cap, float x, float z, float size, float ux, float uz, float x0, float z0, float sx, float sz, ref int heads, List<ObjectInstance> list)
+        {
+            if (x < x0 || z < z0 || x >= x0 + sx || z >= z0 + sz) return;
+            float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
+            if (!Accept(h, x, z, size, qw, qy, out var s)) return;
+            s.Variant = (int)(Rng.Mix(chainKey ^ ((ulong)(cap + 1) * 0xD1B54A32D192ED03UL)) % (ulong)lib.Objects[h].Variants);
+            s.Id = ObjectIds.Make(chunk, h, heads++);
+            list.Add(s);
         }
 
         void AddBoulder(ObjectInstance o, float reach, float qa, float qb, float x0, float z0, float sx, float sz, List<FeatureEdit> boulders)
@@ -370,8 +401,8 @@ namespace Stabby.World
             float ux = yw * yw - yy * yy, uz = 2 * yw * yy, side = (o.Variant & 1) == 0 ? 1f : -1f;
             float r = BoulderMainR * reach, h = BoulderLength * reach, y = o.Y + BoulderLift * r;
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
-            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
-            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
+            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, N = BoulderRelief * r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
+            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, N = BoulderRelief * r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
             if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
             boulders.Add(a);
             boulders.Add(b);

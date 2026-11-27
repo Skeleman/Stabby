@@ -145,7 +145,7 @@ namespace Stabby.Game.Editor
                 float2 centre = at + new float2(math.sin(ang), math.cos(ang)) * rad;
                 float2 p = centre + new float2((h & 0xFF) / 255f - 0.5f, (h >> 8 & 0xFF) / 255f - 0.5f) * 8f;
                 int body = (i / 10) % bodies;
-                sem.SetComponentData(es[i], new CreatureState { Id = -1 - i - 100000 * (r + 1), Body = body, Seed = h, WalkSpeed = 1.2f, Position = p, Heading = ang });
+                sem.SetComponentData(es[i], new CreatureState { Id = -1 - i - 100000 * (r + 1), Body = body, Seed = h, WalkSpeed = 1.2f, Position = p, Heading = ang, Age = CreatureBody.AdultAge });
                 var needs = new HerdNeeds { GrazeX = centre.x + 15, GrazeZ = centre.y, DrinkX = centre.x, DrinkZ = centre.y + 25, WaterZ = 1, BedX = centre.x - 10, BedZ = centre.y - 10, Has = HerdNeeds.HasGraze | HerdNeeds.HasDrink | HerdNeeds.HasBed };
                 var drives = plan.IsCreated ? plan.Value.Drives[body] : new CreatureDef().Drives;
                 byte want = Drives.Wake(drives, needs, server.Time.ElapsedTime, (ulong)(herd * 2654435761L), h, out var levels);
@@ -252,7 +252,7 @@ namespace Stabby.Game.Editor
                 uint h = math.hash(new uint2((uint)i, (uint)round + 77u));
                 em.SetComponentData(bench[i], new CreatureState
                 {
-                    Id = -1 - i - 100000 * round, Body = 0, BodySeed = ((ulong)h << 32) | math.hash(new uint2(h, 3u)), Seed = h, WalkSpeed = 1.2f,
+                    Id = -1 - i - 100000 * round, Body = 0, BodySeed = ((ulong)h << 32) | math.hash(new uint2(h, 3u)), Seed = h, WalkSpeed = 1.2f, Age = CreatureBody.AdultAge,
                 });
             }
             return bench;
@@ -488,7 +488,7 @@ namespace Stabby.Game.Editor
                 float2 p = mid + new float2(side.x, side.z) * lateral + new float2(fwd.x, fwd.z) * depth;
                 em.SetComponentData(bench[i], new CreatureState
                 {
-                    Id = -1 - i - 900000, Body = math.max(0, body), BodySeed = ((ulong)h << 32) | math.hash(new uint2(h, 5u)), Seed = h, WalkSpeed = 1f,
+                    Id = -1 - i - 900000, Body = math.max(0, body), BodySeed = ((ulong)h << 32) | math.hash(new uint2(h, 5u)), Seed = h, WalkSpeed = 1f, Age = CreatureBody.AdultAge,
                     Position = p, Heading = yaw + math.PI * (i % 2 == 0 ? 0.5f : -0.5f) + 0.25f * ((h & 0xFF) / 255f - 0.5f),
                 });
                 names.Add(body < 0 ? SpeciesLineup[i] + " missing" : SpeciesLineup[i]);

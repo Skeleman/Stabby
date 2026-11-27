@@ -85,7 +85,7 @@ namespace Stabby.Game.Editor
             uint hb = math.hash(new uint2(560u, 0x5BEC1u));
             em.SetComponentData(boar, new CreatureState
             {
-                Id = -910000, Body = math.max(0, body), BodySeed = ((ulong)hb << 32) | math.hash(new uint2(hb, 5u)), Seed = hb, WalkSpeed = 1f,
+                Id = -910000, Body = math.max(0, body), BodySeed = ((ulong)hb << 32) | math.hash(new uint2(hb, 5u)), Seed = hb, WalkSpeed = 1f, Age = CreatureBody.AdultAge,
                 Position = boarAt, Heading = math.atan2(-side.x, -side.y) + 0.4f,
             });
             for (int f = 0; f < 1800 && CreatureBuildSystem.Count < baseCount + 1; f++) yield return null;
