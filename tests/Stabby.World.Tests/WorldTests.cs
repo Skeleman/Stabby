@@ -40,6 +40,28 @@ public class WorldTests
     }
 
     [Fact]
+    public void ColdSeedsRaiseMorainesWithKettlePonds()
+    {
+        int moraines = 0, kettles = 0, wet = 0;
+        Parallel.For(1, 21, s =>
+        {
+            var w = Gen((ulong)s);
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            foreach (var m in w.Sketch.Moraines)
+            {
+                Interlocked.Increment(ref moraines);
+                for (int k = 0; k < m.Kettles.Count; k += 4)
+                {
+                    Interlocked.Increment(ref kettles);
+                    if (w.Water.LakeId[(int)Math.Round(m.Kettles[k + 1] / cm) * n + (int)Math.Round(m.Kettles[k] / cm)] >= 0) Interlocked.Increment(ref wet);
+                }
+            }
+        });
+        Assert.True(moraines >= 4 && kettles >= moraines && wet == kettles, $"{moraines} moraines, {kettles} kettles, {wet} holding water in 20 seeds");
+    }
+
+    [Fact]
     public void DrySeedsRaiseMesasAndButtes()
     {
         int mesas = 0, buttes = 0, lips = 0;

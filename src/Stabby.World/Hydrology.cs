@@ -508,7 +508,10 @@ namespace Stabby.World
                     else
                     {
                         int lo = IslandRunMin + k0 / 2, hi = count - IslandRunMin - k0 + k0 / 2;
-                        Gap(drop, Math.Max(lo, Math.Min(hi, mid + (int)Math.Round(mid * IslandSpread * (2 * p1 - 1)))), k0);
+                        int at = Math.Max(lo, Math.Min(hi, mid + (int)Math.Round(mid * IslandSpread * (2 * p1 - 1))));
+                        if (at - k0 / 2 <= mid && mid < at - k0 / 2 + k0) at = p1 < 0.5f ? mid - k0 + k0 / 2 : mid + 1 + k0 / 2;
+                        if (at < lo || at > hi) continue;
+                        Gap(drop, at, k0);
                     }
                     if (!Runs(drop, IslandRunMin)) continue;
                     var pts = new List<float>();

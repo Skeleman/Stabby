@@ -135,6 +135,7 @@ namespace Stabby.World
             var raw = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             Mesas.Raise(c, sketch, sea, h, raw);
             Volcanoes.Raise(c, sketch, sea, h, raw, biomes);
+            Glacial.Raise(c, sketch, sea, h, raw);
             stage?.Invoke("erosion");
             var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             stage?.Invoke("climate");

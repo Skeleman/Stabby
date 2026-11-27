@@ -77,7 +77,7 @@ namespace Stabby.World
             if (clock.Start("core")) CheckCore(w, e);
             if (clock.Start("hydrology")) CheckHydrology(w, e);
             if (clock.Start("biomes")) CheckBiomes(w, e);
-            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); CheckVolcanoes(w, e); }
+            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); CheckVolcanoes(w, e); CheckGlacial(w, e); }
             if (clock.Start("surface")) { CheckDetail(w, e); CheckNearField(w, e); CheckGeometry(w, e); }
             CheckFeatures(w, e, clock, creatures);
             clock.Stop();
@@ -305,7 +305,7 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var hy = w.Water;
-            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false;
+            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false, centre = false;
             foreach (var s in hy.Rivers)
                 foreach (var f in s.Falls)
                 {
@@ -351,6 +351,12 @@ namespace Stabby.World
                                 break;
                             }
                         }
+                    for (int r = 2; !centre && r < runs.Count; r += 2)
+                    {
+                        if (runs[r - 1] >= 0 || runs[r] <= 0) continue;
+                        centre = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has a lip island across its channel: gap {runs[r - 1]:F1} to {runs[r]:F1} m off centre");
+                    }
                     for (int r = 2; !bare && r < runs.Count; r += 2)
                     {
                         float mid = 0.5f * (runs[r - 1] + runs[r]), back = IsleProbe * (runs[r] - runs[r - 1]);
@@ -962,6 +968,7 @@ namespace Stabby.World
                 CheckArches(w, edits, e);
                 CheckSeaStacks(w, detail, edits, field, e);
                 if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
+                if (field != null) CheckGlacialGround(w, detail, grid, field, e);
             }
             if (clock.Start("caves"))
             {
