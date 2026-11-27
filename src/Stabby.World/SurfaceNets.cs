@@ -235,33 +235,36 @@ namespace Stabby.World
         public static void General<TField, TSink>(TField field, NetsChunk c, int jMin, int jMax, ref TSink sink)
             where TField : struct, ISolidField where TSink : struct, INetsSink
         {
-            int w = c.Cells + 1, layers = jMax - jMin, bx = c.X0 - 1, bz = c.Z0 - 1;
+            int w = c.Cells + 1, layers = jMax - jMin, bx = c.X0 - 1, bz = c.Z0 - 1, gl = layers + 1, gw = w + 1;
             sink.Begin(w * w * layers, 0);
+            var g = new float[gw * gw * gl];
+            for (int k = 0; k < gw; k++)
+                for (int i = 0; i < gw; i++)
+                    for (int j = 0; j < gl; j++)
+                        g[(k * gw + i) * gl + j] = field.Density(bx + i, jMin + j, bz + k);
             for (int k = 0; k < w; k++)
                 for (int i = 0; i < w; i++)
                 {
-                    int ci = bx + i, ck = bz + k;
+                    int ci = bx + i, ck = bz + k, o = (k * gw + i) * gl, ox = o + gl, oz = o + gw * gl, oxz = oz + gl;
                     for (int j = jMin; j < jMax; j++)
                     {
-                        float d0 = field.Density(ci, j, ck), d1 = field.Density(ci + 1, j, ck);
-                        float d2 = field.Density(ci, j + 1, ck), d3 = field.Density(ci + 1, j + 1, ck);
-                        float d4 = field.Density(ci, j, ck + 1), d5 = field.Density(ci + 1, j, ck + 1);
-                        float d6 = field.Density(ci, j + 1, ck + 1), d7 = field.Density(ci + 1, j + 1, ck + 1);
-                        sink.SetInt((k * w + i) * layers + j - jMin, Cell(ref sink, field, ci, j, ck, c.StepM, d0, d1, d2, d3, d4, d5, d6, d7));
+                        int q = j - jMin;
+                        sink.SetInt((k * w + i) * layers + q, Cell(ref sink, field, ci, j, ck, c.StepM, g[o + q], g[ox + q], g[o + q + 1], g[ox + q + 1], g[oz + q], g[oxz + q], g[oz + q + 1], g[oxz + q + 1]));
                     }
                 }
             for (int k = 1; k < w; k++)
                 for (int i = 1; i < w; i++)
                 {
-                    int ci = bx + i, ck = bz + k;
+                    int o = (k * gw + i) * gl;
                     for (int j = jMin; j < jMax; j++)
                     {
-                        bool p = field.Density(ci, j, ck) > 0;
-                        int a = (k * w + i) * layers + j - jMin, dz = w * layers;
+                        int q = j - jMin;
+                        bool p = g[o + q] > 0;
+                        int a = (k * w + i) * layers + q, dz = w * layers;
                         bool mid = j > jMin && j < jMax - 1;
-                        if (mid && p != field.Density(ci + 1, j, ck) > 0) Quad(ref sink, p, a - 1 - dz, a - dz, a, a - 1);
-                        if (p != field.Density(ci, j + 1, ck) > 0) Quad(ref sink, p, a - dz - layers, a - layers, a, a - dz);
-                        if (mid && p != field.Density(ci, j, ck + 1) > 0) Quad(ref sink, p, a - layers - 1, a - 1, a, a - layers);
+                        if (mid && p != g[o + gl + q] > 0) Quad(ref sink, p, a - 1 - dz, a - dz, a, a - 1);
+                        if (p != g[o + q + 1] > 0) Quad(ref sink, p, a - dz - layers, a - layers, a, a - dz);
+                        if (mid && p != g[o + gw * gl + q] > 0) Quad(ref sink, p, a - layers - 1, a - 1, a, a - layers);
                     }
                 }
         }
