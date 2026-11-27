@@ -18,7 +18,7 @@ namespace Stabby.World
 
     public sealed class GroundBake
     {
-        public const int Format = 1, Sections = 4;
+        public const int Format = 2, Sections = 5;
 
         public ulong Key;
         public DetailArrays Detail;
@@ -63,6 +63,7 @@ namespace Stabby.World
                     case 0: o.Raw(Detail.Amp); break;
                     case 1: o.Raw(Detail.Offsets); break;
                     case 2: o.Raw(Detail.Start); o.Raw(Detail.Items); o.Raw(Detail.Bands); o.Float(Detail.Period); o.Raw(Detail.Pieces); break;
+                    case 3: o.Raw(Field?.Placed); o.Raw(Field?.PlacedStart); break;
                     default: Rest(o); break;
                 }
                 parts[s] = o.ToArray();
@@ -130,7 +131,11 @@ namespace Stabby.World
             var i0 = new In(parts[0]); d.Amp = i0.Raw<float>(); i0.End();
             var i1 = new In(parts[1]); d.Offsets = i1.Raw<float>(); i1.End();
             var i2 = new In(parts[2]); d.Start = i2.Raw<int>(); d.Items = i2.Raw<int>(); d.Bands = i2.Raw<float>(); d.Period = i2.Float(); d.Pieces = i2.Raw<RiverPiece>(); i2.End();
-            var i3 = new In(parts[3]); bake.Rest(i3); i3.End();
+            var i3 = new In(parts[3]); var placed = i3.Raw<ObjectInstance>(); var placedStart = i3.Raw<int>(); i3.End();
+            var i4 = new In(parts[4]); bake.Rest(i4); i4.End();
+            if ((placed == null) != (placedStart == null) || placedStart != null && (bake.Field == null || !Ascending(placedStart, placed.Length)))
+                throw new FormatException("ground bake placed objects do not fit their chunk table");
+            if (bake.Field != null) { bake.Field.Placed = placed; bake.Field.PlacedStart = placedStart; }
             if (d.Amp == null || d.Offsets == null || d.Start == null || d.Items == null || d.Bands == null || d.Pieces == null || bake.Edits == null || bake.Caves == null || bake.Roads == null || bake.Brooks == null)
                 throw new FormatException("ground bake is missing a section");
             return bake;
@@ -227,6 +232,13 @@ namespace Stabby.World
             f.HotX = i.Raw<float>(); f.HotZ = i.Raw<float>(); f.HotR = i.Raw<float>();
             if (f.BogPools == null || f.Roads == null || f.Sites == null || f.SiteChunks == null || f.Sites.Length != f.SiteChunks.Length || f.HotX == null || f.HotZ == null || f.HotR == null || f.HotX.Length != f.HotZ.Length || f.HotX.Length != f.HotR.Length)
                 throw new FormatException("ground bake object caches do not fit together");
+        }
+
+        static bool Ascending(int[] start, int total)
+        {
+            if (start.Length == 0 || start[0] != 0 || start[start.Length - 1] != total) return false;
+            for (int k = 1; k < start.Length; k++) if (start[k] < start[k - 1]) return false;
+            return true;
         }
 
         static class Size<T> where T : unmanaged

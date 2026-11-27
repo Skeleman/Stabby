@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -12,6 +14,8 @@ namespace Stabby.World
         public TownPlan[] Plans;
         public LandmarkSketch[] Towns;
         public float[] HotX, HotZ, HotR;
+        public ObjectInstance[] Placed;
+        public int[] PlacedStart;
     }
 
     public sealed partial class ObjectField
@@ -20,7 +24,7 @@ namespace Stabby.World
         {
             var roads = Roads();
             var hot = Hotspots;
-            return new FieldCaches
+            var c = new FieldCaches
             {
                 BogPools = BogPools(),
                 Roads = roads,
@@ -32,6 +36,16 @@ namespace Stabby.World
                 HotZ = hot.Z.ToArray(),
                 HotR = hot.R.ToArray(),
             };
+            int count = across * across;
+            var placed = new ObjectInstance[count][];
+            Parallel.For(0, count, k => placed[k] = Chunk(k % across, k / across));
+            var start = new int[count + 1];
+            for (int k = 0; k < count; k++) start[k + 1] = start[k] + placed[k].Length;
+            var all = new ObjectInstance[start[count]];
+            for (int k = 0; k < count; k++) placed[k].CopyTo(all, start[k]);
+            c.Placed = all;
+            c.PlacedStart = start;
+            return c;
         }
 
         public ObjectField Adopt(FieldCaches c)
@@ -59,6 +73,9 @@ namespace Stabby.World
                 IndexRoads(c.Roads);
                 roads = c.Roads;
             }
+            if (c.Placed != null && c.PlacedStart != null && c.PlacedStart.Length == chunks.Length + 1)
+                for (int k = 0; k < chunks.Length; k++)
+                    Volatile.Write(ref chunks[k], c.Placed.AsSpan(c.PlacedStart[k], c.PlacedStart[k + 1] - c.PlacedStart[k]).ToArray());
             return this;
         }
     }

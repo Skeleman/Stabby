@@ -42,6 +42,7 @@ public class GroundBakeTests
         var adopted = new ObjectField(w, detail, g.Edits, w.Objects, g.Discoveries).Adopt(g.Field);
         int a = WorldChunks.Across(w.Config.Size);
         for (int k = 0; k < a * a; k += 5) Assert.Equal(fresh.Chunk(k % a, k / a), adopted.Chunk(k % a, k / a));
+        Assert.Equal(0, adopted.ChunkComputes);
         Assert.Equal(fresh.Roads(), adopted.Roads());
         Assert.Equal(fresh.BogPools(), adopted.BogPools());
         Assert.Equal(fresh.TownPlans().Length, adopted.TownPlans().Length);
