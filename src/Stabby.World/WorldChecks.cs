@@ -1494,6 +1494,7 @@ namespace Stabby.World
         public static void CheckCaveLights(GeneratedWorld w, FeatureEdit[] edits, ObjectField field, List<string> e)
         {
             var perTile = new Dictionary<int, int>();
+            var decoded = new DecodedChunks(field);
             for (int i = 0; i < field.CaveLightCount; i++)
             {
                 var p = field.CaveLight(i);
@@ -1503,7 +1504,7 @@ namespace Stabby.World
                 if ((p.Kind == ObjectField.CaveSkylight) != (c.Shape == FeatureEdit.Shaft)) { e.Add($"caves: light {i} pairs a skylight with a non-shaft edit or a shaft with another light"); return; }
                 if ((p.Kind == ObjectField.CaveLava) != ObjectField.LavaBasin(c)) { e.Add($"caves: light {i} pairs a lava glow with a non-lava edit or a lava pool with another light"); return; }
                 if (!field.CaveLightAt(i, out var o)) continue;
-                string fault = field.CaveFault(o) ?? CaveLightOverlap(w, field, o);
+                string fault = field.CaveFault(o) ?? CaveLightOverlap(w, field, decoded, o);
                 if (fault != null) { e.Add(fault); return; }
                 if (p.Kind != ObjectField.CaveSkylight) continue;
                 float dx = o.X - c.Ax, dz = o.Z - c.Az;
@@ -1511,7 +1512,7 @@ namespace Stabby.World
             }
         }
 
-        static string CaveLightOverlap(GeneratedWorld w, ObjectField field, ObjectInstance o)
+        static string CaveLightOverlap(GeneratedWorld w, ObjectField field, DecodedChunks decoded, ObjectInstance o)
         {
             var defs = w.Objects.Objects;
             float reach = defs[o.Def].FootprintRadius() * o.Size, span = field.ChunkMeters, edge = 2f * reach + ObjectField.CaveColumnGapMaxM;
@@ -1523,7 +1524,7 @@ namespace Stabby.World
                     if (ax < 0 || az < 0 || ax >= across || az >= across) continue;
                     if ((dx < 0 && o.X - cx * span > edge) || (dx > 0 && (cx + 1) * span - o.X > edge)) continue;
                     if ((dz < 0 && o.Z - cz * span > edge) || (dz > 0 && (cz + 1) * span - o.Z > edge)) continue;
-                    foreach (var m in field.Chunk(ax, az))
+                    foreach (var m in decoded.Get(ax, az))
                     {
                         int kind = defs[m.Def].Placement.Cave;
                         if (kind != ObjectField.CaveStalagmite && kind != ObjectField.CaveColumn) continue;
