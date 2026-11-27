@@ -8,7 +8,7 @@ namespace Stabby.World
     {
         public const float SurfaceTolerance = 1e-3f;
         public const float CorridorFollowShare = 0.7f;
-        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f, ShoreToeMaxBend = 3f;
+        public const float CliffMinRise = 30f, BeachMaxDepth = 4f, BeachShelfStep = 0.1f, BeachShelfShare = 0.25f, ShoreToeMaxBend = 3f, BeachTerraceShare = 0.05f, BeachRippleBend = 0.05f, BeachRippleShare = 0.04f;
         public const int ShoreToeMinPairs = 20;
 
         static int FirstUndrained(GeneratedWorld w)
@@ -420,7 +420,7 @@ namespace Stabby.World
                 {
                     float bx = mx + side * ez / l * reach, bz = mz - side * ex / l * reach;
                     int bc = NearField.CellOf(bx, bz, cm, n);
-                    if (w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || InFall(w, bx, bz) || pools.Exists(o => NearField.InPoolWater(o, bx, bz))) continue;
+                    if (s < Erosion.MinLandHeight || w.Sea[bc] || w.Water.LakeId[bc] >= 0 || Crowded(pieces, p, bx, bz, reach, s) || InFall(w, bx, bz) || pools.Exists(o => NearField.InPoolWater(o, bx, bz))) continue;
                     float h = d.Sample(bx, bz), held = Math.Min(s, Math.Min(q.Sa, q.Sb) + NearField.Rise(hw));
                     if (h < held - BankTolerance) { e.Add($"river at {mx:F0},{mz:F0} spills over its bank at {bx:F0},{bz:F0}: bank {h:F1}, water {held:F1}"); return; }
                 }
@@ -1085,7 +1085,7 @@ namespace Stabby.World
                 var dry = Array.FindAll(items, q => !CaveBrooks.Channel(q));
                 foreach (var edge in g.Edges) if ((tight = Underground.Cramped(detail, dry, g, edge)) != null) break;
                 if (tight != null) e.Add(tight);
-                string why = Underground.Unreached(detail, items, g);
+                string why = Underground.Unreached(detail, dry, g);
                 if (why != null) e.Add(why);
                 if (tight != null || why != null) return;
                 var rock = new List<FeatureEdit>();
@@ -1561,7 +1561,7 @@ namespace Stabby.World
         }
 
         public const float CaveNormalDeg = 1.5f;
-        public const int CaveNormalLevels = 3, CaveCoverSteps = 4, CaveNormalMin = 8;
+        public const int CaveNormalLevels = 3, CaveCoverSteps = 4, CaveNormalMin = 16;
 
         public static void CheckCaveNormals(GeneratedWorld w, TerrainDetail detail, EditGrid grid, CaveGraph[] caves, List<string> e)
         {
@@ -1596,7 +1596,7 @@ namespace Stabby.World
                 {
                     float x = f.Verts[6 * t], y = f.Verts[6 * t + 1], z = f.Verts[6 * t + 2];
                     bool cave = false;
-                    foreach (var m in meshed) if (m.CaveCarve && m.Reach(x, y, z, out _)) { cave = true; break; }
+                    foreach (var m in meshed) if (m.CaveCarve && m.Shape != FeatureEdit.Mine && m.Reach(x, y, z, out _)) { cave = true; break; }
                     if (!cave || Math.Abs(Field(x, y, z)) > 0.75f * sm || detail.Sample(x, z) - y < CaveCoverSteps * sm) continue;
                     const float d = 0.05f;
                     float gx = Field(x + d, y, z) - Field(x - d, y, z), gy = Field(x, y + d, z) - Field(x, y - d, z), gz = Field(x, y, z + d) - Field(x, y, z - d);
@@ -1702,6 +1702,9 @@ namespace Stabby.World
             }
             CheckShores(w, island, e);
             CheckBeachShelf(w, e);
+            var offshore = Erosion.Offshore(n, w.Sea);
+            CheckBeachTerrace(w, offshore, e);
+            CheckBeachRipple(w, offshore, e);
             if (s.Landmasses.Count > 1)
             {
                 int a = island[(int)s.Landmasses[0].Y * n + (int)s.Landmasses[0].X];
@@ -1825,6 +1828,42 @@ namespace Stabby.World
                     }
                 }
             if (pairs > 0 && flat > pairs * BeachShelfShare) e.Add($"beach seabed is flat beside the shore at {flat} of {pairs} cells");
+        }
+
+        static void CheckBeachTerrace(GeneratedWorld w, float[] offshore, List<string> e)
+        {
+            var c = w.Config;
+            int n = c.Size, cells = 0, flat = 0;
+            for (int i = 0; i < n * n; i++)
+            {
+                if (!w.Sea[i] || w.Sketch.Beach[i] < 0.5f || offshore[i] < 2 || offshore[i] > 20) continue;
+                cells++;
+                float floor = -1 - c.NearShoreDepth * (1 - (float)FMath.Exp(-offshore[i] * c.CellMeters / c.NearShoreMeters));
+                if (w.Height[i] > floor - 0.005f) flat++;
+            }
+            if (cells > 0 && flat > cells * BeachTerraceShare) e.Add($"beach seabed sits on the -1 m terrace at {flat} of {cells} near-shore cells");
+        }
+
+        static float Alternation(float[] h, int i, int step)
+        {
+            float a = h[i - 2 * step] + h[i] - 2 * h[i - step], b = h[i - step] + h[i + step] - 2 * h[i], c = h[i] + h[i + 2 * step] - 2 * h[i + step];
+            if (a * b >= 0 || b * c >= 0) return 0;
+            return Math.Min(Math.Abs(b), Math.Min(Math.Abs(a), Math.Abs(c)));
+        }
+
+        static void CheckBeachRipple(GeneratedWorld w, float[] offshore, List<string> e)
+        {
+            int n = w.Config.Size, cells = 0, bent = 0;
+            var h = w.Height;
+            for (int y = 2; y < n - 2; y++)
+                for (int x = 2; x < n - 2; x++)
+                {
+                    int i = y * n + x;
+                    if (!w.Sea[i] || w.Sketch.Beach[i] < 0.5f || offshore[i] < 4 || offshore[i] > 20) continue;
+                    cells++;
+                    if (Math.Max(Alternation(h, i, 1), Alternation(h, i, n)) > BeachRippleBend) bent++;
+                }
+            if (cells > 0 && bent > cells * BeachRippleShare) e.Add($"beach seabed ripples along grid lines at {bent} of {cells} near-shore cells");
         }
 
         static bool TouchesLand(GeneratedWorld w, int n, int i, float beach)
