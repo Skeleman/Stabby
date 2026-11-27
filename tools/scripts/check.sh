@@ -83,7 +83,7 @@ if ! dotnet build -c Release -v q > out/check/build.log 2>&1; then say "build: F
 say "build: ok, $((SECONDS - t0)) s"
 if ! dotnet run --project tools/Stabby.Lint -c Release --no-build -- . > out/check/lint.log 2>&1; then say "lint: FAILED"; grep -v "^lint" out/check/lint.log | head -10; exit 1; fi
 say "lint: ok, $((SECONDS - t0)) s"
-rm -f out/check/*.sum out/check/*.rc
+rm -f out/check/*.sum out/check/*.rc out/check/sweep256.log out/check/sweep512.log
 phase_tests() {
   local s=$SECONDS rc=0 targs=(); [ -n "$tf" ] && targs=(--filter "$tf")
   dotnet test -c Release --no-build "${targs[@]}" --blame-hang-timeout 10m --blame-hang-dump-type none --logger "console;verbosity=normal" > out/check/test.log 2>&1 || rc=1
