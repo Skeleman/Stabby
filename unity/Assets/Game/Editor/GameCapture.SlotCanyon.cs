@@ -6,7 +6,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float SlotHour = 12.5f, SlotMoon = 0.5f, SlotEyeM = 1.7f, SlotRimOutM = 4f, SlotRimUpM = 6f, SlotRimAheadM = 14f;
+        const float SlotHour = 12.5f, SlotMoon = 0.5f, SlotEyeM = 1.7f, SlotRimUpM = 12f, SlotRimSegs = 4f, SlotRimBackM = 6f, SlotRimDropM = 3f;
 
         static System.Collections.IEnumerator SlotCanyonTour(Camera cam, string dir)
         {
@@ -41,14 +41,27 @@ namespace Stabby.Game.Editor
             string info = $"slotcanyon: edit {at} of {segments} segments, half width {e.W:F2}, depth {depth:F1}, floor {floor:F1}, at {cx:F0},{cz:F0}, GV {WorldConfig.GeneratorVersion}, pinned hour {sky.Hour:F2} moon {sky.Phase:F2}";
             GameStatus.Lines["~slotcanyon"] = info;
             Shot(cam, dir, "slotcanyon-floor");
-            float off = e.W + SlotRimOutM, rx = cx + ux * SlotRimOutM, rz = cz + uz * SlotRimOutM;
-            float lip = Mathf.Max(ground.HeightAt(rx - uz * off, rz + ux * off), ground.HeightAt(rx + uz * off, rz - ux * off));
-            eye = new Vector3(rx, lip + SlotRimUpM, rz);
-            look = new Vector3(cx - ux * SlotRimAheadM, floor + 0.25f * depth, cz - uz * SlotRimAheadM);
+            var down = DownSlot(ground, at, e);
+            float back = 0.5f * len + SlotRimBackM, bx = cx - ux * back, bz = cz - uz * back;
+            eye = new Vector3(bx, Mathf.Max(e.P, e.T) + SlotRimUpM, bz);
+            look = new Vector3(0.5f * (down.Ax + down.Bx), down.P - SlotRimDropM, 0.5f * (down.Az + down.Bz));
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
             for (var w = Settle(120); w.MoveNext();) yield return null;
             GameStatus.Lines["~slotcanyon"] = info + $", rim eye {eye.x:F0},{eye.y:F0},{eye.z:F0}";
             Shot(cam, dir, "slotcanyon-rim");
+        }
+
+        static FeatureEdit DownSlot(Ground ground, int at, FeatureEdit e)
+        {
+            ref var g = ref ground.Blob.Value;
+            var d = e;
+            for (int k = at + 1; k < g.Edits.Length && k - at <= SlotRimSegs; k++)
+            {
+                var c = g.Edits[k];
+                if (c.Shape != FeatureEdit.SlotCanyon || c.S != e.S) break;
+                d = c;
+            }
+            return d;
         }
 
         static int DeepestSlot(Ground ground, out FeatureEdit e, out int segments)
