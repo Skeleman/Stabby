@@ -180,51 +180,6 @@ public class StructureTests
         Assert.True(capped >= 0.9f * ends, $"{capped} of {ends} wall ends carry a wall head");
     }
 
-    [Fact]
-    public void StumpMeshIsDeterministicAndOpenOnlyBelowItsBreak()
-    {
-        for (ulong key = 1; key <= 6; key++)
-            for (int tier = 0; tier < Structures.Tiers; tier++)
-            {
-                var w = Structures.StumpMesh(key, tier, out var idx, out var lift);
-                var w2 = Structures.StumpMesh(key, tier, out var idx2, out var lift2);
-                Assert.Equal(w, w2);
-                Assert.Equal(idx, idx2);
-                Assert.Equal(lift, lift2);
-                Assert.True(idx.Length % 3 == 0 && idx.Length > 0);
-                Assert.All(idx, i => Assert.InRange(i, 0, lift.Length - 1));
-                Assert.All(w, v => Assert.InRange(v, -1.05f, 1.05f));
-                var weld = new Dictionary<(float, float, float), int>();
-                var id = new int[lift.Length];
-                for (int v = 0; v < lift.Length; v++)
-                {
-                    var p = (w[3 * v], w[3 * v + 1], w[3 * v + 2]);
-                    if (!weld.TryGetValue(p, out id[v])) weld[p] = id[v] = weld.Count;
-                }
-                var edges = new Dictionary<(int, int), int>();
-                for (int t = 0; t < idx.Length; t += 3)
-                    for (int e = 0; e < 3; e++)
-                    {
-                        int a = id[idx[t + e]], b = id[idx[t + (e + 1) % 3]];
-                        Assert.NotEqual(a, b);
-                        var k = (Math.Min(a, b), Math.Max(a, b));
-                        edges[k] = edges.GetValueOrDefault(k) + 1;
-                    }
-                float rim = float.MaxValue;
-                for (int v = 0; v < lift.Length; v++)
-                    if (lift[v] > 7.5f && w[3 * v + 1] > -1) rim = Math.Min(rim, w[3 * v + 1]);
-                var y = new float[weld.Count];
-                foreach (var kv in weld) y[kv.Value] = kv.Key.Item2;
-                foreach (var kv in edges)
-                {
-                    Assert.True(kv.Value <= 2, $"key {key} tier {tier}: edge shared by {kv.Value} triangles");
-                    if (kv.Value == 2) continue;
-                    float ya = y[kv.Key.Item1], yb = y[kv.Key.Item2];
-                    Assert.True(ya == yb && (ya == -1 || ya < rim), $"key {key} tier {tier}: open edge at {ya}, {yb} above the base");
-                }
-            }
-    }
-
     struct Flat : IGroundHeight
     {
         public float HeightAt(float x, float z) => 0;

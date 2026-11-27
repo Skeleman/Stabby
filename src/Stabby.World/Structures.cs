@@ -207,6 +207,7 @@ namespace Stabby.World
                             float r = OccRadii[ri] * span, w = 1 - 0.4f * ri;
                             float qx = px + dx * r, qy = py + dy * r, qz = pz + dz * r;
                             total += w;
+                            if (pieces[k].R == RoundTube && InHollow(pieces[k], qx, qy, qz)) { hit += w; continue; }
                             foreach (int j in near)
                                 if (Inside(pieces[j], qx, qy, qz)) { hit += w; break; }
                         }

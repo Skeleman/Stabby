@@ -6,8 +6,7 @@ namespace Stabby.World
     {
         public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11;
         const int GX = 0, GV = 1, GZ = 2;
-        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5, RoundStump = 6;
-        const float StumpR = 0.55f * TreeSz, StumpH = 2.2f, StumpSink = 0.3f;
+        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5;
         static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };
         static readonly float[] DomeLowR = { 1f, 0.8f }, DomeLowY = { -0.8f, 0.3f };
 
@@ -62,7 +61,6 @@ namespace Stabby.World
         {
             var rng = Rng.Stream(key, "round");
             if (shape == RoundTube) return TubeMesh(ref rng, tier, out idx, out lift);
-            if (shape == RoundStump) return StumpMesh(ref rng, tier, out idx, out lift);
             int sides = shape == RoundDisc ? 32 : tier < (shape >= RoundStem ? 1 : 2) ? 16 : 8;
             var dc = new float[sides];
             var ds = new float[sides];
@@ -145,105 +143,14 @@ namespace Stabby.World
             return w;
         }
 
-        static float StumpY(float h) => -1 + 2 * (StumpSink + h) / StumpH;
-
-        public static float[] StumpMesh(ulong key, int tier, out int[] idx, out float[] lift)
+        static bool InHollow(in StructurePiece p, float px, float py, float pz)
         {
-            var rng = Rng.Stream(key, "round");
-            return StumpMesh(ref rng, tier, out idx, out lift);
+            float dx = px - p.X, dz = pz - p.Z, x = p.C * dx + p.S * dz, z = p.C * dz - p.S * dx;
+            float t = 2 * x / p.Sx, uy = 2 * (py - p.Y) / p.Sy - 1, uz = 2 * z / p.Sz;
+            if (t <= -1 || t >= 1) return false;
+            float k = 1 - TreeTaper * 0.5f * (t + 1), cy = -TreeSag * (1 - t * t) - TreeDrop * (1 - k);
+            return (uy - cy) * (uy - cy) + uz * uz < 0.56f * k * k;
         }
-
-        static float[] StumpMesh(ref Rng rng, int tier, out int[] idx, out float[] lift)
-        {
-            int n = tier < 1 ? 32 : tier < 2 ? 16 : 8, spl = rng.Range(3, 7), disc = 6 * n, centre = 7 * n, sp0 = centre + 1, total = sp0 + 5 * spl;
-            var dc = new float[n];
-            var ds = new float[n];
-            for (int i = 0; i < n; i++) RoundDir(i, n, out dc[i], out ds[i]);
-            float hi = rng.Range(1.4f, 1.8f), lo = rng.Range(0.7f, 1f), top = Math.Max(lo, hi - 0.3f), th = rng.Range(0.08f, 0.12f) / StumpR, tap = rng.Range(0.03f, 0.05f) / StumpR;
-            int k0 = rng.Range(0, n), np = rng.Range(2, 6), nl = rng.Range(1, 3);
-            var h = new float[n];
-            var peak = new bool[n];
-            var lean = new float[n];
-            for (int i = 0; i < n; i++)
-            {
-                float a = 0.5f * (1 + dc[i] * dc[k0] + ds[i] * ds[k0]);
-                h[i] = lo + (top - lo) * a * a + rng.Range(-0.06f, 0.03f);
-            }
-            var hb = (float[])h.Clone();
-            float pos = rng.Range(-0.32f, -0.22f);
-            for (int p = 0; p < np; p++)
-            {
-                float c = (float)Math.Round(k0 + pos * n), hw = Math.Max(0.6f, rng.Range(0.012f, 0.045f) * n), sk = rng.Range(-0.6f, 0.6f), hl = hw * (1 + sk), hr = hw * (1 - sk);
-                float ht = rng.Range(0.18f, 0.55f), round = rng.Range(0f, 0.6f), tilt = p < nl ? rng.Range(0.06f, 0.12f) * (rng.NextFloat() < 0.5f ? -1 : 1) : 0;
-                pos += rng.Range(0.04f, 0.16f);
-                for (int i = 0; i < n; i++)
-                {
-                    float d = i - c;
-                    d -= n * (float)Math.Floor(d / n + 0.5f);
-                    float t = d < 0 ? 1 + d / hl : 1 - d / hr;
-                    if (t <= 0) continue;
-                    float v = hb[i] + ht * (t + round * t * (1 - t)) + rng.Range(-0.04f, 0.02f);
-                    if (v <= h[i]) continue;
-                    h[i] = Math.Min(1.9f, v);
-                    peak[i] = t > 0.6f;
-                    lean[i] = tilt * t;
-                }
-            }
-            for (int i = 0; i < n; i++)
-                if (rng.NextFloat() < 0.25f) h[i] -= rng.Range(0.04f, 0.12f);
-            for (int st = rng.Range(1, 3); st > 0; st--)
-            {
-                int s0 = rng.Range(0, n), len = Math.Max(2, (int)(rng.Range(0.05f, 0.1f) * n));
-                float lv = h[s0] - rng.Range(0f, 0.08f);
-                for (int j = 0; j < len; j++) { int i = (s0 + j) % n; h[i] = lv; peak[i] = false; lean[i] = 0; }
-            }
-            float low = float.MaxValue;
-            for (int i = 0; i < n; i++) { h[i] = Math.Min(1.9f, Math.Max(0.6f, h[i])); low = Math.Min(low, h[i]); }
-            float yd = StumpY(low - 0.04f);
-            var ro = RoundNoise(ref rng, n, 0.95f, 1f);
-            var w = new float[3 * total];
-            lift = new float[total];
-            for (int i = 0; i < n; i++)
-            {
-                float r = ro[i], ot = 0.98f * r - tap, ri = ot - th * (peak[i] ? 0.5f : rng.Range(0.85f, 1.15f)), y = StumpY(h[i]), yi = peak[i] ? StumpY(h[i] - 0.06f) : y;
-                Set(w, i, 1.04f * r * dc[i], -1, 1.04f * r * ds[i]); lift[i] = 9;
-                float lx = dc[i] - lean[i] * ds[i], lz = ds[i] + lean[i] * dc[i];
-                Set(w, n + i, ot * lx, y, ot * lz); lift[n + i] = 9;
-                Set(w, 2 * n + i, ot * lx, y, ot * lz);
-                Set(w, 3 * n + i, ri * lx, yi, ri * lz);
-                Set(w, 4 * n + i, ri * lx, yi, ri * lz);
-                Set(w, 5 * n + i, ri * dc[i], yd, ri * ds[i]);
-                Set(w, disc + i, ri * dc[i], yd, ri * ds[i]); lift[disc + i] = 3;
-            }
-            Set(w, centre, 0, yd, 0); lift[centre] = 3;
-            var id = new System.Collections.Generic.List<int>();
-            for (int i = 0; i < n; i++)
-            {
-                int j = (i + 1) % n;
-                id.Add(i); id.Add(n + j); id.Add(j); id.Add(i); id.Add(n + i); id.Add(n + j);
-                id.Add(3 * n + i); id.Add(2 * n + j); id.Add(2 * n + i); id.Add(3 * n + i); id.Add(3 * n + j); id.Add(2 * n + j);
-                id.Add(5 * n + i); id.Add(5 * n + j); id.Add(4 * n + j); id.Add(5 * n + i); id.Add(4 * n + j); id.Add(4 * n + i);
-                id.Add(centre); id.Add(disc + j); id.Add(disc + i);
-            }
-            for (int k = 0; k < spl; k++)
-            {
-                int o = sp0 + 5 * k, q = rng.Range(0, n);
-                float pr = rng.Range(0f, 0.65f), px = pr * dc[q], pz = pr * ds[q], e = rng.Range(0.08f, 0.15f) / StumpR, sh = rng.Range(0.25f, 0.5f);
-                for (int c = 0; c < 4; c++)
-                {
-                    float ee = e * rng.Range(0.7f, 1.3f);
-                    Set(w, o + c, px + (c == 0 ? ee : c == 2 ? -ee : 0), StumpY(low - 0.07f), pz + (c == 1 ? ee : c == 3 ? -ee : 0));
-                    lift[o + c] = 3;
-                }
-                Set(w, o + 4, px + rng.Range(-0.5f, 0.5f) * e, StumpY(low + sh), pz + rng.Range(-0.5f, 0.5f) * e);
-                lift[o + 4] = 3;
-                for (int c = 0; c < 4; c++) { id.Add(o + c); id.Add(o + 4); id.Add(o + (c + 1) % 4); }
-            }
-            idx = id.ToArray();
-            return w;
-        }
-
-        static void Set(float[] w, int v, float x, float y, float z) { w[3 * v] = x; w[3 * v + 1] = y; w[3 * v + 2] = z; }
 
         static float[] TubeMesh(ref Rng rng, int tier, out int[] idx, out float[] lift)
         {
@@ -255,9 +162,13 @@ namespace Stabby.World
             var w = new float[3 * (rim + 4 * sides)];
             lift = new float[rim + 4 * sides];
             var rag = new float[2][];
-            rag[0] = RoundNoise(ref rng, sides, 0f, 0.05f);
-            rag[1] = new float[sides];
-            for (int i = 0; i < sides; i++) rag[1][i] = 0.01f + (rng.NextFloat() < 0.4f ? rng.Range(0.06f, 0.15f) : rng.Range(0f, 0.04f));
+            for (int e = 0; e < 2; e++)
+            {
+                rag[e] = new float[sides];
+                var tear = new float[sides];
+                for (int i = 0; i < sides; i++) tear[i] = rng.NextFloat() < 0.4f ? rng.Range(0.06f, 0.15f) : rng.Range(0f, 0.04f);
+                for (int i = 0; i < sides; i++) rag[e][i] = 0.01f + 0.25f * tear[(i + sides - 1) % sides] + 0.5f * tear[i] + 0.25f * tear[(i + 1) % sides];
+            }
             var outer = RoundNoise(ref rng, sides, 0.93f, 1f);
             var inner = RoundNoise(ref rng, sides, 0.78f, 0.84f);
             for (int j = 0; j < rings; j++)

@@ -270,22 +270,17 @@ public class DiscoveryTests
     }
 
     [Fact]
-    public void FallenTreesLieInTheWoodsWithAPitBehindTheirRoots()
+    public void FallenTreesLieInTheWoods()
     {
         int tree = Objects.Objects.FindIndex(o => o.Id == "fallen-tree");
-        var (_, _, edits, field) = World(TestWorlds.DefaultSeed);
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
         var trees = field.Discoveries().Where(o => o.Def == tree).ToArray();
         output.WriteLine($"{trees.Length} fallen trees " + string.Join(" ", trees.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
         Assert.NotEmpty(trees);
-        var pits = new System.Collections.Generic.List<FeatureEdit>();
         foreach (var c in trees)
         {
             Assert.True(field.Woods(c.X, c.Z) >= ObjectField.TreeWoods);
             Assert.Null(field.TreeFault(c));
-            pits.Clear();
-            field.TreeEditsOf(c, pits);
-            Assert.Single(pits);
-            Assert.Contains(edits, f => f.Kind == FeatureEdit.Carve && f.Shape == FeatureEdit.Spring && f.Ax == pits[0].Ax && f.Az == pits[0].Az);
         }
     }
 
