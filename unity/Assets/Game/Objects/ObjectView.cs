@@ -409,7 +409,6 @@ namespace Stabby.Game
                 {
                     var built = await pending[b].ConfigureAwait(false);
                     pending[b] = null;
-                    if (b + ahead < batches) pending[b + ahead] = BuildBatch(parts, keys, (b + ahead) * batch, Math.Min(batch, count - (b + ahead) * batch));
                     int b0 = b * batch, bn = Math.Min(batch, count - b0);
                     set.Fresh();
                     for (int k = b0; k < b0 + bn; k++)
@@ -461,6 +460,7 @@ namespace Stabby.Game
                         if (impostors[k] && set.Spans[k * Stride].Uvs > 0) Impostor(set, k);
                     }
                     set.Packs.Enqueue(Pack(set, b0 * Stride, (b0 + bn) * Stride));
+                    if (b + ahead < batches) pending[b + ahead] = BuildBatch(parts, keys, (b + ahead) * batch, Math.Min(batch, count - (b + ahead) * batch));
                 }
             }
             catch
@@ -1165,8 +1165,7 @@ namespace Stabby.Game
             DespawnHidden();
             if (!Warm()) { PendingWhy = 128; return; }
             if (field == null && !Prepare()) { PendingWhy = 128; return; }
-            bool registered;
-            using (RegisterMarker.Auto()) registered = Register();
+            using (RegisterMarker.Auto()) if (!Register()) return;
             var cam = Camera.main;
             if (cam == null) return;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1180,14 +1179,6 @@ namespace Stabby.Game
             }
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
-            if (!registered)
-            {
-                int waitWhy = PendingWhy;
-                using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
-                Pending = 1;
-                PendingWhy = waitWhy | why;
-                return;
-            }
             if (!scanned) { Pending = 1; PendingWhy = 256; scanAt = pos; scan = Scan(pos); scanned = true; return; }
             if (math.distance(pos, lastPos) > span) settled = false;
             lastPos = pos;
