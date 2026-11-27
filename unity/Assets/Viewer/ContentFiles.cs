@@ -42,6 +42,10 @@ namespace Stabby.Viewer
             return ContentLoader.ParseCreatures(File.ReadAllText(CreaturesPath), ids, CreaturesPath, Materials(MaterialsPath));
         }
 
+        static ulong? bakeKey;
+
+        public static ulong BakeKey() => bakeKey ??= GroundBake.KeyOf(new[] { File.ReadAllBytes(BiomesPath), File.ReadAllBytes(MaterialsPath), File.ReadAllBytes(ObjectsPath), File.ReadAllBytes(CavesPath) }, ObjectDensity);
+
         public static readonly float ObjectDensity = float.TryParse(System.Environment.GetEnvironmentVariable("STABBY_OBJECT_DENSITY"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var k) && k > 0 ? k : 1f;
     }
 }

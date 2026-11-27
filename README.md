@@ -117,9 +117,11 @@ Stabby.Viewer.Editor.ViewerSetup.Capture [-stabbySeed N]` writes `out/unity/seed
 `Assets/Scenes/Game.unity` runs a host and two clients in one process with
 Netcode for Entities. The host loads `out/maps/seed<N>-512.stabbymap`
 (`WorldFile`: raw chunks, rebuilt with `Relink`, about 25 ms) instead of generating
-(about 4 s in Unity at 512, 6 s at 2048; the file loads in about 0.5 s at 2048). If the file is missing, from another generator version or
-older than `content/biomes.json`, the host generates and saves it, so run
-`stabby bake` after generator changes or let the first run rebake. `Client1`
+(about 4 s in Unity at 512, 6 s at 2048; the file loads in about 0.5 s at 2048). The
+header stores a hash of `content/biomes.json` and `content/materials.json`. If the
+file is missing, from another generator version or baked from other content, the
+editor host generates and saves it; a player never generates and fails with the
+`stabby bake` command to run instead. A client without a usable file starts empty. `Client1`
 loads the same file, compares chunk checksums and streams the chunks that differ
 (deflated); `Client2` starts from an empty world to exercise a full stream.
 Players are predicted capsules walking on the shared terrain. The view client

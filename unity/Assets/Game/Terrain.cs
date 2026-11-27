@@ -55,7 +55,7 @@ namespace Stabby.Game
         public AABB Box;
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainWriteJob : IJob
     {
         [ReadOnly] public NativeList<TerrainWrite> Writes;
@@ -419,7 +419,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainLayoutJob : IJob
     {
         public TerrainChunk Chunk;
@@ -456,7 +456,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainRowsJob : IJobParallelForDefer
     {
         [ReadOnly] public NativeArray<int> Slabs;
@@ -481,7 +481,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainMeshJob : IJob
     {
         public TerrainChunk Chunk;
@@ -752,7 +752,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainSelectJob : IJob
     {
         public TerrainTree Tree;
@@ -854,7 +854,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainDrawJob : IJob
     {
         public TerrainTree Tree;
@@ -907,7 +907,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainNodesJob : IJob
     {
         public TerrainTree Tree;
@@ -1105,13 +1105,12 @@ namespace Stabby.Game
         sealed class Prepared
         {
             public BlobBuilder Look;
-            public List<MeshParts> Lakes, Rivers, Mist;
-            public MeshParts Sea;
             public StrataLook Strata;
             public FieldLook Field;
             public int[] Offset, Dim;
             public float2[] Range;
             public float Deep;
+            public LoadTimes Times;
         }
 
         struct Pending
@@ -1141,6 +1140,7 @@ namespace Stabby.Game
             public readonly List<(BatchMaterialID Mat, float Pad, bool Cast)> Kinds = new List<(BatchMaterialID, float, bool)>();
             public MeshBatch Batch;
             public int Steam, Pools;
+            public LoadTimes Times;
 
             public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast, bool lean = false)
             {
@@ -1211,10 +1211,11 @@ namespace Stabby.Game
         BatchMaterialID material, waterMaterial, mistMaterial;
         Ground ground;
         int frameVertices, built, evicted, generation, poolMisses, oddBuilt;
-        bool ready, rootsReady, builtSmooth;
+        bool ready, rootsReady, rootsMarked, builtSmooth;
         float worstMs, worstLoadMs, worstLodsMs, worstCollectMs;
         string loadPart = "";
-        double partUpload, partCollect, partStatics, partLods, lodRequests, lodDraw, lodNodes, lodApply, lodEvictMs;
+        LoadTimes readyTimes;
+        double partUpload, partCollect, partRoots, partStatics, partSteam, partClock, partLods, lodRequests, lodDraw, lodNodes, lodApply, lodEvictMs;
         int lodEvicts, lodDeferred, lodShadows;
 
         NativeList<TerrainWrite> writes;
@@ -1246,13 +1247,19 @@ namespace Stabby.Game
                 Collect();
                 TopUp();
                 double tc = frame.Elapsed.TotalMilliseconds;
-                Roots(); Statics(); Steam(); Clock();
+                Roots();
+                double tr = frame.Elapsed.TotalMilliseconds;
+                Statics();
+                double tw = frame.Elapsed.TotalMilliseconds;
+                Steam();
+                double tm = frame.Elapsed.TotalMilliseconds;
+                Clock();
                 double ts = frame.Elapsed.TotalMilliseconds;
                 lodRequests = lodDraw = lodNodes = 0;
                 Lods();
                 double lm = frame.Elapsed.TotalMilliseconds - ts + lodApply;
                 loadPart = null;
-                (partUpload, partCollect, partStatics, partLods) = (tu, tc - tu, ts - tc, lm);
+                (partUpload, partCollect, partRoots, partStatics, partSteam, partClock, partLods) = (tu, tc - tu, tr - tc, tw - tr, tm - tw, ts - tm, lm);
                 Flush();
                 if (lm > worstLodsMs) { worstLodsMs = (float)lm; GameStatus.Lines["terrain~lods"] = $"terrain worst lods {lm:F1} ms ({stage}: {LodParts()})"; }
                 if (tc - tu > worstCollectMs) { worstCollectMs = (float)(tc - tu); GameStatus.Lines["terrain~collect"] = $"terrain worst collect {tc - tu:F1} ms ({stage}, {frameVertices} vertices)"; }
@@ -1280,7 +1287,7 @@ namespace Stabby.Game
 
         string Status() => $"terrain nodes {shownDrawn} drawn, {shownSunk} sunk hidden, {shownWanted} wanted, {shownBehind} behind, {built} built, {built - evicted} live, {shownVertices} drawn vertices, {shownCasting} casting ({shownCast} vertices), by level {string.Join("/", shownLevels)}";
 
-        string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, statics {partStatics:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
+        string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, roots {partRoots:F1}, statics {partStatics:F1}, steam {partSteam:F1}, clock {partClock:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
 
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1}, apply {lodApply:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows}]";
 
@@ -1322,37 +1329,79 @@ namespace Stabby.Game
             var defs = map.Defs;
             quads = map.Objects?.Terrain ?? quads;
             string materials = ContentFiles.MaterialsPath;
+            graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
+            var scene = UnityEngine.Object.FindFirstObjectByType<GameScene>();
+            material = graphics.RegisterMaterial(scene != null ? scene.TerrainMaterial : null);
+            waterMaterial = scene != null && scene.WaterMaterial != null ? graphics.RegisterMaterial(scene.WaterMaterial) : material;
+            hasMist = scene != null && scene.MistMaterial != null;
+            if (hasMist) mistMaterial = graphics.RegisterMaterial(scene.MistMaterial);
+            BatchMaterialID wm = waterMaterial, mm = mistMaterial;
+            bool lean = wm != material, mist = hasMist;
             since.Restart();
-            preparing = Task.Run(() => Prepare(world, parts.Detail, defs, materials, parts.Edits, parts.Brooks));
+            preparing = Task.Run(() => Prepare(world, parts.Detail, defs, materials, parts.Edits));
+            packing = Task.Run(() => Water(world, parts.Detail, parts.Brooks, wm, mm, lean, mist));
         }
 
-        static Prepared Prepare(GeneratedWorld world, TerrainDetail detail, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits, CaveBrook[] brooks)
+        static StaticPack Water(GeneratedWorld world, TerrainDetail detail, CaveBrook[] brooks, BatchMaterialID wm, BatchMaterialID mm, bool lean, bool mist)
+        {
+            int n = world.Config.Size;
+            var t = new LoadTimes();
+            var mists = new List<MeshParts>();
+            var blocks = new List<int2>();
+            for (int cy = 0; cy < n; cy += LakeCells)
+                for (int cx = 0; cx < n; cx += LakeCells)
+                    if (HasLand(world, cx, cy)) blocks.Add(new int2(cx, cy));
+            var lakes = new MeshParts[blocks.Count];
+            Parallel.For(0, blocks.Count, k => lakes[k] = WaterGeometry.Lakes(world, blocks[k].x, blocks[k].y, LakeCells, true));
+            WaterGeometry.ShareLakeConstants(lakes);
+            t.Mark("lakes");
+            var rivers = WaterGeometry.Rivers(world, detail, mists);
+            t.Mark("rivers");
+            rivers.AddRange(WaterGeometry.CaveBrooks(world, brooks));
+            var sea = WaterGeometry.Sea(n, world.Config.CellMeters);
+            if (!mist) mists.Clear();
+            t.Mark("brooks sea");
+            var pack = Pack(sp =>
+            {
+                foreach (var part in lakes) sp.Add(part, wm, 0, Casts(part), lean);
+                foreach (var part in rivers) sp.Add(part, wm, 0, Casts(part), lean);
+                foreach (var part in mists) sp.Add(part, mm, WaterGeometry.MistPad, true);
+                sp.Add(sea, wm, 0, Casts(sea), lean);
+            });
+            t.Mark("pack");
+            pack.Times = t;
+            return pack;
+        }
+
+        static Prepared Prepare(GeneratedWorld world, TerrainDetail detail, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits)
         {
             int n = world.Config.Size;
             float cm = world.Config.CellMeters;
-            var p = new Prepared { Lakes = new List<MeshParts>(), Mist = new List<MeshParts>() };
+            var t = new LoadTimes();
+            var p = new Prepared { Times = t };
             Pyramid(world, detail, edits, p);
-            for (int cy = 0; cy < n; cy += LakeCells)
-                for (int cx = 0; cx < n; cx += LakeCells)
-                    if (HasLand(world, cx, cy)) p.Lakes.Add(WaterGeometry.Lakes(world, cx, cy, LakeCells));
-            p.Rivers = WaterGeometry.Rivers(world, detail, p.Mist);
-            p.Rivers.AddRange(WaterGeometry.CaveBrooks(world, brooks));
-            p.Sea = WaterGeometry.Sea(n, cm);
+            t.Mark("pyramid");
             var colors = TerrainLook.BaseColors(world, defs);
+            t.Mark("colors");
             p.Look = new BlobBuilder(Allocator.Persistent);
             ref var root = ref p.Look.ConstructRoot<TerrainLookData>();
             root.N = n;
             var arr = p.Look.Allocate(ref root.Colors, colors.Length);
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
+            t.Mark("color blob");
             var lib = ContentFiles.Materials(materials);
+            t.Mark("materials");
             p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
+            t.Mark("strata");
             p.Deep = lib.Water == null ? float.NegativeInfinity : -SunkClarities * math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
             var lake = p.Look.Allocate(ref root.Lake, n * n);
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++) lake[y * n + x] = WaterGeometry.LakeHeight(world, x, y);
+            t.Mark("lake heights");
             p.Field = TerrainLook.Field(detail, n, cm, colors, p.Strata.Offsets);
+            t.Mark("field");
             return p;
         }
 
@@ -1430,24 +1479,14 @@ namespace Stabby.Game
             preparing = null;
             if (!task.IsCompletedSuccessfully) { UnityEngine.Debug.LogException(task.Exception); yield break; }
             prepared = task.Result;
-            GameStatus.Lines["terrain~prep"] = $"terrain prepared at {since.ElapsedMilliseconds} ms";
+            GameStatus.Lines["terrain~prep"] = $"terrain prepared at {since.ElapsedMilliseconds} ms ({prepared.Times})";
+            readyTimes = new LoadTimes();
             lookBake = BlobBake<TerrainLookData>.Start(prepared.Look);
             yield return "blob";
             foreach (string step in TerrainLook.StrataSteps(prepared.Strata)) yield return step;
             while (!lookBake.IsCompleted) yield return "blob wait";
             lookReady = lookBake.Take();
             Shader.SetGlobalFloat("_StabbyCellMeters", ground.Blob.Value.CellMeters);
-            graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            var scene = UnityEngine.Object.FindFirstObjectByType<GameScene>();
-            material = graphics.RegisterMaterial(scene != null ? scene.TerrainMaterial : null);
-            yield return "material";
-            waterMaterial = scene != null && scene.WaterMaterial != null ? graphics.RegisterMaterial(scene.WaterMaterial) : material;
-            yield return "water material";
-            bool mist = scene != null && scene.MistMaterial != null;
-            hasMist = mist;
-            if (mist) mistMaterial = graphics.RegisterMaterial(scene.MistMaterial);
-            else prepared.Mist.Clear();
-            yield return "mist material";
             tree = new TerrainTree
             {
                 Offset = new NativeArray<int>(prepared.Offset, Allocator.Persistent),
@@ -1491,6 +1530,7 @@ namespace Stabby.Game
             upload = new TerrainLook.FieldUpload(prepared.Field, UploadBytes);
             prepared.Field = null;
             look = lookReady;
+            readyTimes.Mark("load");
         }
 
         void FineNodes()
@@ -1788,29 +1828,18 @@ namespace Stabby.Game
             if (ready || !rootsReady) return;
             if (water == null)
             {
-                if (packing == null)
-                {
-                    var p = prepared;
-                    BatchMaterialID wm = waterMaterial, mm = mistMaterial;
-                    bool lean = wm != material;
-                    packing = Task.Run(() => Pack(sp =>
-                    {
-                        foreach (var part in p.Lakes) sp.Add(part, wm, 0, Casts(part), lean);
-                        foreach (var part in p.Rivers) sp.Add(part, wm, 0, Casts(part), lean);
-                        foreach (var part in p.Mist) sp.Add(part, mm, WaterGeometry.MistPad, true);
-                        sp.Add(p.Sea, wm, 0, Casts(p.Sea), lean);
-                    }));
-                    return;
-                }
-                if (!packing.IsCompleted) return;
+                if (!rootsMarked) { rootsMarked = true; readyTimes.Mark("roots"); }
+                if (packing == null || !packing.IsCompleted) return;
                 if (packing.IsFaulted) { GameStatus.Failure = packing.Exception.ToString(); return; }
                 water = packing.Result;
                 packing = null;
+                readyTimes.Add("water", water.Times);
             }
             if (!PumpStatics(water)) return;
+            readyTimes.Mark("statics");
             water.Dispose();
             water = null;
-            GameStatus.Lines["terrain~ready"] = $"terrain ready at {since.ElapsedMilliseconds} ms";
+            GameStatus.Lines["terrain~ready"] = $"terrain ready at {since.ElapsedMilliseconds} ms ({readyTimes})";
             prepared = null;
             ready = true;
             GameStatus.TerrainBuilt = true;
