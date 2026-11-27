@@ -42,6 +42,8 @@ src/Stabby.World/MineKit.cs objects,caves
 src/Stabby.World/DungeonLinks.cs caves,objects,sites
 content/objects.json objects,sites,surface
 src/Stabby.World/Bogs.cs sites,surface
+src/Stabby.World/Oases.cs sites,surface
+src/Stabby.World/OasisChecks.cs sites
 src/Stabby.World/Pools.cs sites
 src/Stabby.World/Discover*.cs sites
 src/Stabby.World/Geothermal.cs sites

@@ -65,7 +65,8 @@ namespace Stabby.World
                     if (!seen[2] && site < 0 && (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0)) Fail(2, $" stands in lake {lake}");
                     if (!seen[3] && site < 0 && OnBed(bed, segs, i, o.X, o.Z, 0.5f * r)) Fail(3, " lies on a river bed");
                     if (!seen[9] && site >= 0 && !OnBank(w, detail, site, gx, gz, o.X, o.Z, ground)) Fail(9, " is off its river or lake bank");
-                    if (!seen[4])
+                    bool oasis = def.Placement.Oasis != null;
+                    if (!seen[4] && !oasis)
                     {
                         grid.Near(o.X - 0.5f * r, o.Z - 0.5f * r, o.X + 0.5f * r, o.Z + 0.5f * r, ids);
                         if (def.Placement.Discovery > 0) ids.RemoveAll(f => edits[f].Shape == FeatureEdit.Spring || (def.Placement.Discovery == ObjectField.WolfDen && edits[f].Shape == FeatureEdit.Boulder));
@@ -78,9 +79,10 @@ namespace Stabby.World
                         if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
                     }
                     float foot = ground;
+                    if (oasis) foot = field.OasisFoot(o.X, o.Z);
                     if (ObjectPart.IsDungeon(def.Parts[0].Shape)) ObjectField.SeatRange(detail, cm, ObjectField.Seats(def), o, out foot, out _);
                     if (!seen[5] && (o.Y > foot + 0.05f || o.Y < foot - o.Size)) Fail(5, $" is not grounded ({o.Y:F2} vs ground {foot:F2})");
-                    if (!seen[8])
+                    if (!seen[8] && !oasis)
                     {
                         float sg = ObjectField.SlopeStepM, sx = (ObjectField.GroundAt(detail, cm, o.X + sg, o.Z) - ObjectField.GroundAt(detail, cm, o.X - sg, o.Z)) / (2 * sg);
                         float sz = (ObjectField.GroundAt(detail, cm, o.X, o.Z + sg) - ObjectField.GroundAt(detail, cm, o.X, o.Z - sg)) / (2 * sg), slope = (float)Math.Sqrt(sx * sx + sz * sz);

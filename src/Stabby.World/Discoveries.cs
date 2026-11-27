@@ -57,6 +57,7 @@ namespace Stabby.World
             var f = new ObjectField(w, detail, edits, lib);
             f.discoveries = Discoveries();
             f.bogPools = BogPools();
+            f.oasisPools = OasisPools();
             f.roads = Roads(); f.roadStart = roadStart; f.roadItems = roadItems; f.roadSites = roadSites; f.siteCells = siteCells; f.siteList = siteList; f.tunnelEdits = tunnelEdits; f.tunnelGraphs = tunnelGraphs;
             f.sketch = sketch; f.towns = towns; f.townPlans = townPlans; f.townChunks = townChunks; f.hotspots = hotspots; f.treeCover = treeCover;
             return f;
@@ -311,7 +312,7 @@ namespace Stabby.World
 
         bool SiteFits(int d, int variant, float px, float pz, float size, float qa, float qb, out ObjectInstance o)
         {
-            if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o)) { o = default; return false; }
+            if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o, site: true)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
             int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook ? lib.Objects[d].Variants : 1, k = 0;

@@ -331,6 +331,16 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void OasesHoldWaterAmongPalms()
+    {
+        var p = TestWorlds.Default;
+        int oases = p.Field.OasisPools().Length / ObjectField.OasisStride;
+        output.WriteLine($"{oases} oases");
+        Assert.True(oases > 0, "no oasis in the default world");
+        Assert.Null(WorldChecks.OasisFault(p.W, p.Field));
+    }
+
+    [Fact]
     public void GeyserCyclesDifferPerSite()
     {
         Structures.GeyserCycle(1, out float i1, out float d1, out float o1);
