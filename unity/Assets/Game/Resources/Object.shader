@@ -51,7 +51,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
-            float4 _StabbyKit[39], _StabbyKitSrgb[39];
+            float4 _StabbyKit[42], _StabbyKitSrgb[42];
             float _StabbyClock;
             static float3 emberGlow;
             static float iceWrap;
@@ -497,10 +497,34 @@ Shader "Stabby/Object"
                         grad = 0.1 * str.yzw * fs + 0.08 * fib.yzw * ff;
                     }
                 }
+                else if (mat == 11)
+                {
+                    float4 lp = OrgRP3(q, OrgF(1), sd + 1.7, 1);
+                    float wet = smoothstep(0.1, -0.7, mid.x * fm + 0.4 * big.x) * 0.5 + (1 - open) * 0.4;
+                    a = lerp(_StabbyKit[39].rgb, _StabbyKit[41].rgb, 0.35 + 0.25 * big.x) * (0.9 + 0.14 * fib.x * ff + 0.1 * big.x);
+                    a = lerp(a, _StabbyKit[40].rgb, saturate(wet));
+                    float grit = smoothstep(0.5, 0.85, lp.x + 0.35 * fib.x * ff) * fs;
+                    a = lerp(a, _StabbyKit[41].rgb * 1.2, 0.5 * grit);
+                    float3 cc = ContactColor(wp.xz, wp.y);
+                    a = lerp(a, a * saturate(dot(cc, 1) / max(dot(a, 1), 1e-3)), 0.35 + 0.4 * (1 - open));
+                    a = lerp(a, cc, 0.12);
+                    grad = 0.26 * mid.yzw * fm + 0.16 * lp.yzw * fs + 0.1 * fib.yzw * ff;
+                    shade = 0.35 * smoothstep(0.0, -0.6, mid.x) * fm;
+                }
+                else if (mat == 1 && th.x > 2.5 && th.x < 3.5)
+                {
+                    float rot = smoothstep(-0.3, 0.6, big.x + 0.5 * mid.x * fm);
+                    a = lerp(_StabbyKit[5].rgb, _StabbyKit[0].rgb, 0.5 * rot) * (0.5 + 0.14 * str.x * fs + 0.12 * fib.x * ff);
+                    float pith = smoothstep(0.75, 0.95, 1 - abs(fib.x + 0.3 * str.x)) * ff;
+                    a *= 1 - 0.4 * pith;
+                    a = lerp(a, _StabbyKit[40].rgb * (0.9 + 0.2 * mid.x), 0.55 * smoothstep(0.35, 0.9, n.y + 0.3 * big.x));
+                    grad = 0.18 * str.yzw * fs + 0.16 * fib.yzw * ff + 0.05 * mid.yzw * fm;
+                    shade = 0.3 * pith;
+                }
                 else if (side && mat == 1)
                 {
                     float al = dot(q, g);
-                    float3 sp = (q - g * al) * 15 + g * (al * 1.6) + sd, sp2 = sp * 2.3 + 5.1;
+                    float3 sp = (q - g * al) * 15 + g * (al * 3) + sd, sp2 = sp * 2.3 + 5.1;
                     float4 bn = OrgNoise3(sp, int3(0, 0, 0)), bm = OrgNoise3(sp2, int3(0, 0, 0));
                     float fb = OrgRungW(2, fp), fb2 = OrgRungW(2, fp);
                     float rid = lerp(0.6, 1 - abs(bn.x), fb) * 0.65 + lerp(0.6, 1 - abs(bm.x), fb2) * 0.35;
@@ -510,6 +534,16 @@ Shader "Stabby/Object"
                     float3 d1 = bn.yzw - g * dot(bn.yzw, g), d2 = bm.yzw - g * dot(bm.yzw, g);
                     grad = -(sign(bn.x) * 0.16 * fb) * d1 - (sign(bm.x) * 0.07 * fb2) * d2 + 0.04 * mid.yzw * fm;
                     shade = 0.35 * (1 - smoothstep(0.2, 0.6, rid)) * fb;
+                    [branch] if (th.x > 8.5)
+                    {
+                        float3 pq = q - g * (al * 0.45) + sd;
+                        float4 fu = OrgRP3(pq, OrgF(0), 4.3, 0), fv = OrgRP3(pq, OrgF(1), 8.9, 1);
+                        float plate = smoothstep(0.0, 0.5, 1 - abs(fu.x) + 0.25 * fv.x * fs);
+                        float3 e1 = fu.yzw - g * dot(fu.yzw, g), e2 = fv.yzw - g * dot(fv.yzw, g);
+                        a *= 0.55 + 0.5 * plate;
+                        grad += -(sign(fu.x) * 0.38 * fm) * e1 + 0.12 * e2 * fs;
+                        shade = max(shade, 0.55 * (1 - plate) * fm);
+                    }
                 }
                 else if (cap && mat == 1)
                 {

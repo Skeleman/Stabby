@@ -90,7 +90,7 @@ namespace Stabby.World
                 int[] idx;
                 if (p.R > 0)
                     u = RoundMesh(p.Key, p.R, tier, out idx, out lift);
-                else if (p.M > 0 || p.Coursed)
+                else if ((p.M > 0 && p.M != Soil) || p.Coursed)
                 {
                     u = UnitBox;
                     idx = UnitBoxIdx;
@@ -207,6 +207,7 @@ namespace Stabby.World
                             float r = OccRadii[ri] * span, w = 1 - 0.4f * ri;
                             float qx = px + dx * r, qy = py + dy * r, qz = pz + dz * r;
                             total += w;
+                            if (pieces[k].R == RoundTube && InHollow(pieces[k], qx, qy, qz)) { hit += w; continue; }
                             foreach (int j in near)
                                 if (Inside(pieces[j], qx, qy, qz)) { hit += w; break; }
                         }
