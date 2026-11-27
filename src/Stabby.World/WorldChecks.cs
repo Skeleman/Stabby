@@ -737,9 +737,10 @@ namespace Stabby.World
                     foreach (int q in ids) if (placed[q].MeshedIn(sm, x0, z0, x1, z1)) meshed.Add(placed[q].AtStep(sm));
                     var f = new NetsBuffers();
                     var list = new EditArray { Items = meshed.ToArray() };
-                    if (meshed.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
+                    var mc = meshed.Count > 0 ? ColumnCache.Over(cols, c.X0 - 3, c.Z0 - 3, c.Cells + 7) : default;
+                    if (meshed.Count > 0) SurfaceNets.Edited(mc, list, c, ref f);
                     else SurfaceNets.Heightfield(cols, c, ref f);
-                    if (meshed.Count > 0 && !StitchTargetsMatch(cols, list, c, f))
+                    if (meshed.Count > 0 && !StitchTargetsMatch(mc, list, c, f))
                     { e.Add($"node {x0:F0},{z0:F0} at level {level} has border vertices a finer neighbour cannot stitch to"); return; }
                     foreach (int t in f.Tris)
                     {
@@ -767,7 +768,7 @@ namespace Stabby.World
                         fine.Add((ix, iz));
             }
             var cols = new DetailColumns { Detail = detail, StepM = s };
-            var meshed = new Dictionary<(int, int), (NetsChunk, NetsBuffers)>();
+            var meshed = new Dictionary<(int, int), (NetsChunk, NetsBuffers, ColumnCache)>();
             for (int fz = n0z; fz <= n1z; fz++)
                 for (int fx = n0x; fx <= n1x; fx++)
                 {
@@ -781,12 +782,13 @@ namespace Stabby.World
                             var list = MeshedAt(grid, s, nx * size, nz * size, (nx + 1) * size, (nz + 1) * size, ids);
                             var c = new NetsChunk { X0 = nx * NearField.NodeQuads, Z0 = nz * NearField.NodeQuads, Cells = NearField.NodeQuads, StepM = s };
                             var f = new NetsBuffers();
-                            if (list.Count > 0) SurfaceNets.Edited(cols, list, c, ref f);
+                            var cc = ColumnCache.Over(cols, c.X0 - 3, c.Z0 - 3, c.Cells + 7);
+                            if (list.Count > 0) SurfaceNets.Edited(cc, list, c, ref f);
                             else SurfaceNets.Heightfield(cols, c, ref f);
-                            m = (c, f);
+                            m = (c, f, cc);
                             meshed[(nx, nz)] = m;
                         }
-                        if (!StitchTargetsMatch(cols, near, m.Item1, m.Item2))
+                        if (!StitchTargetsMatch(m.Item3, near, m.Item1, m.Item2))
                         {
                             at = $"fine brook node {fx * size:F0},{fz * size:F0} cannot stitch to its level 0 neighbour {nx * size:F0},{nz * size:F0}";
                             return false;
@@ -804,7 +806,7 @@ namespace Stabby.World
             return new EditArray { Items = list.ToArray() };
         }
 
-        static bool StitchTargetsMatch(DetailColumns cols, EditArray edits, NetsChunk c, NetsBuffers f)
+        static bool StitchTargetsMatch(ColumnCache cols, EditArray edits, NetsChunk c, NetsBuffers f)
         {
             int w = c.Cells + 1;
             for (int k = 0; k < w; k++)
