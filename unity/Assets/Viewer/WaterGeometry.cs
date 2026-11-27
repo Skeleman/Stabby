@@ -445,18 +445,20 @@ namespace Stabby.Viewer
                 else { Tris.Add(row[m]); Tris.Add(l); Tris.Add(r); }
             }
 
-            int Band(FallCurtain f, int prev, int cols, float y, float h, float blend, float[] off, int o0, int o1, float t, Color flow, Vector4 reach, Vector4 fall, bool both, float foot = 1, float ahead = 0)
+            int Band(FallCurtain f, int prev, int cols, float y, float h, float blend, float[] off, int o0, int o1, float t, Color flow, Color top, Vector4 reach, Vector4 fall, bool both, float foot = 1, float ahead = 0)
             {
                 float half = 0.5f * f.Width;
                 var fwd = new Vector3(f.DirX, 0, f.DirZ);
                 var side = new Vector3(f.DirZ, 0, -f.DirX) * half;
                 var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
-                var curt = new Vector4((blend > 0 ? Mathf.Clamp01(y / blend) : 0) * foot, y / h, h, f.Discharge);
+                float w = blend > 0 ? Mathf.Clamp01(y / blend) : 0;
+                var curt = new Vector4(w * foot, y / h, h, f.Discharge);
+                var col = Color.Lerp(top, flow, w);
                 int b = Verts.Count;
                 for (int c = 0; c < cols; c++)
                 {
                     float sc = f.SideAt(c, cols), o = Mathf.Lerp(off[o0 + c], off[o1 + c], t) + ahead;
-                    Add(lip + side * sc + fwd * (f.Bow * sc * sc + o) - Vector3.up * y, flow, new Vector2(2f * c / (cols - 1) - 1, half * f.Span), reach, fall, curt);
+                    Add(lip + side * sc + fwd * (f.Bow * sc * sc + o) - Vector3.up * y, col, Vector2.Lerp(new Vector2(sc, half), new Vector2(2f * c / (cols - 1) - 1, half * f.Span), w), reach, fall, curt);
                     if (c == 0) continue;
                     int v = b + c, a = prev + c;
                     Tris.Add(a - 1); Tris.Add(v - 1); Tris.Add(a);
@@ -488,8 +490,8 @@ namespace Stabby.Viewer
                 var off = CurtainOffsets(f, detail);
                 int prev = Verts.Count;
                 for (int c = 0; c < cols; c++)
-                    lip.Add(Add(new Vector3(f.LipX, f.LipY, f.LipZ) + side * f.SideAt(c, cols), top, new Vector2(2f * c / (cols - 1) - 1, half * f.Span), reach, pool, new Vector4(0, 0, h, f.Discharge)));
-                if (f.Bow > 0) prev = Band(f, prev, cols, 0, h, 0, off, 0, 0, 0, top, reach, fall, false);
+                    lip.Add(Add(new Vector3(f.LipX, f.LipY, f.LipZ) + side * f.SideAt(c, cols), top, new Vector2(f.SideAt(c, cols), half), reach, pool, new Vector4(0, 0, h, f.Discharge)));
+                if (f.Bow > 0) prev = Band(f, prev, cols, 0, h, 0, off, 0, 0, 0, top, top, reach, fall, false);
                 float ext = Mathf.Clamp(FootBendPerDrop * f.Drop, FootBendMin, FootBendMax), yb = f.Drop - Mathf.Min(ext, 0.5f * f.Drop);
                 ext = f.Drop - yb;
                 float far = float.MinValue, lean;
@@ -503,13 +505,13 @@ namespace Stabby.Viewer
                 {
                     float u1 = j / (rows - 1f), y = u1 * u1 * h;
                     if (y > yb - 0.05f * ext) break;
-                    prev = Band(f, prev, cols, y, h, blend, off, j * cols, j * cols, 0, flow, reach, fall, true);
+                    prev = Band(f, prev, cols, y, h, blend, off, j * cols, j * cols, 0, flow, top, reach, fall, true);
                 }
                 for (int s = 0; s <= FootBendRows; s++)
                 {
                     float q = s / (float)FootBendRows, y = yb + ext * q;
                     int j = FootRowOf(y, h, rows);
-                    prev = Band(f, prev, cols, y, h, blend, off, (j - 1) * cols, j * cols, FootRowT(y, h, rows, j), flow, reach, fall, true, Mathf.Clamp01((1 - q) / FootFade), lean * (1 - Mathf.Sqrt(Mathf.Max(0, 1 - q * q))));
+                    prev = Band(f, prev, cols, y, h, blend, off, (j - 1) * cols, j * cols, FootRowT(y, h, rows, j), flow, top, reach, fall, true, Mathf.Clamp01((1 - q) / FootFade), lean * (1 - Mathf.Sqrt(Mathf.Max(0, 1 - q * q))));
                     for (int c = 0; c < cols; c++) bend.Add(prev + c);
                 }
                 for (int c = 0; c < cols; c++) foot.Add(prev + c);
@@ -725,6 +727,7 @@ namespace Stabby.Viewer
                 float endHalf = Mathf.Max(pts[last].w * 0.5f, 6f), reach = Mathf.Max(MouthReachM, MouthReachWidths * endHalf);
                 float s = 0;
                 var pool = NoPool;
+                var held = new List<int>();
                 for (int k = 0; k < pts.Count; k++)
                 {
                     var a = pts[Mathf.Max(k - 1, 0)];
@@ -758,12 +761,14 @@ namespace Stabby.Viewer
                         var lip = new List<int>();
                         var foot = new List<int>();
                         var bendRows = new List<int>();
-                        int up = buf.Verts.Count - 2;
+                        int up = buf.Verts.Count - 2, t0 = buf.Tris.Count;
                         if (parts[0].U0 > -0.999f) buf.Edge(f, -1, slopes[k - 1], lr, pool, lip);
                         float shove = 0;
                         foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, bendRows, (FootMax - lt) * seg - FootGap));
                         if (parts[parts.Length - 1].U1 < 0.999f) buf.Edge(f, 1, slopes[k - 1], lr, pool, lip);
                         buf.Fan(up, up + 1, lip, true);
+                        held.AddRange(buf.Tris.GetRange(t0, buf.Tris.Count - t0));
+                        buf.Tris.RemoveRange(t0, buf.Tris.Count - t0);
                         th += shove;
                         foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
                         ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
@@ -801,6 +806,7 @@ namespace Stabby.Viewer
                     }
                 }
                 buf.Fade = 0;
+                buf.Tris.AddRange(held);
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Rivers {pieces.Count}"));
             if (mist != null && mist.Verts.Count > 0) mists.Add(mist.Piece($"Fall mist {mists.Count}"));

@@ -118,7 +118,9 @@ namespace Stabby.World
                 var line = new RiverLine { X = px.ToArray(), Z = pz.ToArray(), S = ps.ToArray(), W = pw.ToArray(), D = pd.ToArray(), Falls = falls.ToArray(), Lip = lips.ToArray(), Liquid = r.Liquid, Mix = new WaterMix[px.Count] };
                 for (int k = 0; k < px.Count; k++) line.Mix[k] = new WaterMix { A = tint[0][k], B = tint[1][k], C = tint[2][k] };
                 Bends(line);
-                Steps(line, cm, ref rng);
+                var coast = new bool[px.Count];
+                for (int k = 0; k < px.Count; k++) coast[k] = Hydrology.NearSea(w.Config, w.Sea, line.X[k], line.Z[k]);
+                Steps(line, cm, coast, ref rng);
                 for (int k = 0; k < px.Count; k++)
                     if (!w.Sea[CellOf(line.X[k], line.Z[k], cm, w.Config.Size)]) line.S[k] = Math.Max(line.S[k], 0.5f * Erosion.MinLandHeight);
                 lines.Add(line);
@@ -193,11 +195,11 @@ namespace Stabby.World
             return along;
         }
 
-        static void Steps(RiverLine l, float cm, ref Rng rng)
+        static void Steps(RiverLine l, float cm, bool[] coast, ref Rng rng)
         {
             int m = l.X.Length;
             var along = Along(l);
-            var mask = new bool[m];
+            var mask = (bool[])coast.Clone();
             for (int f = 0; f < l.Lip.Length; f++)
             {
                 int lip = l.Lip[f];

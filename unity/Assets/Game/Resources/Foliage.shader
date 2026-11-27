@@ -18,6 +18,7 @@ Shader "Stabby/Foliage"
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         #include "Assets/Game/Grass/Wind.hlsl"
+        #include "Assets/Viewer/Shaders/Clock.hlsl"
 
         CBUFFER_START(UnityPerMaterial)
         float4 _BaseColor;
@@ -100,7 +101,7 @@ Shader "Stabby/Foliage"
             float3 root = UNITY_MATRIX_M._m03_m13_m23;
             float size = max(_Fade.w, 0.1);
             float seed = frac(dot(root.xz, float2(0.1373, 0.2719)));
-            float t = _Time.y;
+            float t = StabbyTime;
             float hz = _StabbyWind.w * rsqrt(max(size, 0.5)) * 1.6;
             float2 push = WindPush(root.xz, t, seed);
             float slow = sin(6.2831853 * (hz * t + seed));
