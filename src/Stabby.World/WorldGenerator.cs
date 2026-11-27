@@ -62,6 +62,8 @@ namespace Stabby.World
             foreach (var r in k.Shores) { f.Mix(r.Cliff ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
             f.Mix((ulong)k.Highlands.Count);
             foreach (var r in k.Highlands) { f.Mix(r.Plateau ? 1UL : 2UL); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
+            f.Mix((ulong)k.Hotspots.Count);
+            foreach (var r in k.Hotspots) { f.Mix((ulong)r.Kind + 1); f.F(r.X); f.F(r.Y); f.F(r.Radius); }
             f.Bs(k.Land); f.Fs(k.Uplift); f.Bs(k.Landmark); f.Fs(k.Valley); f.Fs(k.Coast);
             f.Fs(k.ValleyRun); f.Fs(k.Cliff); f.Fs(k.Beach); f.Fs(k.Plateau);
             return f.H;
@@ -133,6 +135,7 @@ namespace Stabby.World
             Erosion.FlattenTableland(c, sketch, h);
             Erosion.CarveLakes(c, sketch, h);
             var raw = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
+            Volcanoes.RaiseBig(c, sketch, sea, h);
             Mesas.Raise(c, sketch, sea, h, raw);
             Volcanoes.Raise(c, sketch, sea, h, raw, biomes);
             stage?.Invoke("erosion");

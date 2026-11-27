@@ -70,7 +70,7 @@ namespace Stabby.World
         public float X, Y, Radius;
     }
 
-    public sealed class WorldSketch
+    public sealed partial class WorldSketch
     {
         public int Size;
         public List<LandmassSketch> Landmasses = new List<LandmassSketch>();
@@ -84,6 +84,7 @@ namespace Stabby.World
         public List<HighlandSketch> Highlands = new List<HighlandSketch>();
         public List<MesaSketch> Mesas = new List<MesaSketch>();
         public List<VolcanoSketch> Volcanoes = new List<VolcanoSketch>();
+        public List<HotspotSketch> Hotspots = new List<HotspotSketch>();
 
         public bool[] Land;
         public float[] Uplift;
@@ -127,6 +128,7 @@ namespace Stabby.World
                 var islet = RandomIslet(n, c, s, k > 0 && islets.NextFloat() < c.IsletClusterChance, ref islets);
                 if (islet != null) s.Islets.Add(islet);
             }
+            s.AddOceanHotspot(c);
             s.Land = s.LandMask(c);
 
             var ranges = Rng.Stream(c.Seed, "ranges");
@@ -170,6 +172,7 @@ namespace Stabby.World
             }
             foreach (var m in s.Islets)
             {
+                if (s.Volcanic(m)) continue;
                 if (ranges.NextFloat() < c.IsletRidgeChance)
                 {
                     var r = RandomRange(n, m, s.Land, ref ranges);
@@ -178,6 +181,7 @@ namespace Stabby.World
                 var l = RandomLandmark(n, m, s.Land, s.Lakes, ref sites);
                 if (l != null) s.Landmarks.Add(l);
             }
+            s.AddHotspots(c, inland);
             s.Build(c, s.Land);
             return s;
         }

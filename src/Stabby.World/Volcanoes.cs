@@ -20,8 +20,48 @@ namespace Stabby.World
         public const float GapM = 3000f, LandmarkGapM = 1200f, RoadGapM = 500f, CoastPadM = 300f, RiverPadM = 300f, MesaPadM = 200f, SampleM = 20f;
         public const float CarveShare = 0.85f, CarveRound = 1.5f, CarveTaper = -1.4f, CarveP = -0.15f, CarveN = 0.3f, MinDepthM = 4f, MaxDepthM = 10f, RingPadM = 2f, TopPadM = 2f;
         public const float NoneChance = 0.3f, OneChance = 0.75f, RainPadMm = 120f;
-        public const int MaxClosed = 2, Tries = 1500, RimDirs = 256, RingDirs = 48, ReachPasses = 4;
+        public const float BigMinRoM = 600f, BigMaxRoM = 1300f, StratoSearchM = 4000f, SpineJitterM = 250f, IslandSearchM = 400f, IslandPadM = 150f, LiftShare = 1.5f, SkirtSlope = 0.35f, MaxCarveM = 60f, CinderReachM = 6000f;
+        public const int BigTries = 400, MaxClosed = 2, Tries = 1500, RimDirs = 256, RingDirs = 48, ReachPasses = 4;
         const ulong CraterTag = 0xC4A7E5D1B3F29A61UL;
+
+        public static void RaiseBig(WorldConfig c, WorldSketch s, bool[] sea, float[] h)
+        {
+            int n = c.Size;
+            float cm = c.CellMeters;
+            float[] flow = null;
+            var v = new float[12];
+            ulong bigSeed = Rng.Stream(c.Seed, "stratovolcanoes").NextU64();
+            var spine = new List<float>();
+            for (int k = 0; k < s.Hotspots.Count; k++)
+            {
+                var spot = s.Hotspots[k];
+                if (spot.Kind == HotspotSketch.Plume) continue;
+                bool island = spot.Kind == HotspotSketch.Ocean;
+                float reach = island ? IslandSearchM : SpineJitterM;
+                spine.Clear();
+                if (!island) Spine(s, spot, cm, spine);
+                for (int t = 0; t < BigTries; t++)
+                {
+                    var r = new Rng(Rng.Mix(bigSeed + (ulong)(k * BigTries + t)));
+                    for (int q = 0; q < v.Length; q++) v[q] = r.NextFloat();
+                    if (island) v[2] = 1f - (float)t / BigTries;
+                    float px = spot.X * cm, pz = spot.Y * cm;
+                    if (spine.Count > 0)
+                    {
+                        int j = Math.Min(spine.Count / 2 - 1, (int)(v[11] * (spine.Count / 2)));
+                        px = spine[2 * j]; pz = spine[2 * j + 1];
+                    }
+                    var b = Shape(px + (2f * v[0] - 1f) * reach, pz + (2f * v[1] - 1f) * reach, v, BigMinRoM, BigMaxRoM);
+                    if (!Site(c, s, sea, h, null, b, island ? IslandPadM : CoastPadM, out float skirt)) continue;
+                    flow ??= Mesas.Flow(c, sea, h);
+                    if (Mesas.Wet(c, flow, b.X, b.Z, b.Rc + RiverPadM)) continue;
+                    b.RimLow = Low(b);
+                    Stamp(c, sea, h, b, skirt);
+                    s.Volcanoes.Add(b);
+                    break;
+                }
+            }
+        }
 
         public static void Raise(WorldConfig c, WorldSketch s, bool[] sea, float[] h, ClimateField climate, IReadOnlyList<BiomeDef> biomes)
         {
@@ -30,40 +70,66 @@ namespace Stabby.World
             float roll = root.NextFloat();
             int count = roll < NoneChance ? 0 : roll < OneChance ? 1 : 2;
             if (count == 0 || biomes == null) return;
+            int n = c.Size;
+            float cm = c.CellMeters;
+            float[] flow = null;
+            var v = new float[12];
             var open = OpenCells(c, s, sea, h, climate, biomes);
-            int n = c.Size, edge = (int)Math.Ceiling((MaxRoM + CoastPadM) / c.CellMeters) + 1;
+            int edge = (int)Math.Ceiling((MaxRoM + CoastPadM) / cm) + 1;
+            float near = CinderReachM / cm;
             var cells = new List<int>();
             for (int y = edge; y < n - edge; y++)
                 for (int x = edge; x < n - edge; x++)
                 {
                     int i = y * n + x;
-                    if (!sea[i] && h[i] > 0f && open[i]) cells.Add(i);
+                    if (sea[i] || h[i] <= 0f || !open[i]) continue;
+                    foreach (var spot in s.Hotspots)
+                        if (spot.Kind != HotspotSketch.Ocean && (spot.X - x) * (spot.X - x) + (spot.Y - y) * (spot.Y - y) <= near * near) { cells.Add(i); break; }
                 }
             if (cells.Count == 0) return;
-            float[] flow = null;
-            var v = new float[12];
             for (int k = 0; k < count; k++)
                 for (int t = 0; t < Tries; t++)
                 {
                     var r = new Rng(Rng.Mix(baseSeed + (ulong)(k * Tries + t)));
                     for (int q = 0; q < v.Length; q++) v[q] = r.NextFloat();
                     int cell = cells[Math.Min(cells.Count - 1, (int)(v[0] * cells.Count))];
-                    var b = Shape((cell % n + v[1] - 0.5f) * c.CellMeters, (cell / n + v[11] - 0.5f) * c.CellMeters, v);
-                    if (!Site(c, s, sea, h, open, b)) continue;
+                    var b = Shape((cell % n + v[1] - 0.5f) * cm, (cell / n + v[11] - 0.5f) * cm, v, MinRoM, MaxRoM);
+                    if (!Site(c, s, sea, h, open, b, CoastPadM, out _)) continue;
                     flow ??= Mesas.Flow(c, sea, h);
                     if (Mesas.Wet(c, flow, b.X, b.Z, b.Ro + RiverPadM)) continue;
                     b.RimLow = Low(b);
-                    Stamp(c, sea, h, b);
+                    Stamp(c, sea, h, b, 0f);
                     s.Volcanoes.Add(b);
                     break;
                 }
         }
 
+        public static bool Big(VolcanoSketch v) => v.Ro > MaxRoM;
+
+        static void Spine(WorldSketch s, HotspotSketch spot, float cm, List<float> spine)
+        {
+            float reach = StratoSearchM / cm;
+            foreach (var r in s.Ranges)
+            {
+                bool own = false;
+                for (int i = 0; i < r.X.Length; i++) own |= r.X[i] == spot.X && r.Y[i] == spot.Y;
+                if (!own) continue;
+                for (int i = 0; i < r.X.Length; i++)
+                {
+                    float dx = r.X[i] - spot.X, dy = r.Y[i] - spot.Y;
+                    if (dx * dx + dy * dy > reach * reach) continue;
+                    if (i + 1 < r.X.Length) { spine.Add((r.X[i] + r.X[i + 1]) * 0.5f * cm); spine.Add((r.Y[i] + r.Y[i + 1]) * 0.5f * cm); }
+                    spine.Add(r.X[i] * cm); spine.Add(r.Y[i] * cm);
+                }
+                return;
+            }
+        }
+
         static float Mix(float a, float b, float t) => a + (b - a) * t;
 
-        static VolcanoSketch Shape(float x, float z, float[] v)
+        static VolcanoSketch Shape(float x, float z, float[] v, float minRo, float maxRo)
         {
-            float ro = Mix(MinRoM, MaxRoM, v[2]), rc = Mix(MinCrater, MaxCrater, v[3]) * ro;
+            float ro = Mix(minRo, maxRo, v[2]), rc = Mix(MinCrater, MaxCrater, v[3]) * ro;
             float rr = (ro / (1f + OutlineShare) + ApronShare * rc) / (1f + ApronShare);
             bool breached = v[4] < BreachChance;
             float lx = 2f * v[6] - 1f, lz = 2f * v[7] - 1f, l = (float)Math.Sqrt(lx * lx + lz * lz);
@@ -170,25 +236,31 @@ namespace Stabby.World
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        static bool Site(WorldConfig c, WorldSketch s, bool[] sea, float[] h, bool[] open, VolcanoSketch b)
+        static bool Site(WorldConfig c, WorldSketch s, bool[] sea, float[] h, bool[] open, VolcanoSketch b, float pad, out float skirt)
         {
+            skirt = 0f;
+            bool big = open == null;
             int n = c.Size;
             float cm = c.CellMeters;
             int cx = (int)Math.Round(b.X / cm), cy = (int)Math.Round(b.Z / cm);
-            int coast = (int)Math.Ceiling((CoastPadM + b.Ro) / cm);
+            int coast = (int)Math.Ceiling((pad + b.Ro) / cm);
             if (cx - coast < 1 || cy - coast < 1 || cx + coast >= n - 1 || cy + coast >= n - 1 || sea[cy * n + cx]) return false;
-            if (!OpenAt(c, open, b.X, b.Z)) return false;
-            int closed = 0;
-            for (int k = 0; k < 8; k++)
+            if (!big)
             {
-                Ring(k, 8, out float ux, out float uz);
-                if (!OpenAt(c, open, b.X + ux * b.Ro, b.Z + uz * b.Ro)) closed++;
+                if (!OpenAt(c, open, b.X, b.Z)) return false;
+                int closed = 0;
+                for (int k = 0; k < 8; k++)
+                {
+                    Ring(k, 8, out float ux, out float uz);
+                    if (!OpenAt(c, open, b.X + ux * b.Ro, b.Z + uz * b.Ro)) closed++;
+                }
+                if (closed > MaxClosed) return false;
             }
-            if (closed > MaxClosed) return false;
+            float landmarkGap = big ? Math.Max(LandmarkGapM, b.Ro + RoadGapM) : LandmarkGapM;
             foreach (var l in s.Landmarks)
             {
                 float dx = l.X * cm - b.X, dz = l.Y * cm - b.Z;
-                if (dx * dx + dz * dz < LandmarkGapM * LandmarkGapM) return false;
+                if (dx * dx + dz * dz < landmarkGap * landmarkGap) return false;
             }
             for (int p = 0; p < s.Landmarks.Count; p++)
                 for (int q = p + 1; q < s.Landmarks.Count; q++)
@@ -203,7 +275,10 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < gap * gap) return false;
             }
             foreach (var o in s.Volcanoes)
-                if ((o.X - b.X) * (o.X - b.X) + (o.Z - b.Z) * (o.Z - b.Z) < GapM * GapM) return false;
+            {
+                float gap = Math.Max(GapM, o.Ro + b.Ro + MesaPadM);
+                if ((o.X - b.X) * (o.X - b.X) + (o.Z - b.Z) * (o.Z - b.Z) < gap * gap) return false;
+            }
             foreach (var lake in s.Lakes)
                 if (lake.Gap(cx, cy, 1) < (b.Ro + RiverPadM) / cm) return false;
             int step = Math.Max(1, coast / 24);
@@ -217,29 +292,49 @@ namespace Stabby.World
                 {
                     if (dx * dx + dy * dy > rr * rr) continue;
                     int i = (cy + dy) * n + cx + dx;
+                    bool inCore = (dx * dx + dy * dy) * cm * cm <= b.R * b.R;
                     if (s.Beach[i] > 0f && s.Coast[i] * cm < c.BeachMeters) return false;
-                    if (s.Landmark[i] || s.Cliff[i] > 0f || s.Valley[i] > Mesas.ValleyMax) return false;
+                    if (s.Landmark[i] || (!big && (s.Cliff[i] > 0f || s.Valley[i] > Mesas.ValleyMax))) return false;
                     lo = Math.Min(lo, h[i]); hi = Math.Max(hi, h[i]);
-                    if ((dx * dx + dy * dy) * cm * cm <= b.R * b.R) core = Math.Max(core, h[i]);
+                    if (inCore) core = Math.Max(core, h[i]);
                 }
-            if (core - lo > CoreShare * b.H) return false;
-            if (lo <= 0f || hi - lo > ReliefShare * b.H) return false;
+            if (lo <= 0f) return false;
+            if (big)
+            {
+                b.Base = Math.Max(lo, core - CoreShare * b.H);
+                if (b.Base - lo > LiftShare * b.H) return false;
+                skirt = b.Base > lo ? (b.Base - lo) / SkirtSlope + cm : 0f;
+                int far = (int)Math.Ceiling((b.Ro + skirt) / cm);
+                return cx - far >= 0 && cy - far >= 0 && cx + far < n && cy + far < n;
+            }
+            if (core - lo > CoreShare * b.H || hi - lo > ReliefShare * b.H) return false;
             b.Base = lo;
             return true;
         }
 
-        static void Stamp(WorldConfig c, bool[] sea, float[] h, VolcanoSketch b)
+        static void Stamp(WorldConfig c, bool[] sea, float[] h, VolcanoSketch b, float skirt)
         {
             int n = c.Size;
-            float cm = c.CellMeters;
-            int x0 = Math.Max(0, (int)Math.Floor((b.X - b.Ro) / cm)), x1 = Math.Min(n - 1, (int)Math.Ceiling((b.X + b.Ro) / cm));
-            int y0 = Math.Max(0, (int)Math.Floor((b.Z - b.Ro) / cm)), y1 = Math.Min(n - 1, (int)Math.Ceiling((b.Z + b.Ro) / cm));
+            float cm = c.CellMeters, ext = b.Ro + skirt;
+            int x0 = Math.Max(0, (int)Math.Floor((b.X - ext) / cm)), x1 = Math.Min(n - 1, (int)Math.Ceiling((b.X + ext) / cm));
+            int y0 = Math.Max(0, (int)Math.Floor((b.Z - ext) / cm)), y1 = Math.Min(n - 1, (int)Math.Ceiling((b.Z + ext) / cm));
             for (int y = y0; y <= y1; y++)
                 for (int x = x0; x <= x1; x++)
                 {
                     int i = y * n + x;
-                    if (!sea[i]) h[i] = Math.Max(h[i], Profile(b, x * cm, y * cm));
+                    if (sea[i]) continue;
+                    float g = Profile(b, x * cm, y * cm);
+                    if (g == float.MinValue && skirt > 0f) g = Skirt(b, x * cm, y * cm, skirt);
+                    h[i] = Math.Max(h[i], g);
                 }
+        }
+
+        static float Skirt(VolcanoSketch v, float x, float z, float skirt)
+        {
+            float dx = x - v.X, dz = z - v.Z, rr = (float)Math.Sqrt(dx * dx + dz * dz);
+            Radii(v, dx / rr, dz / rr, out float rd, out _, out _, out float ad, out _, out _);
+            float d = rr - rd - ad;
+            return d < 0f || d > skirt ? float.MinValue : v.Base - SkirtSlope * d;
         }
 
         public static float Near(WorldSketch s, float x, float z)
@@ -251,7 +346,7 @@ namespace Stabby.World
             return best;
         }
 
-        public static float CarveRadius(VolcanoSketch v) => CarveShare * v.Rf * (1f - CraterNoise);
+        public static float CarveRadius(VolcanoSketch v) => Math.Min(MaxCarveM, CarveShare * v.Rf * (1f - CraterNoise));
 
         public static bool IsCrater(VolcanoSketch v, FeatureEdit e) => e.Shape == FeatureEdit.Spring && e.Kind == FeatureEdit.Carve && e.Ax == v.X && e.Az == v.Z;
 
