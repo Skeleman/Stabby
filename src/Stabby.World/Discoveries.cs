@@ -271,7 +271,7 @@ namespace Stabby.World
             int station = 0;
             foreach (var s in segs)
             {
-                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel) { lx = float.NaN; continue; }
+                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel || s.Kind == RoadSegment.Bridge) { lx = float.NaN; continue; }
                 if (s.X0 != lx || s.Z0 != lz) walked = 0;
                 lx = s.X1; lz = s.Z1;
                 float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, len = (float)Math.Sqrt(dx * dx + dz * dz);

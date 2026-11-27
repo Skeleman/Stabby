@@ -341,6 +341,20 @@ public static class ContentLoader
         public FoliageEntry? Foliage { get; set; }
         public QualityEntry? Quality { get; set; }
         public List<TownEntry> Towns { get; set; } = new();
+        public RoadsEntry? Roads { get; set; }
+    }
+
+    sealed class RoadsEntry
+    {
+        public BridgeEntry? Bridge { get; set; }
+    }
+
+    sealed class BridgeEntry
+    {
+        public string Object { get; set; } = "";
+        public float SpanM { get; set; }
+        public float RiverWidthM { get; set; }
+        public float ClearM { get; set; }
     }
 
     sealed class TownEntry
@@ -634,6 +648,7 @@ public static class ContentLoader
             }
             lib.Towns.Add(town);
         }
+        if (file.Roads?.Bridge is { } rb) lib.Roads = new RoadDef { BridgeObject = rb.Object, SpanM = rb.SpanM, RiverM = rb.RiverWidthM, ClearM = rb.ClearM };
         if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels, ColumnFadePixels = file.Terrain.ColumnFadePixels, ColumnFullPixels = file.Terrain.ColumnFullPixels, ShadowTexels = file.Terrain.ShadowTexels };
         if (file.Foliage != null)
         {

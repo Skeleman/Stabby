@@ -23,6 +23,9 @@
       "sites": [ { "object": "well", "place": "centre", "count": [1, 1] }, { "object": "inn", "place": "plaza", "count": [1, 1] }, { "object": "house", "place": "lane", "count": [5, 9] } ]
     }
   ],
+  "roads": {
+    "bridge": { "object": "road-bridge", "spanM": 320, "riverWidthM": 280, "clearM": 1.5 }
+  },
   "objects": [
     {
       "id": "small-rock", "name": "Small rock", "kind": "static", "material": "fieldstone-grey", "variants": 6,
@@ -339,6 +342,11 @@
       "id": "overlook", "name": "Overlook", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "site", "shape": "overlook" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra", "steppe", "shrubland", "savanna", "tropical-forest", "alpine", "cold-desert", "desert"], "perHectare": 0, "discovery": "overlook", "spacingM": 800, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 8, "sizeMaxM": 9, "sink": 0.002 }
+    },
+    {
+      "id": "road-bridge", "name": "Road bridge", "kind": "structure", "material": "hewn-timber", "variants": 4,
+      "parts": [ { "id": "span", "shape": "road-bridge" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
     },
     {
       "id": "stalactite", "name": "Stalactite", "kind": "static", "material": "dripstone", "variants": 8,

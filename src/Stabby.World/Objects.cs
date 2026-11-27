@@ -258,6 +258,11 @@ namespace Stabby.World
                     continue;
                 }
                 if (townMember[d] && stageDef < 0 && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
+                if (d == BridgeDef())
+                {
+                    if (stageDef < 0 && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitBridges(d, chunk, list, ref ordinal);
+                    continue;
+                }
                 if (stageDef < 0 && RoadSite(d))
                 {
                     if (boulders == null && (!solidOnly || AnySolid(d))) EmitRoadSites(d, chunk, list, ref ordinal);
@@ -524,7 +529,7 @@ namespace Stabby.World
             List<float> pts = null;
             foreach (var p in def.Parts)
             {
-                if (!ObjectPart.IsStructure(p.Shape) || ObjectPart.IsMine(p.Shape)) continue;
+                if (!ObjectPart.IsStructure(p.Shape) || ObjectPart.IsMine(p.Shape) || p.Shape == ObjectPart.Bridge) continue;
                 pts = pts ?? new List<float>();
                 var seat = Structures.Seat(p.Shape);
                 for (int k = 0; k < seat.Length; k += 2) { pts.Add(p.OffsetX + seat[k] * p.ScaleX); pts.Add(p.OffsetZ + seat[k + 1] * p.ScaleZ); }
