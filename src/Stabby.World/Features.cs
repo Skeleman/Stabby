@@ -748,7 +748,7 @@ namespace Stabby.World
             for (int q = 0, n = edits.Count; q < n; q++)
             {
                 var e = edits.At(q);
-                if (e.Shape == FeatureEdit.Boulder && !e.Fine && e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
+                if (e.Shape == FeatureEdit.Boulder && e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
             }
             return false;
         }
