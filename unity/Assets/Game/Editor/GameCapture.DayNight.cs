@@ -5,7 +5,10 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        public const float PinnedMidday = 12f, NightHour = 0f, DuskHour = 18.15f, DawnHour = 24f - DuskHour;
+        public const float PinnedMidday = 12f, NightHour = 0f, DuskHour = 18.15f, DawnHour = 24f - DuskHour, PinnedShaderTime = 100f;
+        static readonly int TimePinId = Shader.PropertyToID("_StabbyTimePin");
+
+        static void PinClock(bool on) => Shader.SetGlobalVector(TimePinId, on ? new Vector4(1, PinnedShaderTime, 0, 0) : Vector4.zero);
 
         public static void PinTime()
         {

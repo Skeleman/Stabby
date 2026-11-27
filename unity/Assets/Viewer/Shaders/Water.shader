@@ -6,6 +6,7 @@ Shader "Stabby/Water"
 
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Assets/Viewer/Shaders/Clock.hlsl"
 
         float4 _StabbyLiquid[160];
         float4 _StabbyShadowPx;
@@ -352,7 +353,7 @@ Shader "Stabby/Water"
                 float u = saturate(i.curt.y), h = i.curt.z, y = u * h, x = i.chan.x * i.chan.y;
                 float2 fd = normalize(i.color.rg * 2 - 1), sd = float2(fd.y, -fd.x);
                 float flowQ = saturate(log2(1 + i.curt.w) / 9);
-                float tau = sqrt(2 * y / 9.81), tm = _Time.y * L7.x;
+                float tau = sqrt(2 * y / 9.81), tm = StabbyTime * L7.x;
                 float fp = max(length(ddx(float2(x, y))), length(ddy(float2(x, y))));
                 float detail = saturate(1.5 - fp * 1.2);
                 float2 wq = float2(x * 0.35, tau * 1.3 + 3.1);
@@ -481,7 +482,7 @@ Shader "Stabby/Water"
                     {
                         float2 fd = normalize(i.color.rg * 2 - 1);
                         float3 f3 = float3(fd.x, 0, fd.y), s3d = float3(fd.y, 0, -fd.x);
-                        float tau = sqrt(2 * u * h / 9.81), ph = (tau - _Time.y * 0.8 * Liquid(i.reach.w, 7).x) * 2.2;
+                        float tau = sqrt(2 * u * h / 9.81), ph = (tau - StabbyTime * 0.8 * Liquid(i.reach.w, 7).x) * 2.2;
                         float3 fl = Noise(float2(i.reach.z * 0.03 + 1.3, ph * 0.3));
                         float3 er = Noise(float2(i.chan.x * 3.7 + i.reach.z * 0.1, ph + 9.1));
                         float flowQ = saturate(log2(1 + i.curt.w) / 9);
@@ -509,12 +510,12 @@ Shader "Stabby/Water"
                     {
                         float2 gr;
                         float cr;
-                        lift = w * Swell(p, wp.xz, _Time.y * (1 - 0.7 * visc), d, d / SwShoreSlope, sl / max(sm, 1e-4), ShoreWay(fuv), i.fall.z, 4, gr, cr);
+                        lift = w * Swell(p, wp.xz, StabbyTime * (1 - 0.7 * visc), d, d / SwShoreSlope, sl / max(sm, 1e-4), ShoreWay(fuv), i.fall.z, 4, gr, cr);
                         wp.y += lift;
                     }
                 }
                 UNITY_BRANCH if (_StabbyWakeCount > 0 && i.color.a > 0.25 && i.fall.z > 0 && i.fall.w < 0.5)
-                    wp.y += WakeAt(wp.xz, wp.y, _Time.y, 1, i.fall.z, 0);
+                    wp.y += WakeAt(wp.xz, wp.y, StabbyTime, 1, i.fall.z, 0);
                 float4 cs = TransformWorldToHClip(wp);
                 o.positionCS = cs;
                 o.positionWS = wp;
@@ -535,7 +536,7 @@ Shader "Stabby/Water"
             float2 Wakes(float2 xz, float surfaceY, float visc, float fp)
             {
                 if (_StabbyWakeCount <= 0) return 0;
-                float pace = 1 - 0.8 * visc, t = _Time.y * pace;
+                float pace = 1 - 0.8 * visc, t = StabbyTime * pace;
                 float e = max(fp, 0.04);
                 float c = WakeAt(xz, surfaceY, t, pace, fp, 1);
                 float hx = WakeAt(xz + float2(e, 0), surfaceY, t, pace, fp, 1);
@@ -560,7 +561,7 @@ Shader "Stabby/Water"
                 float4 wv = L2;
                 float slope = i.color.b * SlopeRange;
                 if (i.chan.y > 0 && dot(i.color.rg * 2 - 1, i.color.rg * 2 - 1) > 0.01) wv.x = lerp(max(wv.x, 1 / (ChannelWaves * 2 * i.chan.y)), wv.x, smoothstep(ChurnLo, ChurnHi, slope * L4.y));
-                float t = _Time.y * wv.y * pace;
+                float t = StabbyTime * wv.y * pace;
                 float2 q = i.positionWS.xz * wv.x;
                 float2 xz = i.positionWS.xz;
                 float hot = 1 - L6.w;
@@ -577,7 +578,7 @@ Shader "Stabby/Water"
                 float2 cw = float2(i.along, i.chan.x * i.chan.y);
                 bool look = _StabbyWaterLookOff < 0.5;
                 float speed = (look && i.tint.w > 0 ? L4.x * i.tint.w : L4.x * (0.8 + 20 * slope)) * pace;
-                float ph = frac(_Time.y / FlowPeriod), wab = abs(1 - 2 * ph);
+                float ph = frac(StabbyTime / FlowPeriod), wab = abs(1 - 2 * ph);
                 float crest = 0, swH = 0;
                 float2 swGrad = 0;
                 float4 swp = SwellParamsOf(i.swell.z);
@@ -589,7 +590,7 @@ Shader "Stabby/Water"
                 {
                     swp.x *= i.swell.x * (1 - visc);
                     float spx = max(fpa * _ScreenParams.y / 1080, 1e-3);
-                    swH = Swell(swp, xz, _Time.y * pace, swDepth, swDepth / SwShoreSlope, sdir, way, spx, 3, swGrad, crest);
+                    swH = Swell(swp, xz, StabbyTime * pace, swDepth, swDepth / SwShoreSlope, sdir, way, spx, 3, swGrad, crest);
                     float cb = CrestShare * 0.5 * SwShoreLength(swp) * SwShoreSlope / max(slm, 1e-3);
                     crest *= smoothstep(CrestPxLo, CrestPxHi, cb / spx);
                 }
@@ -644,7 +645,7 @@ Shader "Stabby/Water"
                 UNITY_BRANCH if (swell > 0)
                 {
                     float2 wq = mul(Turn, xz * L3.x);
-                    float2 sp = wq * float2(0.15, 1.4) + float2(_Time.y * 0.004, 0.6 * Noise(wq * 0.35 + 2.1).x);
+                    float2 sp = wq * float2(0.15, 1.4) + float2(StabbyTime * 0.004, 0.6 * Noise(wq * 0.35 + 2.1).x);
                     float sn = Noise(sp).x + 0.5 * Noise(sp * float2(1.9, 2.1) + 5.3).x;
                     slick = swell * smoothstep(0.05, 0.45, sn) * saturate(2 - fp * L3.x * 20);
                 }
@@ -653,7 +654,7 @@ Shader "Stabby/Water"
                 g += wv.z * 3 * wg;
                 UNITY_BRANCH if (swell > 0)
                 {
-                    float2 sq = mul(Turn, xz * L3.x - way * (_Time.y * 0.054));
+                    float2 sq = mul(Turn, xz * L3.x - way * (StabbyTime * 0.054));
                     float2 sg = mul(Noise(sq).yz, Turn) + 0.7 * Noise(mul(sq, Turn) * 0.43 + float2(0, 1.7)).yz;
                     g += swell * L3.y * saturate(1.6 - fp * L3.x * 6) * (1.2 - 0.5 * ripple) * (1 - 0.5 * slick) * sg;
                 }
@@ -670,7 +671,7 @@ Shader "Stabby/Water"
                 float3 bub = 0;
                 UNITY_BRANCH if (L5.z > 0.01)
                 {
-                    float bt = _Time.y * (1 - 0.5 * visc);
+                    float bt = StabbyTime * (1 - 0.5 * visc);
                     float2 bp = xz * 1.4 + 0.3 * Noise(xz * 0.7 + 1.9).yz;
                     bub = Bubbles(bp, bt) + 0.6 * Bubbles(mul(Turn, xz) * 2.2 + 5.3, bt * 0.8);
                     bub *= L5.z * saturate(2 - fp * 5);
@@ -686,13 +687,13 @@ Shader "Stabby/Water"
                 float streak = 0;
                 UNITY_BRANCH if (river && churn > 0.35)
                 {
-                    float sp = frac(_Time.y / 7), sw = abs(1 - 2 * sp);
+                    float sp = frac(StabbyTime / 7), sw = abs(1 - 2 * sp);
                     float sdr = speed * 7 * 0.05;
                     float2 sq = cw * float2(0.12, 0.3);
                     sq.y += 0.5 * Noise(sq * float2(0.7, 0.3) + 11.3).x + 1.3 * Noise(cw * float2(0.02, 0.07) + 17.9).x;
                     float s1 = Noise(sq - float2(sdr * sp, 0)).x, s2 = Noise(sq - float2(sdr * frac(sp + 0.5), 0) + 5.1).x;
                     float acc = lerp(s1, s2, sw) * rsqrt(sw * sw + (1 - sw) * (1 - sw));
-                    float sb = smoothstep(0.15, 0.5, Noise(cw * float2(0.21, 0.3) + float2(-sdr * 0.3 * _Time.y / 7, 6.7)).x);
+                    float sb = smoothstep(0.15, 0.5, Noise(cw * float2(0.21, 0.3) + float2(-sdr * 0.3 * StabbyTime / 7, 6.7)).x);
                     streak = smoothstep(0.35, 0.9, churn) * sb * smoothstep(0.84, 0.97, 1 - abs(acc)) * saturate(1.6 - fp * 0.8);
                 }
 
@@ -727,7 +728,7 @@ Shader "Stabby/Water"
                     float lum = dot(l.color, float3(0.3, 0.59, 0.11));
                     float sun = saturate(l.direction.y * 3) * saturate(lum) * shallow * saturate(1.5 - fp * 1.2) * (1 - far);
                     UNITY_BRANCH if (sun > 0.01)
-                        under *= 1 + sun * 0.9 * Caustics(bed.xz * 0.9 + g * 0.4, _Time.y);
+                        under *= 1 + sun * 0.9 * Caustics(bed.xz * 0.9 + g * 0.4, StabbyTime);
                 }
                 float sig = gs * (1 - visc);
                 float mss = max(L7.w * L7.w, ChopFloorA2) + ChopLostBlur * lost * sig * sig;
@@ -763,13 +764,13 @@ Shader "Stabby/Water"
                     float fpr = fpa * _ScreenParams.y / 1080;
                     float tilt = clamp(GlitTilt + sig * sqrt(lost + 0.2), GlitTilt, GlitTiltMax);
                     float3 hl = normalize(lg.dir + v);
-                    c += lg.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * smoothstep(GlitFacetLo, GlitFacetHi, fpa)) * Glitter(xz, fpr, n, hl, _Time.y, tilt);
+                    c += lg.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * smoothstep(GlitFacetLo, GlitFacetHi, fpa)) * Glitter(xz, fpr, n, hl, StabbyTime, tilt);
                 }
                 UNITY_BRANCH if (look && !river && opacity < 0.5 && l.direction.y > 0)
                 {
                     float fpr = fpa * _ScreenParams.y / 1080;
                     float tilt = clamp(GlitTilt + sig * sqrt(lost + 0.2), GlitTilt, GlitTiltMax);
-                    c += l.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * saturate(l.direction.y * 4)) * Glitter(xz, fpr, n, h, _Time.y, tilt);
+                    c += l.color * (GlitGain * (1 - visc) * (1 - 0.6 * slick) * saturate(l.direction.y * 4)) * Glitter(xz, fpr, n, h, StabbyTime, tilt);
                 }
 
                 float shore = depth / max(slm, 0.03);
@@ -782,7 +783,7 @@ Shader "Stabby/Water"
                     float near = saturate(2 - dist / 250);
                     float3 ph = Noise(xz * 0.021 + 3.1);
                     float swash;
-                    float run = look && !river ? 0.5 + 0.5 * SwWave(_Time.y / swp.z + 0.25 + 0.12 * ph.x, 0, swash) : 0.5 + 0.5 * sin(_Time.y * 0.5 + 5 * ph.x + 1.7 * Noise(xz * 0.09 + 8.3).x);
+                    float run = look && !river ? 0.5 + 0.5 * SwWave(StabbyTime / swp.z + 0.25 + 0.12 * ph.x, 0, swash) : 0.5 + 0.5 * sin(StabbyTime * 0.5 + 5 * ph.x + 1.7 * Noise(xz * 0.09 + 8.3).x);
                     float reach = calm * (0.3 + 0.7 * run * (0.75 + 0.5 * ph.x));
                     float2 fp = (xz + sdir * (wv.w * 0.6 * run)) * 0.35;
                     float lace = 0.5 + Noise(mul(Turn, fp) + float2(t * 0.3, -t * 0.2)).x + 0.5 * Noise(mul(fp, Turn) * 2.7 - float2(t * 0.4, t * 0.1)).x;
@@ -807,7 +808,7 @@ Shader "Stabby/Water"
                 float lw = slow * saturate(1.8 * inner - 0.1) * saturate(2.5 - fp * 3);
                 UNITY_BRANCH if (river && lw > 0.01)
                 {
-                    float la = _Time.y * L4.x * pace;
+                    float la = StabbyTime * L4.x * pace;
                     float2 lp = float2((i.along - 0.6 * la) * 0.19, cw.y * 0.5);
                     float3 wn = Noise(lp * float2(0.8, 0.22) + 7.3);
                     lp.y += 1.6 * wn.x + 1.5 * Noise(float2(i.along * 0.025, cw.y * 0.08) + 19.1).x;
@@ -844,8 +845,8 @@ Shader "Stabby/Water"
                 float film = 0, seam = 0;
                 UNITY_BRANCH if (L5.w > 0.01)
                 {
-                    float2 fq = mul(Turn, xz) * lerp(0.4, 1.1, molten) + _Time.y * lerp(float2(0.01, 0), float2(0.012, 0.007), molten);
-                    float fn = Noise(fq).x + 0.5 * Noise(fq * 2.3 + 7.1).x + 0.25 * Noise(xz * 3.7 + 2.9 + _Time.y * 0.02 * molten).x * saturate(2 - fp * 4);
+                    float2 fq = mul(Turn, xz) * lerp(0.4, 1.1, molten) + StabbyTime * lerp(float2(0.01, 0), float2(0.012, 0.007), molten);
+                    float fn = Noise(fq).x + 0.5 * Noise(fq * 2.3 + 7.1).x + 0.25 * Noise(xz * 3.7 + 2.9 + StabbyTime * 0.02 * molten).x * saturate(2 - fp * 4);
                     float plate = smoothstep(-0.02, 0.05 + fp * 0.2, fn - 0.02);
                     film = L5.w * lerp(smoothstep(-0.05, 0.45, fn), plate, molten);
                     seam = molten * (1 - smoothstep(-0.25, 0.02, fn - 0.02));
@@ -853,7 +854,7 @@ Shader "Stabby/Water"
                     fc += glow * molten * 0.1 * saturate(1 - plate * 0.6 + 0.4 * Noise(fq * 5.3 + 3.3).x);
                     c = lerp(c, fc, film);
                 }
-                float pulse = 1 + 0.2 * molten * Noise(xz * 0.35 + float2(_Time.y * 0.06, 1.7)).x;
+                float pulse = 1 + 0.2 * molten * Noise(xz * 0.35 + float2(StabbyTime * 0.06, 1.7)).x;
                 float gm = max(glow.r, max(glow.g, glow.b));
                 c += lerp(glow, gm * float3(1, 0.72, 0.28), seam) * (1 - film) * (1 + seam) * pulse;
 
@@ -930,7 +931,7 @@ Shader "Stabby/Water"
             half4 frag(Varyings i) : SV_Target
             {
                 clip(min(i.sheet.z - 0.5, i.shade.x - 0.001));
-                float tau = sqrt(2 * max(i.sheet.y, 0) / 9.81), ph = tau - _Time.y * i.sheet.w * 0.8;
+                float tau = sqrt(2 * max(i.sheet.y, 0) / 9.81), ph = tau - StabbyTime * i.sheet.w * 0.8;
                 float n = Noise(float2(i.sheet.x * 1.3, ph * 0.66)).x + 0.5 * Noise(float2(i.sheet.x * 2.6, ph * 1.2) + 7.7).x;
                 float edge = smoothstep(1, 0.82, abs(i.shade.y));
                 clip(saturate(i.shade.x * edge * (0.55 + 0.6 * n)) - Bayer(i.positionCS.xy));

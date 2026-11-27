@@ -41,6 +41,7 @@ Shader "Stabby/VertexLit"
             #include "Look.hlsl"
             #include "Sky.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
+            #include "Assets/Viewer/Shaders/Clock.hlsl"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; float2 dark : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -259,7 +260,7 @@ Shader "Stabby/VertexLit"
                     float far = smoothstep(0.7, 1, dr);
                     float3 bt = lerp(dot(m.albedo, float3(0.2126, 0.7152, 0.0722)).xxx, m.albedo, 0.74) * float3(1.0, 0.96, 0.86);
                     m.albedo = lerp(m.albedo, bt, tmGrass * smoothstep(0.4, 1, dr));
-                    float gust = WindGust(xa, _Time.y);
+                    float gust = WindGust(xa, StabbyTime);
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
                 float2 xv = i.xz + OrgOrigin(_WorldSpaceCameraPos);

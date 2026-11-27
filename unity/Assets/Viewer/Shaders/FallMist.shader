@@ -7,6 +7,7 @@ Shader "Stabby/FallMist"
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         #include "Assets/Game/Grass/Wind.hlsl"
+        #include "Assets/Viewer/Shaders/Clock.hlsl"
 
         float4 _StabbySky;
         float _StabbyMistOff;
@@ -52,7 +53,7 @@ Shader "Stabby/FallMist"
             float3 wp = TransformObjectToWorld(i.positionOS.xyz);
             float2 fd = normalize(i.color.rg * 2 - 1);
             float3 f3 = float3(fd.x, 0, fd.y), s3 = float3(fd.y, 0, -fd.x);
-            float ph = i.color.a, kind = i.corner.z, tm = _Time.y;
+            float ph = i.color.a, kind = i.corner.z, tm = StabbyTime;
             float2 c = i.corner.xy, wind = WindPush(wp.xz, tm, ph);
             UNITY_BRANCH if (kind > 3.5)
             {
@@ -123,7 +124,7 @@ Shader "Stabby/FallMist"
 
         float Density(float4 puff, float4 color, float2 p, out float n, out float op)
         {
-            float kind = puff.w, ph = color.a, flowQ = color.b, tm = _Time.y, e2 = dot(p, p);
+            float kind = puff.w, ph = color.a, flowQ = color.b, tm = StabbyTime, e2 = dot(p, p);
             float dens;
             float t = puff.x;
             float2 q = p * 1.4 + ph * 31.7 + float2(tm * 0.13, -tm * 0.21 - t * 1.5);
