@@ -151,14 +151,15 @@ namespace Stabby.World
                 int count = 7 + 5 * ring;
                 for (int i = 0; i < count; i++)
                 {
-                    float a = (i + 0.5f * ring + rng.Range(-0.3f, 0.3f)) * 16f / count;
+                    float a = (i + 0.5f * ring + rng.Range(-0.08f, 0.08f)) * 16f / count;
                     Arc(a / 16f, out float c, out float s);
-                    float edge = rim[((int)(a + 16.5f)) & 15], r = (0.3f + 0.22f * ring) * edge + rng.Range(-0.15f, 0.15f) + (ring == 3 ? rng.Range(-0.3f, 0.35f) : 0), big = rng.Range(1.3f, 1.9f) * (1.1f - 0.15f * ring);
-                    float yc = TreePlateY + TreePlateSq * r * c, top = yc + 0.4f * big * rng.Range(0.85f, 1.1f);
+                    float edge = rim[((int)(a + 16.5f)) & 15], r = (0.3f + 0.22f * ring) * edge + rng.Range(-0.1f, 0.1f) + (ring == 3 ? rng.Range(-0.15f, 0.2f) : 0);
+                    float w = 1.7f * Math.Max(6.2832f * (0.3f + 0.22f * ring) / count, 0.22f) * edge * rng.Range(1f, 1.15f);
+                    float yc = TreePlateY + TreePlateSq * r * c, top = yc + 0.5f * w * rng.Range(0.95f, 1.1f);
                     if (top < 0.1f) continue;
-                    float y = Math.Max(-0.9f, yc - 0.4f * big), x = xp + 0.05f * ring + rng.Range(-0.08f, 0.08f);
+                    float y = Math.Max(-0.9f, yc - 0.5f * w), x = xp + 0.05f * ring + rng.Range(-0.08f, 0.08f);
                     int yawk = rng.Range(-1, 2);
-                    Clod(l, rng.NextU64(), f, x - TreeTilt * y, y, r * s, rng.Range(0.5f, 0.7f) - 0.07f * ring, top - y, big * rng.Range(0.8f, 1.15f), Cos16(yawk), Sin16(yawk), 0, ring < 2 ? 1 : 0);
+                    Clod(l, rng.NextU64(), f, x - TreeTilt * y, y, r * s, rng.Range(0.55f, 0.75f) - 0.05f * ring, top - y, w * rng.Range(0.95f, 1.1f), Cos16(yawk), Sin16(yawk), 0, ring < 2 ? 1 : 0);
                     Sheared(l, l.Pieces.Count - 1, -TreeTilt, 0);
                     if (y < 0.1f) Touch(l, f, x, 0, r * s, 0.6f);
                 }
@@ -174,14 +175,16 @@ namespace Stabby.World
             int roots = rng.Range(12, 17);
             for (int i = 0; i < roots; i++)
             {
-                float a = i * 16f / roots + rng.Range(-0.35f, 0.35f), edge = rim[((int)(a + 16.5f)) & 15], r = rng.Range(0.62f, 0.8f) * edge, r1 = edge + rng.Range(0.5f, 1.5f), curl = rng.Range(-0.35f, 0.35f), d = rng.Range(0.3f, 0.45f), x = xp - 0.45f;
+                float a = i * 16f / roots + rng.Range(-0.35f, 0.35f), edge = rim[((int)(a + 16.5f)) & 15], r = rng.Range(0.62f, 0.8f) * edge, reach = rng.Range(1.4f, 2.6f), d = rng.Range(0.3f, 0.45f), x = xp - 0.45f;
+                float wrap = ((a % 16f) + 16f) % 16f, bend = rng.Range(2.9f, 5.1f) * (wrap < 8f ? 1 : -1) / 5f, da = a + rng.Range(-0.4f, 0.4f);
                 Arc(a / 16f, out float c, out float s);
                 float y = TreePlateY + TreePlateSq * r * c, z = r * s;
-                for (int k = 1; k <= 4; k++)
+                for (int k = 1; k <= 5; k++)
                 {
-                    float t = k / 4f, rk = r + (r1 - r) * t;
-                    Arc((a + curl * k) / 16f, out float ck, out float sk);
-                    float yk = TreePlateY + TreePlateSq * rk * ck - 0.25f * t * t * (1 - ck), zk = rk * sk, xk = x - 0.12f * t, dk = Math.Max(0.06f, d * (1 - 0.8f * t));
+                    float t = k / 5f;
+                    da += bend;
+                    Arc(da / 16f, out float ck, out float sk);
+                    float yk = y + 0.2f * reach * TreePlateSq * ck, zk = z + 0.2f * reach * sk, xk = x - 0.1f * t, dk = Math.Max(0.06f, d * (1 - 0.8f * t));
                     if (yk > -0.25f || y > -0.25f) Twig(l, rng.NextU64(), f, x - TreeTilt * y, y, z, xk - TreeTilt * yk, yk, zk, dk, k < 3 ? 1 : 0);
                     x = xk; y = yk; z = zk;
                 }
