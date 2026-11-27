@@ -211,9 +211,7 @@ namespace Stabby.World
         public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
-            if (cached != null) list.AddRange(cached);
-            else PlaceInto(cx, cz, false, list, null);
+            list.AddRange(Chunk(cx, cz));
         }
 
         public FeatureEdit[] Boulders()
