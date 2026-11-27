@@ -114,7 +114,7 @@ namespace Stabby.Game
         public static GroundParts Fill(GeneratedWorld w)
         {
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads);
+            var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads, out var field);
             var c = detail.Cells;
             int n = c.N, nn = n * n;
             var b = new BlobBuilder(Allocator.Persistent);
@@ -154,7 +154,7 @@ namespace Stabby.Game
             for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
             var rs = b.Allocate(ref root.Roads, roads.Length);
             for (int i = 0; i < roads.Length; i++) rs[i] = roads[i];
-            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Roads = roads, Brooks = CaveBrooks.Build(w, detail, edits, caves), Blob = b };
+            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Roads = roads, Field = field, Brooks = CaveBrooks.Build(w, detail, edits, caves), Blob = b };
         }
 
         public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
@@ -216,6 +216,9 @@ namespace Stabby.Game
         public FeatureEdit[] Edits;
         public ObjectInstance[] Discoveries;
         public RoadSegment[] Roads;
+        public ObjectField Field;
+
+        public ObjectField Objects(GeneratedWorld w, ObjectLibrary lib) => Field != null ? Field.Fresh(Edits, Discoveries) : new ObjectField(w, Detail, Edits, lib, Discoveries);
         public CaveBrook[] Brooks;
         public BlobBuilder Blob;
     }

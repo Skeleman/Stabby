@@ -263,7 +263,7 @@ namespace Stabby.Game
             if (gen != null)
             {
                 if (!gen.IsCompleted) return;
-                if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.ToString(); gen = null; Enabled = false; return; }
+                if (gen.IsFaulted) { GameStatus.Failure = gen.Exception.InnerException is MapFileException m ? $"{World.Name}: {m.Message}" : gen.Exception.ToString(); gen = null; Enabled = false; return; }
                 prepared = gen.Result;
                 entry = prepared.Entry;
                 gen = null;
@@ -453,8 +453,13 @@ namespace Stabby.Game
                     source = "started empty";
                     return (null, WorldChunks.EmptyChecksums(GameSettings.Size, true), null);
                 }
-                var (w, note) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false);
-                source = note;
+                GeneratedWorld w;
+                try { (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false); }
+                catch (MapFileException e)
+                {
+                    source = $"started empty ({e.Message})";
+                    return (null, WorldChunks.EmptyChecksums(GameSettings.Size, true), null);
+                }
                 w.Objects = objects;
                 w.Caves = ContentFiles.Caves();
                 return (w, WorldChunks.Checksums(w), null);
@@ -494,6 +499,7 @@ namespace Stabby.Game
                     var ids = new string[defs.Count];
                     for (int b = 0; b < ids.Length; b++) ids[b] = defs[b].Id;
                     w = WorldFile.Empty(new WorldConfig { Seed = hs, Size = n, CellMeters = WorldConfig.CellMetersFor(n) }, ids, lib);
+                    w.Sketch = WorldSketch.Generate(w.Config);
                     w.Objects = objects;
                     w.Caves = ContentFiles.Caves();
                 }

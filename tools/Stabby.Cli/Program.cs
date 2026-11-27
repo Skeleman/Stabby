@@ -73,7 +73,8 @@ int Bake()
     var w = WorldGenerator.Generate(c, biomes, materials, null, null, objects, caves);
     long genMs = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
-    var bytes = WorldFile.Write(w);
+    var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
+    var bytes = WorldFile.Write(w, WorldFile.ContentHash(File.ReadAllBytes(Path.Combine(root, "biomes.json")), File.ReadAllBytes(Path.Combine(root, "materials.json"))));
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
     File.WriteAllBytes(path, bytes);
     sw.Restart();
