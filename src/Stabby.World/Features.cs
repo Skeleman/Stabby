@@ -187,7 +187,7 @@ namespace Stabby.World
 
         public float SlotSway(float x, float z) => SlotSwayM * (2f * Value(Seed, x / SlotSwaySpanM, 0f, z / SlotSwaySpanM) - 1f);
 
-        float SlotAxis(float x, float z, out float t, out float a, out float v)
+        void SlotFrame(float x, float z, out float t, out float a, out float v)
         {
             float ex = Bx - Ax, ez = Bz - Az, ll = ex * ex + ez * ez, len = (float)Math.Sqrt(ll);
             float ux = len > 0f ? ex / len : 1f, uz = len > 0f ? ez / len : 0f, px = x - Ax, pz = z - Az;
@@ -195,7 +195,19 @@ namespace Stabby.World
             float qx = px - t * ex, qz = pz - t * ez;
             a = qx * ux + qz * uz;
             v = qz * ux - qx * uz;
+        }
+
+        float SlotAxis(float x, float z, out float t, out float a, out float v)
+        {
+            SlotFrame(x, z, out t, out a, out v);
             return Ay + (By - Ay) * t + SlotRippleM * (2f * Value(Seed ^ 0x5BE0CD19u, x / 1.6f, 0f, z / 1.6f) - 1f);
+        }
+
+        bool SlotOut(float x, float y, float z)
+        {
+            SlotFrame(x, z, out float t, out float a, out float v);
+            float off = Math.Max(0f, Math.Abs(v) - SlotSwayM - SlotLeanM), half = W * (1f + SlotBelly) + SlotFlare + SlotScallopM + SlotLedgeM + SlotGrainM;
+            return (float)Math.Sqrt(a * a + off * off) - half > R + 0.05f || Ay + (By - Ay) * t - SlotRippleM - y > R + 0.05f;
         }
 
         public float SlotSand(float x, float y, float z)
@@ -207,6 +219,8 @@ namespace Stabby.World
 
         bool Slot(float x, float y, float z, out float dist)
         {
+            dist = R;
+            if (SlotOut(x, y, z)) return false;
             uint seed = Seed;
             float floor = SlotAxis(x, z, out float t, out float a, out float v), rise = y - floor, rim = P + (T - P) * t;
             float tau = Math.Max(0f, Math.Min(1.2f, rise / Math.Max(1f, rim - floor))), up = Smooth(1.5f, 5f, rise);
