@@ -44,6 +44,7 @@ test TownTests.TownsPlaceTheirSitesAndPassTheCheck 40 plans and checks towns in 
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
 test WorldTests.MountainsCastRainShadows 12 generates twenty 256 worlds in parallel and compares windward and lee rain
 test CarvedMeshTests.SkipPathMatchesFullPathInLabyrinthChunks 10 meshes two labyrinth chunks on a 512 world both ways
+test WorldTests.SplitFallsKeepOrderedLipRunsInsideTheirSheet 6 generates seed 12, the nearest seed with split falls, and checks its lip runs
 test WorldTests.TerrainStageSkipsClimateAndBiomes 8 runs every check on a terrain-only world
 sweep 256 checks 85000 390000 WorldChecks per seed at 256 while tests and the other sweep share the machine
 sweep 512 checks 265000 360000 WorldChecks per seed at 512 while tests and the other sweep share the machine
