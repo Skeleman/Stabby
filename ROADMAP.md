@@ -62,7 +62,7 @@ and converts once into native data.
   Zach 11-23: darkness is a core theme; nights and caves may be very dark. Moon phases on
   the shared clock: full-moon nights clearly brighter, new-moon nights very dark.
   b/day-night merged: shared clock (content/sky.json), one directional light for sun and moon, sky, fog and ambient follow it; moon phases (8-day cycle, new moon very dark); captures pin hour and phase.
-  b/dusk-sky merged: procedural sky gradient, dawn and dusk glow, dark new moon, fog matches the horizon. Open: sky ambient globals passed in gamma space; noon zenith a bit dark.
+  b/dusk-sky merged: procedural sky gradient, dawn and dusk glow, dark new moon, fog matches the horizon. Sky ambient globals linear since dd10fdc; noon zenith checked, no retune needed.
   Capture follow-ups from b/day-night: captures must wait for object regions (with a
   cached map file they start about 14 s early and show no trees); the cliff-lows capture
   should steer the light via DayNightSystem.LightOverride.
