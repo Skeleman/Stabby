@@ -1109,6 +1109,7 @@ namespace Stabby.Game
     {
         TerrainViewDef quads = new TerrainViewDef();
         const int LakeCells = 32;
+        const int LakeBatch = 256;
         const float SunkClarities = 10f;
         public int ApplyVertices = 300000;
         public float ApplyMs = 4f;
@@ -1375,19 +1376,24 @@ namespace Stabby.Game
             for (int cy = 0; cy < n; cy += LakeCells)
                 for (int cx = 0; cx < n; cx += LakeCells)
                     if (HasLand(world, cx, cy)) blocks.Add(new int2(cx, cy));
-            var lakes = new MeshParts[blocks.Count];
-            Parallel.For(0, blocks.Count, k => lakes[k] = WaterGeometry.Lakes(world, blocks[k].x, blocks[k].y, LakeCells, true));
-            WaterGeometry.ShareLakeConstants(lakes);
-            t.Mark("lakes");
-            var rivers = WaterGeometry.Rivers(world, detail, mists);
-            t.Mark("rivers");
-            rivers.AddRange(WaterGeometry.CaveBrooks(world, brooks));
-            var sea = WaterGeometry.Sea(n, world.Config.CellMeters);
-            if (!mist) mists.Clear();
-            t.Mark("brooks sea");
             var pack = Pack(sp =>
             {
-                foreach (var part in lakes) sp.Add(part, wm, 0, Casts(part), lean);
+                for (int b0 = 0; b0 < blocks.Count; b0 += LakeBatch)
+                {
+                    int b = b0;
+                    var lakes = new MeshParts[Math.Min(LakeBatch, blocks.Count - b)];
+                    Parallel.For(0, lakes.Length, k => lakes[k] = WaterGeometry.Lakes(world, blocks[b + k].x, blocks[b + k].y, LakeCells, true));
+                    WaterGeometry.ShareLakeConstants(lakes);
+                    foreach (var part in lakes) sp.Add(part, wm, 0, Casts(part), lean);
+                    sp.Flush();
+                }
+                t.Mark("lakes");
+                var rivers = WaterGeometry.Rivers(world, detail, mists);
+                t.Mark("rivers");
+                rivers.AddRange(WaterGeometry.CaveBrooks(world, brooks));
+                var sea = WaterGeometry.Sea(n, world.Config.CellMeters);
+                if (!mist) mists.Clear();
+                t.Mark("brooks sea");
                 foreach (var part in rivers) sp.Add(part, wm, 0, Casts(part), lean);
                 foreach (var part in mists) sp.Add(part, mm, WaterGeometry.MistPad, true);
                 sp.Add(sea, wm, 0, Casts(sea), lean);
@@ -1400,18 +1406,15 @@ namespace Stabby.Game
         static Prepared Prepare(GeneratedWorld world, TerrainDetail detail, IReadOnlyList<BiomeDef> defs, string materials, FeatureEdit[] edits)
         {
             int n = world.Config.Size;
-            float cm = world.Config.CellMeters;
             var t = new LoadTimes();
             var p = new Prepared { Times = t };
             Pyramid(world, detail, edits, p);
             t.Mark("pyramid");
-            var colors = TerrainLook.BaseColors(world, defs);
-            t.Mark("colors");
             p.Look = new BlobBuilder(Allocator.Persistent);
             ref var root = ref p.Look.ConstructRoot<TerrainLookData>();
             root.N = n;
-            var arr = p.Look.Allocate(ref root.Colors, colors.Length);
-            for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
+            var arr = p.Look.Allocate(ref root.Colors, world.Height.Length);
+            for (int i = 0; i < arr.Length; i++) arr[i] = TerrainLook.BaseColor(world, defs, i);
             t.Mark("color blob");
             var lib = ContentFiles.Materials(materials);
             t.Mark("materials");
@@ -1424,7 +1427,7 @@ namespace Stabby.Game
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++) lake[y * n + x] = WaterGeometry.LakeHeight(world, x, y);
             t.Mark("lake heights");
-            p.Field = TerrainLook.Field(detail, n, cm, colors, p.Strata.Offsets);
+            p.Field = TerrainLook.Field(detail, world, defs, p.Strata.Offsets);
             t.Mark("field");
             return p;
         }
@@ -2230,7 +2233,9 @@ namespace Stabby.Game
             pending.Clear();
             foreach (var b in buffers) b.Dispose();
             buffers.Clear();
-            Owned.Release(preparing, p => p.Look.Dispose());
+            Owned.Release(preparing, p => { p.Look.Dispose(); p.Field?.Dispose(); });
+            prepared?.Field?.Dispose();
+            upload?.Dispose();
             lookBake.Release();
             foreach (var mesh in meshes.Values) UnityEngine.Object.Destroy(mesh);
             if (zeros.IsCreated) zeros.Dispose();

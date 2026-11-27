@@ -127,13 +127,12 @@ namespace Stabby.World
                         float rain = 0.5f * (bd.PrecipMinMm + bd.PrecipMaxMm), temp = 0.5f * (bd.TempMinC + bd.TempMaxC);
                         wets[k] = Saturate((rain - 900f) / 1700f) * Saturate((temp + 2f) / 6f) * Saturate((26f - temp) / 6f);
                     }
-            var raw = new float[cells * 3];
             float cm = w.Config.CellMeters;
-            Parallel.For(0, n, y =>
+            void Row(int y, float[] raw, int at)
             {
                 for (int x = 0; x < n; x++)
                 {
-                    int i = y * n + x, k = w.Biome[i];
+                    int i = y * n + x, k = w.Biome[i], o = (at + x) * 3;
                     if (w.Sea[i] || k < 0) continue;
                     float gx = (w.Height[y * n + Math.Min(x + 1, n - 1)] - w.Height[y * n + Math.Max(x - 1, 0)]) / (2 * cm);
                     float gz = (w.Height[Math.Min(y + 1, n - 1) * n + x] - w.Height[Math.Max(y - 1, 0) * n + x]) / (2 * cm);
@@ -147,31 +146,37 @@ namespace Stabby.World
                     }
                     float cover = 1f - (float)FMath.Exp(-(broad + needle));
                     float sum = Math.Max(broad + needle, 1e-6f);
-                    raw[i * 3] = cover * broad / sum;
-                    raw[i * 3 + 1] = cover * needle / sum;
-                    raw[i * 3 + 2] = wets[k];
+                    raw[o] = cover * broad / sum;
+                    raw[o + 1] = cover * needle / sum;
+                    raw[o + 2] = wets[k];
                 }
-            });
-            Parallel.For(0, n, y =>
+            }
+            const int band = 64;
+            Parallel.For(0, (n + band - 1) / band, () => new float[(band + 2) * n * 3], (b, _, raw) =>
             {
-                for (int x = 0; x < n; x++)
-                {
-                    int i = y * n + x;
-                    for (int c = 0; c < 3; c++)
+                int y0 = b * band, y1 = Math.Min(n, y0 + band), r0 = Math.Max(y0 - 1, 0), r1 = Math.Min(y1 + 1, n);
+                Array.Clear(raw, 0, (r1 - r0) * n * 3);
+                for (int y = r0; y < r1; y++) Row(y, raw, (y - r0) * n);
+                for (int y = y0; y < y1; y++)
+                    for (int x = 0; x < n; x++)
                     {
-                        float s = 0, wsum = 0;
-                        for (int dy = -1; dy <= 1; dy++)
-                            for (int dx = -1; dx <= 1; dx++)
-                            {
-                                int xx = Math.Min(Math.Max(x + dx, 0), n - 1), yy = Math.Min(Math.Max(y + dy, 0), n - 1);
-                                float wt = (dx == 0 ? 2 : 1) * (dy == 0 ? 2 : 1);
-                                s += raw[(yy * n + xx) * 3 + c] * wt; wsum += wt;
-                            }
-                        px[i * 4 + c] = (byte)Math.Round(Saturate(s / wsum) * 255f);
+                        int i = y * n + x;
+                        for (int c = 0; c < 3; c++)
+                        {
+                            float s = 0, wsum = 0;
+                            for (int dy = -1; dy <= 1; dy++)
+                                for (int dx = -1; dx <= 1; dx++)
+                                {
+                                    int xx = Math.Min(Math.Max(x + dx, 0), n - 1), yy = Math.Min(Math.Max(y + dy, 0), n - 1);
+                                    float wt = (dx == 0 ? 2 : 1) * (dy == 0 ? 2 : 1);
+                                    s += raw[((yy - r0) * n + xx) * 3 + c] * wt; wsum += wt;
+                                }
+                            px[i * 4 + c] = (byte)Math.Round(Saturate(s / wsum) * 255f);
+                        }
+                        px[i * 4 + 3] = 255;
                     }
-                    px[i * 4 + 3] = 255;
-                }
-            });
+                return raw;
+            }, _ => { });
             return px;
         }
 

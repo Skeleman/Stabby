@@ -8,7 +8,7 @@ public class InnTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
-    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.House, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen, ObjectPart.Overlook, ObjectPart.SaltTower, ObjectPart.FallenTree, ObjectPart.InnRoadside, ObjectPart.WallTorch };
+    static readonly int[] Built = { ObjectPart.Inn, ObjectPart.InnYard, ObjectPart.House, ObjectPart.Table, ObjectPart.Bench, ObjectPart.Barrel, ObjectPart.Crate, ObjectPart.Stall, ObjectPart.Well, ObjectPart.StoneRing, ObjectPart.Tent, ObjectPart.FirePit, ObjectPart.LogSeat, ObjectPart.Campsite, ObjectPart.HermitHut, ObjectPart.Hermitage, ObjectPart.RoadShrine, ObjectPart.Wayside, ObjectPart.Ruin, ObjectPart.HotSpring, ObjectPart.Mushroom, ObjectPart.FairyRing, ObjectPart.Geyser, ObjectPart.MudPot, ObjectPart.WolfDen, ObjectPart.Overlook, ObjectPart.SaltTower, ObjectPart.FallenTree, ObjectPart.Monument, ObjectPart.InnRoadside, ObjectPart.WallTorch };
 
     [Fact]
     public void BuiltMeshesAreDeterministicFallPerTierAndStayInBounds()
@@ -117,6 +117,62 @@ public class InnTests
             for (int k = 0; k < 100; k++) Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0, -0.1f, 1);
             Assert.True(z > 1, $"walked over the trunk to {x:F2},{z:F2}");
         }
+    }
+
+    [Fact]
+    public void FallenTreeFloorAndTrunkHoldWalkersAtMeshHeight()
+    {
+        int d = Objects.Objects.FindIndex(o => o.Id == "fallen-tree");
+        var def = Objects.Objects[d];
+        var shapes = PartShapes.Of(Objects);
+        for (int v = 0; v < def.Variants; v++)
+        {
+            var o = new ObjectInstance { Def = d, Variant = v, X = 0, Y = 0, Z = 0, Qw = 1, Size = 17 + v % 3 };
+            var list = new List<ObjectColumn>();
+            ObjectField.AddColumns(Objects, shapes, o, list);
+            var cols = ColumnRegions.Whole(list);
+            var mesh = ObjectMeshes.Build(def.Parts[0], ObjectMeshes.Key(def.Id, 0, o.Variant), 0);
+            float u = o.Size * Structures.TreeU;
+            float tip = 4;
+            while (MeshTop(mesh, (tip + 0.25f) * u / o.Size, 0, float.MaxValue) > 0) tip += 0.25f;
+            Assert.True(tip > 7, $"v{v}: trunk ends at {tip:F2}");
+            foreach (float sx in new[] { -5f, -2f, 1f, 4f, tip - 0.5f, tip })
+            {
+                float floor = Math.Max(0, Under(mesh, sx * u, 1.2f, o.Size)), top = Under(mesh, sx * u, float.MaxValue, o.Size);
+                if (sx <= 4) Assert.True(Math.Abs(MeshTop(mesh, sx * u / o.Size, 0, 1.2f / o.Size) * o.Size - Structures.TreeFloorM * u) <= 0.05f, $"hollow floor mesh v{v} at {sx}");
+                float x = sx * u, y = 0.1f, z = 0;
+                Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0, 0, 1);
+                Assert.True(Math.Abs(y - floor) <= 0.05f, $"inside v{v} at {sx}: walker {y:F2}, floor {floor:F2}");
+                x = sx * u; y = top + 0.5f; z = 0;
+                Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0, 0, 1);
+                Assert.True(Math.Abs(y - top) <= 0.05f, $"on top v{v} at {sx}: walker {y:F2}, trunk {top:F2}");
+            }
+        }
+    }
+
+    static float Under(ObjectMesh m, float x, float below, float size)
+    {
+        float best = float.NegativeInfinity;
+        for (float dx = -Walk.Radius; dx <= Walk.Radius; dx += 0.1f)
+            for (float dz = -Walk.Radius; dz <= Walk.Radius; dz += 0.1f)
+                if (dx * dx + dz * dz <= Walk.Radius * Walk.Radius) best = Math.Max(best, MeshTop(m, (x + dx) / size, dz / size, below / size) * size);
+        return best;
+    }
+
+    static float MeshTop(ObjectMesh m, float px, float pz, float below)
+    {
+        float best = float.NegativeInfinity;
+        var p = m.Positions;
+        for (int t = 0; t < m.Indices.Length; t += 3)
+        {
+            int a = 3 * m.Indices[t], b = 3 * m.Indices[t + 1], c = 3 * m.Indices[t + 2];
+            float ax = p[a] - px, az = p[a + 2] - pz, bx = p[b] - px, bz = p[b + 2] - pz, cx = p[c] - px, cz = p[c + 2] - pz;
+            float wa = bx * cz - bz * cx, wb = cx * az - cz * ax, wc = ax * bz - az * bx, sum = wa + wb + wc;
+            if (Math.Abs(sum) < 1e-12f || (wa < 0 || wb < 0 || wc < 0) && (wa > 0 || wb > 0 || wc > 0)) continue;
+            float y = (wa * p[a + 1] + wb * p[b + 1] + wc * p[c + 1]) / sum;
+            if (y < below && y > best) best = y;
+        }
+        return best;
     }
 
     [Fact]

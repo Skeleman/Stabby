@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const float TreeU = 1 / 18f, TreeCy = 1.05f, TreeSy = 3.2f, TreeSz = 3.05f, TreeTaper = 0.3f, TreeSag = 0.05f, TreeDrop = 0.8f, TreeWallZ = 1.15f, TreeRoofM = 2.25f, TreeSeatZ = 1.1f, TreeFloorM = 0.45f;
+        public const float TreeU = 1 / 18f, TreeCy = 1.05f, TreeSy = 3.2f, TreeSz = 3.05f, TreeTaper = 0.3f, TreeSag = 0.05f, TreeDrop = 0.8f, TreeWallZ = 1.15f, TreeRoofM = 2.25f, TreeSeatZ = 1.1f, TreeFloorM = 0.45f, TreeLidM = TreeFloorM + 1.3f;
         static readonly float[] TreeSeats =
         {
             -7.5f / 18, 1.1f / 18, -5f / 18, 1.1f / 18, -2.5f / 18, 1.1f / 18, 0, 1.1f / 18, 2.5f / 18, 1.1f / 18, 5f / 18, 1.1f / 18, 7.5f / 18, 1.1f / 18,
@@ -66,10 +66,25 @@ namespace Stabby.World
 
             Drape(l, moss);
 
+            var skin = SurfaceTris(l);
+            float last = 0;
             for (float x = -half + 0.4f; x <= half - 0.6f; x += 0.9f)
             {
-                Col(l, f, x, TreeWallZ, 0.32f, 0, 2.8f);
-                Col(l, f, x, -TreeWallZ, 0.32f, 0, 2.8f);
+                float top = Math.Min(2.8f, SurfaceTop(skin, f, x, 0, 9));
+                Col(l, f, x, TreeWallZ, 0.32f, 0, top);
+                Col(l, f, x, -TreeWallZ, 0.32f, 0, top);
+                last = x;
+            }
+            for (float x = -half + 0.6f; x <= last - 0.2f; x += 0.8f) Col(l, f, x, 0, 0.45f, 0, TreeFloorM);
+            for (int k = 0; k < 5; k++)
+            {
+                float x = last + 0.2f - 0.2f * k, floor = SurfaceTop(skin, f, x, 0, TreeFloorM + 0.2f);
+                if (floor > 0.02f) Col(l, f, x, 0, 0.1f, 0, Math.Min(floor, TreeFloorM));
+            }
+            for (float x = -half + 0.3f; x <= last + 0.2f; x += 0.25f)
+            {
+                float top = SurfaceTop(skin, f, x, 0, 9);
+                if (top > 1) Col(l, f, x, 0, 0.12f, TreeLidM, Math.Max(top, TreeLidM + 0.01f));
             }
             for (float x = -half; x <= half; x += 1f)
             {

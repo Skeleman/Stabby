@@ -804,7 +804,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float sl = n.y;
     float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
     float2 fl2 = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo, fp);
-    float fb = fl2.y;
+    float fb = fl2.y * (1 - stone);
     float bf = br * (1 - 0.85 * fb);
     float m = saturate(max((rockMix * (1 - 0.8 * fb) - 0.5) * 1.6 + 0.5 + bf, 1 - smoothstep(0.5, 0.72, sl + 0.4 * bf)));
     TmOut o;
