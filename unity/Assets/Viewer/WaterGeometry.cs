@@ -40,6 +40,7 @@ namespace Stabby.Viewer
         public const float RiverLift = 0.1f, LakeLift = 0.5f;
         const float SlopeRange = 0.1f;
         const int SlopeReach = 8, TurnReach = 6, PlungeReach = 16;
+        const float MouthReachM = 60f, MouthReachWidths = 3f, MouthFlare = 1.8f, MouthStepM = 8f;
         public const float SeaStep = 2f, SeaNearHalf = 64f, SeaGrowth = 1.05f;
         public const int LakeSwellSplit = 8, LakeSwellCells = 150;
         const float LakeSwellFullCells = 600f;
@@ -367,6 +368,7 @@ namespace Stabby.Viewer
             public readonly List<Vector4> Reach = new List<Vector4>(), Fall = new List<Vector4>(), Tints = new List<Vector4>(), Curt = new List<Vector4>();
             public readonly List<int> Tris = new List<int>();
             public Vector4 Tint;
+            public float Fade;
 
             public void Clear() { Verts.Clear(); Cols.Clear(); Chan.Clear(); Reach.Clear(); Fall.Clear(); Tints.Clear(); Curt.Clear(); Tris.Clear(); }
 
@@ -386,8 +388,8 @@ namespace Stabby.Viewer
                 Tints.Add(Tint);
                 Fall.Add(fall);
                 Fall.Add(fall);
-                Curt.Add(Vector4.zero);
-                Curt.Add(Vector4.zero);
+                Curt.Add(new Vector4(0, 0, 0, Fade));
+                Curt.Add(new Vector4(0, 0, 0, Fade));
                 if (!join) return;
                 int v = Verts.Count - 2;
                 Tris.Add(v - 2); Tris.Add(v); Tris.Add(v - 1);
@@ -705,6 +707,17 @@ namespace Stabby.Viewer
                     slopes[k] = Mathf.Clamp01((run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0) / SlopeRange);
                     currents[k] = Current(r.D[k], run > 0 ? (u.y - d.y) / run : 0);
                 }
+                int coast = pts.Count;
+                if (world.Sea != null)
+                    while (coast > 0 && world.Sea[NearField.CellOf(pts[coast - 1].x, pts[coast - 1].z, world.Config.CellMeters, world.Config.Size)]) coast--;
+                bool mouth = coast < pts.Count;
+                float coastS = 0, total = 0;
+                for (int k = 1; k < pts.Count; k++)
+                {
+                    total += new Vector2(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z).magnitude;
+                    if (k == coast) coastS = total;
+                }
+                float endHalf = Mathf.Max(pts[last].w * 0.5f, 6f), reach = Mathf.Max(MouthReachM, MouthReachWidths * endHalf);
                 float s = 0;
                 var pool = NoPool;
                 for (int k = 0; k < pts.Count; k++)
@@ -762,13 +775,34 @@ namespace Stabby.Viewer
                         buf.Fan(buf.Verts.Count - 2, buf.Verts.Count - 1, foot, false);
                     }
                     buf.Tint = Flowing(Tint(r.Mix[k]), currents[k]);
+                    buf.Fade = mouth ? MouthFade(s, coastS, total + reach) : 0;
+                    buf.Tint = Vector4.Lerp(buf.Tint, Vector4.zero, buf.Fade);
                     buf.Row(p, dir, half, slopes[k], rv, pool, join);
                 }
+                if (mouth && pts.Count > 1)
+                {
+                    var end = pts[last];
+                    var prev = pts[last - 1];
+                    var dir = new Vector3(end.x - prev.x, 0, end.z - prev.z).normalized;
+                    int steps = Mathf.Max(2, Mathf.CeilToInt(reach / MouthStepM));
+                    var tint = Flowing(Tint(r.Mix[last]), currents[last]);
+                    for (int j = 1; j <= steps; j++)
+                    {
+                        float u = j / (float)steps, along = u * reach;
+                        var p = new Vector3(end.x, end.y + RiverLift, end.z) + dir * along;
+                        buf.Fade = MouthFade(s + along, coastS, total + reach);
+                        buf.Tint = Vector4.Lerp(tint, Vector4.zero, buf.Fade);
+                        buf.Row(p, dir, endHalf * Mathf.Lerp(1, MouthFlare, u), 0, new Vector4(0, 0, s + along, r.Liquid), pool, true);
+                    }
+                }
+                buf.Fade = 0;
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Rivers {pieces.Count}"));
             if (mist != null && mist.Verts.Count > 0) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
             return pieces;
         }
+
+        static float MouthFade(float s, float from, float to) => to > from ? Mathf.SmoothStep(0, 1, (s - from) / (to - from)) : 1;
 
         public static List<MeshParts> CaveBrooks(GeneratedWorld world, CaveBrook[] brooks)
         {
