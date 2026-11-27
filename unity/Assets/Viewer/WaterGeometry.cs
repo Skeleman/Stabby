@@ -780,6 +780,7 @@ namespace Stabby.Viewer
         {
             var spray = Sprays(world, r.Liquid) ? mist : null;
             if (spray != null) { spray.Amount = SprayAmount(world, r.Liquid); spray.Liquid = r.Liquid; }
+            int v0 = buf.Verts.Count;
             var pts = new List<Vector4>();
             for (int k = 0; k < r.X.Length; k++)
                 pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));
@@ -887,6 +888,25 @@ namespace Stabby.Viewer
             }
             buf.Fade = 0;
             buf.Tris.AddRange(held);
+            if (world.Sea != null) OverSea(world, buf, v0);
+        }
+
+        static void OverSea(GeneratedWorld world, RiverBuffers buf, int v0)
+        {
+            int n = world.Config.Size;
+            float cm = world.Config.CellMeters;
+            for (int v = v0; v < buf.Verts.Count; v++)
+            {
+                var c = buf.Curt[v];
+                if (c.x != 0 || c.y != 0 || c.z != 0) continue;
+                float fx = Mathf.Clamp(buf.Verts[v].x / cm, 0, n - 1), fz = Mathf.Clamp(buf.Verts[v].z / cm, 0, n - 1);
+                int i = Mathf.Min((int)fx, n - 2), k = Mathf.Min((int)fz, n - 2);
+                float tx = fx - i, tz = fz - k;
+                float sea = Mathf.Lerp(Mathf.Lerp(world.Sea[k * n + i] ? 1 : 0, world.Sea[k * n + i + 1] ? 1 : 0, tx), Mathf.Lerp(world.Sea[(k + 1) * n + i] ? 1 : 0, world.Sea[(k + 1) * n + i + 1] ? 1 : 0, tx), tz);
+                if (sea <= c.w) continue;
+                buf.Curt[v] = new Vector4(0, 0, 0, sea);
+                buf.Tints[v] = Vector4.Lerp(buf.Tints[v], Vector4.zero, sea);
+            }
         }
 
         static float MouthFade(float s, float from, float to) => to > from ? Mathf.SmoothStep(0, 1, (s - from) / (to - from)) : 1;
