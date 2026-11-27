@@ -130,6 +130,7 @@ namespace Stabby.Game
             FeatureEdit.Hoodoo => "hoodoo",
             FeatureEdit.Butte => "butte",
             FeatureEdit.Cenote => "cenote",
+            FeatureEdit.SlotCanyon => "slot canyon",
             FeatureEdit.Spring => "spring",
             FeatureEdit.Sink => "sinkhole",
             FeatureEdit.Bridge => "rock bridge",

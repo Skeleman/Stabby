@@ -401,7 +401,7 @@ namespace Stabby.World
                 if (OnBed(bed, segs, i, x, z, r)) { e.Add(at + " lies on a river bed"); return; }
                 grid.Near(b.MinX, b.MinZ, b.MaxX, b.MaxZ, ids);
                 foreach (int f in ids)
-                    if (edits[f].Shape != FeatureEdit.Boulder && !edits[f].Link) { e.Add(at + " overlaps a terrain feature"); return; }
+                    if (edits[f].Shape != FeatureEdit.Boulder && edits[f].Shape != FeatureEdit.SlotCanyon && !edits[f].Link) { e.Add(at + " overlaps a terrain feature"); return; }
             }
             int samples = Math.Min(BoulderMeshSamples, boulders.Count);
             for (int k = 0; k < samples; k++)

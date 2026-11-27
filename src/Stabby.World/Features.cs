@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Cenote = 18, Shapes = 19;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Cenote = 18, SlotCanyon = 19, Shapes = 20;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
@@ -63,11 +63,11 @@ namespace Stabby.World
 
         public const float BoulderFoot = 2f;
 
-        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : Shape == Cenote ? CenoteSpan : W;
+        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : Shape == Cenote ? CenoteSpan : Shape == SlotCanyon ? SlotSpan : W;
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
-        public float MinY => Shape == Butte ? Ay - H - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
+        public float MinY => Shape == Butte ? Ay - H - 1f : Shape == SlotCanyon ? Math.Min(Ay, By) - R - SlotRippleM - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
         public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Math.Max(Ay, By) + R + H;
         public float MinZ => Math.Min(Az, Bz) - R - Spread;
         public float MaxZ => Math.Max(Az, Bz) + R + Spread;
@@ -90,6 +90,7 @@ namespace Stabby.World
             if (Shape == Spring) return Basin(x, y, z, out dist);
             if (Shape == Butte) return Mesa(x, y, z, out dist);
             if (Shape == Cenote) return Pit(x, y, z, out dist);
+            if (Shape == SlotCanyon) return Slot(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
@@ -178,6 +179,65 @@ namespace Stabby.World
             dist = HoleR + s;
             return s < R;
         }
+
+        public const float SlotBelly = 0.45f, SlotPinch = 0.4f, SlotFlare = 0.8f, SlotScallopM = 0.45f, SlotLedgeM = 0.3f, SlotGrainM = 0.12f, SlotSwayM = 1.1f, SlotSwaySpanM = 11f, SlotLeanM = 0.9f, SlotRippleM = 0.12f, SlotSandM = 0.7f;
+
+        float SlotSpan => W * (1f + SlotBelly) + SlotFlare + SlotScallopM + SlotLedgeM + SlotGrainM + SlotSwayM + SlotLeanM + 1f;
+
+        public float SlotSway(float x, float z) => SlotSwayM * (2f * Value(Seed, x / SlotSwaySpanM, 0f, z / SlotSwaySpanM) - 1f);
+
+        float SlotAxis(float x, float z, out float t, out float a, out float v)
+        {
+            float ex = Bx - Ax, ez = Bz - Az, ll = ex * ex + ez * ez, len = (float)Math.Sqrt(ll);
+            float ux = len > 0f ? ex / len : 1f, uz = len > 0f ? ez / len : 0f, px = x - Ax, pz = z - Az;
+            t = ll > 0f ? Math.Max(0f, Math.Min(1f, (px * ex + pz * ez) / ll)) : 0f;
+            float qx = px - t * ex, qz = pz - t * ez;
+            a = qx * ux + qz * uz;
+            v = qz * ux - qx * uz;
+            return Ay + (By - Ay) * t + SlotRippleM * (2f * Value(Seed ^ 0x5BE0CD19u, x / 1.6f, 0f, z / 1.6f) - 1f);
+        }
+
+        public float SlotSand(float x, float y, float z)
+        {
+            float floor = SlotAxis(x, z, out _, out float a, out float v), dv = v - SlotSway(x, z);
+            if (a * a + dv * dv > Sq(W + SlotGrainM + SlotScallopM + 0.5f)) return 0f;
+            return 1f - Smooth(0.5f * SlotSandM, SlotSandM, y - floor);
+        }
+
+        bool Slot(float x, float y, float z, out float dist)
+        {
+            uint seed = Seed;
+            float floor = SlotAxis(x, z, out float t, out float a, out float v), rise = y - floor, rim = P + (T - P) * t;
+            float tau = Math.Max(0f, Math.Min(1.2f, rise / Math.Max(1f, rim - floor))), up = Smooth(1.5f, 5f, rise);
+            float sway = SlotSway(x, z) + SlotLeanM * up * (2f * Value(seed ^ 0x3C6EF372u, x / 8f, y / 6f, z / 8f) - 1f);
+            float dv = v - sway, h = (float)Math.Sqrt(a * a + dv * dv);
+            float half = W * (1f + SlotBelly * 4f * tau * (1f - tau) * up - SlotPinch * Smooth(0.6f, 0.9f, tau) * Smooth(2.5f, 4f, rise)) + SlotFlare * Smooth(0.95f, 1.15f, tau)
+                + up * (SlotScallopM * (2f * Value(seed ^ 0x510E527Fu, x / 2.6f, y / 1.8f, z / 2.6f) - 1f) + SlotLedgeM * (2f * Value(seed ^ 0x1F83D9ABu, x / 14f, y / 1.3f, z / 14f) - 1f))
+                + SlotGrainM * (2f * Value(seed ^ 0x9B05688Cu, x / 0.7f, y / 0.5f, z / 0.7f) - 1f);
+            float s = Math.Max(h - half, floor - y);
+            if (F > 0f)
+            {
+                SlotChock(out float cx, out float cy, out float cz);
+                float cr = F * (1f + 0.2f * (2f * Value(seed ^ 0x6A09E667u, x / 1.1f, y / 1.1f, z / 1.1f) - 1f));
+                s = Math.Max(s, cr - (float)Math.Sqrt(Sq(x - cx) + Sq(y - cy) + Sq(z - cz)));
+            }
+            dist = HoleR + s;
+            return s < R;
+        }
+
+        public void SlotChock(out float cx, out float cy, out float cz)
+        {
+            float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+            float nx = len > 0f ? -ez / len : 0f, nz = len > 0f ? ex / len : 1f;
+            cx = Ax + N * ex;
+            cz = Az + N * ez;
+            float sway = SlotSway(cx, cz);
+            cx += nx * sway;
+            cz += nz * sway;
+            cy = Ay + (By - Ay) * N + D;
+        }
+
+        public float SlotFloor(float x, float z) => SlotAxis(x, z, out _, out _, out _);
 
         static float Groove(float dv) => Math.Max(0f, 1f - Sq(dv / ButteGrooveW));
 
@@ -505,6 +565,11 @@ namespace Stabby.World
                 float wg = 1.3f * CenoteGullyM + CenoteFlare * Math.Max(0f, u - D) + R;
                 return u >= 0f && u <= len && Math.Abs(v) <= wg;
             }
+            if (Shape == SlotCanyon)
+            {
+                SlotAxis(x, z, out _, out float a, out float v);
+                return a * a + v * v <= Sq(Spread + R);
+            }
             if (W > 0f)
             {
                 float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -795,6 +860,7 @@ namespace Stabby.World
                 }
             Mines.Place(w, detail, strata, list, caves);
             Cenotes.Place(w, detail, list);
+            SlotCanyons.Place(w, detail, list);
             return list.ToArray();
         }
 
