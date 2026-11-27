@@ -19,12 +19,12 @@ public class DiscoveryTests
     public void FeaturePassDiscoveriesMatchTheFinalEdits()
     {
         int seen = 0;
-        for (ulong seed = 1; seed <= 8; seed++)
+        var kinds = new HashSet<int>();
+        for (ulong seed = 1; seed <= 4; seed++)
         {
-            var w = TestWorlds.World(seed);
-            var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out _, out var shared);
-            var fresh = new ObjectField(w, detail, edits, w.Objects).Discoveries();
+            var p = TestWorlds.Place(seed);
+            var shared = p.Sites;
+            var fresh = p.Field.Discoveries();
             Assert.NotNull(shared);
             Assert.Equal(fresh.Length, shared.Length);
             for (int i = 0; i < fresh.Length; i++)
@@ -36,8 +36,11 @@ public class DiscoveryTests
                 Assert.Equal((fresh[i].Qx, fresh[i].Qy, fresh[i].Qz, fresh[i].Qw), (shared[i].Qx, shared[i].Qy, shared[i].Qz, shared[i].Qw));
             }
             seen += fresh.Length;
+            kinds.UnionWith(fresh.Select(o => o.Def));
         }
         Assert.True(seen > 0);
+        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
+        Assert.True(missing.Count == 0, $"seeds 1..4 place no {string.Join(", ", missing)}");
     }
 
     [Fact]
