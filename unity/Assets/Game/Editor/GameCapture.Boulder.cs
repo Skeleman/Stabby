@@ -37,6 +37,44 @@ namespace Stabby.Game.Editor
             var sky = DayNightSystem.Shown;
             GameStatus.Lines["~boulder"] = $"boulder: edit {at} R {b.R:F2} at {mid.x:F0},{mid.y:F0},{mid.z:F0}, GV {WorldConfig.GeneratorVersion}, pinned hour {sky.Hour:F2} moon {sky.Phase:F2}";
             Shot(cam, dir, "boulder-near");
+            if (!SoilRockSlope(ground, mid, out var hill, out var up)) { GameStatus.Lines["~hillside"] = "hillside: no slope found"; yield break; }
+            var eye2 = hill - up * 40f;
+            eye2.y = Mathf.Max(ground.HeightAt(eye2.x, eye2.z) + 1.7f, hill.y + 6f);
+            var aim = hill + up * 8f;
+            aim.y = ground.HeightAt(aim.x, aim.z);
+            cam.transform.SetPositionAndRotation(eye2, Quaternion.LookRotation(aim - eye2));
+            for (var w = Settle(180); w.MoveNext();) yield return null;
+            GameStatus.Lines["~hillside"] = $"hillside: at {hill.x:F0},{hill.y:F0},{hill.z:F0} grade {Grade(ground, hill.x, hill.z, out _, out _):F2}";
+            Shot(cam, dir, "hillside-slope");
+        }
+
+        static bool SoilRockSlope(Ground ground, Vector3 from, out Vector3 at, out Vector3 up)
+        {
+            const float Step = 8f, Span = 800f, Want = 1.15f;
+            at = up = default;
+            float best = float.MaxValue;
+            for (float dz = -Span; dz <= Span; dz += Step)
+                for (float dx = -Span; dx <= Span; dx += Step)
+                {
+                    if (dx * dx + dz * dz < 900f) continue;
+                    float x = from.x + dx, z = from.z + dz, h = ground.HeightAt(x, z);
+                    if (h < 3f) continue;
+                    float g = Grade(ground, x, z, out float gx, out float gz), score = Mathf.Abs(g - Want) + 0.0005f * Mathf.Sqrt(dx * dx + dz * dz);
+                    if (score >= best) continue;
+                    float lx = x - 15f * gx / g, lz = z - 15f * gz / g;
+                    if (ground.HeightAt(lx, lz) < 3f || Grade(ground, lx, lz, out _, out _) > 0.5f) continue;
+                    best = score;
+                    at = new Vector3(x, h, z);
+                    up = new Vector3(gx, 0, gz) / g;
+                }
+            return best < float.MaxValue;
+        }
+
+        static float Grade(Ground ground, float x, float z, out float gx, out float gz)
+        {
+            gx = (ground.HeightAt(x + 3f, z) - ground.HeightAt(x - 3f, z)) / 6f;
+            gz = (ground.HeightAt(x, z + 3f) - ground.HeightAt(x, z - 3f)) / 6f;
+            return Mathf.Sqrt(gx * gx + gz * gz);
         }
 
         static int LargestBoulder(Ground ground, out FeatureEdit b)

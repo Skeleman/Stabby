@@ -176,19 +176,48 @@ namespace Stabby.World
 
     public sealed class LiquidDef
     {
-        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 8, TintSlots = 3;
+        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 16, TintSlots = 3;
         public static readonly string[] SprayNames = { "none", "mist", "dust", "shimmer" };
         public string Id;
         public List<string> Biomes = new List<string>();
         public uint DeepColor, ShallowColor, FilmColor, EmissionColor;
-        public float ClarityM, ShoreM, FoamWidthM;
+        public float ClarityM, ShoreM, FoamWidthM, OpaqueDepthM = 0.25f;
         public float WaveScaleM, WaveSpeed, WaveStrength;
         public float SwellScaleM, SwellStrength, LakeSwell;
         public float FlowSpeed, RapidsSlope, BedFieldM;
-        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness;
+        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness, GroundTint;
         public int Spray;
         public float FallSpeed, SheetOpacity, SprayAmount, Froth;
         public uint SprayColor;
+    }
+
+    public sealed class WakeDef
+    {
+        public float FadePixels = 4f, FullPixels = 12f;
+        public float RingAmplitude = 1f, VAmplitude = 1f, NormalStrength = 1.5f;
+        public float RefSpeedMps = 1.6f, RefSizeM = 1.2f, SpeedExponent = 0.5f, SizeExponent = 0.5f, MaxGain = 3f;
+        public float SpeedSmoothS = 0.25f;
+
+        public void Window(float quality, out float fadePixels, out float fullPixels)
+        {
+            float q = Math.Max(quality, 0.1f);
+            fadePixels = FadePixels / q;
+            fullPixels = FullPixels / q;
+        }
+
+        public void Validate(List<string> errors)
+        {
+            if (!(FadePixels > 0 && FullPixels > FadePixels && FullPixels <= 200)) errors.Add("wakes: fullPixels must exceed fadePixels > 0, at most 200");
+            if (!(RingAmplitude >= 0 && RingAmplitude <= 4)) errors.Add($"wakes.ringAmplitude {RingAmplitude} outside 0..4");
+            if (!(VAmplitude >= 0 && VAmplitude <= 4)) errors.Add($"wakes.vAmplitude {VAmplitude} outside 0..4");
+            if (!(NormalStrength >= 0 && NormalStrength <= 4)) errors.Add($"wakes.normalStrength {NormalStrength} outside 0..4");
+            if (!(RefSpeedMps >= 0.1f && RefSpeedMps <= 20)) errors.Add($"wakes.refSpeedMps {RefSpeedMps} outside 0.1..20");
+            if (!(RefSizeM >= 0.1f && RefSizeM <= 50)) errors.Add($"wakes.refSizeM {RefSizeM} outside 0.1..50");
+            if (!(SpeedExponent >= 0 && SpeedExponent <= 2)) errors.Add($"wakes.speedExponent {SpeedExponent} outside 0..2");
+            if (!(SizeExponent >= 0 && SizeExponent <= 2)) errors.Add($"wakes.sizeExponent {SizeExponent} outside 0..2");
+            if (!(MaxGain >= 1 && MaxGain <= 10)) errors.Add($"wakes.maxGain {MaxGain} outside 1..10");
+            if (!(SpeedSmoothS >= 0 && SpeedSmoothS <= 2)) errors.Add($"wakes.speedSmoothS {SpeedSmoothS} outside 0..2");
+        }
     }
 
     public sealed class LibraryMaterial
@@ -212,6 +241,7 @@ namespace Stabby.World
 
         public SurfaceDetail Surface = new SurfaceDetail();
         public List<LiquidDef> Liquids = new List<LiquidDef>();
+        public WakeDef Wakes = new WakeDef();
         public LiquidDef Water => Liquids != null && Liquids.Count > 0 ? Liquids[0] : null;
 
         public int Liquid(string id)
@@ -337,6 +367,8 @@ namespace Stabby.World
             else Amp(errors, "mud.roughness", lib.Mud.Roughness);
             if (lib.Peat == null) errors.Add("peat: required");
             else Amp(errors, "peat.roughness", lib.Peat.Roughness);
+            if (lib.Wakes == null) errors.Add("wakes: required");
+            else lib.Wakes.Validate(errors);
             if (lib.Strata.Count == 0) errors.Add("strata: at least one stratum required");
             var ids = new HashSet<string>();
             foreach (var s in lib.Strata)
@@ -427,6 +459,7 @@ namespace Stabby.World
                     if (lib.Liquid(n) != i) errors.Add($"liquids: duplicate id {n}");
                     if (!(w.ClarityM >= 0.1f && w.ClarityM <= 100)) errors.Add($"{n}.clarityM {w.ClarityM} outside 0.1..100");
                     if (!(w.ShoreM >= 0.01f && w.ShoreM <= 5)) errors.Add($"{n}.shoreM {w.ShoreM} outside 0.01..5");
+                    if (!(w.OpaqueDepthM >= 0 && w.OpaqueDepthM <= 5)) errors.Add($"{n}.opaqueDepthM {w.OpaqueDepthM} outside 0..5");
                     if (!(w.FoamWidthM >= 0 && w.FoamWidthM <= 50)) errors.Add($"{n}.foamWidthM {w.FoamWidthM} outside 0..50");
                     Len(errors, n + ".waveScaleM", w.WaveScaleM);
                     Len(errors, n + ".swellScaleM", w.SwellScaleM);
@@ -440,6 +473,7 @@ namespace Stabby.World
                     Amp(errors, n + ".silt", w.Silt);
                     Amp(errors, n + ".opacity", w.Opacity);
                     Amp(errors, n + ".viscosity", w.Viscosity);
+                    Amp(errors, n + ".groundTint", w.GroundTint);
                     Amp(errors, n + ".bubbles", w.Bubbles);
                     Amp(errors, n + ".film", w.Film);
                     if (!(w.Emission >= 0 && w.Emission <= 8)) errors.Add($"{n}.emission {w.Emission} outside 0..8");

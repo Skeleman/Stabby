@@ -15,9 +15,9 @@ namespace Stabby.World
             float span = WorldChunks.Size * w.Config.CellMeters;
             List<float[]> segs = null;
             List<int>[] bed = null;
-            float[] bogs = null;
-            Parallel.Invoke(() => bed = RiverBedCells(w, out segs), () => bogs = field.BogPools());
-            var picked = ObjectChunks(w, edits, bogs, across, span);
+            float[] bogs = null, sands = null;
+            Parallel.Invoke(() => bed = RiverBedCells(w, out segs), () => bogs = field.BogPools(), () => sands = field.QuicksandPools());
+            var picked = ObjectChunks(w, edits, bogs, sands, across, span);
             if (picked.Count == 0) return;
             var placed = new ObjectInstance[picked.Count][];
             Parallel.For(0, picked.Count, k => placed[k] = field.Chunk(picked[k] % across, picked[k] / across));
@@ -30,21 +30,21 @@ namespace Stabby.World
                 () => { string fault = RegionFault(field, field.Fresh(), a0, c0); if (fault != null) fresh[2] = $"collision region {cx0},{cz0} {fault}"; });
             foreach (var f in fresh) if (f != null) { e.Add(f); return; }
             var found = new List<KeyValuePair<int, string>>[picked.Count];
-            Parallel.For(0, picked.Count, k => found[k] = ObjectFaults(w, detail, grid, field, bed, segs, bogs, picked[k], placed[k]));
+            Parallel.For(0, picked.Count, k => found[k] = ObjectFaults(w, detail, grid, field, bed, segs, bogs, sands, picked[k], placed[k]));
             var seen = new HashSet<int>();
             foreach (var list in found)
                 foreach (var f in list)
                     if (f.Key < 0 || seen.Add(f.Key)) e.Add(f.Value);
         }
 
-        static List<KeyValuePair<int, string>> ObjectFaults(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<int>[] bed, List<float[]> segs, float[] bogs, int c, ObjectInstance[] a)
+        static List<KeyValuePair<int, string>> ObjectFaults(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<int>[] bed, List<float[]> segs, float[] bogs, float[] sands, int c, ObjectInstance[] a)
         {
             var edits = grid.Edits;
             var ids = new List<int>();
             int n = w.Config.Size, across = field.ChunksAcross, cx = c % across, cz = c / across;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm;
             var found = new List<KeyValuePair<int, string>>();
-            var seen = new bool[12];
+            var seen = new bool[13];
             var idFaults = new List<string>();
             CheckObjectIds(a, c, idFaults);
             foreach (var m in idFaults) found.Add(new KeyValuePair<int, string>(-1, m));
@@ -58,7 +58,7 @@ namespace Stabby.World
                 if (!seen[0] && (o.X < cx * span || o.X >= (cx + 1) * span || o.Z < cz * span || o.Z >= (cz + 1) * span)) Fail(0, " lies outside its chunk");
                 int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
                 float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
-                if (!ObjectField.IsCave(def))
+                if (!ObjectField.IsCave(def) && def.Parts[0].Shape != ObjectPart.Bridge)
                 {
                     if (!seen[1] && w.Sea[i]) Fail(1, " stands in the sea");
                     int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
@@ -77,6 +77,11 @@ namespace Stabby.World
                     {
                         float bx = o.X - bogs[k], bz = o.Z - bogs[k + 1], reach = ObjectField.BogMargin(bogs[k + 2]) + 0.5f * r;
                         if (bx * bx + bz * bz < reach * reach) Fail(11, $" stands in the bog margin at {bogs[k]:F0},{bogs[k + 1]:F0}");
+                    }
+                    for (int k = 0; k < sands.Length && !seen[12]; k += ObjectField.BogStride)
+                    {
+                        float bx = o.X - sands[k], bz = o.Z - sands[k + 1], reach = ObjectField.BogMargin(sands[k + 2]) + 0.5f * r;
+                        if (bx * bx + bz * bz < reach * reach) Fail(12, $" stands in the quicksand margin at {sands[k]:F0},{sands[k + 1]:F0}");
                     }
                     float foot = ground;
                     if (oasis) foot = field.OasisFoot(o.X, o.Z);
@@ -107,12 +112,36 @@ namespace Stabby.World
 
         public const int SiteCheckLimit = 6;
 
+        sealed class DecodedChunks
+        {
+            readonly ObjectField field;
+            readonly Dictionary<int, ObjectInstance[]> seen = new Dictionary<int, ObjectInstance[]>();
+
+            public DecodedChunks(ObjectField field) => this.field = field;
+
+            public ObjectInstance[] Get(int cx, int cz)
+            {
+                int c = cz * field.ChunksAcross + cx;
+                if (!seen.TryGetValue(c, out var o)) seen[c] = o = field.Chunk(cx, cz);
+                return o;
+            }
+
+            public void Warm(List<int> chunks)
+            {
+                int across = field.ChunksAcross;
+                var got = new ObjectInstance[chunks.Count][];
+                Parallel.For(0, chunks.Count, k => got[k] = field.Chunk(chunks[k] % across, chunks[k] / across));
+                for (int k = 0; k < chunks.Count; k++) seen[chunks[k]] = got[k];
+            }
+        }
+
         static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
             int across = field.ChunksAcross, checkedSites = 0;
             float span = field.ChunkMeters;
             var columns = new List<ObjectColumn>();
             var dens = new List<FeatureEdit>();
+            var decoded = new DecodedChunks(field);
             for (int c = 0; c < across * across && checkedSites < SiteCheckLimit; c++)
                 foreach (var s in field.Sites(c % across, c / across))
                 {
@@ -127,7 +156,7 @@ namespace Stabby.World
                     int z0 = Math.Max(0, (int)((s.Z - reach) / span)), z1 = Math.Min(across - 1, (int)((s.Z + reach) / span));
                     for (int cz = z0; cz <= z1; cz++)
                         for (int cx = x0; cx <= x1; cx++)
-                            foreach (var o in field.Chunk(cx, cz))
+                            foreach (var o in decoded.Get(cx, cz))
                             {
                                 if (field.IsSite(o.Def) || w.Objects.Objects[o.Def].Kind == ObjectLibrary.Structure) continue;
                                 columns.Clear();
@@ -148,7 +177,12 @@ namespace Stabby.World
             foreach (var s in segs)
             {
                 string at = $"road {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0}";
-                if (s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel)
+                if (s.Kind == RoadSegment.Bridge)
+                {
+                    string f = field.BridgeFault(s.X0, s.Z0, s.X1, s.Z1, out _, out _, out _);
+                    if (f != null) { e.Add($"bridge {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0} {f}"); return; }
+                }
+                else if (s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel)
                 {
                     string f = field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford);
                     if (f != null) { e.Add($"{at} {f}"); return; }
@@ -166,7 +200,7 @@ namespace Stabby.World
             foreach (int c in chunks)
                 foreach (var o in field.Chunk(c % across, c / across))
                 {
-                    if (field.IsTownMember(o.Def) || defs[o.Def].Placement.Cave > 0) continue;
+                    if (field.IsTownMember(o.Def) || defs[o.Def].Placement.Cave > 0 || o.Def == field.BridgeDef()) continue;
                     if (field.OnRoad(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on a road"); return; }
                 }
             foreach (var s in field.Discoveries())
@@ -191,7 +225,8 @@ namespace Stabby.World
                     under.Add(Math.Min(across - 1, (int)(m.Z / span)) * across + Math.Min(across - 1, (int)(m.X / span)));
             }
             var chunks = new List<int>(under);
-            Parallel.For(0, chunks.Count, k => field.Chunk(chunks[k] % across, chunks[k] / across));
+            var decoded = new DecodedChunks(field);
+            decoded.Warm(chunks);
             foreach (var p in plans)
             {
                 var t = w.Objects.Towns[p.Town];
@@ -208,7 +243,7 @@ namespace Stabby.World
                         if (dx * dx + dz * dz < g * g) { e.Add($"{at}: {defs[m.Def].Id} and {defs[o.Def].Id} overlap"); return; }
                     }
                     int cx = Math.Min(across - 1, (int)(m.X / span)), cz = Math.Min(across - 1, (int)(m.Z / span));
-                    if (!Array.Exists(field.Chunk(cx, cz), o => o.Def == m.Def && o.X == m.X && o.Z == m.Z)) { e.Add($"{at}: {defs[m.Def].Id} at {m.X:F0},{m.Z:F0} is missing from its chunk"); return; }
+                    if (!Array.Exists(decoded.Get(cx, cz), o => o.Def == m.Def && o.X == m.X && o.Z == m.Z)) { e.Add($"{at}: {defs[m.Def].Id} at {m.X:F0},{m.Z:F0} is missing from its chunk"); return; }
                     if (Math.Sqrt((m.X - p.X) * (m.X - p.X) + (m.Z - p.Z) * (m.Z - p.Z)) + ra > p.Radius) { e.Add($"{at}: {defs[m.Def].Id} lies outside the town"); return; }
                 }
                 float water = field.TownWater(p.X, p.Z, t.WaterM);
@@ -228,7 +263,7 @@ namespace Stabby.World
                 int z0 = Math.Max(0, (int)((p.Z - p.Radius) / span)), z1 = Math.Min(across - 1, (int)((p.Z + p.Radius) / span));
                 for (int cz = z0; cz <= z1; cz++)
                     for (int cx = x0; cx <= x1; cx++)
-                        foreach (var o in field.Chunk(cx, cz))
+                        foreach (var o in decoded.Get(cx, cz))
                         {
                             if (field.IsTownMember(o.Def) || field.IsSite(o.Def) || defs[o.Def].Placement.Cave > 0) continue;
                             if (field.InTownGround(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size, defs[o.Def].Kind == ObjectLibrary.Structure)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on the ground of {at}"); return; }
@@ -289,6 +324,31 @@ namespace Stabby.World
         }
 
         public const float BoulderStepM = 1f, BoulderTolerance = 1f;
+        public const float BoulderSteepNy = 0.5f, BoulderLowNy = -0.3f, BoulderNormalLift = 0.3f, BoulderNormalShare = 0.1f, BoulderNormalFloor = 2f;
+
+        public static string BoulderNormalFault<TCols>(TCols cols, NetsBuffers m, FeatureEdit b, FeatureEdit[] near, float s) where TCols : struct, IColumnField
+        {
+            int steep = 0, bad = 0;
+            float ex = b.Bx - b.Ax, ey = b.By - b.Ay, ez = b.Bz - b.Az, ll = ex * ex + ey * ey + ez * ez;
+            foreach (int t in new HashSet<int>(m.Tris))
+            {
+                int v = t * 6;
+                float x = m.Verts[v], y = m.Verts[v + 1], z = m.Verts[v + 2], ny = m.Verts[v + 4];
+                float px = x - b.Ax, py = y - b.Ay, pz = z - b.Az;
+                float u = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
+                float qx = px - u * ex, qy = py - u * ey, qz = pz - u * ez, d = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+                if (d <= 0f || Math.Abs(d - b.R) > 0.5f * s + b.N || y - cols.Height((int)Math.Round(x / s), (int)Math.Round(z / s)) < 0.5f * s) continue;
+                float ty = qy / d;
+                if (ty > BoulderSteepNy || ty < BoulderLowNy) continue;
+                bool shared = false;
+                foreach (var f in near)
+                    shared |= (f.Ax != b.Ax || f.Ay != b.Ay || f.Az != b.Az) && f.Kind == FeatureEdit.Add && f.Shape == FeatureEdit.Boulder && f.BoulderDistance(x, y, z) < f.R + s;
+                if (shared) continue;
+                steep++;
+                if (ny - ty > BoulderNormalLift) bad++;
+            }
+            return bad > Math.Max(BoulderNormalFloor, BoulderNormalShare * steep) ? $" tilts {bad} of {steep} steep-face normals upward" : null;
+        }
         public const int BoulderMeshSamples = 12;
 
         static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
@@ -389,6 +449,8 @@ namespace Stabby.World
             MeshBoulder(detail, list, c, out var m, out var g, out var h);
             if (!m.SameSurfaceAs(g)) e.Add(at + " mesh differs from the general mesher");
             if (m.SameSurfaceAs(h)) e.Add(at + " leaves the ground unchanged");
+            string tilt = BoulderNormalFault(new DetailColumns { Detail = detail, StepM = s }, m, b, list.Items, s);
+            if (tilt != null) e.Add(at + tilt);
             var ground = new DetailGround { Detail = detail };
             float mx = 0.5f * (b.Ax + b.Bx), mz = 0.5f * (b.Az + b.Bz), top = TopAt(b, mx, mz);
             foreach (var f in list.Items) top = Math.Max(top, TopAt(f, mx, mz));
@@ -436,7 +498,7 @@ namespace Stabby.World
             return dd > 0 ? y + (float)Math.Sqrt(dd) : float.NegativeInfinity;
         }
 
-        static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, int across, float span)
+        static List<int> ObjectChunks(GeneratedWorld w, FeatureEdit[] edits, float[] bogs, float[] sands, int across, float span)
         {
             var picked = new List<int>();
             foreach (var f in edits)
@@ -448,6 +510,11 @@ namespace Stabby.World
             for (int k = 0; k < bogs.Length && k < 2 * ObjectField.BogStride; k += ObjectField.BogStride)
             {
                 int c = Math.Min(across - 1, (int)(bogs[k + 1] / span)) * across + Math.Min(across - 1, (int)(bogs[k] / span));
+                if (!picked.Contains(c)) picked.Add(c);
+            }
+            for (int k = 0; k < sands.Length && k < 2 * ObjectField.BogStride; k += ObjectField.BogStride)
+            {
+                int c = Math.Min(across - 1, (int)(sands[k + 1] / span)) * across + Math.Min(across - 1, (int)(sands[k] / span));
                 if (!picked.Contains(c)) picked.Add(c);
             }
             int quota = picked.Count + ObjectCheckChunks / 2;

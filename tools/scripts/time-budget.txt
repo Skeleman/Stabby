@@ -3,14 +3,16 @@ test WorldTests.GameScaleWorldPlacesFeaturesAndPassesChecks 100 builds and check
 test FineGridTests.FourKCellsPlaceFeaturesOnTheGrid 55 places features over a 4K-cell fine grid
 test ObjectTests.RiverBanksGrowReedsBarsDriftAndWetStones 50 places every bank object along all rivers of a world
 test DiscoveryTests.RuinsAppearOnSteadyGround 45 runs discovery placement on full worlds
+test DiscoveryTests.SaltTowersStandOnDryBasinFloors 20 runs discovery placement on the default world
 test ObjectTests.TalusGathersAtCliffFeetAndDryOrWetLandStaysSparse 40 scans every cliff foot of a world for talus
 test CaveTests.CaveObjectsAreCommonAndPass 40 places cave objects over full worlds and runs their checks
-test CaveTests.SeedsGrowEveryClassAndPass 30 grows every cave class over several seeds and runs the cave checks
+test CaveTests.SeedsGrowEveryClassAndPass 45 grows every cave class over several seeds and runs the cave checks
 test ObjectTests.ObjectPlacementIsDeterministicAndVaried 27 places objects for a world twice and compares
 test CaveTests.TunnelsAreNarrowFineAndVaried 24 carves and meshes cave tunnels on full worlds
 test ObjectTests.ObjectsStayInTheirBiomes 21 checks every placed object against its biome
 test TestWorldsTests.DefaultHasCavesRiversTownInnDungeonAndMine 15 builds and places TestWorlds.Default once; later feature tests reuse the cached world
 test CaveTests.HallsBuildAtFullSize 21 builds and meshes full-size cave halls
+test CaveTests.HallWallNormalsFollowTheField 15 meshes cave halls and compares wall normals with the field
 test CaveTests.CaveLightsAreSporadicAndPass 30 places and checks cave lights on four worlds
 test CaveTests.ObsidianCavesFormInHotDryGroundWithLavaPools 10 builds the pinned seed-13 512 world and checks its lava pools, glow and dripstone
 test CaveTests.LavaPoolOnAPassageFails 10 reuses the pinned seed-13 world and moves its lava pool onto a passage

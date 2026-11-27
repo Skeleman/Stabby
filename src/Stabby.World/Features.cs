@@ -97,10 +97,24 @@ namespace Stabby.World
                 dist = Rock(x, y, z, qx, qy, qz, out floor);
                 return dist < R;
             }
-            dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
+            dist = Shell(x, y, z, qx, qy, qz, t);
+            return dist < R;
+        }
+
+        float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
+        {
+            float dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
             if (P > 0f) dist += R * Profile(t);
             if (N > 0f) dist += Weathering(x, y, z);
-            return dist < R;
+            return dist;
+        }
+
+        public float BoulderDistance(float x, float y, float z)
+        {
+            float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
+            float ll = ex * ex + ey * ey + ez * ez;
+            float t = ll > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + py * ey + pz * ez) / ll)) : 0f;
+            return Shell(x, y, z, px - t * ex, py - t * ey, pz - t * ez, t);
         }
 
         public const float Fill = 0.35f, RockBand = 6f, RockFade = 3f, DebrisBand = 4.5f, RockRefM = 10f, RockFineM = 2f;
@@ -450,7 +464,7 @@ namespace Stabby.World
         public bool Round(int i, int j, int k) => Features.Rounds(Edits, i * StepM, j * StepM, k * StepM, StepM);
         public float Base(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
 
-        public float Edit(float d, float x, float y, float z) => Features.Edit(Edits, d, x, y, z);
+        public float Edit(float d, float x, float y, float z) => Features.Edit(Edits, d, x, y, z, true);
     }
 
     public static class Features
@@ -468,13 +482,17 @@ namespace Stabby.World
         public static float Apply<TCols, TEdits>(TCols columns, TEdits edits, float d, int i, int j, int k, float s) where TCols : struct, IColumnField where TEdits : struct, IEditList
             => Edit(edits, Level(columns, d, i, k, s), i * s, j * s, k * s);
 
-        public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z) where TEdits : struct, IEditList
+        public static float Edit<TEdits>(TEdits edits, float d, float x, float y, float z, bool smooth = false) where TEdits : struct, IEditList
         {
             float hole = float.MaxValue, low = float.MaxValue, k = 0f;
             for (int q = 0, n = edits.Count; q < n; q++)
             {
                 var e = edits.At(q);
-                if (!e.Reach(x, y, z, out float dist, out float floor)) continue;
+                if (!e.Reach(x, y, z, out float dist, out float floor))
+                {
+                    if (smooth && hole == float.MaxValue && e.Kind == FeatureEdit.Add && e.Shape == FeatureEdit.Boulder) d = Math.Max(d, e.R - e.BoulderDistance(x, y, z));
+                    continue;
+                }
                 if (e.Kind == FeatureEdit.Add)
                 {
                     if (hole < float.MaxValue) { d = FeatureEdit.Cut(d, Math.Max(hole, low), k); hole = low = float.MaxValue; k = 0f; }
@@ -563,9 +581,14 @@ namespace Stabby.World
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
             var field = new ObjectField(w, detail, terrain, w.Objects);
+            field.QuicksandPools();
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
-            var bogs = field.BogEdits();
+            var bog = field.BogEdits();
+            var sand = field.QuicksandEdits();
+            var bogs = new FeatureEdit[bog.Length + sand.Length];
+            bog.CopyTo(bogs, 0);
+            sand.CopyTo(bogs, bog.Length);
             var oases = field.OasisEdits();
             var dens = field.DenEdits();
             var vaults = field.DungeonEdits();

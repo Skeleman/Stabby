@@ -1,4 +1,4 @@
-GameScene scene MonoBehaviour with no update; TerrainViewSystem reads its materials once at startup
+GameScene scene MonoBehaviour; TerrainViewSystem reads its materials once at startup and its OnGUI draws one loading line until terrain is built
 ServerMapSystem loads or generates the managed Stabby.World map once at startup, off the main thread
 ClientMapSystem rebuilds the managed GeneratedWorld from synced chunks once per world it joins
 ClientViewSystem registers the player mesh with Entities Graphics once and drives the managed chase camera
@@ -60,3 +60,4 @@ LightPresenterSystem.capsTask yields a LightBudget.Caps value; nothing to releas
 ObjectColumnsSystem.fieldTask yields the managed ObjectField the GC frees; nothing to release
 ObjectViewSystem.atlasTask yields managed Color32 mips the GC frees; nothing to release
 ShadowViewSystem.spanTask yields a ShadowSpan value and a float; nothing to release
+WakePresenterSystem uploads the Burst-picked wake emitters to a managed GraphicsBuffer for the water shader

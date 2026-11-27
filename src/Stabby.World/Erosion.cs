@@ -7,6 +7,7 @@ namespace Stabby.World
     {
         public const float MinLandHeight = 0.5f;
         public const float CorridorGradient = 0.003f;
+        public const int OffshoreBlurPasses = 4;
 
         public static float[] InitialHeight(WorldConfig c, WorldSketch s)
         {
@@ -14,7 +15,7 @@ namespace Stabby.World
             var h = new float[n * n];
             uint seed = Rng.Stream(c.Seed, "initial-height").NextU32();
             var sea = SeaOf(s.Land);
-            var offshore = WorldSketch.CoastDistance(n, sea);
+            var offshore = Offshore(n, sea);
             var inland = s.Coast;
             Parallel.For(0, n, y =>
             {
@@ -53,9 +54,32 @@ namespace Stabby.World
 
         public static void DeepenNearShore(WorldConfig c, bool[] sea, float[] h)
         {
-            var offshore = WorldSketch.CoastDistance(c.Size, sea);
+            var offshore = Offshore(c.Size, sea);
             for (int i = 0; i < h.Length; i++)
                 if (sea[i]) h[i] -= c.NearShoreDepth * (1 - (float)FMath.Exp(-offshore[i] * c.CellMeters / c.NearShoreMeters));
+        }
+
+        public static float[] Offshore(int n, bool[] sea)
+        {
+            var d = WorldSketch.CoastDistance(n, sea);
+            var src = new float[d.Length];
+            for (int pass = 0; pass < OffshoreBlurPasses; pass++)
+            {
+                Array.Copy(d, src, d.Length);
+                Parallel.For(1, n - 1, y =>
+                {
+                    for (int x = 1; x < n - 1; x++)
+                    {
+                        int i = y * n + x;
+                        if (!sea[i]) continue;
+                        float sum = 0;
+                        for (int dy = -1; dy <= 1; dy++)
+                            for (int dx = -1; dx <= 1; dx++) sum += src[i + dy * n + dx];
+                        d[i] = sum / 9;
+                    }
+                });
+            }
+            return d;
         }
 
         static float BeachCap(WorldConfig c, float metersInland) => MinLandHeight + c.BeachGrade * metersInland;
@@ -68,7 +92,7 @@ namespace Stabby.World
                 + (c.DeepDepth - c.ShelfDepth) * Grid.Smoothstep(shelf, shelf + c.SlopeMeters, d)
                 + c.CliffFootDepth * cliff;
             depth *= 1 + 0.25f * Noise.Fbm(seed ^ 0x5EAu, x * 10f / n, y * 10f / n, 4);
-            return Math.Min(-1f, -depth);
+            return -1f - depth;
         }
 
         static void AddSeaRidges(WorldConfig c, WorldSketch s, float[] h, uint seed)
@@ -123,14 +147,15 @@ namespace Stabby.World
                     for (int x = 1; x < n - 1; x++)
                     {
                         int i = y * n + x;
-                        if (!sea[i] || src[i] > -10f) continue;
+                        float blend = sea[i] ? Grid.Smoothstep(6f, 14f, -src[i]) : 0;
+                        if (blend <= 0) continue;
                         float sum = 0; int count = 0;
                         for (int k = 0; k < 8; k++)
                         {
                             int j = i + Grid.DY[k] * n + Grid.DX[k];
                             if (sea[j]) { sum += src[j]; count++; }
                         }
-                        h[i] = Math.Min(-1f, (src[i] + sum) / (1 + count));
+                        h[i] = Math.Min(-1f, src[i] + ((src[i] + sum) / (1 + count) - src[i]) * blend);
                     }
                 });
             }

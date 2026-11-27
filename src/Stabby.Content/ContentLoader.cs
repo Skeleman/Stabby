@@ -241,6 +241,20 @@ namespace Stabby.Content
                 Fibre = Hex(peat.String("fibre", ""), source, "peat.fibre"), Roughness = peat.Float("roughness", 0),
             };
             peat?.End();
+            var wakes = root.Object("wakes");
+            if (wakes != null)
+            {
+                var w0 = new WakeDef();
+                lib.Wakes = new WakeDef
+                {
+                    FadePixels = wakes.Float("fadePixels", w0.FadePixels), FullPixels = wakes.Float("fullPixels", w0.FullPixels),
+                    RingAmplitude = wakes.Float("ringAmplitude", w0.RingAmplitude), VAmplitude = wakes.Float("vAmplitude", w0.VAmplitude), NormalStrength = wakes.Float("normalStrength", w0.NormalStrength),
+                    RefSpeedMps = wakes.Float("refSpeedMps", w0.RefSpeedMps), RefSizeM = wakes.Float("refSizeM", w0.RefSizeM),
+                    SpeedExponent = wakes.Float("speedExponent", w0.SpeedExponent), SizeExponent = wakes.Float("sizeExponent", w0.SizeExponent),
+                    MaxGain = wakes.Float("maxGain", w0.MaxGain), SpeedSmoothS = wakes.Float("speedSmoothS", w0.SpeedSmoothS),
+                };
+                wakes.End();
+            }
             var strata = new List<StratumDef>();
             foreach (var s in root.Objects("strata"))
             {
@@ -281,12 +295,12 @@ namespace Stabby.Content
                 ShallowColor = Hex(e.String("shallowColor", ""), path, id + ".shallowColor"),
                 FilmColor = Hex(e.String("filmColor", ""), path, id + ".filmColor"),
                 EmissionColor = Hex(e.String("emissionColor", ""), path, id + ".emissionColor"),
-                ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0),
+                ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0), OpaqueDepthM = e.Float("opaqueDepthM", 0.25f),
                 WaveScaleM = e.Float("waveScaleM", 0), WaveSpeed = e.Float("waveSpeed", 0), WaveStrength = e.Float("waveStrength", 0),
                 SwellScaleM = e.Float("swellScaleM", 0), SwellStrength = e.Float("swellStrength", 0), LakeSwell = e.Float("lakeSwell", 0),
                 FlowSpeed = e.Float("flowSpeed", 0), RapidsSlope = e.Float("rapidsSlope", 0), BedFieldM = e.Float("bedFieldM", 0),
                 Silt = e.Float("silt", 0), Opacity = e.Float("opacity", 0), Viscosity = e.Float("viscosity", 0), Bubbles = e.Float("bubbles", 0),
-                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0),
+                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0), GroundTint = e.Float("groundTint", 0),
                 Biomes = e.Strings("biomes", new List<string>()),
             };
             var f = e.Object("fall");
@@ -408,6 +422,17 @@ namespace Stabby.Content
                 }
                 lib.Towns.Add(town);
                 t.End();
+            }
+            var roads = root.Object("roads");
+            if (roads != null)
+            {
+                var bridge = roads.Object("bridge");
+                if (bridge != null)
+                {
+                    lib.Roads = new RoadDef { BridgeObject = bridge.String("object", ""), SpanM = bridge.Float("spanM", 0), RiverM = bridge.Float("riverWidthM", 0), ClearM = bridge.Float("clearM", 0) };
+                    bridge.End();
+                }
+                roads.End();
             }
             var terrain = root.Object("terrain");
             if (terrain != null)

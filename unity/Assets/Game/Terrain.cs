@@ -98,7 +98,7 @@ namespace Stabby.Game
     {
         public const int Levels = NearField.NodeLevels, Root = Levels - 1, Quads = NearField.NodeQuads;
         public const int Vertices = (Quads + 1) * (Quads + 1) + 4 * Quads, Indices = Quads * Quads * 6 + 4 * Quads * 12;
-        public const float SkirtBit = 4096f, GlassBit = 8192f;
+        public const float SkirtBit = 4096f, GlassBit = 8192f, BoulderBit = 16384f;
         public const int Tiers = 10;
 
         public static void Capacity(int tier, out int vertices, out int indices)
@@ -185,6 +185,19 @@ namespace Stabby.Game
             var b = Box(key);
             return math.max(1f, math.distance(eye, math.clamp(eye, b.Min, b.Max)));
         }
+
+        public int RingNodes(float allowed)
+        {
+            int total = 0, split = Dim[Root] * Dim[Root];
+            for (int l = Root; l >= 0; l--)
+            {
+                int live = math.min(Dim[l] * Dim[l], l == Root ? split : 4 * split);
+                total += live;
+                float r = Step(l) / allowed / Size(l) + 0.5f * math.SQRT2;
+                split = math.min(live, (int)math.ceil(math.PI * r * r));
+            }
+            return total;
+        }
     }
 
     struct NativeEdits : IEditList
@@ -265,7 +278,7 @@ namespace Stabby.Game
         }
     }
 
-    struct CachedColumns : IColumnField
+    struct CachedColumns : ISurfaceField
     {
         public GroundColumns Columns;
         public NativeArray<float> Cells;
@@ -482,39 +495,22 @@ namespace Stabby.Game
         public NativeList<int> Tris;
         public NativeArray<float3> Bounds;
 
-        float Cover(NativeEdits edits, GroundColumns columns, float3 p, out float stone, out float boulderBase)
+        float Cover(NativeEdits edits, GroundColumns columns, float3 p, out float stone, out float boulderBase, out bool boulder)
         {
             stone = 0;
             boulderBase = 0;
+            boulder = false;
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
                 if (p.x >= e.MinX && p.x <= e.MaxX && p.z >= e.MinZ && p.z <= e.MaxZ)
                 {
                     float cover = columns.At(p.x, p.z) - p.y;
-                    if (e.Shape == FeatureEdit.Boulder) { stone = Lift(math.min(cover, 0)); boulderBase = e.Ay - ObjectField.BoulderLift * e.R; }
+                    if (e.Shape == FeatureEdit.Boulder) { stone = Lift(math.min(cover, 0)); boulderBase = e.Ay - ObjectField.BoulderLift * e.R; boulder = true; }
                     return cover;
                 }
             }
             return 0;
-        }
-
-        static void Axis(int b0, int i, int m, float s2, out int c, out bool snap, out bool lerp, out float at)
-        {
-            int b = b0 + i;
-            if (i == 0 || i == m)
-            {
-                c = (b >> 1) - 1;
-                snap = true;
-                lerp = (b >> 1) % m != 0;
-                at = (b >> 1) * s2;
-                return;
-            }
-            c = (b - 1) >> 1;
-            int end = (b0 >> 1) / m * m + m;
-            snap = c == end - 1;
-            lerp = false;
-            at = end * s2;
         }
 
         static float Dark(NativeEdits edits, NativeList<float2> light, float3 p, float cover)
@@ -528,41 +524,7 @@ namespace Stabby.Game
             return CaveDark.Of(inside, lit, cover);
         }
 
-        static float Fraction(float a, float b, float t) => b != a ? math.saturate((t - a) / (b - a)) : 0.5f;
-
         static float Lift(float cover) => cover < 0 ? math.smoothstep(0.3f, 0.9f, -cover) : math.smoothstep(2f, 6f, cover);
-
-        static bool Open(NativeEdits edits, float x, float z)
-        {
-            for (int q = 0; q < edits.Count; q++)
-            {
-                var e = edits.Items[q];
-                if (x >= e.MinX && x <= e.MaxX && z >= e.MinZ && z <= e.MaxZ) return false;
-            }
-            return true;
-        }
-
-        static float3 Coarse(CachedColumns coarse, NativeEdits near, float s2, int cx, int j, int cz, bool sx, float ax, bool sz, float az, out float3 nrm)
-        {
-            SurfaceNets.CoarseVertex(coarse, near, s2, cx, j, cz, out float x, out float y, out float z, out nrm.x, out nrm.y, out nrm.z);
-            if (sx) x = ax;
-            if (sz) z = az;
-            if ((sx || sz) && Open(near, x, z)) y = coarse.At(x, z);
-            return new float3(x, y, z);
-        }
-
-        static void Row(CachedColumns coarse, NativeEdits near, float s2, int cx, bool sx, bool lx, float ax, int cz, bool sz, float az, int j, out float3 pos, out float3 nrm)
-        {
-            pos = Coarse(coarse, near, s2, cx, j, cz, sx && !lx, ax, sz, az, out nrm);
-            if (lx)
-            {
-                var q = Coarse(coarse, near, s2, cx + 1, j, cz, false, ax, sz, az, out float3 qn);
-                float f = Fraction(pos.x, q.x, ax);
-                pos = math.lerp(pos, q, f);
-                nrm = math.lerp(nrm, qn, f);
-            }
-            if (sx) pos.x = ax;
-        }
 
         const float SinterFadeM = 0.9f;
 
@@ -664,7 +626,7 @@ namespace Stabby.Game
             for (int f = 0; f < g.Roads.Length; f++)
             {
                 var r = g.Roads[f];
-                if (r.Kind == RoadSegment.Tunnel) continue;
+                if (r.Kind == RoadSegment.Tunnel || r.Kind == RoadSegment.Bridge) continue;
                 float pad = r.HalfWidth + 2 * RoadFadeM;
                 if (math.max(r.X0, r.X1) + pad > x0m && math.min(r.X0, r.X1) - pad < x1m && math.max(r.Z0, r.Z1) + pad > z0m && math.min(r.Z0, r.Z1) - pad < z1m) roads.Add(r);
             }
@@ -739,20 +701,11 @@ namespace Stabby.Game
                 var p = Verts[v];
                 if (i == 0) p.Pos.x = x0m; else if (i == m) p.Pos.x = x1m;
                 if (k == 0) p.Pos.z = z0m; else if (k == m) p.Pos.z = z1m;
-                if (edge && Open(edits, p.Pos.x, p.Pos.z)) p.Pos.y = columns.At(p.Pos.x, p.Pos.z);
+                if (edge && LodStitch.Open(edits, p.Pos.x, p.Pos.z)) p.Pos.y = columns.At(p.Pos.x, p.Pos.z);
                 if (stitch)
                 {
-                    Axis(chunk.X0, i, m, 2 * s, out int cx, out bool sx, out bool lx, out float ax);
-                    Axis(chunk.Z0, k, m, 2 * s, out int cz, out bool sz, out bool lz, out float az);
-                    Row(coarse, near, 2 * s, cx, sx, lx, ax, cz, sz && !lz, az, j >> 1, out float3 tp, out float3 tn);
-                    if (lz)
-                    {
-                        Row(coarse, near, 2 * s, cx, sx, lx, ax, cz + 1, sz && !lz, az, j >> 1, out float3 tp1, out float3 tn1);
-                        float f = Fraction(tp.z, tp1.z, az);
-                        tp = math.lerp(tp, tp1, f);
-                        tn = math.lerp(tn, tn1, f);
-                    }
-                    if (sz) tp.z = az;
+                    bool hit = LodStitch.Target(coarse, near, 2 * s, chunk.X0, chunk.Z0, m, i, j, k, p.Pos.y, out var t);
+                    float3 tp = hit ? new float3(t.X, t.Y, t.Z) : p.Pos, tn = hit ? new float3(t.NX, t.NY, t.NZ) : p.Normal;
                     p.StitchNormal = new half4(new float4(tn, 0));
                     p.Stitch = new float4(tp, bits);
                 }
@@ -767,13 +720,13 @@ namespace Stabby.Game
                 int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
                 float off = TerrainLook.Bilinear(look.Offsets[a], look.Offsets[a + 1], look.Offsets[a + n], look.Offsets[a + n + 1], gx - ax, gy - ay);
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
-                float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase), lift = Lift(cover);
+                float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase, out bool boulder), lift = Lift(cover);
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
                 float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y);
-                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), 1 - lift, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, lift), cover, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
                 float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover, false), glass = peat > 0 || ice > 0.01f ? 0 : Ice(edits, light, p.Pos, cover, true), coat = math.max(ice, glass);
                 float green = peat > 0 || coat > 0.01f ? 0 : Fertile(fertile, p.Pos);
-                p.Stitch.w = math.floor(p.Stitch.w) + (glass > 0.01f || green > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : green > 0.01f ? 0.5f * green : 0.5f * peat);
+                p.Stitch.w = math.floor(p.Stitch.w) + (boulder ? TerrainTree.BoulderBit : 0) + (glass > 0.01f || green > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : green > 0.01f ? 0.5f * green : 0.5f * peat);
                 float dark = Dark(edits, light, p.Pos, cover);
                 p.Dark = new half2(new float2(dark, dark));
                 if (stitch)
@@ -782,7 +735,7 @@ namespace Stabby.Game
                     float sx = math.clamp(p.Stitch.x / cm, 0, top), sz = math.clamp(p.Stitch.z / cm, 0, top);
                     int bx = math.min((int)sx, n - 2), bz = math.min((int)sz, n - 2), b = bz * n + bx;
                     var sc = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[b], look.Colors[b + 1], look.Colors[b + n], look.Colors[b + n + 1], sx - bx, sz - bz), p.Stitch.y, sn.y);
-                    float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _), sLift = Lift(sCover);
+                    float sCover = Cover(near, coarse.Columns, p.Stitch.xyz, out float sStone, out _, out _), sLift = Lift(sCover);
                     p.StitchNormal = new half4(new float4(sn, math.max(sc.w, sLift)));
                     p.StitchColor = new half4(new float4(sc.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, sCover) + sStone));
                     p.Dark.y = (half)Dark(near, nearLight, p.Stitch.xyz, sCover);
@@ -1156,6 +1109,7 @@ namespace Stabby.Game
     {
         TerrainViewDef quads = new TerrainViewDef();
         const int LakeCells = 32;
+        const float SunkClarities = 10f;
         public int ApplyVertices = 300000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
@@ -1241,7 +1195,9 @@ namespace Stabby.Game
         NativeList<Entity> spare;
         Entity prototype, casterPrototype;
         const int SpareBatch = 64, SpareFill = 256;
-        static readonly int[] PoolFill = { 64, 128, 96, 32, 24, 64, 48, 12, 8 }, PoolPeak = { 64, 128, 96, 80, 80, 88, 104, 16, 12 };
+        static readonly int[] PoolPerKilonode = { 69, 206, 111, 94, 94, 103, 129, 19, 15, 1 };
+        readonly int[] poolTarget = new int[TerrainTree.Tiers];
+        float poolAllowed;
         const int PoolReach = 2;
         NativeArray<int> zeros;
         readonly List<Mesh>[] pool = Lists<Mesh>();
@@ -1406,7 +1362,7 @@ namespace Stabby.Game
             for (int i = 0; i < colors.Length; i++) arr[i] = colors[i];
             var lib = ContentFiles.Materials(materials);
             p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
-            p.Deep = lib.Water == null ? float.NegativeInfinity : -math.max(lib.Water.ClarityM, lib.Water.ShoreM);
+            p.Deep = lib.Water == null ? float.NegativeInfinity : -SunkClarities * math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);
             for (int i = 0; i < offs.Length; i++) offs[i] = p.Strata.Offsets[i];
             var lake = p.Look.Allocate(ref root.Lake, n * n);
@@ -1536,6 +1492,7 @@ namespace Stabby.Game
             builtSmooth = SmoothOnly;
             TerrainTree.Capacity(TerrainTree.Tiers - 1, out _, out int most);
             if (!zeros.IsCreated) zeros = new NativeArray<int>(most, Allocator.Persistent);
+            PoolTarget(quads.Allowed(Detail.ReferencePixelsPerMetre, GameSettings.GraphicsQuality));
             while (Fill() >= 0 || spare.Length < 2 * SpareFill)
             {
                 do
@@ -1744,18 +1701,26 @@ namespace Stabby.Game
             PoolStatus();
         }
 
-        int Fill(int[] target = null)
+        void PoolTarget(float allowed)
         {
-            target ??= PoolFill;
-            for (int k = 0; k < target.Length; k++)
-                if (created[k] < target[k]) return k;
+            if (allowed == poolAllowed) return;
+            poolAllowed = allowed;
+            int n = tree.RingNodes(allowed);
+            for (int k = 0; k < poolTarget.Length; k++) poolTarget[k] = math.max(poolTarget[k], (n * PoolPerKilonode[k] + 999) / 1000);
+        }
+
+        int Fill()
+        {
+            for (int k = 0; k < poolTarget.Length; k++)
+                if (created[k] < poolTarget[k]) return k;
             return -1;
         }
 
         void TopUp()
         {
             if (!ready) return;
-            int k = Fill(PoolPeak);
+            PoolTarget(quads.Allowed(viewPpm, viewQuality));
+            int k = Fill();
             if (k < 0) return;
             TerrainTree.Capacity(k, out int v, out _);
             if (frameVertices + v > ApplyVertices || frame.Elapsed.TotalMilliseconds > ApplyMs) return;
@@ -1867,6 +1832,16 @@ namespace Stabby.Game
             GameStatus.TerrainBuilt = true;
         }
 
+        static Vector3 GroundColor(BlobAssetReference<TerrainLookData> lk, float cm, float x, float z, float h)
+        {
+            ref var look = ref lk.Value;
+            int n = look.N;
+            float top = n - 1, gx = math.clamp(x / cm, 0, top), gy = math.clamp(z / cm, 0, top);
+            int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
+            var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), h, 1);
+            return new Vector3(col.x, col.y, col.z);
+        }
+
         void Steam()
         {
             if (!ready || steamDone) return;
@@ -1879,11 +1854,13 @@ namespace Stabby.Game
                     bool mist = hasMist;
                     BatchMaterialID wm = waterMaterial, mm = mistMaterial;
                     bool lean = wm != material;
+                    var lk = look;
+                    float lcm = ground.Blob.Value.CellMeters;
                     steaming = Task.Run(() => Pack(sp =>
                     {
                         var l = new List<MeshParts>();
                         var w = new List<MeshParts>();
-                        WaterGeometry.Springs(field, l, w);
+                        WaterGeometry.Springs(field, l, w, lk.IsCreated ? (x, z, h) => GroundColor(lk, lcm, x, z, h) : null);
                         if (!mist) l.Clear();
                         (sp.Steam, sp.Pools) = (l.Count, w.Count);
                         foreach (var part in l) sp.Add(part, mm, WaterGeometry.MistPad, true);

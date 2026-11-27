@@ -41,10 +41,11 @@ Shader "Stabby/VertexLit"
             #include "Look.hlsl"
             #include "Sky.hlsl"
             #include "Assets/Game/Grass/Wind.hlsl"
+            #include "Assets/Viewer/Shaders/Clock.hlsl"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; float2 dark : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float2 peat : TEXCOORD6; float3 sky : TEXCOORD7; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float2 peat : TEXCOORD6; float3 sky : TEXCOORD7; float2 foot : TEXCOORD8; };
 
             Varyings vert(Attributes i)
             {
@@ -57,7 +58,9 @@ Shader "Stabby/VertexLit"
                 o.positionCS = p.positionCS;
                 o.normalWS = TransformObjectToWorldNormal(normalize(lerp(i.normalOS, i.stitchNormal.xyz, t)));
                 o.color = lerp(i.color, i.stitchColor, t);
-                o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y + lift, i.strata.z);
+                float cv = i.strata.z;
+                o.strata = float4(i.strata.x, lerp(i.strata.y, i.stitchNormal.w, t), p.positionWS.y + lift, FieldShare(cv));
+                o.foot = float2(-cv, ((uint)i.stitch.w & 16384u) != 0 ? 1 : 0);
                 o.xz = p.positionWS.xz - OrgOrigin(_WorldSpaceCameraPos);
                 o.field = sm.w > 0 ? lerp(saturate(sm.w / _StabbyCellMeters - 1), saturate(2 * sm.w / _StabbyCellMeters - 1), t) : 1;
                 float sw = i.strata.w;
@@ -77,7 +80,7 @@ Shader "Stabby/VertexLit"
             {
                 float3 n = normalize(i.normalWS);
                 float3 color = i.color.rgb;
-                float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1);
+                float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1), fw = fwidth(i.foot.x);
                 if (f > 0)
                 {
                     float2 xa = i.xz + OrgOrigin(_WorldSpaceCameraPos);
@@ -92,7 +95,9 @@ Shader "Stabby/VertexLit"
                         fc = ToLinear(bo.rgb);
                         fr = saturate((slope - 0.25) / 0.35) * (1 - shore);
                     }
-                    n = normalize(lerp(n, fn, f * i.field));
+                    float bw = 1;
+                    [branch] if (i.foot.y > 0) bw = lerp(1, 1 - smoothstep(0, min(0.9, (0.04 + 1.5 * fw) * (1 + 0.4 * OrgNoise2(xa * 2.3 + 1.9).x)), i.foot.x), i.foot.y);
+                    n = normalize(lerp(n, fn, f * i.field * bw));
                     color = lerp(color, fc, f);
                     off = lerp(off, bo.a, f);
                     mix = lerp(mix, fr, f);
@@ -271,7 +276,7 @@ Shader "Stabby/VertexLit"
                     float far = smoothstep(0.7, 1, dr);
                     float3 bt = lerp(dot(m.albedo, float3(0.2126, 0.7152, 0.0722)).xxx, m.albedo, 0.74) * float3(1.0, 0.96, 0.86);
                     m.albedo = lerp(m.albedo, bt, tmGrass * smoothstep(0.4, 1, dr));
-                    float gust = WindGust(xa, _Time.y);
+                    float gust = WindGust(xa, StabbyTime);
                     m.albedo *= 1 + tmGrass * (_StabbyGrassFar.y + (gust - 0.5) * 0.3 * far * (0.4 + _StabbyWind.z));
                 }
                 float2 xv = i.xz + OrgOrigin(_WorldSpaceCameraPos);

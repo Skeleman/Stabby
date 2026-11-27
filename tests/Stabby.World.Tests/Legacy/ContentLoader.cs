@@ -20,6 +20,7 @@ public static class ContentLoader
         public SinterEntry? Sinter { get; set; }
         public MudEntry? Mud { get; set; }
         public PeatEntry? Peat { get; set; }
+        public WakeEntry Wakes { get; set; } = new();
         public LookEntry? Look { get; set; }
         public List<StratumEntry> Strata { get; set; } = new();
         public List<MaterialEntry> Materials { get; set; } = new();
@@ -56,6 +57,21 @@ public static class ContentLoader
         public string Clay { get; set; } = "";
         public string Grey { get; set; } = "";
         public float Roughness { get; set; }
+    }
+
+    sealed class WakeEntry
+    {
+        public float FadePixels { get; set; } = 4f;
+        public float FullPixels { get; set; } = 12f;
+        public float RingAmplitude { get; set; } = 1f;
+        public float VAmplitude { get; set; } = 1f;
+        public float NormalStrength { get; set; } = 1.5f;
+        public float RefSpeedMps { get; set; } = 1.6f;
+        public float RefSizeM { get; set; } = 1.2f;
+        public float SpeedExponent { get; set; } = 0.5f;
+        public float SizeExponent { get; set; } = 0.5f;
+        public float MaxGain { get; set; } = 3f;
+        public float SpeedSmoothS { get; set; } = 0.25f;
     }
 
     sealed class PeatEntry
@@ -98,9 +114,11 @@ public static class ContentLoader
         public float Film { get; set; }
         public float Emission { get; set; }
         public float Roughness { get; set; }
+        public float GroundTint { get; set; }
         public FallEntry? Fall { get; set; }
         public float ClarityM { get; set; }
         public float ShoreM { get; set; }
+        public float OpaqueDepthM { get; set; } = 0.25f;
         public float FoamWidthM { get; set; }
         public float WaveScaleM { get; set; }
         public float WaveSpeed { get; set; }
@@ -253,6 +271,12 @@ public static class ContentLoader
                 Wet = Hex(file.Peat.Wet, path, "peat.wet"), Dark = Hex(file.Peat.Dark, path, "peat.dark"),
                 Fibre = Hex(file.Peat.Fibre, path, "peat.fibre"), Roughness = file.Peat.Roughness,
             },
+            Wakes = new WakeDef
+            {
+                FadePixels = file.Wakes.FadePixels, FullPixels = file.Wakes.FullPixels, RingAmplitude = file.Wakes.RingAmplitude, VAmplitude = file.Wakes.VAmplitude, NormalStrength = file.Wakes.NormalStrength,
+                RefSpeedMps = file.Wakes.RefSpeedMps, RefSizeM = file.Wakes.RefSizeM, SpeedExponent = file.Wakes.SpeedExponent, SizeExponent = file.Wakes.SizeExponent,
+                MaxGain = file.Wakes.MaxGain, SpeedSmoothS = file.Wakes.SpeedSmoothS,
+            },
             Look = file.Look == null ? null! : new LookDef
             {
                 NoiseContrast = file.Look.NoiseContrast, AlbedoVar = file.Look.AlbedoVar, DetailWavelengthM = file.Look.DetailWavelengthM, DetailLacunarity = file.Look.DetailLacunarity, DetailOctaves = file.Look.DetailOctaves, DetailGain = file.Look.DetailGain,
@@ -280,11 +304,11 @@ public static class ContentLoader
         Id = e.Id,
         DeepColor = Hex(e.DeepColor, path, e.Id + ".deepColor"), ShallowColor = Hex(e.ShallowColor, path, e.Id + ".shallowColor"),
         FilmColor = Hex(e.FilmColor, path, e.Id + ".filmColor"), EmissionColor = Hex(e.EmissionColor, path, e.Id + ".emissionColor"),
-        Silt = e.Silt, Opacity = e.Opacity, Viscosity = e.Viscosity, Bubbles = e.Bubbles, Film = e.Film, Emission = e.Emission, Roughness = e.Roughness,
+        Silt = e.Silt, Opacity = e.Opacity, Viscosity = e.Viscosity, Bubbles = e.Bubbles, Film = e.Film, Emission = e.Emission, Roughness = e.Roughness, GroundTint = e.GroundTint,
         Spray = e.Fall == null ? -1 : Array.IndexOf(LiquidDef.SprayNames, e.Fall.Spray),
         FallSpeed = e.Fall?.Speed ?? 0, SheetOpacity = e.Fall?.SheetOpacity ?? 0,
         SprayColor = e.Fall == null ? 0 : Hex(e.Fall.SprayColor, path, e.Id + ".fall.sprayColor"), SprayAmount = e.Fall?.SprayAmount ?? 0, Froth = e.Fall?.Froth ?? 0,
-        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
+        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM, OpaqueDepthM = e.OpaqueDepthM,
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
         FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope, BedFieldM = e.BedFieldM,
@@ -341,6 +365,20 @@ public static class ContentLoader
         public FoliageEntry? Foliage { get; set; }
         public QualityEntry? Quality { get; set; }
         public List<TownEntry> Towns { get; set; } = new();
+        public RoadsEntry? Roads { get; set; }
+    }
+
+    sealed class RoadsEntry
+    {
+        public BridgeEntry? Bridge { get; set; }
+    }
+
+    sealed class BridgeEntry
+    {
+        public string Object { get; set; } = "";
+        public float SpanM { get; set; }
+        public float RiverWidthM { get; set; }
+        public float ClearM { get; set; }
     }
 
     sealed class TownEntry
@@ -635,6 +673,7 @@ public static class ContentLoader
             }
             lib.Towns.Add(town);
         }
+        if (file.Roads?.Bridge is { } rb) lib.Roads = new RoadDef { BridgeObject = rb.Object, SpanM = rb.SpanM, RiverM = rb.RiverWidthM, ClearM = rb.ClearM };
         if (file.Terrain != null) lib.Terrain = new TerrainViewDef { QuadPixels = file.Terrain.QuadPixels, ContactPixels = file.Terrain.ContactPixels, ContactTexelPixels = file.Terrain.ContactTexelPixels, MistFadePixels = file.Terrain.MistFadePixels, MistFullPixels = file.Terrain.MistFullPixels, SteamFadePixels = file.Terrain.SteamFadePixels, SteamFullPixels = file.Terrain.SteamFullPixels, ColumnFadePixels = file.Terrain.ColumnFadePixels, ColumnFullPixels = file.Terrain.ColumnFullPixels, ShadowTexels = file.Terrain.ShadowTexels };
         if (file.Foliage != null)
         {

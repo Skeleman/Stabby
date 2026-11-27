@@ -23,6 +23,9 @@
       "sites": [ { "object": "well", "place": "centre", "count": [1, 1] }, { "object": "inn", "place": "plaza", "count": [1, 1] }, { "object": "house", "place": "lane", "count": [5, 9] } ]
     }
   ],
+  "roads": {
+    "bridge": { "object": "road-bridge", "spanM": 320, "riverWidthM": 280, "clearM": 1.5 }
+  },
   "objects": [
     {
       "id": "small-rock", "name": "Small rock", "kind": "static", "material": "fieldstone-grey", "variants": 6,
@@ -341,6 +344,16 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra", "steppe", "shrubland", "savanna", "tropical-forest", "alpine", "cold-desert", "desert"], "perHectare": 0, "discovery": "overlook", "spacingM": 800, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 8, "sizeMaxM": 9, "sink": 0.002 }
     },
     {
+      "id": "salt-tower", "name": "Salt tower", "kind": "structure", "material": "salt-crust", "variants": 6,
+      "parts": [ { "id": "site", "shape": "salt-tower", "material": "salt-crust" } ],
+      "placement": { "biomes": ["steppe", "cold-desert", "desert"], "perHectare": 0, "discovery": "salt-tower", "spacingM": 800, "chance": 0.6, "slopeMax": 0.3, "sizeMinM": 11, "sizeMaxM": 13, "sink": 0.002 }
+    },
+    {
+      "id": "road-bridge", "name": "Road bridge", "kind": "structure", "material": "hewn-timber", "variants": 4,
+      "parts": [ { "id": "span", "shape": "road-bridge" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
       "id": "stalactite", "name": "Stalactite", "kind": "static", "material": "dripstone", "variants": 8,
       "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.3, 1, 0.3], "solid": "off" } ],
       "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 60, "sizeMinM": 0.4, "sizeMaxM": 8, "clusterCount": 3, "clusterRadiusM": 1.0, "sink": 0.1 }
@@ -474,6 +487,11 @@
       "id": "oasis-shrub", "name": "Oasis shrub", "kind": "animated", "material": "twig-brown", "variants": 6,
       "parts": [ { "id": "body", "shape": "shrub", "leafMaterial": "bush-leaf" } ],
       "placement": { "biomes": ["desert", "cold-desert", "steppe"], "perHectare": 0, "oasis": "shrub", "slopeMax": 0.8, "sizeMinM": 0.8, "sizeMaxM": 1.8, "sink": 0.04, "alignToSlope": 0.2 }
+    },
+    {
+      "id": "bones", "name": "Giant bones", "kind": "structure", "material": "aged-bone", "variants": 6,
+      "parts": [ { "id": "site", "shape": "bones" } ],
+      "placement": { "biomes": ["steppe", "savanna", "shrubland", "desert", "cold-desert"], "perHectare": 0, "discovery": "bones", "spacingM": 1000, "chance": 1, "slopeMax": 0.25, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

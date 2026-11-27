@@ -37,10 +37,10 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, WallHead = 49, Overlook = 50, DatePalm = 51, Shapes = 52;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "date-palm" };
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, WallHead = 49, Overlook = 50, Bones = 51, SaltTower = 52, Bridge = 53, DatePalm = 54, Shapes = 55;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "bones", "salt-tower", "road-bridge", "date-palm" };
         public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed || shape == DatePalm;
-        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || shape == House || shape == WallHead || shape == Overlook || IsDungeon(shape) || IsMine(shape);
+        public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || shape == House || shape == WallHead || shape == Overlook || shape == Bones || shape == SaltTower || shape == Bridge || IsDungeon(shape) || IsMine(shape);
         public static bool IsDungeon(int shape) => shape >= DungeonCorridor && shape <= Dungeon;
         public static bool IsMine(int shape) => shape >= MineTimber && shape <= MineCart;
         public static bool IsStone(int shape) => shape == Rock || shape == BasaltColumns || shape == Crystals || shape == Dripstone || shape == DripColumn || IsStructure(shape);
@@ -174,6 +174,12 @@ namespace Stabby.World
         public List<TownSite> Sites = new List<TownSite>();
     }
 
+    public sealed class RoadDef
+    {
+        public string BridgeObject = "";
+        public float SpanM, RiverM, ClearM;
+    }
+
     public sealed class ObjectLibrary
     {
         public List<LightKind> Lights = new List<LightKind>();
@@ -185,6 +191,7 @@ namespace Stabby.World
         public QualityDef Quality = new QualityDef();
         public List<ArchStyle> Styles = new List<ArchStyle>();
         public List<TownDef> Towns = new List<TownDef>();
+        public RoadDef Roads = new RoadDef();
 
         public ObjectKind KindOf(ObjectDef d)
         {
@@ -388,6 +395,13 @@ namespace Stabby.World
                     if (s.Place == TownSite.Centre) centres += s.Max;
                 }
                 if (centres > 1) errors.Add("town " + t.Id + ": at most one centre site");
+            }
+            var rd = lib.Roads;
+            if (!string.IsNullOrEmpty(rd.BridgeObject))
+            {
+                var bd = lib.Objects.Find(o => o.Id == rd.BridgeObject);
+                if (bd == null || bd.Kind != "structure" || bd.Placement.PerHectare > 0 || bd.Placement.SizeMinM != bd.Placement.SizeMaxM || bd.Placement.SizeMinM <= 0) errors.Add("roads: bridge " + rd.BridgeObject + " needs a structure with no perHectare and one size");
+                if (!(rd.SpanM > 0 && rd.RiverM > 0 && rd.RiverM < rd.SpanM && rd.ClearM >= 0)) errors.Add("roads: bridge distances out of range");
             }
             return errors;
         }

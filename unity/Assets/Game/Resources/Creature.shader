@@ -40,6 +40,7 @@ Shader "Stabby/Creature"
         ByteAddressBuffer _CreatureBones;
         StructuredBuffer<float4> _CreatureFur;
         int _CreatureStart;
+        int _CreatureBench;
         CreaturePart CreatureAt(uint id) { return _Creatures[_CreatureStart + id]; }
         float4x4 CreatureBone(uint index)
         {
@@ -52,7 +53,7 @@ Shader "Stabby/Creature"
         {
             float4x4 m = CreatureBone(c.bone);
             uint s = c.skin & 0x3fffffff;
-            [branch] if (s != 0 && w.x + w.y > 0) m = (1 - w.x - w.y) * m + w.x * CreatureBone(s) + w.y * CreatureBone(s + 1);
+            [branch] if (s != 0 && w.x + w.y > 0 && (_CreatureBench & 1) == 0) m = (1 - w.x - w.y) * m + w.x * CreatureBone(s) + w.y * CreatureBone(s + 1);
             return m;
         }
         float3 CreatureSkinPoint(CreaturePart c, float3 p, float3 w)
@@ -174,6 +175,7 @@ Shader "Stabby/Creature"
             {
                 #ifdef STABBY_CREATURE_BUFFER
                 CreaturePart ci = CreatureAt(i.creatureId);
+                [branch] if (_CreatureBench & 2) return half4(0.4, 0.3, 0.2, 1);
                 float4 fade = ci.fade;
                 float4x4 mm = CreatureMatrix(ci);
                 float3 baseC = _CreatureFur[3 * ci.fur].rgb, accentC = _CreatureFur[3 * ci.fur + 1].rgb, darkC = _CreatureFur[3 * ci.fur + 2].rgb;
