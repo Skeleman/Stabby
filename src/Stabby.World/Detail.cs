@@ -45,6 +45,9 @@ namespace Stabby.World
                     amp[i] = Math.Min(Math.Min(a, 40f), 0.6f * lo);
                 }
             });
+            Dunes.Build(w, index, out var dunes, out var specs);
+            if (dunes.Length == n * n)
+                for (int i = 0; i < dunes.Length; i++) amp[i] *= 1 - (dunes[i] & 255) / 255f;
             float period;
             if (strata)
             {
@@ -58,7 +61,7 @@ namespace Stabby.World
                 period = 1f;
                 bands = new[] { 0.5f };
             }
-            arrays = new DetailArrays { Amp = amp, Offsets = offsets, Period = period, Bands = bands, Pieces = pieces.ToArray(), Start = index, Items = items };
+            arrays = new DetailArrays { Amp = amp, Offsets = offsets, Period = period, Bands = bands, Pieces = pieces.ToArray(), Start = index, Items = items, Dunes = dunes, DuneSpecs = specs };
             cells = Near(w, arrays);
         }
 
@@ -66,7 +69,7 @@ namespace Stabby.World
         {
             n = w.Config.Size;
             cm = w.Config.CellMeters;
-            if (stored.Amp.Length != n * n || stored.Offsets.Length != n * n || stored.Start.Length != n * n + 1 || stored.Bands.Length == 0)
+            if (stored.Amp.Length != n * n || stored.Offsets.Length != n * n || stored.Start.Length != n * n + 1 || stored.Bands.Length == 0 || (stored.Dunes.Length != 0 && stored.Dunes.Length != n * n))
                 throw new FormatException($"stored terrain detail does not fit a {n}x{n} world");
             arrays = stored;
             cells = Near(w, stored);
@@ -74,7 +77,7 @@ namespace Stabby.World
 
         static NearArrays Near(GeneratedWorld w, DetailArrays a) =>
             new NearArrays(w.Config.Size, w.Config.CellMeters, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(), Rng.Stream(w.Config.Seed, "near-coast").NextU32(), Rng.Stream(w.Config.Seed, "near-crag").NextU32(), Rng.Stream(w.Config.Seed, "near-river").NextU32(),
-                w.Height, a.Amp, a.Offsets, a.Period, a.Bands, a.Pieces, a.Start, a.Items);
+                w.Height, a.Amp, a.Offsets, a.Period, a.Bands, a.Pieces, a.Start, a.Items, a.Dunes, a.DuneSpecs);
 
         public DetailArrays Arrays => arrays;
 
@@ -93,6 +96,20 @@ namespace Stabby.World
         public float Sample(float x, float z) => NearField.Sample(cells, x, z);
         public float Smooth(float x, float z) => NearField.Smooth(cells, x, z);
         public float HeightAt(float gx, float gy) => Sample(gx * cm, gy * cm);
+        public float DuneAt(float x, float z) => Dunes.At(cells, x, z);
+        public bool HasDunes => cells.DuneCount > 0;
+        public int DunePack(int cell) => cells.Dune(cell);
+
+        public bool DuneNear(float x0, float z0, float x1, float z1)
+        {
+            if (cells.DuneCount == 0) return false;
+            int a0 = Math.Max(0, (int)Math.Floor(x0 / cm)), a1 = Math.Min(n - 1, (int)Math.Ceiling(x1 / cm));
+            int b0 = Math.Max(0, (int)Math.Floor(z0 / cm)), b1 = Math.Min(n - 1, (int)Math.Ceiling(z1 / cm));
+            for (int y = b0; y <= b1; y++)
+                for (int x = a0; x <= a1; x++)
+                    if (cells.Dune(y * n + x) != 0) return true;
+            return false;
+        }
 
         public void ChunkRange<TEdits>(TEdits edits, float x0, float z0, float size, float pad, out float lo, out float hi) where TEdits : struct, IEditList
         {
@@ -140,15 +157,18 @@ namespace Stabby.World
         readonly float[] h, amp, off, bands;
         readonly RiverPiece[] pieces;
         readonly int[] start, items;
+        readonly ushort[] dunes;
+        readonly DuneSpec[] specs;
         readonly int n;
         readonly float cm, period;
         readonly uint seed, gully, rock, coast, crag, river;
 
-        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, uint coast, uint crag, uint river, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items)
+        public NearArrays(int n, float cm, uint seed, uint gully, uint rock, uint coast, uint crag, uint river, float[] h, float[] amp, float[] off, float period, float[] bands, RiverPiece[] pieces, int[] start, int[] items, ushort[] dunes, DuneSpec[] specs)
         {
             this.n = n; this.cm = cm; this.seed = seed; this.gully = gully; this.rock = rock; this.coast = coast; this.crag = crag; this.river = river;
             this.h = h; this.amp = amp; this.off = off; this.period = period; this.bands = bands;
             this.pieces = pieces; this.start = start; this.items = items;
+            this.dunes = dunes ?? Array.Empty<ushort>(); this.specs = specs ?? Array.Empty<DuneSpec>();
         }
 
         public int N => n;
@@ -171,6 +191,10 @@ namespace Stabby.World
         public int PieceStart(int cell) => start[cell];
         public int PieceAt(int k) => items[k];
         public RiverPiece Piece(int p) => pieces[p];
+        public int DuneCount => dunes.Length;
+        public int SpecCount => specs.Length;
+        public int Dune(int i) => dunes.Length == 0 ? 0 : dunes[i];
+        public DuneSpec DuneRegion(int r) => specs[r];
     }
 }
 

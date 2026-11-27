@@ -70,7 +70,8 @@ int Bake()
     var c = Config(ulong.Parse(Opt("seed", "1"), CultureInfo.InvariantCulture), int.Parse(Opt("size", "512"), CultureInfo.InvariantCulture));
     var path = Opt("out", Path.Combine("out", "maps", $"seed{c.Seed}-{c.Size}.stabbymap"));
     var sw = Stopwatch.StartNew();
-    var w = WorldGenerator.Generate(c, biomes, materials, null, null, objects, caves);
+    var sketch = opts.TryGetValue("sketch", out var sketchPath) ? SketchFile.Read(File.ReadAllText(sketchPath), c) : null;
+    var w = WorldGenerator.Generate(c, biomes, materials, sketch, null, objects, caves);
     long genMs = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
     sw.Restart();

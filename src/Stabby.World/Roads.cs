@@ -442,6 +442,7 @@ namespace Stabby.World
             ford = false;
             float len = (float)Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
             if (!bridge && Math.Abs(h1 - h0) > RoadGrade * len) return "is too steep";
+            if (detail.DuneNear(Math.Min(x0, x1), Math.Min(z0, z1), Math.Max(x0, x1), Math.Max(z0, z1))) return "crosses dunes";
             int last = -1;
             for (int t = 0; t <= 2; t++)
             {
