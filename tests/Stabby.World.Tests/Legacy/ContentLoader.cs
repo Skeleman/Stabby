@@ -540,6 +540,7 @@ public static class ContentLoader
         public int ChainMax { get; set; } = 1;
         public float ChainCorner { get; set; }
         public float ChainGate { get; set; }
+        public string? ChainHead { get; set; }
         public string? Bank { get; set; }
         public float PerHundredM { get; set; }
         public string? Discovery { get; set; }
@@ -616,7 +617,7 @@ public static class ContentLoader
                 HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
                 FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
-                ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
+                ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, ChainHead = pl.ChainHead, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
                 Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), Cave = Array.IndexOf(ObjectField.CaveNames, pl.Cave ?? ""), CaveIce = pl.CaveIce, Liquid = pl.Liquid, SpacingM = pl.SpacingM, Chance = pl.Chance,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),
             };
