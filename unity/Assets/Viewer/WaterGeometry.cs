@@ -709,6 +709,7 @@ namespace Stabby.Viewer
                 }
                 float s = 0;
                 var pool = NoPool;
+                var held = new List<int>();
                 for (int k = 0; k < pts.Count; k++)
                 {
                     var a = pts[Mathf.Max(k - 1, 0)];
@@ -742,12 +743,14 @@ namespace Stabby.Viewer
                         var lip = new List<int>();
                         var foot = new List<int>();
                         var bendRows = new List<int>();
-                        int up = buf.Verts.Count - 2;
+                        int up = buf.Verts.Count - 2, t0 = buf.Tris.Count;
                         if (parts[0].U0 > -0.999f) buf.Edge(f, -1, slopes[k - 1], lr, pool, lip);
                         float shove = 0;
                         foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, bendRows, (FootMax - lt) * seg - FootGap));
                         if (parts[parts.Length - 1].U1 < 0.999f) buf.Edge(f, 1, slopes[k - 1], lr, pool, lip);
                         buf.Fan(up, up + 1, lip, true);
+                        held.AddRange(buf.Tris.GetRange(t0, buf.Tris.Count - t0));
+                        buf.Tris.RemoveRange(t0, buf.Tris.Count - t0);
                         th += shove;
                         foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
                         ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
@@ -766,6 +769,7 @@ namespace Stabby.Viewer
                     buf.Tint = Flowing(Tint(r.Mix[k]), currents[k]);
                     buf.Row(p, dir, half, slopes[k], rv, pool, join);
                 }
+                buf.Tris.AddRange(held);
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Rivers {pieces.Count}"));
             if (mist != null && mist.Verts.Count > 0) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
