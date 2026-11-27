@@ -159,26 +159,46 @@ namespace Stabby.World
             var dc = new float[n];
             var ds = new float[n];
             for (int i = 0; i < n; i++) RoundDir(i, n, out dc[i], out ds[i]);
-            float hi = rng.Range(1.4f, 1.8f), lo = rng.Range(0.7f, 1f), top = Math.Max(lo, hi - 0.05f), th = rng.Range(0.08f, 0.12f) / StumpR, tap = rng.Range(0.03f, 0.05f) / StumpR;
-            int k0 = rng.Range(0, n), np = rng.Range(3, 6);
+            float hi = rng.Range(1.4f, 1.8f), lo = rng.Range(0.7f, 1f), top = Math.Max(lo, hi - 0.3f), th = rng.Range(0.08f, 0.12f) / StumpR, tap = rng.Range(0.03f, 0.05f) / StumpR;
+            int k0 = rng.Range(0, n), np = rng.Range(2, 6), nl = rng.Range(1, 3);
             var h = new float[n];
             var peak = new bool[n];
+            var lean = new float[n];
             for (int i = 0; i < n; i++)
             {
                 float a = 0.5f * (1 + dc[i] * dc[k0] + ds[i] * ds[k0]);
-                h[i] = lo + (top - lo) * a * a + rng.Range(-0.08f, 0.03f);
+                h[i] = lo + (top - lo) * a * a + rng.Range(-0.06f, 0.03f);
             }
+            var hb = (float[])h.Clone();
+            float pos = rng.Range(-0.32f, -0.22f);
             for (int p = 0; p < np; p++)
             {
-                int k = ((k0 + (int)Math.Round(((p + 0.5f) / np - 0.5f) * 0.6f * n + rng.Range(-0.6f, 0.6f))) % n + n) % n;
-                if (peak[k]) continue;
-                peak[k] = true;
-                h[k] = Math.Min(1.9f, h[k] + rng.Range(0.25f, 0.45f));
+                float c = (float)Math.Round(k0 + pos * n), hw = Math.Max(0.6f, rng.Range(0.012f, 0.045f) * n), sk = rng.Range(-0.6f, 0.6f), hl = hw * (1 + sk), hr = hw * (1 - sk);
+                float ht = rng.Range(0.18f, 0.55f), round = rng.Range(0f, 0.6f), tilt = p < nl ? rng.Range(0.06f, 0.12f) * (rng.NextFloat() < 0.5f ? -1 : 1) : 0;
+                pos += rng.Range(0.04f, 0.16f);
+                for (int i = 0; i < n; i++)
+                {
+                    float d = i - c;
+                    d -= n * (float)Math.Floor(d / n + 0.5f);
+                    float t = d < 0 ? 1 + d / hl : 1 - d / hr;
+                    if (t <= 0) continue;
+                    float v = hb[i] + ht * (t + round * t * (1 - t)) + rng.Range(-0.04f, 0.02f);
+                    if (v <= h[i]) continue;
+                    h[i] = Math.Min(1.9f, v);
+                    peak[i] = t > 0.6f;
+                    lean[i] = tilt * t;
+                }
             }
             for (int i = 0; i < n; i++)
-                if (!peak[i] && (peak[(i + 1) % n] || peak[(i + n - 1) % n])) h[i] -= rng.Range(0.04f, 0.12f);
+                if (rng.NextFloat() < 0.25f) h[i] -= rng.Range(0.04f, 0.12f);
+            for (int st = rng.Range(1, 3); st > 0; st--)
+            {
+                int s0 = rng.Range(0, n), len = Math.Max(2, (int)(rng.Range(0.05f, 0.1f) * n));
+                float lv = h[s0] - rng.Range(0f, 0.08f);
+                for (int j = 0; j < len; j++) { int i = (s0 + j) % n; h[i] = lv; peak[i] = false; lean[i] = 0; }
+            }
             float low = float.MaxValue;
-            for (int i = 0; i < n; i++) { h[i] = Math.Max(0.6f, h[i]); low = Math.Min(low, h[i]); }
+            for (int i = 0; i < n; i++) { h[i] = Math.Min(1.9f, Math.Max(0.6f, h[i])); low = Math.Min(low, h[i]); }
             float yd = StumpY(low - 0.04f);
             var ro = RoundNoise(ref rng, n, 0.95f, 1f);
             var w = new float[3 * total];
@@ -187,10 +207,11 @@ namespace Stabby.World
             {
                 float r = ro[i], ot = 0.98f * r - tap, ri = ot - th * (peak[i] ? 0.5f : rng.Range(0.85f, 1.15f)), y = StumpY(h[i]), yi = peak[i] ? StumpY(h[i] - 0.06f) : y;
                 Set(w, i, 1.04f * r * dc[i], -1, 1.04f * r * ds[i]); lift[i] = 9;
-                Set(w, n + i, ot * dc[i], y, ot * ds[i]); lift[n + i] = 9;
-                Set(w, 2 * n + i, ot * dc[i], y, ot * ds[i]);
-                Set(w, 3 * n + i, ri * dc[i], yi, ri * ds[i]);
-                Set(w, 4 * n + i, ri * dc[i], yi, ri * ds[i]);
+                float lx = dc[i] - lean[i] * ds[i], lz = ds[i] + lean[i] * dc[i];
+                Set(w, n + i, ot * lx, y, ot * lz); lift[n + i] = 9;
+                Set(w, 2 * n + i, ot * lx, y, ot * lz);
+                Set(w, 3 * n + i, ri * lx, yi, ri * lz);
+                Set(w, 4 * n + i, ri * lx, yi, ri * lz);
                 Set(w, 5 * n + i, ri * dc[i], yd, ri * ds[i]);
                 Set(w, disc + i, ri * dc[i], yd, ri * ds[i]); lift[disc + i] = 3;
             }

@@ -522,7 +522,7 @@ Shader "Stabby/Object"
                 else if (side && mat == 1)
                 {
                     float al = dot(q, g);
-                    float3 sp = (q - g * al) * 15 + g * (al * 1.6) + sd, sp2 = sp * 2.3 + 5.1;
+                    float3 sp = (q - g * al) * 15 + g * (al * 3) + sd, sp2 = sp * 2.3 + 5.1;
                     float4 bn = OrgNoise3(sp, int3(0, 0, 0)), bm = OrgNoise3(sp2, int3(0, 0, 0));
                     float fb = OrgRungW(2, fp), fb2 = OrgRungW(2, fp);
                     float rid = lerp(0.6, 1 - abs(bn.x), fb) * 0.65 + lerp(0.6, 1 - abs(bm.x), fb2) * 0.35;
@@ -534,7 +534,7 @@ Shader "Stabby/Object"
                     shade = 0.35 * (1 - smoothstep(0.2, 0.6, rid)) * fb;
                     [branch] if (th.x > 8.5)
                     {
-                        float3 pq = q - g * (al * 0.78) + sd;
+                        float3 pq = q - g * (al * 0.45) + sd;
                         float4 fu = OrgRP3(pq, OrgF(0), 4.3, 0), fv = OrgRP3(pq, OrgF(1), 8.9, 1);
                         float plate = smoothstep(0.0, 0.5, 1 - abs(fu.x) + 0.25 * fv.x * fs);
                         float3 e1 = fu.yzw - g * dot(fu.yzw, g), e2 = fv.yzw - g * dot(fv.yzw, g);
