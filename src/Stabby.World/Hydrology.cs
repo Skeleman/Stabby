@@ -420,7 +420,7 @@ namespace Stabby.World
                     }
                     float baseY = stage[e], bx = lx + dx * FallBaseOffsetM, bz = lz + dz * FallBaseOffsetM;
                     if (Wet(c, sea, hy, bx, bz)) baseY = Math.Max(baseY, hy.WaterSurface[CellAt(c, bx, bz)]);
-                    if (t < 0 || stage[k] - baseY < FallMinDrop || InJunction(c, seg, hy, e, lx, lz)) { k = e - 1; continue; }
+                    if (t < 0 || stage[k] - baseY < FallMinDrop || InJunction(c, seg, hy, lx, lz)) { k = e - 1; continue; }
                     drop = stage[k] - baseY;
                     float q = seg.Discharge[big], w = seg.Width[big];
                     float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
@@ -615,12 +615,24 @@ namespace Stabby.World
             return false;
         }
 
-        static bool InJunction(WorldConfig c, RiverSegment seg, Hydrology hy, int e, float x, float z)
+        static bool InJunction(WorldConfig c, RiverSegment seg, Hydrology hy, float x, float z)
         {
             int last = seg.Cells.Count - 1;
-            if (seg.End != RiverEnd.Junction || e != last) return false;
-            float hw = 0.5f * hy.Rivers[seg.Downstream].Width[0], dx = seg.X[last] * c.CellMeters - x, dz = seg.Y[last] * c.CellMeters - z, r = hw + NearField.Bank(hw);
-            return dx * dx + dz * dz < r * r;
+            if (seg.End != RiverEnd.Junction) return false;
+            float cm = c.CellMeters, hw = 0.5f * hy.Rivers[seg.Downstream].Width[0], dx = seg.X[last] * cm - x, dz = seg.Y[last] * cm - z, r = hw + NearField.Bank(hw);
+            if (dx * dx + dz * dz < r * r) return true;
+            foreach (var o in hy.Rivers)
+            {
+                if (o == seg || (o.Id != seg.Downstream && (o.End != RiverEnd.Junction || o.Downstream != seg.Downstream))) continue;
+                for (int k = 0; k + 1 < o.Cells.Count; k++)
+                {
+                    float ax = o.X[k] * cm, az = o.Y[k] * cm, ex = o.X[k + 1] * cm - ax, ez = o.Y[k + 1] * cm - az, ee = ex * ex + ez * ez;
+                    float t = ee > 0 ? Math.Max(0, Math.Min(1, ((x - ax) * ex + (z - az) * ez) / ee)) : 0, px = ax + ex * t - x, pz = az + ez * t - z;
+                    float h = 0.5f * Math.Max(o.Width[k], o.Width[k + 1]), rr = h + NearField.Bank(h);
+                    if (px * px + pz * pz < rr * rr) return true;
+                }
+            }
+            return false;
         }
 
         static int CellAt(WorldConfig c, float x, float z)

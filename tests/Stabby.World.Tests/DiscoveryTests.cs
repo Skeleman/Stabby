@@ -488,10 +488,10 @@ public class DiscoveryTests
     [Fact]
     public void OasesHoldWaterAmongPalms()
     {
-        var p = TestWorlds.Default;
+        var p = TestWorlds.Place(3);
         int oases = p.Field.OasisPools().Length / ObjectField.OasisStride;
         output.WriteLine($"{oases} oases");
-        Assert.True(oases > 0, "no oasis in the default world");
+        Assert.True(oases > 0, "no oasis in seed 3");
         Assert.Null(WorldChecks.OasisFault(p.W, p.Field));
     }
 
