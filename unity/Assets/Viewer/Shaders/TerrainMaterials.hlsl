@@ -224,6 +224,7 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float cav = 0, ctone = 0, streak = 0;
     [branch] if (ck > 0) TmCrag(q.xz + orgO.xz, q.y, n, hard, mass, fp, crg, cav, ctone, streak);
     float crs = ck * lerp(0.8, 1.3, mass);
+    float vg = smoothstep(0.4226, 0.2588, n.y);
     float4 bump = OrgFbm3(q, ra.w, ra.z, 3, fp);
     float gw = OrgRungW(0, fp), fw2 = OrgRungW(1, fp);
     float4 grain = OrgRLN3(q, 0, 5.1, gw);
@@ -261,14 +262,14 @@ TmOut TmRock(float3 wp, float3 n, float3 v, float fp, float off, float2 dux, flo
     float dm = fm * lerp(0.1, 1.8, smoothstep(-0.25, 0.35, 0.6 * drift.x + 0.4 * drift2.x)), gs = gw * grain.x * 0.5;
     float lgt = dm * (1 + gs) * smoothstep(0.35, 0.75, mn.x), drk = dm * (1 - gs) * smoothstep(0.35, 0.75, -mn.x);
     c = lerp(c, dot(c, lw) * 1.6, 0.2 * lgt) * (1 - 0.17 * drk);
-    c *= (1 - 0.3 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4))) * (1 - 0.35 * crs * cav) * (1 - 0.4 * crs * streak * float3(1, 0.99, 0.97));
+    c *= (1 - 0.3 * saturate(-hr / (_StabbyRockB.y * 1.2 + 1e-4))) * (1 - 0.35 * crs * cav) * (1 - 0.4 * crs * vg * streak * float3(1, 0.99, 0.97));
     c *= 1 + 0.3 * (1 - 0.5 * stone) * bump.x * ra.w;
     float up = saturate(n.y), dn = saturate((0.05 - n.y) * 2.5);
     float cl = dot(c, lw);
     c = lerp(c, cl * 1.15, 0.3 * up * up);
     c = lerp(c, cl, 0.6 * dn) * lerp(1, float3(0.94, 0.97, 1.03), dn);
     float steep = saturate(1 - n.y * n.y);
-    float fs = steep * OrgFade(1.3, fp);
+    float fs = steep * vg * OrgFade(1.3, fp);
     float sn = OrgLN3(q * float3(1, 0.06, 1), 1.3, 23.7, fs).x;
     float3 sv = OrgNoise2(float2(sa * 0.29, bed * 3.7) + 61.3);
     float fb = saturate(bedF + 0.05 * sv.x), wv = 0.06 + 0.1 * saturate(0.5 + 0.7 * sv.y) + fp * _StabbyRockB.x;
@@ -744,7 +745,7 @@ void TmStoneCover(inout TmOut o, float3 wp, float3 n, float4 cw, float fp, float
     float top = smoothstep(0.45, 0.9, n.y), side = 1 - top, wet = cw.x + 0.4 * cw.y, dry = cw.z + 0.5 * cw.y;
     float moss = stone * wet * top * smoothstep(-0.15, 0.35, fm * patch.x + 0.2 * fl * streak.x);
     float lichen = stone * saturate(wet + 0.3 * cw.z) * smoothstep(-0.2, 0.5, n.y) * fm * smoothstep(0.1, 0.45, patch.x + 0.3 * fl * streak.x) * (1 - moss);
-    float stain = stone * saturate(0.4 + 0.4 * dry + 0.3 * wet) * side * fl * smoothstep(0.15, 0.6, streak.x) * smoothstep(-0.4, 0.2, -patch.x) * (1 - moss);
+    float stain = stone * saturate(0.4 + 0.4 * dry + 0.3 * wet) * side * smoothstep(0.4226, 0.2588, n.y) * fl * smoothstep(0.15, 0.6, streak.x) * smoothstep(-0.4, 0.2, -patch.x) * (1 - moss);
     float dust = stone * dry * top * fm * smoothstep(0, 0.5, patch.x) * (1 - moss);
     float frost = stone * cw.w * smoothstep(0.55, 0.85, n.y);
     float3 mossC = lerp(float3(0.035, 0.06, 0.018), float3(0.085, 0.115, 0.03), saturate(0.5 + fm * patch.y));
