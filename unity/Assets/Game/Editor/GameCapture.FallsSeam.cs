@@ -32,11 +32,13 @@ namespace Stabby.Game.Editor
             for (var w = ShowHour(SeamHour, SeamMoon); w.MoveNext();) yield return null;
             cam.fieldOfView = 60f;
             var fd = new Vector3(f.DirX, 0, f.DirZ);
-            var side = new Vector3(-fd.z, 0, fd.x);
             var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
+            float rise = ground.HeightAt(lip.x + fd.x * 8f, lip.z + fd.z * 8f) - ground.HeightAt(lip.x - fd.x * 8f, lip.z - fd.z * 8f);
+            if (rise > 0) fd = -fd;
+            var side = new Vector3(-fd.z, 0, fd.x);
             var foot = new Vector3(f.BaseX, f.BaseY, f.BaseZ);
             float h = f.Drop, wd = f.Width;
-            GameStatus.Lines["~fallsseam"] = $"fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {wd:F1} m, pool {f.PoolRadius:F1} m, discharge {f.Discharge:F1}, hour {SeamHour}, moon {SeamMoon}";
+            GameStatus.Lines["~fallsseam"] = $"fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {wd:F1} m, pool {f.PoolRadius:F1} m, discharge {f.Discharge:F1}, ground rise downstream {(rise > 0 ? -rise : rise):F1} m{(rise > 0 ? " (dir flipped)" : "")}, hour {SeamHour}, moon {SeamMoon}";
             var looks = new[] { lip + fd * (0.3f * h), lip - Vector3.up * (0.5f * h), foot + Vector3.up * 0.3f, foot + Vector3.up * (0.4f * h) };
             for (int v = 0; v < looks.Length; v++)
             {
@@ -59,12 +61,16 @@ namespace Stabby.Game.Editor
                         block = Mathf.Max(block, ground.HeightAt(p.x, p.z) - p.y);
                     }
                     block += 0.02f * (e.y - look.y);
+                    if (v == 0 && Vector3.Dot(e - lip, fd) >= 0) block += 1000f;
                     if (block < worst) { worst = block; eye = e; }
                 }
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 for (var s = Settle(150); s.MoveNext();) yield return null;
                 Shot(cam, null, "warmup");
-                Shot(cam, dir, FallsSeamShots[v]);
+                string name = FallsSeamShots[v];
+                if (v == 0 && (worst > 0.5f || Vector3.Dot(eye - lip, fd) >= 0)) name += Vector3.Dot(eye - lip, fd) >= 0 ? "-downstream" : "-upstream-blocked";
+                GameStatus.Lines["~fallsseam-" + v] = $"{name} eye {eye.x:F0},{eye.y:F0},{eye.z:F0} along-flow {Vector3.Dot(eye - lip, fd):F1} m, block {worst:F1} m";
+                Shot(cam, dir, name);
             }
         }
     }

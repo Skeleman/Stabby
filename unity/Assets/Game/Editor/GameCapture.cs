@@ -66,6 +66,10 @@ namespace Stabby.Game.Editor
             cam.nearClipPlane = 0.5f;
             cam.farClipPlane = 60000f;
             cam.fieldOfView = 60f;
+            var camData = cam.GetUniversalAdditionalCameraData();
+            camData.renderPostProcessing = true;
+            camData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+            camData.antialiasingQuality = AntialiasingQuality.High;
 
             var water = AssetDatabase.LoadAssetAtPath<Material>("Assets/Viewer/Water.mat");
             if (water == null)
