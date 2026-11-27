@@ -140,6 +140,7 @@ namespace Stabby.Game.Editor
         }
 
         static string dir;
+        static bool allSynced;
         static (Vector3 pos, Quaternion rot) farPose;
 
         static void PollBody()
@@ -161,7 +162,8 @@ namespace Stabby.Game.Editor
                 Finish(1);
                 return;
             }
-            bool ready = GameStatus.Synced.Count >= GameSettings.Clients.Length && GameStatus.TerrainBuilt && GameStatus.Capsules >= 2;
+            if (!allSynced && GameStatus.Synced.Count >= GameSettings.Clients.Length) { allSynced = true; GameStatus.Lines["~startup clients"] = $"all clients synced {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
+            bool ready = GameStatus.Synced.Contains(GameSettings.ViewClient) && GameStatus.TerrainBuilt && GameStatus.Capsules >= 2;
             if (!ready) return;
             if (settle == -1) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
             if (settle > 0 && --settle > 0) return;
