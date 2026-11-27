@@ -7,7 +7,7 @@ using Xunit.Abstractions;
 
 namespace Stabby.World.Tests;
 
-public class MineTests
+public class MineTests : IClassFixture<DefaultWorldFixture>
 {
     readonly ITestOutputHelper output;
     public MineTests(ITestOutputHelper o) { output = o; }
