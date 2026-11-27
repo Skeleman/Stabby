@@ -1405,11 +1405,13 @@ namespace Stabby.Game
         {
             int n = world.Config.Size;
             var t = new LoadTimes();
-            var lakes = new List<MeshParts>();
             var mists = new List<MeshParts>();
+            var blocks = new List<int2>();
             for (int cy = 0; cy < n; cy += LakeCells)
                 for (int cx = 0; cx < n; cx += LakeCells)
-                    if (HasLand(world, cx, cy)) lakes.Add(WaterGeometry.Lakes(world, cx, cy, LakeCells));
+                    if (HasLand(world, cx, cy)) blocks.Add(new int2(cx, cy));
+            var lakes = new MeshParts[blocks.Count];
+            Parallel.For(0, blocks.Count, k => lakes[k] = WaterGeometry.Lakes(world, blocks[k].x, blocks[k].y, LakeCells));
             t.Mark("lakes");
             var rivers = WaterGeometry.Rivers(world, detail, mists);
             t.Mark("rivers");

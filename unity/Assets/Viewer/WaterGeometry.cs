@@ -211,7 +211,8 @@ namespace Stabby.Viewer
             float cm = world.Config.CellMeters;
             var corner = new int[row * (y1 - cy + 1)];
             for (int k = 0; k < corner.Length; k++) corner[k] = -1;
-            var sheet = new SheetBuffers();
+            var sheet = lakeSheet ??= new SheetBuffers();
+            sheet.Clear();
             int Corner(int X, int Y)
             {
                 ref int v = ref corner[(Y - cy) * row + X - cx];
@@ -254,12 +255,16 @@ namespace Stabby.Viewer
             return size < LakeSwellCells ? 0 : Mathf.Min(1, Mathf.Sqrt(size / LakeSwellFullCells));
         }
 
+        [System.ThreadStatic] static SheetBuffers lakeSheet;
+
         sealed class SheetBuffers
         {
             readonly List<Vector3> verts = new List<Vector3>();
             readonly List<int> tris = new List<int>();
             readonly List<Vector4> kinds = new List<Vector4>(), tints = new List<Vector4>(), swells = new List<Vector4>();
             readonly Dictionary<long, int> edges = new Dictionary<long, int>();
+
+            public void Clear() { verts.Clear(); tris.Clear(); kinds.Clear(); tints.Clear(); swells.Clear(); edges.Clear(); }
 
             public int Add(Vector3 p, Vector4 kind, Vector4 tint, Vector4 swell = default)
             {
@@ -307,11 +312,7 @@ namespace Stabby.Viewer
             public MeshParts Piece(string name, Color kind)
             {
                 if (verts.Count == 0) return null;
-                var m = Flat(name, verts, null, tris, kind);
-                m.Uv1 = kinds.ToArray();
-                m.Uv2 = swells.ToArray();
-                m.Uv3 = tints.ToArray();
-                return m;
+                return Flat(name, verts, null, tris, kind, uv1: kinds.ToArray(), uv2: swells.ToArray(), uv3: tints.ToArray());
             }
         }
 
@@ -520,13 +521,7 @@ namespace Stabby.Viewer
 
             public MeshParts Piece(string name)
             {
-                var m = Flat(name, Verts, Cols, Tris, default);
-                m.Uvs = Chan.ToArray();
-                m.Uv1 = Reach.ToArray();
-                m.Uv2 = Fall.ToArray();
-                m.Uv3 = Tints.ToArray();
-                m.Uv4 = Curt.ToArray();
-                return m;
+                return Flat(name, Verts, Cols, Tris, default, Chan.ToArray(), Reach.ToArray(), Fall.ToArray(), Tints.ToArray(), Curt.ToArray());
             }
         }
 
@@ -600,9 +595,7 @@ namespace Stabby.Viewer
 
             public MeshParts Piece(string name)
             {
-                var m = Flat(name, Verts, Cols, Tris, default);
-                m.Uvs = Size.ToArray();
-                m.Uv1 = Corner.ToArray();
+                var m = Flat(name, Verts, Cols, Tris, default, Size.ToArray(), Corner.ToArray());
                 Verts.Clear(); Cols.Clear(); Size.Clear(); Corner.Clear(); Tris.Clear();
                 return m;
             }
@@ -857,18 +850,16 @@ namespace Stabby.Viewer
                     tris.Add(a); tris.Add(a + m); tris.Add(a + 1);
                     tris.Add(a + 1); tris.Add(a + m); tris.Add(a + m + 1);
                 }
-            var part = Flat("Sea", verts, null, tris, SeaKind);
-            part.Uv2 = fall;
-            return part;
+            return Flat("Sea", verts, null, tris, SeaKind, uv2: fall);
         }
 
-        static MeshParts Flat(string name, List<Vector3> verts, List<Color> perVertex, List<int> tris, Color kind)
+        static MeshParts Flat(string name, List<Vector3> verts, List<Color> perVertex, List<int> tris, Color kind, Vector2[] uvs = null, Vector4[] uv1 = null, Vector4[] uv2 = null, Vector4[] uv3 = null, Vector4[] uv4 = null)
         {
             var cols = perVertex != null ? perVertex.ToArray() : new Color[verts.Count];
             var up = new Vector3[verts.Count];
             for (int k = 0; k < up.Length; k++) { up[k] = Vector3.up; if (perVertex == null) cols[k] = kind; }
             int n = verts.Count;
-            return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray(), Uvs = new Vector2[n], Uv1 = new Vector4[n], Uv2 = new Vector4[n], Uv3 = new Vector4[n], Uv4 = new Vector4[n] };
+            return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray(), Uvs = uvs ?? new Vector2[n], Uv1 = uv1 ?? new Vector4[n], Uv2 = uv2 ?? new Vector4[n], Uv3 = uv3 ?? new Vector4[n], Uv4 = uv4 ?? new Vector4[n] };
         }
     }
 }
