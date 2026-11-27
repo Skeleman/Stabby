@@ -44,7 +44,7 @@ namespace Stabby.World
             int n = w.Config.Size, across = field.ChunksAcross, cx = c % across, cz = c / across;
             float cm = w.Config.CellMeters, span = WorldChunks.Size * cm;
             var found = new List<KeyValuePair<int, string>>();
-            var seen = new bool[12];
+            var seen = new bool[13];
             var idFaults = new List<string>();
             CheckObjectIds(a, c, idFaults);
             foreach (var m in idFaults) found.Add(new KeyValuePair<int, string>(-1, m));
@@ -90,6 +90,11 @@ namespace Stabby.World
                     {
                         string seat = SeatFault(w, detail, o);
                         if (seat != null) Fail(7, seat);
+                    }
+                    if (!seen[12])
+                    {
+                        float pit = ObjectField.PitFloat(w.Objects, detail, cm, o);
+                        if (pit > 0) Fail(12, $" root pit floats {pit:F2} m past its skirt");
                     }
                     var biomes = def.Placement.Biomes;
                     if (!seen[6] && biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, " is outside its biomes");
