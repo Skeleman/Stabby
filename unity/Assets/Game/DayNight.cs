@@ -90,7 +90,7 @@ namespace Stabby.Game
         void Apply(SkyState s)
         {
             var rotation = LightOverride ?? Quaternion.LookRotation(new Vector3(s.DirX, s.DirY, s.DirZ));
-            if (light.transform.rotation != rotation) light.transform.rotation = rotation;
+            if (!light.transform.rotation.Equals(rotation)) light.transform.rotation = rotation;
             light.color = new Color(s.Light.R, s.Light.G, s.Light.B);
             light.intensity = s.Intensity;
             var skyColor = new Color(s.Sky.R, s.Sky.G, s.Sky.B);

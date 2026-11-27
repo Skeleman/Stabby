@@ -6,7 +6,7 @@ namespace Stabby.World
 {
     public struct RoadSegment
     {
-        public const int Dirt = 0, Ford = 1, Lane = 2, Tunnel = 3;
+        public const int Dirt = 0, Ford = 1, Lane = 2, Tunnel = 3, Bridge = 4;
         public float X0, Z0, X1, Z1, HalfWidth;
         public int Kind;
 
@@ -16,7 +16,7 @@ namespace Stabby.World
     public sealed partial class ObjectField
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
-        public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f;
+        public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;
         public const float TunnelMinM = 70f, TunnelMostM = 250f, TunnelGrade = 0.12f, TunnelCost = 1f, TunnelRise = 0.5f, TunnelSpanM = 150f, TunnelSocketM = 100f, TunnelCampMin = 14.5f, TunnelCampMax = 18f, TunnelWarp = 0.04f;
@@ -28,6 +28,7 @@ namespace Stabby.World
         ObjectInstance[][] roadSites;
         Dictionary<int, List<int>> siteCells;
         List<ObjectInstance> siteList;
+        int[] siteChunkOf;
         HashSet<long> tunnelBan;
         HashSet<int> tunnelTiles, tunnelBlocked;
         List<FeatureEdit> tunnelEdits = new List<FeatureEdit>();
@@ -88,7 +89,7 @@ namespace Stabby.World
             return tunnelBlocked = set;
         }
 
-        List<int> Route(int sx, int sz, int tx, int tz, out List<bool> jumps, out List<Bored> bored)
+        List<int> Route(int sx, int sz, int tx, int tz, out List<byte> jumps, out List<Bored> bored)
         {
             bored = new List<Bored>();
             for (int t = 0; ; t++)
@@ -99,7 +100,7 @@ namespace Stabby.World
                 bool ok = true;
                 for (int k = 1; k < path.Count && ok; k++)
                 {
-                    if (!jumps[k]) continue;
+                    if (jumps[k] != 1) continue;
                     long key = (long)path[k - 1] * n * n + path[k];
                     var b = Bore(path[k - 1], path[k], key);
                     if (b == null || bored.Exists(o => o.Tile == b.Tile)) { tunnelBan.Add(key); ok = false; }
@@ -131,7 +132,7 @@ namespace Stabby.World
                 if (e.Shape != FeatureEdit.Boulder && e.Shape != FeatureEdit.Spring && e.Shape != FeatureEdit.Vault && e.MinX < x1 && e.MaxX > x0 && e.MinZ < z1 && e.MaxZ > z0) near.Add(e);
             near.AddRange(list);
             var all = near.ToArray();
-            foreach (var e in list) if (e.Shape == FeatureEdit.Cave && Underground.PathFault(detail, all, e) != null) return null;
+            foreach (var e in list) if (e.Shape == FeatureEdit.Cave && (detail.HeightAt(e.Bx / cm, e.Bz / cm) < e.By + e.R || Underground.PathFault(detail, all, e) != null)) return null;
             foreach (var edge in g.Edges) if (Underground.Cramped(detail, all, g, edge) != null) return null;
             if (Underground.Through(detail, all, g) != null || !DungeonLinks.Fits(DungeonLinks.Width(detail, all, g))) return null;
             g.Tile = tile;
@@ -148,13 +149,14 @@ namespace Stabby.World
             }
         }
 
-        List<(List<float> x, List<float> z)> Runs(List<int> path, List<bool> jumps)
+        List<(List<float> x, List<float> z)> Runs(List<int> path, List<byte> jumps, out List<int> joins)
         {
             var runs = new List<(List<float> x, List<float> z)>();
+            joins = new List<int>();
             var px = new List<float>(); var pz = new List<float>();
             for (int k = 0; k < path.Count; k++)
             {
-                if (jumps[k]) { runs.Add((px, pz)); px = new List<float>(); pz = new List<float>(); }
+                if (jumps[k] != 0) { runs.Add((px, pz)); px = new List<float>(); pz = new List<float>(); joins.Add(jumps[k] == 1 ? RoadSegment.Tunnel : RoadSegment.Bridge); }
                 px.Add((path[k] % n) * cm); pz.Add((path[k] / n) * cm);
             }
             runs.Add((px, pz));
@@ -162,7 +164,7 @@ namespace Stabby.World
             return runs;
         }
 
-        void EmitRuns(List<(List<float> x, List<float> z)> runs, List<RoadSegment> list, bool site)
+        void EmitRuns(List<(List<float> x, List<float> z)> runs, List<int> joins, List<RoadSegment> list, bool site)
         {
             for (int r = 0; r < runs.Count; r++)
             {
@@ -170,7 +172,8 @@ namespace Stabby.World
                 if (r > 0)
                 {
                     var (qx, qz) = runs[r - 1];
-                    list.Add(new RoadSegment { X0 = qx[qx.Count - 1], Z0 = qz[qz.Count - 1], X1 = px[0], Z1 = pz[0], HalfWidth = TunnelHalfM, Kind = RoadSegment.Tunnel });
+                    int kind = joins[r - 1];
+                    list.Add(new RoadSegment { X0 = qx[qx.Count - 1], Z0 = qz[qz.Count - 1], X1 = px[0], Z1 = pz[0], HalfWidth = kind == RoadSegment.Tunnel ? TunnelHalfM : RoadHalfM, Kind = kind });
                 }
                 for (int k = 0; k + 1 < px.Count; k++)
                 {
@@ -234,10 +237,9 @@ namespace Stabby.World
 
         void PlaceRoadSites()
         {
-            var bins = new ObjectInstance[across * across][];
             var all = new List<ObjectInstance>();
+            var chunks = new List<int>();
             var scratch = new List<ObjectInstance>();
-            var cells = new Dictionary<int, List<int>>();
             for (int d = 0; d < lib.Objects.Count; d++)
             {
                 if (!RoadSite(d)) continue;
@@ -245,15 +247,26 @@ namespace Stabby.World
                 {
                     scratch.Clear();
                     PlaceInto(c % across, c / across, false, scratch, null, false, false, d);
-                    if (scratch.Count == 0) continue;
-                    var bin = bins[c];
-                    int at = bin == null ? 0 : bin.Length;
-                    Array.Resize(ref bin, at + scratch.Count);
-                    scratch.CopyTo(bin, at);
-                    bins[c] = bin;
                     all.AddRange(scratch);
+                    for (int k = 0; k < scratch.Count; k++) chunks.Add(c);
                 }
             }
+            IndexSites(all, chunks.ToArray());
+        }
+
+        void IndexSites(List<ObjectInstance> all, int[] chunks)
+        {
+            var bins = new ObjectInstance[across * across][];
+            var count = new int[across * across];
+            foreach (int c in chunks) count[c]++;
+            var fill = new int[across * across];
+            for (int k = 0; k < all.Count; k++)
+            {
+                int c = chunks[k];
+                var bin = bins[c] ?? (bins[c] = new ObjectInstance[count[c]]);
+                bin[fill[c]++] = all[k];
+            }
+            var cells = new Dictionary<int, List<int>>();
             for (int k = 0; k < all.Count; k++)
             {
                 var o = all[k];
@@ -269,6 +282,7 @@ namespace Stabby.World
             }
             roadSites = bins;
             siteList = all;
+            siteChunkOf = chunks;
             siteCells = cells;
         }
 
@@ -302,7 +316,7 @@ namespace Stabby.World
                 }
             foreach (var s in list)
             {
-                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel) continue;
+                if (s.Kind == RoadSegment.Lane || s.Kind == RoadSegment.Tunnel || s.Kind == RoadSegment.Bridge) continue;
                 float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, l2 = dx * dx + dz * dz;
                 float t = l2 > 1e-9f ? Math.Max(0f, Math.Min(1f, ((o.X - s.X0) * dx + (o.Z - s.Z0) * dz) / l2)) : 0f;
                 float px = s.X0 + t * dx, pz = s.Z0 + t * dz, d2 = (px - o.X) * (px - o.X) + (pz - o.Z) * (pz - o.Z);
@@ -315,14 +329,14 @@ namespace Stabby.World
             if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return;
             var path = Route(Cell(ax), Cell(az), Cell(tx), Cell(tz), out var jumps, out var bored);
             if (path == null) return;
-            var runs = Runs(path, jumps);
+            var runs = Runs(path, jumps, out var joins);
             var (fx, fz) = runs[0];
             var (lx, lz) = runs[runs.Count - 1];
             int end = lx.Count - 1;
             if (RoadFault(sx, sz, fx[0], fz[0], out _) != null) return;
             if (!town && RoadFault(lx[end], lz[end], tx, tz, out _) != null) return;
             AddRun(sx, sz, fx[0], fz[0], list);
-            EmitRuns(runs, list, true);
+            EmitRuns(runs, joins, list, true);
             if (town) list.Add(new RoadSegment { X0 = lx[end], Z0 = lz[end], X1 = ex, Z1 = ez, HalfWidth = RoadHalfM, Kind = RoadSegment.Lane });
             else AddRun(lx[end], lz[end], tx, tz, list);
             Commit(bored);
@@ -401,13 +415,33 @@ namespace Stabby.World
             return null;
         }
 
+        string KnightFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford)
+        {
+            ford = false;
+            float dx = x1 - x0, dz = z1 - z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
+            int pieces = Math.Max(1, (int)Math.Ceiling(len / cm));
+            float xa = x0, za = z0, ha = h0;
+            for (int k = 0; k < pieces; k++)
+            {
+                float tb = (float)(k + 1) / pieces, xb = x0 + dx * tb, zb = z0 + dz * tb;
+                float hb = xb == x1 && zb == z1 ? h1 : GroundAt(detail, cm, xb, zb);
+                string f = StepFault(xa, za, xb, zb, ha, hb, out bool wet);
+                if (f != null) return f;
+                ford |= wet;
+                xa = xb; za = zb; ha = hb;
+            }
+            return null;
+        }
+
         string StepFault(float x0, float z0, float x1, float z1, out bool ford) => StepFault(x0, z0, x1, z1, GroundAt(detail, cm, x0, z0), GroundAt(detail, cm, x1, z1), out ford);
 
-        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford)
+        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford) => StepFault(x0, z0, x1, z1, h0, h1, h0, h1, out ford, false);
+
+        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, float u0, float u1, out bool ford, bool bridge)
         {
             ford = false;
             float len = (float)Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
-            if (Math.Abs(h1 - h0) > RoadGrade * len) return "is too steep";
+            if (!bridge && Math.Abs(h1 - h0) > RoadGrade * len) return "is too steep";
             int last = -1;
             for (int t = 0; t <= 2; t++)
             {
@@ -425,9 +459,10 @@ namespace Stabby.World
                         var f = solid[~item];
                         if (f.Shape == FeatureEdit.Boulder || f.Shape == FeatureEdit.Spring || f.Shape == FeatureEdit.Vault || f.Link) continue;
                         if (Math.Max(x0, x1) + RoadHalfM < f.MinX || Math.Min(x0, x1) - RoadHalfM > f.MaxX || Math.Max(z0, z1) + RoadHalfM < f.MinZ || Math.Min(z0, z1) - RoadHalfM > f.MaxZ) continue;
-                        if (f.MinY < Math.Max(h0, h1) + RoadEditY && f.MaxY > Math.Min(h0, h1) - RoadEditY) return $"meets a feature edit of shape {f.Shape}";
+                        if (f.MinY < Math.Max(h0, h1) + RoadEditY && f.MaxY > Math.Min(u0, u1) - RoadEditY) return $"meets a feature edit of shape {f.Shape}";
                         continue;
                     }
+                    if (bridge) continue;
                     float g = phw[item] + RoadHalfM;
                     if (SegmentSegment2(x0, z0, x1, z1, pax[item], paz[item], pbx[item], pbz[item]) >= g * g) continue;
                     if (phw[item] > FordHalfM) return "crosses a river too wide to ford";
@@ -459,27 +494,42 @@ namespace Stabby.World
         void Link(TownPlan[] plans, int a, int b, List<RoadSegment> list)
         {
             var pa = plans[a]; var pb = plans[b];
-            LaneEnd(pa, pb, out float ax, out float az, out float aox, out float aoz);
-            LaneEnd(pb, pa, out float bx, out float bz, out float box, out float boz);
-            var path = Route(Cell(aox), Cell(aoz), Cell(box), Cell(boz), out var jumps, out var bored);
-            if (path == null) return;
-            var runs = Runs(path, jumps);
-            var (fx, fz) = runs[0];
-            var (lx, lz) = runs[runs.Count - 1];
-            list.Add(new RoadSegment { X0 = ax, Z0 = az, X1 = fx[0], Z1 = fz[0], HalfWidth = RoadHalfM, Kind = RoadSegment.Lane });
-            EmitRuns(runs, list, false);
-            list.Add(new RoadSegment { X0 = lx[lx.Count - 1], Z0 = lz[lz.Count - 1], X1 = bx, Z1 = bz, HalfWidth = RoadHalfM, Kind = RoadSegment.Lane });
-            Commit(bored);
+            float sa = Side(pa, pb), sb = Side(pb, pa);
+            stepSeen = new Dictionary<long, byte>();
+            groundSeen = new Dictionary<long, float>();
+            for (int k = 0; k < 4; k++)
+            {
+                float ua = k < 2 ? sa : -sa, ub = k % 2 == 0 ? sb : -sb;
+                LaneEnd(pa, ua, out float ax, out float az, out float aox, out float aoz);
+                LaneEnd(pb, ub, out float bx, out float bz, out float box, out float boz);
+                var path = Route(Cell(aox), Cell(aoz), Cell(box), Cell(boz), out var jumps, out var bored);
+                if (path == null) continue;
+                stepSeen = null; groundSeen = null;
+                var runs = Runs(path, jumps, out var joins);
+                var (fx, fz) = runs[0];
+                var (lx, lz) = runs[runs.Count - 1];
+                list.Add(new RoadSegment { X0 = ax, Z0 = az, X1 = fx[0], Z1 = fz[0], HalfWidth = RoadHalfM, Kind = RoadSegment.Lane });
+                EmitRuns(runs, joins, list, false);
+                list.Add(new RoadSegment { X0 = lx[lx.Count - 1], Z0 = lz[lz.Count - 1], X1 = bx, Z1 = bz, HalfWidth = RoadHalfM, Kind = RoadSegment.Lane });
+                Commit(bored);
+                return;
+            }
+            stepSeen = null; groundSeen = null;
         }
 
-        void LaneEnd(TownPlan p, TownPlan to, out float x, out float z, out float ox, out float oz)
+        Dictionary<long, byte> stepSeen;
+        Dictionary<long, float> groundSeen;
+
+        static float Side(TownPlan p, TownPlan to) => (to.X - p.X) * p.Ux + (to.Z - p.Z) * p.Uz >= 0 ? 1f : -1f;
+
+        void LaneEnd(TownPlan p, float s, out float x, out float z, out float ox, out float oz)
         {
-            float s = (to.X - p.X) * p.Ux + (to.Z - p.Z) * p.Uz >= 0 ? 1f : -1f, o = p.Radius + RoadHalfM + RoadOutCells * cm;
+            float o = p.Radius + RoadHalfM + RoadOutCells * cm;
             x = p.X + s * p.Ux * p.LaneM; z = p.Z + s * p.Uz * p.LaneM;
             ox = p.X + s * p.Ux * o; oz = p.Z + s * p.Uz * o;
         }
 
-        List<int> RoadPath(int sx, int sz, int tx, int tz, bool tunnels, out List<bool> jumps)
+        List<int> RoadPath(int sx, int sz, int tx, int tz, bool tunnels, out List<byte> jumps)
         {
             jumps = null;
             if (sx == tx && sz == tz) return null;
@@ -490,7 +540,8 @@ namespace Stabby.World
             var cost = new float[size];
             var from = new int[size];
             var done = new bool[size];
-            var tun = new bool[size];
+            var tun = new byte[size];
+            bool bridges = BridgeDef() >= 0;
             int hw = 2 * bw;
             var height = new float[4 * size];
             for (int i = 0; i < size; i++) { cost[i] = float.MaxValue; from[i] = -1; }
@@ -498,7 +549,15 @@ namespace Stabby.World
             float Lattice(int hx, int hz)
             {
                 int k = (hz - 2 * z0) * hw + hx - 2 * x0;
-                if (float.IsNaN(height[k])) height[k] = GroundAt(detail, cm, 0.5f * hx * cm, 0.5f * hz * cm);
+                if (float.IsNaN(height[k]))
+                {
+                    long g = (long)hz * (2 * n + 1) + hx;
+                    if (groundSeen == null || !groundSeen.TryGetValue(g, out height[k]))
+                    {
+                        height[k] = GroundAt(detail, cm, 0.5f * hx * cm, 0.5f * hz * cm);
+                        if (groundSeen != null) groundSeen[g] = height[k];
+                    }
+                }
                 return height[k];
             }
             var heap = new List<(float f, int i)>();
@@ -526,7 +585,31 @@ namespace Stabby.World
                     float c = cost[cur] + dist * TunnelCost;
                     if (c < cost[j])
                     {
-                        cost[j] = c; from[j] = cur; tun[j] = true;
+                        cost[j] = c; from[j] = cur; tun[j] = 1;
+                        HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
+                    }
+                    return;
+                }
+            }
+            void Span(int cur, int cx, int cz, int dx, int dz)
+            {
+                float step = (dx != 0 && dz != 0 ? 1.41421356f : 1f) * cm, ax = cx * cm, az = cz * cm;
+                if (Footing(ax, az) != null) return;
+                int most = (int)(lib.Roads.SpanM / step), tries = 0;
+                bool wet = false;
+                for (int k = 1; k <= most; k++)
+                {
+                    int nx = cx + k * dx, nz = cz + k * dz;
+                    if (nx < x0 || nz < z0 || nx > x1 || nz > z1) return;
+                    if (RiverUnder(nx * cm, nz * cm, 0, out _, out _)) { wet = true; continue; }
+                    if (!wet) { if (k >= BridgeLookCells) return; continue; }
+                    int j = (nz - z0) * bw + (nx - x0);
+                    if (k < 2 || done[j]) continue;
+                    if (!BridgeOk(cz * n + cx, nz * n + nx)) { if (++tries >= BridgeTries) return; continue; }
+                    float c = cost[cur] + k * step * BridgeCost;
+                    if (c < cost[j])
+                    {
+                        cost[j] = c; from[j] = cur; tun[j] = 2;
                         HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
                     }
                     return;
@@ -542,22 +625,27 @@ namespace Stabby.World
                 done[cur] = true;
                 if (cur == goal) break;
                 int cx = cur % bw + x0, cz = cur / bw + z0;
-                for (int dz = -1; dz <= 1; dz++)
-                    for (int dx = -1; dx <= 1; dx++)
+                for (int dz = -2; dz <= 2; dz++)
+                    for (int dx = -2; dx <= 2; dx++)
                     {
-                        if (dx == 0 && dz == 0) continue;
+                        int ad = Math.Abs(dx) + Math.Abs(dz);
+                        if (ad == 0 || (ad == 2 && dx != 0 && dz == 0) || (ad == 2 && dz != 0 && dx == 0) || ad == 4) continue;
                         int nx = cx + dx, nz = cz + dz;
                         if (nx < x0 || nz < z0 || nx > x1 || nz > z1) continue;
                         int j = (nz - z0) * bw + (nx - x0);
                         if (done[j]) continue;
                         float ax = cx * cm, az = cz * cm, bx = nx * cm, bz = nz * cm;
-                        float len = (dx != 0 && dz != 0 ? 1.41421356f : 1f) * cm;
+                        float len = (ad == 3 ? 2.23606798f : ad == 2 ? 1.41421356f : 1f) * cm;
                         float ha = Lattice(2 * cx, 2 * cz), hb = Lattice(2 * nx, 2 * nz), rise = Math.Abs(hb - ha);
-                        if (tunnels && hb > ha && rise > TunnelRise * RoadGrade * len) Jump(cur, cx, cz, dx, dz, ha);
-                        if (rise > RoadGrade * len) continue;
+                        if (tunnels && ad < 3 && hb > ha && rise > TunnelRise * RoadGrade * len) Jump(cur, cx, cz, dx, dz, ha);
+                        bool span = bridges && ad < 3 && WideAhead(cx, cz, dx, dz);
+                        if (rise > RoadGrade * len) { if (span) Span(cur, cx, cz, dx, dz); continue; }
                         bool ford;
                         string why;
-                        if (dx != 0 && dz != 0)
+                        long sk = ((long)cz * n + cx) * 25 + (dz + 2) * 5 + dx + 2;
+                        if (stepSeen != null && stepSeen.TryGetValue(sk, out byte seen)) { why = seen == 2 ? "" : null; ford = seen == 1; }
+                        else if (ad == 3) why = KnightFault(ax, az, bx, bz, ha, hb, out ford);
+                        else if (dx != 0 && dz != 0)
                         {
                             float hm = Lattice(2 * cx + dx, 2 * cz + dz), mx = (cx + 0.5f * dx) * cm, mz = (cz + 0.5f * dz) * cm;
                             why = StepFault(ax, az, mx, mz, ha, hm, out bool f0);
@@ -566,17 +654,18 @@ namespace Stabby.World
                             ford = why == null && (f0 || f1);
                         }
                         else why = StepFault(ax, az, bx, bz, ha, hb, out ford);
-                        if (why != null) continue;
+                        if (stepSeen != null) stepSeen[sk] = why != null ? (byte)2 : ford ? (byte)1 : (byte)0;
+                        if (why != null) { if (span) Span(cur, cx, cz, dx, dz); continue; }
                         float grade = rise / len;
                         float c = cost[cur] + len * (1 + RoadClimb * grade) * (ford ? FordCost : 1f);
                         if (c >= cost[j]) continue;
-                        cost[j] = c; from[j] = cur; tun[j] = false;
+                        cost[j] = c; from[j] = cur; tun[j] = 0;
                         HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
                     }
             }
             if (!done[goal]) return null;
             var path = new List<int>();
-            jumps = new List<bool>();
+            jumps = new List<byte>();
             for (int k = goal; k >= 0; k = from[k]) { path.Add((k / bw + z0) * n + k % bw + x0); jumps.Add(tun[k]); }
             path.Reverse();
             jumps.Reverse();

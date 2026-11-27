@@ -14,7 +14,7 @@ namespace Stabby.World
         static readonly float[] HouseSeat = { 0, 0, 0.4f, 0.3f, -0.4f, 0.3f, 0.4f, -0.3f, -0.4f, -0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook ? YardSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower ? YardSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -22,6 +22,7 @@ namespace Stabby.World
             {
                 case ObjectPart.Inn: Inn(l, key, Frame.Root(InnU)); break;
                 case ObjectPart.House: House(l, key, Frame.Root(HouseU)); break;
+                case ObjectPart.Bones: Bones(l, key, Frame.Root(BonesU)); break;
                 case ObjectPart.InnYard: Yard(l, key, Frame.Root(YardU)); break;
                 case ObjectPart.Table: Table(l, key, Frame.Root(1 / 1.6f)); break;
                 case ObjectPart.Bench: Bench(l, key, Frame.Root(1 / 1.4f)); break;
@@ -47,6 +48,8 @@ namespace Stabby.World
                 case ObjectPart.WolfDen: WolfDen(l, key, Frame.Root(WolfU)); break;
                 case ObjectPart.Overlook: Overlook(l, key, Frame.Root(OverlookU)); break;
                 case ObjectPart.InnRoadside: Roadside(l, key, Frame.Root(RoadsideU)); break;
+                case ObjectPart.SaltTower: SaltTower(l, key, Frame.Root(SaltU)); break;
+                case ObjectPart.Bridge: Bridge(l, key, Frame.Root(BridgeU)); break;
                 case ObjectPart.WallTorch: WallTorch(l, key, Frame.Root(1 / 0.7f)); break;
             }
         }

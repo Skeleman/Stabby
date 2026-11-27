@@ -153,6 +153,23 @@
         }
       }
     },
+    "roads": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bridge": {
+          "type": "object",
+          "required": ["object", "spanM", "riverWidthM", "clearM"],
+          "additionalProperties": false,
+          "properties": {
+            "object": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+            "spanM": { "type": "number", "exclusiveMinimum": 0 },
+            "riverWidthM": { "type": "number", "exclusiveMinimum": 0 },
+            "clearM": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
     "towns": {
       "type": "array",
       "items": {
@@ -234,7 +251,7 @@
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string" },
-                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "overlook", "inn-roadside"] },
+                "shape": { "enum": ["rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "bones", "salt-tower", "road-bridge", "inn-roadside"] },
                 "offset": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
                 "scale": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 }, "minItems": 3, "maxItems": 3 },
                 "solid": { "enum": ["", "on", "off"] },
@@ -270,9 +287,10 @@
               "chainMax": { "type": "integer", "minimum": 1, "maximum": 24 },
               "chainCorner": { "type": "number", "minimum": 0, "maximum": 1 },
               "chainGate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "chainHead": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
               "bank": { "enum": ["reed", "bar", "drift", "rapid"] },
               "perHundredM": { "type": "number", "minimum": 0, "maximum": 800 },
-              "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "lone-inn"] },
+              "discovery": { "enum": ["hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "lone-inn"] },
               "cave": { "enum": ["stalactite", "stalagmite", "rubble", "column", "crystal", "fungus", "crystal-light", "skylight", "mine-timber", "mine-rail", "mine-cart", "lava-glow"] },
               "caveIce": { "type": "boolean" },
               "liquid": { "type": "string", "pattern": "^[a-z][a-z-]*$" },

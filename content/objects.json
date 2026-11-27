@@ -23,6 +23,9 @@
       "sites": [ { "object": "well", "place": "centre", "count": [1, 1] }, { "object": "inn", "place": "plaza", "count": [1, 1] }, { "object": "house", "place": "lane", "count": [5, 9] } ]
     }
   ],
+  "roads": {
+    "bridge": { "object": "road-bridge", "spanM": 320, "riverWidthM": 280, "clearM": 1.5 }
+  },
   "objects": [
     {
       "id": "small-rock", "name": "Small rock", "kind": "static", "material": "fieldstone-grey", "variants": 6,
@@ -168,7 +171,7 @@
       "id": "dry-stone-wall", "name": "Dry-stone wall", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
       "parts": [ { "id": "wall", "shape": "dry-stone-wall" } ],
       "placement": { "biomes": ["steppe", "shrubland", "tundra", "temperate-forest", "alpine", "boreal", "cold-desert"], "perHectare": 0.1, "slopeMax": 0.25, "hardnessMin": 0.1, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005,
-        "chainMin": 3, "chainMax": 10, "chainCorner": 0.14, "chainGate": 0.07,
+        "chainMin": 3, "chainMax": 10, "chainCorner": 0.14, "chainGate": 0.07, "chainHead": "wall-head",
         "biomeDensity": [ { "biome": "temperate-forest", "scale": 0.4 }, { "biome": "boreal", "scale": 0.3 }, { "biome": "cold-desert", "scale": 0.5 } ] }
     },
     {
@@ -341,6 +344,16 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "tundra", "steppe", "shrubland", "savanna", "tropical-forest", "alpine", "cold-desert", "desert"], "perHectare": 0, "discovery": "overlook", "spacingM": 800, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 8, "sizeMaxM": 9, "sink": 0.002 }
     },
     {
+      "id": "salt-tower", "name": "Salt tower", "kind": "structure", "material": "salt-crust", "variants": 6,
+      "parts": [ { "id": "site", "shape": "salt-tower", "material": "salt-crust" } ],
+      "placement": { "biomes": ["steppe", "cold-desert", "desert"], "perHectare": 0, "discovery": "salt-tower", "spacingM": 800, "chance": 0.6, "slopeMax": 0.3, "sizeMinM": 11, "sizeMaxM": 13, "sink": 0.002 }
+    },
+    {
+      "id": "road-bridge", "name": "Road bridge", "kind": "structure", "material": "hewn-timber", "variants": 4,
+      "parts": [ { "id": "span", "shape": "road-bridge" } ],
+      "placement": { "perHectare": 0, "sizeMinM": 4, "sizeMaxM": 4 }
+    },
+    {
       "id": "stalactite", "name": "Stalactite", "kind": "static", "material": "dripstone", "variants": 8,
       "parts": [ { "id": "body", "shape": "dripstone", "scale": [0.3, 1, 0.3], "solid": "off" } ],
       "placement": { "perHectare": 0, "cave": "stalactite", "perHundredM": 60, "sizeMinM": 0.4, "sizeMaxM": 8, "clusterCount": 3, "clusterRadiusM": 1.0, "sink": 0.1 }
@@ -451,9 +464,19 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland"], "perHectare": 0, "discovery": "dungeon", "spacingM": 1200, "chance": 0.6, "slopeMax": 0.25, "sizeMinM": 16, "sizeMaxM": 16, "sink": 0 }
     },
     {
+      "id": "wall-head", "name": "Wall head", "kind": "structure", "material": "fieldstone-grey", "variants": 4,
+      "parts": [ { "id": "head", "shape": "wall-head" } ],
+      "placement": { "perHectare": 0, "slopeMax": 0.4, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005 }
+    },
+    {
+      "id": "bones", "name": "Giant bones", "kind": "structure", "material": "aged-bone", "variants": 6,
+      "parts": [ { "id": "site", "shape": "bones" } ],
+      "placement": { "biomes": ["steppe", "savanna", "shrubland", "desert", "cold-desert"], "perHectare": 0, "discovery": "bones", "spacingM": 1000, "chance": 1, "slopeMax": 0.25, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.002 }
+    },
+    {
       "id": "lone-inn", "name": "Roadside inn", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "inn", "shape": "inn", "offset": [0, 0, -0.12], "scale": [0.63, 0.63, 0.63] }, { "id": "yard", "shape": "inn-yard" }, { "id": "roadside", "shape": "inn-roadside" } ],
-      "placement": { "biomes": ["steppe", "temperate-forest", "temperate-rain", "boreal", "shrubland", "savanna"], "perHectare": 0, "discovery": "lone-inn", "spacingM": 600, "chance": 0.8, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
+      "placement": { "biomes": ["steppe", "temperate-forest", "temperate-rain", "boreal", "shrubland", "savanna"], "perHectare": 0, "discovery": "lone-inn", "spacingM": 300, "chance": 1, "slopeMax": 0.06, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.005, "alignToSlope": 0 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

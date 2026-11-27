@@ -12,7 +12,7 @@ namespace Stabby.World
         public int TriangleCount => Indices.Length / 3;
     }
 
-    public static class ObjectMeshes
+    public static partial class ObjectMeshes
     {
         public const int MaxLods = 4;
         static readonly int[] RockLevels = { 3, 2, 1, 0 };
@@ -643,6 +643,14 @@ namespace Stabby.World
             }
         }
 
+        public const float PitRimY = -1.1f, PitSkirt = 1.6f;
+
+        public static void PitReach(float rp, float thick, out float centreX, out float radius)
+        {
+            centreX = 0.3f - thick - 0.55f * rp;
+            radius = 1.5f * rp;
+        }
+
         public static void RootPlate(ulong key, out float radius, out float centreY, out float thickness)
         {
             var rng = new Rng(Rng.Mix(key ^ 0x3C6EF372FE94F82BUL));
@@ -942,10 +950,10 @@ namespace Stabby.World
                 }
             }
             float rpit = rp * pitScale, pcx = xp - thick - 0.55f * rpit;
-            var pitRho = new[] { 0.55f, 1f, 1.5f };
-            var pitY = new[] { -0.94f, 0f, -1.1f };
-            var pit = new int[3][];
-            for (int q = 0; q < 3; q++)
+            var pitRho = new[] { 0.55f, 1f, 1.5f, 1.45f };
+            var pitY = new[] { -0.94f, 0f, PitRimY, PitRimY - PitSkirt };
+            var pit = new int[4][];
+            for (int q = 0; q < 4; q++)
             {
                 pit[q] = new int[seg];
                 for (int k = 0; k < seg; k++)
@@ -953,7 +961,7 @@ namespace Stabby.World
                     Ring(seg, k, out float c, out float s);
                     float rr = rpit * pitRho[q] * (1 + 0.5f * pitRim.At(c, s));
                     float y = q == 1 ? -1 + rimRise * (1 + pitRim.At(s, c)) + jr.Range(-0.05f, 0.05f) : pitY[q];
-                    float blend = q == 0 ? 0.25f : q == 1 ? 0.55f : 1f, dark = q == 0 ? 1f : q == 1 ? 0.35f : 0f;
+                    float blend = q == 0 ? 0.25f : q == 1 ? 0.55f : 1f, dark = q == 0 ? 1f : q == 1 ? 0.35f : q == 2 ? 0f : Contact(y);
                     pit[q][k] = w.Add(new ObjectFoliage.V(pcx + 0.7f * rr * c, y, rr * s), CodeSoil, blend, dark, age);
                 }
             }
@@ -964,6 +972,9 @@ namespace Stabby.World
                 w.Tri(pc, pit[0][k], pit[0][k1], ey);
                 w.Quad(pit[0][k], pit[0][k1], pit[1][k1], pit[1][k], ey);
                 w.Quad(pit[1][k], pit[1][k1], pit[2][k1], pit[2][k], ey);
+                Ring(seg, k, out float c0, out float s0);
+                Ring(seg, k1, out float c1, out float s1);
+                w.Quad(pit[2][k], pit[2][k1], pit[3][k1], pit[3][k], new ObjectFoliage.V(c0 + c1, 0, s0 + s1));
             }
         }
 

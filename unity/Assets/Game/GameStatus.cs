@@ -10,7 +10,9 @@ namespace Stabby.Game
         public static int Capsules, TerrainBehind, ToolFrame = -100, ToolFrames, TerrainVertices;
         public static float TerrainMs;
         public static bool TerrainBuilt, HoldCamera;
-        public static string Failure, TerrainStage;
+        public static string TerrainStage;
+        static string failure;
+        public static string Failure { get => failure; set { failure = value; if (value != null) UnityEngine.Debug.LogError("Stabby failure: " + value); } }
         public static int Frames, SlowFrames;
         public static float WorstMs, WorstPlayMs;
         public static string WorstWhy;

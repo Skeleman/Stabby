@@ -5,6 +5,11 @@ TEXTURE2D(_StabbyContact);
 SAMPLER(sampler_StabbyContact);
 float4 _StabbyContactUV;
 
+float FieldShare(float cover)
+{
+    return 1 - (cover < 0 ? smoothstep(0.3, 0.9, -cover) : smoothstep(2, 6, cover));
+}
+
 float3 ContactTint(float3 g, float ice)
 {
     float l = dot(g, float3(0.2126, 0.7152, 0.0722));

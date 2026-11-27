@@ -42,11 +42,12 @@ namespace Stabby.World
         };
         static readonly float[] WallSeat = { -0.45f, 0, -0.225f, 0, 0, 0, 0.225f, 0, 0.45f, 0 };
         static readonly float[] CairnSeat = { 0, 0, 0.4f, 0, -0.4f, 0, 0, 0.4f, 0, -0.4f };
+        static readonly float[] HeadSeat = { 0, 0, 0.065f, 0, -0.065f, 0, 0, 0.085f, 0, -0.085f };
 
         internal static float Cos16(int k) => Dir[k & 15];
         internal static float Sin16(int k) => Dir[(k + 12) & 15];
 
-        public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : KitSeat(shape);
+        public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : shape == ObjectPart.WallHead ? HeadSeat : KitSeat(shape);
 
         public static float Skirt(in StructurePiece p) => p.Y - p.Base <= GroundY ? SkirtShare * Math.Min(p.Sy, 0.5f * (p.Sx + p.Sz)) : 0;
 
@@ -55,6 +56,7 @@ namespace Stabby.World
             var l = new StructureLayout();
             if (shape == ObjectPart.Wall) Wall(key, l);
             else if (shape == ObjectPart.Cairn) Cairn(key, l);
+            else if (shape == ObjectPart.WallHead) WallHead(key, l);
             else if (ObjectPart.IsDungeon(shape)) Dungeon(shape, key, l, trim > 0 ? trim : Iron);
             else if (ObjectPart.IsMine(shape)) Mine(shape, key, l);
             else Built(shape, key, l);
@@ -83,7 +85,7 @@ namespace Stabby.World
                 var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
                 float tv = tr.Range(-1f, 1f) * (1 - p.Calm), th = tr.Range(-1f, 1f) * (1 - p.Calm), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
-                bool cut = p.Q >= Faceted && p.M == 0 && !p.Coursed;
+                bool cut = p.R == 0 && p.Q >= Faceted && p.M == 0 && !p.Coursed;
                 float[] u, lift = null;
                 int[] idx;
                 if (p.R > 0)
@@ -477,6 +479,37 @@ namespace Stabby.World
                 float top = WallTop(l, x);
                 if (top > 0.01f) l.Columns.Add(new ObjectColumn { X = x, Z = 0, R = 0.5f * WallBase, Bottom = 0, Top = top });
             }
+        }
+
+        public const float HeadLong = 0.13f, HeadWide = 0.17f;
+
+        static void WallHead(ulong key, StructureLayout l)
+        {
+            var rng = new Rng(Rng.Mix(key ^ 0x5851F42D4C957F2DUL));
+            float h = rng.Range(0.29f, 0.32f), cap = rng.Range(0.026f, 0.034f), body = h - cap;
+            int count = rng.Range(4, 6);
+            float y = 0, step = body / count;
+            for (int j = 0; j < count; j++)
+            {
+                float ch = j == count - 1 ? body - y : step * rng.Range(0.9f, 1.1f);
+                float shrink = 1 - 0.06f * (y + 0.5f * ch) / body + (j == 0 ? 0.04f : 0);
+                float sx = HeadLong * shrink, sz = HeadWide * shrink, cut = rng.Range(0.42f, 0.58f);
+                bool across = ((j + (int)(key & 1)) & 1) == 0;
+                for (int b = 0; b < 2; b++)
+                {
+                    float share = b == 0 ? cut : 1 - cut, off = b == 0 ? -0.5f * (1 - cut) : 0.5f * cut;
+                    Yaw(ref rng, FaceYaw, out float c, out float s);
+                    float bx = across ? 0 : off * sx, bz = across ? off * sz : 0;
+                    float lx = across ? sx : share * sx - 0.002f, lz = across ? share * sz - 0.002f : sz;
+                    Add(l, key, bx + rng.Range(-0.002f, 0.002f), y, bz + rng.Range(-0.002f, 0.002f), lx, ch * rng.Range(0.97f, 1f), lz, c, s, 0, 1, StoneSquare);
+                }
+                y += ch;
+            }
+            Add(l, key, 0, 0, 0, HeadLong, body, HeadWide, 1, 0, 2, 2, StoneSquare, 0, 0, 0.03f * HeadWide / body);
+            Yaw(ref rng, 0.03f, out float cc, out float cs);
+            Add(l, key, 0, body - 0.002f, 0, HeadLong + 0.02f, cap, HeadWide + 0.02f, cc, cs, 0, 2, SlabSquare, rng.Range(-0.04f, 0.04f));
+            Calm(l);
+            l.Columns.Add(new ObjectColumn { X = 0, Z = 0, R = 0.5f * HeadWide, Bottom = 0, Top = h });
         }
 
         const float CopeCalm = 0.67f;

@@ -118,7 +118,9 @@ namespace Stabby.World
                 var line = new RiverLine { X = px.ToArray(), Z = pz.ToArray(), S = ps.ToArray(), W = pw.ToArray(), D = pd.ToArray(), Falls = falls.ToArray(), Lip = lips.ToArray(), Liquid = r.Liquid, Mix = new WaterMix[px.Count] };
                 for (int k = 0; k < px.Count; k++) line.Mix[k] = new WaterMix { A = tint[0][k], B = tint[1][k], C = tint[2][k] };
                 Bends(line);
-                Steps(line, cm, ref rng);
+                var coast = new bool[px.Count];
+                for (int k = 0; k < px.Count; k++) coast[k] = Hydrology.NearSea(w.Config, w.Sea, line.X[k], line.Z[k]);
+                Steps(line, cm, coast, ref rng);
                 for (int k = 0; k < px.Count; k++)
                     if (!w.Sea[CellOf(line.X[k], line.Z[k], cm, w.Config.Size)]) line.S[k] = Math.Max(line.S[k], 0.5f * Erosion.MinLandHeight);
                 lines.Add(line);
@@ -193,11 +195,11 @@ namespace Stabby.World
             return along;
         }
 
-        static void Steps(RiverLine l, float cm, ref Rng rng)
+        static void Steps(RiverLine l, float cm, bool[] coast, ref Rng rng)
         {
             int m = l.X.Length;
             var along = Along(l);
-            var mask = new bool[m];
+            var mask = (bool[])coast.Clone();
             for (int f = 0; f < l.Lip.Length; f++)
             {
                 int lip = l.Lip[f];
@@ -538,7 +540,11 @@ namespace Stabby.World
                 float cap = Grid.Smoothstep(0, f, Math.Max(along - el, -along)) * sea;
                 raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (falls ? 1 - Gorge(c, s0, s1, x, z, s, f) : 1) * Grid.Smoothstep(0, Erosion.MinLandHeight, s) * (1 - cap) * (1 - sea * (1 - Grid.Smoothstep(2 * Erosion.MinLandHeight, 4 * Erosion.MinLandHeight, s))));
             }
-            float cut = float.MaxValue, pool = float.MaxValue, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
+            float cut = float.MaxValue, pool = float.MaxValue, bank = 1, banked = 0, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
+            Span<float> hs = stackalloc float[HoldCap], ha = stackalloc float[HoldCap], hm = stackalloc float[HoldCap], hp = stackalloc float[HoldCap];
+            int hn = -1;
+            bool hasJag = false, hasNb = false, hasRough = false, hasBoulder = false;
+            float jag = 0, nb = 0, rough = 0, boulderNoise = 0;
             for (int k = s0; k < s1; k++)
             {
                 if (!falls && !mask.Has(k - s0)) continue;
@@ -547,8 +553,15 @@ namespace Stabby.World
                 if (!mask.Has(k - s0)) continue;
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
+                bank = Math.Min(bank, Grid.Smoothstep(w, wb, d));
+                if (q.Fr <= 0 && d < wb + Bank(w)) banked = 1;
                 if (d >= wb + f) continue;
-                float gate = q.Fr > 0 || (q.Ux == 0 && q.Uz == 0) ? 1 : Grid.Smoothstep(-FallTrimM - Math.Max(0, d - w), 0, ShearAlong(q, x, z) - Jag(c, x, z));
+                float gate = 1;
+                if (!(q.Fr > 0 || (q.Ux == 0 && q.Uz == 0)))
+                {
+                    if (!hasJag) { jag = Jag(c, x, z); hasJag = true; }
+                    gate = Grid.Smoothstep(-FallTrimM - Math.Max(0, d - w), 0, ShearAlong(q, x, z) - jag);
+                }
                 float s = q.Sa + (q.Sb - q.Sa) * t, depth = q.Da + (q.Db - q.Da) * t, top = SmoothMax(h, s + Rise(w), 1f), p;
                 float ex = q.Bx - q.Ax, ez = q.Bz - q.Az, el = (float)Math.Sqrt(ex * ex + ez * ez);
                 float lat = el > 1e-3f ? ((z - q.Az) * ex - (x - q.Ax) * ez) / el : 0;
@@ -557,16 +570,18 @@ namespace Stabby.World
                 if (d < w)
                 {
                     float bed = 1 - d * d / (w * w), plunge = q.Pa + (q.Pb - q.Pa) * t, rapid = q.Ra + (q.Rb - q.Ra) * t;
-                    float rough = 1 + BedNoise * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 2u, x / BedNoiseM, z / BedNoiseM)));
-                    float boulder = rapid > 0 ? rapid * BoulderFrac * depth * Grid.Smoothstep(-0.2f, 0.8f, Noise.Gradient(c.RiverSeed + 3u, x / BoulderM, z / BoulderM)) : 0;
+                    if (!hasRough) { rough = 1 + BedNoise * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed + 2u, x / BedNoiseM, z / BedNoiseM))); hasRough = true; }
+                    if (rapid > 0 && !hasBoulder) { boulderNoise = Grid.Smoothstep(-0.2f, 0.8f, Noise.Gradient(c.RiverSeed + 3u, x / BoulderM, z / BoulderM)); hasBoulder = true; }
+                    float boulder = rapid > 0 ? rapid * BoulderFrac * depth * boulderNoise : 0;
                     float mouth = MouthDepthM * bed * (1 - Grid.Smoothstep(0.5f * Erosion.MinLandHeight, Erosion.MinLandHeight, s));
                     p = Math.Max(s - bed * (depth * (1 - BarSkew * inner) * rough + plunge - boulder) + bar * (1 - bed), 0.5f * Math.Min(s, Erosion.MinLandHeight) - mouth);
                     low = Math.Min(low, land + (Math.Max(SurfaceFloorM, 0.5f * Math.Min(s, Erosion.MinLandHeight)) - mouth - land) * (1 - Grid.Smoothstep(0.5f * w, w, d)));
                 }
                 else
                 {
-                    top = Math.Max(top, Hold(c, s0, s1, hold, x, z, h, s, f));
-                    float nb = 0.5f + 0.5f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed, x / BankNoiseM, z / BankNoiseM) + 0.5f * Noise.Gradient(c.RiverSeed + 1u, 2.3f * x / BankNoiseM, 2.3f * z / BankNoiseM)));
+                    if (hn == -1) hn = Held(c, s0, s1, hold, x, z, h, f, hs, ha, hm, hp);
+                    top = hn < 0 ? Math.Max(top, Hold(c, s0, s1, hold, x, z, h, s, f)) : Hold(hs, ha, hm, hp, hn, h, s, top);
+                    if (!hasNb) { nb = 0.5f + 0.5f * Math.Max(-1f, Math.Min(1f, Noise.Gradient(c.RiverSeed, x / BankNoiseM, z / BankNoiseM) + 0.5f * Noise.Gradient(c.RiverSeed + 1u, 2.3f * x / BankNoiseM, 2.3f * z / BankNoiseM))); hasNb = true; }
                     wb = w + Math.Max(Bank(w) * (1 - CutShrink * Math.Max(0, -inner)) * (1 - BankNoise * nb), Math.Min(Bank(w), (top - s - bar) / MaxBankSlope));
                     float r = Math.Min(WallRampM, 2f * (wb - w));
                     float u = d < wb ? (d - w) / (wb - w) : 1, ss = Grid.Smoothstep(0, 1, u), shape = ss + (u * u - ss) * Math.Max(0, inner);
@@ -580,7 +595,8 @@ namespace Stabby.World
                 var q = c.Piece(c.PieceAt(k));
                 if (q.Fr <= 0) continue;
                 float v = Pool(c, q, x, z, raised), reach = PoolReach(q.Fc, q.Fr), along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz;
-                pool = Math.Min(pool, cut < float.MaxValue ? v + Grid.Smoothstep(reach, reach + 0.5f * f, along) * Math.Max(0, cut - v) : v);
+                float past = Math.Max(Grid.Smoothstep(reach, reach + 0.5f * f, along), banked * bank * (1 - Grid.Smoothstep(-FallBlendM, 0, PoolCircle(q, x, z))));
+                pool = Math.Min(pool, cut < float.MaxValue ? v + past * Math.Max(0, cut - v) : v);
             }
             float ground = Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low);
             return isles ? Isles(c, s0, s1, x, z, ground) : ground;
@@ -599,6 +615,71 @@ namespace Stabby.World
                 float sq = q.Sa + (q.Sb - q.Sa) * t;
                 if (sq <= s) continue;
                 top = Math.Max(top, h + Math.Max(0, sq + Rise(w) - h) * (1 - Grid.Smoothstep(wb, wb + reach, d)) * Grid.Smoothstep(0, HoldStageM, sq - s));
+            }
+            return top;
+        }
+
+        const int HoldCap = 256;
+
+        static int Held<T>(T c, int s0, int s1, PieceMask mask, float x, float z, float h, float f, Span<float> hs, Span<float> ha, Span<float> hm, Span<float> hp) where T : struct, INearCells
+        {
+            int n = Gather(c, s0, s1, mask, x, z, h, f, hs, ha);
+            if (n <= 0) return n;
+            for (int i = 1; i < n; i++)
+            {
+                float ks = hs[i], ka = ha[i];
+                int j = i - 1;
+                for (; j >= 0 && hs[j] > ks; j--) { hs[j + 1] = hs[j]; ha[j + 1] = ha[j]; }
+                hs[j + 1] = ks; ha[j + 1] = ka;
+            }
+            hm[n - 1] = ha[n - 1];
+            for (int i = n - 2; i >= 0; i--) hm[i] = Math.Max(hm[i + 1], ha[i]);
+            hp[0] = ha[0];
+            for (int i = 1; i < n; i++) hp[i] = Math.Max(hp[i - 1], ha[i]);
+            return n;
+        }
+
+        static int Gather<T>(T c, int s0, int s1, PieceMask mask, float x, float z, float h, float f, Span<float> hs, Span<float> ha) where T : struct, INearCells
+        {
+            int n = 0;
+            for (int k = s0; k < s1; k++)
+            {
+                if (!mask.Has(k - s0)) continue;
+                var q = c.Piece(c.PieceAt(k));
+                Project(q, x, z, out float d, out float t);
+                float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w), reach = Math.Min(Bank(w), f);
+                if (d >= wb + reach) continue;
+                float sq = q.Sa + (q.Sb - q.Sa) * t, a = Math.Max(0, sq + Rise(w) - h) * (1 - Grid.Smoothstep(wb, wb + reach, d));
+                if (a == 0) continue;
+                if (n == HoldCap) return -2;
+                hs[n] = sq;
+                ha[n++] = a;
+            }
+            return n;
+        }
+
+        static float Hold(Span<float> hs, Span<float> ha, Span<float> hm, Span<float> hp, int n, float h, float s, float top)
+        {
+            int lo = 0, hi = n;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (hs[mid] <= s) lo = mid + 1; else hi = mid;
+            }
+            int e = n;
+            hi = n;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (hs[mid] - s >= HoldStageM) e = hi = mid; else lo = mid + 1;
+            }
+            top = Math.Max(top, h);
+            if (e < n) top = Math.Max(top, h + hm[e]);
+            for (int i = e - 1; i >= 0 && hs[i] > s; i--)
+            {
+                float g = Grid.Smoothstep(0, HoldStageM, hs[i] - s);
+                if (h + hp[i] * g <= top) break;
+                top = Math.Max(top, h + ha[i] * g);
             }
             return top;
         }
@@ -678,9 +759,13 @@ namespace Stabby.World
         static float PoolMargin(RiverPiece q, float x, float z, float f)
         {
             float along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz, side = Math.Abs((x - q.Lx) * q.Uz - (z - q.Lz) * q.Ux);
+            return Math.Max(PoolCircle(q, x, z), Math.Min(Math.Min(along - FallJagM, PoolReach(q.Fc, q.Fr) + f - along), q.Fw + OutletRing(q.Fr) + FallBlendM - side));
+        }
+
+        static float PoolCircle(RiverPiece q, float x, float z)
+        {
             Frame(q, x, z, out float sa, out float ss);
-            float circle = PoolReach(q.Fc, q.Fr) - q.Fc - PoolDist(q, sa, ss);
-            return Math.Max(circle, Math.Min(Math.Min(along - FallJagM, PoolReach(q.Fc, q.Fr) + f - along), q.Fw + OutletRing(q.Fr) + FallBlendM - side));
+            return PoolReach(q.Fc, q.Fr) - q.Fc - PoolDist(q, sa, ss);
         }
 
         static float OutletRing(float r) => Math.Max(FallRingMinM, FallRingFrac * r);
@@ -884,8 +969,9 @@ namespace Stabby.World
             float harm = 2 * d0 * d1 / (d0 + d1);
             float cross = Math.Min(Math.Max(p0, Math.Max(p1, p2)), -Math.Min(p0, Math.Min(p1, p2)));
             if (cross <= 0) return harm;
-            float w = Math.Min(1f, cross / ShoreBlendM);
-            float lim = ShoreTangentCap * Math.Min(Math.Abs(d0), Math.Abs(d1)), mean = 0.5f * (d0 + d1);
+            float step = Math.Min(Math.Abs(d0), Math.Abs(d1));
+            float w = Math.Min(1f, cross / Math.Max(ShoreBlendM, step));
+            float lim = ShoreTangentCap * step, mean = 0.5f * (d0 + d1);
             return harm + w * (Math.Max(-lim, Math.Min(lim, mean)) - harm);
         }
 

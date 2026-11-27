@@ -31,8 +31,8 @@ namespace Stabby.Game.Editor
             var lip = new Vector3(best.LipX, best.LipY, best.LipZ);
             var foot = new Vector3(best.BaseX, best.BaseY, best.BaseZ);
             float h = best.Drop, wd = best.Width;
-            int seams = FallSeams(sys.Map, best, out int flipped);
-            GameStatus.Lines["~waterfall"] = $"fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {wd:F0} m, discharge {best.Discharge:F0}, pool {best.PoolRadius:F1} m, open seams {seams}, flipped foot faces {flipped}";
+            int seams = FallSeams(sys.Map, best, out int flipped, out int unshared);
+            GameStatus.Lines["~waterfall"] = $"fall at {lip.x:F0},{lip.y:F0},{lip.z:F0}, drop {h:F1} m, width {wd:F0} m, discharge {best.Discharge:F0}, pool {best.PoolRadius:F1} m, open seams {seams}, flipped foot faces {flipped}, unshared foot verts {unshared}";
             cam.fieldOfView = 60f;
             var a = lip + fd * (h + 0.4f * wd + 6f) + side * (0.45f * wd);
             var b = lip + fd * (h + 0.4f * wd + 6f) - side * (0.45f * wd);
@@ -52,9 +52,10 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "waterfall-foot");
         }
 
-        static int FallSeams(GeneratedWorld map, FallCurtain f, out int flipped)
+        static int FallSeams(GeneratedWorld map, FallCurtain f, out int flipped, out int unshared)
         {
             flipped = 0;
+            unshared = 0;
             var fd = new Vector3(f.DirX, 0, f.DirZ);
             var side = new Vector3(fd.z, 0, -fd.x);
             var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
@@ -69,6 +70,8 @@ namespace Stabby.Game.Editor
                     var p = m.Verts[v];
                     var key = new Vector3Int(Mathf.RoundToInt(p.x * 1000), Mathf.RoundToInt(p.y * 1000), Mathf.RoundToInt(p.z * 1000));
                     if (!weld.TryGetValue(key, out ids[v])) weld[key] = ids[v] = v;
+                    float tu = Vector3.Dot(p - lip, fd), su = Mathf.Abs(Vector3.Dot(p - lip, side));
+                    if (ids[v] != v && Mathf.Abs(p.y - f.BaseY) < 0.05f && tu > -2f && tu < run && su < reach) unshared++;
                 }
                 var faces = new System.Collections.Generic.HashSet<(int, int, int)>();
                 var edges = new System.Collections.Generic.Dictionary<(int, int), int>();
