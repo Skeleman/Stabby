@@ -45,12 +45,12 @@ namespace Stabby.Viewer
         const float LakeSwellFullCells = 600f;
         public const float CurrentPerManning = 28f, CurrentMinSlope = 0.0005f, CurrentMax = 6f;
         public const float FallMinDrop = 0.3f;
-        const float FallMargin = 0.3f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, LipBlend = 1.2f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerPool = 0.5f, MistPerDrop = 0.25f, MistPhase = 0.618034f, MistSpread = 0.8f, SprayStep = 3f, SprayPerPool = 0.35f, SprayPerDrop = 0.12f, SpraySpread = 0.95f, SprayAhead = 0.2f, VeilWidth = 1.1f, VeilHeight = 0.4f, VeilAhead = 1f;
+        const float FallMargin = 0.3f, FallLipMin = 0.2f, FallLipMax = 0.75f, FallScour = 1.9f, FallScourDrop = 0.225f, FallScourQ = 0.54f, FallPoolMin = 0.6f, FallPoolMax = 2f, FallDischargePerArea = 2f, FallSink = 0.5f, LipBlend = 1.2f, FootGap = 0.5f, FootMax = 0.95f, PoolSpread = 2f, MistPerWidth = 7f, MistPerHeight = 10f, MistPerFlow = 0.5f, MistPerDrop = 0.25f, MistBase = 0.3f, MistMin = 0.5f, MistCap = 9f, MistCapPerDrop = 0.5f, MistCapPerWidth = 0.25f, MistFlowBase = 0.4f, MistJitter = 0.35f, MistPhase = 0.618034f, MistSpread = 0.8f, SprayStep = 3f, SprayPerDrop = 0.1f, SprayBase = 0.15f, SprayMin = 0.25f, SprayCap = 4f, SpraySpread = 0.95f, SprayAhead = 0.2f;
         public const float MistPad = 40f;
         const float SteamRadius = 0.55f, SteamRise = 2.2f, ShoreOvershoot = 0.25f, ColumnRadius = 0.9f;
         public const float ColumnPerRadius = 14f;
         const int SteamPuffs = 2, JetPuffs = 7, ColumnSteamPuffs = 3;
-        const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
+        const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12, MistPuffs = 3;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f, FootBendPerDrop = 0.25f, FootBendMin = 0.3f, FootBendMax = 1.5f, FootFade = 0.5f;
         const int FootBendRows = 4;
@@ -544,20 +544,18 @@ namespace Stabby.Viewer
             {
                 float flowQ = Mathf.Clamp01(Mathf.Log(1 + f.Discharge, 2) / 9), seed = along * 0.0137f + f.Mid * 0.37f;
                 var basePos = new Vector3(f.BaseX, f.BaseY, f.BaseZ) + push;
-                float spray = Mathf.Clamp(SprayPerPool * f.PoolRadius + SprayPerDrop * f.Drop, 1.2f, 6f);
+                float scale = MistFlowBase + flowQ;
+                float spray = Mathf.Clamp(SprayPerDrop * f.Drop * scale + SprayBase, SprayMin, SprayCap);
                 int sprays = Mathf.Clamp(Mathf.RoundToInt((Mathf.RoundToInt(f.RunWidth / SprayStep) + 1) * Amount), 2, SprayMax);
                 for (int m = 0; m < sprays; m++)
                     Puff(At(f, basePos, fwd, side, ((m + 0.5f) / sprays * 2 - 1) * SpraySpread * f.Span) + fwd * (SprayAhead * spray), fwd, flowQ, Mathf.Repeat(m * MistPhase + seed, 1f), new Vector2(spray, f.Drop), 0);
                 int mists = Mathf.Clamp(Mathf.RoundToInt((f.RunWidth / MistPerWidth + f.Drop / MistPerHeight + MistPerFlow * Mathf.Sqrt(f.Discharge)) * Amount), 1, MistMax);
-                float radius = Mathf.Clamp(MistPerPool * f.PoolRadius + MistPerDrop * f.Drop, 2.5f, 14f);
-                for (int m = 0; m < mists; m++)
+                float radius = Mathf.Min(Mathf.Clamp(MistPerDrop * f.Drop * scale + MistBase, MistMin, MistCap), MistCapPerDrop * f.Drop + MistCapPerWidth * f.RunWidth);
+                for (int m = 0; m < mists * MistPuffs; m++)
                 {
-                    var c = At(f, basePos, fwd, side, ((m + 0.5f) / mists * 2 - 1) * MistSpread * f.Span) + fwd * (0.3f * radius);
-                    float phase = Mathf.Repeat(m * MistPhase + seed + 0.29f, 1f);
-                    Puff(c, fwd, flowQ, phase, new Vector2(radius, f.Drop), 1);
-                    Puff(c, fwd, flowQ, Mathf.Repeat(phase + 0.5f, 1f), new Vector2(radius, f.Drop), 1);
+                    float phase = Mathf.Repeat(m * MistPhase + seed + 0.29f, 1f), mu = ((m / MistPuffs + 0.5f) / mists * 2 - 1 + (phase - 0.5f) * MistJitter * 2 / mists) * MistSpread * f.Span;
+                    Puff(At(f, basePos, fwd, side, mu) + fwd * (0.3f * radius), fwd, flowQ, phase, new Vector2(radius, f.Drop), 1);
                 }
-                Puff(basePos + fwd * VeilAhead, fwd, flowQ, Mathf.Repeat(seed + 0.5f, 1f), new Vector2(0.5f * VeilWidth * f.RunWidth, VeilHeight * h), 2);
             }
 
             public void Vent(Vector3 c, float phase, float radius, float rise) => Puff(c, Vector3.right, 0, phase, new Vector2(radius, rise), 3);
