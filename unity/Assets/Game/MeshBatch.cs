@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Stabby.Viewer;
 using Unity.Burst;
 using Unity.Collections;
@@ -62,56 +63,96 @@ namespace Stabby.Game
             Add(name, new MeshPiece { Id = id, Vertex = vertex, VertexCount = vertices.Length / floats, Floats = floats, Index = index, IndexCount = indices.Length, Attr = attr, AttrCount = attrCount });
         }
 
-        public void Add(MeshParts d, int id, bool lean = false)
+        sealed class Plan
         {
-            int attr = Attrs.Length, floats = 3, vc = d.Verts.Length;
-            Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Position));
-            var norms = lean ? null : d.Norms;
-            var extra = new[] { d.Uv1, d.Uv2, d.Uv3, d.Uv4 };
-            int nAt = Channel(VertexAttribute.Normal, norms != null, false, 3, ref floats);
-            bool cHalf = lean && d.Cols != null && HalfExact(d.Cols);
-            int cAt = Channel(VertexAttribute.Color, d.Cols != null, cHalf, 4, ref floats);
-            bool tHalf = lean && d.Uvs != null && HalfExact(d.Uvs);
-            int tAt = Channel(VertexAttribute.TexCoord0, d.Uvs != null, tHalf, 2, ref floats);
-            var eAt = new int[4];
-            var eHalf = new bool[4];
-            for (int u = 0; u < 4; u++)
-            {
-                eHalf[u] = lean && extra[u] != null && HalfExact(extra[u]);
-                eAt[u] = Channel(VertexAttribute.TexCoord1 + u, extra[u] != null, eHalf[u], 4, ref floats);
-            }
-            int vertex = Vertices.Length;
-            Vertices.ResizeUninitialized(vertex + vc * floats);
-            var dst = Vertices.AsArray().Reinterpret<uint>();
-            for (int v = 0; v < vc; v++)
-            {
-                int o = vertex + v * floats;
-                var p = d.Verts[v];
-                dst[o] = math.asuint(p.x); dst[o + 1] = math.asuint(p.y); dst[o + 2] = math.asuint(p.z);
-                if (nAt >= 0) { var q = norms[v]; dst[o + nAt] = math.asuint(q.x); dst[o + nAt + 1] = math.asuint(q.y); dst[o + nAt + 2] = math.asuint(q.z); }
-                if (cAt >= 0) { var c = d.Cols[v]; Put(dst, o + cAt, c.r, c.g, c.b, c.a, cHalf); }
-                if (tAt >= 0)
-                {
-                    var t = d.Uvs[v];
-                    if (tHalf) dst[o + tAt] = math.f32tof16(t.x) | (math.f32tof16(t.y) << 16);
-                    else { dst[o + tAt] = math.asuint(t.x); dst[o + tAt + 1] = math.asuint(t.y); }
-                }
-                for (int u = 0; u < 4; u++)
-                    if (eAt[u] >= 0) { var e = extra[u][v]; Put(dst, o + eAt[u], e.x, e.y, e.z, e.w, eHalf[u]); }
-            }
-            bool wide = vc > 65535;
-            int index = wide ? Wide.Length : Narrow.Length;
-            if (wide) foreach (var t in d.Tris) Wide.Add(t);
-            else foreach (var t in d.Tris) Narrow.Add((ushort)t);
-            Add(d.Name, new MeshPiece { Id = id, Vertex = vertex, VertexCount = vc, Floats = floats, Index = index, IndexCount = d.Tris.Length, Attr = attr, AttrCount = Attrs.Length - attr, Wide = wide, AllBounds = true });
+            public readonly List<VertexAttributeDescriptor> Attrs = new List<VertexAttributeDescriptor>();
+            public Vector3[] Norms;
+            public Vector4[][] Extra;
+            public int Floats = 3, N, C, T;
+            public readonly int[] E = new int[4];
+            public bool CHalf, THalf;
+            public readonly bool[] EHalf = new bool[4];
+            public int Attr, Vertex, Index;
         }
 
-        int Channel(VertexAttribute at, bool present, bool half, int dim, ref int floats)
+        public void Add(IReadOnlyList<(MeshParts Part, int Id, bool Lean)> parts)
+        {
+            var plans = new Plan[parts.Count];
+            Parallel.For(0, parts.Count, i => plans[i] = PlanOf(parts[i].Part, parts[i].Lean));
+            int vertex = Vertices.Length, narrow = Narrow.Length, wide = Wide.Length;
+            for (int i = 0; i < parts.Count; i++)
+            {
+                var d = parts[i].Part;
+                var p = plans[i];
+                p.Attr = Attrs.Length;
+                foreach (var a in p.Attrs) Attrs.Add(a);
+                p.Vertex = vertex;
+                vertex += d.Verts.Length * p.Floats;
+                bool w = d.Verts.Length > 65535;
+                p.Index = w ? wide : narrow;
+                if (w) wide += d.Tris.Length;
+                else narrow += d.Tris.Length;
+                Add(d.Name, new MeshPiece { Id = parts[i].Id, Vertex = p.Vertex, VertexCount = d.Verts.Length, Floats = p.Floats, Index = p.Index, IndexCount = d.Tris.Length, Attr = p.Attr, AttrCount = p.Attrs.Count, Wide = w, AllBounds = true });
+            }
+            Vertices.ResizeUninitialized(vertex);
+            Narrow.ResizeUninitialized(narrow);
+            Wide.ResizeUninitialized(wide);
+            var dst = Vertices.AsArray().Reinterpret<uint>();
+            var na = Narrow.AsArray();
+            var wa = Wide.AsArray();
+            Parallel.For(0, parts.Count, i => Write(parts[i].Part, plans[i], dst, na, wa));
+        }
+
+        static Plan PlanOf(MeshParts d, bool lean)
+        {
+            var p = new Plan();
+            p.Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Position));
+            p.Norms = lean ? null : d.Norms;
+            p.Extra = new[] { d.Uv1, d.Uv2, d.Uv3, d.Uv4 };
+            p.N = Channel(p, VertexAttribute.Normal, p.Norms != null, false, 3);
+            p.CHalf = lean && d.Cols != null && HalfExact(d.Cols);
+            p.C = Channel(p, VertexAttribute.Color, d.Cols != null, p.CHalf, 4);
+            p.THalf = lean && d.Uvs != null && HalfExact(d.Uvs);
+            p.T = Channel(p, VertexAttribute.TexCoord0, d.Uvs != null, p.THalf, 2);
+            for (int u = 0; u < 4; u++)
+            {
+                p.EHalf[u] = lean && p.Extra[u] != null && HalfExact(p.Extra[u]);
+                p.E[u] = Channel(p, VertexAttribute.TexCoord1 + u, p.Extra[u] != null, p.EHalf[u], 4);
+            }
+            return p;
+        }
+
+        static void Write(MeshParts d, Plan p, NativeArray<uint> dst, NativeArray<ushort> narrow, NativeArray<int> wide)
+        {
+            int floats = p.Floats, vc = d.Verts.Length;
+            var norms = p.Norms;
+            var extra = p.Extra;
+            for (int v = 0; v < vc; v++)
+            {
+                int o = p.Vertex + v * floats;
+                var q0 = d.Verts[v];
+                dst[o] = math.asuint(q0.x); dst[o + 1] = math.asuint(q0.y); dst[o + 2] = math.asuint(q0.z);
+                if (p.N >= 0) { var q = norms[v]; dst[o + p.N] = math.asuint(q.x); dst[o + p.N + 1] = math.asuint(q.y); dst[o + p.N + 2] = math.asuint(q.z); }
+                if (p.C >= 0) { var c = d.Cols[v]; Put(dst, o + p.C, c.r, c.g, c.b, c.a, p.CHalf); }
+                if (p.T >= 0)
+                {
+                    var t = d.Uvs[v];
+                    if (p.THalf) dst[o + p.T] = math.f32tof16(t.x) | (math.f32tof16(t.y) << 16);
+                    else { dst[o + p.T] = math.asuint(t.x); dst[o + p.T + 1] = math.asuint(t.y); }
+                }
+                for (int u = 0; u < 4; u++)
+                    if (p.E[u] >= 0) { var e = extra[u][v]; Put(dst, o + p.E[u], e.x, e.y, e.z, e.w, p.EHalf[u]); }
+            }
+            if (vc > 65535) for (int k = 0; k < d.Tris.Length; k++) wide[p.Index + k] = d.Tris[k];
+            else for (int k = 0; k < d.Tris.Length; k++) narrow[p.Index + k] = (ushort)d.Tris[k];
+        }
+
+        static int Channel(Plan p, VertexAttribute at, bool present, bool half, int dim)
         {
             if (!present) return -1;
-            Attrs.Add(new VertexAttributeDescriptor(at, half ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, dim));
-            int offset = floats;
-            floats += half ? dim / 2 : dim;
+            p.Attrs.Add(new VertexAttributeDescriptor(at, half ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, dim));
+            int offset = p.Floats;
+            p.Floats += half ? dim / 2 : dim;
             return offset;
         }
 
