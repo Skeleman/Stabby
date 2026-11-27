@@ -74,14 +74,14 @@ public class ContentParityTests
     [InlineData("{}")]
     [InlineData("[]")]
     [InlineData("not json")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"bogus\":1}")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"ranges\":[{\"x\":[1],\"y\":[1],\"width\":2,\"strength\":1}]}")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"corridors\":[{\"x\":[1,2],\"y\":[1,2],\"width\":2,\"strength\":1}]}")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"highlands\":[{\"kind\":\"hill\",\"x\":1,\"y\":1,\"radius\":2}]}")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,\"landmasses\":[{\"x\":1,\"y\":1,\"radius\":2,\"lobes\":[{\"x\":1,\"y\":1,\"radius\":1,\"z\":0}]}]}")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64.5,\"cellMeters\":90}")]
-    [InlineData("{\"schemaVersion\":5,\"seed\":-1,\"size\":64,\"cellMeters\":90}")]
-    [InlineData("{\"schemaVersion\":5,\"size\":64,\"cellMeters\":90,}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64,\"cellMeters\":90,\"bogus\":1}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64,\"cellMeters\":90,\"ranges\":[{\"x\":[1],\"y\":[1],\"width\":2,\"strength\":1}]}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64,\"cellMeters\":90,\"corridors\":[{\"x\":[1,2],\"y\":[1,2],\"width\":2,\"strength\":1}]}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64,\"cellMeters\":90,\"highlands\":[{\"kind\":\"hill\",\"x\":1,\"y\":1,\"radius\":2}]}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64,\"cellMeters\":90,\"landmasses\":[{\"x\":1,\"y\":1,\"radius\":2,\"lobes\":[{\"x\":1,\"y\":1,\"radius\":1,\"z\":0}]}]}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64.5,\"cellMeters\":90}")]
+    [InlineData("{\"schemaVersion\":6,\"seed\":-1,\"size\":64,\"cellMeters\":90}")]
+    [InlineData("{\"schemaVersion\":6,\"size\":64,\"cellMeters\":90,}")]
     public void MalformedSketchFailsInBothReaders(string json)
     {
         Assert.NotNull(Record.Exception(() => Legacy.SketchFile.Read(json, new WorldConfig())));

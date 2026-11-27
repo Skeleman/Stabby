@@ -7,7 +7,9 @@ namespace Stabby.Content
 {
     public static class SketchFile
     {
-        public const int SchemaVersion = 5;
+        public const int SchemaVersion = 6;
+
+        static readonly string[] HotspotKinds = { "arc", "plume", "ocean" };
 
         public static string Write(WorldSketch s, WorldConfig c)
         {
@@ -38,6 +40,9 @@ namespace Stabby.Content
             w.EndArray();
             w.Key("highlands").BeginArray();
             foreach (var h in s.Highlands) Spot(w, h.Plateau ? "plateau" : "peak", h.X, h.Y, h.Radius);
+            w.EndArray();
+            w.Key("hotspots").BeginArray();
+            foreach (var h in s.Hotspots) Spot(w, HotspotKinds[h.Kind], h.X, h.Y, h.Radius);
             w.EndArray();
             return w.EndObject().ToString();
         }
@@ -111,6 +116,7 @@ namespace Stabby.Content
             var lakes = Masses(d, "lakes");
             var shores = Spots(d, "shores");
             var highlands = Spots(d, "highlands");
+            var hotspots = Spots(d, "hotspots");
             d.End();
 
             if (size < 16 || cell <= 0) throw new InvalidDataException("sketch needs size and cellMeters");
@@ -122,6 +128,7 @@ namespace Stabby.Content
             if (corridors.Exists(r => r.Strength != null)) errors.Add("corridors have no strength");
             if (shores.Exists(h => h.Kind != "cliff" && h.Kind != "beach")) errors.Add("shore kind is cliff or beach");
             if (highlands.Exists(h => h.Kind != "peak" && h.Kind != "plateau")) errors.Add("highland kind is peak or plateau");
+            if (hotspots.Exists(h => Array.IndexOf(HotspotKinds, h.Kind) < 0)) errors.Add("hotspot kind is arc, plume or ocean");
             if (errors.Count > 0) throw new InvalidDataException(string.Join("; ", errors));
 
             c.Seed = seed; c.Size = size; c.CellMeters = cell;
@@ -130,6 +137,7 @@ namespace Stabby.Content
             foreach (var r in corridors) s.Corridors.Add(new CorridorSketch { X = r.X, Y = r.Y, Width = r.Width });
             foreach (var h in shores) s.Shores.Add(new ShoreSketch { Cliff = h.Kind == "cliff", X = h.X, Y = h.Y, Radius = h.Radius });
             foreach (var h in highlands) s.Highlands.Add(new HighlandSketch { Plateau = h.Kind == "plateau", X = h.X, Y = h.Y, Radius = h.Radius });
+            foreach (var h in hotspots) s.Hotspots.Add(new HotspotSketch { Kind = Array.IndexOf(HotspotKinds, h.Kind), X = h.X, Y = h.Y, Radius = h.Radius });
             s.Build(c);
             return s;
         }

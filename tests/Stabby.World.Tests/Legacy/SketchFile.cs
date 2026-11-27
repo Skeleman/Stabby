@@ -5,7 +5,7 @@ namespace Stabby.World.Tests.Legacy;
 
 public static class SketchFile
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
 
     sealed class Dto
     {
@@ -22,7 +22,10 @@ public static class SketchFile
         public List<LandmassDto> Lakes { get; set; } = new();
         public List<ShoreDto> Shores { get; set; } = new();
         public List<ShoreDto> Highlands { get; set; } = new();
+        public List<ShoreDto> Hotspots { get; set; } = new();
     }
+
+    static readonly string[] HotspotKinds = { "arc", "plume", "ocean" };
 
     sealed class LandmassDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } public List<LobeDto>? Lobes { get; set; } }
     sealed class LobeDto { public float X { get; set; } public float Y { get; set; } public float Radius { get; set; } }
@@ -51,6 +54,7 @@ public static class SketchFile
         Lakes = s.Lakes.Select(ToDto).ToList(),
         Shores = s.Shores.Select(h => new ShoreDto { Kind = h.Cliff ? "cliff" : "beach", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
         Highlands = s.Highlands.Select(h => new ShoreDto { Kind = h.Plateau ? "plateau" : "peak", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
+        Hotspots = s.Hotspots.Select(h => new ShoreDto { Kind = HotspotKinds[h.Kind], X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
     }, Options);
 
     public static WorldSketch Read(string json, WorldConfig c)
@@ -65,6 +69,7 @@ public static class SketchFile
         if (d.Corridors.Any(r => r.Strength is not null)) errors.Add("corridors have no strength");
         if (d.Shores.Any(h => h.Kind != "cliff" && h.Kind != "beach")) errors.Add("shore kind is cliff or beach");
         if (d.Highlands.Any(h => h.Kind != "peak" && h.Kind != "plateau")) errors.Add("highland kind is peak or plateau");
+        if (d.Hotspots.Any(h => Array.IndexOf(HotspotKinds, h.Kind) < 0)) errors.Add("hotspot kind is arc, plume or ocean");
         if (errors.Count > 0) throw new InvalidDataException(string.Join("; ", errors));
 
         c.Seed = d.Seed; c.Size = d.Size; c.CellMeters = d.CellMeters;
@@ -79,6 +84,7 @@ public static class SketchFile
             Lakes = d.Lakes.Select(FromDto).ToList(),
             Shores = d.Shores.Select(h => new ShoreSketch { Cliff = h.Kind == "cliff", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
             Highlands = d.Highlands.Select(h => new HighlandSketch { Plateau = h.Kind == "plateau", X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
+            Hotspots = d.Hotspots.Select(h => new HotspotSketch { Kind = Array.IndexOf(HotspotKinds, h.Kind), X = h.X, Y = h.Y, Radius = h.Radius }).ToList(),
         };
         s.Build(c);
         return s;
