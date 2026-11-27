@@ -203,9 +203,11 @@ Shader "Stabby/Object"
                     return;
                 }
                 bool spruce = code == 1;
-                float2 mm = float2(atan2(rc.y, rc.x) * radius, along);
+                float2 st = isLog ? float2(1, 1) : float2(1.8, 0.5);
+                float2 mm = float2(atan2(rc.y, rc.x) * radius, along) * st;
                 float tn, fresh = 0;
                 float3 bk = spruce ? SpruceBark(mm, fp, tn, fresh) : OakBark(mm, fp, tn);
+                tn = isLog ? tn : saturate(0.35 + 0.6 * tn + 0.12 * mf.x);
                 albedo = baseColor * (spruce ? 0.62 + 0.5 * tn : 0.5 + 0.6 * tn);
                 albedo = spruce ? lerp(albedo, albedo * float3(1.35, 0.95, 0.75), fresh * (1 - age)) : lerp(albedo, dot(albedo, lw) * float3(1.04, 1, 0.94), 0.4 * saturate(tn));
                 albedo = lerp(albedo, dot(albedo, lw) * float3(1, 0.97, 0.92), 0.45 * age) * decay;
@@ -218,8 +220,8 @@ Shader "Stabby/Object"
                 float4 lc = OrgRP3(wp, OrgF(1), 31.1, 1);
                 float lic = smoothstep(0.5, 0.68, lc.x) * (spruce ? 0.25 : 0.4) * (0.6 + 0.6 * age) * (1 - moss) * BarkFade(4.7, fp);
                 albedo = lerp(albedo, dot(albedo, lw) * float3(0.9, 1.03, 0.78) * (2.1 + 0.3 * lc.y), 0.6 * saturate(lic));
-                float2 g = lerp(bk.yz, 0.08 * fibre.yz * float2(30, 3) * BarkFade(30, fp), loss);
-                float depth = (spruce ? 0.012 : 0.01) * (1 - 0.6 * moss);
+                float2 g = lerp(bk.yz * st, 0.08 * fibre.yz * float2(30, 3) * BarkFade(30, fp), loss);
+                float depth = (spruce ? 0.012 : 0.01) * (1 - 0.6 * moss) * (isLog ? 1 : 0.55);
                 nOut = Bumped(n, axis, sgn, g, depth);
             }
 
