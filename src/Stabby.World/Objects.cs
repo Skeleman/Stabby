@@ -167,6 +167,9 @@ namespace Stabby.World
         readonly FeatureEdit[] solid;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly PackedObjects[] chunks;
+        byte[] pack;
+        int[] packAt, packRaw;
+        ulong[] packSum;
         readonly object[] chunkGates;
         int chunkComputes;
 
@@ -306,11 +309,23 @@ namespace Stabby.World
             {
                 s = chunks[c];
                 if (s != null) return s;
-                s = new PackedObjects(c, Place(cx, cz));
-                Interlocked.Increment(ref chunkComputes);
+                var packed = Volatile.Read(ref pack);
+                var baked = packed != null && packAt[c + 1] > packAt[c] ? PlacedPack.TryUnpack(packed, packAt[c], packAt[c + 1] - packAt[c], packRaw[c], packSum[c], c) : null;
+                if (baked != null) s = new PackedObjects(c, baked);
+                else
+                {
+                    s = new PackedObjects(c, Place(cx, cz));
+                    Interlocked.Increment(ref chunkComputes);
+                }
                 Volatile.Write(ref chunks[c], s);
                 return s;
             }
+        }
+
+        bool HasBake(int cx, int cz)
+        {
+            int c = cz * across + cx;
+            return Volatile.Read(ref pack) != null && packAt[c + 1] > packAt[c];
         }
 
         [ThreadStatic] static List<ObjectInstance> scratch;
@@ -326,7 +341,7 @@ namespace Stabby.World
         public void SolidInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
+            var cached = Volatile.Read(ref chunks[cz * across + cx]) ?? (HasBake(cx, cz) ? Packed(cx, cz) : null);
             if (cached != null) cached.AddTo(list);
             else PlaceInto(cx, cz, true, list, null);
         }

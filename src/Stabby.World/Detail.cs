@@ -12,6 +12,7 @@ namespace Stabby.World
         readonly NearArrays cells;
         readonly float cm;
         readonly int n;
+        readonly DetailArrays arrays;
 
         public TerrainDetail(GeneratedWorld w)
         {
@@ -57,9 +58,25 @@ namespace Stabby.World
                 period = 1f;
                 bands = new[] { 0.5f };
             }
-            cells = new NearArrays(n, cm, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(), Rng.Stream(w.Config.Seed, "near-coast").NextU32(), Rng.Stream(w.Config.Seed, "near-crag").NextU32(), Rng.Stream(w.Config.Seed, "near-river").NextU32(),
-                h, amp, offsets, period, bands, pieces.ToArray(), index, items);
+            arrays = new DetailArrays { Amp = amp, Offsets = offsets, Period = period, Bands = bands, Pieces = pieces.ToArray(), Start = index, Items = items };
+            cells = Near(w, arrays);
         }
+
+        public TerrainDetail(GeneratedWorld w, DetailArrays stored)
+        {
+            n = w.Config.Size;
+            cm = w.Config.CellMeters;
+            if (stored.Amp.Length != n * n || stored.Offsets.Length != n * n || stored.Start.Length != n * n + 1 || stored.Bands.Length == 0)
+                throw new FormatException($"stored terrain detail does not fit a {n}x{n} world");
+            arrays = stored;
+            cells = Near(w, stored);
+        }
+
+        static NearArrays Near(GeneratedWorld w, DetailArrays a) =>
+            new NearArrays(w.Config.Size, w.Config.CellMeters, Rng.Stream(w.Config.Seed, "detail").NextU32(), Rng.Stream(w.Config.Seed, "near-gully").NextU32(), Rng.Stream(w.Config.Seed, "near-rock").NextU32(), Rng.Stream(w.Config.Seed, "near-coast").NextU32(), Rng.Stream(w.Config.Seed, "near-crag").NextU32(), Rng.Stream(w.Config.Seed, "near-river").NextU32(),
+                w.Height, a.Amp, a.Offsets, a.Period, a.Bands, a.Pieces, a.Start, a.Items);
+
+        public DetailArrays Arrays => arrays;
 
         public int Size => n;
         public float CellMeters => cm;

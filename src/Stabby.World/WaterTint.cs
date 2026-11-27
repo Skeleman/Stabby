@@ -79,18 +79,18 @@ namespace Stabby.World
             return sum > 0 ? WaterMix.Lerp(lake.Mix, WaterMix.Lerp(default, acc, 1 / sum), near) : lake.Mix;
         }
 
-        public static void Apply(GeneratedWorld w)
+        public static void Apply(GeneratedWorld w) => Apply(w, Field(w));
+
+        public static WaterMix[] Field(GeneratedWorld w)
         {
-            var hy = w.Water;
-            foreach (var lake in hy.Lakes) { lake.Mix = default; lake.Inflows.Clear(); }
-            foreach (var r in hy.Rivers) r.Mix.Clear();
-            if (w.Biome == null || w.BiomeIds == null || w.Materials == null || w.Climate == null) return;
+            if (w.Biome == null || w.BiomeIds == null || w.Materials == null || w.Climate == null) return null;
             var slots = w.Materials.TintSlots();
-            if (slots.Length == 0) return;
-            int n = w.Config.Size;
+            if (slots.Length == 0) return null;
+            var hy = w.Water;
+            int n = w.Config.Size, used = Math.Min(slots.Length, LiquidDef.TintSlots);
             var slotOf = new int[w.BiomeIds.Length];
             for (int b = 0; b < slotOf.Length; b++) slotOf[b] = -1;
-            for (int t = 0; t < slots.Length && t < LiquidDef.TintSlots; t++)
+            for (int t = 0; t < used; t++)
                 foreach (var id in w.Materials.Liquids[slots[t]].Biomes)
                 {
                     int b = Array.IndexOf(w.BiomeIds, id);
@@ -98,28 +98,37 @@ namespace Stabby.World
                 }
             var stack = Drainage.Stack(hy.Receiver, n);
             var mix = new WaterMix[n * n];
-            var weight = new float[n * n];
-            var acc = new float[n * n];
             var precip = w.Climate.PrecipitationMm;
-            for (int t = 0; t < slots.Length && t < LiquidDef.TintSlots; t++)
+            for (int i = 0; i < n * n; i++)
             {
-                for (int i = 0; i < n * n; i++)
-                {
-                    int b = w.Biome[i];
-                    weight[i] = b >= 0 && slotOf[b] == t ? Hydrology.Runoff(w.Config, w.Sea[i], precip[i]) : 0;
-                }
-                Drainage.Accumulate(stack, hy.Receiver, weight, acc);
-                for (int i = 0; i < n * n; i++)
-                {
-                    float q = hy.DischargeM3s[i];
-                    mix[i][t] = q > 0 ? Math.Min(1f, acc[i] / q) : 0;
-                }
+                int b = w.Biome[i], t = b >= 0 ? slotOf[b] : -1;
+                if (t >= 0) mix[i][t] = Hydrology.Runoff(w.Config, w.Sea[i], precip[i]);
+            }
+            var recv = hy.Receiver;
+            for (int s = stack.Length - 1; s >= 0; s--)
+            {
+                int i = stack[s], r = recv[i];
+                if (r == i) continue;
+                mix[r].A += mix[i].A; mix[r].B += mix[i].B; mix[r].C += mix[i].C;
             }
             for (int i = 0; i < n * n; i++)
             {
-                float sum = mix[i].Sum;
-                if (sum > 1) mix[i] = WaterMix.Lerp(default, mix[i], 1 / sum);
+                float q = hy.DischargeM3s[i];
+                var a = mix[i];
+                var m = q > 0 ? new WaterMix { A = Math.Min(1f, a.A / q), B = Math.Min(1f, a.B / q), C = Math.Min(1f, a.C / q) } : default;
+                float sum = m.Sum;
+                mix[i] = sum > 1 ? WaterMix.Lerp(default, m, 1 / sum) : m;
             }
+            return mix;
+        }
+
+        public static void Apply(GeneratedWorld w, WaterMix[] mix)
+        {
+            var hy = w.Water;
+            foreach (var lake in hy.Lakes) { lake.Mix = default; lake.Inflows.Clear(); }
+            foreach (var r in hy.Rivers) r.Mix.Clear();
+            if (mix == null) return;
+            int n = w.Config.Size;
             foreach (var lake in hy.Lakes)
                 if (lake.Outlet >= 0) lake.Mix = mix[lake.Outlet];
             Inflows(w, mix);

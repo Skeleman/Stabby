@@ -1,6 +1,5 @@
 using System.IO;
 using Stabby.Content;
-using Stabby.Game;
 using Stabby.World;
 
 namespace Stabby.World.Tests;
