@@ -359,7 +359,7 @@ namespace Stabby.Viewer
             return rt;
         }
 
-        public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib, IReadOnlyList<BiomeDef> defs, float[] offsets = null)
+        public static StrataLook Strata(GeneratedWorld w, MaterialLibrary lib, IReadOnlyList<BiomeDef> defs, float[] offsets = null, FeatureEdit[] edits = null)
         {
             var ids = lib.Bands(BandStepM);
             var bands = new float3[ids.Length];
@@ -382,7 +382,7 @@ namespace Stabby.Viewer
             byte[] coat = null, forest = null;
             Parallel.Invoke(
                 () => off ??= lib.Offsets(w),
-                () => coat = d.CoatWeights(w),
+                () => coat = d.CoatWeights(w, edits),
                 () => forest = SurfaceDetail.ForestWeights(w, w.Objects, defs),
                 () => water = WaterLevel(w));
             return new StrataLook
