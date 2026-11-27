@@ -538,7 +538,7 @@ namespace Stabby.World
                 float cap = Grid.Smoothstep(0, f, Math.Max(along - el, -along)) * sea;
                 raised = Math.Max(raised, h + (top - h) * (1 - Grid.Smoothstep(wb, wb + f, d)) * (falls ? 1 - Gorge(c, s0, s1, x, z, s, f) : 1) * Grid.Smoothstep(0, Erosion.MinLandHeight, s) * (1 - cap) * (1 - sea * (1 - Grid.Smoothstep(2 * Erosion.MinLandHeight, 4 * Erosion.MinLandHeight, s))));
             }
-            float cut = float.MaxValue, pool = float.MaxValue, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
+            float cut = float.MaxValue, pool = float.MaxValue, bank = 1, banked = 0, low = Math.Min(h, 0.5f * Erosion.MinLandHeight), land = low;
             Span<float> hs = stackalloc float[HoldCap], ha = stackalloc float[HoldCap], hm = stackalloc float[HoldCap], hp = stackalloc float[HoldCap];
             int hn = -1;
             bool hasJag = false, hasNb = false, hasRough = false, hasBoulder = false;
@@ -551,6 +551,8 @@ namespace Stabby.World
                 if (!mask.Has(k - s0)) continue;
                 Project(q, x, z, out float d, out float t);
                 float w = q.Wa + (q.Wb - q.Wa) * t, wb = w + Bank(w);
+                bank = Math.Min(bank, Grid.Smoothstep(w, wb, d));
+                if (q.Fr <= 0 && d < wb + Bank(w)) banked = 1;
                 if (d >= wb + f) continue;
                 float gate = 1;
                 if (!(q.Fr > 0 || (q.Ux == 0 && q.Uz == 0)))
@@ -591,7 +593,8 @@ namespace Stabby.World
                 var q = c.Piece(c.PieceAt(k));
                 if (q.Fr <= 0) continue;
                 float v = Pool(c, q, x, z, raised), reach = PoolReach(q.Fc, q.Fr), along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz;
-                pool = Math.Min(pool, cut < float.MaxValue ? v + Grid.Smoothstep(reach, reach + 0.5f * f, along) * Math.Max(0, cut - v) : v);
+                float past = Math.Max(Grid.Smoothstep(reach, reach + 0.5f * f, along), banked * bank * (1 - Grid.Smoothstep(-FallBlendM, 0, PoolCircle(q, x, z))));
+                pool = Math.Min(pool, cut < float.MaxValue ? v + past * Math.Max(0, cut - v) : v);
             }
             float ground = Math.Max(PolyMin(SmoothMin(raised, cut, CutSoft), pool, FallBlendM), low);
             return isles ? Isles(c, s0, s1, x, z, ground) : ground;
@@ -754,9 +757,13 @@ namespace Stabby.World
         static float PoolMargin(RiverPiece q, float x, float z, float f)
         {
             float along = (x - q.Lx) * q.Ux + (z - q.Lz) * q.Uz, side = Math.Abs((x - q.Lx) * q.Uz - (z - q.Lz) * q.Ux);
+            return Math.Max(PoolCircle(q, x, z), Math.Min(Math.Min(along - FallJagM, PoolReach(q.Fc, q.Fr) + f - along), q.Fw + OutletRing(q.Fr) + FallBlendM - side));
+        }
+
+        static float PoolCircle(RiverPiece q, float x, float z)
+        {
             Frame(q, x, z, out float sa, out float ss);
-            float circle = PoolReach(q.Fc, q.Fr) - q.Fc - PoolDist(q, sa, ss);
-            return Math.Max(circle, Math.Min(Math.Min(along - FallJagM, PoolReach(q.Fc, q.Fr) + f - along), q.Fw + OutletRing(q.Fr) + FallBlendM - side));
+            return PoolReach(q.Fc, q.Fr) - q.Fc - PoolDist(q, sa, ss);
         }
 
         static float OutletRing(float r) => Math.Max(FallRingMinM, FallRingFrac * r);
