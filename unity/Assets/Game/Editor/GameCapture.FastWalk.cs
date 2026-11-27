@@ -311,7 +311,7 @@ namespace Stabby.Game.Editor
             int collections = frames.Count(f => f[gcAt] > 0), slowCollections = frames.Count(f => f[gcAt] > 0 && f[1] > 15f), slowOthers = frames.Count(f => f[gcAt] == 0 && f[1] > 15f);
             var worst = frames.Select((f, i) => (f, i)).OrderByDescending(x => x.f[1]).Take(8)
                 .Select(x => $"#{x.i} {x.f[1]:F0} ms (" + string.Join(", ", Enumerable.Range(2, names.Length - 2).Where(c => x.f[c] >= 0.5f).Select(c => $"{names[c]} {x.f[c]:F1}")) + (x.f[gcAt] > 0 ? ", GC" : "") + $", alloc {x.f[gcAt + 1]:F0} KB)");
-            return $"walk {label} {speed:F0} m/s over {length:F0} m, {frames.Count} frames: {over} main-thread frames over 33 ms ({overDt} by dt), {streaming} with streaming systems over 33 ms; {collections} GC frames ({slowCollections} over 15 ms, {slowOthers} non-GC over 15 ms), {GcStats(frames.Select(f => f[gcAt + 1]), frames.Select(f => f[gcAt + 2]))}\n  " +
+            return $"walk {label} {speed:F0} m/s over {length:F0} m, {frames.Count} frames: {over} of {frames.Count} main-thread frames over 33 ms ({(frames.Count > 0 ? over * 100f / frames.Count : 0):F2}%; {overDt} by dt, {(frames.Count > 0 ? overDt * 100f / frames.Count : 0):F2}%), {streaming} with streaming systems over 33 ms; {collections} GC frames ({slowCollections} over 15 ms, {slowOthers} non-GC over 15 ms), {GcStats(frames.Select(f => f[gcAt + 1]), frames.Select(f => f[gcAt + 2]))}\n  " +
                    string.Join("\n  ", parts) + "\n  worst: " + string.Join("; ", worst);
         }
     }
