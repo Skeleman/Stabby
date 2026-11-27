@@ -87,6 +87,7 @@ and converts once into native data.
   - b/ocean-normals: base water movement is biased toward the shore in every direction (a beach currently shows movement away from it). Normal waves should be a sum of displaced waves, not stripes. Cut the fine high-frequency normal that speckles under highlights. Beach waves themselves are OK.
   - b/river-mouth-edge: the river surface ends in a rectangle at the sea, and land chunks stop underwater with a square drop-off. Blend the mouth into the ocean and continue the seabed. Fixed (7cc4a51, accepted 11-26: river surface runs past the coast and fades, sunk-chunk cut-off at -30 m). Follow-ups: bench the extra shelf terrain; waterfalls landing right on the coast still leave a straight white edge (either no coastal falls in generation, with a GV bump, or a softer sea-landing foot).
   - b/arch-lod-seams: arch LOD seams make downward spikes. Consider LOD for non-heightfield terrain (feature edits) per object, like objects (rule 2/12 check with Zach if it changes the mesher contract).
+- Kit: swept, continuously tapering branch/root shape and a smooth lens shape (11-26). The fallen tree's root plate failed 8 passes with capped segments and stacked lumps; it uses a snapped trunk and stump until this exists.
 - Weather, precipitation and volumetric clouds.
 
 Overhangs, layers, vertical faces, caves and arches share one geometry model
