@@ -23,7 +23,7 @@ namespace Stabby.World
     public sealed partial class ObjectField
     {
         public const float SlopeStepM = 1f, ShoreClearM = 0.5f, RiverClearM = 1.5f, BankReachM = 3f, CrustThin = 0.85f;
-        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f;
+        public const float BoulderMainR = 0.75f, BoulderLength = 0.25f, BoulderLift = 0.6f, BoulderSideR = 0.5f, BoulderSide = 0.4f, BoulderRelief = 0.12f;
 
         readonly GeneratedWorld w;
         readonly TerrainDetail detail;
@@ -401,8 +401,8 @@ namespace Stabby.World
             float ux = yw * yw - yy * yy, uz = 2 * yw * yy, side = (o.Variant & 1) == 0 ? 1f : -1f;
             float r = BoulderMainR * reach, h = BoulderLength * reach, y = o.Y + BoulderLift * r;
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
-            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
-            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
+            var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, N = BoulderRelief * r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
+            var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, N = BoulderRelief * r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
             if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
             boulders.Add(a);
             boulders.Add(b);

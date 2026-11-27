@@ -175,6 +175,65 @@ namespace Stabby.Game.Editor
 
         static string Per(long bytes, int n) => $"{bytes / (double)n / 1024.0:F2} KiB";
 
+        sealed class MarkerSpread : System.IDisposable
+        {
+            static readonly string[] Keys = { "Creature", "Gfx.", "GC.", "WaitFor", "Shadow", "Lock", "Upload", "Present", "Complete", "Sync", "Main Thread", "Render Thread", "GPU Frame Time", "PlayerLoop", "DrawSubmit", "RenderMeshIndirect", "Culling", "Camera.Render", "Inl_", "Anim", "Pack", "Compact" };
+            readonly List<ProfilerRecorder> recs = new List<ProfilerRecorder>();
+            readonly List<string> names = new List<string>();
+            readonly List<double> scale = new List<double>();
+            readonly List<double[]> rows = new List<double[]>();
+            readonly List<double> dts = new List<double>();
+
+            public MarkerSpread()
+            {
+                var handles = new List<Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle>();
+                Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle.GetAvailable(handles);
+                foreach (var h in handles)
+                {
+                    var d = Unity.Profiling.LowLevel.Unsafe.ProfilerRecorderHandle.GetDescription(h);
+                    bool bytes = d.Name == "GC Allocated In Frame" || d.Name == "GC Allocation In Frame Count";
+                    if (!bytes && (d.UnitType != ProfilerMarkerDataUnit.TimeNanoseconds || !System.Array.Exists(Keys, k => d.Name.Contains(k)))) continue;
+                    var rec = new ProfilerRecorder(h, 2, ProfilerRecorderOptions.Default);
+                    rec.Start();
+                    recs.Add(rec);
+                    names.Add($"{d.Name} [{d.Category.Name}]");
+                    scale.Add(d.UnitType == ProfilerMarkerDataUnit.TimeNanoseconds ? 1e-6 : d.UnitType == ProfilerMarkerDataUnit.Bytes ? 1.0 / 1024.0 : 1.0);
+                }
+            }
+
+            public void Sample(double dt)
+            {
+                var row = new double[recs.Count];
+                for (int i = 0; i < recs.Count; i++) row[i] = recs[i].LastValue * scale[i];
+                rows.Add(row);
+                dts.Add(dt);
+            }
+
+            public IEnumerable<string> Report(string label, int top)
+            {
+                var order = new List<int>();
+                for (int f = 0; f < rows.Count; f++) order.Add(f);
+                order.Sort((a, b) => dts[a].CompareTo(dts[b]));
+                int calm = math.max(order.Count / 2, 1), spike = math.max(order.Count / 10, 1);
+                double Mean(int i, int from, int to) { double s = 0; for (int k = from; k < to; k++) s += rows[order[k]][i]; return s / math.max(to - from, 1); }
+                double dtCalm = 0, dtSpike = 0;
+                for (int k = 0; k < calm; k++) dtCalm += dts[order[k]];
+                for (int k = order.Count - spike; k < order.Count; k++) dtSpike += dts[order[k]];
+                yield return $"{label} marker spread over {rows.Count} frames, {recs.Count} markers: calm half dt {dtCalm / calm:F1} ms, worst tenth dt {dtSpike / spike:F1} ms";
+                var stats = new List<(string name, double calm, double spike)>();
+                for (int i = 0; i < recs.Count; i++) stats.Add((names[i], Mean(i, 0, calm), Mean(i, order.Count - spike, order.Count)));
+                stats.Sort((a, b) => (b.spike - b.calm).CompareTo(a.spike - a.calm));
+                for (int i = 0; i < math.min(top, stats.Count); i++) yield return $"  {label} grows in worst tenth: {stats[i].name} calm {stats[i].calm:F2}, worst {stats[i].spike:F2}";
+                stats.Sort((a, b) => b.calm.CompareTo(a.calm));
+                for (int i = 0; i < math.min(top, stats.Count); i++) yield return $"  {label} largest calm: {stats[i].name} calm {stats[i].calm:F2}, worst {stats[i].spike:F2}";
+            }
+
+            public void Dispose()
+            {
+                foreach (var r in recs) r.Dispose();
+            }
+        }
+
         static System.Collections.IEnumerator CreatureMemory(Camera cam, string dir)
         {
             string path = CreaturePath.Instanced ? "instanced" : "entity";
@@ -204,6 +263,7 @@ namespace Stabby.Game.Editor
 
             var draw = view.GetExistingSystemManaged<CreatureDrawSystem>();
             int baseCount = CreatureBuildSystem.Count;
+            var profile = new List<string>();
             var lines = new List<string>
             {
                 $"creature memory path {path}, quality {DetailView.Current.Quality:F2}, {baseCount} plan creatures shown, {CreaturePlanSystem.Planned} planned",
@@ -213,7 +273,10 @@ namespace Stabby.Game.Editor
 
             using var mainRec = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread", 4);
             using var buildRec = new SystemMarker(MarkerName(view, typeof(CreatureBuildSystem)), 4);
-            var hd = new RenderTexture(1920, 1080, 24);
+            int.TryParse(System.Environment.GetEnvironmentVariable("STABBY_BENCH_GPU"), out int gpuMode);
+            Shader.SetGlobalInteger("_CreatureBench", gpuMode);
+            int div = System.Environment.GetEnvironmentVariable("STABBY_BENCH_HALF") == "1" ? 2 : 1;
+            var hd = new RenderTexture(1920 / div, 1080 / div, 24);
             for (int r = 0; r < MemoryCounts.Length; r++)
             {
                 int n = MemoryCounts[r];
@@ -244,6 +307,7 @@ namespace Stabby.Game.Editor
                 var s1 = SampleMemory(vem, draw);
                 var main = new List<double>(BenchFrames);
                 var renderMs = new List<double>(BenchFrames);
+                var dts = new List<double>(BenchFrames);
                 for (int k = 0; k < BenchFrames + 5; k++)
                 {
                     yield return null;
@@ -255,8 +319,53 @@ namespace Stabby.Game.Editor
                     if (k < 5) continue;
                     main.Add(mainRec.LastValue / 1e6);
                     renderMs.Add((r1 - r0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    dts.Add(Time.unscaledDeltaTime * 1000.0);
                 }
                 string mem = BenchMemory(vem, n);
+                if (n >= 500 && System.Environment.GetEnvironmentVariable("STABBY_BENCH_PROFILE") == "1")
+                {
+                    using var spread = new MarkerSpread();
+                    for (int k = 0; k < 2 * BenchFrames + 5; k++)
+                    {
+                        yield return null;
+                        cam.targetTexture = hd;
+                        cam.Render();
+                        cam.targetTexture = null;
+                        if (k >= 5) spread.Sample(Time.unscaledDeltaTime * 1000.0);
+                    }
+                    profile.AddRange(spread.Report($"N {n}", 14));
+                    if (System.Environment.GetEnvironmentVariable("STABBY_BENCH_AB") == "1")
+                    {
+                        string[] ab = { "off", "base", "bind", "flat", "half", "halfoff", "upload" };
+                        var gpu = new List<double>[ab.Length];
+                        for (int a = 0; a < ab.Length; a++) gpu[a] = new List<double>();
+                        var small = new RenderTexture(960, 540, 24);
+                        using var gpuRec = ProfilerRecorder.StartNew(ProfilerCategory.Render, "GPU Frame Time");
+                        for (int round = 0; round < 8; round++)
+                            for (int a = 0; a < ab.Length; a++)
+                            {
+                                draw.Enabled = a != 0 && a != 5;
+                                CreatureDrawSystem.BenchSkipDraw = a == 6;
+                                Shader.SetGlobalInteger("_CreatureBench", a == 2 ? 1 : a == 3 ? 2 : 0);
+                                for (int k = 0; k < 14; k++)
+                                {
+                                    yield return null;
+                                    cam.targetTexture = a >= 4 ? small : hd;
+                                    cam.Render();
+                                    cam.targetTexture = null;
+                                    if (k >= 6) gpu[a].Add(gpuRec.LastValue / 1e6);
+                                }
+                            }
+                        draw.Enabled = true;
+                        CreatureDrawSystem.BenchSkipDraw = false;
+                        Shader.SetGlobalInteger("_CreatureBench", gpuMode);
+                        Object.DestroyImmediate(small);
+                        var parts = new List<string>();
+                        for (int a = 0; a < ab.Length; a++) parts.Add($"{ab[a]} {Pct(gpu[a], 0.5):F2}");
+                        profile.Add($"N {n} interleaved GPU frame time median ms: " + string.Join(", ", parts));
+                    }
+                }
+                int trimsBefore = AnimHeld(view).trims;
 
                 int left = CreatureBuildSystem.Count - n;
                 vem.DestroyEntity(bench);
@@ -264,21 +373,21 @@ namespace Stabby.Game.Editor
                 int gone = 0;
                 while (CreatureBuildSystem.Count > left && gone < 1200) { yield return null; gone++; }
                 for (int k = 0; k < 30; k++) yield return null;
-                var (heldAfter, trims0) = AnimHeld(view);
+                var (heldAfter, _) = AnimHeld(view);
                 var s2 = SampleMemory(vem, draw);
                 int waited = 0;
-                while (path == "instanced" && AnimHeld(view).trims == trims0 && waited < 600) { yield return null; waited++; }
+                while (path == "instanced" && AnimHeld(view).trims == trimsBefore && waited < 600) { yield return null; waited++; }
                 for (int k = 0; k < 10; k++) yield return null;
                 var (heldTrim, trims1) = AnimHeld(view);
                 var s3 = SampleMemory(vem, draw);
 
-                lines.Add($"N {n}: built in {frames} frames, worst arrival frame: build system {worstBuild:F2} ms, main thread {worstMain:F2} ms and dt {worstDt:F1} ms past the bench's own spawn frames; steady 1080p: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms, camera render median {Pct(renderMs, 0.5):F2} ms over {BenchFrames} frames");
+                lines.Add($"N {n}: built in {frames} frames, worst arrival frame: build system {worstBuild:F2} ms, main thread {worstMain:F2} ms and dt {worstDt:F1} ms past the bench's own spawn frames; steady 1080p: main thread median {Pct(main, 0.5):F2} ms, p99 {Pct(main, 0.99):F2} ms, camera render median {Pct(renderMs, 0.5):F2} ms, frame dt median {Pct(dts, 0.5):F1} ms, p99 {Pct(dts, 0.99):F1} ms, {dts.FindAll(d => d > 33.0).Count} over 33 ms over {BenchFrames} frames");
                 lines.Add($"  N {n}: retiered after the move in {30 + retier} frames, {CreatureBuildSystem.Count - left + n} live after build; {counts}");
                 lines.Add($"  N {n} entities: {(s1.Entities - s0.Entities) / (float)n:F2} client entities per creature (bench ghost stand-in included), chunks {(s1.Chunks - s0.Chunks) * 16f / n:F2} KiB per creature");
                 lines.Add($"  N {n} {mem}");
                 lines.Add($"  N {n} memory per creature: native {Per(s1.Native - s0.Native, n)}, managed GC {Per(s1.Managed - s0.Managed, n)}, mono heap {Per(s1.Mono - s0.Mono, n)}, instance GPU buffers {Per(s1.Gpu - s0.Gpu, n)}, graphics driver {Per(s1.Driver - s0.Driver, n)}");
                 lines.Add($"  N {n} after removal ({gone} frames): native {(s2.Native - s0.Native) / 1024.0:F0} KiB, driver {(s2.Driver - s0.Driver) / 1024.0:F0} KiB, instance GPU buffers {(s2.Gpu - s0.Gpu) / 1024.0:F0} KiB, managed {(s2.Managed - s0.Managed) / 1024.0:F0} KiB, entities {s2.Entities - s0.Entities}, chunks {s2.Chunks - s0.Chunks}; anim containers hold {heldAfter / 1024.0:F0} KiB");
-                lines.Add($"  N {n} after trim ({waited} + 10 more frames, {(trims1 > trims0 ? "trimmed" : "no trim")}): native {(s3.Native - s0.Native) / 1024.0:F0} KiB, driver {(s3.Driver - s0.Driver) / 1024.0:F0} KiB, instance GPU buffers {(s3.Gpu - s0.Gpu) / 1024.0:F0} KiB, anim containers hold {heldTrim / 1024.0:F0} KiB");
+                lines.Add($"  N {n} after trim ({waited} + 10 more frames, {(trims1 > trimsBefore ? "trimmed" : "no trim")}): native {(s3.Native - s0.Native) / 1024.0:F0} KiB, driver {(s3.Driver - s0.Driver) / 1024.0:F0} KiB, instance GPU buffers {(s3.Gpu - s0.Gpu) / 1024.0:F0} KiB, anim containers hold {heldTrim / 1024.0:F0} KiB");
                 lines.Add($"  N {n} build budget: peak {CreatureBuildSystem.PeakSpend}/{FrameBudget.CreatureEntities} entities in one frame, {CreatureBuildSystem.TierBuilds} tier builds, {CreatureBuildSystem.TierDrops} tier entities released");
             }
 
@@ -291,6 +400,7 @@ namespace Stabby.Game.Editor
             CreatureView.Current = default;
             FreezeCreatures(false);
             for (int i = 0; i < lines.Count; i++) GameStatus.Lines[$"~creature memory {i:D2}"] = lines[i];
+            lines.AddRange(profile);
             System.IO.File.WriteAllLines(System.IO.Path.Combine(dir, $"creature-memory-{path}.txt"), lines);
         }
     }

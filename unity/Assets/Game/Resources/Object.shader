@@ -638,9 +638,10 @@ Shader "Stabby/Object"
                     [unroll] for (int k = 1; k < 6; k++) mean += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(u0 + k * 0.1667, 0.5), 0).rgb;
                     mean = (mean + band) * 0.1667;
                     float3 pull = lerp(1, clamp((mean + 0.02) / (band + 0.02), 0.6, 1.6), 0.6);
+                    bool own = base.a > 0.006;
                     float2 dux = float2(ddx(u0), 0), duy = float2(ddy(u0), 0);
                     [branch] if (_StabbyDetailOff > 0)
-                        albedo = SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
+                        albedo = own ? 1 : SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
                     else
                     {
                         float2 o2 = OrgOrigin(_WorldSpaceCameraPos);
@@ -670,7 +671,8 @@ Shader "Stabby/Object"
                             float us = (i.origin.y + off) / period + (hj - 0.5) * 0.25 * (1 - calm);
                             float3 sb = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us, 0.5), 0).rgb, sm = sb;
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
-                            TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, lerp(sb, sm * 0.1667, 0.5), tone, fp);
+                            float3 sc = own ? base.rgb * clamp((dot(sb, 1) + 0.02) / (dot(sm, 0.1667) + 0.02), 0.88, 1.12) : lerp(sb, sm * 0.1667, 0.5);
+                            TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, sc, tone, fp);
                             TmStoneCover(m, wp - orgO, n, mossy ? float4(saturate(cwn.x + 0.55 * surf * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
                             float3 g = m.grad + cg;
                             g -= n * dot(g, n);
@@ -693,7 +695,7 @@ Shader "Stabby/Object"
                             albedo = lerp(m.albedo, lum * lerp(float3(1.1, 1.12, 0.92), float3(1.35, 1.1, 0.62), h1 * h1), 0.35 * crust);
                         }
                     }
-                    albedo *= base.rgb * pull;
+                    albedo *= own && i.tone.x > 0.25 && _StabbyDetailOff <= 0 ? 1 : base.rgb * pull;
                     [branch] if (i.tone.x > 0.25) occ = Dressed(albedo, i.tone, wp - orgO);
                 }
                 else

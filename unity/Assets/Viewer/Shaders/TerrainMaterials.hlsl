@@ -777,7 +777,6 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float3 dx = ddx(wp), dy = ddy(wp);
     float la = length(dx), lb = length(dy);
     float fp = max(max(sqrt(la * lb), 0.4 * max(la, lb)), 1e-4);
-    float face = abs(normalize(cross(dx, dy) + float3(0, 1e-9, 0)).y);
     float period = max(_StabbyStrataPeriod, 1);
     float u0 = (wp.y + off) / period;
     float2 dux = float2(ddx(u0), 0), duy = float2(ddy(u0), 0);
@@ -801,7 +800,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float fk = OrgFade(1.3, fp);
     float3 jk = OrgN2(wa * 1.3 + 13.9, fk);
     float br = 0.12 * fj * jn.x + 0.35 * fk * jk.x;
-    float sl = min(n.y, face);
+    float sl = n.y;
     float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
     float2 fl2 = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo, fp);
     float fb = fl2.y;

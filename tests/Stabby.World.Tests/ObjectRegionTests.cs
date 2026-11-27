@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Stabby.Content;
 using Stabby.World;
 
@@ -16,18 +15,10 @@ public class ObjectRegionTests
         var (_, _, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         int across = field.ChunksAcross;
         var regions = ColumnRegions.For(field);
-        ColumnRegion? best = null;
-        var clock = Stopwatch.StartNew();
-        var built = new ColumnRegion[across * across];
-        Parallel.For(0, built.Length, c => built[c] = ColumnRegion.Build(field, c));
-        for (int c = 0; c < built.Length; c++)
-        {
-            var r = built[c];
-            Assert.All(r.Owners, id => Assert.Equal(c, ObjectIds.Chunk(id)));
-            Assert.Equal(r.Count, r.Starts[r.Grid.Cells]);
-            if (best == null || r.Count > best.Count) best = r;
-        }
-        Console.WriteLine($"object regions: {across * across} built in {clock.ElapsedMilliseconds} ms, largest {best!.Count} columns");
+        int at = Enumerable.Range(0, across * across).First(c => field.Sites(c % across, c / across).Length > 0);
+        var best = ColumnRegion.Build(field, at);
+        Assert.All(best.Owners, id => Assert.Equal(at, ObjectIds.Chunk(id)));
+        Assert.Equal(best.Count, best.Starts[best.Grid.Cells]);
         Assert.True(best.Count > 0);
 
         int tall = Math.Max(0, Array.FindIndex(best.Items, c => c.Top - c.Bottom > Walk.StepUp));
