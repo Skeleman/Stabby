@@ -152,6 +152,8 @@ namespace Stabby.Game
         readonly int[] groupCounts = new int[4], groupAt = new int[4];
         readonly NativeArray<Entity>[] groupMade = new NativeArray<Entity>[4];
         readonly Entity[] groupPrefabs = new Entity[4];
+        readonly List<long> pickKeys = new List<long>();
+        readonly List<int3> pickRanges = new List<int3>();
         NativeArray<bool> loaded;
         NativeArray<ObjectSpawn>[] chunkObjects;
         NativeArray<uint>[] chunkParts;
@@ -173,6 +175,8 @@ namespace Stabby.Game
         static readonly Unity.Profiling.ProfilerMarker LoadMarker = new Unity.Profiling.ProfilerMarker("ObjectView.LoadChunks"), DespawnMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Despawn"), SpawnMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Spawn"), RegisterMarker = new Unity.Profiling.ProfilerMarker("ObjectView.Register");
 
         public static int Pending { get; private set; } = 1;
+        public static int PendingWhy { get; private set; }
+        int why;
         static float3 readyAt;
         static int readyFrame = -1;
         public static bool ReadyAround(float3 p, float within) => readyFrame >= UnityEngine.Time.frameCount - 2 && math.distance(readyAt, p) <= within;
@@ -377,11 +381,19 @@ namespace Stabby.Game
             try
             {
                 for (int i = 0; i < n; i++) set.Spans[i].Uvs = -1;
+                const int batch = 128;
+                var built = new ObjectMesh[batch * Lods];
                 for (int k = 0; k < shapes.Count; k++)
                 {
+                    int b0 = k - k % batch;
+                    if (k == b0)
+                    {
+                        int bn = Math.Min(batch, shapes.Count - b0);
+                        Parallel.For(0, bn * Lods, j => built[j] = ObjectMeshes.Build(parts[b0 + j / Lods], keys[b0 + j / Lods], j % Lods));
+                    }
                     for (int l = 0; l < Lods; l++)
                     {
-                        var m = ObjectMeshes.Build(parts[k], keys[k], l);
+                        var m = built[(k - b0) * Lods + l];
                         int vc = m.VertexCount, at = k * Stride + l;
                         float[] p = m.Positions, q = m.Normals;
                         Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity, mid = Vector3.zero;
@@ -571,7 +583,7 @@ namespace Stabby.Game
         {
             if (meshSet == null)
             {
-                if (meshTask == null || !meshTask.IsCompleted) return false;
+                if (meshTask == null || !meshTask.IsCompleted) { PendingWhy = 512; return false; }
                 if (meshTask.IsFaulted) { GameStatus.Failure = meshTask.Exception.ToString(); meshTask = null; return false; }
                 meshSet = meshTask.Result;
                 meshTask = null;
@@ -580,7 +592,7 @@ namespace Stabby.Game
             }
             if (atlasTask != null)
             {
-                if (!atlasTask.IsCompleted) return false;
+                if (!atlasTask.IsCompleted) { PendingWhy = 1024; return false; }
                 if (atlasTask.IsFaulted) { GameStatus.Failure = atlasTask.Exception.ToString(); atlasTask = null; return false; }
                 atlas = LeafAtlas.Create(atlasTask.Result);
                 atlasTask = null;
@@ -594,7 +606,7 @@ namespace Stabby.Game
                     meshes[pumpedIds[i]] = pumped[i];
                     meshIds[pumpedIds[i]] = graphics.RegisterMesh(pumped[i]);
                 }
-            if (!meshBatch.Done) return false;
+            if (!meshBatch.Done) { PendingWhy = 2048; return false; }
             meshBatch.Dispose();
             meshBatch = null;
             meshesDone = true;
@@ -840,7 +852,8 @@ namespace Stabby.Game
                 float minBase = Need(RectDistance(cam, (pick % across) * span, (pick / across) * span, span), q);
                 chunkTasks.Add(StartCollect(pick, minBase, !loaded[pick]));
             }
-            Pending = unserved || chunkTasks.Count > 0 ? 1 : 0;
+            why = (chunkTasks.Count > 0 ? 1 : 0) | (unserved ? 2 : 0);
+            Pending = why != 0 ? 1 : 0;
         }
 
         const float ShrinkAt = 2f;
@@ -879,7 +892,7 @@ namespace Stabby.Game
             {
                 if (!spawned.Contains(key)) continue;
                 int d = (int)(key >> 40);
-                if (doomed.Length >= DespawnBudget) { Pending = 1; break; }
+                if (doomed.Length >= DespawnBudget) { Pending = 1; why |= 4; break; }
                 int count = doomed.Length;
                 if (tileEntities.TryGetFirstValue(key, out var e, out var it))
                     do doomed.Add(e); while (tileEntities.TryGetNextValue(out e, ref it));
@@ -909,6 +922,7 @@ namespace Stabby.Game
                 if (!loaded[c] || baseReach[d] < heldBase[c])
                 {
                     waiting++;
+                    why |= 8;
                     if (watch && blockedFrame[c] != frame)
                     {
                         if (blockedSince[c] < 0f || blockedFrame[c] < frame - 1) blockedSince[c] = now;
@@ -917,10 +931,12 @@ namespace Stabby.Game
                     continue;
                 }
                 if (!ranges.TryGetValue(key, out var range)) { spawned.Add(key); continue; }
-                if (budget <= 0 || Since(t0) > StreamMs) { waiting++; continue; }
-                SpawnTile(key, chunkObjects[range.z], chunkParts[range.z], range);
+                if (budget <= 0 || Since(t0) > StreamMs) { waiting++; why |= budget <= 0 ? 16 : 32; continue; }
+                pickKeys.Add(key);
+                pickRanges.Add(range);
                 budget -= range.y;
             }
+            if (pickKeys.Count > 0) SpawnPicked();
             if (writes.Length > 0)
                 Dependency = new SpawnJob
                 {
@@ -933,38 +949,54 @@ namespace Stabby.Game
             return waiting;
         }
 
-        void SpawnTile(long key, NativeArray<ObjectSpawn> objects, NativeArray<uint> parts, int3 range)
+        void SpawnPicked()
         {
             var counts = groupCounts;
             System.Array.Clear(counts, 0, 4);
             System.Array.Clear(groupAt, 0, 4);
-            int shown = 0;
-            for (int k = 0; k < range.y; k++)
+            for (int t = 0; t < pickKeys.Count; t++)
             {
-                uint item = parts[range.x + k];
-                var o = objects[(int)(item >> 8)];
-                if (!Hidden(o.Id)) { shown++; counts[Group(meshBase[o.Def][(int)(item & 255)] + o.Variant)]++; }
+                var range = pickRanges[t];
+                var objects = chunkObjects[range.z];
+                var parts = chunkParts[range.z];
+                for (int k = 0; k < range.y; k++)
+                {
+                    uint item = parts[range.x + k];
+                    var o = objects[(int)(item >> 8)];
+                    if (!Hidden(o.Id)) counts[Group(meshBase[o.Def][(int)(item & 255)] + o.Variant)]++;
+                }
             }
             var prefabs = groupPrefabs;
             prefabs[0] = flatPrefab; prefabs[1] = castPrefab; prefabs[2] = flatFoliagePrefab; prefabs[3] = castFoliagePrefab;
             var made = groupMade;
             for (int g = 0; g < 4; g++) made[g] = EntityManager.Instantiate(prefabs[g], counts[g], Allocator.Temp);
             var at = groupAt;
-            for (int k = 0; k < range.y; k++)
+            for (int t = 0; t < pickKeys.Count; t++)
             {
-                uint item = parts[range.x + k];
-                var s = objects[(int)(item >> 8)];
-                if (Hidden(s.Id)) continue;
-                int p = (int)(item & 255);
-                int group = Group(meshBase[s.Def][p] + s.Variant);
-                var e = made[group][at[group]++];
-                writes.Add(new SpawnWrite { E = e, S = s, Part = partBase[s.Def] + p, Foliage = group >= 2 });
-                tileEntities.Add(key, e);
-                liveByDef[s.Def]++;
+                long key = pickKeys[t];
+                var range = pickRanges[t];
+                var objects = chunkObjects[range.z];
+                var parts = chunkParts[range.z];
+                int shown = 0;
+                for (int k = 0; k < range.y; k++)
+                {
+                    uint item = parts[range.x + k];
+                    var s = objects[(int)(item >> 8)];
+                    if (Hidden(s.Id)) continue;
+                    shown++;
+                    int p = (int)(item & 255);
+                    int group = Group(meshBase[s.Def][p] + s.Variant);
+                    var e = made[group][at[group]++];
+                    writes.Add(new SpawnWrite { E = e, S = s, Part = partBase[s.Def] + p, Foliage = group >= 2 });
+                    tileEntities.Add(key, e);
+                    liveByDef[s.Def]++;
+                }
+                spawned.Add(key);
+                liveEntities += shown;
             }
-            spawned.Add(key);
-            liveEntities += shown;
             foreach (var arr in made) arr.Dispose();
+            pickKeys.Clear();
+            pickRanges.Clear();
         }
 
         JobHandle Scan(float3 cam) => new ScanJob
@@ -1095,10 +1127,10 @@ namespace Stabby.Game
 
         protected override void OnUpdate()
         {
-            if (!JobPoll.Done(scan)) return;
+            if (!JobPoll.Done(scan)) { PendingWhy |= 64; return; }
             DespawnHidden();
-            if (!Warm()) return;
-            if (field == null && !Prepare()) return;
+            if (!Warm()) { PendingWhy = 128; return; }
+            if (field == null && !Prepare()) { PendingWhy = 128; return; }
             using (RegisterMarker.Auto()) if (!Register()) return;
             var cam = Camera.main;
             if (cam == null) return;
@@ -1113,7 +1145,7 @@ namespace Stabby.Game
             }
             float maxReach = 0;
             foreach (float r in reach) maxReach = math.max(maxReach, r);
-            if (!scanned) { Pending = 1; scanAt = pos; scan = Scan(pos); scanned = true; return; }
+            if (!scanned) { Pending = 1; PendingWhy = 256; scanAt = pos; scan = Scan(pos); scanned = true; return; }
             if (math.distance(pos, lastPos) > span) settled = false;
             lastPos = pos;
             using (LoadMarker.Auto()) LoadChunks(pos, maxReach);
@@ -1123,6 +1155,7 @@ namespace Stabby.Game
             if (waiting > 0) Pending = 1;
             if (waiting == 0 && GameStatus.TerrainBuilt) settled = true;
             if (Pending == 0) { readyAt = scanAt; readyFrame = UnityEngine.Time.frameCount; }
+            PendingWhy = why;
             scanAt = pos;
             scan = Scan(pos);
             scanned = true;

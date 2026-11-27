@@ -167,14 +167,14 @@ namespace Stabby.Game.Editor
             if (!ready) return;
             if (settle == -1) { settle = 240; GameStatus.Lines["~startup"] = $"playable {EditorApplication.timeSinceStartup - playAt:F2} s after entering play mode"; }
             if (settle > 0 && --settle > 0) return;
-            if (phase == 0 && Loading()) { if (firstStep == 0) chaseWait++; return; }
+            if (phase == 0 && Loading()) { if (firstStep == 0) { chaseWait++; ChaseWhy(); } return; }
 
             if (dir == null) { dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "out", "unity", "game")); Directory.CreateDirectory(dir); }
             var cam = Camera.main;
             if (phase == 0 && firstStep == 0)
             {
                 Shot(cam, null, "warmup");
-                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain and objects";
+                if (chaseWait > 0) GameStatus.Lines["~chase wait"] = $"chase waited {chaseWait} extra frames for terrain and objects (s: terrain behind {chaseWhy[0]:F1}, regions {chaseWhy[1]:F1}, objects pending {chaseWhy[2]:F1} (collecting {pendWhy[0]:F1}, unserved {pendWhy[1]:F1}, despawn {pendWhy[2]:F1}, chunk {pendWhy[3]:F1}, spawn budget {pendWhy[4]:F1}, spawn time {pendWhy[5]:F1}, scan busy {pendWhy[6]:F1}, preparing {pendWhy[7]:F1}, rescan {pendWhy[8]:F1}, mesh build {pendWhy[9]:F1}, leaf atlas {pendWhy[10]:F1}, mesh upload {pendWhy[11]:F1}), objects stale {chaseWhy[3]:F1})";
                 Shot(cam, dir, "chase");
                 home = cam.transform.position;
                 GameStatus.Lines["~bench chase"] = Bench(cam, "chase");
@@ -2984,6 +2984,26 @@ namespace Stabby.Game.Editor
         static readonly System.Text.StringBuilder loadWaits = new System.Text.StringBuilder();
 
         static double LoadWaitTotal() => loadTotal + (loadSince >= 0 ? EditorApplication.timeSinceStartup - loadSince : 0);
+
+        static readonly double[] chaseWhy = new double[4], pendWhy = new double[12];
+        static double chaseLast = -1;
+
+        static void ChaseWhy()
+        {
+            double now = EditorApplication.timeSinceStartup, dt = chaseLast < 0 ? 0 : now - chaseLast;
+            chaseLast = now;
+            bool columns = true;
+            foreach (var w in Unity.Entities.World.All)
+                if (w.Name == GameSettings.ViewClient) columns = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Settled ?? false;
+            var cam = Camera.main;
+            if (GameStatus.TerrainBehind > 0) chaseWhy[0] += dt;
+            if (!columns) chaseWhy[1] += dt;
+            if (cam != null && !ObjectViewSystem.ReadyAround(cam.transform.position, ReadyWithin))
+            {
+                chaseWhy[ObjectViewSystem.Pending != 0 ? 2 : 3] += dt;
+                for (int b = 0; b < pendWhy.Length; b++) if ((ObjectViewSystem.PendingWhy & (1 << b)) != 0) pendWhy[b] += dt;
+            }
+        }
 
         static bool Loading()
         {
