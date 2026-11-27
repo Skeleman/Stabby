@@ -232,7 +232,7 @@ namespace Stabby.Viewer
             {
                 ref int v = ref corner[(Y - cy) * row + X - cx];
                 if (v >= 0) return v;
-                float h = 0, a = 0, b = 0, c = 0, swell = 1;
+                float h = 0, a = 0, b = 0, c = 0, depth = 0, swell = 1;
                 int count = 0, liquid = -1;
                 for (int j = Y - 1; j <= Y; j++)
                     for (int i = X - 1; i <= X; i++)
@@ -245,11 +245,11 @@ namespace Stabby.Viewer
                         if (id < 0) continue;
                         var lk = world.Water.Lakes[id];
                         var m = WaterTint.MixAt(lk, n, X - 0.5f, Y - 0.5f);
-                        h += ch; a += m.A; b += m.B; c += m.C; count++;
+                        h += ch; a += m.A; b += m.B; c += m.C; depth += Mathf.Max(0, ch - world.Height[j * n + i]); count++;
                         if (liquid < 0) liquid = lk.Liquid;
                     }
                 count = Mathf.Max(count, 1);
-                return v = sheet.Add(new Vector3((X - 0.5f) * cm, h / count, (Y - 0.5f) * cm), new Vector4(0, 0, 0, Mathf.Max(liquid, 0)), new Vector4(a / count, b / count, c / count, 0), new Vector4(swell, 0, 0, 0));
+                return v = sheet.Add(new Vector3((X - 0.5f) * cm, h / count, (Y - 0.5f) * cm), new Vector4(0, 0, 0, Mathf.Max(liquid, 0)), new Vector4(a / count, b / count, c / count, 0), new Vector4(swell, 1 + depth / count, 0, 0));
             }
             for (int y = cy; y < y1; y++)
                 for (int x = cx; x < x1; x++)
@@ -348,7 +348,7 @@ namespace Stabby.Viewer
                         kinds.Add(kinds[v00]);
                         tints.Add(Bilerp(tints, v00, v10, v01, v11, u, w));
                         var sw = Bilerp(swells, v00, v10, v01, v11, u, w);
-                        swells.Add(new Vector4(sw.x, 0, spacing, 0));
+                        swells.Add(new Vector4(sw.x, sw.y, spacing, 0));
                     }
                 for (int j = 0; j < split; j++)
                     for (int i = 0; i < split; i++)
@@ -736,7 +736,7 @@ namespace Stabby.Viewer
                     rim = opaque ? 1 : 0;
                 }
                 var c = ground == null ? Vector3.zero : ground(x, z, p.Level);
-                return index[k] = sheet.Add(new Vector3(x, p.Level, z), new Vector4(rim, 0, 0, p.Liquid), new Vector4(c.x, c.y, c.z, 0));
+                return index[k] = sheet.Add(new Vector3(x, p.Level, z), new Vector4(rim, 0, 0, p.Liquid), new Vector4(c.x, c.y, c.z, 0), new Vector4(0, 1 + Mathf.Max(0, p.Level - p.Ground[k]), 0, 0));
             }
             for (int j = 0; j + 1 < nz; j++)
                 for (int i = 0; i + 1 < nx; i++)
@@ -780,6 +780,7 @@ namespace Stabby.Viewer
         {
             var spray = Sprays(world, r.Liquid) ? mist : null;
             if (spray != null) { spray.Amount = SprayAmount(world, r.Liquid); spray.Liquid = r.Liquid; }
+            int v0 = buf.Verts.Count;
             var pts = new List<Vector4>();
             for (int k = 0; k < r.X.Length; k++)
                 pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));
@@ -887,6 +888,25 @@ namespace Stabby.Viewer
             }
             buf.Fade = 0;
             buf.Tris.AddRange(held);
+            if (world.Sea != null) OverSea(world, buf, v0);
+        }
+
+        static void OverSea(GeneratedWorld world, RiverBuffers buf, int v0)
+        {
+            int n = world.Config.Size;
+            float cm = world.Config.CellMeters;
+            for (int v = v0; v < buf.Verts.Count; v++)
+            {
+                var c = buf.Curt[v];
+                if (c.x != 0 || c.y != 0 || c.z != 0) continue;
+                float fx = Mathf.Clamp(buf.Verts[v].x / cm, 0, n - 1), fz = Mathf.Clamp(buf.Verts[v].z / cm, 0, n - 1);
+                int i = Mathf.Min((int)fx, n - 2), k = Mathf.Min((int)fz, n - 2);
+                float tx = fx - i, tz = fz - k;
+                float sea = Mathf.Lerp(Mathf.Lerp(world.Sea[k * n + i] ? 1 : 0, world.Sea[k * n + i + 1] ? 1 : 0, tx), Mathf.Lerp(world.Sea[(k + 1) * n + i] ? 1 : 0, world.Sea[(k + 1) * n + i + 1] ? 1 : 0, tx), tz);
+                if (sea <= c.w) continue;
+                buf.Curt[v] = new Vector4(0, 0, 0, sea);
+                buf.Tints[v] = Vector4.Lerp(buf.Tints[v], Vector4.zero, sea);
+            }
         }
 
         static float MouthFade(float s, float from, float to) => to > from ? Mathf.SmoothStep(0, 1, (s - from) / (to - from)) : 1;

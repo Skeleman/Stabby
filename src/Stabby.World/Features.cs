@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Shapes = 18;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Cenote = 18, SeaStack = 19, Shapes = 20;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
@@ -63,12 +63,12 @@ namespace Stabby.World
 
         public const float BoulderFoot = 2f;
 
-        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
+        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : Shape == Cenote ? CenoteSpan : W;
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
-        public float MinY => Shape == Butte ? Ay - H - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
-        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Math.Max(Ay, By) + R + H;
+        public float MinY => Shape == Butte || Shape == SeaStack ? Ay - H - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
+        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Shape == SeaStack ? By + F + StackBand + 1f : Math.Max(Ay, By) + R + H;
         public float MinZ => Math.Min(Az, Bz) - R - Spread;
         public float MaxZ => Math.Max(Az, Bz) + R + Spread;
 
@@ -89,6 +89,8 @@ namespace Stabby.World
             if (!Contains(x, y, z)) return false;
             if (Shape == Spring) return Basin(x, y, z, out dist);
             if (Shape == Butte) return Mesa(x, y, z, out dist);
+            if (Shape == SeaStack) return Stack(x, y, z, out dist);
+            if (Shape == Cenote) return Pit(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
@@ -125,7 +127,92 @@ namespace Stabby.World
             return s < ButteBand;
         }
 
+        public const float CenoteLobe = 0.16f, CenoteLobeM = 9f, CenoteRoughM = 0.8f, CenoteGrainM = 0.35f, CenoteLedgeM = 0.6f, CenoteGullyM = 2.6f, CenoteFlare = 0.05f, CenoteToeM = 0.6f, CenoteFoot = 0.25f, CenoteSpread = 0.85f, CenoteCapM = 3f, CenoteDive = 2.5f, CenoteRubbleM = 0.4f, CenoteScreeM = 1.5f;
+
+        public float CenoteWall => D * (1f + CenoteLobe) + N + CenoteRoughM + CenoteGrainM + CenoteLedgeM;
+
+        float CenoteSpan => CenoteWall + 1f;
+
+        public float CenoteAxis(out float ux, out float uz)
+        {
+            float gx = Bx - Ax, gz = Bz - Az, len = (float)Math.Sqrt(gx * gx + gz * gz);
+            ux = len > 0f ? gx / len : 1f;
+            uz = len > 0f ? gz / len : 0f;
+            return len;
+        }
+
+        public float CenoteRamp(float u, float v)
+        {
+            float du = Math.Max(0f, D - u), sv = v / CenoteSpread, cap = CenoteCapM * CenoteCapM;
+            float y = P - CenoteToeM + T * (u - CenoteFoot * D) - T * ((float)Math.Sqrt(du * du + sv * sv + cap) - (float)Math.Sqrt(du * du + cap));
+            return y < P ? P - CenoteDive * (P - y) : y;
+        }
+
+        float CenoteFan(float u, float v, float x, float y, float z) => CenoteRamp(u, v) + CenoteRubbleM * (2f * Value(Seed ^ 0x5BE0CD19u, x / 2.5f, y / 2.5f, z / 2.5f) - 1f);
+
+        public float CenoteScree(float x, float y, float z)
+        {
+            if (Shape != Cenote || y < P) return 0f;
+            CenoteAxis(out float ux, out float uz);
+            float px = x - Ax, pz = z - Az, u = px * ux + pz * uz, v = pz * ux - px * uz;
+            if (px * px + pz * pz > CenoteWall * CenoteWall && (u < 0f || u > D + CenoteWall || Math.Abs(v) > 1.3f * CenoteGullyM)) return 0f;
+            float ramp = CenoteFan(u, v, x, y, z);
+            return 1f - Math.Min(1f, Math.Max(0f, (Math.Abs(y - ramp) - 0.5f * CenoteScreeM) / (0.5f * CenoteScreeM)));
+        }
+
+        bool Pit(float x, float y, float z, out float dist)
+        {
+            uint seed = Seed;
+            float len = CenoteAxis(out float ux, out float uz), px = x - Ax, pz = z - Az, rh = (float)Math.Sqrt(px * px + pz * pz);
+            float u = px * ux + pz * uz, v = pz * ux - px * uz;
+            float t = Math.Max(0f, Math.Min(1f, (y - By) / Math.Max(1f, F - By)));
+            float rw = D * (1f + CenoteLobe * (2f * Value(seed, x / CenoteLobeM, 0f, z / CenoteLobeM) - 1f)) + N * (1f - t * t)
+                + CenoteRoughM * (2f * Value(seed ^ 0x3C6EF372u, x / 3f, y / 3f, z / 3f) - 1f)
+                + CenoteGrainM * (2f * Value(seed ^ 0x510E527Fu, x / 1.2f, y / 1.2f, z / 1.2f) - 1f)
+                + CenoteLedgeM * (2f * Value(seed ^ 0x9B05688Cu, x / 12f, y / 1.7f, z / 12f) - 1f);
+            float pit = Math.Max(rh - rw, By - y);
+            float wg = CenoteGullyM * (1f + 0.3f * (2f * Value(seed ^ 0x1F83D9ABu, x / 6f, y / 4f, z / 6f) - 1f)) + CenoteFlare * Math.Max(0f, u - D);
+            float gully = Math.Max(Math.Abs(v) - wg, Math.Max(-u, u - len));
+            float ramp = CenoteFan(u, v, x, y, z);
+            float g = T / CenoteSpread * (ramp < P ? CenoteDive : 1f);
+            float s = Math.Max(Math.Min(pit, gully), (ramp - y) / (float)Math.Sqrt(1f + g * g));
+            dist = HoleR + s;
+            return s < R;
+        }
+
         static float Groove(float dv) => Math.Max(0f, 1f - Sq(dv / ButteGrooveW));
+
+        public const float StackBand = 2f, StackLobe = 0.22f, StackLobeM = 11f, StackFluteM = 0.9f, StackLumpM = 1.1f, StackLedgeM = 0.7f, StackNotchM = 1.8f, StackNotchY = 0.7f, StackNotchW = 1.6f, StackFootM = 2.5f, StackShoulderM = 1.2f, StackHoleRough = 0.12f;
+
+        public static float StackReach(float d) => d * (1f + StackLobe) + StackFluteM + StackLumpM + StackFootM + StackBand + 1f;
+
+        bool Stack(float x, float y, float z, out float dist)
+        {
+            uint seed = Seed;
+            float ex = Bx - Ax, ez = Bz - Az, px = x - Ax, pz = z - Az, ll = ex * ex + ez * ez;
+            float t = ll > 0f ? Math.Max(0f, Math.Min(1f, (px * ex + pz * ez) / ll)) : 0f;
+            float qx = px - t * ex, qz = pz - t * ez, rh = (float)Math.Sqrt(qx * qx + qz * qz);
+            float u = Math.Max(0f, Math.Min(1f, y / Math.Max(1f, By))), k = Math.Min(1f, D / 8f);
+            float rim = D * (1f + StackLobe * (2f * Value(seed, x / StackLobeM, y / (2f * StackLobeM), z / StackLobeM) - 1f)) * (1f - N * u);
+            rim += StackFluteM * k * (2f * Value(seed ^ 0x3C6EF372u, x / 3.5f, y / 15f, z / 3.5f) - 1f);
+            rim += StackLumpM * k * (2f * Value(seed ^ 0x510E527Fu, x / 5f, y / 5f, z / 5f) - 1f);
+            rim -= StackLedgeM * k * Sq(Value(seed ^ 0x1F83D9ABu, x / 40f, y / 2.6f, z / 40f));
+            rim -= StackNotchM * k * Math.Max(0f, 1f - Sq((y - StackNotchY) / StackNotchW)) * (0.6f + 0.4f * Value(seed ^ 0x9B05688Cu, x / 6f, 0f, z / 6f));
+            rim += StackFootM * k * Smooth(-1f, -9f, y);
+            float top = By + F * (2f * Value(seed ^ 0x6A09E667u, x / 6f, 0f, z / 6f) - 1f) - StackShoulderM * k * Smooth(-4f, 0f, rh - rim);
+            float s = Math.Max(rh - rim, Math.Max(y - top, Ay - H - y));
+            if (P > 0f)
+            {
+                float len = (float)Math.Sqrt(ll), hx = x - Ax - 0.5f * ex, hz = z - Az - 0.5f * ez;
+                float a = len > 0f ? (hx * ex + hz * ez) / len : hx, dy = (y - T) * (y > T ? 0.8f : 1.25f);
+                float hr = P * (1f + StackHoleRough * (2f * Value(seed ^ 0xA54FF53Au, x / 3f, y / 3f, z / 3f) - 1f));
+                s = Math.Max(s, hr - (float)Math.Sqrt(a * a + dy * dy));
+            }
+            dist = R + s;
+            return s < StackBand;
+        }
+
+        public bool StackOpen(float x, float y, float z) => !Reach(x, y, z, out float dist) || dist >= R;
 
         float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
         {
@@ -444,6 +531,13 @@ namespace Stabby.World
                 }
                 return sx * sx + sz * sz <= rr * rr;
             }
+            if (Shape == Cenote)
+            {
+                float len = CenoteAxis(out float ux, out float uz), px = x - Ax, pz = z - Az, u = px * ux + pz * uz, v = pz * ux - px * uz, rw = CenoteWall + R;
+                if (px * px + pz * pz <= rw * rw) return true;
+                float wg = 1.3f * CenoteGullyM + CenoteFlare * Math.Max(0f, u - D) + R;
+                return u >= 0f && u <= len && Math.Abs(v) <= wg;
+            }
             if (W > 0f)
             {
                 float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -737,6 +831,8 @@ namespace Stabby.World
             Mines.Place(w, detail, strata, list, caves);
             foreach (var crater in craters)
                 if (!Overlaps(crater, list, 0)) list.Add(crater);
+            Cenotes.Place(w, detail, list);
+            SeaStacks.Place(w, detail, list);
             return list.ToArray();
         }
 

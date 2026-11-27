@@ -599,6 +599,59 @@ public class ObjectTests
     }
 
     [Fact]
+    public void SeaStacksStandInSeaAcrossSeaLevelWithAnOpenArch()
+    {
+        var (w, _, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
+        int n = w.Config.Size, tall = 0, arches = 0;
+        float cm = w.Config.CellMeters;
+        var coat = Materials.Surface.CoatWeights(w, edits);
+        foreach (var e in edits)
+        {
+            if (e.Shape != FeatureEdit.SeaStack) continue;
+            Assert.Equal(FeatureEdit.Add, e.Kind);
+            Assert.True(e.Ay < 0f && e.By > 0f, $"stack base {e.Ay} below and top {e.By} above sea level");
+            float mx = 0.5f * (e.Ax + e.Bx), mz = 0.5f * (e.Az + e.Bz);
+            Assert.True(w.Sea[(int)(mz / cm) * n + (int)(mx / cm)], "stack stands in the sea");
+            if (e.By >= SeaStacks.MinRise) tall++;
+            if (e.D >= 4f) Assert.False(e.StackOpen(mx, 0.5f * e.By, mz), "stack core is solid");
+            Assert.True(e.StackOpen(mx, e.By + e.F + FeatureEdit.StackBand + 1f, mz), "nothing stands above the stack top");
+            Assert.Equal(0, coat[((int)(mz / cm) * n + (int)(mx / cm)) * 4 + SurfaceDetail.Sand]);
+            if (e.P <= 0f) continue;
+            arches++;
+            Assert.True(SeaStacks.Offshore(w, mx, mz, SeaStacks.ArchReach(e)), "arch stands clear of the cliff");
+            Assert.True(e.T + 1.25f * e.P >= 10f, $"arch hole rises {e.T + 1.25f * e.P} m above the sea");
+            Assert.True(e.StackOpen(mx, e.T, mz), "arch hole is open at the waterline");
+            Assert.False(e.StackOpen(mx, e.T + e.P + 3f, mz), "arch span is solid above the hole");
+        }
+        Assert.True(tall >= SeaStacks.MinStacks, $"{tall} tall stacks on the default world");
+        Assert.True(arches > 0, "the default world holds a sea arch");
+        var loaded = WorldFile.Read(WorldFile.Write(w), Materials);
+        string Stacks(FeatureEdit[] list) => string.Join(" ", list.Where(e => e.Shape == FeatureEdit.SeaStack).Select(e => $"{e.Ax},{e.Az},{e.By}"));
+        Assert.Equal(Stacks(edits), Stacks(Features.Place(loaded, new TerrainDetail(loaded))));
+    }
+
+    [Fact]
+    public void CenotesOnSeed2At1024DropToWalkablePools()
+    {
+        var (w, detail, edits, field) = TestWorlds.Get(2, 1024);
+        var small = TestWorlds.Default;
+        Assert.InRange(small.Edits.Count(e => e.Shape == FeatureEdit.Cenote), 0, 1);
+        var cenotes = edits.Where(e => e.Shape == FeatureEdit.Cenote).ToList();
+        Assert.InRange(cenotes.Count, 2, 4);
+        foreach (var e in cenotes)
+        {
+            Assert.Equal(FeatureEdit.Carve, e.Kind);
+            Assert.InRange(2f * e.D, 2f * Cenotes.MinD, 2f * Cenotes.MaxD);
+            Assert.InRange(e.F - e.P, Cenotes.MinDrop, Cenotes.MaxDrop);
+        }
+        var faults = new List<string>();
+        WorldChecks.CheckCenotes(w, detail, edits, field, faults);
+        WorldChecks.CheckCenotes(small.W, small.Detail, small.Edits, small.Field, faults);
+        Assert.Empty(faults);
+        Assert.Equal(cenotes.Count, field.CenotePools().Length);
+    }
+
+    [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
         var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);

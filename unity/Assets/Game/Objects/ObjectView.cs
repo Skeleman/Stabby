@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stabby.World;
@@ -74,17 +75,29 @@ namespace Stabby.Game
             public int[] Slots;
             public int SlotCount;
             public MeshPack Pack;
+            public readonly ConcurrentQueue<MeshPack> Packs = new ConcurrentQueue<MeshPack>();
 
-            public void Dispose()
+            public void Fresh()
             {
-                if (Pack != null)
-                {
-                    Pack.Dispose();
-                    return;
-                }
+                Vertices = new NativeList<float>(1 << 18, Allocator.Persistent);
+                Narrow = new NativeList<ushort>(1 << 16, Allocator.Persistent);
+                Wide = new NativeList<int>(0, Allocator.Persistent);
+            }
+
+            public void DisposeLists()
+            {
                 if (Vertices.IsCreated) Vertices.Dispose();
                 if (Narrow.IsCreated) Narrow.Dispose();
                 if (Wide.IsCreated) Wide.Dispose();
+                Vertices = default; Narrow = default; Wide = default;
+            }
+
+            public void Dispose()
+            {
+                Pack?.Dispose();
+                Pack = null;
+                while (Packs.TryDequeue(out var p)) p.Dispose();
+                DisposeLists();
             }
         }
 
@@ -220,9 +233,10 @@ namespace Stabby.Game
             if (chunkKeys != null) foreach (var a in chunkKeys) if (a.IsCreated) a.Dispose();
             if (chunkLights != null) foreach (var a in chunkLights) DestroyLights(a);
             foreach (var t in chunkTasks) Owned.Release(t, r => r.Dispose());
-            Owned.Release(meshTask, r => r.Dispose());
             meshBatch?.Dispose();
-            meshSet?.Dispose();
+            if (meshSet != null) { meshSet.Pack?.Dispose(); meshSet.Pack = null; }
+            if (meshTask != null) Owned.Release(meshTask, r => r.Dispose());
+            else meshSet?.Dispose();
             EntityManager.CompleteAllTrackedJobs();
             JobPoll.Teardown(scan);
             if (tileNative.IsCreated) tileNative.Dispose();
@@ -351,7 +365,12 @@ namespace Stabby.Game
             defPartsNative = new NativeArray<ObjectDefPart>(defPartTable, Allocator.Persistent);
             bool anyFoliage = false;
             for (int k = 0; k < shapes.Count; k++) anyFoliage |= foliageMesh[k] = ObjectPart.IsFoliage(shapes[k]);
-            meshTask = Task.Run(() => BuildMeshes(shapes, parts, keys, impostors));
+            int spans = shapes.Count * Stride;
+            meshSet = new MeshSet { Spans = new MeshSpan[spans], Bounds = new AABB[shapes.Count], Centers = new Vector4[shapes.Count], Slots = new int[shapes.Count] };
+            meshes = new Mesh[spans];
+            meshIds = new BatchMeshID[spans];
+            var set = meshSet;
+            meshTask = Task.Run(() => BuildMeshes(set, shapes, parts, keys, impostors));
             if (anyFoliage) atlasTask = Task.Run(() => LeafAtlas.Build());
             return true;
         }
@@ -370,78 +389,84 @@ namespace Stabby.Game
 
         static int Floats(int uvs) => 6 + 4 * uvs;
 
-        static MeshSet BuildMeshes(List<int> shapes, List<ObjectPart> parts, List<ulong> keys, List<bool> impostors)
+        static Task<ObjectMesh[]> BuildBatch(List<ObjectPart> parts, List<ulong> keys, int b0, int bn) => Task.Run(() =>
         {
-            int n = shapes.Count * Stride;
-            var set = new MeshSet
-            {
-                Vertices = new NativeList<float>(1 << 20, Allocator.Persistent), Narrow = new NativeList<ushort>(1 << 18, Allocator.Persistent), Wide = new NativeList<int>(0, Allocator.Persistent),
-                Spans = new MeshSpan[n], Bounds = new AABB[shapes.Count], Centers = new Vector4[shapes.Count], Slots = new int[shapes.Count],
-            };
+            var built = new ObjectMesh[bn * Lods];
+            Parallel.For(0, bn * Lods, j => built[j] = ObjectMeshes.Build(parts[b0 + j / Lods], keys[b0 + j / Lods], j % Lods));
+            return built;
+        });
+
+        static async Task<MeshSet> BuildMeshes(MeshSet set, List<int> shapes, List<ObjectPart> parts, List<ulong> keys, List<bool> impostors)
+        {
+            const int batch = 128, ahead = 1;
+            int count = shapes.Count, batches = (count + batch - 1) / batch;
+            var pending = new Task<ObjectMesh[]>[batches];
+            for (int b = 0; b < Math.Min(ahead, batches); b++) pending[b] = BuildBatch(parts, keys, b * batch, Math.Min(batch, count - b * batch));
             try
             {
-                for (int i = 0; i < n; i++) set.Spans[i].Uvs = -1;
-                const int batch = 128;
-                var built = new ObjectMesh[batch * Lods];
-                for (int k = 0; k < shapes.Count; k++)
+                for (int i = 0; i < set.Spans.Length; i++) set.Spans[i].Uvs = -1;
+                for (int b = 0; b < batches; b++)
                 {
-                    int b0 = k - k % batch;
-                    if (k == b0)
+                    var built = await pending[b].ConfigureAwait(false);
+                    pending[b] = null;
+                    int b0 = b * batch, bn = Math.Min(batch, count - b0);
+                    set.Fresh();
+                    for (int k = b0; k < b0 + bn; k++)
                     {
-                        int bn = Math.Min(batch, shapes.Count - b0);
-                        Parallel.For(0, bn * Lods, j => built[j] = ObjectMeshes.Build(parts[b0 + j / Lods], keys[b0 + j / Lods], j % Lods));
-                    }
-                    for (int l = 0; l < Lods; l++)
-                    {
-                        var m = built[(k - b0) * Lods + l];
-                        int vc = m.VertexCount, at = k * Stride + l;
-                        float[] p = m.Positions, q = m.Normals;
-                        Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity, mid = Vector3.zero;
-                        for (int v = 0; v < vc; v++)
+                        for (int l = 0; l < Lods; l++)
                         {
-                            var pv = new Vector3(p[3 * v], p[3 * v + 1], p[3 * v + 2]);
-                            lo = Vector3.Min(lo, pv); hi = Vector3.Max(hi, pv); mid += pv;
+                            var m = built[(k - b0) * Lods + l];
+                            int vc = m.VertexCount, at = k * Stride + l;
+                            float[] p = m.Positions, q = m.Normals;
+                            Vector3 lo = Vector3.positiveInfinity, hi = Vector3.negativeInfinity, mid = Vector3.zero;
+                            for (int v = 0; v < vc; v++)
+                            {
+                                var pv = new Vector3(p[3 * v], p[3 * v + 1], p[3 * v + 2]);
+                                lo = Vector3.Min(lo, pv); hi = Vector3.Max(hi, pv); mid += pv;
+                            }
+                            mid /= Mathf.Max(1, vc);
+                            float outward = 0;
+                            for (int v = 0; v < vc; v++) outward += Vector3.Dot(new Vector3(q[3 * v], q[3 * v + 1], q[3 * v + 2]), new Vector3(p[3 * v], p[3 * v + 1], p[3 * v + 2]) - mid);
+                            var idx = m.Indices;
+                            int uvs = m.Uvs != null ? 2 : m.Tones != null ? 1 : 0;
+                            bool flip = m.Uvs == null && outward < 0;
+                            if (flip) for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
+                            int f = Floats(uvs), start = set.Vertices.Length;
+                            set.Vertices.ResizeUninitialized(start + vc * f);
+                            var dst = set.Vertices.AsArray();
+                            for (int v = 0; v < vc; v++)
+                            {
+                                int o = start + v * f;
+                                for (int c = 0; c < 3; c++)
+                                {
+                                    dst[o + c] = p[3 * v + c];
+                                    dst[o + 3 + c] = flip ? -q[3 * v + c] : q[3 * v + c];
+                                }
+                                if (uvs == 2)
+                                {
+                                    for (int c = 0; c < 4; c++) { dst[o + 6 + c] = m.Uvs[4 * v + c]; dst[o + 10 + c] = m.Winds[4 * v + c]; }
+                                }
+                                else if (uvs == 1)
+                                {
+                                    for (int c = 0; c < 4; c++) dst[o + 6 + c] = m.Tones[4 * v + c];
+                                }
+                            }
+                            Begin(set, at, start, vc, uvs);
+                            foreach (var i in idx) Push(set, at, i);
+                            End(set, at);
+                            if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * (m.Uvs != null ? 0.56f : 0.5f) };
                         }
-                        mid /= Mathf.Max(1, vc);
-                        float outward = 0;
-                        for (int v = 0; v < vc; v++) outward += Vector3.Dot(new Vector3(q[3 * v], q[3 * v + 1], q[3 * v + 2]), new Vector3(p[3 * v], p[3 * v + 1], p[3 * v + 2]) - mid);
-                        var idx = m.Indices;
-                        int uvs = m.Uvs != null ? 2 : m.Tones != null ? 1 : 0;
-                        bool flip = m.Uvs == null && outward < 0;
-                        if (flip) for (int t = 0; t < idx.Length; t += 3) (idx[t + 1], idx[t + 2]) = (idx[t + 2], idx[t + 1]);
-                        int f = Floats(uvs), start = set.Vertices.Length;
-                        set.Vertices.ResizeUninitialized(start + vc * f);
-                        var dst = set.Vertices.AsArray();
-                        for (int v = 0; v < vc; v++)
-                        {
-                            int o = start + v * f;
-                            for (int c = 0; c < 3; c++)
-                            {
-                                dst[o + c] = p[3 * v + c];
-                                dst[o + 3 + c] = flip ? -q[3 * v + c] : q[3 * v + c];
-                            }
-                            if (uvs == 2)
-                            {
-                                for (int c = 0; c < 4; c++) { dst[o + 6 + c] = m.Uvs[4 * v + c]; dst[o + 10 + c] = m.Winds[4 * v + c]; }
-                            }
-                            else if (uvs == 1)
-                            {
-                                for (int c = 0; c < 4; c++) dst[o + 6 + c] = m.Tones[4 * v + c];
-                            }
-                        }
-                        Begin(set, at, start, vc, uvs);
-                        foreach (var i in idx) Push(set, at, i);
-                        End(set, at);
-                        if (l == 0) set.Bounds[k] = new AABB { Center = (lo + hi) * 0.5f, Extents = (hi - lo) * (m.Uvs != null ? 0.56f : 0.5f) };
+                        set.Slots[k] = -1;
+                        if (impostors[k] && set.Spans[k * Stride].Uvs > 0) Impostor(set, k);
                     }
-                    set.Slots[k] = -1;
-                    if (impostors[k] && set.Spans[k * Stride].Uvs > 0) Impostor(set, k);
+                    set.Packs.Enqueue(Pack(set, b0 * Stride, (b0 + bn) * Stride));
+                    if (b + ahead < batches) pending[b + ahead] = BuildBatch(parts, keys, (b + ahead) * batch, Math.Min(batch, count - (b + ahead) * batch));
                 }
-                Pack(set);
             }
             catch
             {
-                set.Dispose();
+                set.DisposeLists();
+                while (set.Packs.TryDequeue(out var p)) p.Dispose();
                 throw;
             }
             return set;
@@ -516,13 +541,13 @@ namespace Stabby.Game
             End(set, at + 1);
         }
 
-        static void Pack(MeshSet set)
+        static MeshPack Pack(MeshSet set, int from, int to)
         {
             var pack = new MeshPack(set.Vertices, set.Narrow, set.Wide);
-            set.Pack = pack;
+            set.Vertices = default; set.Narrow = default; set.Wide = default;
             var attr = new int[Layouts.Length];
             for (int u = 0; u < Layouts.Length; u++) attr[u] = pack.Layout(Layouts[u]);
-            for (int i = 0; i < set.Spans.Length; i++)
+            for (int i = from; i < to; i++)
             {
                 var s = set.Spans[i];
                 if (s.Uvs < 0) continue;
@@ -531,6 +556,7 @@ namespace Stabby.Game
                     Id = i, Vertex = s.Vertex, VertexCount = s.VertexCount, Floats = Floats(s.Uvs), Index = s.Index, IndexCount = s.IndexCount, Attr = attr[s.Uvs], AttrCount = Layouts[s.Uvs].Length, Wide = s.Wide,
                 });
             }
+            return pack;
         }
 
         void Bake(CommandBuffer cmd)
@@ -581,14 +607,34 @@ namespace Stabby.Game
 
         bool Register()
         {
-            if (meshSet == null)
+            if (meshesDone) return true;
+            var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
+            while (true)
             {
-                if (meshTask == null || !meshTask.IsCompleted) { PendingWhy = 512; return false; }
-                if (meshTask.IsFaulted) { GameStatus.Failure = meshTask.Exception.ToString(); meshTask = null; return false; }
-                meshSet = meshTask.Result;
-                meshTask = null;
-                meshes = new Mesh[meshSet.Spans.Length];
-                meshIds = new BatchMeshID[meshes.Length];
+                if (meshBatch == null)
+                {
+                    if (!meshSet.Packs.TryDequeue(out var pack))
+                    {
+                        if (meshTask == null) break;
+                        if (!meshTask.IsCompleted) { PendingWhy = 512; return false; }
+                        if (meshTask.IsFaulted) { GameStatus.Failure = meshTask.Exception.ToString(); meshTask = null; return false; }
+                        meshTask = null;
+                        continue;
+                    }
+                    meshSet.Pack = pack;
+                    meshBatch = new MeshBatch(pack);
+                }
+                if (meshBatch.Pump(pumped, pumpedIds))
+                    for (int i = 0; i < pumped.Count; i++)
+                    {
+                        meshes[pumpedIds[i]] = pumped[i];
+                        meshIds[pumpedIds[i]] = graphics.RegisterMesh(pumped[i]);
+                    }
+                if (!meshBatch.Done) { PendingWhy = 2048; return false; }
+                meshBatch.Dispose();
+                meshBatch = null;
+                meshSet.Pack.Dispose();
+                meshSet.Pack = null;
             }
             if (atlasTask != null)
             {
@@ -597,18 +643,6 @@ namespace Stabby.Game
                 atlas = LeafAtlas.Create(atlasTask.Result);
                 atlasTask = null;
             }
-            if (meshesDone) return true;
-            var graphics = World.GetExistingSystemManaged<EntitiesGraphicsSystem>();
-            meshBatch ??= new MeshBatch(meshSet.Pack);
-            if (meshBatch.Pump(pumped, pumpedIds))
-                for (int i = 0; i < pumped.Count; i++)
-                {
-                    meshes[pumpedIds[i]] = pumped[i];
-                    meshIds[pumpedIds[i]] = graphics.RegisterMesh(pumped[i]);
-                }
-            if (!meshBatch.Done) { PendingWhy = 2048; return false; }
-            meshBatch.Dispose();
-            meshBatch = null;
             meshesDone = true;
             meshSet.Dispose();
             meshIdsNative = new NativeArray<BatchMeshID>(meshIds, Allocator.Persistent);

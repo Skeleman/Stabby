@@ -5,7 +5,7 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public const int VolcanoPool = -5;
+        public const int VolcanoPool = -6;
         readonly object volcanoPoolLock = new object();
         LiquidPool[] volcanoPools;
         VolcanoSketch[] volcanoOwners;

@@ -129,6 +129,8 @@ namespace Stabby.Game
             FeatureEdit.Tor => "tor",
             FeatureEdit.Hoodoo => "hoodoo",
             FeatureEdit.Butte => "butte",
+            FeatureEdit.SeaStack => "sea stack",
+            FeatureEdit.Cenote => "cenote",
             FeatureEdit.Spring => "spring",
             FeatureEdit.Sink => "sinkhole",
             FeatureEdit.Bridge => "rock bridge",
