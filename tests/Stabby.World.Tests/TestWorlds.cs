@@ -49,3 +49,8 @@ static class TestWorlds
         return (p.W, p.Detail, p.Edits, p.Field);
     }
 }
+
+public sealed class DefaultWorldFixture
+{
+    public DefaultWorldFixture() { _ = TestWorlds.Default; }
+}
