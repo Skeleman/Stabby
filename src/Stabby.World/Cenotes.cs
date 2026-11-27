@@ -5,7 +5,7 @@ namespace Stabby.World
 {
     public static class Cenotes
     {
-        public const float MinD = 6f, MaxD = 15f, MinDrop = 8f, MaxDrop = 20f, MinPool = 2f, MaxPool = 4f, MinLean = 1.5f, MaxLean = 3f, MinGrade = 0.6f, MaxGrade = 0.7f;
+        public const float MinD = 6f, MaxD = 15f, MinDrop = 8f, MaxDrop = 20f, MinPool = 8f, MaxPool = 14f, MinLean = 1.5f, MaxLean = 3f, MinGrade = 0.6f, MaxGrade = 0.7f;
         public const float ReliefM = 6f, GapM = 1500f, StepM = 48f, ClearM = 12f, DryM = 40f, HeadM = 1f, SealM = 1f, RimM = 1f, Blend = 3f;
         public const int Tries = 400;
         public static readonly string[] Biomes = { "temperate-forest", "temperate-rain", "shrubland", "savanna", "tropical-forest" };
@@ -105,6 +105,48 @@ namespace Stabby.World
         public LiquidPool[] CenotePools()
         {
             lock (cenotePoolLock) return cenotePools ??= BuildCenotePools();
+        }
+
+        void EmitCenote(int d, int chunk, float x0, float z0, float sx, float sz, List<ObjectInstance> list, ref int ordinal)
+        {
+            var def = lib.Objects[d];
+            var pl = def.Placement;
+            var ground = new DetailGround { Detail = detail };
+            for (int k = 0; k < edits.Length; k++)
+            {
+                var e = edits[k];
+                if (e.Shape != FeatureEdit.Cenote || e.MaxX < x0 || e.MinX >= x0 + sx || e.MaxZ < z0 || e.MinZ >= z0 + sz) continue;
+                e.CenoteAxis(out float ux, out float uz);
+                float wet = FeatureEdit.CenoteFoot * e.D + FeatureEdit.CenoteToeM / e.T, run = e.D - wet;
+                var rng = new Rng(Rng.Mix(cenoteStream ^ (ulong)(k + 1) * 0x9E3779B97F4A7C15UL ^ key[d]));
+                for (int m = 0; m < pl.PerCenote; m++)
+                {
+                    float a = rng.NextFloat(), b = rng.Range(-1f, 1f), grow = rng.NextFloat(), qa = rng.Range(-1f, 1f), qb = rng.Range(-1f, 1f);
+                    int variant = (int)(rng.NextU32() % (uint)def.Variants);
+                    float du = run * (1f - a * a), u = e.D - du, v = b * FeatureEdit.CenoteSpread * du * 0.8f;
+                    float px = e.Ax + ux * u - uz * v, pz = e.Az + uz * u + ux * v;
+                    if (px < x0 || pz < z0 || px >= x0 + sx || pz >= z0 + sz) continue;
+                    float y = Walk.Surface(ground, RockAt(px, pz), Features.LatticeStepM, px, pz, e.Ay, e.P);
+                    if (!(y > e.P + 0.3f) || Math.Abs(y - e.CenoteRamp(u, v)) > 1f) continue;
+                    float size = pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * grow;
+                    var o = new ObjectInstance { Def = d, Variant = variant, X = px, Y = y - pl.Sink * size, Z = pz, Size = size };
+                    Yaw(qa, qb, false, ref o);
+                    o.Id = ObjectIds.Make(chunk, d, ordinal++);
+                    list.Add(o);
+                }
+            }
+        }
+
+        public bool CenoteFoot(float x, float z, out float foot)
+        {
+            foot = 0f;
+            foreach (var e in edits)
+            {
+                if (e.Shape != FeatureEdit.Cenote || x < e.MinX || x > e.MaxX || z < e.MinZ || z > e.MaxZ || !e.Under(x, z)) continue;
+                foot = Walk.Surface(new DetailGround { Detail = detail }, RockAt(x, z), Features.LatticeStepM, x, z, e.Ay, e.By);
+                return true;
+            }
+            return false;
         }
 
         LiquidPool[] BuildCenotePools()

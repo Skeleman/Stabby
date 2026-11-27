@@ -42,7 +42,7 @@
     {
       "id": "talus", "name": "Talus", "kind": "static", "material": "talus-grey", "variants": 8,
       "parts": [ { "id": "body", "shape": "rock", "scale": [1, 0.7, 1] } ],
-      "placement": { "perHectare": 360, "slopeMax": 1.1, "sizeMinM": 0.3, "sizeMaxM": 1.4, "clusterCount": 24, "clusterRadiusM": 10, "sink": 0.25, "alignToSlope": 0.7, "footRiseM": 5, "footReachM": 10,
+      "placement": { "perHectare": 360, "slopeMax": 1.1, "sizeMinM": 0.3, "sizeMaxM": 1.4, "clusterCount": 24, "clusterRadiusM": 10, "sink": 0.25, "alignToSlope": 0.7, "footRiseM": 5, "footReachM": 10, "perCenote": 10,
         "biomeDensity": [ { "biome": "desert", "scale": 0.4 }, { "biome": "wetland", "scale": 0.15 }, { "biome": "mangrove", "scale": 0.15 } ] }
     },
     {

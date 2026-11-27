@@ -126,7 +126,7 @@ namespace Stabby.World
             return s < ButteBand;
         }
 
-        public const float CenoteLobe = 0.16f, CenoteLobeM = 9f, CenoteRoughM = 0.8f, CenoteGrainM = 0.35f, CenoteLedgeM = 0.6f, CenoteGullyM = 2.6f, CenoteFlare = 0.05f, CenoteToeM = 0.6f, CenoteFoot = 0.25f, CenoteFan = 0.7f, CenoteRubbleM = 0.4f;
+        public const float CenoteLobe = 0.16f, CenoteLobeM = 9f, CenoteRoughM = 0.8f, CenoteGrainM = 0.35f, CenoteLedgeM = 0.6f, CenoteGullyM = 2.6f, CenoteFlare = 0.05f, CenoteToeM = 0.6f, CenoteFoot = 0.25f, CenoteSpread = 0.85f, CenoteCapM = 3f, CenoteDive = 2.5f, CenoteRubbleM = 0.4f, CenoteScreeM = 1.5f;
 
         public float CenoteWall => D * (1f + CenoteLobe) + N + CenoteRoughM + CenoteGrainM + CenoteLedgeM;
 
@@ -140,7 +140,24 @@ namespace Stabby.World
             return len;
         }
 
-        public float CenoteRamp(float u, float v) => P - CenoteToeM + T * (u - CenoteFoot * D) - CenoteFan * v * v / D;
+        public float CenoteRamp(float u, float v)
+        {
+            float du = Math.Max(0f, D - u), sv = v / CenoteSpread, cap = CenoteCapM * CenoteCapM;
+            float y = P - CenoteToeM + T * (u - CenoteFoot * D) - T * ((float)Math.Sqrt(du * du + sv * sv + cap) - (float)Math.Sqrt(du * du + cap));
+            return y < P ? P - CenoteDive * (P - y) : y;
+        }
+
+        float CenoteFan(float u, float v, float x, float y, float z) => CenoteRamp(u, v) + CenoteRubbleM * (2f * Value(Seed ^ 0x5BE0CD19u, x / 2.5f, y / 2.5f, z / 2.5f) - 1f);
+
+        public float CenoteScree(float x, float y, float z)
+        {
+            if (Shape != Cenote || y < P) return 0f;
+            CenoteAxis(out float ux, out float uz);
+            float px = x - Ax, pz = z - Az, u = px * ux + pz * uz, v = pz * ux - px * uz;
+            if (px * px + pz * pz > CenoteWall * CenoteWall && (u < 0f || u > D + CenoteWall || Math.Abs(v) > 1.3f * CenoteGullyM)) return 0f;
+            float ramp = CenoteFan(u, v, x, y, z);
+            return 1f - Math.Min(1f, Math.Max(0f, (Math.Abs(y - ramp) - 0.5f * CenoteScreeM) / (0.5f * CenoteScreeM)));
+        }
 
         bool Pit(float x, float y, float z, out float dist)
         {
@@ -155,8 +172,9 @@ namespace Stabby.World
             float pit = Math.Max(rh - rw, By - y);
             float wg = CenoteGullyM * (1f + 0.3f * (2f * Value(seed ^ 0x1F83D9ABu, x / 6f, y / 4f, z / 6f) - 1f)) + CenoteFlare * Math.Max(0f, u - D);
             float gully = Math.Max(Math.Abs(v) - wg, Math.Max(-u, u - len));
-            float ramp = CenoteRamp(u, v) + CenoteRubbleM * (2f * Value(seed ^ 0x5BE0CD19u, x / 2.5f, y / 2.5f, z / 2.5f) - 1f);
-            float s = Math.Max(Math.Min(pit, gully), (ramp - y) / (float)Math.Sqrt(1f + T * T));
+            float ramp = CenoteFan(u, v, x, y, z);
+            float g = T / CenoteSpread * (ramp < P ? CenoteDive : 1f);
+            float s = Math.Max(Math.Min(pit, gully), (ramp - y) / (float)Math.Sqrt(1f + g * g));
             dist = HoleR + s;
             return s < R;
         }

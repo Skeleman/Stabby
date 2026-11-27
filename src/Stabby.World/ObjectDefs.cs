@@ -87,6 +87,7 @@ namespace Stabby.World
         public string ChainHead;
         public string Bank;
         public string Oasis;
+        public int PerCenote;
         public float PerHundredM;
         public int Discovery;
         public int Cave;
