@@ -271,7 +271,7 @@ namespace Stabby.World
             return true;
         }
 
-        static float[] Flow(WorldConfig c, bool[] sea, float[] h)
+        internal static float[] Flow(WorldConfig c, bool[] sea, float[] h)
         {
             int n = c.Size;
             float cm = c.CellMeters;
@@ -283,7 +283,7 @@ namespace Stabby.World
             return Drainage.Accumulate(stack, recv, weight);
         }
 
-        static bool Wet(WorldConfig c, float[] flow, float x, float z, float reach)
+        internal static bool Wet(WorldConfig c, float[] flow, float x, float z, float reach)
         {
             int n = c.Size;
             float cm = c.CellMeters;
