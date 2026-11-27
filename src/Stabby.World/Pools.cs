@@ -18,7 +18,7 @@ namespace Stabby.World
     public sealed partial class ObjectField
     {
         public const float PoolStepM = 0.5f, PoolSlopeM = 1f, PoolPadM = 1f, PoolGapM = 0.04f, PoolMinDepthM = 0.05f;
-        public const int BogPool = -1;
+        public const int BogPool = -1, OasisPool = -4;
         readonly object liquidLock = new object();
         LiquidPool[] liquidPools;
 
@@ -52,6 +52,13 @@ namespace Stabby.World
             {
                 float top = q[k + 5] + BogHeadM;
                 list.Add(Pool(QuicksandPool, sand, q[k], q[k + 1], BogReach(q[k + 2], q[k + 3], top), q[k + 3], q[k + 4] - BogHeadM, top));
+            }
+            var oa = OasisPools();
+            int water = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("water"));
+            for (int k = 0; k < oa.Length; k += OasisStride)
+            {
+                float top = oa[k + 5] + OasisHeadM;
+                list.Add(Pool(OasisPool, water, oa[k], oa[k + 1], OasisReach(oa[k + 2], oa[k + 3], top), oa[k + 3], oa[k + 4] - OasisHeadM, top));
             }
             list.AddRange(CavePools());
             return list.ToArray();

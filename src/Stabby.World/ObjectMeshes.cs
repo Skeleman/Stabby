@@ -46,6 +46,7 @@ namespace Stabby.World
             if (shape == ObjectPart.Reed) return ObjectFoliage.Reed(key, lod);
             if (shape == ObjectPart.Broadleaf) return ObjectFoliage.Broadleaf(key, lod);
             if (shape == ObjectPart.Conifer) return ObjectFoliage.Conifer(key, lod);
+            if (shape == ObjectPart.DatePalm) return ObjectFoliage.DatePalm(key, lod);
             if (shape == ObjectPart.Log) return Log(key, lod, aspect > 0 ? aspect : 0.11f, ends);
             if (shape == ObjectPart.Stump) return Stump(key, lod, aspect > 0 ? aspect : 1.11f, ends);
             if (shape == ObjectPart.BasaltColumns) return Columns(key, lod);

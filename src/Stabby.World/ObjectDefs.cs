@@ -37,9 +37,9 @@ namespace Stabby.World
 
     public sealed class ObjectPart
     {
-        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, WallHead = 49, Overlook = 50, Bones = 51, SaltTower = 52, Bridge = 53, Shapes = 54;
-        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "bones", "salt-tower", "road-bridge" };
-        public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed;
+        public const int Rock = 0, Log = 1, Stump = 2, Shrub = 3, Broadleaf = 4, Conifer = 5, Wall = 6, Cairn = 7, Reed = 8, Inn = 9, InnYard = 10, Table = 11, Bench = 12, Barrel = 13, Crate = 14, Stall = 15, Well = 16, StoneRing = 17, Tent = 18, FirePit = 19, LogSeat = 20, Campsite = 21, HermitHut = 22, Hermitage = 23, RoadShrine = 24, Wayside = 25, Ruin = 26, HotSpring = 27, Mushroom = 28, FairyRing = 29, Geyser = 30, MudPot = 31, BasaltColumns = 32, Crystals = 33, WolfDen = 34, Dripstone = 35, DripColumn = 36, DungeonCorridor = 37, DungeonRoom = 38, DungeonStairs = 39, DungeonDoor = 40, DungeonPillar = 41, DungeonCollapse = 42, Dungeon = 43, MineTimber = 44, MineRail = 45, MineCart = 46, WallTorch = 47, House = 48, WallHead = 49, Overlook = 50, Bones = 51, SaltTower = 52, Bridge = 53, DatePalm = 54, Shapes = 55;
+        public static readonly string[] ShapeNames = { "rock", "log", "stump", "shrub", "broadleaf", "conifer", "dry-stone-wall", "cairn", "reed", "inn", "inn-yard", "table", "bench", "barrel", "crate", "market-stall", "well", "stone-ring", "tent", "fire-pit", "log-seat", "campsite", "hermit-hut", "hermitage", "road-shrine", "wayside", "ruin", "hot-spring", "mushroom", "fairy-ring", "geyser", "mud-pot", "basalt-columns", "crystal-cluster", "wolf-den", "dripstone", "dripstone-column", "dungeon-corridor", "dungeon-room", "dungeon-stairs", "dungeon-door", "dungeon-pillar", "dungeon-collapse", "dungeon", "mine-timber", "mine-rail", "mine-cart", "wall-torch", "house", "wall-head", "overlook", "bones", "salt-tower", "road-bridge", "date-palm" };
+        public static bool IsFoliage(int shape) => (shape >= Shrub && shape <= Conifer) || shape == Reed || shape == DatePalm;
         public static bool IsStructure(int shape) => (shape >= Wall && shape <= Cairn) || (shape >= Inn && shape <= MudPot) || shape == WolfDen || shape == WallTorch || shape == House || shape == WallHead || shape == Overlook || shape == Bones || shape == SaltTower || shape == Bridge || IsDungeon(shape) || IsMine(shape);
         public static bool IsDungeon(int shape) => shape >= DungeonCorridor && shape <= Dungeon;
         public static bool IsMine(int shape) => shape >= MineTimber && shape <= MineCart;
@@ -86,6 +86,7 @@ namespace Stabby.World
         public float ChainCorner, ChainGate;
         public string ChainHead;
         public string Bank;
+        public string Oasis;
         public float PerHundredM;
         public int Discovery;
         public int Cave;
@@ -333,6 +334,7 @@ namespace Stabby.World
                 if (pl.HardnessMax <= pl.HardnessMin || pl.HardnessMin < 0 || pl.HardnessMax > 1) errors.Add(d.Id + ": hardness range must lie in 0-1 and be increasing");
                 if (pl.SizeMinM <= 0 || pl.SizeMaxM < pl.SizeMinM || pl.SizeMaxM > 20) errors.Add(d.Id + ": sizeMinM/sizeMaxM must be increasing, 0-20 m");
                 if (pl.ClusterCount < 1 || pl.ClusterCount > 32) errors.Add(d.Id + ": clusterCount must be 1-32");
+                if (pl.Oasis != null && ObjectField.OasisKind(pl.Oasis) == 0) errors.Add(d.Id + ": oasis must be palm, reeds, grass or shrub");
                 if (pl.ClusterRadiusM < 0 || pl.ClusterRadiusM > 30) errors.Add(d.Id + ": clusterRadiusM must be 0-30");
                 if (pl.Sink < 0 || pl.Sink > 0.9f) errors.Add(d.Id + ": sink must be 0-0.9");
                 if (pl.AlignToSlope < 0 || pl.AlignToSlope > 1) errors.Add(d.Id + ": alignToSlope must be 0-1");

@@ -469,6 +469,26 @@
       "placement": { "perHectare": 0, "slopeMax": 0.4, "sizeMinM": 4.5, "sizeMaxM": 6, "sink": 0.005 }
     },
     {
+      "id": "date-palm", "name": "Date palm", "kind": "animated", "material": "palm-bark", "variants": 8,
+      "parts": [ { "id": "body", "shape": "date-palm", "solid": "on", "leafMaterial": "palm-frond" } ],
+      "placement": { "biomes": ["desert", "cold-desert", "steppe"], "perHectare": 0, "oasis": "palm", "slopeMax": 0.6, "sizeMinM": 7, "sizeMaxM": 13, "sink": 0.02 }
+    },
+    {
+      "id": "oasis-reeds", "name": "Oasis reeds", "kind": "animated", "material": "reed-brown", "variants": 8,
+      "parts": [ { "id": "body", "shape": "reed", "leafMaterial": "reed-leaf" } ],
+      "placement": { "biomes": ["desert", "cold-desert", "steppe"], "perHectare": 0, "oasis": "reeds", "slopeMax": 1.3, "sizeMinM": 1.1, "sizeMaxM": 2.2, "sink": 0.04 }
+    },
+    {
+      "id": "oasis-grass", "name": "Oasis grass", "kind": "animated", "material": "reed-brown", "variants": 8,
+      "parts": [ { "id": "body", "shape": "reed", "scale": [1.4, 1, 1.4], "leafMaterial": "oasis-grass" } ],
+      "placement": { "biomes": ["desert", "cold-desert", "steppe"], "perHectare": 0, "oasis": "grass", "slopeMax": 1.2, "sizeMinM": 0.35, "sizeMaxM": 0.8, "sink": 0.08 }
+    },
+    {
+      "id": "oasis-shrub", "name": "Oasis shrub", "kind": "animated", "material": "twig-brown", "variants": 6,
+      "parts": [ { "id": "body", "shape": "shrub", "leafMaterial": "bush-leaf" } ],
+      "placement": { "biomes": ["desert", "cold-desert", "steppe"], "perHectare": 0, "oasis": "shrub", "slopeMax": 0.8, "sizeMinM": 0.8, "sizeMaxM": 1.8, "sink": 0.04, "alignToSlope": 0.2 }
+    },
+    {
       "id": "bones", "name": "Giant bones", "kind": "structure", "material": "aged-bone", "variants": 6,
       "parts": [ { "id": "site", "shape": "bones" } ],
       "placement": { "biomes": ["steppe", "savanna", "shrubland", "desert", "cold-desert"], "perHectare": 0, "discovery": "bones", "spacingM": 1000, "chance": 1, "slopeMax": 0.25, "sizeMinM": 18, "sizeMaxM": 20, "sink": 0.002 }
