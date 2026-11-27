@@ -8,7 +8,7 @@ public class GroundBakeTests
     {
         var w = TestWorlds.World(TestWorlds.DefaultSeed);
         var g = GroundBake.Run(w, 77, true, out var detail);
-        return (g, detail, WorldFile.Write(w, 5, g));
+        return (g, detail, WorldFile.Write(w, 9, 5, g));
     });
 
     [Fact]

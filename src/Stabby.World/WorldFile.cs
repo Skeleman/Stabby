@@ -20,18 +20,18 @@ namespace Stabby.World
 
     public static class WorldFile
     {
-        public const int Version = 2, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256;
+        public const int Version = 2, HeaderBytes = 44, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256;
         static readonly byte[] Magic = { (byte)'S', (byte)'T', (byte)'B', (byte)'W' };
         static readonly int Full = WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes;
 
-        public static byte[] Write(GeneratedWorld w) => Write(w, WorldBake.NotRaised, null);
+        public static byte[] Write(GeneratedWorld w, ulong contentHash = 0) => Write(w, contentHash, WorldBake.NotRaised, null);
 
-        public static byte[] Write(GeneratedWorld w, int mound, GroundBake ground)
+        public static byte[] Write(GeneratedWorld w, ulong contentHash, int mound, GroundBake ground)
         {
             var c = w.Config;
             int a = WorldChunks.Across(c.Size), count = a * a;
             var head = new List<byte>(Magic);
-            Int(head, Version); Int(head, WorldConfig.GeneratorVersion); Int(head, WorldChunks.Version);
+            Int(head, Version); Int(head, WorldConfig.GeneratorVersion); Int(head, WorldChunks.Version); Long(head, contentHash);
             Long(head, c.Seed); Int(head, c.Size); Int(head, BitConverter.SingleToInt32Bits(c.CellMeters));
             Int(head, w.BiomeIds == null ? -1 : w.BiomeIds.Length);
             if (w.BiomeIds != null)
@@ -66,13 +66,34 @@ namespace Stabby.World
 
         public static int GeneratorVersionOf(byte[] data) => data.Length >= 12 && HasMagic(data) ? GetInt(data, 8) : -1;
 
+        public static ulong ContentHashOf(byte[] data) =>
+            data.Length >= 24 && HasMagic(data) && GetInt(data, 4) == Version ? (uint)GetInt(data, 16) | (ulong)(uint)GetInt(data, 20) << 32 : 0;
+
+        public static ulong ContentHash(params byte[][] files)
+        {
+            ulong h = 14695981039346656037UL;
+            foreach (var f in files)
+            {
+                long n = 0;
+                foreach (var b in f)
+                {
+                    if (b == (byte)'\r') continue;
+                    h = (h ^ b) * 1099511628211UL;
+                    n++;
+                }
+                for (int i = 0; i < 8; i++) h = (h ^ (byte)(n >> (8 * i))) * 1099511628211UL;
+            }
+            return h;
+        }
+
         public static GeneratedWorld Read(byte[] data, MaterialLibrary materials)
         {
-            if (data.Length < 36 || !HasMagic(data)) throw new FormatException("not a Stabby world file");
+            if (data.Length < HeaderBytes || !HasMagic(data)) throw new FormatException("not a Stabby world file");
             int o = 4;
             int version = Next(data, ref o), gen = Next(data, ref o), chunkVersion = Next(data, ref o);
             if (version != Version || gen != WorldConfig.GeneratorVersion || chunkVersion != WorldChunks.Version)
                 throw new FormatException($"world file v{version} generator {gen} chunks v{chunkVersion}, expected v{Version} generator {WorldConfig.GeneratorVersion} chunks v{WorldChunks.Version}");
+            o += 8;
             ulong seed = (uint)Next(data, ref o) | (ulong)(uint)Next(data, ref o) << 32;
             var c = new WorldConfig { Seed = seed, Size = Next(data, ref o), CellMeters = BitConverter.Int32BitsToSingle(Next(data, ref o)) };
             if (c.Size < 1 || c.Size > MaxSize) throw new FormatException($"world file size {c.Size} outside 1..{MaxSize}");

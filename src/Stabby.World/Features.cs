@@ -531,16 +531,19 @@ namespace Stabby.World
 
         public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries) => Place(w, detail, out caves, out discoveries, out _);
 
-        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads)
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads) => Place(w, detail, out caves, out discoveries, out roads, out _);
+
+        public static FeatureEdit[] Place(GeneratedWorld w, TerrainDetail detail, out CaveGraph[] caves, out ObjectInstance[] discoveries, out RoadSegment[] roads, out ObjectField field)
         {
             roads = Array.Empty<RoadSegment>();
+            field = null;
             var graphs = new List<CaveGraph>();
             var terrain = Terrain(w, detail, graphs);
             caves = graphs.ToArray();
             terrain = Sunk(terrain, CaveBrooks.Sinks(w, detail, terrain, caves));
             discoveries = null;
             if (w.Objects == null || w.Biome == null) return Brooked(w, detail, terrain, caves);
-            var field = new ObjectField(w, detail, terrain, w.Objects);
+            field = new ObjectField(w, detail, terrain, w.Objects);
             var boulders = field.Boulders();
             var springs = field.SpringEdits();
             var bogs = field.BogEdits();

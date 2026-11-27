@@ -29,10 +29,12 @@ namespace Stabby.World
         public CaveBrook[] Brooks;
         public FieldCaches Field;
 
-        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail)
+        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail) => Run(w, key, caches, out detail, out _);
+
+        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail, out ObjectField live)
         {
             detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads);
+            var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads, out live);
             var bake = new GroundBake
             {
                 Key = key, Detail = detail.Arrays, Edits = edits, Caves = caves, Discoveries = discoveries, Roads = roads,
@@ -44,15 +46,10 @@ namespace Stabby.World
 
         public static ulong KeyOf(IReadOnlyList<byte[]> files, float density)
         {
-            ulong h = 14695981039346656037UL;
-            void Mix(ulong v) { h ^= v; h *= 1099511628211UL; }
-            Mix(Format); Mix((ulong)WorldConfig.GeneratorVersion); Mix(WorldChunks.Version); Mix((uint)BitConverter.SingleToInt32Bits(density));
-            foreach (var f in files)
-            {
-                Mix((ulong)f.Length);
-                foreach (var b in f) Mix(b);
-            }
-            return h;
+            var all = new byte[files.Count + 1][];
+            for (int i = 0; i < files.Count; i++) all[i] = files[i];
+            all[files.Count] = Encoding.ASCII.GetBytes($"ground {Format} generator {WorldConfig.GeneratorVersion} chunks {WorldChunks.Version} density {BitConverter.SingleToInt32Bits(density)}");
+            return WorldFile.ContentHash(all);
         }
 
         public byte[] Write()

@@ -115,8 +115,9 @@ namespace Stabby.Game
         {
             var g = w.Bake?.Ground;
             TerrainDetail detail;
+            ObjectField live = null;
             if (g != null && g.Key == Stabby.Viewer.ContentFiles.BakeKey()) detail = new TerrainDetail(w, g.Detail);
-            else g = GroundBake.Run(w, 0, false, out detail);
+            else g = GroundBake.Run(w, 0, false, out detail, out live);
             var edits = g.Edits;
             var roads = g.Roads;
             var c = detail.Cells;
@@ -158,7 +159,7 @@ namespace Stabby.Game
             for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
             var rs = b.Allocate(ref root.Roads, roads.Length);
             for (int i = 0; i < roads.Length; i++) rs[i] = roads[i];
-            return new GroundParts { Detail = detail, Edits = edits, Discoveries = g.Discoveries, Roads = roads, Brooks = g.Brooks, Field = g.Field, Blob = b };
+            return new GroundParts { Detail = detail, Edits = edits, Discoveries = g.Discoveries, Roads = roads, Brooks = g.Brooks, Field = g.Field, Live = live, Blob = b };
         }
 
         public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
@@ -222,6 +223,9 @@ namespace Stabby.Game
         public RoadSegment[] Roads;
         public CaveBrook[] Brooks;
         public FieldCaches Field;
+        public ObjectField Live;
+
+        public ObjectField Objects(GeneratedWorld w, ObjectLibrary lib) => Live != null ? Live.Fresh(Edits, Discoveries) : new ObjectField(w, Detail, Edits, lib, Discoveries).Adopt(Field);
         public BlobBuilder Blob;
     }
 

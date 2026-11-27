@@ -74,14 +74,16 @@ int Bake()
     long genMs = sw.ElapsedMilliseconds;
     var violations = WorldChecks.Run(w);
     sw.Restart();
+    var files = ContentBytes();
+    ulong hash = WorldFile.ContentHash(files[0], files[1]);
     var raised = WorldFile.Read(WorldFile.Write(w), materials);
     int mound = Mound.Raise(raised);
-    var played = WorldFile.Read(WorldFile.Write(raised, mound, null), materials);
+    var played = WorldFile.Read(WorldFile.Write(raised, hash, mound, null), materials);
     played.Objects = objects;
     played.Caves = caves;
-    var ground = GroundBake.Run(played, BakeKey(), true, out _);
+    var ground = GroundBake.Run(played, GroundBake.KeyOf(files, 1f), true, out _);
     long groundMs = sw.ElapsedMilliseconds;
-    var bytes = WorldFile.Write(played, mound, ground);
+    var bytes = WorldFile.Write(played, hash, mound, ground);
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
     File.WriteAllBytes(path, bytes);
     sw.Restart();
@@ -94,12 +96,12 @@ int Bake()
     return same && violations.Count == 0 ? 0 : 1;
 }
 
-ulong BakeKey()
+List<byte[]> ContentBytes()
 {
     var root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     var files = new List<byte[]>();
     foreach (var f in "biomes.json materials.json objects.json caves.json".Split(' ')) files.Add(File.ReadAllBytes(Path.Combine(root, f)));
-    return GroundBake.KeyOf(files, 1f);
+    return files;
 }
 
 int RunScenarios()
