@@ -1,12 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
     public sealed class GeneratedWorld
     {
         public WorldConfig Config;
-        public WorldSketch Sketch;
+        WorldSketch sketch;
+        Lazy<WorldSketch> later;
+        public WorldSketch Sketch
+        {
+            get { var l = later; return sketch ?? (l == null ? null : sketch = l.Value); }
+            set { sketch = value; later = null; }
+        }
         public bool[] Sea;
         public float[] Height;
         public ClimateField Climate;
@@ -16,6 +24,16 @@ namespace Stabby.World
         public MaterialLibrary Materials;
         public ObjectLibrary Objects;
         public CaveLibrary Caves;
+        public WorldBake Bake;
+
+        public void SketchInBackground()
+        {
+            var c = Config;
+            var l = new Lazy<WorldSketch>(() => WorldSketch.Generate(c), LazyThreadSafetyMode.ExecutionAndPublication);
+            sketch = null;
+            later = l;
+            Task.Run(() => l.Value);
+        }
 
         public ulong Fingerprint()
         {

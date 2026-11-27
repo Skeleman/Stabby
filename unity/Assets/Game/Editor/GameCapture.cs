@@ -489,7 +489,7 @@ namespace Stabby.Game.Editor
             if (phase == 470) { if (job == null) job = ShadowTiersTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 430) { if (job == null) job = DesireShots(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 420) { if (job == null) job = BrainOnly(dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
-            if (phase == 350) { if (job == null) job = ControlsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 350) { if (job == null) job = ControlsTour(cam, dir); if (job.MoveNext()) return; GameStatus.Lines["~spikes"] = SpikeProbe.Report(); File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 500) { if (job == null) job = DetailTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 450) { if (job == null) job = WaterfallTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 460) { if (job == null) job = SitingTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
@@ -2663,7 +2663,7 @@ namespace Stabby.Game.Editor
             for (var f = FallsTour(cam, dir, map, ground); f.MoveNext();) yield return null;
         }
 
-        static readonly string[] BankShots = { "reeds", "river-gravel", "driftwood", "wet-stone" };
+        static readonly string[] BankShots = { "reeds", "river-gravel", "driftwood", "drift-root", "wet-stone" };
 
         static System.Collections.IEnumerator BankDetails(Camera cam, string dir, Ground ground)
         {
@@ -2697,7 +2697,8 @@ namespace Stabby.Game.Editor
                     float sc = count - (new Vector2(a.X - home.x, a.Z - home.z)).magnitude / 300f;
                     if (sc > best) { best = sc; pick = a; }
                 }
-                float back = id == "driftwood" ? 5f + pick.Size : id == "reeds" ? 6.5f : 1.8f;
+                bool drift = id == "driftwood" || id == "drift-root";
+                float back = drift ? 5f + pick.Size : id == "reeds" ? 6.5f : 1.8f;
                 Vector3 eye = Vector3.zero, shore = Vector3.zero;
                 float low = float.MaxValue, high = float.MinValue;
                 for (int a = 0; a < 8; a++)
@@ -2708,9 +2709,9 @@ namespace Stabby.Game.Editor
                     if (h < low) { low = h; eye = e; }
                     if (h > high && h < pick.Y + 3f) { high = h; shore = e; }
                 }
-                bool landward = (id == "reeds" || id == "driftwood" || id == "river-gravel") && high > float.MinValue;
+                bool landward = (id == "reeds" || drift || id == "river-gravel") && high > float.MinValue;
                 if (landward) { eye = shore; low = high; }
-                eye.y = Mathf.Max(low, pick.Y) + (id == "reeds" ? 2.4f : id == "driftwood" ? 1.6f : id == "wet-stone" ? 6f : 2.8f);
+                eye.y = Mathf.Max(low, pick.Y) + (id == "reeds" ? 2.4f : drift ? 1.6f : id == "wet-stone" ? 6f : 2.8f);
                 var look = new Vector3(pick.X, pick.Y + (id == "reeds" ? 0.6f * pick.Size : 0.2f), pick.Z);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
                 GameStatus.Lines["~bank " + id] = $"{id} at {pick.X:F0},{pick.Y:F1},{pick.Z:F0}, {all.Count} near, cluster {best:F1}";

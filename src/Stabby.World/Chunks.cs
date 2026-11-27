@@ -112,10 +112,11 @@ namespace Stabby.World
                 }
         }
 
-        public static void Relink(GeneratedWorld w)
+        public static void Relink(GeneratedWorld w, LoadTimes times = null)
         {
-            Hydrology.Relink(w.Config, w.Height, w.Sea, w.Water);
+            Hydrology.Relink(w.Config, w.Height, w.Sea, w.Water, times);
             WaterTint.Apply(w);
+            times?.Mark("tint");
         }
 
         public static int Bytes(int n, int cx, int cy) => Cells(n, cx, cy) * CellBytes;

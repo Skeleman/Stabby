@@ -48,9 +48,9 @@ namespace Stabby.World
             float r = rng.Range(2.2f, 3.2f), t0 = rng.NextFloat();
             ulong dye = Rng.Mix(key ^ 0x3C6EF372FE94F82BUL);
 
-            Band(l, f, 0, 0, r, rng.Range(0.75f, 1f));
+            Band(l, f, 0, 0, r, rng.Range(1.2f, 1.5f));
 
-            int clumps = rng.Range(14, 25), skip = rng.Range(0, clumps);
+            int clumps = rng.Range(24, 33), skip = rng.Range(0, clumps);
             float gap = rng.Range(1.5f, 3.5f);
             for (int i = 0; i < clumps; i++)
             {
@@ -58,7 +58,7 @@ namespace Stabby.World
                 Arc(t0 + (i + rng.Range(-0.35f, 0.35f)) / clumps, out float c, out float s);
                 float rr = r + rng.Range(-0.15f, 0.15f);
                 int d = rng.Range(0, 16);
-                Mushroom(l, rng.NextU64(), f.Child(c * rr, 0, s * rr, Cos16(d), Sin16(d), 0, 2, rng.Range(1.4f, 2.3f)), dye);
+                Mushroom(l, rng.NextU64(), f.Child(c * rr, 0, s * rr, Cos16(d), Sin16(d), 0, 2, rng.Range(2.4f, 3.4f)), dye);
             }
 
             Arc(t0 + (skip + rng.Range(-1f, 1f)) / clumps, out float bc, out float bs);

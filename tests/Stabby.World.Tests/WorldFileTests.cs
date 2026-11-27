@@ -14,10 +14,11 @@ public class WorldFileTests
     public void BakedWorldLoadsBackIdentical(ulong seed)
     {
         var host = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, Materials);
-        var bytes = WorldFile.Write(host);
+        var bytes = WorldFile.Write(host, 0x0123456789ABCDEFUL);
         var loaded = WorldFile.Read(bytes, Materials);
 
         Assert.Equal(WorldConfig.GeneratorVersion, WorldFile.GeneratorVersionOf(bytes));
+        Assert.Equal(0x0123456789ABCDEFUL, WorldFile.ContentHashOf(bytes));
         Assert.Equal(host.BiomeIds, loaded.BiomeIds);
         Assert.Equal(WorldChunks.Checksums(host), WorldChunks.Checksums(loaded));
         Assert.Empty(WorldChecks.Run(loaded));
@@ -34,12 +35,12 @@ public class WorldFileTests
     }
 
     [Theory]
-    [InlineData(24, int.MaxValue)]
-    [InlineData(24, -5)]
-    [InlineData(28, 0)]
     [InlineData(32, int.MaxValue)]
-    [InlineData(36, int.MaxValue)]
-    [InlineData(24, 129)]
+    [InlineData(32, -5)]
+    [InlineData(36, 0)]
+    [InlineData(40, int.MaxValue)]
+    [InlineData(44, int.MaxValue)]
+    [InlineData(32, 129)]
     public void MalformedHeadersAreRejectedBeforeAllocating(int offset, int value)
     {
         var bytes = WorldFile.Write(WorldGenerator.Generate(new WorldConfig { Seed = 3, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) }, Biomes, Materials));
@@ -57,6 +58,14 @@ public class WorldFileTests
         WorldChunks.Relink(peer);
         Assert.Equal(WorldChunks.Checksums(host), WorldChunks.Checksums(peer));
         Assert.Empty(WorldChecks.Run(peer));
+    }
+
+    [Fact]
+    public void ContentHashIgnoresLineEndingsAndSeparatesFiles()
+    {
+        byte[] B(string t) => System.Text.Encoding.UTF8.GetBytes(t);
+        Assert.Equal(WorldFile.ContentHash(B("a\nb"), B("c")), WorldFile.ContentHash(B("a\r\nb"), B("c")));
+        Assert.NotEqual(WorldFile.ContentHash(B("ab"), B("c")), WorldFile.ContentHash(B("a"), B("bc")));
     }
 
     [Theory]

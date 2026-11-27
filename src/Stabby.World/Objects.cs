@@ -159,6 +159,7 @@ namespace Stabby.World
         readonly float[] footprint;
         readonly PartShapes shapes;
         readonly float[][] seats;
+        readonly bool[] rooted;
         readonly int[] chainHead;
         readonly ulong[] key;
         readonly int[] blockStart, blockItems, bankSite, bankStart, bankItems;
@@ -166,6 +167,9 @@ namespace Stabby.World
         readonly FeatureEdit[] solid;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly PackedObjects[] chunks;
+        byte[] pack;
+        int[] packAt, packRaw;
+        ulong[] packSum;
         readonly object[] chunkGates;
         int chunkComputes;
 
@@ -200,6 +204,7 @@ namespace Stabby.World
             int defs = lib.Objects.Count, biomes = w.BiomeIds == null ? 0 : w.BiomeIds.Length;
             shapes = PartShapes.Of(lib);
             seats = new float[defs][];
+            rooted = new bool[defs];
             density = new float[defs][];
             footprint = new float[defs];
             key = new ulong[defs];
@@ -219,6 +224,7 @@ namespace Stabby.World
                 footprint[d] = def.FootprintRadius();
                 key[d] = Key(def.Id);
                 seats[d] = Seats(def);
+                rooted[d] = def.Parts.Exists(p => p.Shape == ObjectPart.Log && p.Ends == ObjectPart.EndsRooted);
                 chainHead[d] = def.Placement.ChainHead == null ? -1 : lib.Objects.FindIndex(h => h.Id == def.Placement.ChainHead);
                 maxR = Math.Max(maxR, footprint[d] * def.Placement.SizeMaxM + def.Placement.ClusterRadiusM);
             }
@@ -304,11 +310,23 @@ namespace Stabby.World
             {
                 s = chunks[c];
                 if (s != null) return s;
-                s = new PackedObjects(c, Place(cx, cz));
-                Interlocked.Increment(ref chunkComputes);
+                var packed = Volatile.Read(ref pack);
+                var baked = packed != null && packAt[c + 1] > packAt[c] ? PlacedPack.TryUnpack(packed, packAt[c], packAt[c + 1] - packAt[c], packRaw[c], packSum[c], c) : null;
+                if (baked != null) s = new PackedObjects(c, baked);
+                else
+                {
+                    s = new PackedObjects(c, Place(cx, cz));
+                    Interlocked.Increment(ref chunkComputes);
+                }
                 Volatile.Write(ref chunks[c], s);
                 return s;
             }
+        }
+
+        bool HasBake(int cx, int cz)
+        {
+            int c = cz * across + cx;
+            return Volatile.Read(ref pack) != null && packAt[c + 1] > packAt[c];
         }
 
         [ThreadStatic] static List<ObjectInstance> scratch;
@@ -324,7 +342,7 @@ namespace Stabby.World
         public void SolidInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
+            var cached = Volatile.Read(ref chunks[cz * across + cx]) ?? (HasBake(cx, cz) ? Packed(cx, cz) : null);
             if (cached != null) cached.AddTo(list);
             else PlaceInto(cx, cz, true, list, null);
         }
@@ -423,8 +441,7 @@ namespace Stabby.World
                         float size = (pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t) * grade;
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
                         if (!built && Cleared(near, px, pz, footprint[d] * size * (boulders != null ? BoulderReach : 1f))) continue;
-                        if (!Accept(d, px, pz, size, qa, qb, out var o, built: builtOnly || sitesOnly || stageDef >= 0)) continue;
-                        o.Variant = variant;
+                        if (!Accept(d, px, pz, size, qa, qb, out var o, built: builtOnly || sitesOnly || stageDef >= 0, variant: variant)) continue;
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
@@ -610,7 +627,7 @@ namespace Stabby.World
             return b >= 0 && density[d][b] > 0;
         }
 
-        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false, bool site = false, bool built = false)
+        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false, bool site = false, bool built = false, int variant = 0)
         {
             o = default;
             if (!bank && !Open(d, x, z)) return false;
@@ -638,10 +655,11 @@ namespace Stabby.World
             float yw = ql > 1e-4f ? qa / ql : 1f, yy = ql > 1e-4f ? qb / ql : 0f;
             o = new ObjectInstance
             {
-                Def = d, X = x, Z = z, Size = size,
+                Def = d, Variant = variant, X = x, Z = z, Size = size,
                 Y = y - pl.Sink * size - slope * r * 0.5f * (1 - pl.AlignToSlope),
                 Qx = tx * yw - tz * yy, Qy = tw * yy, Qz = tz * yw + tx * yy, Qw = tw * yw,
             };
+            if (rooted[d] && PitFloat(lib, detail, cm, o) > 0) return false;
             if (seats[d] == null) return true;
             SeatRange(detail, cm, seats[d], o, out float lo, out float hi);
             if (hi - lo > Structures.SeatM) return false;
@@ -671,6 +689,30 @@ namespace Stabby.World
                 float g = GroundAt(detail, cellMeters, o.X + rx, o.Z + rz);
                 lo = Math.Min(lo, g); hi = Math.Max(hi, g);
             }
+        }
+
+        public const float PitFloatShare = 0.6f;
+
+        public static float PitFloat(ObjectLibrary lib, TerrainDetail detail, float cellMeters, ObjectInstance o)
+        {
+            var def = lib.Objects[o.Def];
+            float worst = float.NegativeInfinity;
+            for (int pi = 0; pi < def.Parts.Count; pi++)
+            {
+                var p = def.Parts[pi];
+                if (p.Shape != ObjectPart.Log || p.Ends != ObjectPart.EndsRooted) continue;
+                ObjectMeshes.RootPlate(ObjectMeshes.Key(def.Id, pi, o.Variant), out float rp, out _, out float thick);
+                ObjectMeshes.PitReach(rp, thick, out float pcx, out float rr);
+                float rad = 0.5f * p.ScaleY * o.Size, radZ = 0.5f * p.ScaleZ * o.Size, allow = PitFloatShare * ObjectMeshes.PitSkirt * rad;
+                float bx = (p.OffsetX - 0.5f * p.ScaleX) * o.Size + pcx * rad, by = (p.OffsetY + 0.5f * p.ScaleY) * o.Size + ObjectMeshes.PitRimY * rad;
+                for (int k = 0; k < 8; k++)
+                {
+                    FanDir(k, 0.7071f, out float c, out float s);
+                    Rotate(o, bx + 0.7f * rr * c * rad, by, p.OffsetZ * o.Size + rr * s * radZ, out float rx, out float ry, out float rz);
+                    worst = Math.Max(worst, o.Y + ry - GroundAt(detail, cellMeters, o.X + rx, o.Z + rz) - allow);
+                }
+            }
+            return worst;
         }
 
         bool Clear(int i, int gx, int gz, float x, float y, float z, float r, bool bank, int site = 0, bool town = false)

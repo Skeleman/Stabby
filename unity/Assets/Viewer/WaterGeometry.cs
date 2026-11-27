@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Stabby.World;
 using Unity.Mathematics;
 using UnityEngine;
@@ -206,13 +207,27 @@ namespace Stabby.Viewer
             }
         }
 
-        public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells)
+        public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells) => Lakes(world, cx, cy, cells, false);
+
+        public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells, bool shared)
         {
             int n = world.Config.Size, x1 = Mathf.Min(cx + cells, n), y1 = Mathf.Min(cy + cells, n), row = x1 - cx + 1;
             float cm = world.Config.CellMeters;
-            var corner = new int[row * (y1 - cy + 1)];
-            for (int k = 0; k < corner.Length; k++) corner[k] = -1;
-            var sheet = new SheetBuffers();
+            int wet = 0, swelling = 0;
+            for (int y = cy; y < y1; y++)
+                for (int x = cx; x < x1; x++)
+                    if (LakeHeight(world, x, y) != float.MinValue) { wet++; if (SwellOf(world, x, y) > 0) swelling++; }
+            if (wet == 0) return null;
+            int side = LakeSwellSplit + 1;
+            var sheet = SheetBuffers.Rent(4 * wet + side * side * swelling, 6 * (wet - swelling) + 6 * LakeSwellSplit * LakeSwellSplit * swelling, row * (y1 - cy + 1));
+            try { return Lakes(world, cx, cy, x1, y1, row, cm, sheet, shared); }
+            finally { SheetBuffers.Return(sheet); }
+        }
+
+        static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int x1, int y1, int row, float cm, SheetBuffers sheet, bool shared)
+        {
+            int n = world.Config.Size;
+            var corner = sheet.Corners;
             int Corner(int X, int Y)
             {
                 ref int v = ref corner[(Y - cy) * row + X - cx];
@@ -244,7 +259,20 @@ namespace Stabby.Viewer
                     if (SwellOf(world, x, y) > 0) sheet.Grid(v00, v01, v10, v11, LakeSwellSplit, cm / LakeSwellSplit, x, y);
                     else sheet.Quad(v00, v01, v10, v11);
                 }
-            return sheet.Piece($"Water {cx},{cy}", LakeKind);
+            return shared ? sheet.Bare($"Water {cx},{cy}") : sheet.Piece($"Water {cx},{cy}", LakeKind);
+        }
+
+        public static void ShareLakeConstants(MeshParts[] parts)
+        {
+            int most = 0;
+            foreach (var p in parts) if (p != null) most = Mathf.Max(most, p.Verts.Length);
+            var up = new Vector3[most];
+            var cols = new Color[most];
+            for (int k = 0; k < most; k++) { up[k] = Vector3.up; cols[k] = LakeKind; }
+            var uvs = new Vector2[most];
+            var zero = new Vector4[most];
+            foreach (var p in parts)
+                if (p != null) { p.Norms = up; p.Cols = cols; p.Uvs = uvs; p.Uv4 = zero; }
         }
 
         static float SwellOf(GeneratedWorld world, int x, int y)
@@ -257,10 +285,39 @@ namespace Stabby.Viewer
 
         sealed class SheetBuffers
         {
+            static readonly List<SheetBuffers> free = new List<SheetBuffers>();
+
             readonly List<Vector3> verts = new List<Vector3>();
             readonly List<int> tris = new List<int>();
             readonly List<Vector4> kinds = new List<Vector4>(), tints = new List<Vector4>(), swells = new List<Vector4>();
             readonly Dictionary<long, int> edges = new Dictionary<long, int>();
+            public int[] Corners = new int[0];
+            int[] at = new int[0];
+
+            public static SheetBuffers Rent(int vertCount, int triCount, int cornerCount)
+            {
+                SheetBuffers pick = null;
+                lock (free)
+                {
+                    foreach (var b in free)
+                        if (pick == null || (b.verts.Capacity >= vertCount ? pick.verts.Capacity < vertCount || b.verts.Capacity < pick.verts.Capacity : b.verts.Capacity > pick.verts.Capacity)) pick = b;
+                    if (pick != null) free.Remove(pick);
+                }
+                pick ??= new SheetBuffers();
+                pick.Reserve(vertCount, triCount, cornerCount);
+                return pick;
+            }
+
+            public static void Return(SheetBuffers b) { lock (free) free.Add(b); }
+
+            void Reserve(int vertCount, int triCount, int cornerCount)
+            {
+                verts.Clear(); tris.Clear(); kinds.Clear(); tints.Clear(); swells.Clear(); edges.Clear();
+                if (verts.Capacity < vertCount) { verts.Capacity = vertCount; kinds.Capacity = vertCount; tints.Capacity = vertCount; swells.Capacity = vertCount; }
+                if (tris.Capacity < triCount) tris.Capacity = triCount;
+                if (Corners.Length < cornerCount) Corners = new int[cornerCount];
+                for (int k = 0; k < cornerCount; k++) Corners[k] = -1;
+            }
 
             public int Add(Vector3 p, Vector4 kind, Vector4 tint, Vector4 swell = default)
             {
@@ -277,7 +334,7 @@ namespace Stabby.Viewer
             public void Grid(int v00, int v01, int v10, int v11, int split, float spacing, int cx, int cy)
             {
                 int row = split + 1;
-                var at = new int[row * row];
+                if (at.Length < row * row) at = new int[row * row];
                 for (int j = 0; j <= split; j++)
                     for (int i = 0; i <= split; i++)
                     {
@@ -308,12 +365,10 @@ namespace Stabby.Viewer
             public MeshParts Piece(string name, Color kind)
             {
                 if (verts.Count == 0) return null;
-                var m = Flat(name, verts, null, tris, kind);
-                m.Uv1 = kinds.ToArray();
-                m.Uv2 = swells.ToArray();
-                m.Uv3 = tints.ToArray();
-                return m;
+                return Flat(name, verts, null, tris, kind, uv1: kinds.ToArray(), uv2: swells.ToArray(), uv3: tints.ToArray());
             }
+
+            public MeshParts Bare(string name) => new MeshParts { Name = name, Verts = verts.ToArray(), Tris = tris.ToArray(), Uv1 = kinds.ToArray(), Uv2 = swells.ToArray(), Uv3 = tints.ToArray() };
         }
 
         static Vector4 Tint(WaterMix m) => new Vector4(m.A, m.B, m.C, 0);
@@ -371,6 +426,13 @@ namespace Stabby.Viewer
             public float Fade;
 
             public void Clear() { Verts.Clear(); Cols.Clear(); Chan.Clear(); Reach.Clear(); Fall.Clear(); Tints.Clear(); Curt.Clear(); Tris.Clear(); }
+
+            public void Append(RiverBuffers o)
+            {
+                int b = Verts.Count;
+                Verts.AddRange(o.Verts); Cols.AddRange(o.Cols); Chan.AddRange(o.Chan); Reach.AddRange(o.Reach); Fall.AddRange(o.Fall); Tints.AddRange(o.Tints); Curt.AddRange(o.Curt);
+                foreach (int t in o.Tris) Tris.Add(b + t);
+            }
 
             public void Row(Vector3 p, Vector3 dir, float half, float slope, Vector4 reach, Vector4 fall, bool join)
             {
@@ -525,13 +587,7 @@ namespace Stabby.Viewer
 
             public MeshParts Piece(string name)
             {
-                var m = Flat(name, Verts, Cols, Tris, default);
-                m.Uvs = Chan.ToArray();
-                m.Uv1 = Reach.ToArray();
-                m.Uv2 = Fall.ToArray();
-                m.Uv3 = Tints.ToArray();
-                m.Uv4 = Curt.ToArray();
-                return m;
+                return Flat(name, Verts, Cols, Tris, default, Chan.ToArray(), Reach.ToArray(), Fall.ToArray(), Tints.ToArray(), Curt.ToArray());
             }
         }
 
@@ -601,11 +657,16 @@ namespace Stabby.Viewer
                 Tris.Add(q + 1); Tris.Add(q + 2); Tris.Add(q + 3);
             }
 
+            public void Append(MistBuffers o)
+            {
+                int b = Verts.Count;
+                Verts.AddRange(o.Verts); Cols.AddRange(o.Cols); Size.AddRange(o.Size); Corner.AddRange(o.Corner);
+                foreach (int t in o.Tris) Tris.Add(b + t);
+            }
+
             public MeshParts Piece(string name)
             {
-                var m = Flat(name, Verts, Cols, Tris, default);
-                m.Uvs = Size.ToArray();
-                m.Uv1 = Corner.ToArray();
+                var m = Flat(name, Verts, Cols, Tris, default, Size.ToArray(), Corner.ToArray());
                 Verts.Clear(); Cols.Clear(); Size.Clear(); Corner.Clear(); Tris.Clear();
                 return m;
             }
@@ -690,7 +751,16 @@ namespace Stabby.Viewer
             var pieces = new List<MeshParts>();
             var buf = new RiverBuffers();
             var mist = mists == null ? null : new MistBuffers();
-            foreach (var r in NearField.Lines(world))
+            var lines = NearField.Lines(world);
+            var built = new RiverBuffers[lines.Count];
+            var sprays = new MistBuffers[lines.Count];
+            Parallel.For(0, lines.Count, i =>
+            {
+                built[i] = new RiverBuffers();
+                sprays[i] = mists == null ? null : new MistBuffers();
+                River(world, detail, lines[i], built[i], sprays[i]);
+            });
+            for (int i = 0; i < lines.Count; i++)
             {
                 if (buf.Verts.Count >= RiverPieceVertices)
                 {
@@ -698,119 +768,125 @@ namespace Stabby.Viewer
                     buf.Clear();
                 }
                 if (mist != null && mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
-                var spray = Sprays(world, r.Liquid) ? mist : null;
-                if (spray != null) { spray.Amount = SprayAmount(world, r.Liquid); spray.Liquid = r.Liquid; }
-                var pts = new List<Vector4>();
-                for (int k = 0; k < r.X.Length; k++)
-                    pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));
-                int last = pts.Count - 1;
-                var slopes = new float[pts.Count];
-                var currents = new float[pts.Count];
-                for (int k = 0; k < pts.Count; k++)
-                {
-                    var u = pts[Mathf.Max(k - SlopeReach, 0)];
-                    var d = pts[Mathf.Min(k + SlopeReach, last)];
-                    float run = new Vector2(d.x - u.x, d.z - u.z).magnitude;
-                    slopes[k] = Mathf.Clamp01((run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0) / SlopeRange);
-                    currents[k] = Current(r.D[k], run > 0 ? (u.y - d.y) / run : 0);
-                }
-                int coast = pts.Count;
-                if (world.Sea != null)
-                    while (coast > 0 && world.Sea[NearField.CellOf(pts[coast - 1].x, pts[coast - 1].z, world.Config.CellMeters, world.Config.Size)]) coast--;
-                bool mouth = coast < pts.Count;
-                float coastS = 0, total = 0;
-                for (int k = 1; k < pts.Count; k++)
-                {
-                    total += new Vector2(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z).magnitude;
-                    if (k == coast) coastS = total;
-                }
-                float endHalf = Mathf.Max(pts[last].w * 0.5f, 6f), reach = Mathf.Max(MouthReachM, MouthReachWidths * endHalf);
-                float s = 0;
-                var pool = NoPool;
-                var held = new List<int>();
-                for (int k = 0; k < pts.Count; k++)
-                {
-                    var a = pts[Mathf.Max(k - 1, 0)];
-                    var z = pts[Mathf.Min(k + 1, last)];
-                    var dir = new Vector3(z.x - a.x, 0, z.z - a.z).normalized;
-                    float half = Mathf.Max(pts[k].w * 0.5f, 6f), seg = 0;
-                    var p = new Vector3(pts[k].x, 0, pts[k].z);
-                    if (k > 0) s += seg = new Vector2(p.x - pts[k - 1].x, p.z - pts[k - 1].z).magnitude;
-                    p.y = pts[k].y + RiverLift;
-                    var i0 = pts[Mathf.Max(k - TurnReach, 0)];
-                    var i1 = pts[Mathf.Min(k + TurnReach, last)];
-                    float ix = p.x - i0.x, iz = p.z - i0.z, ox = i1.x - p.x, oz = i1.z - p.z;
-                    float li = Mathf.Sqrt(ix * ix + iz * iz), lo = Mathf.Sqrt(ox * ox + oz * oz);
-                    float bend = li * lo > 0 ? (ix * oz - iz * ox) / (li * lo) / (0.5f * (li + lo)) : 0;
-                    float plunge = 0;
-                    for (int j = Mathf.Max(k - PlungeReach, 0); j <= k; j++)
-                        plunge = Mathf.Max(plunge, slopes[j] * (1 - (k - j) / (float)(PlungeReach + 1)));
-                    if (pool.x > NoPool.x) half = Mathf.Max(half, pool.z * (1 - Mathf.Clamp01((s - pool.x) / (PoolSpread * pool.z))));
-                    var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, r.Liquid);
-                    bool join = k > 0;
-                    buf.Tint = Flowing(Tint(r.Mix[k]), currents[k]);
-                    if (k > 0 && FallAt(r, k, out var f, out float lt))
-                    {
-                        buf.Tint = Flowing(Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], lt)), currents[k]);
-                        var fd = new Vector3(f.DirX, 0, f.DirZ);
-                        var prev = new Vector3(pts[k - 1].x, 0, pts[k - 1].z);
-                        float sl = s - seg * (1 - lt), th = FallThrowAt(f.Drop), ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
-                        var lr = new Vector4(rv.x, rv.y, sl, rv.w);
-                        var parts = Split(f);
-                        System.Array.Sort(parts, (x, y) => x.U0.CompareTo(y.U0));
-                        var lip = new List<int>();
-                        var foot = new List<int>();
-                        var bendRows = new List<int>();
-                        int up = buf.Verts.Count - 2, t0 = buf.Tris.Count;
-                        if (parts[0].U0 > -0.999f) buf.Edge(f, -1, slopes[k - 1], lr, pool, lip);
-                        float shove = 0;
-                        foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, bendRows, (FootMax - lt) * seg - FootGap));
-                        if (parts[parts.Length - 1].U1 < 0.999f) buf.Edge(f, 1, slopes[k - 1], lr, pool, lip);
-                        buf.Fan(up, up + 1, lip, true);
-                        held.AddRange(buf.Tris.GetRange(t0, buf.Tris.Count - t0));
-                        buf.Tris.RemoveRange(t0, buf.Tris.Count - t0);
-                        th += shove;
-                        foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
-                        ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
-                        pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);
-                        foreach (int v in bendRows)
-                        {
-                            buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
-                            buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, slopes[k], 0);
-                        }
-                        var footRow = Vector3.Lerp(prev, new Vector3(p.x, 0, p.z), ft);
-                        footRow.y = f.BaseY;
-                        buf.Tint = Flowing(Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], ft)), currents[k]);
-                        buf.Row(footRow, fd, Mathf.Lerp(0.5f * f.Width, half, (ft - lt) / (1 - lt)), slopes[k], new Vector4(rv.x, rv.y, s - seg * (1 - ft), rv.w), pool, false);
-                        buf.Fan(buf.Verts.Count - 2, buf.Verts.Count - 1, foot, false);
-                    }
-                    buf.Tint = Flowing(Tint(r.Mix[k]), currents[k]);
-                    buf.Fade = mouth ? MouthFade(s, coastS, total + reach) : 0;
-                    buf.Tint = Vector4.Lerp(buf.Tint, Vector4.zero, buf.Fade);
-                    buf.Row(p, dir, half, slopes[k], rv, pool, join);
-                }
-                if (mouth && pts.Count > 1)
-                {
-                    var end = pts[last];
-                    var prev = pts[last - 1];
-                    var dir = new Vector3(end.x - prev.x, 0, end.z - prev.z).normalized;
-                    int steps = Mathf.Max(2, Mathf.CeilToInt(reach / MouthStepM));
-                    var tint = Flowing(Tint(r.Mix[last]), currents[last]);
-                    for (int j = 1; j <= steps; j++)
-                    {
-                        float u = j / (float)steps, along = u * reach;
-                        var p = new Vector3(end.x, end.y + RiverLift, end.z) + dir * along;
-                        buf.Fade = MouthFade(s + along, coastS, total + reach);
-                        buf.Tint = Vector4.Lerp(tint, Vector4.zero, buf.Fade);
-                        buf.Row(p, dir, endHalf * Mathf.Lerp(1, MouthFlare, u), 0, new Vector4(0, 0, s + along, r.Liquid), pool, true);
-                    }
-                }
-                buf.Fade = 0;
-                buf.Tris.AddRange(held);
+                buf.Append(built[i]);
+                mist?.Append(sprays[i]);
             }
             if (buf.Verts.Count > 0) pieces.Add(buf.Piece($"Rivers {pieces.Count}"));
             if (mist != null && mist.Verts.Count > 0) mists.Add(mist.Piece($"Fall mist {mists.Count}"));
             return pieces;
+        }
+
+        static void River(GeneratedWorld world, TerrainDetail detail, RiverLine r, RiverBuffers buf, MistBuffers mist)
+        {
+            var spray = Sprays(world, r.Liquid) ? mist : null;
+            if (spray != null) { spray.Amount = SprayAmount(world, r.Liquid); spray.Liquid = r.Liquid; }
+            var pts = new List<Vector4>();
+            for (int k = 0; k < r.X.Length; k++)
+                pts.Add(new Vector4(r.X[k], r.S[k], r.Z[k], 2 * r.W[k]));
+            int last = pts.Count - 1;
+            var slopes = new float[pts.Count];
+            var currents = new float[pts.Count];
+            for (int k = 0; k < pts.Count; k++)
+            {
+                var u = pts[Mathf.Max(k - SlopeReach, 0)];
+                var d = pts[Mathf.Min(k + SlopeReach, last)];
+                float run = new Vector2(d.x - u.x, d.z - u.z).magnitude;
+                slopes[k] = Mathf.Clamp01((run > 0 ? Mathf.Max(0, u.y - d.y) / run : 0) / SlopeRange);
+                currents[k] = Current(r.D[k], run > 0 ? (u.y - d.y) / run : 0);
+            }
+            int coast = pts.Count;
+            if (world.Sea != null)
+                while (coast > 0 && world.Sea[NearField.CellOf(pts[coast - 1].x, pts[coast - 1].z, world.Config.CellMeters, world.Config.Size)]) coast--;
+            bool mouth = coast < pts.Count;
+            float coastS = 0, total = 0;
+            for (int k = 1; k < pts.Count; k++)
+            {
+                total += new Vector2(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z).magnitude;
+                if (k == coast) coastS = total;
+            }
+            float endHalf = Mathf.Max(pts[last].w * 0.5f, 6f), reach = Mathf.Max(MouthReachM, MouthReachWidths * endHalf);
+            float s = 0;
+            var pool = NoPool;
+            var held = new List<int>();
+            for (int k = 0; k < pts.Count; k++)
+            {
+                var a = pts[Mathf.Max(k - 1, 0)];
+                var z = pts[Mathf.Min(k + 1, last)];
+                var dir = new Vector3(z.x - a.x, 0, z.z - a.z).normalized;
+                float half = Mathf.Max(pts[k].w * 0.5f, 6f), seg = 0;
+                var p = new Vector3(pts[k].x, 0, pts[k].z);
+                if (k > 0) s += seg = new Vector2(p.x - pts[k - 1].x, p.z - pts[k - 1].z).magnitude;
+                p.y = pts[k].y + RiverLift;
+                var i0 = pts[Mathf.Max(k - TurnReach, 0)];
+                var i1 = pts[Mathf.Min(k + TurnReach, last)];
+                float ix = p.x - i0.x, iz = p.z - i0.z, ox = i1.x - p.x, oz = i1.z - p.z;
+                float li = Mathf.Sqrt(ix * ix + iz * iz), lo = Mathf.Sqrt(ox * ox + oz * oz);
+                float bend = li * lo > 0 ? (ix * oz - iz * ox) / (li * lo) / (0.5f * (li + lo)) : 0;
+                float plunge = 0;
+                for (int j = Mathf.Max(k - PlungeReach, 0); j <= k; j++)
+                    plunge = Mathf.Max(plunge, slopes[j] * (1 - (k - j) / (float)(PlungeReach + 1)));
+                if (pool.x > NoPool.x) half = Mathf.Max(half, pool.z * (1 - Mathf.Clamp01((s - pool.x) / (PoolSpread * pool.z))));
+                var rv = new Vector4(Mathf.Clamp(bend * half * 3, -1, 1), plunge, s, r.Liquid);
+                bool join = k > 0;
+                buf.Tint = Flowing(Tint(r.Mix[k]), currents[k]);
+                if (k > 0 && FallAt(r, k, out var f, out float lt))
+                {
+                    buf.Tint = Flowing(Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], lt)), currents[k]);
+                    var fd = new Vector3(f.DirX, 0, f.DirZ);
+                    var prev = new Vector3(pts[k - 1].x, 0, pts[k - 1].z);
+                    float sl = s - seg * (1 - lt), th = FallThrowAt(f.Drop), ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
+                    var lr = new Vector4(rv.x, rv.y, sl, rv.w);
+                    var parts = Split(f);
+                    System.Array.Sort(parts, (x, y) => x.U0.CompareTo(y.U0));
+                    var lip = new List<int>();
+                    var foot = new List<int>();
+                    var bendRows = new List<int>();
+                    int up = buf.Verts.Count - 2, t0 = buf.Tris.Count;
+                    if (parts[0].U0 > -0.999f) buf.Edge(f, -1, slopes[k - 1], lr, pool, lip);
+                    float shove = 0;
+                    foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, bendRows, (FootMax - lt) * seg - FootGap));
+                    if (parts[parts.Length - 1].U1 < 0.999f) buf.Edge(f, 1, slopes[k - 1], lr, pool, lip);
+                    buf.Fan(up, up + 1, lip, true);
+                    held.AddRange(buf.Tris.GetRange(t0, buf.Tris.Count - t0));
+                    buf.Tris.RemoveRange(t0, buf.Tris.Count - t0);
+                    th += shove;
+                    foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
+                    ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
+                    pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);
+                    foreach (int v in bendRows)
+                    {
+                        buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
+                        buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, slopes[k], 0);
+                    }
+                    var footRow = Vector3.Lerp(prev, new Vector3(p.x, 0, p.z), ft);
+                    footRow.y = f.BaseY;
+                    buf.Tint = Flowing(Tint(WaterMix.Lerp(r.Mix[k - 1], r.Mix[k], ft)), currents[k]);
+                    buf.Row(footRow, fd, Mathf.Lerp(0.5f * f.Width, half, (ft - lt) / (1 - lt)), slopes[k], new Vector4(rv.x, rv.y, s - seg * (1 - ft), rv.w), pool, false);
+                    buf.Fan(buf.Verts.Count - 2, buf.Verts.Count - 1, foot, false);
+                }
+                buf.Tint = Flowing(Tint(r.Mix[k]), currents[k]);
+                buf.Fade = mouth ? MouthFade(s, coastS, total + reach) : 0;
+                buf.Tint = Vector4.Lerp(buf.Tint, Vector4.zero, buf.Fade);
+                buf.Row(p, dir, half, slopes[k], rv, pool, join);
+            }
+            if (mouth && pts.Count > 1)
+            {
+                var end = pts[last];
+                var prev = pts[last - 1];
+                var dir = new Vector3(end.x - prev.x, 0, end.z - prev.z).normalized;
+                int steps = Mathf.Max(2, Mathf.CeilToInt(reach / MouthStepM));
+                var tint = Flowing(Tint(r.Mix[last]), currents[last]);
+                for (int j = 1; j <= steps; j++)
+                {
+                    float u = j / (float)steps, along = u * reach;
+                    var p = new Vector3(end.x, end.y + RiverLift, end.z) + dir * along;
+                    buf.Fade = MouthFade(s + along, coastS, total + reach);
+                    buf.Tint = Vector4.Lerp(tint, Vector4.zero, buf.Fade);
+                    buf.Row(p, dir, endHalf * Mathf.Lerp(1, MouthFlare, u), 0, new Vector4(0, 0, s + along, r.Liquid), pool, true);
+                }
+            }
+            buf.Fade = 0;
+            buf.Tris.AddRange(held);
         }
 
         static float MouthFade(float s, float from, float to) => to > from ? Mathf.SmoothStep(0, 1, (s - from) / (to - from)) : 1;
@@ -903,18 +979,16 @@ namespace Stabby.Viewer
                     tris.Add(a); tris.Add(a + m); tris.Add(a + 1);
                     tris.Add(a + 1); tris.Add(a + m); tris.Add(a + m + 1);
                 }
-            var part = Flat("Sea", verts, null, tris, SeaKind);
-            part.Uv2 = fall;
-            return part;
+            return Flat("Sea", verts, null, tris, SeaKind, uv2: fall);
         }
 
-        static MeshParts Flat(string name, List<Vector3> verts, List<Color> perVertex, List<int> tris, Color kind)
+        static MeshParts Flat(string name, List<Vector3> verts, List<Color> perVertex, List<int> tris, Color kind, Vector2[] uvs = null, Vector4[] uv1 = null, Vector4[] uv2 = null, Vector4[] uv3 = null, Vector4[] uv4 = null)
         {
             var cols = perVertex != null ? perVertex.ToArray() : new Color[verts.Count];
             var up = new Vector3[verts.Count];
             for (int k = 0; k < up.Length; k++) { up[k] = Vector3.up; if (perVertex == null) cols[k] = kind; }
             int n = verts.Count;
-            return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray(), Uvs = new Vector2[n], Uv1 = new Vector4[n], Uv2 = new Vector4[n], Uv3 = new Vector4[n], Uv4 = new Vector4[n] };
+            return new MeshParts { Name = name, Verts = verts.ToArray(), Norms = up, Cols = cols, Tris = tris.ToArray(), Uvs = uvs ?? new Vector2[n], Uv1 = uv1 ?? new Vector4[n], Uv2 = uv2 ?? new Vector4[n], Uv3 = uv3 ?? new Vector4[n], Uv4 = uv4 ?? new Vector4[n] };
         }
     }
 }
