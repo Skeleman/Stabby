@@ -6,7 +6,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float SlotHour = 12.5f, SlotMoon = 0.5f, SlotEyeM = 1.7f, SlotRimOutM = 7f;
+        const float SlotHour = 12.5f, SlotMoon = 0.5f, SlotEyeM = 1.7f, SlotRimOutM = 4f, SlotRimUpM = 6f, SlotRimAheadM = 14f;
 
         static System.Collections.IEnumerator SlotCanyonTour(Camera cam, string dir)
         {
@@ -41,10 +41,10 @@ namespace Stabby.Game.Editor
             string info = $"slotcanyon: edit {at} of {segments} segments, half width {e.W:F2}, depth {depth:F1}, floor {floor:F1}, at {cx:F0},{cz:F0}, GV {WorldConfig.GeneratorVersion}, pinned hour {sky.Hour:F2} moon {sky.Phase:F2}";
             GameStatus.Lines["~slotcanyon"] = info;
             Shot(cam, dir, "slotcanyon-floor");
-            float side = ground.HeightAt(cx - uz * SlotRimOutM, cz + ux * SlotRimOutM) <= ground.HeightAt(cx + uz * SlotRimOutM, cz - ux * SlotRimOutM) ? 1f : -1f;
-            float rx = cx - side * uz * SlotRimOutM + ux * SlotRimOutM, rz = cz + side * ux * SlotRimOutM + uz * SlotRimOutM;
-            eye = new Vector3(rx, ground.HeightAt(rx, rz) + 2.5f, rz);
-            look = new Vector3(cx - ux * 12f, floor + 0.35f * depth, cz - uz * 12f);
+            float off = e.W + SlotRimOutM, rx = cx + ux * SlotRimOutM, rz = cz + uz * SlotRimOutM;
+            float lip = Mathf.Max(ground.HeightAt(rx - uz * off, rz + ux * off), ground.HeightAt(rx + uz * off, rz - ux * off));
+            eye = new Vector3(rx, lip + SlotRimUpM, rz);
+            look = new Vector3(cx - ux * SlotRimAheadM, floor + 0.25f * depth, cz - uz * SlotRimAheadM);
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
             for (var w = Settle(120); w.MoveNext();) yield return null;
             GameStatus.Lines["~slotcanyon"] = info + $", rim eye {eye.x:F0},{eye.y:F0},{eye.z:F0}";
