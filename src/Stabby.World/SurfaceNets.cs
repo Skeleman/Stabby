@@ -455,7 +455,7 @@ namespace Stabby.World
             {
                 var e = edits.At(q);
                 if (e.MaxX < x0 || e.MinX > x1 || e.MaxY < y0 || e.MinY > y1 || e.MaxZ < z0 || e.MinZ > z1) continue;
-                if (e.Shape == FeatureEdit.Spring || e.Shape == FeatureEdit.Butte || e.W > 0f)
+                if (e.Shape == FeatureEdit.Spring || e.Shape == FeatureEdit.Butte || e.Shape == FeatureEdit.SeaStack || e.W > 0f)
                 {
                     if (e.Kind == FeatureEdit.Add) return false;
                     touched = true;
