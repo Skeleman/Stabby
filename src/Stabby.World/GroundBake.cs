@@ -18,7 +18,7 @@ namespace Stabby.World
 
     public sealed class GroundBake
     {
-        public const int Format = 2, Sections = 5;
+        public const int Format = 4, Sections = 6, Stored = 3;
 
         public ulong Key;
         public DetailArrays Detail;
@@ -29,9 +29,9 @@ namespace Stabby.World
         public CaveBrook[] Brooks;
         public FieldCaches Field;
 
-        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail) => Run(w, key, caches, out detail, out _);
+        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail, int every = 1) => Run(w, key, caches, out detail, out _, every);
 
-        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail, out ObjectField live)
+        public static GroundBake Run(GeneratedWorld w, ulong key, bool caches, out TerrainDetail detail, out ObjectField live, int every = 1)
         {
             detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail, out var caves, out var discoveries, out var roads, out live);
@@ -40,7 +40,7 @@ namespace Stabby.World
                 Key = key, Detail = detail.Arrays, Edits = edits, Caves = caves, Discoveries = discoveries, Roads = roads,
                 Brooks = CaveBrooks.Build(w, detail, edits, caves),
             };
-            if (caches && w.Objects != null && w.Biome != null) bake.Field = new ObjectField(w, detail, edits, w.Objects, discoveries).Caches();
+            if (caches && w.Objects != null && w.Biome != null) bake.Field = new ObjectField(w, detail, edits, w.Objects, discoveries).Caches(every);
             return bake;
         }
 
@@ -63,7 +63,8 @@ namespace Stabby.World
                     case 0: o.Raw(Detail.Amp); break;
                     case 1: o.Raw(Detail.Offsets); break;
                     case 2: o.Raw(Detail.Start); o.Raw(Detail.Items); o.Raw(Detail.Bands); o.Float(Detail.Period); o.Raw(Detail.Pieces); break;
-                    case 3: o.Raw(Field?.Placed); o.Raw(Field?.PlacedStart); break;
+                    case Stored: o.Raw(Field?.PlacedPack); break;
+                    case 4: o.Raw(Field?.PlacedAt); o.Raw(Field?.PlacedRaw); o.Raw(Field?.PlacedSum); break;
                     default: Rest(o); break;
                 }
                 parts[s] = o.ToArray();
@@ -71,13 +72,14 @@ namespace Stabby.World
             var packed = new byte[Sections][];
             Parallel.For(0, Sections, s =>
             {
+                if (s == Stored) { packed[s] = parts[s]; return; }
                 var m = new MemoryStream();
                 using (var z = new DeflateStream(m, CompressionLevel.Optimal, true)) z.Write(parts[s], 0, parts[s].Length);
                 packed[s] = m.ToArray();
             });
             var head = new Out(new MemoryStream());
             head.Int(Format); head.Long(Key); head.Int(Sections);
-            for (int s = 0; s < Sections; s++) { head.Int(parts[s].Length); head.Int(packed[s].Length); head.Long(WorldChunks.Checksum(parts[s])); }
+            for (int s = 0; s < Sections; s++) { head.Int(parts[s].Length); head.Int(packed[s].Length); head.Long(s == Stored ? 0 : WorldChunks.Checksum(parts[s])); }
             var m2 = new MemoryStream();
             var h = head.ToArray();
             m2.Write(h, 0, h.Length);
@@ -99,6 +101,7 @@ namespace Stabby.World
             for (int s = 0; s < Sections; s++)
             {
                 raw[s] = head.Int(); len[s] = head.Int(); sum[s] = head.Long();
+                if (s == Stored && raw[s] != len[s]) throw new FormatException("ground bake placed section is not stored whole");
                 if (raw[s] < 0 || len[s] < 0) throw new FormatException($"ground bake section {s} has a negative length");
                 o += len[s];
             }
@@ -110,6 +113,7 @@ namespace Stabby.World
             {
                 Parallel.For(0, Sections, s =>
                 {
+                    if (s == Stored) return;
                     var b = new byte[raw[s]];
                     int got = 0;
                     using (var z = new DeflateStream(new MemoryStream(data, start[s], len[s], false), CompressionMode.Decompress))
@@ -131,11 +135,13 @@ namespace Stabby.World
             var i0 = new In(parts[0]); d.Amp = i0.Raw<float>(); i0.End();
             var i1 = new In(parts[1]); d.Offsets = i1.Raw<float>(); i1.End();
             var i2 = new In(parts[2]); d.Start = i2.Raw<int>(); d.Items = i2.Raw<int>(); d.Bands = i2.Raw<float>(); d.Period = i2.Float(); d.Pieces = i2.Raw<RiverPiece>(); i2.End();
-            var i3 = new In(parts[3]); var placed = i3.Raw<ObjectInstance>(); var placedStart = i3.Raw<int>(); i3.End();
-            var i4 = new In(parts[4]); bake.Rest(i4); i4.End();
-            if ((placed == null) != (placedStart == null) || placedStart != null && (bake.Field == null || !Ascending(placedStart, placed.Length)))
+            var i3 = new In(data, start[Stored], len[Stored]); var placedPack = i3.Raw<byte>(); i3.End();
+            var i4 = new In(parts[4]); var placedAt = i4.Raw<int>(); var placedRaw = i4.Raw<int>(); var placedSum = i4.Raw<ulong>(); i4.End();
+            var i5 = new In(parts[5]); bake.Rest(i5); i5.End();
+            if ((placedAt == null) != (placedPack == null) || (placedAt == null) != (placedRaw == null) || (placedAt == null) != (placedSum == null)
+                || placedAt != null && (bake.Field == null || !Ascending(placedAt, placedPack.Length) || placedRaw.Length != placedAt.Length - 1 || placedSum.Length != placedRaw.Length || Array.Exists(placedRaw, r => r < 0)))
                 throw new FormatException("ground bake placed objects do not fit their chunk table");
-            if (bake.Field != null) { bake.Field.Placed = placed; bake.Field.PlacedStart = placedStart; }
+            if (bake.Field != null) { bake.Field.PlacedPack = placedPack; bake.Field.PlacedAt = placedAt; bake.Field.PlacedRaw = placedRaw; bake.Field.PlacedSum = placedSum; }
             if (d.Amp == null || d.Offsets == null || d.Start == null || d.Items == null || d.Bands == null || d.Pieces == null || bake.Edits == null || bake.Caves == null || bake.Roads == null || bake.Brooks == null)
                 throw new FormatException("ground bake is missing a section");
             return bake;

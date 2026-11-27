@@ -22,8 +22,9 @@ test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places 
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
 test WorldFileTests.BakedWorldLoadsBackIdentical 14 bakes a world file and loads it back
-test GroundBakeTests.AdoptedCachesPlaceTheSameObjects 10 places every fifth chunk of a world fresh and from adopted caches
-test GroundBakeTests.StoredGroundMatchesTheLiveStage 10 runs the ground stage, writes a v2 world file and loads it back
+test GroundBakeTests.AdoptedCachesPlaceTheSameObjects 10 places every fifth chunk of a world fresh and unpacks it from adopted caches
+test GroundBakeTests.StoredGroundMatchesTheLiveStage 10 runs the ground stage packing every fifth chunk, writes a world file and loads it back
+test GroundBakeTests.CorruptPackedChunkFallsBackToLivePlacement 5 corrupts one packed chunk and places it live from a fresh field
 test ChunkTests.StreamedChunksRebuildTheHostWorld 14 streams every chunk of a world and rebuilds it
 test ScenarioTests.ScenarioHolds 12 one case per authored scenario world
 test ObjectRegionTests.RegionsHoldTheirChunkColumnsAndCollideOnlyWhileResident 12 streams object regions across a world

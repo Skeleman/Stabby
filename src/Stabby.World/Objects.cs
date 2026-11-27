@@ -48,6 +48,9 @@ namespace Stabby.World
         readonly FeatureEdit[] solid;
         readonly List<float> pax = new List<float>(), paz = new List<float>(), pbx = new List<float>(), pbz = new List<float>(), phw = new List<float>(), psurf = new List<float>();
         readonly ObjectInstance[][] chunks;
+        byte[] pack;
+        int[] packAt, packRaw;
+        ulong[] packSum;
         readonly object[] chunkGates;
         int chunkComputes;
 
@@ -183,11 +186,22 @@ namespace Stabby.World
             {
                 s = chunks[c];
                 if (s != null) return s;
-                s = Place(cx, cz);
-                Interlocked.Increment(ref chunkComputes);
+                var packed = Volatile.Read(ref pack);
+                if (packed != null && packAt[c + 1] > packAt[c]) s = PlacedPack.TryUnpack(packed, packAt[c], packAt[c + 1] - packAt[c], packRaw[c], packSum[c], c);
+                if (s == null)
+                {
+                    s = Place(cx, cz);
+                    Interlocked.Increment(ref chunkComputes);
+                }
                 Volatile.Write(ref chunks[c], s);
                 return s;
             }
+        }
+
+        bool Packed(int cx, int cz)
+        {
+            int c = cz * across + cx;
+            return Volatile.Read(ref pack) != null && packAt[c + 1] > packAt[c];
         }
 
         [ThreadStatic] static List<ObjectInstance> scratch;
@@ -203,7 +217,7 @@ namespace Stabby.World
         public void SolidInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
+            var cached = Volatile.Read(ref chunks[cz * across + cx]) ?? (Packed(cx, cz) ? Chunk(cx, cz) : null);
             if (cached != null) list.AddRange(cached);
             else PlaceInto(cx, cz, true, list, null);
         }
@@ -211,7 +225,7 @@ namespace Stabby.World
         public void PlaceInto(int cx, int cz, List<ObjectInstance> list)
         {
             list.Clear();
-            var cached = Volatile.Read(ref chunks[cz * across + cx]);
+            var cached = Volatile.Read(ref chunks[cz * across + cx]) ?? (Packed(cx, cz) ? Chunk(cx, cz) : null);
             if (cached != null) list.AddRange(cached);
             else PlaceInto(cx, cz, false, list, null);
         }

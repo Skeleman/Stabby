@@ -69,6 +69,7 @@ src/Stabby.World/ChunkZip.cs core
 src/Stabby.World/Mound.cs core
 src/Stabby.World/GroundBake.cs surface,meshing,caves,sites,objects
 src/Stabby.World/FieldCaches.cs objects,sites
+src/Stabby.World/PlacedPack.cs objects
 src/Stabby.World/Sky.cs core
 src/Stabby.World/LightBudget.cs core
 src/Stabby.World/FoliageDefs.cs core

@@ -14,13 +14,14 @@ namespace Stabby.World
         public TownPlan[] Plans;
         public LandmarkSketch[] Towns;
         public float[] HotX, HotZ, HotR;
-        public ObjectInstance[] Placed;
-        public int[] PlacedStart;
+        public byte[] PlacedPack;
+        public int[] PlacedAt, PlacedRaw;
+        public ulong[] PlacedSum;
     }
 
     public sealed partial class ObjectField
     {
-        public FieldCaches Caches()
+        public FieldCaches Caches(int every = 1)
         {
             var roads = Roads();
             var hot = Hotspots;
@@ -37,14 +38,21 @@ namespace Stabby.World
                 HotR = hot.R.ToArray(),
             };
             int count = across * across;
-            var placed = new ObjectInstance[count][];
-            Parallel.For(0, count, k => placed[k] = Chunk(k % across, k / across));
-            var start = new int[count + 1];
-            for (int k = 0; k < count; k++) start[k + 1] = start[k] + placed[k].Length;
-            var all = new ObjectInstance[start[count]];
-            for (int k = 0; k < count; k++) placed[k].CopyTo(all, start[k]);
-            c.Placed = all;
-            c.PlacedStart = start;
+            var packs = new byte[count][];
+            var raw = new int[count];
+            var sums = new ulong[count];
+            Parallel.For(0, count, k =>
+            {
+                packs[k] = k % every == 0 ? PlacedPack.Pack(Chunk(k % across, k / across), k, out raw[k], out sums[k]) : Array.Empty<byte>();
+            });
+            var at = new int[count + 1];
+            for (int k = 0; k < count; k++) at[k + 1] = at[k] + packs[k].Length;
+            var all = new byte[at[count]];
+            for (int k = 0; k < count; k++) packs[k].CopyTo(all, at[k]);
+            c.PlacedPack = all;
+            c.PlacedAt = at;
+            c.PlacedRaw = raw;
+            c.PlacedSum = sums;
             return c;
         }
 
@@ -73,9 +81,13 @@ namespace Stabby.World
                 IndexRoads(c.Roads);
                 roads = c.Roads;
             }
-            if (c.Placed != null && c.PlacedStart != null && c.PlacedStart.Length == chunks.Length + 1)
-                for (int k = 0; k < chunks.Length; k++)
-                    Volatile.Write(ref chunks[k], c.Placed.AsSpan(c.PlacedStart[k], c.PlacedStart[k + 1] - c.PlacedStart[k]).ToArray());
+            if (c.PlacedPack != null && c.PlacedAt != null && c.PlacedRaw != null && c.PlacedSum != null && c.PlacedAt.Length == chunks.Length + 1 && c.PlacedRaw.Length == chunks.Length && c.PlacedSum.Length == chunks.Length)
+            {
+                packRaw = c.PlacedRaw;
+                packSum = c.PlacedSum;
+                packAt = c.PlacedAt;
+                Volatile.Write(ref pack, c.PlacedPack);
+            }
             return this;
         }
     }
