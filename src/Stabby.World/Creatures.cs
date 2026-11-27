@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Stabby.World
 {
@@ -583,54 +584,65 @@ namespace Stabby.World
         public static DrinkSpotList Drinks(GeneratedWorld w, NearArrays cells, CreatureLibrary lib, float[] pools)
         {
             int n = w.Config.Size, across = SitesAcross(n);
-            float cm = w.Config.CellMeters, top = 0;
+            float top = 0;
             foreach (var def in lib.Bodies) top = Math.Max(top, Footing.Grade(def.MaxSlope));
             float limit = 4 * Footing.FeelM * Footing.FeelM * top * top;
             ulong key = Rng.Stream(w.Config.Seed, "drink-spots").NextU64();
+            var per = new List<DrinkSpot>[across * across];
+            Parallel.For(0, per.Length, site => per[site] = SiteDrinks(w, cells, key, site, limit));
             var list = new DrinkSpotList { Start = new int[across * across + 1], Pools = pools ?? Array.Empty<float>() };
             var spots = new List<DrinkSpot>();
             var pooled = PoolSpots(w, cells, list.Pools, limit, key);
             var order = new long[pooled.Count];
             for (int k = 0; k < order.Length; k++)
             {
-                HerdMind.OffMap(n, cm, pooled[k].X, pooled[k].Z, out int c);
+                HerdMind.OffMap(n, w.Config.CellMeters, pooled[k].X, pooled[k].Z, out int c);
                 order[k] = ((long)(c % n / SiteCells + c / n / SiteCells * across) << 32) + k;
             }
             Array.Sort(order);
             int next = 0;
-            for (int site = 0; site < across * across; site++)
+            for (int site = 0; site < per.Length; site++)
             {
                 list.Start[site] = spots.Count;
                 for (; next < order.Length && order[next] >> 32 == site; next++) spots.Add(pooled[(int)(order[next] & 0xFFFFFFFF)]);
-                var rng = new Rng(Rng.Mix(key ^ (ulong)(site + 1) * 0x9E3779B97F4A7C15UL));
-                int sx = site % across * SiteCells, sz = site / across * SiteCells;
-                for (int z = Math.Max(1, sz); z < Math.Min(n - 1, sz + SiteCells); z++)
-                    for (int x = Math.Max(1, sx); x < Math.Min(n - 1, sx + SiteCells); x++)
-                    {
-                        int i = z * n + x;
-                        if (Wet(w, i)) continue;
-                        float px = (x + 0.5f) * cm, pz = (z + 0.5f) * cm;
-                        for (int k = 0; k < 4; k++)
-                        {
-                            int ex = k == 0 ? 1 : k == 1 ? -1 : 0, ez = k == 2 ? 1 : k == 3 ? -1 : 0;
-                            int j = i + ez * n + ex;
-                            if (!Drinkable(w, j)) continue;
-                            float side = rng.Range(-0.3f, 0.3f) * cm, bx = px - ez * side, bz = pz + ex * side;
-                            float steep = float.MaxValue, qx = 0, qz = 0;
-                            for (float t = cm * 0.5f - 1; t >= cm * 0.5f - EdgeM && t > 0.01f - cm * 0.5f; t -= 0.5f)
-                            {
-                                float tx = bx + ex * t, tz = bz + ez * t, slope = Footing.SlopeSq(cells, tx, tz);
-                                if (slope < steep) { steep = slope; qx = tx; qz = tz; }
-                            }
-                            if (!(steep <= limit)) continue;
-                            float rise = Math.Max(0, NearField.Sample(cells, qx, qz) - w.Water.WaterSurface[j]);
-                            spots.Add(new DrinkSpot { X = qx, Z = qz, WaterX = ex, WaterZ = ez, Steep = steep, Cost = rise * 20 + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost) });
-                        }
-                    }
+                spots.AddRange(per[site]);
             }
             list.Start[across * across] = spots.Count;
             list.Spots = spots.ToArray();
             return list;
+        }
+
+        static List<DrinkSpot> SiteDrinks(GeneratedWorld w, NearArrays cells, ulong key, int site, float limit)
+        {
+            int n = w.Config.Size, across = SitesAcross(n);
+            float cm = w.Config.CellMeters;
+            var spots = new List<DrinkSpot>();
+            var rng = new Rng(Rng.Mix(key ^ (ulong)(site + 1) * 0x9E3779B97F4A7C15UL));
+            int sx = site % across * SiteCells, sz = site / across * SiteCells;
+            for (int z = Math.Max(1, sz); z < Math.Min(n - 1, sz + SiteCells); z++)
+                for (int x = Math.Max(1, sx); x < Math.Min(n - 1, sx + SiteCells); x++)
+                {
+                    int i = z * n + x;
+                    if (Wet(w, i)) continue;
+                    float px = (x + 0.5f) * cm, pz = (z + 0.5f) * cm;
+                    for (int k = 0; k < 4; k++)
+                    {
+                        int ex = k == 0 ? 1 : k == 1 ? -1 : 0, ez = k == 2 ? 1 : k == 3 ? -1 : 0;
+                        int j = i + ez * n + ex;
+                        if (!Drinkable(w, j)) continue;
+                        float side = rng.Range(-0.3f, 0.3f) * cm, bx = px - ez * side, bz = pz + ex * side;
+                        float steep = float.MaxValue, qx = 0, qz = 0;
+                        for (float t = cm * 0.5f - 1; t >= cm * 0.5f - EdgeM && t > 0.01f - cm * 0.5f; t -= 0.5f)
+                        {
+                            float tx = bx + ex * t, tz = bz + ez * t, slope = Footing.SlopeSq(cells, tx, tz);
+                            if (slope < steep) { steep = slope; qx = tx; qz = tz; }
+                        }
+                        if (!(steep <= limit)) continue;
+                        float rise = Math.Max(0, NearField.Sample(cells, qx, qz) - w.Water.WaterSurface[j]);
+                        spots.Add(new DrinkSpot { X = qx, Z = qz, WaterX = ex, WaterZ = ez, Steep = steep, Cost = rise * 20 + (w.Water.LakeId[j] >= 0 ? 0 : RiverCost) });
+                    }
+                }
+            return spots;
         }
 
         static List<DrinkSpot> PoolSpots(GeneratedWorld w, NearArrays cells, float[] pools, float limit, ulong key)

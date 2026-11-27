@@ -38,6 +38,7 @@ namespace Stabby.World
             e.R += grow;
             e.Ay -= grow;
             e.By -= grow;
+            e.N = 0f;
             return e;
         }
 
@@ -47,7 +48,7 @@ namespace Stabby.World
         public float D, F, N, S;
         public float Coarse;
 
-        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f;
+        public const float Flare = 0.3f, FlareSpan = 0.16f, Wave = 1.2f, LobeM = 2.5f, LumpM = 1.8f, Riser = 0.55f, Grain = 4.7f, GrainShare = 0.2f;
 
         public float Thick => R + Math.Min(W, H);
 
@@ -98,7 +99,7 @@ namespace Stabby.World
             }
             dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
             if (P > 0f) dist += R * Profile(t);
-            if (N > 0f) dist += N * Lump(x, y, z);
+            if (N > 0f) dist += Weathering(x, y, z);
             return dist < R;
         }
 
@@ -239,6 +240,14 @@ namespace Stabby.World
             float k = 1f / (Wave * R);
             uint seed = Seed;
             return 0.65f * Value(seed, x * k, y * k, z * k) + 0.35f * Value(seed ^ 0x68E31DA4u, 2.1f * k * x, 2.1f * k * y, 2.1f * k * z);
+        }
+
+        public float Weathering(float x, float y, float z)
+        {
+            if (N <= 0f) return 0f;
+            if (Shape != Boulder) return N * Lump(x, y, z);
+            float k = Grain / (Wave * R);
+            return N * ((1f - GrainShare) * Lump(x, y, z) + GrainShare * Value(Seed ^ 0x2545F491u, k * x, k * y, k * z));
         }
 
         static uint Hash(uint seed, int x, int y, int z)
@@ -416,6 +425,7 @@ namespace Stabby.World
 
         public float Density(int i, int j, int k) => Features.Apply(Columns, Edits, Columns.Height(i, k) - j * StepM, i, j, k, StepM);
         public bool Sharp(int i, int j, int k) => Features.Covers(Edits, i * StepM, j * StepM, k * StepM, StepM);
+        public bool Round(int i, int j, int k) => Features.Rounds(Edits, i * StepM, j * StepM, k * StepM, StepM);
         public float Base(int i, int j, int k) => Features.Level(Columns, Columns.Height(i, k) - j * StepM, i, k, StepM);
 
         public float Edit(float d, float x, float y, float z) => Features.Edit(Edits, d, x, y, z);
@@ -477,10 +487,22 @@ namespace Stabby.World
                 if (e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z)
                 {
                     if (e.Fine && ((e.Shape != FeatureEdit.Cave && e.Shape != FeatureEdit.Mine) || s < NearField.NodeStep(0))) return false;
+                    if (e.Shape == FeatureEdit.Boulder && s <= NearField.NodeStep(0)) return false;
                     any = true;
                 }
             }
             return any;
+        }
+
+        public static bool Rounds<TEdits>(TEdits edits, float x, float y, float z, float s) where TEdits : struct, IEditList
+        {
+            if (s > NearField.NodeStep(0)) return false;
+            for (int q = 0, n = edits.Count; q < n; q++)
+            {
+                var e = edits.At(q);
+                if (e.Shape == FeatureEdit.Boulder && !e.Fine && e.MinX <= x + s && e.MaxX >= x && e.MinY <= y + s && e.MaxY >= y && e.MinZ <= z + s && e.MaxZ >= z) return true;
+            }
+            return false;
         }
 
         public static int TileAt(float x, float z, float cellMeters)

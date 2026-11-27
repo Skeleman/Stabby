@@ -185,6 +185,19 @@ namespace Stabby.Game
             var b = Box(key);
             return math.max(1f, math.distance(eye, math.clamp(eye, b.Min, b.Max)));
         }
+
+        public int RingNodes(float allowed)
+        {
+            int total = 0, split = Dim[Root] * Dim[Root];
+            for (int l = Root; l >= 0; l--)
+            {
+                int live = math.min(Dim[l] * Dim[l], l == Root ? split : 4 * split);
+                total += live;
+                float r = Step(l) / allowed / Size(l) + 0.5f * math.SQRT2;
+                split = math.min(live, (int)math.ceil(math.PI * r * r));
+            }
+            return total;
+        }
     }
 
     struct NativeEdits : IEditList
@@ -1225,7 +1238,9 @@ namespace Stabby.Game
         NativeList<Entity> spare;
         Entity prototype, casterPrototype;
         const int SpareBatch = 64, SpareFill = 256;
-        static readonly int[] PoolFill = { 64, 128, 96, 32, 24, 64, 48, 12, 8 }, PoolPeak = { 64, 128, 96, 80, 80, 88, 104, 16, 12 };
+        static readonly int[] PoolPerKilonode = { 69, 206, 111, 94, 94, 103, 129, 19, 15, 1 };
+        readonly int[] poolTarget = new int[TerrainTree.Tiers];
+        float poolAllowed;
         const int PoolReach = 2;
         NativeArray<int> zeros;
         readonly List<Mesh>[] pool = Lists<Mesh>();
@@ -1520,6 +1535,7 @@ namespace Stabby.Game
             builtSmooth = SmoothOnly;
             TerrainTree.Capacity(TerrainTree.Tiers - 1, out _, out int most);
             if (!zeros.IsCreated) zeros = new NativeArray<int>(most, Allocator.Persistent);
+            PoolTarget(quads.Allowed(Detail.ReferencePixelsPerMetre, GameSettings.GraphicsQuality));
             while (Fill() >= 0 || spare.Length < 2 * SpareFill)
             {
                 do
@@ -1728,18 +1744,26 @@ namespace Stabby.Game
             PoolStatus();
         }
 
-        int Fill(int[] target = null)
+        void PoolTarget(float allowed)
         {
-            target ??= PoolFill;
-            for (int k = 0; k < target.Length; k++)
-                if (created[k] < target[k]) return k;
+            if (allowed == poolAllowed) return;
+            poolAllowed = allowed;
+            int n = tree.RingNodes(allowed);
+            for (int k = 0; k < poolTarget.Length; k++) poolTarget[k] = math.max(poolTarget[k], (n * PoolPerKilonode[k] + 999) / 1000);
+        }
+
+        int Fill()
+        {
+            for (int k = 0; k < poolTarget.Length; k++)
+                if (created[k] < poolTarget[k]) return k;
             return -1;
         }
 
         void TopUp()
         {
             if (!ready) return;
-            int k = Fill(PoolPeak);
+            PoolTarget(quads.Allowed(viewPpm, viewQuality));
+            int k = Fill();
             if (k < 0) return;
             TerrainTree.Capacity(k, out int v, out _);
             if (frameVertices + v > ApplyVertices || frame.Elapsed.TotalMilliseconds > ApplyMs) return;

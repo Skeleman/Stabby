@@ -52,7 +52,8 @@ namespace Stabby.Viewer
         const int SteamPuffs = 2, JetPuffs = 7, ColumnSteamPuffs = 3;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
-        const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f;
+        const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f, FootBendPerDrop = 0.25f, FootBendMin = 0.3f, FootBendMax = 1.5f, FootFade = 0.5f;
+        const int FootBendRows = 4;
         static readonly Vector4 NoPool = new Vector4(-1e5f, 0, 0, 0);
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f), SpringKind = new Color(0.5f, 0.5f, 0, 0);
 
@@ -442,17 +443,17 @@ namespace Stabby.Viewer
                 else { Tris.Add(row[m]); Tris.Add(l); Tris.Add(r); }
             }
 
-            int Band(FallCurtain f, int prev, int cols, float y, float h, float blend, float[] off, int o0, int o1, float t, Color flow, Vector4 reach, Vector4 fall, bool both)
+            int Band(FallCurtain f, int prev, int cols, float y, float h, float blend, float[] off, int o0, int o1, float t, Color flow, Vector4 reach, Vector4 fall, bool both, float foot = 1, float ahead = 0)
             {
                 float half = 0.5f * f.Width;
                 var fwd = new Vector3(f.DirX, 0, f.DirZ);
                 var side = new Vector3(f.DirZ, 0, -f.DirX) * half;
                 var lip = new Vector3(f.LipX, f.LipY, f.LipZ);
-                var curt = new Vector4(blend > 0 ? Mathf.Clamp01(y / blend) : 0, y / h, h, f.Discharge);
+                var curt = new Vector4((blend > 0 ? Mathf.Clamp01(y / blend) : 0) * foot, y / h, h, f.Discharge);
                 int b = Verts.Count;
                 for (int c = 0; c < cols; c++)
                 {
-                    float sc = f.SideAt(c, cols), o = Mathf.Lerp(off[o0 + c], off[o1 + c], t);
+                    float sc = f.SideAt(c, cols), o = Mathf.Lerp(off[o0 + c], off[o1 + c], t) + ahead;
                     Add(lip + side * sc + fwd * (f.Bow * sc * sc + o) - Vector3.up * y, flow, new Vector2(2f * c / (cols - 1) - 1, half * f.Span), reach, fall, curt);
                     if (c == 0) continue;
                     int v = b + c, a = prev + c;
@@ -465,7 +466,15 @@ namespace Stabby.Viewer
                 return b;
             }
 
-            public float Curtain(FallCurtain f, float slope, Vector4 reach, Vector4 pool, float along, TerrainDetail detail, MistBuffers mist, List<int> lip, List<int> foot)
+            static int FootRowOf(float y, float h, int rows) => Mathf.Clamp(Mathf.CeilToInt(Mathf.Sqrt(y / h) * (rows - 1)), 1, rows - 1);
+
+            static float FootRowT(float y, float h, int rows, int j)
+            {
+                float y0 = (j - 1f) * (j - 1f) / ((rows - 1f) * (rows - 1f)) * h, y1 = (float)j * j / ((rows - 1f) * (rows - 1f)) * h;
+                return Mathf.Clamp01((y - y0) / Mathf.Max(y1 - y0, 1e-4f));
+            }
+
+            public float Curtain(FallCurtain f, float slope, Vector4 reach, Vector4 pool, float along, TerrainDetail detail, MistBuffers mist, List<int> lip, List<int> foot, float room = float.MaxValue)
             {
                 float h = f.Drop + FallSink, half = 0.5f * f.Width, blend = Mathf.Min(LipBlend, 0.5f * f.Drop);
                 var fwd = new Vector3(f.DirX, 0, f.DirZ);
@@ -475,23 +484,32 @@ namespace Stabby.Viewer
                 var fall = new Vector4(pool.x, pool.y, pool.z, 1);
                 int rows = CurtainRowsOf(h), cols = CurtainColsOf(f.RunWidth);
                 var off = CurtainOffsets(f, detail);
-                int prev = Verts.Count, surface = -1;
+                int prev = Verts.Count;
                 for (int c = 0; c < cols; c++)
                     lip.Add(Add(new Vector3(f.LipX, f.LipY, f.LipZ) + side * f.SideAt(c, cols), top, new Vector2(2f * c / (cols - 1) - 1, half * f.Span), reach, pool, new Vector4(0, 0, h, f.Discharge)));
                 if (f.Bow > 0) prev = Band(f, prev, cols, 0, h, 0, off, 0, 0, 0, top, reach, fall, false);
+                float ext = Mathf.Clamp(FootBendPerDrop * f.Drop, FootBendMin, FootBendMax), yb = f.Drop - Mathf.Min(ext, 0.5f * f.Drop);
+                ext = f.Drop - yb;
+                float far = float.MinValue, lean;
+                for (int c = 0, jd = FootRowOf(f.Drop, h, rows); c < cols; c++)
+                {
+                    float sc = f.SideAt(c, cols);
+                    far = Mathf.Max(far, f.Bow * sc * sc + Mathf.Lerp(off[(jd - 1) * cols + c], off[jd * cols + c], FootRowT(f.Drop, h, rows, jd)));
+                }
+                lean = Mathf.Clamp(room - far, 0, ext);
                 for (int j = 1; j < rows; j++)
                 {
-                    float u0 = (j - 1) / (rows - 1f), u1 = j / (rows - 1f), y0 = u0 * u0 * h, y = u1 * u1 * h;
-                    if (y0 < f.Drop - 1e-3f && y > f.Drop + 1e-3f)
-                        surface = prev = Band(f, prev, cols, f.Drop, h, blend, off, (j - 1) * cols, j * cols, (f.Drop - y0) / (y - y0), flow, reach, fall, true);
+                    float u1 = j / (rows - 1f), y = u1 * u1 * h;
+                    if (y > yb - 0.05f * ext) break;
                     prev = Band(f, prev, cols, y, h, blend, off, j * cols, j * cols, 0, flow, reach, fall, true);
-                    if (Mathf.Abs(y - f.Drop) <= 1e-3f) surface = prev;
                 }
-                for (int c = 0; c < cols; c++)
+                for (int s = 0; s <= FootBendRows; s++)
                 {
-                    int v = surface + c;
-                    foot.Add(Add(Verts[v], Cols[v], Chan[v], Reach[v], Fall[v], Curt[v]));
+                    float q = s / (float)FootBendRows, y = yb + ext * q;
+                    int j = FootRowOf(y, h, rows);
+                    prev = Band(f, prev, cols, y, h, blend, off, (j - 1) * cols, j * cols, FootRowT(y, h, rows, j), flow, reach, fall, true, Mathf.Clamp01((1 - q) / FootFade), lean * (1 - Mathf.Sqrt(Mathf.Max(0, 1 - q * q))));
                 }
+                for (int c = 0; c < cols; c++) foot.Add(prev + c);
                 float shift = 0;
                 for (int c = 0; c < cols; c++) shift += off[(rows - 1) * cols + c];
                 shift = Mathf.Max(0, shift / cols - FallThrowAt(h));
@@ -730,7 +748,7 @@ namespace Stabby.Viewer
                         int up = buf.Verts.Count - 2;
                         if (parts[0].U0 > -0.999f) buf.Edge(f, -1, slopes[k - 1], lr, pool, lip);
                         float shove = 0;
-                        foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot));
+                        foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, (FootMax - lt) * seg - FootGap));
                         if (parts[parts.Length - 1].U1 < 0.999f) buf.Edge(f, 1, slopes[k - 1], lr, pool, lip);
                         buf.Fan(up, up + 1, lip, true);
                         th += shove;
@@ -741,7 +759,6 @@ namespace Stabby.Viewer
                         {
                             buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
                             buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, slopes[k], 0);
-                            buf.Curt[v] = Vector4.zero;
                         }
                         var footRow = Vector3.Lerp(prev, new Vector3(p.x, 0, p.z), ft);
                         footRow.y = f.BaseY;
@@ -815,7 +832,6 @@ namespace Stabby.Viewer
             {
                 buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
                 buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, 0, 0);
-                buf.Curt[v] = Vector4.zero;
             }
         }
 
