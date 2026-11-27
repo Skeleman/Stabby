@@ -165,6 +165,7 @@ namespace Stabby.World
             CheckRiverMouths(w, e);
             CheckLakeOutlets(w, e);
             CheckFalls(w, e);
+            CheckCoastSteps(w, e);
             CheckRiverShape(w, e);
         }
 
@@ -285,6 +286,17 @@ namespace Stabby.World
 
         public const float FallPoolDepthM = 0.5f, FallEdgeM = 1f, FallEdgeShare = 0.5f, IsleTolerance = 0.05f, IsleProbe = 0.25f, IsleAboveM = 0.5f;
         public const int IsleRows = 4;
+
+        static void CheckCoastSteps(GeneratedWorld w, List<string> e)
+        {
+            foreach (var l in NearField.Lines(w))
+                for (int k = 0; k < l.X.Length; k++)
+                    if (l.P[k] > 0 && Hydrology.NearSea(w.Config, w.Sea, l.X[k], l.Z[k]))
+                    {
+                        e.Add($"river step plunges at {l.X[k]:F0},{l.Z[k]:F0} within {Hydrology.FallCoastCells} cells of the sea");
+                        return;
+                    }
+        }
 
         static void CheckFalls(GeneratedWorld w, List<string> e)
         {
