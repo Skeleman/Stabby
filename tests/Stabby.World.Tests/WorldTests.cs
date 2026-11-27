@@ -80,6 +80,9 @@ public class WorldTests
 
         var broken = TestWorlds.Fresh((ulong)first, 256);
         var hy = broken.Water;
+        string before = string.Join(";", hy.Deltas.ConvertAll(d => d.Apex + ":" + string.Join(",", d.Heads) + "/" + string.Join(",", d.Branches)));
+        WorldChunks.Relink(broken);
+        Assert.Equal(before, string.Join(";", hy.Deltas.ConvertAll(d => d.Apex + ":" + string.Join(",", d.Heads) + "/" + string.Join(",", d.Branches))));
         int cell = hy.Deltas[0].Heads[0];
         broken.Height[cell] = hy.WaterSurface[cell] + 2;
         var found = new List<string>();

@@ -90,7 +90,7 @@ namespace Stabby.World
                 int j = (y + Grid.DY[k]) * n + x + Grid.DX[k];
                 if (j != apex && !w.Sea[j] && hy.Receiver[j] == i) sum += hy.DischargeM3s[j];
             }
-            return sum;
+            return sum + Hydrology.Runoff(w.Config, w.Sea[i], w.Climate.PrecipitationMm[i]);
         }
 
         static bool Joins(GeneratedWorld w, RiverSegment s, int k)

@@ -19,8 +19,6 @@ namespace Stabby.World
         public const float MainShareMin = 0.4f, MainShareMax = 0.55f, ClearWidths = 1f, FreeClears = 3f, TurnCost = 3f;
         public const int MaxBranches = 3;
 
-        public static float SplitDischarge(WorldConfig c) => 0.5f * c.RiverMinDischarge;
-
         sealed class Fan
         {
             public int Apex, Next;
@@ -177,7 +175,7 @@ namespace Stabby.World
                     foreach (int i in path) { taken.Add(i); blocked.Add(i); }
                     Clearance(n, cm, blocked, region, stamp, tag, clear, heap, clearM);
                 }
-                if (paths.Count == 0) continue;
+                if (paths.Count == 0 || (1f - mainShare) * q[s] / paths.Count < 2f * c.RiverMinDischarge) continue;
 
                 heap.Clear();
                 var isHead = new HashSet<int>();
@@ -354,10 +352,9 @@ namespace Stabby.World
             }
             hy.Deltas.Clear();
             var byApex = new Dictionary<int, RiverDelta>();
-            float split = SplitDischarge(c);
             for (int i = 0; i < n * n; i++)
             {
-                if (!hy.IsRiver[i] || q[i] - inflow[i] <= split) continue;
+                if (!hy.IsRiver[i] || q[i] - inflow[i] <= c.RiverMinDischarge) continue;
                 int x = i % n, y = i / n, apex = -1;
                 for (int k = 0; k < 8; k++)
                 {

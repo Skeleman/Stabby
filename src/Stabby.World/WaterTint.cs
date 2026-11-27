@@ -141,7 +141,7 @@ namespace Stabby.World
                     int j = (y + Grid.DY[k]) * n + x + Grid.DX[k];
                     if (!w.Sea[j] && hy.Receiver[j] == head) inflow += q[j];
                 }
-                float f = Math.Max(0, q[head] - inflow) / apexQ;
+                float f = Math.Max(0, q[head] - inflow - Hydrology.Runoff(w.Config, false, w.Climate.PrecipitationMm[head])) / apexQ;
                 moved += f;
                 for (int i = head; !w.Sea[i]; i = hy.Receiver[i]) Add(ref mix[i], src, f);
             }
