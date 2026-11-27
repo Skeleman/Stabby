@@ -599,6 +599,27 @@ public class ObjectTests
     }
 
     [Fact]
+    public void CenotesOnSeed2At1024DropToWalkablePools()
+    {
+        var (w, detail, edits, field) = TestWorlds.Get(2, 1024);
+        var small = TestWorlds.Default;
+        Assert.InRange(small.Edits.Count(e => e.Shape == FeatureEdit.Cenote), 0, 1);
+        var cenotes = edits.Where(e => e.Shape == FeatureEdit.Cenote).ToList();
+        Assert.InRange(cenotes.Count, 2, 4);
+        foreach (var e in cenotes)
+        {
+            Assert.Equal(FeatureEdit.Carve, e.Kind);
+            Assert.InRange(2f * e.D, 2f * Cenotes.MinD, 2f * Cenotes.MaxD);
+            Assert.InRange(e.F - e.P, Cenotes.MinDrop, Cenotes.MaxDrop);
+        }
+        var faults = new List<string>();
+        WorldChecks.CheckCenotes(w, detail, edits, field, faults);
+        WorldChecks.CheckCenotes(small.W, small.Detail, small.Edits, small.Field, faults);
+        Assert.Empty(faults);
+        Assert.Equal(cenotes.Count, field.CenotePools().Length);
+    }
+
+    [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
         var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);

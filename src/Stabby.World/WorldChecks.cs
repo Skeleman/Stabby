@@ -955,6 +955,7 @@ namespace Stabby.World
             {
                 if (field != null) CheckObjects(w, detail, grid, field, e);
                 CheckLandforms(w, edits, e);
+                CheckCenotes(w, detail, edits, field, e);
                 CheckArches(w, edits, e);
                 if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             }
@@ -1041,7 +1042,7 @@ namespace Stabby.World
             {
                 if (!Landforms.Of(x.Shape)) continue;
                 string at = $"{Landforms.Name(x.Shape)} at {x.Ax:F0},{x.Az:F0}";
-                if (x.Kind != FeatureEdit.Add) { e.Add(at + " carves solid"); return; }
+                if (x.Kind != (x.Shape == FeatureEdit.Cenote ? FeatureEdit.Carve : FeatureEdit.Add)) { e.Add(at + (x.Kind == FeatureEdit.Add ? " adds solid" : " carves solid")); return; }
                 if (x.MinX < 0 || x.MinZ < 0 || x.MaxX > span || x.MaxZ > span) { e.Add(at + " leaves the map"); return; }
                 int tile = Features.TileOf(x, cm);
                 count.TryGetValue(tile, out int k);
@@ -1055,6 +1056,60 @@ namespace Stabby.World
                 foreach (var y in edits)
                     if (!Landforms.Of(y.Shape) && y.Shape != FeatureEdit.Boulder && Features.TileOf(y, cm) == tile
                         && x.MinX < y.MaxX && x.MaxX > y.MinX && x.MinY < y.MaxY && x.MaxY > y.MinY && x.MinZ < y.MaxZ && x.MaxZ > y.MinZ) { e.Add(at + " overlaps a terrain feature"); return; }
+            }
+        }
+
+        public static void CheckCenotes(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, ObjectField field, List<string> e)
+        {
+            float cm = w.Config.CellMeters;
+            int n = w.Config.Size;
+            var ground = new DetailGround { Detail = detail };
+            foreach (var c in edits)
+            {
+                if (c.Shape != FeatureEdit.Cenote) continue;
+                string at = $"cenote at {c.Ax:F0},{c.Az:F0}";
+                int i0 = Math.Max(0, (int)Math.Floor(c.MinX / cm)), i1 = Math.Min(n - 1, (int)Math.Ceiling(c.MaxX / cm));
+                int j0 = Math.Max(0, (int)Math.Floor(c.MinZ / cm)), j1 = Math.Min(n - 1, (int)Math.Ceiling(c.MaxZ / cm));
+                for (int j = j0; j <= j1; j++)
+                    for (int i = i0; i <= i1; i++)
+                        if (c.Under(i * cm, j * cm) && !Features.Dry(w, j * n + i)) { e.Add(at + " breaks into open water"); return; }
+                var near = new List<FeatureEdit>();
+                foreach (var y in edits)
+                {
+                    if (c.MinX >= y.MaxX || c.MaxX <= y.MinX || c.MinZ >= y.MaxZ || c.MaxZ <= y.MinZ) continue;
+                    if (y.CaveCarve || y.Shape == FeatureEdit.Shaft || y.Shape == FeatureEdit.Sink || y.Shape == FeatureEdit.Vault || CaveBrooks.Channel(y)) { e.Add($"{at} breaks into a carve of shape {y.Shape}"); return; }
+                    if (y.Shape != FeatureEdit.Boulder) near.Add(y);
+                }
+                float rim = float.MaxValue, ring = c.CenoteWall + c.R + 1f, len = c.CenoteAxis(out float ux, out float uz);
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = k * (float)Math.PI / 8f;
+                    rim = Math.Min(rim, detail.Sample(c.Ax + ring * (float)Math.Cos(a), c.Az + ring * (float)Math.Sin(a)));
+                }
+                if (!(c.P <= rim - Cenotes.MinDrop + 0.5f)) { e.Add($"{at} holds water at {c.P:F1} m, too close to its rim at {rim:F1} m"); return; }
+                if (field != null)
+                {
+                    LiquidPool pool = null;
+                    foreach (var p in field.CenotePools()) if (p.X == c.Ax && p.Z == c.Az) pool = p;
+                    if (pool == null) { e.Add(at + " has no pool"); return; }
+                    if (!(pool.Level <= rim - Cenotes.MinDrop + 0.5f)) { e.Add($"{at} pool stands at {pool.Level:F1} m, too close to its rim at {rim:F1} m"); return; }
+                    for (int j = 0; j < pool.Nz; j++)
+                        for (int i = 0; i < pool.Nx; i++)
+                            if (pool.Wet[j * pool.Nx + i] && !c.Reach(pool.NodeX(i), pool.Level, pool.NodeZ(j), out _)) { e.Add($"{at} pool spreads outside its carve at {pool.NodeX(i):F1},{pool.NodeZ(j):F1}"); return; }
+                }
+                var list = new EditArray { Items = near.ToArray() };
+                float u = FeatureEdit.CenoteFoot * c.D + FeatureEdit.CenoteToeM / c.T, px = c.Ax + ux * u, pz = c.Az + uz * u;
+                float py = Walk.Surface(ground, list, Features.LatticeStepM, px, pz, c.P + 2f, c.By - 2f);
+                if (float.IsNaN(py) || float.IsNegativeInfinity(py)) { e.Add(at + " has no talus at its water edge"); return; }
+                int steps = (int)((len + 2f - u) / WalkStride);
+                float sx = ux * WalkStride, sz = uz * WalkStride, fall = Walk.FallSpeed * WalkStride / 6f;
+                for (int t = 0; t < steps; t++)
+                {
+                    float ox = px, oz = pz;
+                    Walk.Step(ground, list, Features.LatticeStepM, ref px, ref py, ref pz, sx, sz, fall);
+                    if (Math.Abs(px - ox - sx) > 1e-3f || Math.Abs(pz - oz - sz) > 1e-3f) { e.Add($"{at} talus walker is stopped at {px:F1},{py:F1},{pz:F1}"); return; }
+                }
+                if (py < rim - 2f) { e.Add($"{at} talus walker ends at {py:F1} m, below the rim at {rim:F1} m"); return; }
             }
         }
 
