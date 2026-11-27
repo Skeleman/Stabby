@@ -28,7 +28,7 @@ namespace Stabby.World
             bridgeSeen ??= new Dictionary<long, bool>();
             long key = (long)a * n * n + b;
             if (bridgeSeen.TryGetValue(key, out bool ok)) return ok;
-            ok = BridgeFault(a % n * cm, a / n * cm, b % n * cm, b / n * cm, out _, out _, out _) == null;
+            ok = BridgeFault(a % n * cm, a / n * cm, b % n * cm, b / n * cm, out _, out _, out _, true) == null;
             bridgeSeen[key] = ok;
             return ok;
         }
@@ -44,14 +44,22 @@ namespace Stabby.World
             return false;
         }
 
+        bool[] wideCells;
+
         bool WideRiver(int i)
         {
-            for (int k = blockStart[i]; k < blockStart[i + 1]; k++)
+            if (wideCells == null)
             {
-                int item = blockItems[k];
-                if (item >= 0 && phw[item] > FordHalfM) return true;
+                var wc = new bool[n * n];
+                for (int c = 0; c < n * n; c++)
+                    for (int k = blockStart[c]; k < blockStart[c + 1] && !wc[c]; k++)
+                    {
+                        int item = blockItems[k];
+                        wc[c] = item >= 0 && phw[item] > FordHalfM;
+                    }
+                wideCells = wc;
             }
-            return false;
+            return wideCells[i];
         }
 
         bool RiverUnder(float x, float z, float pad, out float surf, out float hw)
@@ -83,14 +91,15 @@ namespace Stabby.World
             return null;
         }
 
-        public string BridgeFault(float x0, float z0, float x1, float z1, out float h0, out float h1, out float arch)
+        public string BridgeFault(float x0, float z0, float x1, float z1, out float h0, out float h1, out float arch) => BridgeFault(x0, z0, x1, z1, out h0, out h1, out arch, false);
+
+        string BridgeFault(float x0, float z0, float x1, float z1, out float h0, out float h1, out float arch, bool quick)
         {
             h0 = h1 = arch = 0;
             if (BridgeDef() < 0) return "has no bridge kind";
             float dx = x1 - x0, dz = z1 - z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
             if (len > lib.Roads.SpanM) return "spans too far";
             if (len < cm) return "is too short";
-            float ux = dx / len, uz = dz / len;
             string a = Abutment(x0, z0, out h0);
             if (a != null) return "abutment " + a;
             a = Abutment(x1, z1, out h1);
@@ -99,35 +108,98 @@ namespace Stabby.World
             if (most < 0) return "is too steep";
             int pieces = Math.Max(2, (int)Math.Ceiling(len / BridgeSampleM));
             bool wet = false;
+            float need = 0;
             for (int k = 1; k < pieces; k++)
             {
                 float t = (float)k / pieces, x = x0 + dx * t, z = z0 + dz * t;
                 int i = Cell(z) * n + Cell(x);
                 if (w.Sea[i] || w.Water.LakeId[i] >= 0) return "crosses standing water";
-                if (!RiverUnder(x, z, 0, out _, out float hw)) continue;
+                if (!RiverUnder(x, z, 0, out float surf, out float hw)) continue;
                 if (2 * hw > lib.Roads.RiverM) return "crosses a river too wide to bridge";
                 wet = true;
-            }
-            if (!wet) return "spans no water";
-            float need = 0;
-            for (int k = 1; k < pieces; k++)
-            {
-                float t = (float)k / pieces, x = x0 + dx * t, z = z0 + dz * t;
-                float req = GroundAt(detail, cm, x, z) - RoadClearM;
-                if (RiverUnder(x, z, 0, out float surf, out _)) req = Math.Max(req, surf + lib.Roads.ClearM);
-                float lift = req - (h0 + (h1 - h0) * t);
+                float lift = surf + lib.Roads.ClearM - (h0 + (h1 - h0) * t);
                 if (lift > 0) need = Math.Max(need, lift / (4 * t * (1 - t)));
             }
+            if (!wet) return "spans no water";
             if (need > most) return "cannot clear the water";
-            arch = need;
             int steps = Math.Max(1, (int)Math.Ceiling(len / cm));
+            if (quick)
+                for (int k = 0; k < steps; k++)
+                {
+                    float ta = (float)k / steps, tb = (float)(k + 1) / steps;
+                    string f = StepFault(x0 + dx * ta, z0 + dz * ta, x0 + dx * tb, z0 + dz * tb, Deck(h0, h1, need, ta), Deck(h0, h1, need, tb), Deck(h0, h1, most, ta), Deck(h0, h1, most, tb), out _, true);
+                    if (f != null) return f;
+                }
+            int group = Math.Max(1, (int)(cm / BridgeSampleM));
+            if (quick && Clears(x0, z0, dx, dz, h0, h1, pieces, group, most))
+            {
+                bool loose = false;
+                for (int k = 0; k < steps && !loose; k++)
+                {
+                    float ta = (float)k / steps, tb = (float)(k + 1) / steps;
+                    loose = StepFault(x0 + dx * ta, z0 + dz * ta, x0 + dx * tb, z0 + dz * tb, Deck(h0, h1, most, ta), Deck(h0, h1, most, tb), Deck(h0, h1, need, ta), Deck(h0, h1, need, tb), out _, true) != null;
+                }
+                if (!loose) return null;
+            }
+            for (int k0 = 1; k0 < pieces; k0 += group)
+            {
+                int k1 = Math.Min(pieces - 1, k0 + group - 1);
+                if (!Rises(x0, z0, dx, dz, h0, h1, pieces, k0, k1, need)) continue;
+                for (int k = k0; k <= k1; k++)
+                {
+                    float t = (float)k / pieces, x = x0 + dx * t, z = z0 + dz * t;
+                    float req = GroundAt(detail, cm, x, z) - RoadClearM;
+                    if (RiverUnder(x, z, 0, out float surf, out _)) req = Math.Max(req, surf + lib.Roads.ClearM);
+                    float lift = req - (h0 + (h1 - h0) * t);
+                    if (lift > 0) need = Math.Max(need, lift / (4 * t * (1 - t)));
+                    if (need > most) return "cannot clear the water";
+                }
+            }
+            arch = need;
             for (int k = 0; k < steps; k++)
             {
                 float ta = (float)k / steps, tb = (float)(k + 1) / steps;
-                string f = StepFault(x0 + dx * ta, z0 + dz * ta, x0 + dx * tb, z0 + dz * tb, Deck(h0, h1, need, ta), Deck(h0, h1, need, tb), out _, true);
+                float da = Deck(h0, h1, need, ta), db = Deck(h0, h1, need, tb);
+                string f = StepFault(x0 + dx * ta, z0 + dz * ta, x0 + dx * tb, z0 + dz * tb, da, db, da, db, out _, true);
                 if (f != null) return f;
             }
             return null;
+        }
+
+        bool Clears(float x0, float z0, float dx, float dz, float h0, float h1, int pieces, int group, float most)
+        {
+            for (int k0 = 1; k0 < pieces; k0 += group)
+                if (!ClearsPart(x0, z0, dx, dz, h0, h1, pieces, k0, Math.Min(pieces - 1, k0 + group - 1), most)) return false;
+            return true;
+        }
+
+        bool ClearsPart(float x0, float z0, float dx, float dz, float h0, float h1, int pieces, int k0, int k1, float most)
+        {
+            if (!Rises(x0, z0, dx, dz, h0, h1, pieces, k0, k1, most)) return true;
+            if (k1 - k0 >= 3)
+            {
+                int km = (k0 + k1) / 2;
+                return ClearsPart(x0, z0, dx, dz, h0, h1, pieces, k0, km, most) && ClearsPart(x0, z0, dx, dz, h0, h1, pieces, km + 1, k1, most);
+            }
+            for (int k = k0; k <= k1; k++)
+            {
+                float t = (float)k / pieces, lift = GroundAt(detail, cm, x0 + dx * t, z0 + dz * t) - RoadClearM - (h0 + (h1 - h0) * t);
+                if (lift > 0 && lift / (4 * t * (1 - t)) > most) return false;
+            }
+            return true;
+        }
+
+        bool Rises(float x0, float z0, float dx, float dz, float h0, float h1, int pieces, int k0, int k1, float arch)
+        {
+            float ta = (float)k0 / pieces, tb = (float)k1 / pieces;
+            float xa = x0 + dx * ta, za = z0 + dz * ta, xb = x0 + dx * tb, zb = z0 + dz * tb;
+            NearField.Range(detail.Cells, Math.Min(xa, xb), Math.Min(za, zb), Math.Max(xa, xb), Math.Max(za, zb), out _, out float hi);
+            for (int k = k0; k <= k1; k++)
+            {
+                float t = (float)k / pieces, lift = hi - RoadClearM - (h0 + (h1 - h0) * t);
+                if (lift > 0 && lift / (4 * t * (1 - t)) > arch) return true;
+            }
+            return false;
         }
 
         static float Deck(float h0, float h1, float arch, float t) => h0 + (h1 - h0) * t + arch * 4 * t * (1 - t);
