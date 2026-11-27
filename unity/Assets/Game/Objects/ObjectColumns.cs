@@ -189,7 +189,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(FloatMode = FloatMode.Strict, CompileSynchronously = true)]
+    [BurstCompile(FloatMode = FloatMode.Strict)]
     public struct RegionBakeJob : IJob
     {
         [ReadOnly] public ColumnShapes Shapes;

@@ -163,7 +163,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard, CompileSynchronously = true)]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public struct ContactSplatJob : IJob
     {
         public const int Res = ContactFieldSystem.Res;
@@ -247,7 +247,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard, CompileSynchronously = true)]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public struct RemoveCheckJob : IJob
     {
         [ReadOnly] public NativeHashMap<int, UnsafeList<ReachRow>> Chunks;
@@ -275,7 +275,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     public struct ResolveJob : IJob
     {
         [ReadOnly] public NativeHashMap<int, UnsafeList<ReachRow>> Chunks;
@@ -295,7 +295,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard, CompileSynchronously = true)]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public struct InReachJob : IJob
     {
         [ReadOnly] public NativeHashMap<int, UnsafeList<ReachRow>> Chunks;

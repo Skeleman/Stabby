@@ -55,7 +55,7 @@ namespace Stabby.Game
         public AABB Box;
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainWriteJob : IJob
     {
         [ReadOnly] public NativeList<TerrainWrite> Writes;
@@ -419,7 +419,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainLayoutJob : IJob
     {
         public TerrainChunk Chunk;
@@ -456,7 +456,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainRowsJob : IJobParallelForDefer
     {
         [ReadOnly] public NativeArray<int> Slabs;
@@ -481,7 +481,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainMeshJob : IJob
     {
         public TerrainChunk Chunk;
@@ -812,7 +812,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainSelectJob : IJob
     {
         public TerrainTree Tree;
@@ -914,7 +914,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainDrawJob : IJob
     {
         public TerrainTree Tree;
@@ -967,7 +967,7 @@ namespace Stabby.Game
         }
     }
 
-    [BurstCompile(CompileSynchronously = true)]
+    [BurstCompile]
     struct TerrainNodesJob : IJob
     {
         public TerrainTree Tree;
@@ -1273,7 +1273,7 @@ namespace Stabby.Game
         bool ready, rootsReady, builtSmooth;
         float worstMs, worstLoadMs, worstLodsMs, worstCollectMs;
         string loadPart = "";
-        double partUpload, partCollect, partStatics, partLods, lodRequests, lodDraw, lodNodes, lodApply, lodEvictMs;
+        double partUpload, partCollect, partRoots, partStatics, partSteam, partClock, partLods, lodRequests, lodDraw, lodNodes, lodApply, lodEvictMs;
         int lodEvicts, lodDeferred, lodShadows;
 
         NativeList<TerrainWrite> writes;
@@ -1305,13 +1305,19 @@ namespace Stabby.Game
                 Collect();
                 TopUp();
                 double tc = frame.Elapsed.TotalMilliseconds;
-                Roots(); Statics(); Steam(); Clock();
+                Roots();
+                double tr = frame.Elapsed.TotalMilliseconds;
+                Statics();
+                double tw = frame.Elapsed.TotalMilliseconds;
+                Steam();
+                double tm = frame.Elapsed.TotalMilliseconds;
+                Clock();
                 double ts = frame.Elapsed.TotalMilliseconds;
                 lodRequests = lodDraw = lodNodes = 0;
                 Lods();
                 double lm = frame.Elapsed.TotalMilliseconds - ts + lodApply;
                 loadPart = null;
-                (partUpload, partCollect, partStatics, partLods) = (tu, tc - tu, ts - tc, lm);
+                (partUpload, partCollect, partRoots, partStatics, partSteam, partClock, partLods) = (tu, tc - tu, tr - tc, tw - tr, tm - tw, ts - tm, lm);
                 Flush();
                 if (lm > worstLodsMs) { worstLodsMs = (float)lm; GameStatus.Lines["terrain~lods"] = $"terrain worst lods {lm:F1} ms ({stage}: {LodParts()})"; }
                 if (tc - tu > worstCollectMs) { worstCollectMs = (float)(tc - tu); GameStatus.Lines["terrain~collect"] = $"terrain worst collect {tc - tu:F1} ms ({stage}, {frameVertices} vertices)"; }
@@ -1339,7 +1345,7 @@ namespace Stabby.Game
 
         string Status() => $"terrain nodes {shownDrawn} drawn, {shownSunk} sunk hidden, {shownWanted} wanted, {shownBehind} behind, {built} built, {built - evicted} live, {shownVertices} drawn vertices, {shownCasting} casting ({shownCast} vertices), by level {string.Join("/", shownLevels)}";
 
-        string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, statics {partStatics:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
+        string Parts() => loadPart ?? $"upload {partUpload:F1}, collect {partCollect:F1}, roots {partRoots:F1}, statics {partStatics:F1}, steam {partSteam:F1}, clock {partClock:F1}, lods {partLods:F1} ms ({LodParts()}), {frameVertices} vertices";
 
         string LodParts() => $"requests {lodRequests:F1}, draw {lodDraw:F1}, nodes {lodNodes:F1}, apply {lodApply:F1} [evict {lodEvicts} {lodEvictMs:F1} ms, {lodDeferred} deferred, shadow {lodShadows}]";
 
