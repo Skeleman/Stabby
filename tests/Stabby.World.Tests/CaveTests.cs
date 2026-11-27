@@ -131,8 +131,9 @@ public class CaveTests
         var w = WorldGenerator.Generate(new WorldConfig { Seed = 6, Size = 2048, CellMeters = WorldConfig.CellMetersFor(2048) }, Biomes, Materials, null, null, Objects, Caves);
         var d = new TerrainDetail(w);
         var edits = Features.Place(w, d, out var graphs);
-        var hall = Assert.Single(graphs, g => g.Class == "hall");
-        Assert.True(hall.Nodes.Count(n => n.Entrance) >= 2);
+        var halls = graphs.Where(g => g.Class == "hall").ToList();
+        Assert.NotEmpty(halls);
+        Assert.All(halls, hall => Assert.True(hall.Nodes.Count(n => n.Entrance) >= 2));
         var e = new List<string>();
         WorldChecks.CheckCaves(w, d, edits, graphs, e);
         Assert.Empty(e);

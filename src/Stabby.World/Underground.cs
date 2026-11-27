@@ -502,7 +502,7 @@ namespace Stabby.World
                 for (int s = 0; s + 1 < ts.Count; s++)
                 {
                     var e = Carve(FeatureEdit.Cave, r, pts[s * 3], pts[s * 3 + 1], pts[s * 3 + 2], pts[s * 3 + 3], pts[s * 3 + 4], pts[s * 3 + 5], C.Lumps * r).Finer();
-                    if (!Fits(e, mouth && Shallow ? float.MaxValue : mouth && s == 0 ? open : 0f, ground)) { Out.RemoveRange(mark, Out.Count - mark); return false; }
+                    if (!Fits(e, mouth && Shallow ? float.MaxValue : mouth && s == 0 ? open : 0f, ground) || mouth && Shallow && s == 0 && Ground(e.Bx, e.Bz) < e.By + e.R) { Out.RemoveRange(mark, Out.Count - mark); return false; }
                     Out.Add(e);
                 }
                 G.Edges.Add(new CaveEdge { A = ia, B = ib, R = r, Points = pts });
