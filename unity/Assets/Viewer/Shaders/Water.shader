@@ -716,7 +716,7 @@ Shader "Stabby/Water"
                 float cave = CaveSky(i.positionWS);
                 l.color *= cave;
                 float3 sky = _StabbySky.rgb * cave;
-                float dk = 1 - exp(-(i.swell.w >= 0 ? i.swell.w / max(v.y, 0.05) : path) * L0.w * 0.3);
+                float dk = 1 - exp(-(i.swell.w >= 0 ? i.swell.w / max(v.y, 0.05) : max(path, field / max(v.y, 0.05))) * L0.w * 0.3);
                 float3 silt = float3(0.5, 0.44, 0.3) * dot(shallowC, 1.0 / 3);
                 float3 teal = shallowC * lerp(float3(0.26, 0.4, 0.42), 0.7, hot);
                 float3 tint = lerp(lerp(silt, teal, saturate(dk * 2.2 + hot)), deepC, smoothstep(0.25, 1, dk));
