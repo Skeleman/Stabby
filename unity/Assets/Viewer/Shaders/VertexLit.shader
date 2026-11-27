@@ -81,6 +81,13 @@ Shader "Stabby/VertexLit"
                 float3 n = normalize(i.normalWS);
                 float3 color = i.color.rgb;
                 float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1), fw = fwidth(i.foot.x);
+                float3 fq = float3(i.xz.x, i.strata.z, i.xz.y), ff = cross(ddy(fq), ddx(fq));
+                [branch] if (i.foot.y > 0)
+                {
+                    float3 fn = normalize(ff);
+                    fn = dot(fn, n) < 0 ? -fn : fn;
+                    n = normalize(lerp(n, fn, i.foot.y * saturate((n.y - fn.y) * 4) * (1 - smoothstep(0.6, 0.9, fn.y)) * (1 - smoothstep(0.8, 1.6, i.foot.x))));
+                }
                 if (f > 0)
                 {
                     float2 xa = i.xz + OrgOrigin(_WorldSpaceCameraPos);
