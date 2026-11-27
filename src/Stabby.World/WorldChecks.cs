@@ -1008,7 +1008,7 @@ namespace Stabby.World
             var edits = Features.Place(w, detail, out var caves, out var sites, out var roads);
             float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
-            var field = (sited || objects) && w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects) : null;
+            var field = (sited || objects) && w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects, sites) : null;
             if (clock.Start("sites"))
             {
                 if (sites != null) CheckSiteFootprints(w, grid, sites, e);

@@ -25,7 +25,7 @@ namespace Stabby.World
             var a0 = placed[0];
             var fresh = new string[3];
             Parallel.Invoke(
-                () => { if (!SameObjects(a0, new ObjectField(w, detail, edits, w.Objects).Place(cx0, cz0))) fresh[0] = $"objects in chunk {cx0},{cz0} differ between runs"; },
+                () => { if (!SameObjects(a0, new ObjectField(w, detail, edits, w.Objects, field.Discoveries()).Place(cx0, cz0))) fresh[0] = $"objects in chunk {cx0},{cz0} differ between runs"; },
                 () => { if (!SolidIdsMatch(a0, field.Fresh().Place(cx0, cz0, true))) fresh[1] = $"object ids in chunk {cx0},{cz0} change when only solid objects are placed"; },
                 () => { string fault = RegionFault(field, field.Fresh(), a0, c0); if (fault != null) fresh[2] = $"collision region {cx0},{cz0} {fault}"; });
             foreach (var f in fresh) if (f != null) { e.Add(f); return; }
