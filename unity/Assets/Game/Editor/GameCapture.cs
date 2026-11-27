@@ -102,6 +102,15 @@ namespace Stabby.Game.Editor
 
         public static void Run()
         {
+            var config = MapGen.Config(GameSettings.ActiveSeed);
+            string map = Stabby.Viewer.MapFile.PathFor(GameSettings.ActiveSeed, GameSettings.Size);
+            string unbaked = Stabby.Viewer.MapFile.Unbaked(map, config);
+            if (unbaked != null)
+            {
+                Debug.LogError($"GameCapture: {unbaked}: {map}. Bake it first with: {Stabby.Viewer.MapFile.BakeCommand(config, map)}");
+                EditorApplication.Exit(3);
+                return;
+            }
             BuildScene();
             PinTime();
             int port = FreeUdpPort();
