@@ -241,6 +241,20 @@ namespace Stabby.Content
                 Fibre = Hex(peat.String("fibre", ""), source, "peat.fibre"), Roughness = peat.Float("roughness", 0),
             };
             peat?.End();
+            var wakes = root.Object("wakes");
+            if (wakes != null)
+            {
+                var w0 = new WakeDef();
+                lib.Wakes = new WakeDef
+                {
+                    FadePixels = wakes.Float("fadePixels", w0.FadePixels), FullPixels = wakes.Float("fullPixels", w0.FullPixels),
+                    RingStrength = wakes.Float("ringStrength", w0.RingStrength), VStrength = wakes.Float("vStrength", w0.VStrength),
+                    RefSpeedMps = wakes.Float("refSpeedMps", w0.RefSpeedMps), RefSizeM = wakes.Float("refSizeM", w0.RefSizeM),
+                    SpeedExponent = wakes.Float("speedExponent", w0.SpeedExponent), SizeExponent = wakes.Float("sizeExponent", w0.SizeExponent),
+                    MaxGain = wakes.Float("maxGain", w0.MaxGain), SpeedSmoothS = wakes.Float("speedSmoothS", w0.SpeedSmoothS),
+                };
+                wakes.End();
+            }
             var strata = new List<StratumDef>();
             foreach (var s in root.Objects("strata"))
             {

@@ -458,7 +458,7 @@ Shader "Stabby/Water"
                 float h = 0, foam = 0;
                 for (int k = 0; k < _StabbyWakeCount; k++)
                 {
-                    float4 a = _StabbyWakes[2 * k], m = _StabbyWakes[2 * k + 1];
+                    float4 a = _StabbyWakes[3 * k], m = _StabbyWakes[3 * k + 1], gn = _StabbyWakes[3 * k + 2];
                     float rad = a.w, sub = surfaceY - a.y;
                     float s = length(m.xy), trail = 2 + 4 * min(s, 4);
                     float2 rel = p - a.xz;
@@ -469,7 +469,7 @@ Shader "Stabby/Water"
                         float r = sqrt(r2);
                         float still = 1 - 0.7 * saturate(s * 0.8);
                         float lip = (r - rad * 1.1) / (0.05 + 0.06 * rad);
-                        foam = max(foam, exp(-lip * lip) * saturate(0.2 + 0.6 * sin(atan2(rel.y, rel.x) * 9 + t * 2)) * wet * 0.7);
+                        foam = max(foam, saturate(exp(-lip * lip) * saturate(0.2 + 0.6 * sin(atan2(rel.y, rel.x) * 9 + t * 2)) * wet * 0.7 * gn.x));
                         float rings = 0;
                         for (int n = 0; n < 3; n++)
                         {
@@ -479,7 +479,7 @@ Shader "Stabby/Water"
                             float d = (r - rr) / wd;
                             rings += exp(-d * d) * sin(d * 2.4) * (1 - age) * (1 - age);
                         }
-                        h += rings * 0.07 * still * wet * saturate(1.5 - fp * 5);
+                        h += rings * 0.07 * gn.x * still * wet * saturate(1.5 - fp * 5);
                         [branch] if (s > 0.08)
                         {
                             float2 dir = m.xy / s, side = float2(dir.y, -dir.x);
@@ -490,9 +490,9 @@ Shader "Stabby/Water"
                             float bowA = (ah - 0.55 * rad) / (0.7 * rad + 0.1), bowB = bs / (1.1 * rad + 0.1);
                             float bow = exp(-bowA * bowA - bowB * bowB);
                             float sideA = ah / (1.2 * rad + 0.1), sideB = (bs - 1.15 * rad) / (0.35 * rad + 0.08);
-                            h += (bow - 0.6 * exp(-sideA * sideA - sideB * sideB)) * 0.11 * min(s, 3) * wet;
+                            h += (bow - 0.6 * exp(-sideA * sideA - sideB * sideB)) * 0.11 * gn.y * min(s, 3) * wet;
                             float lead = (ah - 1.05 * rad) / (0.25 * rad + 0.05);
-                            foam = max(foam, exp(-lead * lead - bowB * bowB * 2) * saturate(s * 0.8) * wet * 0.8);
+                            foam = max(foam, saturate(exp(-lead * lead - bowB * bowB * 2) * saturate(s * 0.8) * wet * 0.8 * gn.y));
                             float u = max(-ah + 0.4 * rad, 0);
                             float spread = lerp(0.62, 0.36, saturate(s * 0.5));
                             float da = bs - rad * 0.9 - u * spread;
@@ -501,8 +501,8 @@ Shader "Stabby/Water"
                             float inside = smoothstep(0.3, -0.6 * lam, da);
                             float trans = inside * cos(kw * u - t * 0.4) * 0.45;
                             float fine = saturate(1.5 - fp * 3 / lam);
-                            h += (arm + trans) * decay * 0.08 * go * fine;
-                            foam = max(foam, smoothstep(0.55, 1, arm) * decay * exp(-u / (rad * 2 + 0.5)) * saturate(s * 0.6 - 0.1) * wet);
+                            h += (arm + trans) * decay * 0.08 * gn.y * go * fine;
+                            foam = max(foam, saturate(smoothstep(0.55, 1, arm) * decay * exp(-u / ((rad * 2 + 0.5) * gn.y)) * saturate(s * 0.6 - 0.1) * wet * gn.y));
                         }
                     }
                 }

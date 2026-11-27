@@ -191,6 +191,34 @@ namespace Stabby.World
         public uint SprayColor;
     }
 
+    public sealed class WakeDef
+    {
+        public float FadePixels = 4f, FullPixels = 12f;
+        public float RingStrength = 1f, VStrength = 1f;
+        public float RefSpeedMps = 1.6f, RefSizeM = 1.2f, SpeedExponent = 0.5f, SizeExponent = 0.5f, MaxGain = 3f;
+        public float SpeedSmoothS = 0.25f;
+
+        public void Window(float quality, out float fadePixels, out float fullPixels)
+        {
+            float q = Math.Max(quality, 0.1f);
+            fadePixels = FadePixels / q;
+            fullPixels = FullPixels / q;
+        }
+
+        public void Validate(List<string> errors)
+        {
+            if (!(FadePixels > 0 && FullPixels > FadePixels && FullPixels <= 200)) errors.Add("wakes: fullPixels must exceed fadePixels > 0, at most 200");
+            if (!(RingStrength >= 0 && RingStrength <= 4)) errors.Add($"wakes.ringStrength {RingStrength} outside 0..4");
+            if (!(VStrength >= 0 && VStrength <= 4)) errors.Add($"wakes.vStrength {VStrength} outside 0..4");
+            if (!(RefSpeedMps >= 0.1f && RefSpeedMps <= 20)) errors.Add($"wakes.refSpeedMps {RefSpeedMps} outside 0.1..20");
+            if (!(RefSizeM >= 0.1f && RefSizeM <= 50)) errors.Add($"wakes.refSizeM {RefSizeM} outside 0.1..50");
+            if (!(SpeedExponent >= 0 && SpeedExponent <= 2)) errors.Add($"wakes.speedExponent {SpeedExponent} outside 0..2");
+            if (!(SizeExponent >= 0 && SizeExponent <= 2)) errors.Add($"wakes.sizeExponent {SizeExponent} outside 0..2");
+            if (!(MaxGain >= 1 && MaxGain <= 10)) errors.Add($"wakes.maxGain {MaxGain} outside 1..10");
+            if (!(SpeedSmoothS >= 0 && SpeedSmoothS <= 2)) errors.Add($"wakes.speedSmoothS {SpeedSmoothS} outside 0..2");
+        }
+    }
+
     public sealed class LibraryMaterial
     {
         public string Id, Name;
@@ -212,6 +240,7 @@ namespace Stabby.World
 
         public SurfaceDetail Surface = new SurfaceDetail();
         public List<LiquidDef> Liquids = new List<LiquidDef>();
+        public WakeDef Wakes = new WakeDef();
         public LiquidDef Water => Liquids != null && Liquids.Count > 0 ? Liquids[0] : null;
 
         public int Liquid(string id)
@@ -337,6 +366,8 @@ namespace Stabby.World
             else Amp(errors, "mud.roughness", lib.Mud.Roughness);
             if (lib.Peat == null) errors.Add("peat: required");
             else Amp(errors, "peat.roughness", lib.Peat.Roughness);
+            if (lib.Wakes == null) errors.Add("wakes: required");
+            else lib.Wakes.Validate(errors);
             if (lib.Strata.Count == 0) errors.Add("strata: at least one stratum required");
             var ids = new HashSet<string>();
             foreach (var s in lib.Strata)

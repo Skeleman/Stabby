@@ -13,6 +13,10 @@
   },
   "mud": { "surface": "#6e6152", "clay": "#9c8c74", "grey": "#8c897f", "roughness": 0.3 },
   "peat": { "wet": "#6e5b43", "dark": "#54432f", "fibre": "#8c7754", "roughness": 0.22 },
+  "wakes": {
+    "fadePixels": 4, "fullPixels": 12, "ringStrength": 1, "vStrength": 1,
+    "refSpeedMps": 1.6, "refSizeM": 1.2, "speedExponent": 0.5, "sizeExponent": 0.5, "maxGain": 1.8, "speedSmoothS": 0.25
+  },
   "liquids": [
     {
       "id": "water", "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8", "filmColor": "#000000", "emissionColor": "#000000",
