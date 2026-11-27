@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stabby.World;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -26,13 +27,22 @@ namespace Stabby.Viewer
         public Vector4[] Kit, KitSrgb;
     }
 
-    public sealed class FieldLook
+    public sealed class FieldLook : IDisposable
     {
         public int Res, N;
         public float TexelM, CellM;
-        public ushort[][] Slopes;
-        public float[][] Bed;
-        public ushort[] Biome;
+        public NativeArray<ushort>[] Slopes;
+        public NativeArray<float>[] Bed;
+        public NativeArray<ushort> Biome;
+
+        public void Dispose()
+        {
+            if (Slopes != null) foreach (var m in Slopes) if (m.IsCreated) m.Dispose();
+            if (Bed != null) foreach (var m in Bed) if (m.IsCreated) m.Dispose();
+            if (Biome.IsCreated) Biome.Dispose();
+            Slopes = null;
+            Bed = null;
+        }
     }
 
     public static class TerrainLook
@@ -137,94 +147,126 @@ namespace Stabby.Viewer
         public static float Bilinear(float a, float b, float c, float d, float tx, float ty) =>
             math.lerp(math.lerp(a, b, tx), math.lerp(c, d, tx), ty);
 
+        public static float3 BaseColor(GeneratedWorld w, IReadOnlyList<BiomeDef> defs, int i) =>
+            w.Sea[i] ? Sand : Unpack(w.Biome != null && w.Biome[i] >= 0 ? defs[w.Biome[i]].Color : 0x8DAA5Eu);
+
         public static float3[] BaseColors(GeneratedWorld w, IReadOnlyList<BiomeDef> defs)
         {
             var colors = new float3[w.Height.Length];
-            for (int i = 0; i < colors.Length; i++)
-                colors[i] = w.Sea[i] ? Sand : Unpack(w.Biome != null && w.Biome[i] >= 0 ? defs[w.Biome[i]].Color : 0x8DAA5Eu);
+            for (int i = 0; i < colors.Length; i++) colors[i] = BaseColor(w, defs, i);
             return colors;
         }
 
-        public static FieldLook Field(TerrainDetail detail, int n, float cm, float3[] colors, float[] offsets)
+        static NativeArray<T> Native<T>(int length) where T : struct => new NativeArray<T>(length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+
+        public static FieldLook Field(TerrainDetail detail, GeneratedWorld w, IReadOnlyList<BiomeDef> defs, float[] offsets)
         {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
             int res = Math.Min(FieldMax, (n - 1) * FieldTexelsPerCell + 1);
             float tc = (n - 1f) / (res - 1), tm = tc * cm;
-            var h = new float[res * res];
-            Parallel.For(0, res, k => { for (int i = 0; i < res; i++) h[k * res + i] = detail.HeightAt(i * tc, k * tc); });
-            var level = new float2[res * res];
-            Parallel.For(0, res, k =>
+            var bed = new List<NativeArray<float>>();
+            var mips = new List<NativeArray<ushort>>();
+            var level = default(NativeArray<float2>);
+            var biome = default(NativeArray<ushort>);
+            try
             {
-                int k0 = Math.Max(k - 1, 0), k1 = Math.Min(k + 1, res - 1);
-                for (int i = 0; i < res; i++)
+                var h = Native<float>(res * res);
+                bed.Add(h);
+                Parallel.For(0, res, k => { var hs = h.AsSpan(); for (int i = 0; i < res; i++) hs[k * res + i] = detail.HeightAt(i * tc, k * tc); });
+                level = Native<float2>(res * res);
+                var top = level;
+                Parallel.For(0, res, k =>
                 {
-                    int i0 = Math.Max(i - 1, 0), i1 = Math.Min(i + 1, res - 1);
-                    level[k * res + i] = new float2((h[k * res + i1] - h[k * res + i0]) / ((i1 - i0) * tm), (h[k1 * res + i] - h[k0 * res + i]) / ((k1 - k0) * tm));
-                }
-            });
-            var mips = new List<ushort[]>();
-            for (int size = res, prev = res; ; prev = size, size = Math.Max(1, size >> 1))
-            {
-                if (size != prev)
-                {
-                    int p = prev, cur = size;
-                    var src = level;
-                    var dst = new float2[cur * cur];
-                    Parallel.For(0, cur, k =>
+                    ReadOnlySpan<float> hs = h.AsReadOnlySpan();
+                    var ls = top.AsSpan();
+                    int k0 = Math.Max(k - 1, 0), k1 = Math.Min(k + 1, res - 1);
+                    for (int i = 0; i < res; i++)
                     {
-                        int k0 = Math.Min(2 * k, p - 1), k1 = Math.Min(2 * k + 1, p - 1);
-                        for (int i = 0; i < cur; i++)
-                        {
-                            int i0 = Math.Min(2 * i, p - 1), i1 = Math.Min(2 * i + 1, p - 1);
-                            dst[k * cur + i] = 0.25f * (src[k0 * p + i0] + src[k0 * p + i1] + src[k1 * p + i0] + src[k1 * p + i1]);
-                        }
-                    });
-                    level = dst;
-                }
-                var px = new ushort[level.Length * 2];
-                var lv = level;
-                int side = size;
-                Parallel.For(0, side, k =>
-                {
-                    for (int q = k * side, end = q + side; q < end; q++) { px[2 * q] = (ushort)math.f32tof16(lv[q].x); px[2 * q + 1] = (ushort)math.f32tof16(lv[q].y); }
+                        int i0 = Math.Max(i - 1, 0), i1 = Math.Min(i + 1, res - 1);
+                        ls[k * res + i] = new float2((hs[k * res + i1] - hs[k * res + i0]) / ((i1 - i0) * tm), (hs[k1 * res + i] - hs[k0 * res + i]) / ((k1 - k0) * tm));
+                    }
                 });
-                mips.Add(px);
-                if (size == 1) break;
-            }
-            var biome = new ushort[n * n * 4];
-            Parallel.For(0, n, y =>
-            {
-                for (int q = y * n, end = q + n; q < end; q++)
+                for (int size = res, prev = res; ; prev = size, size = Math.Max(1, size >> 1))
                 {
-                    biome[4 * q] = (ushort)math.f32tof16(colors[q].x);
-                    biome[4 * q + 1] = (ushort)math.f32tof16(colors[q].y);
-                    biome[4 * q + 2] = (ushort)math.f32tof16(colors[q].z);
-                    biome[4 * q + 3] = (ushort)math.f32tof16(offsets[q]);
+                    if (size != prev)
+                    {
+                        int p = prev, cur = size;
+                        var src = level;
+                        var dst = Native<float2>(cur * cur);
+                        Parallel.For(0, cur, k =>
+                        {
+                            ReadOnlySpan<float2> ss = src.AsReadOnlySpan();
+                            var ds = dst.AsSpan();
+                            int k0 = Math.Min(2 * k, p - 1), k1 = Math.Min(2 * k + 1, p - 1);
+                            for (int i = 0; i < cur; i++)
+                            {
+                                int i0 = Math.Min(2 * i, p - 1), i1 = Math.Min(2 * i + 1, p - 1);
+                                ds[k * cur + i] = 0.25f * (ss[k0 * p + i0] + ss[k0 * p + i1] + ss[k1 * p + i0] + ss[k1 * p + i1]);
+                            }
+                        });
+                        level.Dispose();
+                        level = dst;
+                    }
+                    var px = Native<ushort>(level.Length * 2);
+                    mips.Add(px);
+                    var lv = level;
+                    int side = size;
+                    Parallel.For(0, side, k =>
+                    {
+                        ReadOnlySpan<float2> ls = lv.AsReadOnlySpan();
+                        var ps = px.AsSpan();
+                        for (int q = k * side, end = q + side; q < end; q++) { ps[2 * q] = (ushort)math.f32tof16(ls[q].x); ps[2 * q + 1] = (ushort)math.f32tof16(ls[q].y); }
+                    });
+                    if (size == 1) break;
                 }
-            });
-            return new FieldLook { Res = res, N = n, TexelM = tm, CellM = cm, Slopes = mips.ToArray(), Bed = Mips(h, res), Biome = biome };
+                level.Dispose();
+                biome = Native<ushort>(n * n * 4);
+                var bo = biome;
+                Parallel.For(0, n, y =>
+                {
+                    var bs = bo.AsSpan();
+                    for (int q = y * n, end = q + n; q < end; q++)
+                    {
+                        var c = BaseColor(w, defs, q);
+                        bs[4 * q] = (ushort)math.f32tof16(c.x);
+                        bs[4 * q + 1] = (ushort)math.f32tof16(c.y);
+                        bs[4 * q + 2] = (ushort)math.f32tof16(c.z);
+                        bs[4 * q + 3] = (ushort)math.f32tof16(offsets[q]);
+                    }
+                });
+                Mips(bed, res);
+                return new FieldLook { Res = res, N = n, TexelM = tm, CellM = cm, Slopes = mips.ToArray(), Bed = bed.ToArray(), Biome = biome };
+            }
+            catch
+            {
+                if (level.IsCreated) level.Dispose();
+                new FieldLook { Slopes = mips.ToArray(), Bed = bed.ToArray(), Biome = biome }.Dispose();
+                throw;
+            }
         }
 
-        static float[][] Mips(float[] top, int res)
+        static void Mips(List<NativeArray<float>> mips, int res)
         {
-            var mips = new List<float[]> { top };
             for (int p = res; p > 1;)
             {
                 int cur = Math.Max(1, p >> 1), prev = p;
                 var src = mips[mips.Count - 1];
-                var dst = new float[cur * cur];
+                var dst = Native<float>(cur * cur);
+                mips.Add(dst);
                 Parallel.For(0, cur, k =>
                 {
+                    ReadOnlySpan<float> ss = src.AsReadOnlySpan();
+                    var ds = dst.AsSpan();
                     int k0 = Math.Min(2 * k, prev - 1), k1 = Math.Min(2 * k + 1, prev - 1);
                     for (int i = 0; i < cur; i++)
                     {
                         int i0 = Math.Min(2 * i, prev - 1), i1 = Math.Min(2 * i + 1, prev - 1);
-                        dst[k * cur + i] = 0.25f * (src[k0 * prev + i0] + src[k0 * prev + i1] + src[k1 * prev + i0] + src[k1 * prev + i1]);
+                        ds[k * cur + i] = 0.25f * (ss[k0 * prev + i0] + ss[k0 * prev + i1] + ss[k1 * prev + i0] + ss[k1 * prev + i1]);
                     }
                 });
-                mips.Add(dst);
                 p = cur;
             }
-            return mips.ToArray();
         }
 
         public static void CreateField(FieldLook f)
@@ -246,7 +288,7 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbySand", new Vector4(Sand.x, Sand.y, Sand.z, 0));
         }
 
-        public sealed class FieldUpload
+        public sealed class FieldUpload : IDisposable
         {
             readonly FieldLook f;
             readonly int budget;
@@ -276,12 +318,18 @@ namespace Stabby.Viewer
                         : Slice(f.Biome, 4, biomeField, 1);
                     if ((spent += bytes) >= budget) return false;
                 }
-                if (stage != null) UnityEngine.Object.Destroy(stage);
-                stage = null;
+                Dispose();
                 return true;
             }
 
-            int Slice<T>(T[] src, int channels, RenderTexture target, int mips) where T : struct
+            public void Dispose()
+            {
+                if (stage != null) UnityEngine.Object.Destroy(stage);
+                stage = null;
+                f.Dispose();
+            }
+
+            int Slice<T>(NativeArray<T> src, int channels, RenderTexture target, int mips) where T : struct
             {
                 int bpp = channels * Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<T>();
                 int w = Math.Max(1, target.width >> mip), rows = Math.Clamp(budget / (w * bpp), 1, w), n = Math.Min(rows, w - row);
