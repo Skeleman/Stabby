@@ -13,7 +13,19 @@ public class DiscoveryTests
 
     public DiscoveryTests(ITestOutputHelper output) => this.output = output;
 
-    static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) World(ulong seed) => TestWorlds.Get(seed);
+    static readonly Lazy<bool> Warm = new(() => { Parallel.For(1, 5, s => TestWorlds.Place((ulong)s).Field.Discoveries()); return true; });
+
+    static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) World(ulong seed)
+    {
+        if (seed <= 4) _ = Warm.Value;
+        return TestWorlds.Get(seed);
+    }
+
+    static void Prefetch(int def) => Parallel.For(1, 5, s =>
+    {
+        var field = World((ulong)s).Item4;
+        Parallel.ForEach(field.Discoveries().Where(o => o.Def == def).Select(o => ((int)(o.X / field.ChunkMeters), (int)(o.Z / field.ChunkMeters))).Distinct(), c => field.Chunk(c.Item1, c.Item2));
+    });
 
     [Fact]
     public void FeaturePassDiscoveriesMatchTheFinalEdits()
@@ -47,6 +59,7 @@ public class DiscoveryTests
     public void StoneRingsAppearAndReachTheirChunks()
     {
         int d = Objects.Objects.FindIndex(o => o.Id == "stone-ring"), total = 0, worlds = 0;
+        Prefetch(d);
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var (w, detail, _, field) = World(seed);
@@ -68,6 +81,7 @@ public class DiscoveryTests
     public void CampsitesAppearByForestsAndRiversAwayFromRings()
     {
         int camp = Objects.Objects.FindIndex(o => o.Id == "campsite"), total = 0, worlds = 0;
+        Prefetch(camp);
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var (w, detail, _, field) = World(seed);
@@ -92,6 +106,7 @@ public class DiscoveryTests
     public void HermitagesAppearDeepInTheWoods()
     {
         int hermit = Objects.Objects.FindIndex(o => o.Id == "hermitage"), total = 0, worlds = 0;
+        Prefetch(hermit);
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var (w, detail, _, field) = World(seed);
@@ -116,6 +131,7 @@ public class DiscoveryTests
     public void ShrinesAppearBesideRoads()
     {
         int shrine = Objects.Objects.FindIndex(o => o.Id == "wayside-shrine"), total = 0, worlds = 0;
+        Prefetch(shrine);
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var (w, detail, _, field) = World(seed);
@@ -143,6 +159,7 @@ public class DiscoveryTests
     public void RuinsAppearOnSteadyGround()
     {
         int ruin = Objects.Objects.FindIndex(o => o.Id == "ruin"), total = 0, worlds = 0;
+        Prefetch(ruin);
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var (w, detail, _, field) = World(seed);
@@ -167,6 +184,7 @@ public class DiscoveryTests
     public void FairyRingsAppearOnLevelGround()
     {
         int ring = Objects.Objects.FindIndex(o => o.Id == "fairy-ring"), total = 0, worlds = 0;
+        Prefetch(ring);
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var (w, detail, _, field) = World(seed);
