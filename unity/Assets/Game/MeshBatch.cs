@@ -66,37 +66,38 @@ namespace Stabby.Game
         {
             int attr = Attrs.Length, floats = 3, vc = d.Verts.Length;
             Attrs.Add(new VertexAttributeDescriptor(VertexAttribute.Position));
-            var chans = new List<(VertexAttribute At, Vector4[] V, int Dim)>();
-            if (d.Norms != null && !lean) chans.Add((VertexAttribute.Normal, Array.ConvertAll(d.Norms, n => (Vector4)n), 3));
-            if (d.Cols != null) chans.Add((VertexAttribute.Color, Array.ConvertAll(d.Cols, c => (Vector4)c), 4));
-            if (d.Uvs != null) chans.Add((VertexAttribute.TexCoord0, Array.ConvertAll(d.Uvs, t => (Vector4)t), 2));
+            var norms = lean ? null : d.Norms;
             var extra = new[] { d.Uv1, d.Uv2, d.Uv3, d.Uv4 };
+            int nAt = Channel(VertexAttribute.Normal, norms != null, false, 3, ref floats);
+            bool cHalf = lean && d.Cols != null && HalfExact(d.Cols);
+            int cAt = Channel(VertexAttribute.Color, d.Cols != null, cHalf, 4, ref floats);
+            bool tHalf = lean && d.Uvs != null && HalfExact(d.Uvs);
+            int tAt = Channel(VertexAttribute.TexCoord0, d.Uvs != null, tHalf, 2, ref floats);
+            var eAt = new int[4];
+            var eHalf = new bool[4];
             for (int u = 0; u < 4; u++)
-                if (extra[u] != null) chans.Add((VertexAttribute.TexCoord1 + u, extra[u], 4));
-            var half = new bool[chans.Count];
-            for (int k = 0; k < chans.Count; k++)
             {
-                var (at, vs, dim) = chans[k];
-                half[k] = lean && dim != 3 && HalfExact(vs, dim);
-                Attrs.Add(new VertexAttributeDescriptor(at, half[k] ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, dim));
-                floats += half[k] ? dim / 2 : dim;
+                eHalf[u] = lean && extra[u] != null && HalfExact(extra[u]);
+                eAt[u] = Channel(VertexAttribute.TexCoord1 + u, extra[u] != null, eHalf[u], 4, ref floats);
             }
             int vertex = Vertices.Length;
             Vertices.ResizeUninitialized(vertex + vc * floats);
             var dst = Vertices.AsArray().Reinterpret<uint>();
-            for (int v = 0, o = vertex; v < vc; v++)
+            for (int v = 0; v < vc; v++)
             {
+                int o = vertex + v * floats;
                 var p = d.Verts[v];
-                dst[o++] = math.asuint(p.x); dst[o++] = math.asuint(p.y); dst[o++] = math.asuint(p.z);
-                for (int k = 0; k < chans.Count; k++)
+                dst[o] = math.asuint(p.x); dst[o + 1] = math.asuint(p.y); dst[o + 2] = math.asuint(p.z);
+                if (nAt >= 0) { var q = norms[v]; dst[o + nAt] = math.asuint(q.x); dst[o + nAt + 1] = math.asuint(q.y); dst[o + nAt + 2] = math.asuint(q.z); }
+                if (cAt >= 0) { var c = d.Cols[v]; Put(dst, o + cAt, c.r, c.g, c.b, c.a, cHalf); }
+                if (tAt >= 0)
                 {
-                    var t = chans[k].V[v];
-                    int dim = chans[k].Dim;
-                    if (half[k])
-                        for (int c = 0; c < dim; c += 2) dst[o++] = math.f32tof16(t[c]) | (math.f32tof16(t[c + 1]) << 16);
-                    else
-                        for (int c = 0; c < dim; c++) dst[o++] = math.asuint(t[c]);
+                    var t = d.Uvs[v];
+                    if (tHalf) dst[o + tAt] = math.f32tof16(t.x) | (math.f32tof16(t.y) << 16);
+                    else { dst[o + tAt] = math.asuint(t.x); dst[o + tAt + 1] = math.asuint(t.y); }
                 }
+                for (int u = 0; u < 4; u++)
+                    if (eAt[u] >= 0) { var e = extra[u][v]; Put(dst, o + eAt[u], e.x, e.y, e.z, e.w, eHalf[u]); }
             }
             bool wide = vc > 65535;
             int index = wide ? Wide.Length : Narrow.Length;
@@ -105,11 +106,48 @@ namespace Stabby.Game
             Add(d.Name, new MeshPiece { Id = id, Vertex = vertex, VertexCount = vc, Floats = floats, Index = index, IndexCount = d.Tris.Length, Attr = attr, AttrCount = Attrs.Length - attr, Wide = wide, AllBounds = true });
         }
 
-        static bool HalfExact(Vector4[] vs, int dim)
+        int Channel(VertexAttribute at, bool present, bool half, int dim, ref int floats)
+        {
+            if (!present) return -1;
+            Attrs.Add(new VertexAttributeDescriptor(at, half ? VertexAttributeFormat.Float16 : VertexAttributeFormat.Float32, dim));
+            int offset = floats;
+            floats += half ? dim / 2 : dim;
+            return offset;
+        }
+
+        static void Put(NativeArray<uint> dst, int o, float x, float y, float z, float w, bool half)
+        {
+            if (half)
+            {
+                dst[o] = math.f32tof16(x) | (math.f32tof16(y) << 16);
+                dst[o + 1] = math.f32tof16(z) | (math.f32tof16(w) << 16);
+            }
+            else
+            {
+                dst[o] = math.asuint(x); dst[o + 1] = math.asuint(y); dst[o + 2] = math.asuint(z); dst[o + 3] = math.asuint(w);
+            }
+        }
+
+        static bool Exact(float f) => math.f16tof32(math.f32tof16(f)) == f;
+
+        static bool HalfExact(Color[] vs)
+        {
+            foreach (var c in vs)
+                if (!Exact(c.r) || !Exact(c.g) || !Exact(c.b) || !Exact(c.a)) return false;
+            return true;
+        }
+
+        static bool HalfExact(Vector2[] vs)
         {
             foreach (var t in vs)
-                for (int c = 0; c < dim; c++)
-                    if (math.f16tof32(math.f32tof16(t[c])) != t[c]) return false;
+                if (!Exact(t.x) || !Exact(t.y)) return false;
+            return true;
+        }
+
+        static bool HalfExact(Vector4[] vs)
+        {
+            foreach (var t in vs)
+                if (!Exact(t.x) || !Exact(t.y) || !Exact(t.z) || !Exact(t.w)) return false;
             return true;
         }
 

@@ -52,10 +52,12 @@ namespace Stabby.World
             }
         }
 
-        public ObjectField Fresh()
+        public ObjectField Fresh() => Fresh(edits, Discoveries());
+
+        public ObjectField Fresh(FeatureEdit[] placed, ObjectInstance[] found)
         {
-            var f = new ObjectField(w, detail, edits, lib);
-            f.discoveries = Discoveries();
+            var f = new ObjectField(w, detail, placed, lib);
+            f.discoveries = found;
             f.bogPools = BogPools();
             f.quicksandPools = QuicksandPools();
             f.roads = Roads(); f.roadStart = roadStart; f.roadItems = roadItems; f.roadSites = roadSites; f.siteCells = siteCells; f.siteList = siteList; f.tunnelEdits = tunnelEdits; f.tunnelGraphs = tunnelGraphs;

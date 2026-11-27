@@ -1,8 +1,7 @@
 using System.IO;
 using System.IO.Compression;
-using Stabby.World;
 
-namespace Stabby.Game
+namespace Stabby.World
 {
     public static class ChunkZip
     {
