@@ -5,6 +5,7 @@ src/Stabby.World/Erosion.cs all
 src/Stabby.World/Drainage.cs all
 src/Stabby.World/Climate.cs all
 src/Stabby.World/Hydrology.cs all
+src/Stabby.World/RiverDeltas.cs all
 src/Stabby.World/Biomes.cs all
 src/Stabby.World/Materials.cs all
 src/Stabby.World/WorldGenerator.cs all
