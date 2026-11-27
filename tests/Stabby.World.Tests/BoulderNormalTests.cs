@@ -31,7 +31,7 @@ public class BoulderNormalTests
                 float x = f.Verts[v], y = f.Verts[v + 1], z = f.Verts[v + 2], ny = f.Verts[v + 4];
                 float ax = e.Bx - e.Ax, az = e.Bz - e.Az;
                 float u = System.Math.Clamp(((x - e.Ax) * ax + (z - e.Az) * az) / (ax * ax + az * az), 0f, 1f);
-                float dx = x - (e.Ax + u * ax), dy = y - cy, dz = z - (e.Az + u * az);
+                float dx = x - (e.Ax + u * ax), dy = System.Math.Max(0f, y - cy), dz = z - (e.Az + u * az);
                 float d = (float)System.Math.Sqrt(dx * dx + dy * dy + dz * dz), ty = dy / d;
                 if (System.Math.Abs(d - r) > 0.6f || y < 0.7f || System.Math.Abs(ty) > 0.5f) continue;
                 steep++;

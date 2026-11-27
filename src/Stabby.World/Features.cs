@@ -61,11 +61,13 @@ namespace Stabby.World
             return e;
         }
 
+        public const float BoulderFoot = 2f;
+
         float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
-        public float MinY => Math.Min(Ay, By) - R - H;
+        public float MinY => Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
         public float MaxY => Math.Max(Ay, By) + R + H;
         public float MinZ => Math.Min(Az, Bz) - R - Spread;
         public float MaxZ => Math.Max(Az, Bz) + R + Spread;
@@ -102,6 +104,13 @@ namespace Stabby.World
         }
 
         float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
+        {
+            if (Shape != Boulder) return Surface(x, y, z, qx, qy, qz, t);
+            float foot = Surface(x, y - qy, z, qx, 0f, qz, t);
+            return qy < 0f ? foot : Math.Max(foot, Surface(x, y, z, qx, qy, qz, t));
+        }
+
+        float Surface(float x, float y, float z, float qx, float qy, float qz, float t)
         {
             float dist = (float)Math.Sqrt(qx * qx + qy * qy + qz * qz);
             if (P > 0f) dist += R * Profile(t);

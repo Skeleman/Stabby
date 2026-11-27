@@ -1158,11 +1158,19 @@ namespace Stabby.Game
             public int Steam, Pools;
             public LoadTimes Times;
 
+            readonly List<(MeshParts, int, bool)> queued = new List<(MeshParts, int, bool)>();
+
             public void Add(MeshParts part, BatchMaterialID mat, float pad, bool cast, bool lean = false)
             {
                 if (part == null) return;
-                Pack.Add(part, Kinds.Count, lean);
+                queued.Add((part, Kinds.Count, lean));
                 Kinds.Add((mat, pad, cast));
+            }
+
+            public void Flush()
+            {
+                Pack.Add(queued);
+                queued.Clear();
             }
 
             public void Dispose()
@@ -1915,6 +1923,7 @@ namespace Stabby.Game
             try
             {
                 fill(sp);
+                sp.Flush();
                 sp.Batch = new MeshBatch(sp.Pack, true);
             }
             catch
