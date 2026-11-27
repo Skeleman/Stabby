@@ -621,6 +621,9 @@ public class ObjectTests
         }
         Assert.True(tall >= SeaStacks.MinStacks, $"{tall} tall stacks on the default world");
         Assert.True(arches > 0, "the default world holds a sea arch");
+        var loaded = WorldFile.Read(WorldFile.Write(w), Materials);
+        string Stacks(FeatureEdit[] list) => string.Join(" ", list.Where(e => e.Shape == FeatureEdit.SeaStack).Select(e => $"{e.Ax},{e.Az},{e.By}"));
+        Assert.Equal(Stacks(edits), Stacks(Features.Place(loaded, new TerrainDetail(loaded))));
     }
 
     [Fact]

@@ -45,7 +45,7 @@ namespace Stabby.Game.Editor
             {
                 float a = k * Mathf.PI / 16f, away = Mathf.Max(60f, 4f * s.R);
                 var e = new Vector3(mid.x + away * Mathf.Cos(a), 1.6f, mid.z + away * Mathf.Sin(a));
-                if (ground.HeightAt(e.x, e.z) > -1f || Blocked(ground, e, new Vector3(mid.x, 2f, mid.z))) continue;
+                if (ground.Surface(e.x, e.z) > -1f || Blocked(ground, e, new Vector3(mid.x, 2f, mid.z))) continue;
                 float score = al > 0f ? Mathf.Abs(Mathf.Cos(a) * ax + Mathf.Sin(a) * az) / al : 0f;
                 if (score > bestSea) { bestSea = score; sea = e; }
             }

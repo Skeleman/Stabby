@@ -5,12 +5,22 @@ namespace Stabby.World
 {
     public static class SeaStacks
     {
-        public const float MinOffM = 20f, MaxOffM = 200f, MaxDepthM = 50f, MinCliff = 0.5f, MaxBeach = 0.2f, ReliefM = 30f, ReliefReachM = 140f;
+        public const float MinOffM = 20f, MaxOffM = 200f, MaxDepthM = 50f, BeachM = 4f, CliffM = 15f, CliffReachM = 45f, ReliefM = 30f, ReliefReachM = 140f;
         public const float ClearM = 250f, CheckClearM = 150f, ClusterGapM = 3000f, SpreadM = 70f, SinkM = 4f;
         public const float MinD = 2.5f, MaxD = 12.5f, MinRise = 8f, MaxRise = 40f, StumpMaxRise = 4f, ArchChance = 0.7f;
         public const int MaxClusters = 4, MinStacks = 2, MaxStacks = 6, Tries = 8;
 
-        public static bool Beachy(GeneratedWorld w, int i) => !w.Sea[i] && w.Sketch.Beach[i] >= 0.5f && w.Sketch.Cliff[i] < MaxBeach;
+        public static bool Beachy(GeneratedWorld w, int i)
+        {
+            if (w.Sea[i] || w.Height[i] >= BeachM) return false;
+            int n = w.Config.Size, x = i % n, y = i / n;
+            for (int k = 0; k < 8; k++)
+            {
+                int u = x + Grid.DX[k], v = y + Grid.DY[k];
+                if (u >= 0 && v >= 0 && u < n && v < n && !w.Sea[v * n + u] && w.Height[v * n + u] >= 2f * BeachM) return false;
+            }
+            return true;
+        }
 
         public static bool Clear(GeneratedWorld w, float x, float z, float reachM)
         {
@@ -42,7 +52,7 @@ namespace Stabby.World
 
         public static void Place(GeneratedWorld w, TerrainDetail detail, List<FeatureEdit> list)
         {
-            if (w.Sketch == null || w.Water == null) return;
+            if (w.Water == null) return;
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
             var r = Rng.Stream(w.Config.Seed, "seastacks");
@@ -148,10 +158,13 @@ namespace Stabby.World
 
         static bool Steep(GeneratedWorld w, int s)
         {
-            int n = w.Config.Size;
             float cm = w.Config.CellMeters;
-            if (w.Sketch.Cliff[s] < MinCliff || Beachy(w, s)) return false;
-            int r = Math.Max(2, (int)Math.Ceiling(ReliefReachM / cm)), x = s % n, y = s / n;
+            return !Beachy(w, s) && Top(w, s, Math.Max(1, (int)Math.Ceiling(CliffReachM / cm))) >= CliffM && Top(w, s, Math.Max(2, (int)Math.Ceiling(ReliefReachM / cm))) >= ReliefM;
+        }
+
+        static float Top(GeneratedWorld w, int s, int r)
+        {
+            int n = w.Config.Size, x = s % n, y = s / n;
             float top = 0f;
             for (int v = Math.Max(0, y - r); v <= Math.Min(n - 1, y + r); v++)
                 for (int u = Math.Max(0, x - r); u <= Math.Min(n - 1, x + r); u++)
@@ -159,7 +172,7 @@ namespace Stabby.World
                     int i = v * n + u;
                     if (!w.Sea[i]) top = Math.Max(top, w.Height[i]);
                 }
-            return top >= ReliefM;
+            return top;
         }
 
         static float Off(int n, int a, int b)
