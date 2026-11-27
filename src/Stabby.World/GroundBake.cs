@@ -14,11 +14,13 @@ namespace Stabby.World
         public float Period;
         public RiverPiece[] Pieces;
         public int[] Start, Items;
+        public ushort[] Dunes;
+        public DuneSpec[] DuneSpecs;
     }
 
     public sealed class GroundBake
     {
-        public const int Format = 5, Sections = 6, Stored = 3;
+        public const int Format = 6, Sections = 6, Stored = 3;
 
         public ulong Key;
         public DetailArrays Detail;
@@ -62,7 +64,7 @@ namespace Stabby.World
                 {
                     case 0: o.Raw(Detail.Amp); break;
                     case 1: o.Raw(Detail.Offsets); break;
-                    case 2: o.Raw(Detail.Start); o.Raw(Detail.Items); o.Raw(Detail.Bands); o.Float(Detail.Period); o.Raw(Detail.Pieces); break;
+                    case 2: o.Raw(Detail.Start); o.Raw(Detail.Items); o.Raw(Detail.Bands); o.Float(Detail.Period); o.Raw(Detail.Pieces); o.Raw(Detail.Dunes); o.Raw(Detail.DuneSpecs); break;
                     case Stored: o.Raw(Field?.PlacedPack); break;
                     case 4: o.Raw(Field?.PlacedAt); o.Raw(Field?.PlacedRaw); o.Raw(Field?.PlacedSum); break;
                     default: Rest(o); break;
@@ -131,7 +133,7 @@ namespace Stabby.World
                     {
                         case 0: d.Amp = i.Raw<float>(); break;
                         case 1: d.Offsets = i.Raw<float>(); break;
-                        case 2: d.Start = i.Raw<int>(); d.Items = i.Raw<int>(); d.Bands = i.Raw<float>(); d.Period = i.Float(); d.Pieces = i.Raw<RiverPiece>(); break;
+                        case 2: d.Start = i.Raw<int>(); d.Items = i.Raw<int>(); d.Bands = i.Raw<float>(); d.Period = i.Float(); d.Pieces = i.Raw<RiverPiece>(); d.Dunes = i.Raw<ushort>(); d.DuneSpecs = i.Raw<DuneSpec>(); break;
                         case 4: placedAt = i.Raw<int>(); placedRaw = i.Raw<int>(); placedSum = i.Raw<ulong>(); break;
                         default: bake.Rest(i); break;
                     }
@@ -148,7 +150,7 @@ namespace Stabby.World
                 || placedAt != null && (bake.Field == null || !Ascending(placedAt, placedPack.Length) || placedRaw.Length != placedAt.Length - 1 || placedSum.Length != placedRaw.Length || Array.Exists(placedRaw, r => r < 0)))
                 throw new FormatException("ground bake placed objects do not fit their chunk table");
             if (bake.Field != null) { bake.Field.PlacedPack = placedPack; bake.Field.PlacedAt = placedAt; bake.Field.PlacedRaw = placedRaw; bake.Field.PlacedSum = placedSum; }
-            if (d.Amp == null || d.Offsets == null || d.Start == null || d.Items == null || d.Bands == null || d.Pieces == null || bake.Edits == null || bake.Caves == null || bake.Roads == null || bake.Brooks == null)
+            if (d.Amp == null || d.Offsets == null || d.Start == null || d.Items == null || d.Bands == null || d.Pieces == null || d.Dunes == null || d.DuneSpecs == null || bake.Edits == null || bake.Caves == null || bake.Roads == null || bake.Brooks == null)
                 throw new FormatException("ground bake is missing a section");
             return bake;
         }

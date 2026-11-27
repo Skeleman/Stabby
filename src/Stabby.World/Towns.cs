@@ -185,6 +185,7 @@ namespace Stabby.World
             }
             int b = w.Biome[Cell(z) * n + Cell(x)];
             if (b < 0 || !t.Biomes.Contains(w.BiomeIds[b])) return float.MaxValue;
+            if (detail.DuneNear(x - radius, z - radius, x + radius, z + radius)) return float.MaxValue;
             float y0 = GroundAt(detail, cm, x, z), lo = y0, hi = y0;
             for (int ring = 1; ring <= 2; ring++)
                 for (int k = 0; k < TownRing; k++)

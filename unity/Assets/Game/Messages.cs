@@ -57,6 +57,8 @@ namespace Stabby.Game
         public BlobArray<float> Height, Amp, Offset, Band;
         public BlobArray<int> PieceStart, PieceItems;
         public BlobArray<RiverPiece> Pieces;
+        public BlobArray<ushort> Dune;
+        public BlobArray<DuneSpec> DuneSpecs;
         public BlobArray<FeatureEdit> Edits;
         public BlobArray<int> EditStart, EditItems;
         public BlobArray<float2> CaveLight;
@@ -109,6 +111,8 @@ namespace Stabby.Game
             public int PieceStart(int cell) => Blob.Value.PieceStart[cell];
             public int PieceAt(int k) => Blob.Value.PieceItems[k];
             public RiverPiece Piece(int p) => Blob.Value.Pieces[p];
+            public int Dune(int i) => Blob.Value.Dune.Length == 0 ? 0 : Blob.Value.Dune[i];
+            public DuneSpec DuneRegion(int r) => Blob.Value.DuneSpecs[r];
         }
 
         public static GroundParts Fill(GeneratedWorld w)
@@ -147,6 +151,10 @@ namespace Stabby.Game
             for (int k = 0; k < c.IndexLength; k++) items[k] = c.PieceAt(k);
             var pieces = b.Allocate(ref root.Pieces, c.PieceCount);
             for (int p = 0; p < c.PieceCount; p++) pieces[p] = c.Piece(p);
+            var dune = b.Allocate(ref root.Dune, c.DuneCount);
+            for (int i = 0; i < c.DuneCount; i++) dune[i] = (ushort)c.Dune(i);
+            var specs = b.Allocate(ref root.DuneSpecs, c.SpecCount);
+            for (int r = 0; r < c.SpecCount; r++) specs[r] = c.DuneRegion(r);
             var e = b.Allocate(ref root.Edits, edits.Length);
             for (int i = 0; i < edits.Length; i++) e[i] = edits[i];
             EditGrid.Build(edits, n * c.CellMeters, out root.EditAcross, out var cellStart, out var cellItems);

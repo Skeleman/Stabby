@@ -90,7 +90,8 @@ namespace Stabby.World
 
         bool OasisAt(float x, float z, float r, float depth, List<float> keep, List<float> list)
         {
-            float probe = OasisReach(r, 0f, OasisSteadyM + OasisDipM + OasisTopM + OasisHeadM);
+            float probe = OasisReach(r, 0f, OasisSteadyM + OasisDipM + OasisTopM + OasisHeadM), reach = Math.Max(Math.Max(probe, OasisRiverM), r + OasisLipM);
+            if (detail.DuneNear(x - reach, z - reach, x + reach, z + reach)) return false;
             float low = GroundAt(detail, cm, x, z), high = low;
             for (int ring = 0; ring < 3; ring++)
                 for (int p = 0; p < 8; p++)
