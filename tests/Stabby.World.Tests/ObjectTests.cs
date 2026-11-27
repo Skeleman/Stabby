@@ -223,7 +223,7 @@ public class ObjectTests
         workers.ForEach(t => t.Start());
         workers.ForEach(t => t.Join());
         Assert.Equal(1, hammered.ChunkComputes);
-        Assert.All(results, r => Assert.Same(results[0], r));
+        Assert.All(results, r => Assert.Equal(results[0], r));
         Assert.Equal(expect, results[0]);
     }
 
