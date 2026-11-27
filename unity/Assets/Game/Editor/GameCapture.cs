@@ -1914,7 +1914,7 @@ namespace Stabby.Game.Editor
                 Vector3 eye, target;
                 if (shape == ObjectPart.Overlook && mode == 0) { eye = centre - across * 3.2f + along * 0.6f + Vector3.up * 3.4f; target = centre + across * 30f - Vector3.up * 9f; }
                 else if (shape == ObjectPart.Overlook) { eye = centre + along * 32f - across * 6f + Vector3.up * 10f; target = centre + across * 3f; }
-                else if (shape == ObjectPart.FallenTree && mode == 0) { eye = centre - across * 10f * u - along * 18f * u + Vector3.up * 3.5f * u; target = centre - along * 8f * u + Vector3.up * 1.6f * u; }
+                else if (shape == ObjectPart.FallenTree && mode == 0) { eye = centre - across * 7.15f * u - along * 12.9f * u + Vector3.up * 1.9f * u; target = centre - along * 7.6f * u - across * 4.3f * u + Vector3.up * 0.9f * u; }
                 else if (shape == ObjectPart.FallenTree) { eye = centre + along * 11.5f * u + Vector3.up * 1.3f * u; target = centre - along * 6f * u + Vector3.up * 1.1f * u; }
                 else if (mode == 0) { target = centre + across * focusZ * u + Vector3.up * 0.5f * u; eye = centre + (across * close.x + along * close.y) * close.z * u + Vector3.up * 1.7f; }
                 else { target = centre + Vector3.up * 0.6f * u; eye = centre + (across * 0.8f + along * 0.6f).normalized * 16f * u + Vector3.up * 6f * u; }
