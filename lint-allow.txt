@@ -60,3 +60,4 @@ LightPresenterSystem.capsTask yields a LightBudget.Caps value; nothing to releas
 ObjectColumnsSystem.fieldTask yields the managed ObjectField the GC frees; nothing to release
 ObjectViewSystem.atlasTask yields managed Color32 mips the GC frees; nothing to release
 ShadowViewSystem.spanTask yields a ShadowSpan value and a float; nothing to release
+WakePresenterSystem uploads the Burst-picked wake emitters to a managed GraphicsBuffer for the water shader

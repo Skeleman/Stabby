@@ -474,6 +474,78 @@ Shader "Stabby/Water"
                 return o;
             }
 
+            StructuredBuffer<float4> _StabbyWakes;
+            int _StabbyWakeCount;
+
+            float2 WakeAt(float2 p, float surfaceY, float t, float pace, float fp)
+            {
+                float h = 0, foam = 0;
+                for (int k = 0; k < _StabbyWakeCount; k++)
+                {
+                    float4 a = _StabbyWakes[2 * k], m = _StabbyWakes[2 * k + 1];
+                    float rad = a.w, sub = surfaceY - a.y;
+                    float s = length(m.xy), trail = 2 + 4 * min(s, 4);
+                    float2 rel = p - a.xz;
+                    float r2 = dot(rel, rel), reach = rad * 3 + trail * 1.5 + 1.5;
+                    [branch] if (m.w > 0 && sub > 0.02 && r2 < reach * reach)
+                    {
+                        float wet = m.w * smoothstep(0.02, 0.2, sub) * (1 - smoothstep(m.z, m.z + 0.8, sub));
+                        float r = sqrt(r2);
+                        float still = 1 - 0.7 * saturate(s * 0.8);
+                        float lip = (r - rad * 1.1) / (0.05 + 0.06 * rad);
+                        foam = max(foam, exp(-lip * lip) * saturate(0.2 + 0.6 * sin(atan2(rel.y, rel.x) * 9 + t * 2)) * wet * 0.7);
+                        float rings = 0;
+                        for (int n = 0; n < 3; n++)
+                        {
+                            float age = frac(t / 1.7 + n / 3.0 + k * 0.618);
+                            float rr = rad + age * 2.6 * pace;
+                            float wd = 0.08 + 0.12 * age;
+                            float d = (r - rr) / wd;
+                            rings += exp(-d * d) * sin(d * 2.4) * (1 - age) * (1 - age);
+                        }
+                        h += rings * 0.07 * still * wet * saturate(1.5 - fp * 5);
+                        [branch] if (s > 0.08)
+                        {
+                            float2 dir = m.xy / s, side = float2(dir.y, -dir.x);
+                            float ah = dot(rel, dir), bs = abs(dot(rel, side));
+                            float go = saturate(s * 1.2) * wet;
+                            float lam = clamp(6.283 * s * s / 9.81, 0.3, 2.2) * (0.6 + 0.4 * pace);
+                            float kw = 6.283 / lam;
+                            float bowA = (ah - 0.55 * rad) / (0.7 * rad + 0.1), bowB = bs / (1.1 * rad + 0.1);
+                            float bow = exp(-bowA * bowA - bowB * bowB);
+                            float sideA = ah / (1.2 * rad + 0.1), sideB = (bs - 1.15 * rad) / (0.35 * rad + 0.08);
+                            h += (bow - 0.6 * exp(-sideA * sideA - sideB * sideB)) * 0.11 * min(s, 3) * wet;
+                            float lead = (ah - 1.05 * rad) / (0.25 * rad + 0.05);
+                            foam = max(foam, exp(-lead * lead - bowB * bowB * 2) * saturate(s * 0.8) * wet * 0.8);
+                            float u = max(-ah + 0.4 * rad, 0);
+                            float spread = lerp(0.62, 0.36, saturate(s * 0.5));
+                            float da = bs - rad * 0.9 - u * spread;
+                            float decay = exp(-u / trail) * saturate(u / (rad + 0.2));
+                            float arm = exp(-(da * da) / (lam * lam * 0.6)) * cos(kw * (da * 1.3 + u * 0.45) - t * 0.6);
+                            float inside = smoothstep(0.3, -0.6 * lam, da);
+                            float trans = inside * cos(kw * u - t * 0.4) * 0.45;
+                            float fine = saturate(1.5 - fp * 3 / lam);
+                            h += (arm + trans) * decay * 0.08 * go * fine;
+                            foam = max(foam, smoothstep(0.55, 1, arm) * decay * exp(-u / (rad * 2 + 0.5)) * saturate(s * 0.6 - 0.1) * wet);
+                        }
+                    }
+                }
+                return float2(h, foam);
+            }
+
+            float2 Wakes(float2 xz, float surfaceY, float visc, float fp, out float foam)
+            {
+                foam = 0;
+                if (_StabbyWakeCount <= 0) return 0;
+                float pace = 1 - 0.8 * visc, t = _Time.y * pace;
+                float e = max(fp, 0.04);
+                float2 c = WakeAt(xz, surfaceY, t, pace, fp);
+                float hx = WakeAt(xz + float2(e, 0), surfaceY, t, pace, fp).x;
+                float hz = WakeAt(xz + float2(0, e), surfaceY, t, pace, fp).x;
+                foam = c.y * (1 - visc);
+                return float2(hx - c.x, hz - c.x) / e * (1 - 0.9 * visc);
+            }
+
             half4 Sheet(Varyings i, float3 v, float dist, float2 uv)
             {
                 float4 L0 = Mixed(i, 0), L1 = Mixed(i, 1), L2 = Mixed(i, 2), L3 = Mixed(i, 3), L4 = Mixed(i, 4), L5 = Mixed(i, 5), L6 = Mixed(i, 6), L7 = Mixed(i, 7);
@@ -605,7 +677,8 @@ Shader "Stabby/Water"
                     bub *= L5.z * saturate(2 - fp * 5);
                 }
                 g += swGrad;
-                g = g * (1 - visc) + bub.yz;
+                float wakeFoam;
+                g = g * (1 - visc) + bub.yz + Wakes(xz, i.positionWS.y, visc, fp, wakeFoam);
                 float3 n = normalize(float3(-g.x, 1, -g.y));
                 float streak = 0;
                 UNITY_BRANCH if (river && churn > 0.35)
@@ -751,6 +824,7 @@ Shader "Stabby/Water"
                     float ring = smoothstep(0.1, 0.6, pool) * churned * 0.55;
                     foam = max(foam, max(core, ring) * saturate(depth / PoolFeather));
                 }
+                foam = max(foam, wakeFoam);
                 foam *= 1 - max(visc, 0.9 * opacity);
                 c = lerp(c, l.color * 0.9 + sky * 0.2 + lg.diffuse * 0.9, foam * 0.7);
                 UNITY_BRANCH if (opacity > 0.01)
