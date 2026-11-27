@@ -106,7 +106,7 @@ namespace Stabby.World
             edits.RemoveAll(q => q.Shape == FeatureEdit.Speleothem && Underground.DripFault(ground, solid, Features.LatticeStepM, q, rock, 0, rock.Length, Underground.PassM) != null);
             near.AddRange(edits);
             var all = near.ToArray();
-            foreach (var e in edits) if (Underground.PathFault(detail, all, e) != null) return false;
+            foreach (var e in edits) if ((e.Shape == FeatureEdit.Cave && detail.HeightAt(e.Bx / cm, e.Bz / cm) < e.By + e.R) || Underground.PathFault(detail, all, e) != null) return false;
             foreach (var edge in g.Edges) if (Underground.Cramped(detail, all, g, edge) != null) return false;
             if (Underground.Unreached(detail, all, g) != null || !Fits(Width(detail, all, g))) return false;
             g.Tile = tile;

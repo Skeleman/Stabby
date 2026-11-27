@@ -154,7 +154,7 @@ namespace Stabby.Game
             for (int i = 0; i < edits.Length; i++) cl[i] = new float2(dark[2 * i], dark[2 * i + 1]);
             var rs = b.Allocate(ref root.Roads, roads.Length);
             for (int i = 0; i < roads.Length; i++) rs[i] = roads[i];
-            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Roads = roads, Brooks = CaveBrooks.Build(w, detail, edits, caves), Blob = b };
+            return new GroundParts { Detail = detail, Edits = edits, Discoveries = discoveries, Roads = roads, Brooks = CaveBrooks.Build(w, detail, edits, caves), Caves = caves, Blob = b };
         }
 
         public static BlobAssetReference<GroundData> Create(EntityManager em, BlobAssetReference<GroundData> blob)
@@ -217,6 +217,7 @@ namespace Stabby.Game
         public ObjectInstance[] Discoveries;
         public RoadSegment[] Roads;
         public CaveBrook[] Brooks;
+        public CaveGraph[] Caves;
         public BlobBuilder Blob;
     }
 

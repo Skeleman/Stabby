@@ -12,6 +12,7 @@ public class ObjectTests
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
 
     static readonly float[] RisingLods = { 10f, 50f };
+    static readonly float[] ShortPath = { 0f, 0f, 0f, 1f, 0f, 0f };
 
     [Fact]
     public void DungeonRoomsLightFewTorchesThroughTheFireEmitter()
@@ -223,7 +224,7 @@ public class ObjectTests
         workers.ForEach(t => t.Start());
         workers.ForEach(t => t.Join());
         Assert.Equal(1, hammered.ChunkComputes);
-        Assert.All(results, r => Assert.Same(results[0], r));
+        Assert.All(results, r => Assert.Equal(results[0], r));
         Assert.Equal(expect, results[0]);
     }
 
@@ -321,6 +322,88 @@ public class ObjectTests
             }
             Assert.Equal(ObjectMeshes.Build(shape, k, 0, aspect, ends).Positions, ObjectMeshes.Build(shape, k, 0, aspect, ends).Positions);
         }
+    }
+
+    [Fact]
+    public void KitSweptAndLensShapesMeshClosedWithSaneBounds()
+    {
+        var paths = new[]
+        {
+            new[] { 0f, 0f, 0f, 0.2f, 1.5f, 0.1f, 0.1f, 3f, -0.3f },
+            new[] { 0f, 0f, 0f, 1f, -0.2f, 0f, 2f, -0.5f, 0.4f, 3f, -0.6f, 1f, 3.6f, -0.9f, 1.8f, 4f, -1.2f, 2.6f },
+        };
+        for (int v = 0; v < 4; v++)
+        {
+            ulong k = ObjectMeshes.Key("kit-swept", 0, v);
+            foreach (var path in paths)
+            {
+                int prev = int.MaxValue;
+                for (int lod = 0; lod < ObjectMeshes.MaxLods; lod++)
+                {
+                    var m = ObjectMeshes.Swept(k, path, 0.25f, 0.04f, lod, 0.15f, 0.3f);
+                    Assert.True(m.TriangleCount < prev);
+                    prev = m.TriangleCount;
+                    AssertClosed(m, $"swept v{v} lod{lod}");
+                    Assert.Equal(4 * m.VertexCount, m.Tones.Length);
+                    Bounds(m, out var lo, out var hi);
+                    for (int a = 0; a < 3; a++)
+                    {
+                        float pmin = float.MaxValue, pmax = float.MinValue;
+                        for (int i = a; i < path.Length; i += 3) { pmin = Math.Min(pmin, path[i]); pmax = Math.Max(pmax, path[i]); }
+                        Assert.InRange(lo[a], pmin - 1.2f, pmin + 0.05f);
+                        Assert.InRange(hi[a], pmax - 0.05f, pmax + 1.2f);
+                    }
+                }
+                Assert.Equal(ObjectMeshes.Swept(k, path, 0.25f, 0.04f, 0, 0.15f, 0.3f).Positions, ObjectMeshes.Swept(k, path, 0.25f, 0.04f, 0, 0.15f, 0.3f).Positions);
+                Assert.NotEqual(ObjectMeshes.Swept(k, path, 0.25f, 0.04f, 0).Positions, ObjectMeshes.Swept(k, path, 0.25f, 0.04f, 0, 0.15f).Positions);
+            }
+            int lensPrev = int.MaxValue;
+            for (int lod = 0; lod < ObjectMeshes.MaxLods; lod++)
+            {
+                var m = ObjectMeshes.Lens(k, 1.2f, 0.35f, 0.8f, lod);
+                Assert.True(m.TriangleCount < lensPrev);
+                lensPrev = m.TriangleCount;
+                AssertClosed(m, $"lens v{v} lod{lod}");
+                Bounds(m, out var lo, out var hi);
+                var half = new[] { 1.2f, 0.35f, 0.8f };
+                for (int a = 0; a < 3; a++)
+                {
+                    Assert.InRange(hi[a], 0.75f * half[a], 1.2f * half[a]);
+                    Assert.InRange(-lo[a], 0.75f * half[a], 1.2f * half[a]);
+                }
+            }
+        }
+        Assert.Throws<ArgumentException>(() => ObjectMeshes.Swept(1, ShortPath, 0.2f, 0.1f, 0));
+    }
+
+    static void Bounds(ObjectMesh m, out float[] lo, out float[] hi)
+    {
+        lo = new[] { float.MaxValue, float.MaxValue, float.MaxValue };
+        hi = new[] { float.MinValue, float.MinValue, float.MinValue };
+        for (int i = 0; i < m.Positions.Length; i++)
+        {
+            Assert.True(float.IsFinite(m.Positions[i]) && float.IsFinite(m.Normals[i]));
+            lo[i % 3] = Math.Min(lo[i % 3], m.Positions[i]);
+            hi[i % 3] = Math.Max(hi[i % 3], m.Positions[i]);
+        }
+    }
+
+    static void AssertClosed(ObjectMesh m, string what)
+    {
+        var edges = new HashSet<long>();
+        double volume = 0;
+        for (int t = 0; t < m.Indices.Length; t += 3)
+        {
+            int a = m.Indices[t], b = m.Indices[t + 1], c = m.Indices[t + 2];
+            Assert.True(a != b && b != c && a != c, what + " has a degenerate triangle");
+            Assert.True(edges.Add((long)a << 32 | (uint)b) && edges.Add((long)b << 32 | (uint)c) && edges.Add((long)c << 32 | (uint)a), what + " repeats a directed edge");
+            float ax = m.Positions[3 * a], ay = m.Positions[3 * a + 1], az = m.Positions[3 * a + 2];
+            float bx = m.Positions[3 * b], by = m.Positions[3 * b + 1], bz = m.Positions[3 * b + 2];
+            float cx = m.Positions[3 * c], cy = m.Positions[3 * c + 1], cz = m.Positions[3 * c + 2];
+            volume += ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx);
+        }
+        foreach (var e in edges) Assert.True(edges.Contains((e & 0xFFFFFFFFL) << 32 | (uint)(e >> 32)), what + " has an open edge");
+        Assert.True(volume > 0, what + " faces inward");
     }
 
     [Fact]

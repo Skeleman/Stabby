@@ -48,6 +48,7 @@ namespace Stabby.World
                 case ObjectPart.WolfDen: WolfDen(l, key, Frame.Root(WolfU)); break;
                 case ObjectPart.Overlook: Overlook(l, key, Frame.Root(OverlookU)); break;
                 case ObjectPart.SaltTower: SaltTower(l, key, Frame.Root(SaltU)); break;
+                case ObjectPart.Bridge: Bridge(l, key, Frame.Root(BridgeU)); break;
                 case ObjectPart.WallTorch: WallTorch(l, key, Frame.Root(1 / 0.7f)); break;
             }
         }

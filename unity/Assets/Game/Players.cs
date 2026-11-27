@@ -163,7 +163,7 @@ namespace Stabby.Game
     public static class PlayerControls
     {
         public const float MouseDegPerCount = 0.12f, StickDegPerSecond = 170f, MinPitch = -15f, MaxPitch = 70f;
-        public const float Boom = 24f, BoomMin = 1.5f, BoomMargin = 0.6f, BoomEaseOut = 3f, Lift = 3.5f;
+        public const float Boom = 14f, BoomMin = 1.5f, BoomMargin = 0.6f, BoomEaseOut = 3f, Lift = 2.1f;
         const int BoomSamples = 48;
         public static float Yaw, Pitch = 20f, BoomNow = Boom;
         public static bool SprintOn, Released, Scripted, ScriptSprint, ScriptJump, ScriptSprintPress;

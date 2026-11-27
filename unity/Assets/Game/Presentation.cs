@@ -14,7 +14,7 @@ namespace Stabby.Game
     public partial class ClientViewSystem : SystemBase
     {
         static readonly Color[] Colors = { new Color(0.85f, 0.25f, 0.2f), new Color(0.2f, 0.45f, 0.9f), new Color(0.95f, 0.8f, 0.2f), new Color(0.3f, 0.75f, 0.35f) };
-        const float Scale = 1.5f;
+        const float Scale = 0.9f;
 
         Mesh mesh;
         Material[] materials;

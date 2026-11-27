@@ -13,6 +13,10 @@
   },
   "mud": { "surface": "#6e6152", "clay": "#9c8c74", "grey": "#8c897f", "roughness": 0.3 },
   "peat": { "wet": "#6e5b43", "dark": "#54432f", "fibre": "#8c7754", "roughness": 0.22 },
+  "wakes": {
+    "fadePixels": 4, "fullPixels": 12, "ringAmplitude": 1.2, "vAmplitude": 1, "normalStrength": 2,
+    "refSpeedMps": 1.6, "refSizeM": 1.2, "speedExponent": 0.5, "sizeExponent": 0.5, "maxGain": 3, "speedSmoothS": 0.25
+  },
   "liquids": [
     {
       "id": "water", "deepColor": "#1d3a4c", "shallowColor": "#5ec4c8", "filmColor": "#000000", "emissionColor": "#000000",
@@ -88,6 +92,15 @@
       "flowSpeed": 0.05, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 0, "opacity": 1, "viscosity": 0.95, "bubbles": 0.05, "film": 1, "emission": 3, "roughness": 0.45,
       "fall": { "spray": "shimmer", "speed": 0.1, "sheetOpacity": 1, "sprayColor": "#ffb070", "sprayAmount": 0.3, "froth": 0 }
+    },
+    {
+      "id": "quicksand", "deepColor": "#4c3816", "shallowColor": "#5e451c", "filmColor": "#8a6c3e", "emissionColor": "#000000",
+      "clarityM": 0.1, "shoreM": 0.04, "opaqueDepthM": 0, "foamWidthM": 0,
+      "waveScaleM": 6, "waveSpeed": 0.03, "waveStrength": 0.05,
+      "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
+      "flowSpeed": 0.05, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 1, "opacity": 1, "viscosity": 0.97, "groundTint": 0.9, "bubbles": 0, "film": 0.65, "emission": 0, "roughness": 0.02,
+      "fall": { "spray": "none", "speed": 0.1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 0, "froth": 0 }
     }
   ],
   "surface": {

@@ -26,6 +26,16 @@ public class RoadTests
     }
 
     [Fact]
+    public void BridgesRefuseDryAndOverlongSpans()
+    {
+        var (_, _, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
+        var dry = field.Roads().Where(s => s.Kind == RoadSegment.Dirt).OrderByDescending(s => (s.X1 - s.X0) * (s.X1 - s.X0) + (s.Z1 - s.Z0) * (s.Z1 - s.Z0)).First();
+        Assert.NotNull(field.BridgeFault(dry.X0, dry.Z0, dry.X1, dry.Z1, out _, out _, out _));
+        float far = TestWorlds.Objects.Roads.SpanM + 10f;
+        Assert.Equal("spans too far", field.BridgeFault(dry.X0, dry.Z0, dry.X0 + far, dry.Z0, out _, out _, out _));
+    }
+
+    [Fact]
     public void RoadTunnelsOnSeed2At1024AreWalkableAndMeetTheirRoads()
     {
         var (w, detail, _, _) = TestWorlds.Get(2, 1024);

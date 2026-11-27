@@ -192,7 +192,7 @@ namespace Stabby.Game.Editor
                 GameStatus.Lines["~bench far blades"] = GrassViewSystem.Counts();
                 GameStatus.Lines["~bench far shadows"] = ShadowBench(cam, "far", true);
                 GameStatus.HoldCamera = true;
-                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : only == "lightbudget" ? 540 : only == "waterlook" ? 550 : only == "lightreceivers" ? 560 : only == "firelight" ? 570 : only == "caves" ? 580 : only == "lightscale" ? 590 : only == "oceandetail" ? 600 : only == "waterlights" ? 610 : only == "creaturememory" ? 620 : only == "rigdump" ? 630 : only == "creatureskin" ? 640 : only == "cavemouth" ? 650 : only == "cavelights" ? 660 : only == "caveice" ? 670 : only == "dungeon" ? 680 : only == "dungeons" ? 690 : only == "mines" ? 700 : only == "dungeonlinks" ? 710 : only == "towns" ? 720 : only == "roads" ? 730 : only == "cavelava" ? 740 : only == "cavefalls" ? 750 : only == "overlook" ? 760 : only == "wallheads" ? 770 : only == "bones" ? 820 : only == "creaturesyoung" ? 900 : only == "boulder" ? 780 : only == "salttower" ? 800 : 1;
+                phase = only == "arch" ? 1 : only == "cliffs" ? 50 : only == "scale" ? 120 : only == "rock" ? 7 : only == "coast" ? 9 : only == "grass" ? 8 : only == "biomes" ? 9 : only == "beach" ? 40 : only == "forest" ? 60 : only == "river" ? 80 : only == "water" ? 140 : only == "structure" ? 24 : only == "floor" ? 26 + BiomeShots.Length : only == "inn" ? 160 : only == "discovery" ? 180 : only == "camp" ? 190 : only == "hermit" ? 230 : only == "shrine" ? 240 : only == "ruin" ? 260 : only == "spring" ? 270 : only == "vents" ? 320 : only == "bog" ? 330 : only == "mesas" ? 340 : only == "creatures" ? 200 : only == "creaturebench" ? 250 : only == "landforms" ? 220 : only == "creaturefar" ? 280 : only == "fastwalk" ? 290 : only == "species" ? 310 : only == "fairyring" ? 300 : only == "wolfden" ? 400 : only == "controls" ? 350 : only == "terrainfix" ? 360 : only == "rockbeds" ? 370 : only == "liquids" ? 380 : only == "watertint" ? 390 : only == "brainbench" ? 420 : only == "desires" ? 430 : only == "rivermouth" ? 440 : only == "waterfall" ? 450 : only == "siting" ? 460 : only == "shadowtiers" ? 470 : only == "sprayshadows" ? 480 : only == "farhills" ? 490 : only == "detail" ? 500 : only == "geyserpool" ? 510 : only == "daynight" ? 520 : only == "lightbudget" ? 540 : only == "waterlook" ? 550 : only == "lightreceivers" ? 560 : only == "firelight" ? 570 : only == "caves" ? 580 : only == "lightscale" ? 590 : only == "oceandetail" ? 600 : only == "waterlights" ? 610 : only == "creaturememory" ? 620 : only == "rigdump" ? 630 : only == "creatureskin" ? 640 : only == "cavemouth" ? 650 : only == "cavelights" ? 660 : only == "caveice" ? 670 : only == "dungeon" ? 680 : only == "dungeons" ? 690 : only == "mines" ? 700 : only == "dungeonlinks" ? 710 : only == "towns" ? 720 : only == "roads" ? 730 : only == "cavelava" ? 740 : only == "cavefalls" ? 750 : only == "overlook" ? 760 : only == "wallheads" ? 770 : only == "bones" ? 820 : only == "creaturesyoung" ? 900 : only == "boulder" ? 780 : only == "salttower" ? 800 : only == "fallsmist" ? 910 : only == "oceannormals" ? 920 : only == "fallsseam" ? 930 : only == "mouthedge" ? 940 : only == "cliffstripes" ? 950 : only == "wakes" ? 870 : only == "quicksand" ? 830 : only == "playtest" ? 970 : 1;
             }
             while (phase >= 160 && phase < 160 + InnShots.Length)
             {
@@ -396,6 +396,23 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
+            if (phase >= 830 && phase < 830 + QuicksandShots.Length)
+            {
+                string name = QuicksandShots[phase - 830];
+                if (wait == 0)
+                {
+                    if (!AimQuicksand(cam, phase - 830)) { GameStatus.Lines["~" + name] = "no quicksand patch placed"; phase++; }
+                    else { wait = 180; return; }
+                }
+                else
+                {
+                    if (--wait > 0 || Loading()) return;
+                    Shot(cam, null, "warmup");
+                    Shot(cam, dir, name);
+                    wait = 0;
+                    phase++;
+                }
+            }
             if (phase >= 340 && phase < 340 + MesaShots.Length)
             {
                 string name = MesaShots[phase - 340];
@@ -413,7 +430,7 @@ namespace Stabby.Game.Editor
                     phase++;
                 }
             }
-            if ((only == "arch" && phase > 1) || (only == "spring" && phase >= 270 + SpringShots.Length) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length) || (only == "wolfden" && phase >= 400 + DenShots.Length) || (only == "overlook" && phase >= 760 + OverlookShots.Length))
+            if ((only == "arch" && phase > 1) || (only == "spring" && phase >= 270 + SpringShots.Length) || (only == "vents" && phase >= 320 + VentShots.Length) || (only == "bog" && phase >= 330 + BogShots.Length) || (only == "quicksand" && phase >= 830 + QuicksandShots.Length) || (only == "mesas" && phase >= 340 + MesaShots.Length) || (only == "inn" && phase >= 160 + InnShots.Length) || (only == "discovery" && phase >= 180 + RingShots.Length) || (only == "camp" && phase >= 190 + CampShots.Length) || (only == "hermit" && phase >= 230 + HermitShots.Length) || (only == "shrine" && phase >= 240 + ShrineShots.Length) || (only == "ruin" && phase >= 260 + RuinShots.Length) || (only == "fairyring" && phase >= 300 + FairyShots.Length) || (only == "wolfden" && phase >= 400 + DenShots.Length) || (only == "overlook" && phase >= 760 + OverlookShots.Length))
             {
                 File.WriteAllText(Path.Combine(dir, "stats.txt"), Status());
                 Finish(0);
@@ -491,11 +508,18 @@ namespace Stabby.Game.Editor
             if (phase == 730) { if (job == null) job = RoadsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 820) { if (job == null) job = BonesTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 780) { if (job == null) job = BoulderTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 870) { if (job == null) job = WakesTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 970) { if (job == null) job = PlaytestTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 750) { if (job == null) job = CaveFallsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 770) { if (job == null) job = WallHeadsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 910) { if (job == null) job = FallsMistTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 900) { if (job == null) job = CreaturesYoung(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 920) { if (job == null) job = OceanNormalsTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 930) { if (job == null) job = FallsSeamTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 940) { if (job == null) job = MouthEdgeTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 740) { if (job == null) job = LavaCaveTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 710) { if (job == null) job = DungeonLinksTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
+            if (phase == 950) { if (job == null) job = CliffStripesTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 800) { if (job == null) job = SaltTowerTour(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 630) { if (job == null) job = RigDump(cam, dir); if (job.MoveNext()) return; File.WriteAllText(Path.Combine(dir, "stats.txt"), Status()); Finish(0); return; }
             if (phase == 50)
@@ -1831,6 +1855,36 @@ namespace Stabby.Game.Editor
                 eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(c - eye));
                 GameStatus.Lines["~aim " + BogShots[mode]] = $"bog pool r {r:F2} m depth {bogs[pick + 3] - bogs[pick + 4]:F2} m at {c.x:F0},{c.y:F1},{c.z:F0}, {bogs.Length / ObjectField.BogStride} pools";
+                return true;
+            }
+            return false;
+        }
+
+        static readonly string[] QuicksandShots = { "quicksand", "quicksand-wide" };
+
+        static bool AimQuicksand(Camera cam, int mode)
+        {
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                if (field == null) continue;
+                var sands = field.QuicksandPools();
+                int pick = -1;
+                float best = float.MaxValue;
+                for (int k = 0; k < sands.Length; k += ObjectField.BogStride)
+                {
+                    float score = new Vector2(sands[k] - home.x, sands[k + 1] - home.z).magnitude - 400f * sands[k + 2];
+                    if (score < best) { best = score; pick = k; }
+                }
+                if (pick < 0) return false;
+                var c = new Vector3(sands[pick], sands[pick + 3], sands[pick + 1]);
+                float r = sands[pick + 2];
+                var side = new Vector3(0.8f, 0, 0.6f);
+                var eye = c + side * (mode == 0 ? 1.8f : 5f) * r + Vector3.up * (mode == 0 ? 1.7f : 1.2f * r);
+                var ground = w.EntityManager.CreateEntityQuery(typeof(Ground)).GetSingleton<Ground>();
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.6f);
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(c - eye));
+                GameStatus.Lines["~aim " + QuicksandShots[mode]] = $"quicksand r {r:F2} m depth {sands[pick + 3] - sands[pick + 4]:F2} m at {c.x:F0},{c.y:F1},{c.z:F0}, {sands.Length / ObjectField.BogStride} patches";
                 return true;
             }
             return false;
