@@ -68,7 +68,9 @@ namespace Stabby.World
 
         public static List<string> Run(GeneratedWorld w) => Run(w, null, null);
 
-        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms)
+        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms) => Run(w, groups, ms, null);
+
+        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms, CreatureLibrary creatures)
         {
             var e = new List<string>();
             var clock = new GroupClock(groups, ms);
@@ -77,7 +79,7 @@ namespace Stabby.World
             if (clock.Start("biomes")) CheckBiomes(w, e);
             if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); }
             if (clock.Start("surface")) { CheckDetail(w, e); CheckNearField(w, e); CheckGeometry(w, e); }
-            CheckFeatures(w, e, clock);
+            CheckFeatures(w, e, clock, creatures);
             clock.Stop();
             return e;
         }
@@ -810,6 +812,16 @@ namespace Stabby.World
                 {
                     if (i != 0 && k != 0 && i != c.Cells && k != c.Cells && (i + k) % 7 != 0) continue;
                     int col = k * w + i;
+                    bool crossed = false;
+                    for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
+                    {
+                        if (!SurfaceNets.CrossingVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z, out float nx, out float ny, out float nz)) continue;
+                        crossed = true;
+                        int v = 6 * (f.ColumnBase(col) + j - f.ColumnStart(col));
+                        if (x != f.Verts[v] || y != f.Verts[v + 1] || z != f.Verts[v + 2]) return false;
+                        if (nx != f.Verts[v + 3] || ny != f.Verts[v + 4] || nz != f.Verts[v + 5]) return false;
+                    }
+                    if (crossed) continue;
                     for (int j = f.ColumnStart(col); j < f.ColumnEnd(col); j++)
                     {
                         int cell = SurfaceNets.CoarseVertex(cols, edits, c.StepM, c.X0 - 1 + i, j, c.Z0 - 1 + k, out float x, out float y, out float z, out float nx, out float ny, out float nz);
@@ -855,10 +867,10 @@ namespace Stabby.World
             return ix >= 0 && iz >= 0 && ix < n && iz < n ? iz * n + ix : -1;
         }
 
-        static void CheckFeatures(GeneratedWorld w, List<string> e, GroupClock clock)
+        static void CheckFeatures(GeneratedWorld w, List<string> e, GroupClock clock, CreatureLibrary creatures)
         {
-            bool surface = clock.Has("surface") || clock.Has("meshing"), caved = clock.Has("caves"), sited = clock.Has("sites"), objects = clock.Has("objects");
-            if (!surface && !caved && !sited && !objects) return;
+            bool surface = clock.Has("surface") || clock.Has("meshing"), caved = clock.Has("caves"), sited = clock.Has("sites"), objects = clock.Has("objects"), fed = creatures != null && clock.Has("creatures");
+            if (!surface && !caved && !sited && !objects && !fed) return;
             clock.Time("features");
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail, out var caves, out var sites, out var roads);
@@ -887,6 +899,11 @@ namespace Stabby.World
                 CheckCaveIce(w, edits, caves, e);
                 CheckCaveObsidian(w, edits, caves, e);
                 CheckCaveNormals(w, detail, grid, caves, e);
+            }
+            if (fed && clock.Start("creatures"))
+            {
+                var pooled = w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects, sites) : null;
+                e.AddRange(Creatures(w, creatures, detail, CreaturePlan.Pools(pooled, CaveBrooks.Build(w, detail, edits, caves))));
             }
             if (clock.Start("surface"))
             {
