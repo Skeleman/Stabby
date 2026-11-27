@@ -25,11 +25,18 @@ namespace Stabby.World
         public ObjectLibrary Objects;
         public CaveLibrary Caves;
         public WorldBake Bake;
+        public List<VolcanoSketch> Cones;
 
         public void SketchInBackground()
         {
             var c = Config;
-            var l = new Lazy<WorldSketch>(() => WorldSketch.Generate(c), LazyThreadSafetyMode.ExecutionAndPublication);
+            var cones = Cones;
+            var l = new Lazy<WorldSketch>(() =>
+            {
+                var s = WorldSketch.Generate(c);
+                if (cones != null) s.Volcanoes.AddRange(cones);
+                return s;
+            }, LazyThreadSafetyMode.ExecutionAndPublication);
             sketch = null;
             later = l;
             Task.Run(() => l.Value);
@@ -125,9 +132,10 @@ namespace Stabby.World
             Erosion.Run(c, sketch, materials, h, (rc, rh, rs) => (terrainOnly ? ClimateField.Uniform(rc, rh, rc.UniformRainMm) : ClimateField.Compute(rc, rh, rs)).PrecipitationMm);
             Erosion.FlattenTableland(c, sketch, h);
             Erosion.CarveLakes(c, sketch, h);
-            var early = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
-            Mesas.Raise(c, sketch, sea, h, early);
-            Glacial.Raise(c, sketch, sea, h, early);
+            var raw = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
+            Mesas.Raise(c, sketch, sea, h, raw);
+            Volcanoes.Raise(c, sketch, sea, h, raw, biomes);
+            Glacial.Raise(c, sketch, sea, h, raw);
             stage?.Invoke("erosion");
             var climate = terrainOnly ? ClimateField.Uniform(c, h, c.UniformRainMm) : ClimateField.Compute(c, h, sea);
             stage?.Invoke("climate");

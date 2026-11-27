@@ -77,7 +77,7 @@ namespace Stabby.World
             if (clock.Start("core")) CheckCore(w, e);
             if (clock.Start("hydrology")) CheckHydrology(w, e);
             if (clock.Start("biomes")) CheckBiomes(w, e);
-            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); CheckGlacial(w, e); }
+            if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); CheckVolcanoes(w, e); CheckGlacial(w, e); }
             if (clock.Start("surface")) { CheckDetail(w, e); CheckNearField(w, e); CheckGeometry(w, e); }
             CheckFeatures(w, e, clock, creatures);
             clock.Stop();
@@ -304,7 +304,7 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var hy = w.Water;
-            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false;
+            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false, centre = false;
             foreach (var s in hy.Rivers)
                 foreach (var f in s.Falls)
                 {
@@ -350,6 +350,12 @@ namespace Stabby.World
                                 break;
                             }
                         }
+                    for (int r = 2; !centre && r < runs.Count; r += 2)
+                    {
+                        if (runs[r - 1] >= 0 || runs[r] <= 0) continue;
+                        centre = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has a lip island across its channel: gap {runs[r - 1]:F1} to {runs[r]:F1} m off centre");
+                    }
                     for (int r = 2; !bare && r < runs.Count; r += 2)
                     {
                         float mid = 0.5f * (runs[r - 1] + runs[r]), back = IsleProbe * (runs[r] - runs[r - 1]);
@@ -957,6 +963,7 @@ namespace Stabby.World
                 if (field != null) CheckObjects(w, detail, grid, field, e);
                 CheckLandforms(w, edits, e);
                 CheckCenotes(w, detail, edits, field, e);
+                CheckSlotCanyons(w, detail, edits, field, e);
                 CheckArches(w, edits, e);
                 CheckSeaStacks(w, detail, edits, field, e);
                 if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
@@ -994,7 +1001,7 @@ namespace Stabby.World
                 seen[x.Shape] = true;
                 float minX = x.MinX, maxX = x.MaxX, minZ = x.MinZ, maxZ = x.MaxZ;
                 int tile = Features.TileOf(x, cm);
-                bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink || x.Shape == FeatureEdit.Vault || x.Shape == FeatureEdit.Mine;
+                bool cave = x.Shape == FeatureEdit.Cave || x.Shape == FeatureEdit.Sink || x.Shape == FeatureEdit.Vault || x.Shape == FeatureEdit.Mine || x.Shape == FeatureEdit.SlotCanyon;
                 float s = cave || x.Shape == FeatureEdit.Shaft ? NearField.NodeStep(0) : LatticeStepM;
                 var group = new List<FeatureEdit>();
                 foreach (var y in edits)
@@ -1022,7 +1029,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : x.Shape == FeatureEdit.Vault ? "dungeon vault" : x.Shape == FeatureEdit.Mine ? "mine" : x.Shape == FeatureEdit.SeaStack ? "sea stack" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : x.Shape == FeatureEdit.Vault ? "dungeon vault" : x.Shape == FeatureEdit.Mine ? "mine" : x.Shape == FeatureEdit.SeaStack ? "sea stack" : x.Shape == FeatureEdit.SlotCanyon ? "slot canyon" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -1148,6 +1155,83 @@ namespace Stabby.World
                     if (Math.Abs(px - ox - sx) > 1e-3f || Math.Abs(pz - oz - sz) > 1e-3f) { e.Add($"{at} talus walker is stopped at {px:F1},{py:F1},{pz:F1}"); return; }
                 }
                 if (py < rim - 2f) { e.Add($"{at} talus walker ends at {py:F1} m, below the rim at {rim:F1} m"); return; }
+            }
+        }
+
+        public static void CheckSlotCanyons(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, ObjectField field, List<string> e)
+        {
+            float cm = w.Config.CellMeters;
+            int n = w.Config.Size;
+            var ground = new DetailGround { Detail = detail };
+            var canyons = new List<List<FeatureEdit>>();
+            foreach (var c in edits)
+            {
+                if (c.Shape != FeatureEdit.SlotCanyon) continue;
+                if (canyons.Count == 0 || canyons[canyons.Count - 1][0].S != c.S) canyons.Add(new List<FeatureEdit>());
+                canyons[canyons.Count - 1].Add(c);
+            }
+            foreach (var g in canyons)
+            {
+                var mouth = g[g.Count - 1];
+                string at = $"slot canyon at {mouth.Bx:F0},{mouth.Bz:F0}";
+                float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+                foreach (var c in g)
+                {
+                    if (c.Kind != FeatureEdit.Carve) { e.Add(at + " adds solid"); return; }
+                    if (!(c.W >= SlotCanyons.CheckMinW && c.W <= SlotCanyons.CheckMaxW)) { e.Add($"{at} is {2f * c.W:F1} m wide, outside {2f * SlotCanyons.CheckMinW:F1}-{2f * SlotCanyons.CheckMaxW:F1} m"); return; }
+                    minX = Math.Min(minX, c.MinX); maxX = Math.Max(maxX, c.MaxX); minZ = Math.Min(minZ, c.MinZ); maxZ = Math.Max(maxZ, c.MaxZ);
+                    int i0 = Math.Max(0, (int)Math.Floor(c.MinX / cm)), i1 = Math.Min(n - 1, (int)Math.Ceiling(c.MaxX / cm));
+                    int j0 = Math.Max(0, (int)Math.Floor(c.MinZ / cm)), j1 = Math.Min(n - 1, (int)Math.Ceiling(c.MaxZ / cm));
+                    for (int j = j0; j <= j1; j++)
+                        for (int i = i0; i <= i1; i++)
+                            if (c.Under(i * cm, j * cm) && !Features.Dry(w, j * n + i)) { e.Add(at + " breaks into open water"); return; }
+                }
+                var near = new List<FeatureEdit>();
+                foreach (var y in edits)
+                {
+                    if (minX >= y.MaxX || maxX <= y.MinX || minZ >= y.MaxZ || maxZ <= y.MinZ) continue;
+                    if (y.Shape != FeatureEdit.Boulder && y.Shape != FeatureEdit.SlotCanyon)
+                        foreach (var c in g)
+                            if (c.MinX < y.MaxX && c.MaxX > y.MinX && c.MinZ < y.MaxZ && c.MaxZ > y.MinZ) { e.Add($"{at} overlaps a feature of shape {y.Shape}"); return; }
+                    near.Add(y);
+                }
+                var line = new List<float>();
+                for (int k = g.Count - 1; k >= 0; k--)
+                {
+                    var c = g[k];
+                    float ex = c.Ax - c.Bx, ez = c.Az - c.Bz, len = (float)Math.Sqrt(ex * ex + ez * ez), nx = ez / len, nz = -ex / len;
+                    int parts = Math.Max(1, (int)Math.Ceiling(len / WalkStride));
+                    for (int m = k == g.Count - 1 ? 0 : 1; m <= parts; m++)
+                    {
+                        float t = (float)m / parts, ax = c.Bx + ex * t, az = c.Bz + ez * t, sway = c.SlotSway(ax, az);
+                        sway = c.SlotSway(ax + nx * sway, az + nz * sway);
+                        line.Add(ax + nx * sway);
+                        line.Add(az + nz * sway);
+                    }
+                }
+                if (field != null)
+                    for (int k = 0; k < line.Count; k += 16)
+                        if (field.OnRoad(line[k], line[k + 1], mouth.W) || field.InTownGround(line[k], line[k + 1], mouth.W, false)) { e.Add($"{at} crosses a road or town at {line[k]:F0},{line[k + 1]:F0}"); return; }
+                var list = new EditArray { Items = near.ToArray() };
+                float ox = mouth.Bx - mouth.Ax, oz = mouth.Bz - mouth.Az, ol = (float)Math.Sqrt(ox * ox + oz * oz);
+                float px = mouth.Bx + ox / ol * SlotCanyons.OpenM, pz = mouth.Bz + oz / ol * SlotCanyons.OpenM;
+                float py = Walk.Surface(ground, list, Features.LatticeStepM, px, pz, mouth.T + 10f, mouth.By - 10f);
+                if (float.IsNaN(py) || float.IsNegativeInfinity(py)) { e.Add(at + " has no open ground at its mouth"); return; }
+                if (py - mouth.By > SlotCanyons.OpenRiseM + SlotCanyons.MouthCut + 1f || mouth.By - py > SlotCanyons.OpenDrop * SlotCanyons.OpenM + 1f) { e.Add($"{at} mouth floor at {mouth.By:F1} m misses the open ground at {py:F1} m"); return; }
+                float fall = Walk.FallSpeed * WalkStride / 6f;
+                int steps = (int)Math.Ceiling(SlotCanyons.OpenM / WalkStride);
+                for (int k = 0; k <= steps + line.Count / 2 - 1; k++)
+                {
+                    float tx, tz;
+                    if (k < steps) { float f = 1f - (k + 1f) / steps; tx = line[0] + ox / ol * SlotCanyons.OpenM * f; tz = line[1] + oz / ol * SlotCanyons.OpenM * f; }
+                    else { tx = line[2 * (k - steps)]; tz = line[2 * (k - steps) + 1]; }
+                    float sx = tx - px, sz = tz - pz, bx = px, bz = pz;
+                    if (sx * sx + sz * sz < 1e-8f) continue;
+                    Walk.Step(ground, list, Features.LatticeStepM, ref px, ref py, ref pz, sx, sz, fall);
+                    if (Math.Abs(px - bx - sx) > 1e-3f || Math.Abs(pz - bz - sz) > 1e-3f) { e.Add($"{at} floor walker is stopped at {px:F1},{py:F1},{pz:F1}"); return; }
+                }
+                float head = g[0].SlotFloor(px, pz);
+                if (Math.Abs(py - head) > 1.5f) { e.Add($"{at} floor walker ends at {py:F1} m, off the head floor at {head:F1} m"); return; }
             }
         }
 

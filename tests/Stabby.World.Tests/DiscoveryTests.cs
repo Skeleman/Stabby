@@ -9,6 +9,7 @@ public class DiscoveryTests
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
     static readonly ObjectLibrary Objects = ContentLoader.LoadObjects(Root, Biomes.Select(b => b.Id).ToList());
+    const ulong VolcanoSeed = 16;
     readonly ITestOutputHelper output;
 
     public DiscoveryTests(ITestOutputHelper output) => this.output = output;
@@ -290,6 +291,21 @@ public class DiscoveryTests
             foreach (var o in all.Where(o => o.Def != mon))
                 Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
         }
+    }
+
+    [Fact]
+    public void VolcanoHoldsACraterPoolBelowItsRim()
+    {
+        var p = TestWorlds.Place(VolcanoSeed);
+        Assert.NotEmpty(p.W.Sketch.Volcanoes);
+        Assert.Equal(p.W.Sketch.Volcanoes.Count, p.Field.VolcanoPools().Length);
+        Assert.Empty(WorldChecks.VolcanoFaults(p.W, p.Field));
+        var loaded = WorldFile.Read(WorldFile.Write(WorldFile.Read(WorldFile.Write(p.W), p.W.Materials)), p.W.Materials);
+        loaded.Objects = Objects;
+        loaded.SketchInBackground();
+        var detail = new TerrainDetail(loaded);
+        var field = new ObjectField(loaded, detail, Features.Place(loaded, detail), Objects);
+        Assert.Equal(p.Field.VolcanoPools().Select(q => q.Level), field.VolcanoPools().Select(q => q.Level));
     }
 
     [Fact]

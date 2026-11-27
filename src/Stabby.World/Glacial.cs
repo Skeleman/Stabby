@@ -219,6 +219,11 @@ namespace Stabby.World
                 float bx = b.X - m.X, bz = b.Z - m.Z, gap = reach + Mesas.Extent(b) + LandmarkClearM;
                 if (bx * bx + bz * bz < gap * gap) return false;
             }
+            foreach (var v in s.Volcanoes)
+            {
+                float vx = v.X - m.X, vz = v.Z - m.Z, gap = reach + v.Ro + LandmarkClearM;
+                if (vx * vx + vz * vz < gap * gap) return false;
+            }
             int step = Math.Max(1, (int)Math.Round(20f / cm)), span = Math.Max(1, (int)Math.Round(CliffSpanM / cm));
             float cliff = CliffSlope * span * cm;
             float lo = float.MaxValue, hi = float.MinValue;

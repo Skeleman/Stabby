@@ -652,6 +652,30 @@ public class ObjectTests
     }
 
     [Fact]
+    public void SlotCanyonsWalkFromMouthToHead()
+    {
+        var (w, detail, edits, field) = TestWorlds.Get(TestWorlds.DefaultSeed, TestWorlds.DefaultSize);
+        var canyons = edits.Where(e => e.Shape == FeatureEdit.SlotCanyon).GroupBy(e => e.S).ToList();
+        Assert.InRange(canyons.Count, 1, 3);
+        foreach (var g in canyons)
+        {
+            float len = 0f, deep = 0f;
+            foreach (var e in g)
+            {
+                Assert.Equal(FeatureEdit.Carve, e.Kind);
+                Assert.InRange(2f * e.W, 2f * SlotCanyons.MinW, 2f * SlotCanyons.MaxW);
+                len += MathF.Sqrt((e.Bx - e.Ax) * (e.Bx - e.Ax) + (e.Bz - e.Az) * (e.Bz - e.Az));
+                deep = MathF.Max(deep, e.P - e.Ay);
+            }
+            Assert.InRange(len, SlotCanyons.MinLen, SlotCanyons.MaxLen);
+            Assert.InRange(deep, SlotCanyons.MinDepth, SlotCanyons.MaxDepth + 1f);
+        }
+        var faults = new List<string>();
+        WorldChecks.CheckSlotCanyons(w, detail, edits, field, faults);
+        Assert.Empty(faults);
+    }
+
+    [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
         var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);

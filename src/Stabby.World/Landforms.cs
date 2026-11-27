@@ -125,7 +125,7 @@ namespace Stabby.World
                 if (dx * dx + dz * dz < ButteClearM * ButteClearM) return true;
             }
             foreach (var m in sketch.Mesas) if (Mesas.Dist(m, x, z) - reachM < Mesas.Toe(m, 0.8f)) return true;
-            return false;
+            return Volcanoes.Near(sketch, x, z) < reachM;
         }
 
         public static void Butte(GeneratedWorld w, TerrainDetail detail, StrataField strata, bool[] biomes, int tx, int ty, ref Rng r, List<FeatureEdit> output)
