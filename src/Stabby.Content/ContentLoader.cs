@@ -409,6 +409,17 @@ namespace Stabby.Content
                 lib.Towns.Add(town);
                 t.End();
             }
+            var roads = root.Object("roads");
+            if (roads != null)
+            {
+                var bridge = roads.Object("bridge");
+                if (bridge != null)
+                {
+                    lib.Roads = new RoadDef { BridgeObject = bridge.String("object", ""), SpanM = bridge.Float("spanM", 0), RiverM = bridge.Float("riverWidthM", 0), ClearM = bridge.Float("clearM", 0) };
+                    bridge.End();
+                }
+                roads.End();
+            }
             var terrain = root.Object("terrain");
             if (terrain != null)
             {

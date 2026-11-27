@@ -58,7 +58,7 @@ namespace Stabby.World
                 if (!seen[0] && (o.X < cx * span || o.X >= (cx + 1) * span || o.Z < cz * span || o.Z >= (cz + 1) * span)) Fail(0, " lies outside its chunk");
                 int gx = Math.Min(n - 1, (int)(o.X / cm + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / cm + 0.5f)), i = gz * n + gx;
                 float ground = ObjectField.GroundAt(detail, cm, o.X, o.Z);
-                if (!ObjectField.IsCave(def))
+                if (!ObjectField.IsCave(def) && def.Parts[0].Shape != ObjectPart.Bridge)
                 {
                     if (!seen[1] && w.Sea[i]) Fail(1, " stands in the sea");
                     int lake = w.Water.LakeId[i], site = def.Placement.Bank == null ? -1 : BankSites.Of(def.Placement.Bank);
@@ -170,7 +170,12 @@ namespace Stabby.World
             foreach (var s in segs)
             {
                 string at = $"road {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0}";
-                if (s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel)
+                if (s.Kind == RoadSegment.Bridge)
+                {
+                    string f = field.BridgeFault(s.X0, s.Z0, s.X1, s.Z1, out _, out _, out _);
+                    if (f != null) { e.Add($"bridge {s.X0:F0},{s.Z0:F0} to {s.X1:F0},{s.Z1:F0} {f}"); return; }
+                }
+                else if (s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel)
                 {
                     string f = field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford);
                     if (f != null) { e.Add($"{at} {f}"); return; }
@@ -188,7 +193,7 @@ namespace Stabby.World
             foreach (int c in chunks)
                 foreach (var o in field.Chunk(c % across, c / across))
                 {
-                    if (field.IsTownMember(o.Def) || defs[o.Def].Placement.Cave > 0) continue;
+                    if (field.IsTownMember(o.Def) || defs[o.Def].Placement.Cave > 0 || o.Def == field.BridgeDef()) continue;
                     if (field.OnRoad(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on a road"); return; }
                 }
             foreach (var s in field.Discoveries())
