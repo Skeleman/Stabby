@@ -105,12 +105,36 @@ namespace Stabby.World
 
         public const int SiteCheckLimit = 6;
 
+        sealed class DecodedChunks
+        {
+            readonly ObjectField field;
+            readonly Dictionary<int, ObjectInstance[]> seen = new Dictionary<int, ObjectInstance[]>();
+
+            public DecodedChunks(ObjectField field) => this.field = field;
+
+            public ObjectInstance[] Get(int cx, int cz)
+            {
+                int c = cz * field.ChunksAcross + cx;
+                if (!seen.TryGetValue(c, out var o)) seen[c] = o = field.Chunk(cx, cz);
+                return o;
+            }
+
+            public void Warm(List<int> chunks)
+            {
+                int across = field.ChunksAcross;
+                var got = new ObjectInstance[chunks.Count][];
+                Parallel.For(0, chunks.Count, k => got[k] = field.Chunk(chunks[k] % across, chunks[k] / across));
+                for (int k = 0; k < chunks.Count; k++) seen[chunks[k]] = got[k];
+            }
+        }
+
         static void CheckSites(GeneratedWorld w, TerrainDetail detail, EditGrid grid, ObjectField field, List<string> e)
         {
             int across = field.ChunksAcross, checkedSites = 0;
             float span = field.ChunkMeters;
             var columns = new List<ObjectColumn>();
             var dens = new List<FeatureEdit>();
+            var decoded = new DecodedChunks(field);
             for (int c = 0; c < across * across && checkedSites < SiteCheckLimit; c++)
                 foreach (var s in field.Sites(c % across, c / across))
                 {
@@ -125,7 +149,7 @@ namespace Stabby.World
                     int z0 = Math.Max(0, (int)((s.Z - reach) / span)), z1 = Math.Min(across - 1, (int)((s.Z + reach) / span));
                     for (int cz = z0; cz <= z1; cz++)
                         for (int cx = x0; cx <= x1; cx++)
-                            foreach (var o in field.Chunk(cx, cz))
+                            foreach (var o in decoded.Get(cx, cz))
                             {
                                 if (field.IsSite(o.Def) || w.Objects.Objects[o.Def].Kind == ObjectLibrary.Structure) continue;
                                 columns.Clear();
@@ -189,7 +213,8 @@ namespace Stabby.World
                     under.Add(Math.Min(across - 1, (int)(m.Z / span)) * across + Math.Min(across - 1, (int)(m.X / span)));
             }
             var chunks = new List<int>(under);
-            Parallel.For(0, chunks.Count, k => field.Chunk(chunks[k] % across, chunks[k] / across));
+            var decoded = new DecodedChunks(field);
+            decoded.Warm(chunks);
             foreach (var p in plans)
             {
                 var t = w.Objects.Towns[p.Town];
@@ -206,7 +231,7 @@ namespace Stabby.World
                         if (dx * dx + dz * dz < g * g) { e.Add($"{at}: {defs[m.Def].Id} and {defs[o.Def].Id} overlap"); return; }
                     }
                     int cx = Math.Min(across - 1, (int)(m.X / span)), cz = Math.Min(across - 1, (int)(m.Z / span));
-                    if (!Array.Exists(field.Chunk(cx, cz), o => o.Def == m.Def && o.X == m.X && o.Z == m.Z)) { e.Add($"{at}: {defs[m.Def].Id} at {m.X:F0},{m.Z:F0} is missing from its chunk"); return; }
+                    if (!Array.Exists(decoded.Get(cx, cz), o => o.Def == m.Def && o.X == m.X && o.Z == m.Z)) { e.Add($"{at}: {defs[m.Def].Id} at {m.X:F0},{m.Z:F0} is missing from its chunk"); return; }
                     if (Math.Sqrt((m.X - p.X) * (m.X - p.X) + (m.Z - p.Z) * (m.Z - p.Z)) + ra > p.Radius) { e.Add($"{at}: {defs[m.Def].Id} lies outside the town"); return; }
                 }
                 float water = field.TownWater(p.X, p.Z, t.WaterM);
@@ -226,7 +251,7 @@ namespace Stabby.World
                 int z0 = Math.Max(0, (int)((p.Z - p.Radius) / span)), z1 = Math.Min(across - 1, (int)((p.Z + p.Radius) / span));
                 for (int cz = z0; cz <= z1; cz++)
                     for (int cx = x0; cx <= x1; cx++)
-                        foreach (var o in field.Chunk(cx, cz))
+                        foreach (var o in decoded.Get(cx, cz))
                         {
                             if (field.IsTownMember(o.Def) || field.IsSite(o.Def) || defs[o.Def].Placement.Cave > 0) continue;
                             if (field.InTownGround(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size, defs[o.Def].Kind == ObjectLibrary.Structure)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on the ground of {at}"); return; }
