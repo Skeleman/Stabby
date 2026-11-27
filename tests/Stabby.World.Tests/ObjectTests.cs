@@ -575,6 +575,30 @@ public class ObjectTests
     }
 
     [Fact]
+    public void ButtesOnSeed2At1024StandAsFlatToppedSolidOnDryAridGround()
+    {
+        var (w, _, edits, _) = TestWorlds.Get(2, 1024);
+        int n = w.Config.Size, buttes = 0;
+        float cm = w.Config.CellMeters;
+        foreach (var e in edits)
+        {
+            if (e.Shape != FeatureEdit.Butte) continue;
+            buttes++;
+            Assert.Equal(FeatureEdit.Add, e.Kind);
+            int i = (int)(e.Az / cm) * n + (int)(e.Ax / cm);
+            Assert.Contains(w.BiomeIds[w.Biome[i]], Mesas.Biomes);
+            Assert.False(w.Sea[i] || w.Water.IsRiver[i] || w.Water.LakeId[i] >= 0);
+            float rise = e.By - e.Ay;
+            Assert.InRange(rise, Landforms.ButteMinRise, Landforms.ButteMaxRise);
+            Assert.True(e.Reach(e.Ax, 0.5f * (e.Ay + e.By), e.Az, out var mid) && mid < e.R, "butte core is solid");
+            Assert.False(e.Reach(e.Ax, e.By + FeatureEdit.ButteCapM + 1f, e.Az, out var top) && top < e.R, "butte cap stays below its top");
+            float rim = e.D * (1f + FeatureEdit.ButteLobe) + FeatureEdit.ButteFluteM + 1f;
+            Assert.False(e.Reach(e.Ax + rim, e.Ay + 0.9f * rise, e.Az, out var side) && side < e.R, "butte walls stand steep above the talus");
+        }
+        Assert.True(buttes > 0, "seed 2 at 1024 holds a butte; the 256 default has 90 m cells and no flat arid site, and this world is already built for the road tunnel test");
+    }
+
+    [Fact]
     public void LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects()
     {
         var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);

@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Shapes = 17;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Shapes = 18;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
@@ -67,8 +67,8 @@ namespace Stabby.World
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
-        public float MinY => Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
-        public float MaxY => Math.Max(Ay, By) + R + H;
+        public float MinY => Shape == Butte ? Ay - H - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
+        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Math.Max(Ay, By) + R + H;
         public float MinZ => Math.Min(Az, Bz) - R - Spread;
         public float MaxZ => Math.Max(Az, Bz) + R + Spread;
 
@@ -88,6 +88,7 @@ namespace Stabby.World
             floor = float.MaxValue;
             if (!Contains(x, y, z)) return false;
             if (Shape == Spring) return Basin(x, y, z, out dist);
+            if (Shape == Butte) return Mesa(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
@@ -102,6 +103,29 @@ namespace Stabby.World
             dist = Shell(x, y, z, qx, qy, qz, t);
             return dist < R;
         }
+
+        public const float ButteBand = 3f, ButteLobe = 0.14f, ButteLobeM = 24f, ButteFluteM = 1.4f, ButteGrooveM = 2.2f, ButteGrooveW = 2.6f, ButteCapM = 1.5f, ButteNotchM = 9f, ButteNotchIn = 14f, ButteRecess = 0.35f, ButteLumpM = 2.5f;
+
+        bool Mesa(float x, float y, float z, out float dist)
+        {
+            uint seed = Seed;
+            float px = x - Ax, pz = z - Az, rh = (float)Math.Sqrt(px * px + pz * pz), v = y - Ay;
+            float rim = D + D * ButteLobe * (2f * Value(seed, x / ButteLobeM, 0f, z / ButteLobeM) - 1f);
+            float notch = Smooth(0.58f, 0.72f, Value(seed ^ 0xA54FF53Au, x / 21f, 0f, z / 21f));
+            float rw = rim + ButteFluteM * (2f * Value(seed ^ 0x3C6EF372u, x / 5f, y / 28f, z / 5f) - 1f) - ButteGrooveM * (Groove(v - P) + Groove(v - T)) - ButteRecess * ButteNotchM * notch * Smooth(F, By - Ay, v), g = 0f;
+            if (v < F)
+            {
+                float u = (F - v) / F;
+                rw += N * u * u + ButteLumpM * u * (2f * Value(seed ^ 0x510E527Fu, x / 7f, y / 7f, z / 7f) - 1f);
+                g = 2f * N * u / F;
+            }
+            float top = By + ButteCapM * (2f * Value(seed ^ 0x6A09E667u, x / 40f, 0f, z / 40f) - 1f) - ButteNotchM * notch * Smooth(-ButteNotchIn, -2f, rh - rim);
+            float s = Math.Max((rh - rw) / (float)Math.Sqrt(1f + g * g), Math.Max(y - top, Ay - H - y));
+            dist = R + s;
+            return s < ButteBand;
+        }
+
+        static float Groove(float dv) => Math.Max(0f, 1f - Sq(dv / ButteGrooveW));
 
         float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
         {
@@ -661,11 +685,12 @@ namespace Stabby.World
             ulong rk = Rng.Stream(w.Config.Seed, "cave-rock").NextU64(), rd = Rng.Stream(w.Config.Seed, "cave-speleothems").NextU64(), rf = Rng.Stream(w.Config.Seed, "cave-flowstone").NextU64();
             ulong ru = Rng.Stream(w.Config.Seed, "undercuts").NextU64();
             ulong rw = Rng.Stream(w.Config.Seed, "cave-width").NextU64(), rp = Rng.Stream(w.Config.Seed, "cave-pools").NextU64(), rg = Rng.Stream(w.Config.Seed, "cave-crystal").NextU64(), ri = Rng.Stream(w.Config.Seed, "cave-ice").NextU64(), rv = Rng.Stream(w.Config.Seed, "cave-obsidian").NextU64();
-            ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64();
+            ulong rt = Rng.Stream(w.Config.Seed, "tors").NextU64(), rh = Rng.Stream(w.Config.Seed, "hoodoos").NextU64(), rb = Rng.Stream(w.Config.Seed, "buttes").NextU64();
             ulong rl = Rng.Stream(w.Config.Seed, "mesa-lips").NextU64(), rs = Rng.Stream(w.Config.Seed, "cave-skylights").NextU64();
             var lips = Landforms.BiomeMask(w, Mesas.Biomes);
             var tors = Landforms.BiomeMask(w, Landforms.TorBiomes);
             var hoodoos = Landforms.BiomeMask(w, Landforms.HoodooBiomes);
+            var buttes = Landforms.BiomeMask(w, Mesas.Biomes);
             int from = 0;
             var tile = new List<FeatureEdit>();
             for (int ty = 0; ty < tiles; ty++)
@@ -689,6 +714,10 @@ namespace Stabby.World
                     tile.Clear();
                     Undercut(w, detail, strata, tx, ty, ref r, tile);
                     if (tile.Count == 0 || !Overlaps(tile[0], list, from)) Keep(w, tile, list);
+                    r = new Rng(Rng.Mix(rb + t));
+                    tile.Clear();
+                    Landforms.Butte(w, detail, strata, buttes, tx, ty, ref r, tile);
+                    if (Landforms.Fits(tile, list, from)) Keep(w, tile, list);
                     r = new Rng(Rng.Mix(rt + t));
                     tile.Clear();
                     Landforms.Tor(w, detail, strata, tors, tx, ty, ref r, tile);

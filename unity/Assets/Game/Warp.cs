@@ -128,6 +128,7 @@ namespace Stabby.Game
             FeatureEdit.Arch => "arch",
             FeatureEdit.Tor => "tor",
             FeatureEdit.Hoodoo => "hoodoo",
+            FeatureEdit.Butte => "butte",
             FeatureEdit.Spring => "spring",
             FeatureEdit.Sink => "sinkhole",
             FeatureEdit.Bridge => "rock bridge",

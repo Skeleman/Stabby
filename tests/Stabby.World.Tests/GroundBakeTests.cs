@@ -9,7 +9,9 @@ public class GroundBakeTests
     static readonly Lazy<(GroundBake Bake, TerrainDetail Detail, byte[] File)> Baked = new(() =>
     {
         var w = TestWorlds.World(TestWorlds.DefaultSeed);
-        var g = GroundBake.Run(w, 77, true, out var detail, Every);
+        GroundBake g = null!;
+        TerrainDetail detail = null!;
+        Parallel.Invoke(() => g = GroundBake.Run(w, 77, true, out detail, Every), () => _ = TestWorlds.Default);
         return (g, detail, WorldFile.Write(w, 9, 5, g));
     });
 
@@ -43,7 +45,9 @@ public class GroundBakeTests
         var fresh = new ObjectField(w, detail, g.Edits, w.Objects, g.Discoveries);
         var adopted = new ObjectField(w, detail, g.Edits, w.Objects, g.Discoveries).Adopt(g.Field);
         int a = WorldChunks.Across(w.Config.Size);
-        for (int k = 0; k < a * a; k += Every) Near(fresh.Chunk(k % a, k / a), adopted.Chunk(k % a, k / a), fresh.ChunkMeters);
+        var want = new ObjectInstance[(a * a + Every - 1) / Every][];
+        Parallel.For(0, want.Length, i => want[i] = fresh.Chunk(i * Every % a, i * Every / a));
+        for (int k = 0; k < a * a; k += Every) Near(want[k / Every], adopted.Chunk(k % a, k / a), fresh.ChunkMeters);
         Assert.Equal(0, adopted.ChunkComputes);
         Assert.Equal(fresh.Roads(), adopted.Roads());
         Assert.Equal(fresh.BogPools(), adopted.BogPools());
