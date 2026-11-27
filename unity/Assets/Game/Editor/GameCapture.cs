@@ -2681,7 +2681,7 @@ namespace Stabby.Game.Editor
                     float slope = (r.Surface[k - 3] - r.Surface[k + 3]) / ((la + lb) * cm);
                     var p = new Vector3(r.X[k] * cm, r.Surface[k], r.Y[k] * cm);
                     float d = (new Vector2(p.x, p.z) - new Vector2(home.x, home.z)).sqrMagnitude;
-                    int pick = r.Width[k] >= 12f && bend >= 0.12f ? 0 : r.Width[k] >= 5f && slope >= 0.05f && r.Surface[k] >= 25f ? 1 : -1;
+                    int pick = r.Width[k] >= 12f && bend >= 0.12f && r.Surface[k] >= 5f ? 0 : r.Width[k] >= 5f && slope >= 0.05f && r.Surface[k] >= 25f ? 1 : -1;
                     float q = r.Discharge[k];
                     if (pick < 0 || q < flow[pick] || q == flow[pick] && d >= dist[pick]) continue;
                     flow[pick] = q; dist[pick] = d; spots[pick] = p; turns[pick] = turn; widths[pick] = r.Width[k];
@@ -3071,12 +3071,10 @@ namespace Stabby.Game.Editor
                 GameStatus.Line("terrain", out t);
                 GameStatus.Lines["~bench " + label + " sunk nodes"] = $"bench {label} sunk nodes drawn/hidden (ms, full): 1080p {sunk[0]:F2}/{sunk[1]:F2}, 4K {sunk[2]:F2}/{sunk[3]:F2}; {t}";
             }
-            var sun = Object.FindFirstObjectByType<Light>();
-            var keep = sun.transform.rotation;
             foreach (var (name, pos, rot) in lows)
             {
                 cam.transform.SetPositionAndRotation(pos, rot);
-                sun.transform.rotation = name == "rock" ? keep : Quaternion.Euler(name == "grass" ? 6f : 14f, rot.eulerAngles.y + (name == "grass" ? 160f : 100f), 0);
+                DayNightSystem.LightOverride = name == "rock" ? (Quaternion?)null : Quaternion.Euler(name == "grass" ? 6f : 14f, rot.eulerAngles.y + (name == "grass" ? 160f : 100f), 0);
                 for (var w = Settle(180); w.MoveNext();) yield return null;
                 string[] tags = name == "rock" ? new[] { "-nocast", "-cast", "-detailoff", "-nojoints" } : new[] { "-low-nocast", "-low", "-low-detailoff", "-low-nojoints" };
                 var rockB = Shader.GetGlobalVector("_StabbyRockB");
@@ -3093,7 +3091,7 @@ namespace Stabby.Game.Editor
                 Shader.SetGlobalFloat("_StabbyDetailOff", 0);
                 Shader.SetGlobalVector("_StabbyRockB", rockB);
             }
-            sun.transform.rotation = keep;
+            DayNightSystem.LightOverride = null;
             TerrainViewSystem.Casting = true;
         }
 
