@@ -688,7 +688,7 @@ namespace Stabby.Game
                 if (edge && LodStitch.Open(edits, p.Pos.x, p.Pos.z)) p.Pos.y = columns.At(p.Pos.x, p.Pos.z);
                 if (stitch)
                 {
-                    bool hit = LodStitch.Target(coarse, near, 2 * s, chunk.X0, chunk.Z0, m, i, j, k, out var t);
+                    bool hit = LodStitch.Target(coarse, near, 2 * s, chunk.X0, chunk.Z0, m, i, j, k, p.Pos.y, out var t);
                     float3 tp = hit ? new float3(t.X, t.Y, t.Z) : p.Pos, tn = hit ? new float3(t.NX, t.NY, t.NZ) : p.Normal;
                     p.StitchNormal = new half4(new float4(tn, 0));
                     p.Stitch = new float4(tp, bits);

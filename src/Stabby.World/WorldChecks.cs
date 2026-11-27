@@ -793,7 +793,7 @@ namespace Stabby.World
                                     float px = i == 0 ? x0 : i == m ? x1 : f.Verts[6 * v], py = f.Verts[6 * v + 1], pz = k == 0 ? z0 : k == m ? z1 : f.Verts[6 * v + 2];
                                     if (px < minX - reach || px > maxX + reach || pz < minZ - reach || pz > maxZ + reach) continue;
                                     if ((i == 0 || k == 0 || i == m || k == m) && LodStitch.Open(list, px, pz)) py = detail.Sample(px, pz);
-                                    if (!LodStitch.Target(coarse, near, 2 * s, c.X0, c.Z0, m, i, j, k, out var p)) continue;
+                                    if (!LodStitch.Target(coarse, near, 2 * s, c.X0, c.Z0, m, i, j, k, py, out var p)) continue;
                                     float dx = p.X - px, dy = p.Y - py, dz = p.Z - pz, d = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
                                     if (d > reach) { e.Add($"arch node {x0:F0},{z0:F0} at level {level} stitches vertex {px:F0},{py:F0},{pz:F0} {d:F0} m away to {p.X:F0},{p.Y:F0},{p.Z:F0}"); return; }
                                 }

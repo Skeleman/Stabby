@@ -14,7 +14,9 @@ namespace Stabby.World
 
     public static class LodStitch
     {
-        public static bool Target<TCols, TEdits>(TCols coarse, TEdits near, float s2, int x0, int z0, int m, int i, int j, int k, out StitchPoint p)
+        public const int StitchReachCells = 1;
+
+        public static bool Target<TCols, TEdits>(TCols coarse, TEdits near, float s2, int x0, int z0, int m, int i, int j, int k, float y, out StitchPoint p)
             where TCols : struct, ISurfaceField where TEdits : struct, IEditList
         {
             Axis(x0, i, m, s2, out int cx, out bool sx, out bool lx, out float ax);
@@ -26,7 +28,7 @@ namespace Stabby.World
                 p = Lerp(p, p1, Fraction(p.Z, p1.Z, az));
             }
             if (sz) p.Z = az;
-            return hit;
+            return hit && Math.Abs(p.Y - y) <= (StitchReachCells + 1) * s2;
         }
 
         public static bool Open<TEdits>(TEdits edits, float x, float z) where TEdits : struct, IEditList
@@ -73,11 +75,11 @@ namespace Stabby.World
         static bool Coarse<TCols, TEdits>(TCols coarse, TEdits near, float s2, int cx, int j, int cz, bool sx, float ax, bool sz, float az, out StitchPoint p)
             where TCols : struct, ISurfaceField where TEdits : struct, IEditList
         {
-            SurfaceNets.CoarseVertex(coarse, near, s2, cx, j, cz, out p.X, out p.Y, out p.Z, out p.NX, out p.NY, out p.NZ);
+            int cell = SurfaceNets.CoarseVertex(coarse, near, s2, cx, j, cz, out p.X, out p.Y, out p.Z, out p.NX, out p.NY, out p.NZ);
             if (sx) p.X = ax;
             if (sz) p.Z = az;
             if ((sx || sz) && Open(near, p.X, p.Z)) p.Y = coarse.At(p.X, p.Z);
-            return true;
+            return Math.Abs(cell - j) <= StitchReachCells;
         }
 
         static float Fraction(float a, float b, float t) => b != a ? Math.Max(0f, Math.Min(1f, (t - a) / (b - a))) : 0.5f;
