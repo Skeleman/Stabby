@@ -176,16 +176,16 @@ namespace Stabby.World
 
     public sealed class LiquidDef
     {
-        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 8, TintSlots = 3;
+        public const int SprayNone = 0, SprayMist = 1, SprayDust = 2, SprayShimmer = 3, Max = 16, TintSlots = 3;
         public static readonly string[] SprayNames = { "none", "mist", "dust", "shimmer" };
         public string Id;
         public List<string> Biomes = new List<string>();
         public uint DeepColor, ShallowColor, FilmColor, EmissionColor;
-        public float ClarityM, ShoreM, FoamWidthM;
+        public float ClarityM, ShoreM, FoamWidthM, OpaqueDepthM = 0.25f;
         public float WaveScaleM, WaveSpeed, WaveStrength;
         public float SwellScaleM, SwellStrength, LakeSwell;
         public float FlowSpeed, RapidsSlope, BedFieldM;
-        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness;
+        public float Silt, Opacity, Viscosity, Bubbles, Film, Emission, Roughness, GroundTint;
         public int Spray;
         public float FallSpeed, SheetOpacity, SprayAmount, Froth;
         public uint SprayColor;
@@ -459,6 +459,7 @@ namespace Stabby.World
                     if (lib.Liquid(n) != i) errors.Add($"liquids: duplicate id {n}");
                     if (!(w.ClarityM >= 0.1f && w.ClarityM <= 100)) errors.Add($"{n}.clarityM {w.ClarityM} outside 0.1..100");
                     if (!(w.ShoreM >= 0.01f && w.ShoreM <= 5)) errors.Add($"{n}.shoreM {w.ShoreM} outside 0.01..5");
+                    if (!(w.OpaqueDepthM >= 0 && w.OpaqueDepthM <= 5)) errors.Add($"{n}.opaqueDepthM {w.OpaqueDepthM} outside 0..5");
                     if (!(w.FoamWidthM >= 0 && w.FoamWidthM <= 50)) errors.Add($"{n}.foamWidthM {w.FoamWidthM} outside 0..50");
                     Len(errors, n + ".waveScaleM", w.WaveScaleM);
                     Len(errors, n + ".swellScaleM", w.SwellScaleM);
@@ -472,6 +473,7 @@ namespace Stabby.World
                     Amp(errors, n + ".silt", w.Silt);
                     Amp(errors, n + ".opacity", w.Opacity);
                     Amp(errors, n + ".viscosity", w.Viscosity);
+                    Amp(errors, n + ".groundTint", w.GroundTint);
                     Amp(errors, n + ".bubbles", w.Bubbles);
                     Amp(errors, n + ".film", w.Film);
                     if (!(w.Emission >= 0 && w.Emission <= 8)) errors.Add($"{n}.emission {w.Emission} outside 0..8");

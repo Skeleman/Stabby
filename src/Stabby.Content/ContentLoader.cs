@@ -295,12 +295,12 @@ namespace Stabby.Content
                 ShallowColor = Hex(e.String("shallowColor", ""), path, id + ".shallowColor"),
                 FilmColor = Hex(e.String("filmColor", ""), path, id + ".filmColor"),
                 EmissionColor = Hex(e.String("emissionColor", ""), path, id + ".emissionColor"),
-                ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0),
+                ClarityM = e.Float("clarityM", 0), ShoreM = e.Float("shoreM", 0), FoamWidthM = e.Float("foamWidthM", 0), OpaqueDepthM = e.Float("opaqueDepthM", 0.25f),
                 WaveScaleM = e.Float("waveScaleM", 0), WaveSpeed = e.Float("waveSpeed", 0), WaveStrength = e.Float("waveStrength", 0),
                 SwellScaleM = e.Float("swellScaleM", 0), SwellStrength = e.Float("swellStrength", 0), LakeSwell = e.Float("lakeSwell", 0),
                 FlowSpeed = e.Float("flowSpeed", 0), RapidsSlope = e.Float("rapidsSlope", 0), BedFieldM = e.Float("bedFieldM", 0),
                 Silt = e.Float("silt", 0), Opacity = e.Float("opacity", 0), Viscosity = e.Float("viscosity", 0), Bubbles = e.Float("bubbles", 0),
-                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0),
+                Film = e.Float("film", 0), Emission = e.Float("emission", 0), Roughness = e.Float("roughness", 0), GroundTint = e.Float("groundTint", 0),
                 Biomes = e.Strings("biomes", new List<string>()),
             };
             var f = e.Object("fall");

@@ -46,6 +46,13 @@ namespace Stabby.World
                 float top = b[k + 5] + BogHeadM;
                 list.Add(Pool(BogPool, peat, b[k], b[k + 1], BogReach(b[k + 2], b[k + 3], top), b[k + 3], b[k + 4] - BogHeadM, top));
             }
+            var q = QuicksandPools();
+            int sand = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("quicksand"));
+            for (int k = 0; k < q.Length; k += BogStride)
+            {
+                float top = q[k + 5] + BogHeadM;
+                list.Add(Pool(QuicksandPool, sand, q[k], q[k + 1], BogReach(q[k + 2], q[k + 3], top), q[k + 3], q[k + 4] - BogHeadM, top));
+            }
             list.AddRange(CavePools());
             return list.ToArray();
         }
@@ -72,7 +79,7 @@ namespace Stabby.World
             int ci = Math.Max(0, Math.Min(nx - 1, (int)Math.Round(x / PoolStepM) - i0)), cj = Math.Max(0, Math.Min(nz - 1, (int)Math.Round(z / PoolStepM) - j0));
             p.Centre = cj * nx + ci;
             p.Rim = Spill(p.Ground, nx, nz, p.Centre);
-            p.Level = Math.Min(designed, p.Rim - PoolGapM);
+            p.Level = Math.Min(designed, p.Rim - (kind == QuicksandPool ? QuicksandGapM : PoolGapM));
             Flood(p);
             return p;
         }

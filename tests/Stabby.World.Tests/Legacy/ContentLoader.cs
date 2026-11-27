@@ -114,9 +114,11 @@ public static class ContentLoader
         public float Film { get; set; }
         public float Emission { get; set; }
         public float Roughness { get; set; }
+        public float GroundTint { get; set; }
         public FallEntry? Fall { get; set; }
         public float ClarityM { get; set; }
         public float ShoreM { get; set; }
+        public float OpaqueDepthM { get; set; } = 0.25f;
         public float FoamWidthM { get; set; }
         public float WaveScaleM { get; set; }
         public float WaveSpeed { get; set; }
@@ -302,11 +304,11 @@ public static class ContentLoader
         Id = e.Id,
         DeepColor = Hex(e.DeepColor, path, e.Id + ".deepColor"), ShallowColor = Hex(e.ShallowColor, path, e.Id + ".shallowColor"),
         FilmColor = Hex(e.FilmColor, path, e.Id + ".filmColor"), EmissionColor = Hex(e.EmissionColor, path, e.Id + ".emissionColor"),
-        Silt = e.Silt, Opacity = e.Opacity, Viscosity = e.Viscosity, Bubbles = e.Bubbles, Film = e.Film, Emission = e.Emission, Roughness = e.Roughness,
+        Silt = e.Silt, Opacity = e.Opacity, Viscosity = e.Viscosity, Bubbles = e.Bubbles, Film = e.Film, Emission = e.Emission, Roughness = e.Roughness, GroundTint = e.GroundTint,
         Spray = e.Fall == null ? -1 : Array.IndexOf(LiquidDef.SprayNames, e.Fall.Spray),
         FallSpeed = e.Fall?.Speed ?? 0, SheetOpacity = e.Fall?.SheetOpacity ?? 0,
         SprayColor = e.Fall == null ? 0 : Hex(e.Fall.SprayColor, path, e.Id + ".fall.sprayColor"), SprayAmount = e.Fall?.SprayAmount ?? 0, Froth = e.Fall?.Froth ?? 0,
-        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM,
+        ClarityM = e.ClarityM, ShoreM = e.ShoreM, FoamWidthM = e.FoamWidthM, OpaqueDepthM = e.OpaqueDepthM,
         WaveScaleM = e.WaveScaleM, WaveSpeed = e.WaveSpeed, WaveStrength = e.WaveStrength,
         SwellScaleM = e.SwellScaleM, SwellStrength = e.SwellStrength, LakeSwell = e.LakeSwell,
         FlowSpeed = e.FlowSpeed, RapidsSlope = e.RapidsSlope, BedFieldM = e.BedFieldM,
