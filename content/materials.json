@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "offsetAmplitudeM": 18,
   "offsetWavelengthM": 2400,
   "tiltPerKm": 6,
@@ -117,22 +117,22 @@
     "coats": {
       "grass": {
         "biomes": ["boreal", "steppe", "temperate-forest", "temperate-rain", "savanna", "tropical-forest", "wetland", "mangrove"],
-        "bumpAmp": 0.06, "bumpWavelengthM": 1.6,
+        "bumpAmp": 0.06,
         "featureAmp": 0.12, "featureWavelengthM": 0.8, "parallax": 0
       },
       "soil": {
         "biomes": ["shrubland", "alpine"],
-        "bumpAmp": 0.35, "bumpWavelengthM": 0.9, "grainAmp": 0.15,
+        "bumpAmp": 0.35, "grainAmp": 0.15,
         "featureAmp": 0.6, "featureWavelengthM": 0.22, "parallax": 1, "albedoVar": 0.1, "roughness": 0.9
       },
       "sand": {
         "biomes": ["desert", "cold-desert"],
-        "bumpAmp": 0.035, "bumpWavelengthM": 6,
+        "bumpAmp": 0.035,
         "featureAmp": 0.1, "featureWavelengthM": 0.32, "parallax": 0, "albedoVar": 0.06, "roughness": 0.92
       },
       "snow": {
         "biomes": ["tundra"],
-        "bumpAmp": 0.3, "bumpWavelengthM": 4,
+        "bumpAmp": 0.3,
         "featureAmp": 0.35, "featureWavelengthM": 1.2, "parallax": 0, "roughness": 0.6
       }
     }

@@ -2,7 +2,7 @@
 # Lane check: one call, summary lines only. Usage: check.sh [test-filter] [--no-unity] [--full|--merge]
 # Build, then tests, sweeps and the Unity compile at once; phases the diff cannot affect are skipped
 # (--full forces all; --merge forces all but sweeps only 25+5 seeds, and only when the diff can change
-# generation; daily.sh sweeps all). Tests follow tools/scripts/test-impact.txt; Category=Sweep tests skip
+# generation; daily.sh sweeps all). Tests run in full when the diff touches src/, tests/ or content/, else follow tools/scripts/test-impact.txt; Category=Sweep tests skip
 # when sweeps run, except TwentySeedsPassEveryCheck under --merge. Time budgets (budget.sh) warn; only a runaway fails. One check per machine at a time.
 # Exit 1 if anything fails. Logs in out/check/.
 # Without --full, sweeps run only the check groups tools/scripts/sweep-impact.txt maps the diff to.
@@ -69,6 +69,7 @@ impact() {
 explicit=0
 if [ $full = 1 ] || [ $merge = 1 ]; then tf=""
 elif [ -n "$1" ] && [[ "$1" != --* ]]; then tf="$1"; explicit=1
+elif has '^(src/|tests/|content/|Directory\.Build\.[a-z]+|[^/]+\.sln[x]?|global\.json|NuGet\.config|\.editorconfig|tools/scripts/(check|env)\.sh$)'; then tf=""
 else
   terms="Lint$(impact)"
   { [ $game = 1 ] || [ $unity = 1 ]; } && terms="$terms|ChunkZip|RuntimeParity|PoolSize"

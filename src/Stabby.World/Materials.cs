@@ -26,7 +26,7 @@ namespace Stabby.World
     {
         public string Id;
         public List<string> Biomes = new List<string>();
-        public float BumpAmp, BumpWavelengthM;
+        public float BumpAmp;
         public float GrainAmp;
         public float FeatureAmp, FeatureWavelengthM;
         public float Parallax, AlbedoVar, Roughness = float.NaN;
@@ -486,7 +486,6 @@ namespace Stabby.World
                     Amp(errors, n + ".featureAmp", c.FeatureAmp);
                     Amp(errors, n + ".albedoVar", c.AlbedoVar);
                     Amp(errors, n + ".roughness", c.Roughness);
-                    Len(errors, n + ".bumpWavelengthM", c.BumpWavelengthM);
                     Len(errors, n + ".featureWavelengthM", c.FeatureWavelengthM);
                     if (!(c.Parallax >= 0 && c.Parallax <= 2)) errors.Add($"{n}.parallax {c.Parallax} outside 0..2");
                 }

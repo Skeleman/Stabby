@@ -18,9 +18,11 @@ test CaveTests.ObsidianCavesFormInHotDryGroundWithLavaPools 10 builds the pinned
 test CaveTests.LavaPoolOnAPassageFails 10 reuses the pinned seed-13 world and moves its lava pool onto a passage
 test MineTests.MinesAreWalkableGridAlignedAndTimbered 20 carves mines on full worlds, walks each from its entrance and places its timber
 test MineTests.FloatingTimberIsCaught 2 checks a lifted timber fails on the cached default world, built by the class fixture
+test CreatureTests.HerdsCarryYoungLedByAnAdult 5 builds the shared creature pools once on the cached default world, built by the class fixture
 test DungeonLinkTests.LinksJoinDungeonsToWalkableDarkCaves 25 builds two worlds, checks their dungeon link caves and cave darkness
 test DungeonLinkTests.SurfacedOrStrayLinksAreCaught 12 builds one world and checks raised and moved link caves fail
 test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places boulders over a world and splits large ones into solid edits
+test ObjectTests.BouldersLeaveNoFootGapOnSeed1At2048 25 builds and places seed 1 at 2048 and checks every boulder foot
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
 test WorldFileTests.BakedWorldLoadsBackIdentical 14 bakes a world file and loads it back
@@ -43,6 +45,7 @@ test ObjectTests.SlotCanyonsWalkFromMouthToHead 5 walks the slot canyon on the d
 test TownTests.TownsPlaceTheirSitesAndPassTheCheck 40 plans and checks towns in three test worlds with a wide flat-ground search
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
 test WorldTests.MountainsCastRainShadows 12 generates twenty 256 worlds in parallel and compares windward and lee rain
+test WorldTests.SomeLargeRiversSplitIntoDeltas 5 generates twenty 256 worlds in parallel and checks their deltas; deltas form on only some seeds, so Default alone cannot cover them
 test CarvedMeshTests.SkipPathMatchesFullPathInLabyrinthChunks 10 meshes two labyrinth chunks on a 512 world both ways
 test WorldTests.SplitFallsKeepOrderedLipRunsInsideTheirSheet 6 generates seed 12, the nearest seed with split falls, and checks its lip runs
 test WorldTests.TerrainStageSkipsClimateAndBiomes 8 runs every check on a terrain-only world

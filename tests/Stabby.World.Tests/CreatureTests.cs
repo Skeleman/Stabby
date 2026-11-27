@@ -4,7 +4,7 @@ using Stabby.World;
 
 namespace Stabby.World.Tests;
 
-public class CreatureTests
+public class CreatureTests : IClassFixture<DefaultWorldFixture>
 {
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<string> BiomeIds = ContentLoader.LoadBiomes(Root).Select(b => b.Id).ToList();
@@ -156,7 +156,7 @@ public class CreatureTests
     [Fact]
     public void HerdsCarryYoungLedByAnAdult()
     {
-        var plan = CreaturePlan.Build(PlanWorld, Lib);
+        var plan = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
         var young = plan.Where(s => s.Lead >= 0).ToList();
         Assert.NotEmpty(young);
         Assert.Contains(young, s => Lib.Bodies[s.Body].Id == "deer");
@@ -170,9 +170,10 @@ public class CreatureTests
         Assert.Contains(e, m => m.Contains("young creature " + orphan.Id + " has no adult"));
     }
 
-    static readonly GeneratedWorld PlanWorld = TestWorlds.Default.W;
-    static readonly NearArrays PlanCells = TestWorlds.Default.Detail.Cells;
-    static readonly float[] PlanPools = Pools(TestWorlds.Default);
+    static GeneratedWorld PlanWorld => TestWorlds.Default.W;
+    static NearArrays PlanCells => TestWorlds.Default.Detail.Cells;
+    static float[] PlanPools => PoolsOnce.Value;
+    static readonly Lazy<float[]> PoolsOnce = new(() => Pools(TestWorlds.Default));
 
     static float[] Pools(TestWorlds.Placed p) =>
         CreaturePlan.Pools(new ObjectField(p.W, p.Detail, p.Edits, TestWorlds.Objects, p.Sites), CaveBrooks.Build(p.W, p.Detail, p.Edits, p.Graphs));
@@ -197,7 +198,7 @@ public class CreatureTests
     [Fact]
     public void SpawnPlanPassesWorldChecks()
     {
-        Assert.Empty(WorldChecks.Creatures(PlanWorld, Lib));
+        Assert.Empty(WorldChecks.Creatures(PlanWorld, Lib, TestWorlds.Default.Detail, PlanPools));
         var plan = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
         Assert.NotEmpty(plan);
         var deer = Lib.Body("deer")!;

@@ -68,15 +68,29 @@ namespace Stabby.World
                     else if (k > 0 && !w.Sea[i] && hy.LakeId[i] < 0)
                     {
                         float q = hy.DischargeM3s[i], joined = q > 0 ? Math.Max(0, q - hy.DischargeM3s[s.Cells[k - 1]]) / q : 0;
+                        if (k == 1 && q > 0 && hy.Deltas.Exists(d => d.Apex == s.Cells[0])) joined = Math.Min(1, SideInflow(w, i, s.Cells[0]) / q);
                         for (int t = 0; t < slots && !bad; t++)
                         {
                             float jump = Math.Abs(s.Mix[k][t] - s.Mix[k - 1][t]);
-                            if (jump > joined + TintTolerance) { e.Add($"river {s.Id} tint jumps {jump:F3} at point {k}, inflow allows {joined:F3}"); bad = true; }
+                            if (jump > joined + TintTolerance) { e.Add($"river {s.Id} tint jumps {jump:F3} at point {k},inflow allows {joined:F3}"); bad = true; }
                         }
                     }
                 }
                 if (bad) break;
             }
+        }
+
+        static float SideInflow(GeneratedWorld w, int i, int apex)
+        {
+            var hy = w.Water;
+            int n = w.Config.Size, x = i % n, y = i / n;
+            float sum = 0;
+            for (int k = 0; k < 8; k++)
+            {
+                int j = (y + Grid.DY[k]) * n + x + Grid.DX[k];
+                if (j != apex && !w.Sea[j] && hy.Receiver[j] == i) sum += hy.DischargeM3s[j];
+            }
+            return sum + Hydrology.Runoff(w.Config, w.Sea[i], w.Climate.PrecipitationMm[i]);
         }
 
         static bool Joins(GeneratedWorld w, RiverSegment s, int k)

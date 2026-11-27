@@ -60,7 +60,7 @@ int Gen()
     WriteFloats(Path.Combine(dir, "uplift.f32"), w.Sketch.Uplift);
     var m = Metrics(w, biomes, ms, violations);
     File.WriteAllText(Path.Combine(dir, "metrics.json"), JsonSerializer.Serialize(m, json));
-    Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");
+    Console.WriteLine($"seed {c.Seed}: {ms} ms, {m["lakes"]} lakes, {m["riverSegments"]} river reaches, {m["deltas"]} deltas ({m["distributaries"]} distributaries), {m["riverKm"]} km of river, peak {m["peakM"]} m, {violations.Count} violations -> {dir}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return violations.Count == 0 ? 0 : 1;
 }
@@ -256,7 +256,7 @@ Dictionary<string, object> Metrics(GeneratedWorld w, List<BiomeDef> defs, long m
         ["sketchLakes"] = w.Sketch.Lakes.Count, ["volcanoes"] = w.Sketch.Volcanoes.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Z:F0}")).ToArray(),
         ["peakM"] = MathF.Round(w.Height.Max()), ["lakes"] = w.Water.Lakes.Count,
         ["largestLakeKm2"] = MathF.Round(w.Water.Lakes.Select(l => l.Cells.Count).DefaultIfEmpty(0).Max() * w.Config.CellMeters * w.Config.CellMeters / 1e6f, 2),
-        ["riverSegments"] = w.Water.Rivers.Count, ["riverKm"] = MathF.Round(riverKm, 1),
+        ["riverSegments"] = w.Water.Rivers.Count, ["deltas"] = w.Water.Deltas.Count, ["distributaries"] = w.Water.Deltas.Sum(d => d.Heads.Count + 1), ["riverKm"] = MathF.Round(riverKm, 1),
         ["maxDischargeM3s"] = MathF.Round(w.Water.DischargeM3s.Where((q, i) => !w.Sea[i]).Max(), 1),
         ["biomePercent"] = shares.ToDictionary(kv => kv.Key, kv => MathF.Round(kv.Value, 1)),
         ["chunkSize"] = WorldChunks.Size, ["chunkChecksums"] = WorldChunks.Checksums(w).Select(s => s.ToString("x16", CultureInfo.InvariantCulture)).ToArray(),

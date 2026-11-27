@@ -356,7 +356,7 @@ namespace Stabby.World
             return bad > Math.Max(BoulderNormalFloor, BoulderNormalShare * steep) ? $" tilts {bad} of {steep} steep-face normals upward" : null;
         }
         public const int BoulderMeshSamples = 12, BoulderFootColumns = 12;
-        public const float BoulderFootStep = 0.08f, BoulderFootSkin = 0.05f;
+        public const float BoulderFootStep = 0.08f, BoulderFootSkin = 0.05f, BoulderFootRise = 2.25f;
 
         static void CheckBoulderFoot(TerrainDetail detail, float cm, FeatureEdit b, List<string> e)
         {
@@ -375,7 +375,7 @@ namespace Stabby.World
                 }
         }
 
-        static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        public static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
             var edits = grid.Edits;
             int n = w.Config.Size;
@@ -407,13 +407,18 @@ namespace Stabby.World
                 }
                 if (!chock) boulders.Add(q);
             }
+            int found = e.Count;
+            foreach (int q in boulders)
+            {
+                CheckBoulderFoot(detail, cm, edits[q], e);
+                if (e.Count > found) return;
+            }
             int samples = Math.Min(BoulderMeshSamples, boulders.Count);
             for (int k = 0; k < samples; k++)
             {
                 var b = edits[boulders[(int)((long)k * boulders.Count / samples)]];
                 int before = e.Count;
-                CheckBoulderFoot(detail, cm, b, e);
-                if (e.Count == before) CheckBoulderMesh(detail, grid, b, e);
+                CheckBoulderMesh(detail, grid, b, e);
                 if (e.Count == before) CheckBoulderFade(detail, grid, b, e);
                 if (e.Count > before) return;
             }
@@ -503,7 +508,11 @@ namespace Stabby.World
                 if (!(solid && open)) { e.Add(at + $" collision misses mesh vertex {vx:F1},{vy:F1},{vz:F1}"); return; }
             }
             if (Math.Abs(wy - top) > Walk.Probe) e.Add(at + $" walker stands at {wy:F2}, boulder top is {top:F2}");
-            if (Math.Abs(meshTop - top) > BoulderTolerance) e.Add(at + $" mesh top {meshTop:F2} misses boulder top {top:F2}");
+            float high = top;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                    foreach (var f in list.Items) high = Math.Max(high, TopAt(f, mx + dx * s, mz + dz * s));
+            if (meshTop < top - BoulderTolerance || meshTop > high + BoulderTolerance) e.Add(at + $" mesh top {meshTop:F2} misses boulder top {top:F2}");
         }
 
         static float TopAt(FeatureEdit f, float x, float z)

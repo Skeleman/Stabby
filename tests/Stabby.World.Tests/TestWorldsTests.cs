@@ -2,7 +2,7 @@ using Stabby.World;
 
 namespace Stabby.World.Tests;
 
-public class TestWorldsTests
+public class TestWorldsTests : IClassFixture<DefaultWorldFixture>
 {
     [Fact]
     public void DefaultHasCavesRiversTownInnDungeonAndMine()
@@ -11,7 +11,7 @@ public class TestWorldsTests
         var w = p.W;
         var f = p.Field;
         int inn = TestWorlds.Objects.Objects.FindIndex(o => o.Id == "inn");
-        int inns = Enumerable.Range(0, f.ChunksAcross * f.ChunksAcross).Sum(c => f.Chunk(c % f.ChunksAcross, c / f.ChunksAcross).Count(o => o.Def == inn));
+        int inns = Enumerable.Range(0, f.ChunksAcross * f.ChunksAcross).Where(c => f.Sites(c % f.ChunksAcross, c / f.ChunksAcross).Any(o => o.Def == inn)).Sum(c => f.Chunk(c % f.ChunksAcross, c / f.ChunksAcross).Count(o => o.Def == inn));
         Assert.True(p.Graphs.Any(g => !Mines.IsMine(g) && !DungeonLinks.IsLink(g)), "no natural cave");
         Assert.True(p.Graphs.Any(g => g.Class == "labyrinth"), "no labyrinth for CarvedMeshTests");
         Assert.True(w.Water.Rivers.Count > 0, "no river");

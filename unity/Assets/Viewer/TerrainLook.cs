@@ -374,7 +374,7 @@ namespace Stabby.Viewer
             for (int k = 0; k < d.Coats.Length; k++)
             {
                 var c = d.Coats[k];
-                coatA[k] = new Vector4(c.BumpAmp, 1f / c.BumpWavelengthM, c.GrainAmp, 0);
+                coatA[k] = new Vector4(c.BumpAmp, 0, c.GrainAmp, 0);
                 coatB[k] = new Vector4(c.FeatureAmp, 1f / c.FeatureWavelengthM, c.Parallax, c.AlbedoVar);
                 coatR[k] = c.Roughness;
             }
