@@ -10,6 +10,7 @@ namespace Stabby.Game.Editor
     public static partial class GameCapture
     {
         const float KitHour = 12f, KitMoon = 0.5f, KitGapM = 6f, KitFov = 50f;
+        const float KitMinRadius = 0.35f, KitTallM = 2f, KitCanopy = 0.4f;
         const int KitCellW = 640, KitCellH = 360, KitCols = 7;
 
         static bool KitUser(ObjectDef def)
@@ -26,13 +27,15 @@ namespace Stabby.Game.Editor
         {
             GameStatus.HoldCamera = true;
             ObjectLibrary lib = null;
+            ObjectField field = null;
             GeneratedWorld map = null;
             Ground ground = default;
             bool found = false;
             foreach (var w in Unity.Entities.World.All)
             {
                 if (w.Name != GameSettings.ViewClient) continue;
-                lib = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field?.Library;
+                field = w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+                lib = field?.Library;
                 map = w.GetExistingSystemManaged<ClientMapSystem>()?.Map;
                 var q = w.EntityManager.CreateEntityQuery(typeof(Ground));
                 if (q.CalculateEntityCount() == 1) { ground = q.GetSingleton<Ground>(); found = true; }
@@ -93,6 +96,7 @@ namespace Stabby.Game.Editor
                 placed.Add((id, wb));
                 x += b.size.x + KitGapM;
             }
+            var tall = KitOccluders(field, map, start, length);
             cam.fieldOfView = KitFov;
             for (var w = ShowHour(KitHour, KitMoon); w.MoveNext();) yield return null;
             var mid = new Vector3(start.x + 0.5f * length, 0.5f * (lo + hi), start.y);
@@ -108,14 +112,15 @@ namespace Stabby.Game.Editor
             sheet.SetPixels32(fill);
             var cell = new RenderTexture(KitCellW, KitCellH, 24);
             var order = new System.Text.StringBuilder();
-            var look = new Vector3(-0.55f, 0.42f, -0.72f).normalized;
             float half = Mathf.Sin(0.5f * KitFov * Mathf.Deg2Rad);
+            int moved = 0, blocked = 0;
             for (int k = 0; k < placed.Count; k++)
             {
                 var (id, b) = placed[k];
-                float rad = Mathf.Max(1.2f, b.extents.magnitude);
-                var eye = b.center + look * (rad / half);
-                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + 1.5f);
+                float rad = Mathf.Max(KitMinRadius, b.extents.magnitude);
+                var eye = KitEye(ground, tall, b.center, rad / half, out int view, out int hits);
+                if (view != 0) moved++;
+                if (hits > 0) blocked++;
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(b.center - eye));
                 for (var w = Settle(20); w.MoveNext();) yield return null;
                 Shot(cam, dir, "kit-" + id);
@@ -135,7 +140,54 @@ namespace Stabby.Game.Editor
             Object.DestroyImmediate(sheet);
             Object.Destroy(root);
             var sky = DayNightSystem.Shown;
-            GameStatus.Lines["~kit"] = $"kit: {placed.Count} kit and timber users in a {length:F0} m row from {start.x:F0},{start.y:F0}, ground {lo:F1}-{hi:F1} m, {tris} near triangles, hour {sky.Hour:F2} moon {sky.Phase:F2}, sheet {KitCols}x{rows}";
+            GameStatus.Lines["~kit"] = $"kit: {placed.Count} kit and timber users in a {length:F0} m row from {start.x:F0},{start.y:F0}, ground {lo:F1}-{hi:F1} m, {tall.Count} tall world objects, {moved} eyes moved off canopy, {blocked} still blocked, {tris} near triangles, hour {sky.Hour:F2} moon {sky.Phase:F2}, sheet {KitCols}x{rows}";
+        }
+
+        static List<Vector4> KitOccluders(ObjectField field, GeneratedWorld map, Vector2 start, float length)
+        {
+            var tall = new List<Vector4>();
+            var list = new List<ObjectInstance>();
+            float cm = field.ChunkMeters, pad = 40f;
+            int across = WorldChunks.Across(map.Config.Size);
+            int x0 = Mathf.Max(0, (int)((start.x - pad) / cm)), x1 = Mathf.Min(across - 1, (int)((start.x + length + pad) / cm));
+            int z0 = Mathf.Max(0, (int)((start.y - pad) / cm)), z1 = Mathf.Min(across - 1, (int)((start.y + pad) / cm));
+            for (int cz = z0; cz <= z1; cz++)
+                for (int cx = x0; cx <= x1; cx++)
+                {
+                    field.PlaceInto(cx, cz, list);
+                    foreach (var o in list)
+                        if (o.Size >= KitTallM) tall.Add(new Vector4(o.X, o.Y, o.Z, o.Size));
+                }
+            return tall;
+        }
+
+        static readonly Vector3[] KitLooks =
+        {
+            new Vector3(-0.55f, 0.42f, -0.72f), new Vector3(0.55f, 0.42f, -0.72f), new Vector3(-0.72f, 0.42f, 0.55f), new Vector3(0.72f, 0.42f, 0.55f),
+            new Vector3(0, 0.42f, -0.9f), new Vector3(-0.3f, 0.75f, -0.6f), new Vector3(0.3f, 0.75f, -0.6f), new Vector3(0, 0.95f, -0.3f),
+        };
+
+        static Vector3 KitEye(Ground ground, List<Vector4> tall, Vector3 at, float dist, out int view, out int hits)
+        {
+            view = 0; hits = int.MaxValue;
+            var best = at;
+            for (int k = 0; k < KitLooks.Length && hits > 0; k++)
+            {
+                var eye = at + KitLooks[k].normalized * dist;
+                eye.y = Mathf.Max(eye.y, ground.HeightAt(eye.x, eye.z) + Mathf.Min(1.5f, 0.3f + 0.5f * dist));
+                int h = 0;
+                for (int s = 0; s <= 16; s++)
+                {
+                    var p = Vector3.Lerp(eye, at, s / 20f);
+                    foreach (var t in tall)
+                    {
+                        float dx = p.x - t.x, dz = p.z - t.z, r = KitCanopy * t.w;
+                        if (dx * dx + dz * dz < r * r && p.y > t.y && p.y < t.y + t.w) { h++; break; }
+                    }
+                }
+                if (h < hits) { hits = h; view = k; best = eye; }
+            }
+            return best;
         }
 
         static bool KitSite(Ground ground, GeneratedWorld map, float length, out Vector2 start)
