@@ -12,7 +12,7 @@ namespace Stabby.World
         public int TriangleCount => Indices.Length / 3;
     }
 
-    public static class ObjectMeshes
+    public static partial class ObjectMeshes
     {
         public const int MaxLods = 4;
         static readonly int[] RockLevels = { 3, 2, 1, 0 };
