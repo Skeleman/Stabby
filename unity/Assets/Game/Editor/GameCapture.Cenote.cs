@@ -40,6 +40,7 @@ namespace Stabby.Game.Editor
             for (var w = LakeShoreShot(cam, dir, ground); w.MoveNext();) yield return null;
             for (var w = SeaShoreShot(cam, dir, ground, 12f, 80f, "sea-cliff"); w.MoveNext();) yield return null;
             for (var w = SeaShoreShot(cam, dir, ground, 0.2f, 1.5f, "beach"); w.MoveNext();) yield return null;
+            for (var w = RiverMouthShot(cam, dir, ground); w.MoveNext();) yield return null;
             for (var w = RiverBankShot(cam, dir, ground); w.MoveNext();) yield return null;
         }
 
@@ -96,10 +97,10 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, name);
         }
 
-        static System.Collections.IEnumerator RiverBankShot(Camera cam, string dir, Ground ground)
+        static System.Collections.IEnumerator RiverMouthShot(Camera cam, string dir, Ground ground)
         {
             var map = ShownMap();
-            if (map == null) { GameStatus.Lines["~bank"] = "bank: no map"; yield break; }
+            if (map == null) { GameStatus.Lines["~mouth"] = "mouth: no map"; yield break; }
             RiverLine pick = null;
             int at = -1;
             float best = float.MaxValue;
@@ -110,7 +111,7 @@ namespace Stabby.Game.Editor
                     float d = (new Vector2(l.X[k], l.Z[k]) - new Vector2(home.x, home.z)).sqrMagnitude;
                     if (d < best) { best = d; pick = l; at = k; }
                 }
-            if (pick == null) { GameStatus.Lines["~bank"] = "bank: none found"; yield break; }
+            if (pick == null) { GameStatus.Lines["~mouth"] = "mouth: none found"; yield break; }
             var along = new Vector3(pick.X[at + 1] - pick.X[at - 1], 0, pick.Z[at + 1] - pick.Z[at - 1]).normalized;
             var across = new Vector3(along.z, 0, -along.x);
             var mid = new Vector3(pick.X[at], pick.S[at], pick.Z[at]);
@@ -119,8 +120,8 @@ namespace Stabby.Game.Editor
             var look = mid + along * 12f;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
             for (var w = Settle(240); w.MoveNext();) yield return null;
-            GameStatus.Lines["~bank"] = $"bank: half width {pick.W[at]:F1} depth {pick.D[at]:F1} at {mid.x:F0},{mid.z:F0} eye {eye.x:F0},{eye.y:F0},{eye.z:F0}";
-            Shot(cam, dir, "river-bank");
+            GameStatus.Lines["~mouth"] = $"mouth: half width {pick.W[at]:F1} depth {pick.D[at]:F1} at {mid.x:F0},{mid.z:F0} eye {eye.x:F0},{eye.y:F0},{eye.z:F0}";
+            Shot(cam, dir, "river-mouth");
         }
 
         static System.Collections.IEnumerator LakeShoreShot(Camera cam, string dir, Ground ground)
@@ -157,6 +158,39 @@ namespace Stabby.Game.Editor
             for (var w = Settle(240); w.MoveNext();) yield return null;
             GameStatus.Lines["~shore"] = $"shore: lake {map.Water.LakeId[wet]} at {edge.x:F0},{edge.z:F0} eye {eye.x:F0},{eye.y:F0},{eye.z:F0}";
             Shot(cam, dir, "lake-shore");
+        }
+
+        static System.Collections.IEnumerator RiverBankShot(Camera cam, string dir, Ground ground)
+        {
+            var map = ShownMap();
+            if (map == null) { GameStatus.Lines["~bank"] = "bank: no map"; yield break; }
+            int n = map.Config.Size;
+            float cm = map.Config.CellMeters, best = 0f;
+            RiverLine pick = null;
+            int at = -1;
+            foreach (var l in NearField.Lines(map))
+                for (int k = 4; k < l.X.Length - 4; k++)
+                {
+                    if (l.S[k - 4] - l.S[k + 4] > 1.5f) continue;
+                    if (l.W[k] < 2f || l.W[k] > 10f || l.D[k] < 1f || l.Liquid != 0) continue;
+                    int cx = Mathf.Clamp((int)(l.X[k] / cm), 0, n - 1), cy = Mathf.Clamp((int)(l.Z[k] / cm), 0, n - 1);
+                    if (SeaCells(map, cx, cy) <= CoastFallSearchCells) continue;
+                    float ax = l.X[k + 1] - l.X[k - 1], az = l.Z[k + 1] - l.Z[k - 1], al = Mathf.Sqrt(ax * ax + az * az);
+                    if (al < 1e-3f) continue;
+                    float sx = az / al, sz = -ax / al, r = l.W[k] + 4f;
+                    float rise = Mathf.Min(ground.HeightAt(l.X[k] + sx * r, l.Z[k] + sz * r), ground.HeightAt(l.X[k] - sx * r, l.Z[k] - sz * r)) - l.S[k];
+                    if (rise > best) { best = rise; pick = l; at = k; }
+                }
+            if (pick == null) { GameStatus.Lines["~bank"] = "bank: none found"; yield break; }
+            var along = new Vector3(pick.X[at + 1] - pick.X[at - 1], 0, pick.Z[at + 1] - pick.Z[at - 1]).normalized;
+            var across = new Vector3(along.z, 0, -along.x);
+            var mid = new Vector3(pick.X[at], pick.S[at], pick.Z[at]);
+            var eye = mid - along * 14f - across * (0.4f * pick.W[at]) + Vector3.up * 2.5f;
+            var look = mid + along * 6f + across * pick.W[at];
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+            for (var w = Settle(240); w.MoveNext();) yield return null;
+            GameStatus.Lines["~bank"] = $"bank: half width {pick.W[at]:F1} depth {pick.D[at]:F1} banks {best:F1} m at {mid.x:F0},{mid.z:F0} eye {eye.x:F0},{eye.y:F0},{eye.z:F0}";
+            Shot(cam, dir, "river-bank");
         }
 
         static int WidestCenote(Ground ground, out FeatureEdit c)
