@@ -37,6 +37,7 @@ content/caves.json caves,surface,meshing
 src/Stabby.World/Landforms.cs objects,surface,meshing
 src/Stabby.World/Cenotes.cs objects,surface,meshing,sites
 src/Stabby.World/SeaStacks.cs objects,surface,meshing
+src/Stabby.World/SlotCanyons.cs objects,surface,meshing,sites
 src/Stabby.World/Object*.cs objects,sites,surface
 src/Stabby.World/Objects.cs objects,sites,surface
 src/Stabby.World/CaveObjects.cs objects,sites,surface,caves
@@ -94,3 +95,6 @@ src/Stabby.World/Scenarios.cs core
 content/sky.json core
 content/scenarios/* core
 src/*.meta core
+src/Stabby.World/Volcanoes.cs all
+src/Stabby.World/VolcanoChecks.cs sketch,sites
+src/Stabby.World/VolcanoPools.cs sites

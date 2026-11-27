@@ -605,7 +605,7 @@ namespace Stabby.World
         {
             if (w.Sketch == null) return false;
             foreach (var m in w.Sketch.Mesas) if (Mesas.Dist(m, x, z) - r < Mesas.Toe(m, BogSteadyM)) return true;
-            return false;
+            return Volcanoes.Near(w.Sketch, x, z) < r;
         }
 
         int[] ventDefs;

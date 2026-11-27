@@ -364,12 +364,13 @@ namespace Stabby.World
         public const int FallCoastCells = 3;
         public static float SheetWidth(float width) => Math.Max(width, FallSheetMinM);
         public static float FallThrow(float drop) => FallThrowK * (float)Math.Sqrt(2 * Math.Max(drop, 0) / 9.81f);
-        const float FallSheetMarginM = 1f;
+        const float FallSheetMarginM = 1f, FallPoolGrowM = 0.25f;
 
         static void SheetPool(float half, float drop, ref float r, out float centre)
         {
             float t = FallThrow(drop), h = half + FallSheetMarginM, low = 1 - 0.6f * NearField.FallRadiusNoise;
             r = Math.Max(r, h / low);
+            while (FallPoolCentre * r + (float)Math.Sqrt(Math.Max(0, low * low * r * r - h * h)) < t) r += FallPoolGrowM;
             centre = Math.Min(FallPoolCentre * r, t + (float)Math.Sqrt(Math.Max(0, low * low * r * r - h * h)));
         }
         const float FallStepFraction = 0.5f, FallPoolBaseM = 1.5f, FallPoolScale = 0.9f, FallPoolWidths = 0.75f, FallPoolMaxM = 15f, FallLipT = 0.5f, FallLipStepT = 0.125f;

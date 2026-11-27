@@ -20,7 +20,7 @@ namespace Stabby.World
 
     public static class WorldFile
     {
-        public const int Version = 2, HeaderBytes = 44, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256;
+        public const int Version = 3, HeaderBytes = 48, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256, MaxVolcanoes = 64, VolcanoInts = 17;
         static readonly byte[] Magic = { (byte)'S', (byte)'T', (byte)'B', (byte)'W' };
         static readonly int Full = WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes;
 
@@ -37,6 +37,12 @@ namespace Stabby.World
             if (w.BiomeIds != null)
                 foreach (var id in w.BiomeIds) { var b = Encoding.UTF8.GetBytes(id); Int(head, b.Length); head.AddRange(b); }
             Int(head, mound);
+            var cones = w.Sketch?.Volcanoes ?? w.Cones ?? new List<VolcanoSketch>();
+            Int(head, cones.Count);
+            foreach (var v in cones)
+                foreach (float f in new[] { v.X, v.Z, v.Ro, v.R, v.Rc, v.Rf, v.A, v.H, v.Base, v.RimLow, v.Lx, v.Lz, v.Drop, v.Fill })
+                    Int(head, BitConverter.SingleToInt32Bits(f));
+            foreach (var v in cones) { Int(head, (int)v.Seed); Int(head, v.Breached ? 1 : 0); Int(head, v.Active ? 1 : 0); }
             var sums = new ulong[count];
             var packed = new byte[count][];
             var pool = new ConcurrentBag<byte[][]>();
@@ -117,6 +123,16 @@ namespace Stabby.World
             if (o + 4 + 12L * count > data.Length) throw new FormatException("world file ends inside its chunk table");
             int mound = Next(data, ref o);
             if (mound < WorldBake.NotRaised || mound >= c.Size * c.Size) throw new FormatException($"world file mound {mound} outside the map");
+            int coneCount = Next(data, ref o);
+            if (coneCount < 0 || coneCount > MaxVolcanoes || o + 4L * VolcanoInts * coneCount + 12L * count > data.Length) throw new FormatException($"world file volcano count {coneCount} is bad");
+            var cones = new List<VolcanoSketch>();
+            for (int k = 0; k < coneCount; k++)
+            {
+                var f = new float[VolcanoInts - 3];
+                for (int j = 0; j < f.Length; j++) f[j] = BitConverter.Int32BitsToSingle(Next(data, ref o));
+                cones.Add(new VolcanoSketch { X = f[0], Z = f[1], Ro = f[2], R = f[3], Rc = f[4], Rf = f[5], A = f[6], H = f[7], Base = f[8], RimLow = f[9], Lx = f[10], Lz = f[11], Drop = f[12], Fill = f[13] });
+            }
+            foreach (var v in cones) { v.Seed = (uint)Next(data, ref o); v.Breached = Next(data, ref o) != 0; v.Active = Next(data, ref o) != 0; }
             var bake = new WorldBake { Mound = mound, Sums = new ulong[count], Packed = data, At = new int[count], Len = new int[count] };
             long at = o + 12L * count;
             for (int k = 0; k < count; k++)
@@ -135,6 +151,7 @@ namespace Stabby.World
             if (groundLen < 0 || (long)o + groundLen != data.Length) throw new FormatException($"world file is {data.Length} bytes, header implies {(long)o + groundLen}");
             times?.Mark("table");
             var w = Empty(c, biomeIds, materials);
+            w.Cones = cones;
             times?.Mark("empty");
             var pool = new ConcurrentBag<byte[][]>();
             try

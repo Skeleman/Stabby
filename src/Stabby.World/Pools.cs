@@ -62,6 +62,7 @@ namespace Stabby.World
             }
             list.AddRange(CavePools());
             list.AddRange(CenotePools());
+            list.AddRange(VolcanoPools());
             return list.ToArray();
         }
 
