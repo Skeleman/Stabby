@@ -743,7 +743,7 @@ namespace Stabby.World
             int[] items = null;
             for (int pass = 0; pass < 2; pass++)
             {
-                var fill = pass == 1 ? (int[])start.Clone() : null;
+                var fill = pass == 1 ? start : null;
                 if (pass == 1) items = new int[start[n * n]];
                 for (int k = 0; k < segs.Length; k++)
                 {
@@ -759,6 +759,7 @@ namespace Stabby.World
                         }
                 }
                 if (pass == 0) for (int i = 1; i <= n * n; i++) start[i] += start[i - 1];
+                else { for (int i = n * n; i > 0; i--) start[i] = start[i - 1]; start[0] = 0; }
             }
             roadStart = start;
             roadItems = items;

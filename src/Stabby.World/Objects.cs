@@ -238,7 +238,7 @@ namespace Stabby.World
             blockStart = new int[n * n + 1];
             for (int pass = 0; pass < 2; pass++)
             {
-                var fill = pass == 1 ? (int[])blockStart.Clone() : null;
+                var fill = pass == 1 ? blockStart : null;
                 int[] items = pass == 1 ? new int[blockStart[n * n]] : null;
                 for (int e = 0; e < solid.Length; e++)
                 {
@@ -253,7 +253,7 @@ namespace Stabby.World
                 }
                 if (pass == 0) for (int i = n * n; i > 0; i--) blockStart[i] = blockStart[i - 1];
                 if (pass == 0) { blockStart[0] = 0; for (int i = 1; i <= n * n; i++) blockStart[i] += blockStart[i - 1]; }
-                else blockItems = items;
+                else { for (int i = n * n; i > 0; i--) blockStart[i] = blockStart[i - 1]; blockStart[0] = 0; blockItems = items; }
             }
             caveLit = ResolveCaveLights(out caveLitCells, out caveLitReach);
             InitTowns();
