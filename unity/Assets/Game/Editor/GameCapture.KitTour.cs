@@ -23,6 +23,12 @@ namespace Stabby.Game.Editor
             return false;
         }
 
+        static bool KitInWorld(ObjectDef def)
+        {
+            int kind = def.Placement.Discovery;
+            return ObjectField.Pooled(kind) || kind == ObjectField.WolfDen || kind == ObjectField.FairyRing;
+        }
+
         static System.Collections.IEnumerator KitTour(Camera cam, string dir)
         {
             GameStatus.HoldCamera = true;
@@ -46,10 +52,13 @@ namespace Stabby.Game.Editor
             var shader = Shader.Find("Stabby/Object");
             var root = new GameObject("kit-row");
             var items = new List<(string id, GameObject go, Bounds b, float size)>();
+            var sites = new List<(string id, int def)>();
             int tris = 0;
-            foreach (var def in lib.Objects)
+            for (int di = 0; di < lib.Objects.Count; di++)
             {
+                var def = lib.Objects[di];
                 if (!KitUser(def)) continue;
+                if (KitInWorld(def)) { sites.Add((def.Id, di)); continue; }
                 float size = 0.5f * (def.Placement.SizeMinM + def.Placement.SizeMaxM);
                 var go = new GameObject(def.Id);
                 go.transform.SetParent(root.transform, false);
@@ -105,7 +114,7 @@ namespace Stabby.Game.Editor
             for (var w = Settle(120); w.MoveNext();) yield return null;
             Shot(cam, null, "warmup");
             Shot(cam, dir, "kit-row");
-            int rows = (placed.Count + KitCols - 1) / KitCols;
+            int cells = placed.Count + sites.Count, rows = (cells + KitCols - 1) / KitCols;
             var sheet = new Texture2D(KitCellW * KitCols, KitCellH * rows, TextureFormat.RGB24, false);
             var fill = new Color32[sheet.width * sheet.height];
             for (int i = 0; i < fill.Length; i++) fill[i] = new Color32(24, 24, 24, 255);
@@ -114,15 +123,42 @@ namespace Stabby.Game.Editor
             var order = new System.Text.StringBuilder();
             float half = Mathf.Sin(0.5f * KitFov * Mathf.Deg2Rad);
             int moved = 0, blocked = 0;
-            for (int k = 0; k < placed.Count; k++)
+            var placedSites = field.Discoveries();
+            int missing = 0;
+            for (int k = 0; k < cells; k++)
             {
-                var (id, b) = placed[k];
-                float rad = Mathf.Max(KitMinRadius, b.extents.magnitude);
-                var eye = KitEye(ground, tall, b.center, rad / half, out int view, out int hits);
+                string id;
+                Vector3 at;
+                float rad;
+                var near = tall;
+                if (k < placed.Count)
+                {
+                    Bounds b;
+                    (id, b) = placed[k];
+                    at = b.center;
+                    rad = Mathf.Max(KitMinRadius, b.extents.magnitude);
+                }
+                else
+                {
+                    int def;
+                    (id, def) = sites[k - placed.Count];
+                    float best = float.MaxValue;
+                    ObjectInstance pick = default;
+                    foreach (var o in placedSites)
+                    {
+                        float d = new Vector2(o.X - home.x, o.Z - home.z).sqrMagnitude;
+                        if (o.Def == def && d < best) { best = d; pick = o; }
+                    }
+                    if (best == float.MaxValue) { missing++; continue; }
+                    rad = 0.45f * pick.Size;
+                    at = new Vector3(pick.X, Mathf.Max(pick.Y, ground.HeightAt(pick.X, pick.Z)) + 0.15f * rad, pick.Z);
+                    near = KitOccluders(field, map, new Vector2(pick.X - rad, pick.Z), 2 * rad);
+                }
+                var eye = KitEye(ground, near, at, rad / half, out int view, out int hits);
                 if (view != 0) moved++;
                 if (hits > 0) blocked++;
-                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(b.center - eye));
-                for (var w = Settle(20); w.MoveNext();) yield return null;
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(at - eye));
+                for (var w = Settle(k < placed.Count ? 20 : 180); w.MoveNext();) yield return null;
                 Shot(cam, dir, "kit-" + id);
                 cam.targetTexture = cell;
                 cam.Render();
@@ -140,7 +176,7 @@ namespace Stabby.Game.Editor
             Object.DestroyImmediate(sheet);
             Object.Destroy(root);
             var sky = DayNightSystem.Shown;
-            GameStatus.Lines["~kit"] = $"kit: {placed.Count} kit and timber users in a {length:F0} m row from {start.x:F0},{start.y:F0}, ground {lo:F1}-{hi:F1} m, {tall.Count} tall world objects, {moved} eyes moved off canopy, {blocked} still blocked, {tris} near triangles, hour {sky.Hour:F2} moon {sky.Phase:F2}, sheet {KitCols}x{rows}";
+            GameStatus.Lines["~kit"] = $"kit: {placed.Count} kit and timber users in a {length:F0} m row, {sites.Count - missing} edit sites shot in the world ({missing} not placed), from {start.x:F0},{start.y:F0}, ground {lo:F1}-{hi:F1} m, {tall.Count} tall world objects, {moved} eyes moved off canopy, {blocked} still blocked, {tris} near triangles, hour {sky.Hour:F2} moon {sky.Phase:F2}, sheet {KitCols}x{rows}";
         }
 
         static List<Vector4> KitOccluders(ObjectField field, GeneratedWorld map, Vector2 start, float length)
