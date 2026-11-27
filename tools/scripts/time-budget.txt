@@ -38,6 +38,7 @@ test RoadTests.RoadsLinkTownsAndPassTheCheck 40 routes and checks roads between 
 test RoadTests.RoadsAreDeterministicAndMatchThePlacedWorld 40 routes roads twice and reruns feature placement on one test world
 test RoadTests.RoadTunnelsOnSeed2At1024AreWalkableAndMeetTheirRoads 40 builds a 1024 test world with road tunnels and checks them
 test ObjectTests.CenotesOnSeed2At1024DropToWalkablePools 15 checks cenotes on the cached seed 2 1024 world and the default world
+test ObjectTests.SlotCanyonsWalkFromMouthToHead 5 walks the slot canyon on the default world
 test TownTests.TownsPlaceTheirSitesAndPassTheCheck 40 plans and checks towns in three test worlds with a wide flat-ground search
 test DiscoveryTests.FeaturePassDiscoveriesMatchTheFinalEdits 12 reruns the feature pass and compares discoveries
 test WorldTests.MountainsCastRainShadows 12 generates twenty 256 worlds in parallel and compares windward and lee rain
