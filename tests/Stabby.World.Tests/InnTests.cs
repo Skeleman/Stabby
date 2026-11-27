@@ -133,21 +133,30 @@ public class InnTests
             var cols = ColumnRegions.Whole(list);
             var mesh = ObjectMeshes.Build(def.Parts[0], ObjectMeshes.Key(def.Id, 0, o.Variant), 0);
             float u = o.Size * Structures.TreeU;
-            foreach (float sx in new[] { -5f, -2f, 1f, 4f })
+            float tip = 4;
+            while (MeshTop(mesh, (tip + 0.25f) * u / o.Size, 0, float.MaxValue) > 0) tip += 0.25f;
+            Assert.True(tip > 7, $"v{v}: trunk ends at {tip:F2}");
+            foreach (float sx in new[] { -5f, -2f, 1f, 4f, tip - 0.5f, tip })
             {
-                float x = sx * u, y = 0.1f, z = 0, floor = MeshTop(mesh, x / o.Size, 0, 1.2f / o.Size) * o.Size;
+                float floor = Math.Max(0, Under(mesh, sx * u, 1.2f, o.Size)), top = Under(mesh, sx * u, float.MaxValue, o.Size);
+                if (sx <= 4) Assert.True(Math.Abs(MeshTop(mesh, sx * u / o.Size, 0, 1.2f / o.Size) * o.Size - Structures.TreeFloorM * u) <= 0.05f, $"hollow floor mesh v{v} at {sx}");
+                float x = sx * u, y = 0.1f, z = 0;
                 Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0, 0, 1);
-                Assert.True(Math.Abs(floor - Structures.TreeFloorM * u) <= 0.05f, $"hollow floor mesh v{v} at {sx}: {floor:F2}");
                 Assert.True(Math.Abs(y - floor) <= 0.05f, $"inside v{v} at {sx}: walker {y:F2}, floor {floor:F2}");
-                float top = float.NegativeInfinity;
-                for (float dx = -Walk.Radius; dx <= Walk.Radius; dx += 0.1f)
-                    for (float dz = -Walk.Radius; dz <= Walk.Radius; dz += 0.1f)
-                        if (dx * dx + dz * dz <= Walk.Radius * Walk.Radius) top = Math.Max(top, MeshTop(mesh, (sx * u + dx) / o.Size, dz / o.Size, float.MaxValue) * o.Size);
                 x = sx * u; y = top + 0.5f; z = 0;
                 Walk.Step(new Flat(), default(NoEdits), cols, 1, ref x, ref y, ref z, 0, 0, 1);
                 Assert.True(Math.Abs(y - top) <= 0.05f, $"on top v{v} at {sx}: walker {y:F2}, trunk {top:F2}");
             }
         }
+    }
+
+    static float Under(ObjectMesh m, float x, float below, float size)
+    {
+        float best = float.NegativeInfinity;
+        for (float dx = -Walk.Radius; dx <= Walk.Radius; dx += 0.1f)
+            for (float dz = -Walk.Radius; dz <= Walk.Radius; dz += 0.1f)
+                if (dx * dx + dz * dz <= Walk.Radius * Walk.Radius) best = Math.Max(best, MeshTop(m, (x + dx) / size, dz / size, below / size) * size);
+        return best;
     }
 
     static float MeshTop(ObjectMesh m, float px, float pz, float below)

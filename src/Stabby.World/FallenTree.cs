@@ -76,11 +76,15 @@ namespace Stabby.World
                 last = x;
             }
             for (float x = -half + 0.6f; x <= last - 0.2f; x += 0.8f) Col(l, f, x, 0, 0.45f, 0, TreeFloorM);
-            Col(l, f, last, 0, 0.3f, 0, TreeFloorM);
-            for (float x = -half + 0.3f; x <= last + 0.1f; x += 0.25f)
+            for (int k = 0; k < 5; k++)
+            {
+                float x = last + 0.2f - 0.2f * k, floor = SurfaceTop(skin, f, x, 0, TreeFloorM + 0.2f);
+                if (floor > 0.02f) Col(l, f, x, 0, 0.1f, 0, Math.Min(floor, TreeFloorM));
+            }
+            for (float x = -half + 0.3f; x <= last + 0.2f; x += 0.25f)
             {
                 float top = SurfaceTop(skin, f, x, 0, 9);
-                if (top > TreeLidM + 0.05f) Col(l, f, x, 0, 0.12f, TreeLidM, top);
+                if (top > 1) Col(l, f, x, 0, 0.12f, TreeLidM, Math.Max(top, TreeLidM + 0.01f));
             }
             for (float x = -half; x <= half; x += 1f)
             {
