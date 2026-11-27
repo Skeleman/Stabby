@@ -83,11 +83,17 @@ namespace Stabby.World
         string Abutment(float x, float z, out float h)
         {
             h = 0;
+            string a = Footing(x, z);
+            if (a == null) h = GroundAt(detail, cm, x, z);
+            return a;
+        }
+
+        string Footing(float x, float z)
+        {
             if (x < 0 || z < 0 || x >= worldM || z >= worldM) return "leaves the map";
             int i = Cell(z) * n + Cell(x);
             if (w.Sea[i] || w.Water.LakeId[i] >= 0) return "stands in standing water";
             if (RiverUnder(x, z, RoadHalfM, out _, out _)) return "stands in a river";
-            h = GroundAt(detail, cm, x, z);
             return null;
         }
 

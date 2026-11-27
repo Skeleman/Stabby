@@ -582,7 +582,7 @@ namespace Stabby.World
             void Span(int cur, int cx, int cz, int dx, int dz)
             {
                 float step = (dx != 0 && dz != 0 ? 1.41421356f : 1f) * cm, ax = cx * cm, az = cz * cm;
-                if (Abutment(ax, az, out _) != null) return;
+                if (Footing(ax, az) != null) return;
                 int most = (int)(lib.Roads.SpanM / step), tries = 0;
                 bool wet = false;
                 for (int k = 1; k <= most; k++)
