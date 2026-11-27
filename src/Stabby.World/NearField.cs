@@ -967,8 +967,9 @@ namespace Stabby.World
             float harm = 2 * d0 * d1 / (d0 + d1);
             float cross = Math.Min(Math.Max(p0, Math.Max(p1, p2)), -Math.Min(p0, Math.Min(p1, p2)));
             if (cross <= 0) return harm;
-            float w = Math.Min(1f, cross / ShoreBlendM);
-            float lim = ShoreTangentCap * Math.Min(Math.Abs(d0), Math.Abs(d1)), mean = 0.5f * (d0 + d1);
+            float step = Math.Min(Math.Abs(d0), Math.Abs(d1));
+            float w = Math.Min(1f, cross / Math.Max(ShoreBlendM, step));
+            float lim = ShoreTangentCap * step, mean = 0.5f * (d0 + d1);
             return harm + w * (Math.Max(-lim, Math.Min(lim, mean)) - harm);
         }
 
