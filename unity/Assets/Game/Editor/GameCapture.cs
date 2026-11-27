@@ -2669,8 +2669,9 @@ namespace Stabby.Game.Editor
             var turns = new float[2];
             var widths = new float[2];
             var dist = new float[] { float.MaxValue, float.MaxValue };
+            var flow = new float[] { -1f, -1f };
             foreach (var r in map.Water.Rivers)
-                for (int k = 3; k + 3 < r.X.Count; k++)
+                for (int k = 3; k + 3 < r.X.Count && r.Liquid == 0; k++)
                 {
                     float ax = r.X[k] - r.X[k - 3], az = r.Y[k] - r.Y[k - 3], bx = r.X[k + 3] - r.X[k], bz = r.Y[k + 3] - r.Y[k];
                     float la = Mathf.Sqrt(ax * ax + az * az), lb = Mathf.Sqrt(bx * bx + bz * bz);
@@ -2681,8 +2682,9 @@ namespace Stabby.Game.Editor
                     var p = new Vector3(r.X[k] * cm, r.Surface[k], r.Y[k] * cm);
                     float d = (new Vector2(p.x, p.z) - new Vector2(home.x, home.z)).sqrMagnitude;
                     int pick = r.Width[k] >= 12f && bend >= 0.12f ? 0 : r.Width[k] >= 5f && slope >= 0.05f && r.Surface[k] >= 25f ? 1 : -1;
-                    if (pick < 0 || d >= dist[pick]) continue;
-                    dist[pick] = d; spots[pick] = p; turns[pick] = turn; widths[pick] = r.Width[k];
+                    float q = r.Discharge[k];
+                    if (pick < 0 || q < flow[pick] || q == flow[pick] && d >= dist[pick]) continue;
+                    flow[pick] = q; dist[pick] = d; spots[pick] = p; turns[pick] = turn; widths[pick] = r.Width[k];
                     alongs[pick] = new Vector3(bx + ax, 0, bz + az).normalized;
                 }
             for (int k = 0; k < 2; k++)
@@ -2693,7 +2695,7 @@ namespace Stabby.Game.Editor
                 var left = new Vector3(-al.z, 0, al.x);
                 float hw = 0.5f * widths[k];
                 var inner = turns[k] > 0 ? left : -left;
-                GameStatus.Lines["~river " + kinds[k]] = $"{kinds[k]} at {t.x:F0},{t.y:F0},{t.z:F0}, width {widths[k]:F0} m, turn {turns[k]:F2}, {Mathf.Sqrt(dist[k]):F0} m from the player";
+                GameStatus.Lines["~river " + kinds[k]] = $"{kinds[k]} at {t.x:F0},{t.y:F0},{t.z:F0}, width {widths[k]:F0} m, turn {turns[k]:F2}, discharge {flow[k]:F1} m3/s, {Mathf.Sqrt(dist[k]):F0} m from the player";
                 var eyes = new Vector3[]
                 {
                     k == 0 ? t + inner * (hw + 14f) + Vector3.up * 5f : t + al * (hw + 35f) + Vector3.up * 7f,
