@@ -387,7 +387,6 @@ namespace Stabby.World
             {
                 var b = edits[q];
                 if (b.Shape != FeatureEdit.Boulder) continue;
-                boulders.Add(q);
                 float x = 0.5f * (b.MinX + b.MaxX), z = 0.5f * (b.MinZ + b.MaxZ), r = 0.5f * Math.Max(b.MaxX - b.MinX, b.MaxZ - b.MinZ);
                 string at = $"boulder at {x:F0},{z:F0}";
                 if (b.Kind != FeatureEdit.Add) { e.Add(at + " carves solid"); return; }
@@ -400,8 +399,13 @@ namespace Stabby.World
                 if (lake >= 0 || (lake = NearLake(w, gx, gz, ground)) >= 0) { e.Add(at + $" stands in lake {lake}"); return; }
                 if (OnBed(bed, segs, i, x, z, r)) { e.Add(at + " lies on a river bed"); return; }
                 grid.Near(b.MinX, b.MinZ, b.MaxX, b.MaxZ, ids);
+                bool chock = false;
                 foreach (int f in ids)
-                    if (edits[f].Shape != FeatureEdit.Boulder && edits[f].Shape != FeatureEdit.SlotCanyon && !edits[f].Link) { e.Add(at + " overlaps a terrain feature"); return; }
+                {
+                    if (edits[f].Shape == FeatureEdit.SlotCanyon) chock = true;
+                    else if (edits[f].Shape != FeatureEdit.Boulder && !edits[f].Link) { e.Add(at + " overlaps a terrain feature"); return; }
+                }
+                if (!chock) boulders.Add(q);
             }
             int samples = Math.Min(BoulderMeshSamples, boulders.Count);
             for (int k = 0; k < samples; k++)
