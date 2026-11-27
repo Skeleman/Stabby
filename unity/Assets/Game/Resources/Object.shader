@@ -528,6 +528,16 @@ Shader "Stabby/Object"
                     float3 d1 = bn.yzw - g * dot(bn.yzw, g), d2 = bm.yzw - g * dot(bm.yzw, g);
                     grad = -(sign(bn.x) * 0.16 * fb) * d1 - (sign(bm.x) * 0.07 * fb2) * d2 + 0.04 * mid.yzw * fm;
                     shade = 0.35 * (1 - smoothstep(0.2, 0.6, rid)) * fb;
+                    [branch] if (th.x > 8.5)
+                    {
+                        float3 pq = q - g * (al * 0.78) + sd;
+                        float4 fu = OrgRP3(pq, OrgF(0), 4.3, 0), fv = OrgRP3(pq, OrgF(1), 8.9, 1);
+                        float plate = smoothstep(0.0, 0.5, 1 - abs(fu.x) + 0.25 * fv.x * fs);
+                        float3 e1 = fu.yzw - g * dot(fu.yzw, g), e2 = fv.yzw - g * dot(fv.yzw, g);
+                        a *= 0.55 + 0.5 * plate;
+                        grad += -(sign(fu.x) * 0.38 * fm) * e1 + 0.12 * e2 * fs;
+                        shade = max(shade, 0.55 * (1 - plate) * fm);
+                    }
                 }
                 else if (cap && mat == 1)
                 {

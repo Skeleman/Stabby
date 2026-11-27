@@ -161,15 +161,16 @@ namespace Stabby.World
             for (int j = 0; j < rings; j++)
             {
                 float t = 2f * j / (rings - 1) - 1, k = 1 - TreeTaper * 0.5f * (t + 1), cy = -TreeSag * (1 - t * t) - TreeDrop * (1 - k), cz = sway * (1 - t * t) + wob * t * (1 - t * t);
+                float fl = Math.Max(0, -0.55f - t) / 0.45f, flare = 1 + 0.12f * fl * fl, bump = j == 0 || j == rings - 1 ? 0 : rng.Range(-0.045f, 0.045f);
                 bool end = j == 0 || j == rings - 1;
                 for (int i = 0; i < sides; i++)
                 {
-                    float x = j == 0 ? -1 + rag[0][i] : j == rings - 1 ? 1 - rag[1][i] : t, ro = outer[i] * k * (1 - 0.025f * rng.NextFloat()), ri = inner[i] * k * (1 - 0.03f * rng.NextFloat());
+                    float x = j == 0 ? -1 + rag[0][i] : j == rings - 1 ? 1 - rag[1][i] : t, ro = outer[i] * k * flare * (1 - 0.025f * rng.NextFloat() + bump * Math.Max(0, dc[i]) * Math.Max(0, dc[i])), ri = inner[i] * k * (1 - 0.03f * rng.NextFloat());
                     float xi = end ? x - t * rng.Range(0.02f, 0.06f) : x;
                     int o = j * sides + i, n = wall + o;
                     w[3 * o] = x; w[3 * o + 1] = cy + ro * dc[i]; w[3 * o + 2] = cz + ro * ds[i];
                     w[3 * n] = xi; w[3 * n + 1] = cy + ri * dc[i]; w[3 * n + 2] = cz + ri * ds[i];
-                    lift[o] = 8; lift[n] = 3;
+                    lift[o] = 9; lift[n] = 3;
                     if (!end) continue;
                     int b = rim + (j == 0 ? 0 : 2 * sides) + i;
                     Array.Copy(w, 3 * o, w, 3 * b, 3);
