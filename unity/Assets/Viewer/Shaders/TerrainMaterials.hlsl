@@ -790,6 +790,10 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float fj = OrgFade(0.27, fp);
     float3 jn = OrgN2(wa * 0.27 + 41.7, fj);
     float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    float f6 = OrgF(-6), f5 = OrgF(-5), f4 = OrgF(-4);
+    float2 sw = 0.3 / f6 * OrgLN2(wa, f6, 61.7, 1).yz + 0.3 / f5 * OrgFade(f5, fp) * OrgLN2(wa, f5, 63.9, 1).yz + 0.3 / f4 * OrgFade(f4, fp) * OrgLN2(wa, f4, 67.1, 1).yz;
+    float4 cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, (wa + sw) * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    cw = lerp(cw, cs, saturate(4 * (cw.w + cs.w)));
     float hw = wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyWaterLevel, sampler_StabbyWaterLevel, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0).r;
     float sh = wp.y + 0.15 * OrgLN2(wp.xz, 0.035, 19.3, step(wp.y, 3)).x;
     float shore = smoothstep(2.1, 0.9, sh);
