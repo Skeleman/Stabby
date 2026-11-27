@@ -12,7 +12,7 @@ static class TestWorlds
     static readonly CaveLibrary Caves = ContentLoader.LoadCaves(Root);
     static readonly ConcurrentDictionary<(ulong, int), Lazy<GeneratedWorld>> Worlds = new();
     static readonly ConcurrentDictionary<(ulong, int), Lazy<Placed>> Full = new();
-    public const ulong DefaultSeed = 4;
+    public const ulong DefaultSeed = 6;
     public const int DefaultSize = 256;
 
     public sealed class Placed

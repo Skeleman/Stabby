@@ -23,7 +23,8 @@ namespace Stabby.World
             foreach (var v in w.Sketch.Volcanoes)
             {
                 string at = $"volcano at {v.X:F0},{v.Z:F0}";
-                if (v.Ro < Volcanoes.MinRoM || v.Ro > Volcanoes.MaxRoM) { e.Add(at + $" has base radius {v.Ro:F0} m"); continue; }
+                bool big = Volcanoes.Big(v);
+                if (big ? v.Ro < Volcanoes.BigMinRoM || v.Ro > Volcanoes.BigMaxRoM : v.Ro < Volcanoes.MinRoM) { e.Add(at + $" has base radius {v.Ro:F0} m"); continue; }
                 float share = v.Rc / v.Ro;
                 if (share < 0.25f || share > 0.35f) { e.Add(at + $" has crater share {share:F2}"); continue; }
                 if (v.H < 50f) e.Add(at + $" is only {v.H:F0} m high");
@@ -47,14 +48,14 @@ namespace Stabby.World
                         int x = cx + dx, z = cz + dz;
                         if (x < 0 || z < 0 || x >= n || z >= n || (dx * dx + dz * dz) * cm * cm > v.R * v.R) continue;
                         int i = z * n + x;
-                        if (w.Water != null && w.Water.IsRiver[i]) river = true;
+                        if (w.Water != null && w.Water.IsRiver[i] && (!big || ((dx * dx + dz * dz) * cm * cm <= v.Rc * v.Rc && w.Height[i] < v.RimLow - Volcanoes.TopPadM))) river = true;
                         summit = Math.Max(summit, w.Height[i]);
                         if (w.Biome == null || w.BiomeIds == null || w.Biome[i] < 0) continue;
                         cells++;
                         if (Array.IndexOf(Volcanoes.Biomes, w.BiomeIds[w.Biome[i]]) >= 0) open++;
                     }
                 if (river) e.Add(at + " has a river on its cone");
-                if (cells > 0 && open < VolcanoBiomeShare * cells) e.Add(at + $" stands in {open}/{cells} dry open cells");
+                if (!big && cells > 0 && open < VolcanoBiomeShare * cells) e.Add(at + $" stands in {open}/{cells} dry open cells");
                 if (summit < v.Base + VolcanoSummitShare * v.H) e.Add(at + $" lost its cone ({summit - v.Base:F0} m of {v.H:F0} m)");
                 foreach (var l in w.Sketch.Landmarks)
                 {

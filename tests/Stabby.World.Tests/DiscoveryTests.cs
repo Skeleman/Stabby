@@ -551,6 +551,7 @@ public class DiscoveryTests
         var (w, _, _, field) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var loaded = WorldFile.Read(WorldFile.Write(w), materials);
         loaded.Objects = Objects;
+        loaded.SketchInBackground();
         string Rings(ObjectField f) => string.Join(" ", f.Discoveries().Select(r => $"{r.X},{r.Z},{r.Size}"));
         var loadedDetail = new TerrainDetail(loaded);
         string expected = Rings(field);

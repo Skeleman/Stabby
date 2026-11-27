@@ -1,4 +1,5 @@
 src/Stabby.World/Sketch.cs all
+src/Stabby.World/SketchHotspots.cs all
 src/Stabby.World/Mesas.cs all
 src/Stabby.World/Glacial.cs all
 src/Stabby.World/Erosion.cs all

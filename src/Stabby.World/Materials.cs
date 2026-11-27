@@ -129,7 +129,7 @@ namespace Stabby.World
                     {
                         float qx = x * cm - e.Ax, qz = z * cm - e.Az, t = ll > 0f ? Math.Max(0f, Math.Min(1f, (qx * ex + qz * ez) / ll)) : 0f;
                         qx -= t * ex; qz -= t * ez;
-                        if (qx * qx + qz * qz > (reach + cm) * (reach + cm)) continue;
+                        if (qx * qx + qz * qz > (reach + 1.5f * cm) * (reach + 1.5f * cm)) continue;
                         int i = z * n + x;
                         if (!w.Sea[i]) continue;
                         px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = px[i * 4 + 3] = 0;

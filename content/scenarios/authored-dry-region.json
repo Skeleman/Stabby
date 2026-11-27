@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "seed": 11,
   "size": 256,
   "cellMeters": 90,
@@ -411,5 +411,6 @@
       "y": 190.58754,
       "radius": 11.774349
     }
-  ]
+  ],
+  "hotspots": []
 }
