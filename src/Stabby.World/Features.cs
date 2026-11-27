@@ -6,7 +6,7 @@ namespace Stabby.World
     public struct FeatureEdit
     {
         public const int Add = 0, Carve = 1;
-        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Shapes = 18;
+        public const int Overhang = 0, Arch = 1, Cave = 2, CaveRoom = 3, Boulder = 4, Tor = 5, Hoodoo = 6, Spring = 7, Lip = 8, Bridge = 9, Speleothem = 10, CrystalCell = 11, Sink = 12, Shaft = 14, Vault = 15, Mine = 16, Butte = 17, Cenote = 18, Shapes = 19;
 
         public static bool IsCaveCarve(int shape) => shape == Cave || shape == CaveRoom || shape == CrystalCell || shape == Mine;
 
@@ -63,7 +63,7 @@ namespace Stabby.World
 
         public const float BoulderFoot = 2f;
 
-        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : W;
+        float Spread => Shape == Spring && T < 0f ? W - 2f * H * T : Shape == Cenote ? CenoteSpan : W;
 
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
@@ -89,6 +89,7 @@ namespace Stabby.World
             if (!Contains(x, y, z)) return false;
             if (Shape == Spring) return Basin(x, y, z, out dist);
             if (Shape == Butte) return Mesa(x, y, z, out dist);
+            if (Shape == Cenote) return Pit(x, y, z, out dist);
             if (W > 0f) return Slab(x, y, z, out dist);
             float ex = Bx - Ax, ey = By - Ay, ez = Bz - Az, px = x - Ax, py = y - Ay, pz = z - Az;
             float ll = ex * ex + ey * ey + ez * ez;
@@ -123,6 +124,59 @@ namespace Stabby.World
             float s = Math.Max((rh - rw) / (float)Math.Sqrt(1f + g * g), Math.Max(y - top, Ay - H - y));
             dist = R + s;
             return s < ButteBand;
+        }
+
+        public const float CenoteLobe = 0.16f, CenoteLobeM = 9f, CenoteRoughM = 0.8f, CenoteGrainM = 0.35f, CenoteLedgeM = 0.6f, CenoteGullyM = 2.6f, CenoteFlare = 0.05f, CenoteToeM = 0.6f, CenoteFoot = 0.25f, CenoteSpread = 0.85f, CenoteCapM = 3f, CenoteDive = 2.5f, CenoteRubbleM = 0.4f, CenoteScreeM = 1.5f;
+
+        public float CenoteWall => D * (1f + CenoteLobe) + N + CenoteRoughM + CenoteGrainM + CenoteLedgeM;
+
+        float CenoteSpan => CenoteWall + 1f;
+
+        public float CenoteAxis(out float ux, out float uz)
+        {
+            float gx = Bx - Ax, gz = Bz - Az, len = (float)Math.Sqrt(gx * gx + gz * gz);
+            ux = len > 0f ? gx / len : 1f;
+            uz = len > 0f ? gz / len : 0f;
+            return len;
+        }
+
+        public float CenoteRamp(float u, float v)
+        {
+            float du = Math.Max(0f, D - u), sv = v / CenoteSpread, cap = CenoteCapM * CenoteCapM;
+            float y = P - CenoteToeM + T * (u - CenoteFoot * D) - T * ((float)Math.Sqrt(du * du + sv * sv + cap) - (float)Math.Sqrt(du * du + cap));
+            return y < P ? P - CenoteDive * (P - y) : y;
+        }
+
+        float CenoteFan(float u, float v, float x, float y, float z) => CenoteRamp(u, v) + CenoteRubbleM * (2f * Value(Seed ^ 0x5BE0CD19u, x / 2.5f, y / 2.5f, z / 2.5f) - 1f);
+
+        public float CenoteScree(float x, float y, float z)
+        {
+            if (Shape != Cenote || y < P) return 0f;
+            CenoteAxis(out float ux, out float uz);
+            float px = x - Ax, pz = z - Az, u = px * ux + pz * uz, v = pz * ux - px * uz;
+            if (px * px + pz * pz > CenoteWall * CenoteWall && (u < 0f || u > D + CenoteWall || Math.Abs(v) > 1.3f * CenoteGullyM)) return 0f;
+            float ramp = CenoteFan(u, v, x, y, z);
+            return 1f - Math.Min(1f, Math.Max(0f, (Math.Abs(y - ramp) - 0.5f * CenoteScreeM) / (0.5f * CenoteScreeM)));
+        }
+
+        bool Pit(float x, float y, float z, out float dist)
+        {
+            uint seed = Seed;
+            float len = CenoteAxis(out float ux, out float uz), px = x - Ax, pz = z - Az, rh = (float)Math.Sqrt(px * px + pz * pz);
+            float u = px * ux + pz * uz, v = pz * ux - px * uz;
+            float t = Math.Max(0f, Math.Min(1f, (y - By) / Math.Max(1f, F - By)));
+            float rw = D * (1f + CenoteLobe * (2f * Value(seed, x / CenoteLobeM, 0f, z / CenoteLobeM) - 1f)) + N * (1f - t * t)
+                + CenoteRoughM * (2f * Value(seed ^ 0x3C6EF372u, x / 3f, y / 3f, z / 3f) - 1f)
+                + CenoteGrainM * (2f * Value(seed ^ 0x510E527Fu, x / 1.2f, y / 1.2f, z / 1.2f) - 1f)
+                + CenoteLedgeM * (2f * Value(seed ^ 0x9B05688Cu, x / 12f, y / 1.7f, z / 12f) - 1f);
+            float pit = Math.Max(rh - rw, By - y);
+            float wg = CenoteGullyM * (1f + 0.3f * (2f * Value(seed ^ 0x1F83D9ABu, x / 6f, y / 4f, z / 6f) - 1f)) + CenoteFlare * Math.Max(0f, u - D);
+            float gully = Math.Max(Math.Abs(v) - wg, Math.Max(-u, u - len));
+            float ramp = CenoteFan(u, v, x, y, z);
+            float g = T / CenoteSpread * (ramp < P ? CenoteDive : 1f);
+            float s = Math.Max(Math.Min(pit, gully), (ramp - y) / (float)Math.Sqrt(1f + g * g));
+            dist = HoleR + s;
+            return s < R;
         }
 
         static float Groove(float dv) => Math.Max(0f, 1f - Sq(dv / ButteGrooveW));
@@ -444,6 +498,13 @@ namespace Stabby.World
                 }
                 return sx * sx + sz * sz <= rr * rr;
             }
+            if (Shape == Cenote)
+            {
+                float len = CenoteAxis(out float ux, out float uz), px = x - Ax, pz = z - Az, u = px * ux + pz * uz, v = pz * ux - px * uz, rw = CenoteWall + R;
+                if (px * px + pz * pz <= rw * rw) return true;
+                float wg = 1.3f * CenoteGullyM + CenoteFlare * Math.Max(0f, u - D) + R;
+                return u >= 0f && u <= len && Math.Abs(v) <= wg;
+            }
             if (W > 0f)
             {
                 float ex = Bx - Ax, ez = Bz - Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
@@ -733,6 +794,7 @@ namespace Stabby.World
                     from = list.Count;
                 }
             Mines.Place(w, detail, strata, list, caves);
+            Cenotes.Place(w, detail, list);
             return list.ToArray();
         }
 

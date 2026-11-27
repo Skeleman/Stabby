@@ -149,7 +149,7 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream, oasisStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream, oasisStream, cenoteStream;
         readonly int[] caveCarves;
         readonly CaveLightSpot[] caveLights;
         readonly ObjectInstance[] caveLit;
@@ -197,6 +197,7 @@ namespace Stabby.World
             sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
             caveStream = Rng.Stream(w.Config.Seed, "objects-cave").NextU64();
             oasisStream = Rng.Stream(w.Config.Seed, "objects-oasis").NextU64();
+            cenoteStream = Rng.Stream(w.Config.Seed, "objects-cenote").NextU64();
             caveCarves = CaveCarves(solid);
             caveLights = PlanCaveLights(w, this.edits, Rng.Stream(w.Config.Seed, "objects-cave-lights").NextU64());
             strata = new StrataField(w.Config, w.Materials);
@@ -400,6 +401,7 @@ namespace Stabby.World
                     continue;
                 }
                 if (townMember[d] && stageDef < 0 && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
+                if (pl.PerCenote > 0 && stageDef < 0 && !builtOnly && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitCenote(d, chunk, x0, z0, sx, sz, list, ref ordinal);
                 if (d == BridgeDef())
                 {
                     if (stageDef < 0 && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitBridges(d, chunk, list, ref ordinal);
