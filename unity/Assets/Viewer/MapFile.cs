@@ -21,6 +21,24 @@ namespace Stabby.Viewer
         public static string BakeCommand(WorldConfig c, string path) =>
             $"dotnet run -c Release --project tools/Stabby.Cli -- bake --seed {c.Seed} --size {c.Size} --out \"{path}\"";
 
+        public static string Unbaked(string path, WorldConfig c)
+        {
+            if (!File.Exists(path)) return "no map file";
+            try
+            {
+                var bytes = File.ReadAllBytes(path);
+                int v = WorldFile.GeneratorVersionOf(bytes);
+                if (v != WorldConfig.GeneratorVersion) return $"map file from generator {v}, this build runs {WorldConfig.GeneratorVersion}";
+                if (WorldFile.ContentHashOf(bytes) != ContentHash()) return "map file baked from other biomes.json or materials.json";
+                var w = WorldFile.Read(bytes, ContentFiles.Materials(ContentFiles.MaterialsPath));
+                if (w.Config.Seed != c.Seed || w.Config.Size != c.Size) return "map file has another seed or size";
+                if (w.Bake == null || !w.Bake.Raised) return "map file has no baked mound";
+                if (w.Bake.Ground == null || w.Bake.Ground.Key != ContentFiles.BakeKey()) return "map file has no current ground bake";
+                return null;
+            }
+            catch (Exception e) when (e is FormatException || e is IOException) { return $"map file unreadable: {e.Message}"; }
+        }
+
         public static (GeneratedWorld, string) LoadOrGenerate(string path, WorldConfig c, IReadOnlyList<BiomeDef> defs, MaterialLibrary materials, bool save)
         {
             var sw = Stopwatch.StartNew();

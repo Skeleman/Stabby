@@ -9,7 +9,7 @@ namespace Stabby.World
         static readonly float[] RibCos = { 0.97030f, 0.98481f, 0.86603f, 0.68200f, 0.46947f, 0.25882f };
         static readonly float[] RibSin = { -0.24192f, 0.17365f, 0.5f, 0.73135f, 0.88295f, 0.96593f };
 
-        static void Bone(StructureLayout l, ulong key, in Frame f, float x0, float y0, float z0, float x1, float y1, float z1, float t0, float t1, int lo = 0, int hi = Tiers - 1)
+        static void Bone(StructureLayout l, ulong key, in Frame f, float x0, float y0, float z0, float x1, float y1, float z1, float t0, float t1, int lo = 0, int hi = Tiers - 1, int m = Stone)
         {
             float dx = x1 - x0, dy = y1 - y0, dz = z1 - z0, len = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
             if (dy <= 0.01f || len <= 0) return;
@@ -18,7 +18,7 @@ namespace Stabby.World
             dy = y1 - y0;
             float ln = dx / dy, bt = dz / dy, t = 0.5f * (t0 + t1);
             int before = l.Pieces.Count;
-            Box(l, key, f, 0.5f * (x0 + x1), y0, 0.5f * (z0 + z1), t * (float)Math.Sqrt(1 + ln * ln), dy, t * (float)Math.Sqrt(1 + bt * bt), Stone, GV, lo, hi, 1, 0, ln, bt);
+            Box(l, key, f, 0.5f * (x0 + x1), y0, 0.5f * (z0 + z1), t * (float)Math.Sqrt(1 + ln * ln), dy, t * (float)Math.Sqrt(1 + bt * bt), m, GV, lo, hi, 1, 0, ln, bt);
             if (l.Pieces.Count == before) return;
             var p = l.Pieces[before];
             p.R = RoundStem;

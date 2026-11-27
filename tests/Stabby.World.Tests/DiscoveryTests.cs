@@ -291,6 +291,21 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void FallenTreesLieInTheWoods()
+    {
+        int tree = Objects.Objects.FindIndex(o => o.Id == "fallen-tree");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var trees = field.Discoveries().Where(o => o.Def == tree).ToArray();
+        output.WriteLine($"{trees.Length} fallen trees " + string.Join(" ", trees.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(trees);
+        foreach (var c in trees)
+        {
+            Assert.True(field.Woods(c.X, c.Z) >= ObjectField.TreeWoods);
+            Assert.Null(field.TreeFault(c));
+        }
+    }
+
+    [Fact]
     public void HotSpringsSitInHotspots()
     {
         int spring = Objects.Objects.FindIndex(o => o.Id == "hot-spring"), total = 0, worlds = 0;
