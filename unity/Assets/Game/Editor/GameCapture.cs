@@ -421,6 +421,7 @@ namespace Stabby.Game.Editor
                         GameStatus.Lines["~bench geyser column"] = BenchMist(cam, "geyser erupting");
                     }
                     TerrainViewSystem.ClockOverride = null;
+                    Shader.SetGlobalFloat("_StabbyMudCrustOff", 0);
                     wait = 0;
                     phase++;
                 }
@@ -1831,11 +1832,11 @@ namespace Stabby.Game.Editor
         static readonly string[] OverlookShots = { "overlook-view", "overlook-site" };
         static readonly string[] LoneInnShots = { "loneinn-road", "loneinn-site" };
         static readonly string[] TreeShots = { "fallen-tree-side", "fallen-tree-through" };
-        static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot", "geyser-cone", "mudpot-rim" };
+        static readonly string[] VentShots = { "geyser", "geyser-far", "mudpot", "geyser-cone", "mudpot-rim", "mudpot-rim-before" };
 
         static bool AimVent(Camera cam, int mode)
         {
-            int kind = mode == 2 || mode == 4 ? ObjectField.MudPot : ObjectField.Geyser;
+            int kind = mode == 2 || mode >= 4 ? ObjectField.MudPot : ObjectField.Geyser;
             foreach (var w in Unity.Entities.World.All)
             {
                 var field = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
@@ -1863,9 +1864,10 @@ namespace Stabby.Game.Editor
                     target = c + Vector3.up * 0.1f * rout;
                     eye = c + side * 1.5f * rout + Vector3.up * 0.7f * rout;
                 }
-                else if (mode == 4)
+                else if (mode >= 4)
                 {
                     TerrainViewSystem.ClockOverride = null;
+                    Shader.SetGlobalFloat("_StabbyMudCrustOff", mode == 5 ? 1 : 0);
                     target = c + side * 0.6f * r;
                     eye = c + side * 1.9f * r + Vector3.up * 0.9f;
                 }
@@ -3035,8 +3037,8 @@ namespace Stabby.Game.Editor
             return true;
         }
 
-        const float LowSunTargetM = 30f, LowSunPitch = 14f, LowSunStepM = 8f;
-        const int LowSunSteps = 40;
+        const float LowSunTargetM = 30f, LowSunPitch = 14f, LowSunPitchMax = 32f, LowSunStepM = 8f, LowSunRakeDeg = 80f;
+        const int LowSunSteps = 120;
 
         static System.Collections.IEnumerator CastTour(Camera cam, string dir)
         {
@@ -3089,10 +3091,20 @@ namespace Stabby.Game.Editor
             foreach (var (name, pos, rot) in lows)
             {
                 cam.transform.SetPositionAndRotation(pos, rot);
-                float yaw = rot.eulerAngles.y + (name == "grass" ? 160f : 100f);
-                if (name.StartsWith("cliff") && hasGround && SunBlocked(ground, pos, rot, rot.eulerAngles.y - 100f) < SunBlocked(ground, pos, rot, yaw))
-                    yaw = rot.eulerAngles.y - 100f;
-                DayNightSystem.LightOverride = name == "rock" ? (Quaternion?)null : Quaternion.Euler(name == "grass" ? 6f : 14f, yaw, 0);
+                float yaw = rot.eulerAngles.y + (name == "grass" ? 160f : 100f), sunPitch = LowSunPitch;
+                if (name.StartsWith("cliff") && hasGround)
+                {
+                    float face = FaceYaw(ground, pos, rot);
+                    int best = int.MaxValue;
+                    for (float pitch = LowSunPitch; pitch <= LowSunPitchMax && best > 0; pitch += 6f)
+                        for (float rake = 0; rake <= LowSunRakeDeg; rake += 10f)
+                            foreach (float r in new[] { rake, -rake })
+                            {
+                                int b = SunBlocked(ground, pos, rot, face + 180f + r, pitch);
+                                if (b < best) { best = b; yaw = face + 180f + r; sunPitch = pitch; }
+                            }
+                }
+                DayNightSystem.LightOverride = name == "rock" ? (Quaternion?)null : Quaternion.Euler(name == "grass" ? 6f : sunPitch, yaw, 0);
                 for (var w = Settle(180); w.MoveNext();) yield return null;
                 string[] tags = name == "rock" ? new[] { "-nocast", "-cast", "-detailoff", "-nojoints" } : new[] { "-low-nocast", "-low", "-low-detailoff", "-low-nojoints" };
                 var rockB = Shader.GetGlobalVector("_StabbyRockB");
@@ -3113,16 +3125,27 @@ namespace Stabby.Game.Editor
             TerrainViewSystem.Casting = true;
         }
 
-        static int SunBlocked(Ground ground, Vector3 pos, Quaternion rot, float yaw)
+        static float FaceYaw(Ground ground, Vector3 pos, Quaternion rot)
         {
             var at = pos + rot * Vector3.forward * LowSunTargetM;
-            at.y = ground.HeightAt(at.x, at.z) + 1f;
-            var sun = -(Quaternion.Euler(LowSunPitch, yaw, 0) * Vector3.forward);
+            float dx = ground.HeightAt(at.x + 2f, at.z) - ground.HeightAt(at.x - 2f, at.z);
+            float dz = ground.HeightAt(at.x, at.z + 2f) - ground.HeightAt(at.x, at.z - 2f);
+            return dx * dx + dz * dz < 1e-6f ? rot.eulerAngles.y + 180f : Mathf.Atan2(-dx, -dz) * Mathf.Rad2Deg;
+        }
+
+        static int SunBlocked(Ground ground, Vector3 pos, Quaternion rot, float yaw, float pitch)
+        {
+            var sun = -(Quaternion.Euler(pitch, yaw, 0) * Vector3.forward);
             int blocked = 0;
-            for (int i = 1; i <= LowSunSteps; i++)
+            for (int s = 0; s < 9; s++)
             {
-                var p = at + sun * (i * LowSunStepM);
-                if (ground.HeightAt(p.x, p.z) > p.y) blocked++;
+                var at = pos + rot * new Vector3((s % 3 - 1) * 12f, 0, LowSunTargetM * (0.6f + 0.4f * (s / 3)));
+                at.y = ground.HeightAt(at.x, at.z) + 1f;
+                for (int i = 1; i <= LowSunSteps; i++)
+                {
+                    var p = at + sun * (i * LowSunStepM);
+                    if (ground.HeightAt(p.x, p.z) > p.y) { blocked++; break; }
+                }
             }
             return blocked;
         }
