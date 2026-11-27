@@ -205,14 +205,27 @@ namespace Stabby.Viewer
             }
         }
 
-        public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells)
+        public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells) => Lakes(world, cx, cy, cells, false);
+
+        public static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int cells, bool shared)
         {
             int n = world.Config.Size, x1 = Mathf.Min(cx + cells, n), y1 = Mathf.Min(cy + cells, n), row = x1 - cx + 1;
             float cm = world.Config.CellMeters;
-            var corner = new int[row * (y1 - cy + 1)];
-            for (int k = 0; k < corner.Length; k++) corner[k] = -1;
-            var sheet = lakeSheet ??= new SheetBuffers();
-            sheet.Clear();
+            int wet = 0, swelling = 0;
+            for (int y = cy; y < y1; y++)
+                for (int x = cx; x < x1; x++)
+                    if (LakeHeight(world, x, y) != float.MinValue) { wet++; if (SwellOf(world, x, y) > 0) swelling++; }
+            if (wet == 0) return null;
+            int side = LakeSwellSplit + 1;
+            var sheet = SheetBuffers.Rent(4 * wet + side * side * swelling, 6 * (wet - swelling) + 6 * LakeSwellSplit * LakeSwellSplit * swelling, row * (y1 - cy + 1));
+            try { return Lakes(world, cx, cy, x1, y1, row, cm, sheet, shared); }
+            finally { SheetBuffers.Return(sheet); }
+        }
+
+        static MeshParts Lakes(GeneratedWorld world, int cx, int cy, int x1, int y1, int row, float cm, SheetBuffers sheet, bool shared)
+        {
+            int n = world.Config.Size;
+            var corner = sheet.Corners;
             int Corner(int X, int Y)
             {
                 ref int v = ref corner[(Y - cy) * row + X - cx];
@@ -244,7 +257,20 @@ namespace Stabby.Viewer
                     if (SwellOf(world, x, y) > 0) sheet.Grid(v00, v01, v10, v11, LakeSwellSplit, cm / LakeSwellSplit, x, y);
                     else sheet.Quad(v00, v01, v10, v11);
                 }
-            return sheet.Piece($"Water {cx},{cy}", LakeKind);
+            return shared ? sheet.Bare($"Water {cx},{cy}") : sheet.Piece($"Water {cx},{cy}", LakeKind);
+        }
+
+        public static void ShareLakeConstants(MeshParts[] parts)
+        {
+            int most = 0;
+            foreach (var p in parts) if (p != null) most = Mathf.Max(most, p.Verts.Length);
+            var up = new Vector3[most];
+            var cols = new Color[most];
+            for (int k = 0; k < most; k++) { up[k] = Vector3.up; cols[k] = LakeKind; }
+            var uvs = new Vector2[most];
+            var zero = new Vector4[most];
+            foreach (var p in parts)
+                if (p != null) { p.Norms = up; p.Cols = cols; p.Uvs = uvs; p.Uv4 = zero; }
         }
 
         static float SwellOf(GeneratedWorld world, int x, int y)
@@ -255,16 +281,41 @@ namespace Stabby.Viewer
             return size < LakeSwellCells ? 0 : Mathf.Min(1, Mathf.Sqrt(size / LakeSwellFullCells));
         }
 
-        [System.ThreadStatic] static SheetBuffers lakeSheet;
-
         sealed class SheetBuffers
         {
+            static readonly List<SheetBuffers> free = new List<SheetBuffers>();
+
             readonly List<Vector3> verts = new List<Vector3>();
             readonly List<int> tris = new List<int>();
             readonly List<Vector4> kinds = new List<Vector4>(), tints = new List<Vector4>(), swells = new List<Vector4>();
             readonly Dictionary<long, int> edges = new Dictionary<long, int>();
+            public int[] Corners = new int[0];
+            int[] at = new int[0];
 
-            public void Clear() { verts.Clear(); tris.Clear(); kinds.Clear(); tints.Clear(); swells.Clear(); edges.Clear(); }
+            public static SheetBuffers Rent(int vertCount, int triCount, int cornerCount)
+            {
+                SheetBuffers pick = null;
+                lock (free)
+                {
+                    foreach (var b in free)
+                        if (pick == null || (b.verts.Capacity >= vertCount ? pick.verts.Capacity < vertCount || b.verts.Capacity < pick.verts.Capacity : b.verts.Capacity > pick.verts.Capacity)) pick = b;
+                    if (pick != null) free.Remove(pick);
+                }
+                pick ??= new SheetBuffers();
+                pick.Reserve(vertCount, triCount, cornerCount);
+                return pick;
+            }
+
+            public static void Return(SheetBuffers b) { lock (free) free.Add(b); }
+
+            void Reserve(int vertCount, int triCount, int cornerCount)
+            {
+                verts.Clear(); tris.Clear(); kinds.Clear(); tints.Clear(); swells.Clear(); edges.Clear();
+                if (verts.Capacity < vertCount) { verts.Capacity = vertCount; kinds.Capacity = vertCount; tints.Capacity = vertCount; swells.Capacity = vertCount; }
+                if (tris.Capacity < triCount) tris.Capacity = triCount;
+                if (Corners.Length < cornerCount) Corners = new int[cornerCount];
+                for (int k = 0; k < cornerCount; k++) Corners[k] = -1;
+            }
 
             public int Add(Vector3 p, Vector4 kind, Vector4 tint, Vector4 swell = default)
             {
@@ -281,7 +332,7 @@ namespace Stabby.Viewer
             public void Grid(int v00, int v01, int v10, int v11, int split, float spacing, int cx, int cy)
             {
                 int row = split + 1;
-                var at = new int[row * row];
+                if (at.Length < row * row) at = new int[row * row];
                 for (int j = 0; j <= split; j++)
                     for (int i = 0; i <= split; i++)
                     {
@@ -314,6 +365,8 @@ namespace Stabby.Viewer
                 if (verts.Count == 0) return null;
                 return Flat(name, verts, null, tris, kind, uv1: kinds.ToArray(), uv2: swells.ToArray(), uv3: tints.ToArray());
             }
+
+            public MeshParts Bare(string name) => new MeshParts { Name = name, Verts = verts.ToArray(), Tris = tris.ToArray(), Uv1 = kinds.ToArray(), Uv2 = swells.ToArray(), Uv3 = tints.ToArray() };
         }
 
         static Vector4 Tint(WaterMix m) => new Vector4(m.A, m.B, m.C, 0);
