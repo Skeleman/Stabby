@@ -146,13 +146,15 @@ namespace Stabby.World
                 Rotate(o, local[k + 2] * u, 0, local[k + 3] * u, out float bx, out _, out float bz);
                 ax += o.X; az += o.Z; bx += o.X; bz += o.Z;
                 float r = local[k + 4] * u;
-                list.Add(new FeatureEdit
+                var rock = new FeatureEdit
                 {
                     Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r,
                     Ax = ax, Ay = GroundAt(detail, cm, ax, az) + local[k + 5] * u, Az = az,
                     Bx = bx, By = GroundAt(detail, cm, bx, bz) + local[k + 6] * u, Bz = bz,
                     S = local[k + 7],
-                }.Finer());
+                }.Finer();
+                Settle(ref rock);
+                list.Add(rock);
             }
         }
 

@@ -291,8 +291,10 @@ namespace Stabby.World
         float Shell(float x, float y, float z, float qx, float qy, float qz, float t)
         {
             if (Shape != Boulder) return Surface(x, y, z, qx, qy, qz, t);
-            float foot = Surface(x, y - qy, z, qx, 0f, qz, t);
-            return qy < 0f ? foot : Math.Max(foot, Surface(x, y, z, qx, qy, qz, t));
+            float ex = Bx - Ax, ez = Bz - Az, hl = ex * ex + ez * ez, px = x - Ax, pz = z - Az;
+            float th = hl > 0 ? Math.Max(0f, Math.Min(1f, (px * ex + pz * ez) / hl)) : 0f, hy = y - Ay - th * (By - Ay);
+            float foot = Surface(x, y - hy, z, px - th * ex, 0f, pz - th * ez, th);
+            return hy < 0f ? foot : Math.Max(foot, Surface(x, y, z, qx, qy, qz, t));
         }
 
         float Surface(float x, float y, float z, float qx, float qy, float qz, float t)

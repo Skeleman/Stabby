@@ -369,7 +369,7 @@ namespace Stabby.World
                     for (float y = ground + BoulderFootSkin; y <= b.MaxY; y += BoulderFootStep * b.R)
                     {
                         if (!b.Reach(x, y, z, out _)) { air = true; continue; }
-                        if (air) { e.Add($"boulder at {x:F1},{z:F1} leaves an overhang gap {y - ground:F2} m above its base TMP g={ground:F2} minY={b.MinY:F2} ay={b.Ay:F2} by={b.By:F2} r={b.R:F2} h={b.H:F2} ax={b.Ax:F1},{b.Az:F1}"); return; }
+                        if (air) { e.Add($"boulder at {x:F1},{z:F1} leaves an overhang gap {y - ground:F2} m above its base"); return; }
                         break;
                     }
                 }
@@ -508,7 +508,11 @@ namespace Stabby.World
                 if (!(solid && open)) { e.Add(at + $" collision misses mesh vertex {vx:F1},{vy:F1},{vz:F1}"); return; }
             }
             if (Math.Abs(wy - top) > Walk.Probe) e.Add(at + $" walker stands at {wy:F2}, boulder top is {top:F2}");
-            if (Math.Abs(meshTop - top) > BoulderTolerance) e.Add(at + $" mesh top {meshTop:F2} misses boulder top {top:F2}");
+            float high = top;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                    foreach (var f in list.Items) high = Math.Max(high, TopAt(f, mx + dx * s, mz + dz * s));
+            if (meshTop < top - BoulderTolerance || meshTop > high + BoulderTolerance) e.Add(at + $" mesh top {meshTop:F2} misses boulder top {top:F2}");
         }
 
         static float TopAt(FeatureEdit f, float x, float z)
