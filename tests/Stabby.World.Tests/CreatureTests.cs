@@ -313,7 +313,7 @@ public class CreatureTests
     [Fact]
     public void SpawnPlanVariesBySeed()
     {
-        var other = TestWorlds.World(6);
+        var other = TestWorlds.World(4);
         var a = CreaturePlan.Build(PlanWorld, PlanCells, Lib, PlanPools);
         var b = CreaturePlan.Build(other, new TerrainDetail(other).Cells, Lib, null);
         Assert.False(a.Count == b.Count && a.Zip(b).All(p => p.First.X == p.Second.X && p.First.BodySeed == p.Second.BodySeed));
