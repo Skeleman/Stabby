@@ -326,12 +326,11 @@ namespace Stabby.World
                     float g = Profile(b, x * cm, y * cm);
                     if (drop > 0f)
                     {
-                        float under = Math.Max(h[i], g), sk = Skirt(b, x * cm, y * cm, drop);
-                        if (sk > float.MinValue)
-                        {
-                            float k = Math.Min(1f, Math.Max(0f, Math.Min((LakeGap(s, x, y) * cm - RiverPadM) / (FadeSpan * RiverPadM), (s.Coast[i] * cm - CoastPadM) / CoastPadM)));
-                            g = under + (sk - under) * k;
-                        }
+                        float sk = Skirt(b, x * cm, y * cm, drop);
+                        if (g == float.MinValue && sk == float.MinValue) continue;
+                        float k = Math.Min(1f, Math.Max(0f, Math.Min((LakeGap(s, x, y) * cm - RiverPadM) / (FadeSpan * RiverPadM), (s.Coast[i] * cm - CoastPadM) / CoastPadM)));
+                        float e = g == float.MinValue ? h[i] : g + (Math.Min(h[i], g) - g) * Ease(b, x * cm, y * cm);
+                        g = sk > float.MinValue ? e + (sk - e) * k : g + (e - g) * (1f - k);
                     }
                     h[i] = Math.Max(h[i], g);
                 }
@@ -342,6 +341,15 @@ namespace Stabby.World
             float best = float.MaxValue;
             foreach (var lake in s.Lakes) best = Math.Min(best, lake.Gap(x, y, 1));
             return best;
+        }
+
+        static float Ease(VolcanoSketch v, float x, float z)
+        {
+            float dx = x - v.X, dz = z - v.Z, rr = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (rr < 1e-3f) return 0f;
+            Radii(v, dx / rr, dz / rr, out float rd, out float rcd, out _, out float ad, out _, out _);
+            float m = 0.5f * (rcd + rd), t = Math.Min(1f, Math.Max(0f, (rr - m) / (rd + ad - m)));
+            return t * t * (3f - 2f * t);
         }
 
         static float Skirt(VolcanoSketch v, float x, float z, float drop)
