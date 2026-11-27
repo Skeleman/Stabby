@@ -21,6 +21,7 @@ test MineTests.FloatingTimberIsCaught 2 checks a lifted timber fails on the cach
 test DungeonLinkTests.LinksJoinDungeonsToWalkableDarkCaves 25 builds two worlds, checks their dungeon link caves and cave darkness
 test DungeonLinkTests.SurfacedOrStrayLinksAreCaught 12 builds one world and checks raised and moved link caves fail
 test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places boulders over a world and splits large ones into solid edits
+test ObjectTests.BouldersLeaveNoFootGapOnSeed1At2048 25 builds and places seed 1 at 2048 and checks every boulder foot
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
 test WorldFileTests.BakedWorldLoadsBackIdentical 14 bakes a world file and loads it back

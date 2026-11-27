@@ -552,8 +552,20 @@ namespace Stabby.World
             var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, N = BoulderRelief * r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
             var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, N = BoulderRelief * r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
             if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || NearQuicksand(a) || NearQuicksand(b) || NearOasis(a) || NearOasis(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
+            Settle(ref a);
+            Settle(ref b);
             boulders.Add(a);
             boulders.Add(b);
+        }
+
+        void Settle(ref FeatureEdit e)
+        {
+            int n = WorldChecks.BoulderFootColumns;
+            float lo = float.MaxValue;
+            for (int j = 0; j <= n; j++)
+                for (int i = 0; i <= n; i++)
+                    lo = Math.Min(lo, GroundAt(e.MinX + (e.MaxX - e.MinX) * i / n, e.MinZ + (e.MaxZ - e.MinZ) * j / n));
+            e.H = Math.Max(0f, e.MinY - lo);
         }
 
         bool Wet(FeatureEdit e)

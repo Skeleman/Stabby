@@ -68,7 +68,7 @@ namespace Stabby.World
         public float MinX => Math.Min(Ax, Bx) - R - Spread;
         public float MaxX => Math.Max(Ax, Bx) + R + Spread;
         public float MinY => Shape == Butte || Shape == SeaStack ? Ay - H - 1f : Shape == SlotCanyon ? Math.Min(Ay, By) - R - SlotRippleM - 1f : Math.Min(Ay, By) - (Shape == Boulder ? BoulderFoot : 1f) * R - H;
-        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Shape == SeaStack ? By + F + StackBand + 1f : Math.Max(Ay, By) + R + H;
+        public float MaxY => Shape == Butte ? By + ButteCapM + ButteBand + 1f : Shape == SeaStack ? By + F + StackBand + 1f : Math.Max(Ay, By) + R + (Shape == Boulder ? 0f : H);
         public float MinZ => Math.Min(Az, Bz) - R - Spread;
         public float MaxZ => Math.Max(Az, Bz) + R + Spread;
 

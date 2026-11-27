@@ -369,13 +369,13 @@ namespace Stabby.World
                     for (float y = ground + BoulderFootSkin; y <= b.MaxY; y += BoulderFootStep * b.R)
                     {
                         if (!b.Reach(x, y, z, out _)) { air = true; continue; }
-                        if (air) { e.Add($"boulder at {x:F1},{z:F1} leaves an overhang gap {y - ground:F2} m above its base"); return; }
+                        if (air) { e.Add($"boulder at {x:F1},{z:F1} leaves an overhang gap {y - ground:F2} m above its base TMP g={ground:F2} minY={b.MinY:F2} ay={b.Ay:F2} by={b.By:F2} r={b.R:F2} h={b.H:F2} ax={b.Ax:F1},{b.Az:F1}"); return; }
                         break;
                     }
                 }
         }
 
-        static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
+        public static void CheckBoulders(GeneratedWorld w, TerrainDetail detail, EditGrid grid, List<string> e)
         {
             var edits = grid.Edits;
             int n = w.Config.Size;
@@ -407,13 +407,18 @@ namespace Stabby.World
                 }
                 if (!chock) boulders.Add(q);
             }
+            int found = e.Count;
+            foreach (int q in boulders)
+            {
+                CheckBoulderFoot(detail, cm, edits[q], e);
+                if (e.Count > found) return;
+            }
             int samples = Math.Min(BoulderMeshSamples, boulders.Count);
             for (int k = 0; k < samples; k++)
             {
                 var b = edits[boulders[(int)((long)k * boulders.Count / samples)]];
                 int before = e.Count;
-                CheckBoulderFoot(detail, cm, b, e);
-                if (e.Count == before) CheckBoulderMesh(detail, grid, b, e);
+                CheckBoulderMesh(detail, grid, b, e);
                 if (e.Count == before) CheckBoulderFade(detail, grid, b, e);
                 if (e.Count > before) return;
             }
