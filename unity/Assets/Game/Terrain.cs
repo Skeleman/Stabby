@@ -1431,7 +1431,7 @@ namespace Stabby.Game
             t.Mark("color blob");
             var lib = ContentFiles.Materials(materials);
             t.Mark("materials");
-            p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null);
+            p.Strata = TerrainLook.Strata(world, lib, defs, SameOffsets(world.Materials, lib) ? detail.Offsets : null, edits);
             t.Mark("strata");
             p.Deep = lib.Water == null ? float.NegativeInfinity : -SunkClarities * math.max(lib.Water.ClarityM, lib.Water.ShoreM);
             var offs = p.Look.Allocate(ref root.Offsets, p.Strata.Offsets.Length);

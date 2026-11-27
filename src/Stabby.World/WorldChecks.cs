@@ -959,6 +959,7 @@ namespace Stabby.World
                 CheckCenotes(w, detail, edits, field, e);
                 CheckSlotCanyons(w, detail, edits, field, e);
                 CheckArches(w, edits, e);
+                CheckSeaStacks(w, detail, edits, field, e);
                 if (w.Objects != null && w.Biome != null) CheckBoulders(w, detail, grid, e);
             }
             if (clock.Start("caves"))
@@ -1021,7 +1022,7 @@ namespace Stabby.World
                 SurfaceNets.General(new EditedSolid<ColumnCache, EditArray> { Columns = cols, Edits = list, StepM = s }, c, jMin, jMax, ref g);
                 var h = new NetsBuffers();
                 SurfaceNets.Heightfield(cols, c, ref h);
-                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : x.Shape == FeatureEdit.Vault ? "dungeon vault" : x.Shape == FeatureEdit.Mine ? "mine" : x.Shape == FeatureEdit.SlotCanyon ? "slot canyon" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
+                string kind = x.Shape == FeatureEdit.Arch ? "arch" : x.Shape == FeatureEdit.Cave ? "cave" : x.Shape == FeatureEdit.CaveRoom ? "cave room" : x.Shape == FeatureEdit.CrystalCell ? "crystal cell" : x.Shape == FeatureEdit.Lip ? "mesa lip" : x.Shape == FeatureEdit.Bridge ? "rock bridge" : x.Shape == FeatureEdit.Sink ? "brook sink" : x.Shape == FeatureEdit.Shaft ? "skylight shaft" : x.Shape == FeatureEdit.Vault ? "dungeon vault" : x.Shape == FeatureEdit.Mine ? "mine" : x.Shape == FeatureEdit.SeaStack ? "sea stack" : x.Shape == FeatureEdit.SlotCanyon ? "slot canyon" : Landforms.Of(x.Shape) ? Landforms.Name(x.Shape) : "overhang";
                 if (!f.SameSurfaceAs(g)) e.Add($"{kind} mesh at {x.Ax:F0},{x.Az:F0} differs from the general mesher");
                 if (f.SameSurfaceAs(h)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} leaves the ground unchanged");
                 if (!f.SameRimAs(h, cells)) e.Add($"{kind} at {x.Ax:F0},{x.Az:F0} moves chunk rim vertices");
@@ -1058,6 +1059,41 @@ namespace Stabby.World
                 foreach (var y in edits)
                     if (!Landforms.Of(y.Shape) && y.Shape != FeatureEdit.Boulder && Features.TileOf(y, cm) == tile
                         && x.MinX < y.MaxX && x.MaxX > y.MinX && x.MinY < y.MaxY && x.MaxY > y.MinY && x.MinZ < y.MaxZ && x.MaxZ > y.MinZ) { e.Add(at + " overlaps a terrain feature"); return; }
+            }
+        }
+
+        public static void CheckSeaStacks(GeneratedWorld w, TerrainDetail detail, FeatureEdit[] edits, ObjectField field, List<string> e)
+        {
+            float cm = w.Config.CellMeters;
+            var plans = field != null ? field.TownPlans() : null;
+            foreach (var x in edits)
+            {
+                if (x.Shape != FeatureEdit.SeaStack) continue;
+                string at = $"sea stack at {x.Ax:F0},{x.Az:F0}";
+                if (x.Kind != FeatureEdit.Add) { e.Add(at + " carves solid"); return; }
+                if (!Features.Inside(x, cm)) { e.Add(at + " leaves its tile interior"); return; }
+                if (x.Ay >= 0f || x.By <= 0f) { e.Add($"{at} spans {x.Ay:F1}..{x.By:F1} m, not across sea level"); return; }
+                float foot = x.D * (1f + FeatureEdit.StackLobe);
+                if (!SeaStacks.Wet(w, detail, x.Ax, x.Az, foot) || !SeaStacks.Wet(w, detail, x.Bx, x.Bz, foot)) { e.Add(at + " stands outside the sea"); return; }
+                float mx = 0.5f * (x.Ax + x.Bx), mz = 0.5f * (x.Az + x.Bz);
+                if (!SeaStacks.Clear(w, mx, mz, SeaStacks.CheckClearM)) { e.Add(at + " touches a river mouth, lake or beach strip"); return; }
+                if (plans != null)
+                    foreach (var p in plans)
+                    {
+                        float cx = Math.Max(x.MinX, Math.Min(p.X, x.MaxX)), cz = Math.Max(x.MinZ, Math.Min(p.Z, x.MaxZ));
+                        if ((cx - p.X) * (cx - p.X) + (cz - p.Z) * (cz - p.Z) < p.Radius * p.Radius) { e.Add($"{at} touches town {p.Town}"); return; }
+                    }
+                if (x.P <= 0f) continue;
+                if (!SeaStacks.Offshore(w, mx, mz, SeaStacks.ArchReach(x))) { e.Add($"{at} arch stands within {SeaStacks.ArchOffM:F0} m of land"); return; }
+                if (x.T + 1.25f * x.P < 0.95f * 1.55f * SeaStacks.ArchMinP) { e.Add($"{at} arch hole rises only {x.T + 1.25f * x.P:F1} m above the sea"); return; }
+                float ex = x.Bx - x.Ax, ez = x.Bz - x.Az, len = (float)Math.Sqrt(ex * ex + ez * ez);
+                if (len <= 0f) { e.Add(at + " has a hole but no stub"); return; }
+                float tx = -ez / len, tz = ex / len, y = FeatureEdit.StackNotchY;
+                for (float a = -x.R; a <= x.R; a += 0.5f)
+                {
+                    float px = mx + tx * a, pz = mz + tz * a;
+                    if (!x.StackOpen(px, y, pz) || detail.HeightAt(px / cm, pz / cm) >= y) { e.Add($"{at} has its arch hole blocked at {px:F0},{pz:F0}"); return; }
+                }
             }
         }
 
