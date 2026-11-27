@@ -18,6 +18,7 @@ test CaveTests.ObsidianCavesFormInHotDryGroundWithLavaPools 10 builds the pinned
 test CaveTests.LavaPoolOnAPassageFails 10 reuses the pinned seed-13 world and moves its lava pool onto a passage
 test MineTests.MinesAreWalkableGridAlignedAndTimbered 20 carves mines on full worlds, walks each from its entrance and places its timber
 test MineTests.FloatingTimberIsCaught 2 checks a lifted timber fails on the cached default world, built by the class fixture
+test CreatureTests.HerdsCarryYoungLedByAnAdult 5 builds the shared creature pools once on the cached default world, built by the class fixture
 test DungeonLinkTests.LinksJoinDungeonsToWalkableDarkCaves 25 builds two worlds, checks their dungeon link caves and cave darkness
 test DungeonLinkTests.SurfacedOrStrayLinksAreCaught 12 builds one world and checks raised and moved link caves fail
 test ObjectTests.LargeBouldersBecomeSolidEditsAndSmallOnesStayObjects 18 places boulders over a world and splits large ones into solid edits

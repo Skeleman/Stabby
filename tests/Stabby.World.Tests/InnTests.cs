@@ -3,7 +3,7 @@ using Stabby.World;
 
 namespace Stabby.World.Tests;
 
-public class InnTests
+public class InnTests : IClassFixture<DefaultWorldFixture>
 {
     static readonly string Root = ContentLoader.FindContentRoot(AppContext.BaseDirectory);
     static readonly List<BiomeDef> Biomes = ContentLoader.LoadBiomes(Root);
