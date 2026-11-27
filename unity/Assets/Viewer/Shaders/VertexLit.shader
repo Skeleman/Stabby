@@ -24,7 +24,7 @@ Shader "Stabby/VertexLit"
             #include "LocalLights.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyGrassFar;
-            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre, _StabbyIce, _StabbyRoad, _StabbyRut, _StabbyObsidian;
+            float4 _StabbySinterA, _StabbySinterB, _StabbySinterC, _StabbyMudClay, _StabbyMudGrey, _StabbyMudSurface, _StabbyPeatWet, _StabbyPeatDark, _StabbyPeatFibre, _StabbyIce, _StabbyRoad, _StabbyRut, _StabbyObsidian, _StabbyFertile, _StabbyFertileDamp;
             float _StabbyStrataPeriod, _StabbyCellMeters, _StabbyCaveDarkOff;
             TEXTURE2D(_StabbyStrata);
             SAMPLER(sampler_StabbyStrata);
@@ -81,8 +81,12 @@ Shader "Stabby/VertexLit"
                 float3 n = normalize(i.normalWS);
                 float3 color = i.color.rgb;
                 float off = i.strata.x, mix = i.strata.y, h = i.strata.z, f = saturate(i.strata.w), stone = saturate(i.color.a - 1), ao = min(i.color.a, 1), fw = fwidth(i.foot.x), foot = 0;
+                float3 fq = float3(i.xz.x, i.strata.z, i.xz.y), ff = cross(ddy(fq), ddx(fq));
                 [branch] if (i.foot.y > 0)
                 {
+                    float3 fn = normalize(ff);
+                    fn = dot(fn, n) < 0 ? -fn : fn;
+                    n = normalize(lerp(n, fn, i.foot.y * saturate((n.y - fn.y) * 4) * (1 - smoothstep(0.6, 0.9, fn.y)) * (1 - smoothstep(0.8, 1.6, i.foot.x))));
                     float2 xa = i.xz + OrgOrigin(_WorldSpaceCameraPos);
                     foot = i.foot.y * smoothstep(0, min(0.9, (0.04 + 1.5 * fw) * (1 + 0.4 * OrgNoise2(xa * 2.3 + 1.9).x)), i.foot.x);
                     f = min(f, 1 - foot);
@@ -201,7 +205,7 @@ Shader "Stabby/VertexLit"
                     tmRough = lerp(tmRough, lerp(0.9, _StabbyMudSurface.w, wet), cover);
                     n = normalize(n - grad * cover);
                 }
-                [branch] if (i.peat.x > 0.01)
+                [branch] if (i.peat.x > 0.01 && i.peat.y < 0.5)
                 {
                     float3 q = float3(i.xz.x, h, i.xz.y);
                     float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
@@ -217,6 +221,22 @@ Shader "Stabby/VertexLit"
                     m.albedo = lerp(m.albedo, a, cover);
                     tmRough = lerp(tmRough, lerp(0.8, _StabbyPeatWet.w, wet), cover);
                     tmGrass *= 1 - cover;
+                    n = normalize(n - grad * cover);
+                }
+                [branch] if (i.peat.x > 0.01 && i.peat.y > 0.5)
+                {
+                    float3 q = float3(i.xz.x, h, i.xz.y);
+                    float fp = max(max(length(ddx(q)), length(ddy(q))) * 0.7, 1e-4);
+                    float4 big = OrgNoise3(q * 0.5 + 5.3, int3(0, 0, 0)), mid = OrgRL3(q, OrgF(0), 7.3, 0), fine = OrgRL3(q, OrgF(2), 2.9, 2);
+                    float fm = OrgRungW(0, fp), ff = OrgRungW(2, fp);
+                    float cover = smoothstep(0.2, 0.6, i.peat.x + 0.3 * big.x + 0.1 * mid.x * fm);
+                    float damp = smoothstep(0.7, 1, i.peat.x + 0.12 * big.y + 0.05 * mid.x * fm);
+                    float tuft = smoothstep(0.35, 0.8, 0.6 * fine.x + 0.5 * mid.x) * ff;
+                    float3 a = lerp(_StabbyFertile.rgb, _StabbyFertileDamp.rgb, damp) * (0.88 + 0.1 * mid.x * fm + 0.1 * tuft);
+                    float3 grad = 0.04 * mid.yzw * fm + 0.05 * fine.yzw * ff;
+                    grad -= n * dot(grad, n);
+                    m.albedo = lerp(m.albedo, a, cover);
+                    tmRough = lerp(tmRough, lerp(_StabbyFertile.w, _StabbyFertileDamp.w, damp), cover);
                     n = normalize(n - grad * cover);
                 }
                 [branch] if (i.sky.z > 0.01)

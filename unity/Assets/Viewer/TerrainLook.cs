@@ -125,6 +125,8 @@ namespace Stabby.Viewer
             Shader.SetGlobalVector("_StabbyRoad", s.Sinter[10]);
             Shader.SetGlobalVector("_StabbyRut", s.Sinter[11]);
             Shader.SetGlobalVector("_StabbyObsidian", s.Sinter[12]);
+            Shader.SetGlobalVector("_StabbyFertile", s.Sinter[13]);
+            Shader.SetGlobalVector("_StabbyFertileDamp", s.Sinter[14]);
             Shader.SetGlobalVectorArray("_StabbyKit", s.Kit);
             Shader.SetGlobalVectorArray("_StabbyKitSrgb", s.KitSrgb);
         }
@@ -179,18 +181,26 @@ namespace Stabby.Viewer
                     level = dst;
                 }
                 var px = new ushort[level.Length * 2];
-                for (int q = 0; q < level.Length; q++) { px[2 * q] = (ushort)math.f32tof16(level[q].x); px[2 * q + 1] = (ushort)math.f32tof16(level[q].y); }
+                var lv = level;
+                int side = size;
+                Parallel.For(0, side, k =>
+                {
+                    for (int q = k * side, end = q + side; q < end; q++) { px[2 * q] = (ushort)math.f32tof16(lv[q].x); px[2 * q + 1] = (ushort)math.f32tof16(lv[q].y); }
+                });
                 mips.Add(px);
                 if (size == 1) break;
             }
             var biome = new ushort[n * n * 4];
-            for (int q = 0; q < n * n; q++)
+            Parallel.For(0, n, y =>
             {
-                biome[4 * q] = (ushort)math.f32tof16(colors[q].x);
-                biome[4 * q + 1] = (ushort)math.f32tof16(colors[q].y);
-                biome[4 * q + 2] = (ushort)math.f32tof16(colors[q].z);
-                biome[4 * q + 3] = (ushort)math.f32tof16(offsets[q]);
-            }
+                for (int q = y * n, end = q + n; q < end; q++)
+                {
+                    biome[4 * q] = (ushort)math.f32tof16(colors[q].x);
+                    biome[4 * q + 1] = (ushort)math.f32tof16(colors[q].y);
+                    biome[4 * q + 2] = (ushort)math.f32tof16(colors[q].z);
+                    biome[4 * q + 3] = (ushort)math.f32tof16(offsets[q]);
+                }
+            });
             return new FieldLook { Res = res, N = n, TexelM = tm, CellM = cm, Slopes = mips.ToArray(), Bed = Mips(h, res), Biome = biome };
         }
 
@@ -320,10 +330,17 @@ namespace Stabby.Viewer
                 coatB[k] = new Vector4(c.FeatureAmp, 1f / c.FeatureWavelengthM, c.Parallax, c.AlbedoVar);
                 coatR[k] = c.Roughness;
             }
+            float[] off = offsets, water = null;
+            byte[] coat = null, forest = null;
+            Parallel.Invoke(
+                () => off ??= lib.Offsets(w),
+                () => coat = d.CoatWeights(w),
+                () => forest = SurfaceDetail.ForestWeights(w, w.Objects, defs),
+                () => water = WaterLevel(w));
             return new StrataLook
             {
-                Offsets = offsets ?? lib.Offsets(w), Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
-                Coat = d.CoatWeights(w), Forest = SurfaceDetail.ForestWeights(w, w.Objects, defs), WaterLevel = WaterLevel(w), N = w.Config.Size, CellM = w.Config.CellMeters,
+                Offsets = off, Bands = bands, Hardness = hard, PeriodM = lib.PeriodM,
+                Coat = coat, Forest = forest, WaterLevel = water, N = w.Config.Size, CellM = w.Config.CellMeters,
                 Surface = new Vector4(d.FadePixels, 1f / d.ParallaxFootprintM, math.sin(wind), math.cos(wind)),
                 Detail = new Vector4(1f / lib.Look.DetailWavelengthM, lib.Look.DetailLacunarity, lib.Look.DetailOctaves, lib.Look.DetailGain),
                 Wobble = new Vector4(d.StrataWobbleM, 1f / d.StrataWobbleWavelengthM, d.CoatPatchAmp, 1f / d.CoatPatchWavelengthM),
@@ -335,7 +352,7 @@ namespace Stabby.Viewer
                 CoatA = coatA, CoatB = coatB,
                 Liquids = LiquidLook(lib),
                 Tints = TintLook(lib),
-                Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat, lib.Find("ice"), lib.Find("dirt-road"), lib.Find("rut-dirt"), lib.Find("obsidian")),
+                Sinter = SinterLook(lib.Sinter, lib.Mud, lib.Peat, lib.Find("ice"), lib.Find("dirt-road"), lib.Find("rut-dirt"), lib.Find("obsidian"), lib.Find("oasis-grass"), lib.Find("oasis-damp")),
                 Kit = KitLook(lib, true),
                 KitSrgb = KitLook(lib, false),
             };
@@ -346,9 +363,11 @@ namespace Stabby.Viewer
             int n = w.Config.Size;
             float cm = w.Config.CellMeters;
             var level = new float[n * n];
-            for (int y = 0; y < n; y++)
+            Parallel.For(0, n, y =>
+            {
                 for (int x = 0; x < n; x++)
                     level[y * n + x] = math.max(0, WaterGeometry.LakeHeight(w, x, y));
+            });
             foreach (var r in w.Water.Rivers)
                 for (int k = 0; k < r.Cells.Count; k++)
                 {
@@ -362,10 +381,10 @@ namespace Stabby.Viewer
             return level;
         }
 
-        static Vector4[] SinterLook(SinterDef d, MudDef m, PeatDef p, LibraryMaterial ice, LibraryMaterial road, LibraryMaterial rut, LibraryMaterial obsidian)
+        static Vector4[] SinterLook(SinterDef d, MudDef m, PeatDef p, LibraryMaterial ice, LibraryMaterial road, LibraryMaterial rut, LibraryMaterial obsidian, LibraryMaterial fert, LibraryMaterial damp)
         {
             Vector4 C(uint c, float w) { var l = ToLinear(Unpack(c)); return new Vector4(l.x, l.y, l.z, w); }
-            return new[] { C(d.White, 0), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0), C(ice?.Color ?? 0xcfe2ecu, ice?.Translucency ?? 0), C(road?.Color ?? 0x8a7860u, 0.85f), C(rut?.Color ?? 0x5e5040u, 0.7f), C(obsidian?.Color ?? 0x17141cu, 0) };
+            return new[] { C(d.White, 0), C(d.Ochre, d.Roughness), C(d.Orange, 0), C(m.Surface, m.Roughness), C(m.Clay, 0), C(m.Grey, 0), C(p.Wet, p.Roughness), C(p.Dark, 0), C(p.Fibre, 0), C(ice?.Color ?? 0xcfe2ecu, ice?.Translucency ?? 0), C(road?.Color ?? 0x8a7860u, 0.85f), C(rut?.Color ?? 0x5e5040u, 0.7f), C(obsidian?.Color ?? 0x17141cu, 0), C(fert?.Color ?? 0x6c8440u, 0.85f), C(damp?.Color ?? 0x4e4a35u, 0.6f) };
         }
 
         static Vector4[] KitLook(MaterialLibrary lib, bool linear)

@@ -4,9 +4,9 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9;
+        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11;
         const int GX = 0, GV = 1, GZ = 2;
-        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4;
+        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5;
         static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };
         static readonly float[] DomeLowR = { 1f, 0.8f }, DomeLowY = { -0.8f, 0.3f };
 
@@ -60,6 +60,7 @@ namespace Stabby.World
         static float[] RoundMesh(ulong key, int shape, int tier, out int[] idx, out float[] lift)
         {
             var rng = Rng.Stream(key, "round");
+            if (shape == RoundTube) return TubeMesh(ref rng, tier, out idx, out lift);
             int sides = shape == RoundDisc ? 32 : tier < (shape >= RoundStem ? 1 : 2) ? 16 : 8;
             var dc = new float[sides];
             var ds = new float[sides];
@@ -139,6 +140,76 @@ namespace Stabby.World
                 }
             if (shape == RoundStem)
                 for (int t = 0; t < idx.Length; t += 3) { int a = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = a; }
+            return w;
+        }
+
+        static bool InHollow(in StructurePiece p, float px, float py, float pz)
+        {
+            float dx = px - p.X, dz = pz - p.Z, x = p.C * dx + p.S * dz, z = p.C * dz - p.S * dx;
+            float t = 2 * x / p.Sx, uy = 2 * (py - p.Y) / p.Sy - 1, uz = 2 * z / p.Sz;
+            if (t <= -1 || t >= 1) return false;
+            float k = 1 - TreeTaper * 0.5f * (t + 1), cy = -TreeSag * (1 - t * t) - TreeDrop * (1 - k);
+            return (uy - cy) * (uy - cy) + uz * uz < 0.56f * k * k;
+        }
+
+        static float[] TubeMesh(ref Rng rng, int tier, out int[] idx, out float[] lift)
+        {
+            int sides = tier < 1 ? 32 : tier < 2 ? 16 : 8, rings = tier < 1 ? 13 : tier < 2 ? 7 : 3, wall = rings * sides, rim = 2 * wall;
+            var dc = new float[sides];
+            var ds = new float[sides];
+            for (int i = 0; i < sides; i++) RoundDir(i, sides, out dc[i], out ds[i]);
+            float sway = rng.Range(-0.08f, 0.08f), wob = rng.Range(-0.05f, 0.05f);
+            var w = new float[3 * (rim + 4 * sides)];
+            lift = new float[rim + 4 * sides];
+            var rag = new float[2][];
+            for (int e = 0; e < 2; e++)
+            {
+                rag[e] = new float[sides];
+                var tear = new float[sides];
+                for (int i = 0; i < sides; i++) tear[i] = rng.NextFloat() < 0.4f ? rng.Range(0.06f, 0.15f) : rng.Range(0f, 0.04f);
+                for (int i = 0; i < sides; i++) rag[e][i] = 0.01f + 0.25f * tear[(i + sides - 1) % sides] + 0.5f * tear[i] + 0.25f * tear[(i + 1) % sides];
+            }
+            var outer = RoundNoise(ref rng, sides, 0.93f, 1f);
+            float floor = 2 * (TreeFloorM - TreeCy) / TreeSy;
+            var inner = RoundNoise(ref rng, sides, 0.78f, 0.84f);
+            for (int j = 0; j < rings; j++)
+            {
+                float t = 2f * j / (rings - 1) - 1, k = 1 - TreeTaper * 0.5f * (t + 1), cy = -TreeSag * (1 - t * t) - TreeDrop * (1 - k), cz = sway * (1 - t * t) + wob * t * (1 - t * t);
+                float fl = Math.Max(0, -0.55f - t) / 0.45f, flare = 1 + 0.12f * fl * fl, bump = j == 0 || j == rings - 1 ? 0 : rng.Range(-0.045f, 0.045f);
+                bool end = j == 0 || j == rings - 1;
+                for (int i = 0; i < sides; i++)
+                {
+                    float x = j == 0 ? -1 + rag[0][i] : j == rings - 1 ? 1 - rag[1][i] : t, ro = outer[i] * k * flare * (1 - 0.025f * rng.NextFloat() + bump * Math.Max(0, dc[i]) * Math.Max(0, dc[i])), ri = inner[i] * k * (1 - 0.03f * rng.NextFloat());
+                    float xi = end ? x - t * rng.Range(0.02f, 0.06f) : x;
+                    int o = j * sides + i, n = wall + o;
+                    w[3 * o] = x; w[3 * o + 1] = cy + ro * dc[i]; w[3 * o + 2] = cz + ro * ds[i];
+                    w[3 * n] = xi; w[3 * n + 1] = Math.Max(cy + ri * dc[i], floor); w[3 * n + 2] = cz + ri * ds[i];
+                    lift[o] = 9; lift[n] = 3;
+                    if (!end) continue;
+                    int b = rim + (j == 0 ? 0 : 2 * sides) + i;
+                    Array.Copy(w, 3 * o, w, 3 * b, 3);
+                    Array.Copy(w, 3 * n, w, 3 * (b + sides), 3);
+                    lift[b] = 7; lift[b + sides] = 5.6f;
+                }
+            }
+            var id = new System.Collections.Generic.List<int>();
+            for (int j = 0; j + 1 < rings; j++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int a = j * sides + i, b = j * sides + (i + 1) % sides, c = b + sides, d = a + sides;
+                    id.Add(a); id.Add(b); id.Add(c);
+                    id.Add(a); id.Add(c); id.Add(d);
+                    id.Add(wall + a); id.Add(wall + c); id.Add(wall + b);
+                    id.Add(wall + a); id.Add(wall + d); id.Add(wall + c);
+                }
+            for (int e = 0; e < 2; e++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int oa = rim + 2 * e * sides + i, ob = rim + 2 * e * sides + (i + 1) % sides, ia = oa + sides, ib = ob + sides;
+                    if (e == 0) { id.Add(ia); id.Add(ob); id.Add(oa); id.Add(ia); id.Add(ib); id.Add(ob); }
+                    else { id.Add(ia); id.Add(oa); id.Add(ob); id.Add(ia); id.Add(ob); id.Add(ib); }
+                }
+            idx = id.ToArray();
             return w;
         }
 

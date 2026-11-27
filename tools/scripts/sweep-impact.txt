@@ -45,6 +45,8 @@ src/Stabby.World/MineKit.cs objects,caves
 src/Stabby.World/DungeonLinks.cs caves,objects,sites
 content/objects.json objects,sites,surface
 src/Stabby.World/Bogs.cs sites,surface
+src/Stabby.World/Oases.cs sites,surface
+src/Stabby.World/OasisChecks.cs sites
 src/Stabby.World/Quicksand.cs sites,surface
 src/Stabby.World/Pools.cs sites
 src/Stabby.World/Discover*.cs sites
@@ -62,6 +64,7 @@ src/Stabby.World/Dungeon.cs sites
 src/Stabby.World/DungeonLayout.cs sites
 src/Stabby.World/WolfDen.cs sites,surface
 src/Stabby.World/Overlook.cs sites,surface
+src/Stabby.World/FallenTree.cs sites,surface
 src/Stabby.World/Bones.cs sites,surface
 src/Stabby.World/SaltTower.cs sites,surface
 src/Stabby.World/MesaChecks.cs sketch

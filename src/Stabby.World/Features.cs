@@ -385,6 +385,28 @@ namespace Stabby.World
             return 1f - t * t * (3f - 2f * t);
         }
 
+        public const float FertileWarp = 0.45f;
+
+        public bool Oasis => Shape == Spring && Kind == Carve && F <= -ObjectField.OasisTag;
+
+        public float OasisR => -F - ObjectField.OasisTag;
+
+        public float FertileExtent => ObjectField.OasisMargin(OasisR) + ObjectField.OasisRingM * FertileWarp;
+
+        public float Fertile(float x, float z)
+        {
+            float r = OasisR, dx = x - Ax, dz = z - Az, ext = FertileExtent;
+            if (Math.Abs(dx) >= ext || Math.Abs(dz) >= ext) return 0f;
+            float dist = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (dist >= ext) return 0f;
+            uint seed = Seed ^ 0x5F356495u;
+            float k = 1f / ObjectField.OasisRingM;
+            float n = 0.5f * Value(seed, x * k, 0f, z * k) + 0.3f * Value(seed ^ 0x297A2D39u, 2.3f * k * x, 0f, 2.3f * k * z) + 0.2f * Value(seed ^ 0x1B873593u, 5.1f * k * x, 0f, 5.1f * k * z);
+            float t = (dist - r) / ObjectField.OasisRingM + 2f * FertileWarp * (n - 0.5f);
+            t = Math.Max(0f, Math.Min(1f, t));
+            return 1f - t * t * (3f - 2f * t);
+        }
+
         public bool Under(float x, float z)
         {
             if (Shape == Spring)
@@ -579,6 +601,7 @@ namespace Stabby.World
             var bogs = new FeatureEdit[bog.Length + sand.Length];
             bog.CopyTo(bogs, 0);
             sand.CopyTo(bogs, bog.Length);
+            var oases = field.OasisEdits();
             var dens = field.DenEdits();
             var vaults = field.DungeonEdits();
             discoveries = field.Discoveries();
@@ -586,15 +609,16 @@ namespace Stabby.World
             var tunnels = field.TunnelEdits(out var bores);
             graphs.AddRange(bores);
             caves = graphs.ToArray();
-            if (boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length + tunnels.Length == 0) return Brooked(w, detail, terrain, caves);
-            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length + tunnels.Length];
+            if (boulders.Length + springs.Length + bogs.Length + oases.Length + dens.Length + vaults.Length + tunnels.Length == 0) return Brooked(w, detail, terrain, caves);
+            var all = new FeatureEdit[terrain.Length + boulders.Length + springs.Length + bogs.Length + oases.Length + dens.Length + vaults.Length + tunnels.Length];
             terrain.CopyTo(all, 0);
             boulders.CopyTo(all, terrain.Length);
             springs.CopyTo(all, terrain.Length + boulders.Length);
             bogs.CopyTo(all, terrain.Length + boulders.Length + springs.Length);
-            dens.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length);
-            vaults.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length);
-            tunnels.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + dens.Length + vaults.Length);
+            oases.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length);
+            dens.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + oases.Length);
+            vaults.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + oases.Length + dens.Length);
+            tunnels.CopyTo(all, terrain.Length + boulders.Length + springs.Length + bogs.Length + oases.Length + dens.Length + vaults.Length);
             all = DungeonLinks.Place(w, detail, field, discoveries, all, graphs);
             caves = graphs.ToArray();
             return Brooked(w, detail, all, caves);

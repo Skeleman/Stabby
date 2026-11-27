@@ -149,7 +149,7 @@ namespace Stabby.World
         readonly StrataField strata;
         readonly int n, across;
         readonly float cm, worldM, contrast;
-        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream;
+        readonly ulong stream, footStream, thinStream, boulderStream, boulderThinStream, structureStream, structureThinStream, chainStream, bankStream, lakeReedStream, sinterStream, caveStream, oasisStream;
         readonly int[] caveCarves;
         readonly CaveLightSpot[] caveLights;
         readonly ObjectInstance[] caveLit;
@@ -196,6 +196,7 @@ namespace Stabby.World
             lakeReedStream = Rng.Stream(w.Config.Seed, "objects-lake-reeds").NextU64();
             sinterStream = Rng.Stream(w.Config.Seed, "objects-sinter").NextU64();
             caveStream = Rng.Stream(w.Config.Seed, "objects-cave").NextU64();
+            oasisStream = Rng.Stream(w.Config.Seed, "objects-oasis").NextU64();
             caveCarves = CaveCarves(solid);
             caveLights = PlanCaveLights(w, this.edits, Rng.Stream(w.Config.Seed, "objects-cave-lights").NextU64());
             strata = new StrataField(w.Config, w.Materials);
@@ -393,6 +394,11 @@ namespace Stabby.World
                     if (!builtOnly && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitCave(d, chunk, x0, z0, sx, sz, list, ref ordinal);
                     continue;
                 }
+                if (pl.Oasis != null)
+                {
+                    if (!builtOnly && !sitesOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitOasis(d, chunk, x0, z0, sx, sz, list, ref ordinal);
+                    continue;
+                }
                 if (townMember[d] && stageDef < 0 && !builtOnly && boulders == null && (!solidOnly || AnySolid(d))) EmitTown(d, chunk, list, ref ordinal);
                 if (d == BridgeDef())
                 {
@@ -435,17 +441,17 @@ namespace Stabby.World
                         float size = (pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t) * grade;
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
                         if (!built && Cleared(near, px, pz, footprint[d] * size * (boulders != null ? BoulderReach : 1f))) continue;
-                        if (!Accept(d, px, pz, size, qa, qb, out var o, variant: variant)) continue;
+                        if (!Accept(d, px, pz, size, qa, qb, out var o, built: builtOnly || sitesOnly || stageDef >= 0, variant: variant)) continue;
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
                         if (boulders == null) list.Add(o);
                         else AddBoulder(o, footprint[d] * size, qa, qb, x0, z0, sx, sz, boulders);
-                        if (pl.ChainMax > 1 && boulders == null) Chain(d, o, chunk, chunkKey, x0, z0, sx, sz, ref ordinal, ref heads, list);
+                        if (pl.ChainMax > 1 && boulders == null) Chain(d, o, chunk, chunkKey, x0, z0, sx, sz, ref ordinal, ref heads, list, builtOnly || sitesOnly || stageDef >= 0);
                     }
                 }
             }
         }
 
-        void Chain(int d, ObjectInstance o, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, ref int ordinal, ref int heads, List<ObjectInstance> list)
+        void Chain(int d, ObjectInstance o, int chunk, ulong chunkKey, float x0, float z0, float sx, float sz, ref int ordinal, ref int heads, List<ObjectInstance> list, bool built)
         {
             var def = lib.Objects[d];
             var pl = def.Placement;
@@ -456,7 +462,7 @@ namespace Stabby.World
             Rotate(o, 1, 0, 0, out float ux, out _, out float uz);
             float ex = o.X + ux * 0.5f * span, ez = o.Z + uz * 0.5f * span;
             bool open = true;
-            if (h >= 0) Head(h, chunk, chainKey, cap++, o.X - ux * 0.5f * span, o.Z - uz * 0.5f * span, size, ux, uz, x0, z0, sx, sz, ref heads, list);
+            if (h >= 0) Head(h, chunk, chainKey, cap++, o.X - ux * 0.5f * span, o.Z - uz * 0.5f * span, size, ux, uz, x0, z0, sx, sz, ref heads, list, built);
             for (int k = 0; k < count; k++)
             {
                 float ox = ex, oz = ez, odx = ux, odz = uz;
@@ -488,7 +494,7 @@ namespace Stabby.World
                 }
                 if (gate)
                 {
-                    if (h >= 0 && open) Head(h, chunk, chainKey, cap++, ox, oz, size, odx, odz, x0, z0, sx, sz, ref heads, list);
+                    if (h >= 0 && open) Head(h, chunk, chainKey, cap++, ox, oz, size, odx, odz, x0, z0, sx, sz, ref heads, list, built);
                     open = false;
                     ex = bx + ux * Structures.GateSpan * span; ez = bz + uz * Structures.GateSpan * span;
                     continue;
@@ -506,29 +512,29 @@ namespace Stabby.World
                     float mx = bx + ux * 0.5f * span, mz = bz + uz * 0.5f * span, fx = bx + ux * span, fz = bz + uz * span;
                     if (Math.Min(bx, fx) < x0 || Math.Min(bz, fz) < z0 || Math.Max(bx, fx) >= x0 + sx || Math.Max(bz, fz) >= z0 + sz) continue;
                     float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
-                    if (!Accept(d, mx, mz, size, qw, qy, out var s)) continue;
+                    if (!Accept(d, mx, mz, size, qw, qy, out var s, built: built)) continue;
                     s.Variant = variant;
                     s.Id = ObjectIds.Make(chunk, d, ordinal++);
                     list.Add(s);
-                    if (h >= 0) Head(h, chunk, chainKey, cap++, bx, bz, size, ux, uz, x0, z0, sx, sz, ref heads, list);
+                    if (h >= 0) Head(h, chunk, chainKey, cap++, bx, bz, size, ux, uz, x0, z0, sx, sz, ref heads, list, built);
                     ex = fx; ez = fz;
                     placed = true;
                 }
                 if (!placed)
                 {
-                    if (h >= 0 && open) Head(h, chunk, chainKey, cap++, ox, oz, size, odx, odz, x0, z0, sx, sz, ref heads, list);
+                    if (h >= 0 && open) Head(h, chunk, chainKey, cap++, ox, oz, size, odx, odz, x0, z0, sx, sz, ref heads, list, built);
                     return;
                 }
                 open = true;
             }
-            if (h >= 0 && open) Head(h, chunk, chainKey, cap, ex, ez, size, ux, uz, x0, z0, sx, sz, ref heads, list);
+            if (h >= 0 && open) Head(h, chunk, chainKey, cap, ex, ez, size, ux, uz, x0, z0, sx, sz, ref heads, list, built);
         }
 
-        void Head(int h, int chunk, ulong chainKey, int cap, float x, float z, float size, float ux, float uz, float x0, float z0, float sx, float sz, ref int heads, List<ObjectInstance> list)
+        void Head(int h, int chunk, ulong chainKey, int cap, float x, float z, float size, float ux, float uz, float x0, float z0, float sx, float sz, ref int heads, List<ObjectInstance> list, bool built)
         {
             if (x < x0 || z < z0 || x >= x0 + sx || z >= z0 + sz) return;
             float qw = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + ux))), qy = (uz > 0 ? -1f : 1f) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - ux)));
-            if (!Accept(h, x, z, size, qw, qy, out var s)) return;
+            if (!Accept(h, x, z, size, qw, qy, out var s, built: built)) return;
             s.Variant = (int)(Rng.Mix(chainKey ^ ((ulong)(cap + 1) * 0xD1B54A32D192ED03UL)) % (ulong)lib.Objects[h].Variants);
             s.Id = ObjectIds.Make(chunk, h, heads++);
             list.Add(s);
@@ -543,7 +549,7 @@ namespace Stabby.World
             float r2 = BoulderSideR * reach, sx2 = o.X - uz * side * BoulderSide * reach, sz2 = o.Z + ux * side * BoulderSide * reach;
             var a = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r, N = BoulderRelief * r, Ax = o.X - ux * h, Ay = y, Az = o.Z - uz * h, Bx = o.X + ux * h, By = y, Bz = o.Z + uz * h };
             var b = new FeatureEdit { Kind = FeatureEdit.Add, Shape = FeatureEdit.Boulder, R = r2, N = BoulderRelief * r2, Ax = sx2, Ay = o.Y + BoulderLift * r2, Az = sz2, Bx = sx2, By = o.Y + BoulderLift * r2, Bz = sz2 };
-            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || NearQuicksand(a) || NearQuicksand(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
+            if (!Within(a, x0, z0, sx, sz) || !Within(b, x0, z0, sx, sz) || Wet(a) || Wet(b) || NearBog(a) || NearBog(b) || NearQuicksand(a) || NearQuicksand(b) || NearOasis(a) || NearOasis(b) || InSiteFoot(a, x0, z0) || InSiteFoot(b, x0, z0) || InTownGround(o.X, o.Z, reach, true)) return;
             boulders.Add(a);
             boulders.Add(b);
         }
@@ -621,7 +627,7 @@ namespace Stabby.World
             return b >= 0 && density[d][b] > 0;
         }
 
-        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false, int variant = 0)
+        bool Accept(int d, float x, float z, float size, float qa, float qb, out ObjectInstance o, bool bank = false, bool town = false, bool site = false, bool built = false, int variant = 0)
         {
             o = default;
             if (!bank && !Open(d, x, z)) return false;
@@ -630,6 +636,7 @@ namespace Stabby.World
             float r = footprint[d] * size;
             if (!town && !bank && pl.Cave <= 0 && InTownGround(x, z, r, seats[d] != null)) return false;
             if (!town && pl.Cave <= 0 && OnRoad(x, z, r)) return false;
+            if (!town && !bank && !site && !(built && seats[d] != null) && pl.Cave <= 0 && InOasis(x, z, r)) return false;
             float y = GroundAt(detail, cm, x, z);
             float s = SlopeStepM;
             float gxs = (GroundAt(detail, cm, x + s, z) - GroundAt(detail, cm, x - s, z)) / (2 * s);
