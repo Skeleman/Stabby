@@ -344,7 +344,8 @@ Shader "Stabby/Water"
                 float wl = h - CurtainSink - y + 0.25 * (s1.x + 0.5 * warp.x);
                 white = max(white, (1 - smoothstep(0, CurtainFroth, wl)) * smoothstep(-0.4, 0.3, str) * L8.w);
                 float3 up = float3(0, 1, 0), f3 = float3(fd.x, 0, fd.y), s3d = float3(sd.x, 0, sd.y);
-                float3 nb = normalize(f3 * (0.35 + u) + up * (1 - u) * 0.9);
+                float fade = saturate(i.curt.x);
+                float3 nb = normalize(f3 * (0.35 + u) * fade + up * (1 - u * fade) * 0.9);
                 float3 tb = normalize(cross(s3d, nb));
                 float3 n = normalize(nb + s3d * (0.5 * s1.y + 0.3 * s2.y + 0.2 * s3.y + 0.3 * warp.y) + tb * (0.15 * s1.z + 0.1 * s2.z + 0.2 * warp.z));
                 n = dot(n, v) < 0 ? -n : n;
@@ -381,7 +382,7 @@ Shader "Stabby/Water"
                 c = lerp(c, froth, white * (0.75 + 0.25 * u));
                 float lipW = 0.12 + 0.06 * Noise(float2(x * 0.7, 1.7)).x;
                 float lip = (1 - smoothstep(lipW * 0.5, lipW, y)) * saturate(ScreenPx(lipW, dist) / LipPx);
-                c = lerp(c, skyR * 1.15 + l.color * 0.25, lip * 0.8);
+                c = lerp(c, skyR * 1.15 + l.color * 0.25, lip * 0.8 * fade);
                 float3 h3 = normalize(l.direction + v);
                 float glint = pow(saturate(dot(n, h3)), 400) * smoothstep(0.35, 0.75, s2.x + 0.5 * s3.x + 0.3 * warp.x);
                 c += l.color * (glint * 3 * detail + pow(saturate(dot(n, h3)), 120) * 0.3) * (1 - white);
@@ -398,7 +399,7 @@ Shader "Stabby/Water"
                 UNITY_BRANCH if (i.fall.w > 0.5)
                 {
                     float u = saturate(i.curt.y), h = i.curt.z, wd = 2 * i.chan.y;
-                    float move = smoothstep(CurtainPxLo, CurtainPxHi, ScreenPx(wd, length(_WorldSpaceCameraPos - wp)));
+                    float move = smoothstep(CurtainPxLo, CurtainPxHi, ScreenPx(wd, length(_WorldSpaceCameraPos - wp))) * saturate(i.curt.x);
                     UNITY_BRANCH if (move > 0)
                     {
                         float2 fd = normalize(i.color.rg * 2 - 1);

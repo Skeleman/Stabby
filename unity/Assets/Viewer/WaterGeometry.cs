@@ -52,7 +52,7 @@ namespace Stabby.Viewer
         const int SteamPuffs = 2, JetPuffs = 7, ColumnSteamPuffs = 3;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
-        const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f, FootBendPerDrop = 0.25f, FootBendMin = 0.3f, FootBendMax = 1.5f, FootFade = 0.5f;
+        const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f, FootBendPerDrop = 0.25f, FootBendMin = 0.3f, FootBendMax = 1.5f, FootFade = 1f;
         const int FootBendRows = 4;
         static readonly Vector4 NoPool = new Vector4(-1e5f, 0, 0, 0);
         static readonly Color SeaKind = new Color(0.5f, 0.5f, 0, 1), LakeKind = new Color(0.5f, 0.5f, 0, 0.5f), SpringKind = new Color(0.5f, 0.5f, 0, 0);
@@ -474,7 +474,7 @@ namespace Stabby.Viewer
                 return Mathf.Clamp01((y - y0) / Mathf.Max(y1 - y0, 1e-4f));
             }
 
-            public float Curtain(FallCurtain f, float slope, Vector4 reach, Vector4 pool, float along, TerrainDetail detail, MistBuffers mist, List<int> lip, List<int> foot, float room = float.MaxValue)
+            public float Curtain(FallCurtain f, float slope, Vector4 reach, Vector4 pool, float along, TerrainDetail detail, MistBuffers mist, List<int> lip, List<int> foot, List<int> bend, float room = float.MaxValue)
             {
                 float h = f.Drop + FallSink, half = 0.5f * f.Width, blend = Mathf.Min(LipBlend, 0.5f * f.Drop);
                 var fwd = new Vector3(f.DirX, 0, f.DirZ);
@@ -508,6 +508,7 @@ namespace Stabby.Viewer
                     float q = s / (float)FootBendRows, y = yb + ext * q;
                     int j = FootRowOf(y, h, rows);
                     prev = Band(f, prev, cols, y, h, blend, off, (j - 1) * cols, j * cols, FootRowT(y, h, rows, j), flow, reach, fall, true, Mathf.Clamp01((1 - q) / FootFade), lean * (1 - Mathf.Sqrt(Mathf.Max(0, 1 - q * q))));
+                    for (int c = 0; c < cols; c++) bend.Add(prev + c);
                 }
                 for (int c = 0; c < cols; c++) foot.Add(prev + c);
                 float shift = 0;
@@ -740,17 +741,18 @@ namespace Stabby.Viewer
                         System.Array.Sort(parts, (x, y) => x.U0.CompareTo(y.U0));
                         var lip = new List<int>();
                         var foot = new List<int>();
+                        var bendRows = new List<int>();
                         int up = buf.Verts.Count - 2;
                         if (parts[0].U0 > -0.999f) buf.Edge(f, -1, slopes[k - 1], lr, pool, lip);
                         float shove = 0;
-                        foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, (FootMax - lt) * seg - FootGap));
+                        foreach (var part in parts) shove = Mathf.Max(shove, buf.Curtain(part, slopes[k - 1], lr, pool, sl, detail, spray, lip, foot, bendRows, (FootMax - lt) * seg - FootGap));
                         if (parts[parts.Length - 1].U1 < 0.999f) buf.Edge(f, 1, slopes[k - 1], lr, pool, lip);
                         buf.Fan(up, up + 1, lip, true);
                         th += shove;
                         foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
                         ft = Mathf.Min(lt + (th + FootGap) / Mathf.Max(seg, 1e-3f), FootMax);
                         pool = new Vector4(sl + th, f.Drop, f.PoolRadius, 0);
-                        foreach (int v in foot)
+                        foreach (int v in bendRows)
                         {
                             buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
                             buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, slopes[k], 0);
@@ -819,11 +821,12 @@ namespace Stabby.Viewer
             var reach = new Vector4(0, 0, sl, liquid);
             var lip = new List<int>();
             var foot = new List<int>();
-            th += buf.Curtain(f, 1, reach, NoPool, sl, null, null, lip, foot);
+            var bend = new List<int>();
+            th += buf.Curtain(f, 1, reach, NoPool, sl, null, null, lip, foot, bend);
             buf.Fan(up, up + 2, lip, true);
             foreach (int v in foot) th = Mathf.Max(th, Vector3.Dot(buf.Verts[v] - new Vector3(f.LipX, buf.Verts[v].y, f.LipZ), fd));
             var pool = new Vector4(sl + th, drop, b.PoolR, 0);
-            foreach (int v in foot)
+            foreach (int v in bend)
             {
                 buf.Fall[v] = new Vector4(pool.x, pool.y, pool.z, 1);
                 buf.Cols[v] = new Color(fd.x * 0.5f + 0.5f, fd.z * 0.5f + 0.5f, 0, 0);
