@@ -19,11 +19,11 @@ namespace Stabby.Game
 
     public struct WakeRule
     {
-        public float FadePixels, FullPixels, Ring, V, RefSpeed, RefSize, SpeedExp, SizeExp, MaxGain, SmoothS;
+        public float FadePixels, FullPixels, Ring, V, Normal, RefSpeed, RefSize, SpeedExp, SizeExp, MaxGain, SmoothS;
 
         public static WakeRule From(WakeDef d) => new WakeRule
         {
-            FadePixels = d.FadePixels, FullPixels = d.FullPixels, Ring = d.RingStrength, V = d.VStrength, RefSpeed = d.RefSpeedMps, RefSize = d.RefSizeM,
+            FadePixels = d.FadePixels, FullPixels = d.FullPixels, Ring = d.RingAmplitude, V = d.VAmplitude, Normal = d.NormalStrength, RefSpeed = d.RefSpeedMps, RefSize = d.RefSizeM,
             SpeedExp = d.SpeedExponent, SizeExp = d.SizeExponent, MaxGain = d.MaxGain, SmoothS = d.SpeedSmoothS,
         };
 
@@ -38,7 +38,8 @@ namespace Stabby.Game
         {
             float size = math.pow(math.max(sizeM, 0.01f) / RefSize, SizeExp);
             float pace = math.pow(math.max(speed, 0f) / RefSpeed, SpeedExp);
-            return new float4(Ring * math.clamp(size, 1f, MaxGain), V * math.clamp(size * pace, 1f, MaxGain), 0f, 0f);
+            float v = math.clamp(size * pace, 1f, MaxGain);
+            return new float4(Ring * math.clamp(size, 1f, MaxGain), V * v, 1f + (Normal - 1f) * math.saturate(v - 1f), 0f);
         }
     }
 

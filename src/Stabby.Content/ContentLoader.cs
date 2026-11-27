@@ -248,7 +248,7 @@ namespace Stabby.Content
                 lib.Wakes = new WakeDef
                 {
                     FadePixels = wakes.Float("fadePixels", w0.FadePixels), FullPixels = wakes.Float("fullPixels", w0.FullPixels),
-                    RingStrength = wakes.Float("ringStrength", w0.RingStrength), VStrength = wakes.Float("vStrength", w0.VStrength),
+                    RingAmplitude = wakes.Float("ringAmplitude", w0.RingAmplitude), VAmplitude = wakes.Float("vAmplitude", w0.VAmplitude), NormalStrength = wakes.Float("normalStrength", w0.NormalStrength),
                     RefSpeedMps = wakes.Float("refSpeedMps", w0.RefSpeedMps), RefSizeM = wakes.Float("refSizeM", w0.RefSizeM),
                     SpeedExponent = wakes.Float("speedExponent", w0.SpeedExponent), SizeExponent = wakes.Float("sizeExponent", w0.SizeExponent),
                     MaxGain = wakes.Float("maxGain", w0.MaxGain), SpeedSmoothS = wakes.Float("speedSmoothS", w0.SpeedSmoothS),

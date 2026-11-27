@@ -194,7 +194,7 @@ namespace Stabby.World
     public sealed class WakeDef
     {
         public float FadePixels = 4f, FullPixels = 12f;
-        public float RingStrength = 1f, VStrength = 1f;
+        public float RingAmplitude = 1f, VAmplitude = 1f, NormalStrength = 1.5f;
         public float RefSpeedMps = 1.6f, RefSizeM = 1.2f, SpeedExponent = 0.5f, SizeExponent = 0.5f, MaxGain = 3f;
         public float SpeedSmoothS = 0.25f;
 
@@ -208,8 +208,9 @@ namespace Stabby.World
         public void Validate(List<string> errors)
         {
             if (!(FadePixels > 0 && FullPixels > FadePixels && FullPixels <= 200)) errors.Add("wakes: fullPixels must exceed fadePixels > 0, at most 200");
-            if (!(RingStrength >= 0 && RingStrength <= 4)) errors.Add($"wakes.ringStrength {RingStrength} outside 0..4");
-            if (!(VStrength >= 0 && VStrength <= 4)) errors.Add($"wakes.vStrength {VStrength} outside 0..4");
+            if (!(RingAmplitude >= 0 && RingAmplitude <= 4)) errors.Add($"wakes.ringAmplitude {RingAmplitude} outside 0..4");
+            if (!(VAmplitude >= 0 && VAmplitude <= 4)) errors.Add($"wakes.vAmplitude {VAmplitude} outside 0..4");
+            if (!(NormalStrength >= 0 && NormalStrength <= 4)) errors.Add($"wakes.normalStrength {NormalStrength} outside 0..4");
             if (!(RefSpeedMps >= 0.1f && RefSpeedMps <= 20)) errors.Add($"wakes.refSpeedMps {RefSpeedMps} outside 0.1..20");
             if (!(RefSizeM >= 0.1f && RefSizeM <= 50)) errors.Add($"wakes.refSizeM {RefSizeM} outside 0.1..50");
             if (!(SpeedExponent >= 0 && SpeedExponent <= 2)) errors.Add($"wakes.speedExponent {SpeedExponent} outside 0..2");

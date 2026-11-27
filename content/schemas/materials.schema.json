@@ -83,13 +83,14 @@
     },
     "wakes": {
       "type": "object",
-      "required": ["fadePixels", "fullPixels", "ringStrength", "vStrength", "refSpeedMps", "refSizeM", "speedExponent", "sizeExponent", "maxGain", "speedSmoothS"],
+      "required": ["fadePixels", "fullPixels", "ringAmplitude", "vAmplitude", "normalStrength", "refSpeedMps", "refSizeM", "speedExponent", "sizeExponent", "maxGain", "speedSmoothS"],
       "additionalProperties": false,
       "properties": {
         "fadePixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
         "fullPixels": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
-        "ringStrength": { "type": "number", "minimum": 0, "maximum": 4 },
-        "vStrength": { "type": "number", "minimum": 0, "maximum": 4 },
+        "ringAmplitude": { "type": "number", "minimum": 0, "maximum": 4 },
+        "vAmplitude": { "type": "number", "minimum": 0, "maximum": 4 },
+        "normalStrength": { "type": "number", "minimum": 0, "maximum": 4 },
         "refSpeedMps": { "type": "number", "minimum": 0.1, "maximum": 20 },
         "refSizeM": { "type": "number", "minimum": 0.1, "maximum": 50 },
         "speedExponent": { "type": "number", "minimum": 0, "maximum": 2 },
