@@ -101,6 +101,42 @@
       "flowSpeed": 0.05, "rapidsSlope": 0.04, "bedFieldM": 120,
       "silt": 1, "opacity": 1, "viscosity": 0.97, "groundTint": 0.9, "bubbles": 0, "film": 0.65, "emission": 0, "roughness": 0.02,
       "fall": { "spray": "none", "speed": 0.1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 0, "froth": 0 }
+    },
+    {
+      "id": "brine-teal", "deepColor": "#2a6f73", "shallowColor": "#8ccfc3", "filmColor": "#ebe6da", "emissionColor": "#000000",
+      "clarityM": 1.2, "shoreM": 0.15, "foamWidthM": 0,
+      "waveScaleM": 18, "waveSpeed": 0.1, "waveStrength": 0.01,
+      "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
+      "flowSpeed": 0, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0, "opacity": 0, "viscosity": 0.1, "bubbles": 0, "film": 0.12, "emission": 0, "roughness": 0.02,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
+    },
+    {
+      "id": "brine-rust", "deepColor": "#6e4430", "shallowColor": "#c49a76", "filmColor": "#ebe6da", "emissionColor": "#000000",
+      "clarityM": 1.2, "shoreM": 0.15, "foamWidthM": 0,
+      "waveScaleM": 18, "waveSpeed": 0.1, "waveStrength": 0.01,
+      "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
+      "flowSpeed": 0, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0, "opacity": 0, "viscosity": 0.1, "bubbles": 0, "film": 0.12, "emission": 0, "roughness": 0.02,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
+    },
+    {
+      "id": "brine-rose", "deepColor": "#7d4f5a", "shallowColor": "#d4a3a8", "filmColor": "#ebe6da", "emissionColor": "#000000",
+      "clarityM": 1.2, "shoreM": 0.15, "foamWidthM": 0,
+      "waveScaleM": 18, "waveSpeed": 0.1, "waveStrength": 0.01,
+      "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
+      "flowSpeed": 0, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0, "opacity": 0, "viscosity": 0.1, "bubbles": 0, "film": 0.12, "emission": 0, "roughness": 0.02,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
+    },
+    {
+      "id": "brine-jade", "deepColor": "#3d6b55", "shallowColor": "#a3c79c", "filmColor": "#ebe6da", "emissionColor": "#000000",
+      "clarityM": 1.2, "shoreM": 0.15, "foamWidthM": 0,
+      "waveScaleM": 18, "waveSpeed": 0.1, "waveStrength": 0.01,
+      "swellScaleM": 140, "swellStrength": 0, "lakeSwell": 0,
+      "flowSpeed": 0, "rapidsSlope": 0.04, "bedFieldM": 120,
+      "silt": 0, "opacity": 0, "viscosity": 0.1, "bubbles": 0, "film": 0.12, "emission": 0, "roughness": 0.02,
+      "fall": { "spray": "mist", "speed": 1, "sheetOpacity": 1, "sprayColor": "#ffffff", "sprayAmount": 1, "froth": 1 }
     }
   ],
   "surface": {

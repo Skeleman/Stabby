@@ -680,9 +680,10 @@ namespace Stabby.Viewer
             int next = 0;
             foreach (var o in field.Discoveries())
             {
-                if (!field.IsVent(o)) continue;
+                if (!field.HasPools(o)) continue;
                 int kind = field.VentKind(o);
                 field.SpringPoolsAt(o, pools);
+                if (kind == ObjectField.BrinePools) { next += pools.Count / ObjectField.SpringStride; continue; }
                 for (int k = 0; k < pools.Count; k += ObjectField.SpringStride)
                 {
                     var c = new Vector3(pools[k], liquid[next++].Level, pools[k + 1]);

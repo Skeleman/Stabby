@@ -63,7 +63,7 @@ namespace Stabby.World
             int expected = field.BogPools().Length / ObjectField.BogStride + field.QuicksandPools().Length / ObjectField.BogStride + field.OasisPools().Length / ObjectField.OasisStride + field.CavePools().Length + field.CenotePools().Length + field.VolcanoPools().Length;
             var spots = new List<float>();
             foreach (var o in field.Discoveries())
-                if (field.IsVent(o)) { field.SpringPoolsAt(o, spots); expected += spots.Count / ObjectField.SpringStride; }
+                if (field.HasPools(o)) { field.SpringPoolsAt(o, spots); expected += spots.Count / ObjectField.SpringStride; }
             var pools = field.LiquidPools();
             if (pools.Length != expected) { e.Add($"{pools.Length} liquid pools are water bodies but {expected} pools were placed"); return; }
             foreach (var p in pools)
@@ -169,6 +169,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.LoneInn) { var lf = field.LoneInnFault(s); if (lf != null) { e.Add(at + " " + lf); return; } }
                 if (def.Placement.Discovery == ObjectField.Monument) { var mf = field.MonumentFault(s); if (mf != null) { e.Add(at + " " + mf); return; } }
                 if (def.Placement.Discovery == ObjectField.Watchtower) { var wf = field.WatchFault(s); if (wf != null) { e.Add(at + " " + wf); return; } }
+                if (def.Placement.Discovery == ObjectField.BrinePools) { var bf = field.BrineFault(s); if (bf != null) { e.Add(at + " " + bf); return; } }
                 if (def.Placement.Discovery == ObjectField.GreatMushroom) { var gf = field.GreatMushroomFault(s); if (gf != null) { e.Add(at + " " + gf); return; } }
                 if (def.Placement.Discovery == ObjectField.SunkenTemple) { var tf = field.TempleFault(s); if (tf != null) { e.Add(at + " " + tf); return; } if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add(at + " lies on a road"); return; } }
                 if (def.Placement.Discovery == ObjectField.Shipwreck) { var sf = field.ShipwreckFault(s); if (sf != null) { e.Add(at + " " + sf); return; } }

@@ -33,11 +33,11 @@ namespace Stabby.World
             var pools = new List<float>();
             foreach (var o in Discoveries())
             {
-                if (!IsVent(o)) continue;
+                if (!HasPools(o)) continue;
                 SpringPoolsAt(o, pools);
                 int kind = VentKind(o), liquid = LiquidOf(o);
                 for (int k = 0; k < pools.Count; k += SpringStride)
-                    list.Add(Pool(kind, liquid, pools[k], pools[k + 1], pools[k + 3], pools[k + 4], pools[k + 7], pools[k + 8]));
+                    list.Add(Pool(kind, kind == BrinePools ? BrineLiquid(o, k / SpringStride) : liquid, pools[k], pools[k + 1], pools[k + 3], pools[k + 4], pools[k + 7], pools[k + 8]));
             }
             var b = BogPools();
             int peat = w.Materials == null ? 0 : Math.Max(0, w.Materials.Liquid("peat"));

@@ -319,6 +319,37 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void BrinePoolsHoldTintedWaterOnDryBasinFloors()
+    {
+        int bp = Objects.Objects.FindIndex(o => o.Id == "brine-pools");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == bp).ToArray();
+        output.WriteLine($"{found.Length} brine pools " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:fit {field.SaltFit(c.X, c.Z):F2}")));
+        Assert.NotEmpty(found);
+        var brines = ObjectField.BrineLiquids.Select(id => w.Materials.Liquid(id)).ToArray();
+        var liquids = field.LiquidPools();
+        var spots = new List<float>();
+        foreach (var c in found)
+        {
+            Assert.Null(field.BrineFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            field.SpringPoolsAt(c, spots);
+            Assert.True(spots.Count / ObjectField.SpringStride >= 3);
+            for (int k = 0; k < spots.Count; k += ObjectField.SpringStride)
+            {
+                var q = liquids.Single(p => p.X == spots[k] && p.Z == spots[k + 1]);
+                Assert.Contains(q.Liquid, brines);
+                Assert.True(q.WetCount > 0);
+            }
+            var l = Structures.Layout(ObjectPart.BrinePools, ObjectMeshes.Key("brine-pools", 0, c.Variant));
+            Assert.NotEmpty(l.Contacts);
+            foreach (var o in all.Where(o => o.Def != bp))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void VolcanoHoldsACraterPoolBelowItsRim()
     {
         var p = TestWorlds.Place(VolcanoSeed);

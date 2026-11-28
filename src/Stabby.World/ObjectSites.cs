@@ -51,7 +51,7 @@ namespace Stabby.World
                         }
                     }
                     if (x0 > x1) { x0 = z0 = -footprint[d]; x1 = z1 = footprint[d]; }
-                    if (Pooled(def.Placement.Discovery))
+                    if (HasPools(def.Placement.Discovery))
                     {
                         var pools = new List<float>();
                         LocalPools(def.Placement.Discovery, ObjectMeshes.Key(def.Id, 0, v), pools);
