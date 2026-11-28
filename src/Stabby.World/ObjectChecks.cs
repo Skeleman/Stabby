@@ -181,6 +181,52 @@ namespace Stabby.World
                 }
         }
 
+        public static void TallyMines(GeneratedWorld w, ObjectField field, IDictionary<string, int> tally)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, r = ObjectField.TrailMouthM + 0.05f;
+            var segs = field.Roads();
+            var land = new int[n * n];
+            var queue = new Queue<int>();
+            bool Dry(int i) => !w.Sea[i] && w.Water.LakeId[i] < 0;
+            int Cell(float x, float z) => Math.Max(0, Math.Min(n - 1, (int)(z / cm + 0.5f))) * n + Math.Max(0, Math.Min(n - 1, (int)(x / cm + 0.5f)));
+            void Fill(int i, int id)
+            {
+                if (!Dry(i) || land[i] != 0) return;
+                land[i] = id; queue.Enqueue(i);
+                while (queue.Count > 0)
+                {
+                    int k = queue.Dequeue(), x = k % n;
+                    if (x > 0 && Dry(k - 1) && land[k - 1] == 0) { land[k - 1] = id; queue.Enqueue(k - 1); }
+                    if (x < n - 1 && Dry(k + 1) && land[k + 1] == 0) { land[k + 1] = id; queue.Enqueue(k + 1); }
+                    if (k >= n && Dry(k - n) && land[k - n] == 0) { land[k - n] = id; queue.Enqueue(k - n); }
+                    if (k < n * (n - 1) && Dry(k + n) && land[k + n] == 0) { land[k + n] = id; queue.Enqueue(k + n); }
+                }
+            }
+            var mouths = field.MineMouths();
+            for (int m = 0; m < mouths.Count; m++) Fill(Cell(mouths[m].x, mouths[m].z), m + 1);
+            var served = new HashSet<int>();
+            foreach (var s in segs)
+            {
+                if (ObjectField.IsTrail(s)) continue;
+                served.Add(land[Cell(s.X0, s.Z0)]);
+                served.Add(land[Cell(s.X1, s.Z1)]);
+            }
+            foreach (var p in field.TownPlans()) served.Add(land[Cell(p.X, p.Z)]);
+            int linked = 0, cut = 0;
+            foreach (var (mx, mz, _, _) in mouths)
+            {
+                bool hit = false;
+                foreach (var s in segs)
+                    if (ObjectField.IsTrail(s) && ((s.X0 - mx) * (s.X0 - mx) + (s.Z0 - mz) * (s.Z0 - mz) <= r * r || (s.X1 - mx) * (s.X1 - mx) + (s.Z1 - mz) * (s.Z1 - mz) <= r * r)) { hit = true; break; }
+                if (hit) linked++;
+                else if (!served.Contains(land[Cell(mx, mz)])) cut++;
+            }
+            tally.TryGetValue("mines", out int all); tally["mines"] = all + mouths.Count;
+            tally.TryGetValue("mines linked", out int ln); tally["mines linked"] = ln + linked;
+            tally.TryGetValue("mines cut off", out int co); tally["mines cut off"] = co + cut;
+        }
+
         public static void CheckTrails(GeneratedWorld w, ObjectField field, List<string> e)
         {
             const float tol = 0.05f;

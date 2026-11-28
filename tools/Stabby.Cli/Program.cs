@@ -191,6 +191,8 @@ int Sweep()
         groups.Add("core");
     }
     var groupTimes = new System.Collections.Concurrent.ConcurrentBag<(string, double, ulong)>();
+    var tallies = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+    var unlinked = new System.Collections.Concurrent.ConcurrentBag<ulong>();
     var lowWhile = Opt("low-while", "");
     if (lowWhile != "" && File.Exists(lowWhile))
     {
@@ -229,7 +231,10 @@ int Sweep()
         }
         if (!checks) return;
         var spent = new Dictionary<string, double>();
-        var found = WorldChecks.Run(w, groups, spent, creatures);
+        var counts = new Dictionary<string, int>();
+        var found = WorldChecks.Run(w, groups, spent, creatures, counts);
+        foreach (var kv in counts) tallies.AddOrUpdate(kv.Key, kv.Value, (_, v) => v + kv.Value);
+        if (counts.TryGetValue("mines", out int mn) && mn > counts["mines linked"] + counts["mines cut off"]) unlinked.Add(c.Seed);
         foreach (var kv in spent) groupTimes.Add((kv.Key, kv.Value, c.Seed));
         foreach (var v in found) failures.Add($"seed {c.Seed}: {v}");
         perSeed[c.Seed] = found;
@@ -251,6 +256,7 @@ int Sweep()
         var ms = g.OrderBy(s => s.Item2).ToArray();
         Console.WriteLine($"    {g.Key,-10} median {ms[ms.Length / 2].Item2,8:F1} ms, max {ms[^1].Item2,8:F1} ms (seed {ms[^1].Item3})");
     }
+    if (tallies.TryGetValue("mines", out int mines)) Console.WriteLine($"  mines: {tallies["mines linked"]}/{mines} linked to the road net, {tallies["mines cut off"]} cut off by water{(unlinked.IsEmpty ? "" : $", unlinked on dry land in seeds {string.Join(",", unlinked.OrderBy(x => x))}")}");
     foreach (var f in failures.OrderBy(x => x).Take(30)) Console.WriteLine("  " + f);
     var list = Opt("violations", "");
     if (list != "") File.WriteAllLines(list, perSeed.OrderBy(p => p.Key).SelectMany(p => p.Value.Select(v => $"seed {p.Key}: {v}")));

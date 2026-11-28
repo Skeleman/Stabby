@@ -18,7 +18,7 @@ namespace Stabby.World
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
         public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
         public const float TrailHalfM = 1.2f, TrailGrade = 0.7f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
-        const int TrailMineTries = 4, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
+        const int TrailMineTries = 4, TrailMineTargets = 8, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;
         public const float TunnelMinM = 70f, TunnelMostM = 250f, TunnelGrade = 0.12f, TunnelCost = 1f, TunnelRise = 0.5f, TunnelSpanM = 150f, TunnelSocketM = 100f, TunnelCampMin = 14.5f, TunnelCampMax = 18f, TunnelWarp = 0.04f;
@@ -99,12 +99,14 @@ namespace Stabby.World
             return tunnelBlocked = set;
         }
 
-        List<int> Route(int sx, int sz, int tx, int tz, bool tunnels, out List<byte> jumps, out List<Bored> bored)
+        List<int> Route(int sx, int sz, int tx, int tz, bool tunnels, out List<byte> jumps, out List<Bored> bored) => Route(sx, sz, new[] { tz * n + tx }, tunnels, out jumps, out bored, out _);
+
+        List<int> Route(int sx, int sz, int[] goals, bool tunnels, out List<byte> jumps, out List<Bored> bored, out int reached)
         {
             bored = new List<Bored>();
             for (int t = 0; ; t++)
             {
-                var path = RoadPath(sx, sz, tx, tz, tunnels && t < TunnelTries, out jumps);
+                var path = RoadPath(sx, sz, goals, tunnels && t < TunnelTries, out jumps, out reached);
                 if (path == null) return null;
                 bored.Clear();
                 bool ok = true;
@@ -404,7 +406,7 @@ namespace Stabby.World
                     }
                 heads.Sort((a, b) => a.d.CompareTo(b.d));
                 for (int k = 0; k < heads.Count && k < TrailMineTries; k++)
-                    if (Trail(hx, hz, heads[k].x, heads[k].z, TrailMineReachM, plans, net, list)) break;
+                    if (MineTrail(hx, hz, heads[k].x, heads[k].z, plans, net, list)) break;
             }
             foreach (var o in found)
             {
@@ -424,7 +426,7 @@ namespace Stabby.World
 
         bool TrailTarget(float x, float z, float reach, TownPlan[] plans, RoadSegment[] net, out float tx, out float tz, out float ex, out float ez, out bool town)
         {
-            var all = TrailTargets(x, z, reach, plans, net);
+            var all = TrailTargets(x, z, reach, plans, net, TrailTargetTries);
             tx = tz = ex = ez = 0;
             town = false;
             if (all.Count == 0) return false;
@@ -432,7 +434,7 @@ namespace Stabby.World
             return true;
         }
 
-        List<(float d2, float tx, float tz, float ex, float ez, bool town)> TrailTargets(float x, float z, float reach, TownPlan[] plans, RoadSegment[] net)
+        List<(float d2, float tx, float tz, float ex, float ez, bool town)> TrailTargets(float x, float z, float reach, TownPlan[] plans, RoadSegment[] net, int tries)
         {
             var all = new List<(float d2, float tx, float tz, float ex, float ez, bool town)>();
             float best = reach * reach;
@@ -463,7 +465,7 @@ namespace Stabby.World
                 foreach (var q in picked) if ((q.tx - c.tx) * (q.tx - c.tx) + (q.tz - c.tz) * (q.tz - c.tz) < gap * gap) { near = true; break; }
                 if (near) continue;
                 picked.Add(c);
-                if (picked.Count == TrailTargetTries) break;
+                if (picked.Count == tries) break;
             }
             return picked;
         }
@@ -472,8 +474,30 @@ namespace Stabby.World
         bool Trail(float sx, float sz, float ax, float az, float reach, TownPlan[] plans, RoadSegment[] net, List<RoadSegment> list)
         {
             if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return false;
-            foreach (var (_, tx, tz, ex, ez, town) in TrailTargets(sx, sz, reach, plans, net))
+            foreach (var (_, tx, tz, ex, ez, town) in TrailTargets(sx, sz, reach, plans, net, TrailTargetTries))
                 if (TrailTo(sx, sz, ax, az, tx, tz, ex, ez, town, list)) return true;
+            return false;
+        }
+
+        bool MineTrail(float sx, float sz, float ax, float az, TownPlan[] plans, RoadSegment[] net, List<RoadSegment> list)
+        {
+            if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return false;
+            var targets = TrailTargets(sx, sz, TrailMineReachM, plans, net, TrailMineTargets);
+            int head = Cell(az) * n + Cell(ax);
+            for (int tries = 0; tries < TrailMineTargets && targets.Count > 0; tries++)
+            {
+                var goals = new int[targets.Count];
+                for (int k = 0; k < goals.Length; k++) goals[k] = Cell(targets[k].tz) * n + Cell(targets[k].tx);
+                List<int> path; List<byte> jumps; List<Bored> bored;
+                int reached = Array.IndexOf(goals, head) >= 0 ? head : -1;
+                if (reached >= 0) { path = new List<int> { head }; jumps = new List<byte> { 0 }; bored = new List<Bored>(); }
+                else path = Route(Cell(ax), Cell(az), goals, false, out jumps, out bored, out reached);
+                if (path == null) return false;
+                int at = Array.IndexOf(goals, reached);
+                var t = targets[at];
+                if (Lay(sx, sz, path, jumps, bored, t.tx, t.tz, t.ex, t.ez, t.town, list)) return true;
+                targets.RemoveAt(at);
+            }
             return false;
         }
 
@@ -482,7 +506,11 @@ namespace Stabby.World
             List<int> path; List<byte> jumps; List<Bored> bored;
             if (Cell(ax) == Cell(tx) && Cell(az) == Cell(tz)) { path = new List<int> { Cell(az) * n + Cell(ax) }; jumps = new List<byte> { 0 }; bored = new List<Bored>(); }
             else path = Route(Cell(ax), Cell(az), Cell(tx), Cell(tz), false, out jumps, out bored);
-            if (path == null) return false;
+            return path != null && Lay(sx, sz, path, jumps, bored, tx, tz, ex, ez, town, list);
+        }
+
+        bool Lay(float sx, float sz, List<int> path, List<byte> jumps, List<Bored> bored, float tx, float tz, float ex, float ez, bool town, List<RoadSegment> list)
+        {
             var runs = Runs(path, jumps, out var joins);
             var (fx, fz) = runs[0];
             var (lx, lz) = runs[runs.Count - 1];
@@ -785,14 +813,28 @@ namespace Stabby.World
             ox = p.X + s * p.Ux * o; oz = p.Z + s * p.Uz * o;
         }
 
-        List<int> RoadPath(int sx, int sz, int tx, int tz, bool tunnels, out List<byte> jumps)
+        List<int> RoadPath(int sx, int sz, int[] goals, bool tunnels, out List<byte> jumps, out int reached)
         {
             jumps = null;
-            if (sx == tx && sz == tz) return null;
+            reached = -1;
+            int lx = sx, hx = sx, lz = sz, hz = sz;
+            foreach (int g in goals)
+            {
+                if (g == sz * n + sx) return null;
+                lx = Math.Min(lx, g % n); hx = Math.Max(hx, g % n); lz = Math.Min(lz, g / n); hz = Math.Max(hz, g / n);
+            }
             int margin = Math.Max(RoadMarginCells, (int)(RoadMarginM / cm));
-            int x0 = Math.Max(0, Math.Min(sx, tx) - margin), x1 = Math.Min(n - 1, Math.Max(sx, tx) + margin);
-            int z0 = Math.Max(0, Math.Min(sz, tz) - margin), z1 = Math.Min(n - 1, Math.Max(sz, tz) + margin);
+            int x0 = Math.Max(0, lx - margin), x1 = Math.Min(n - 1, hx + margin);
+            int z0 = Math.Max(0, lz - margin), z1 = Math.Min(n - 1, hz + margin);
             int bw = x1 - x0 + 1, bh = z1 - z0 + 1, size = bw * bh;
+            var goal = new bool[size];
+            foreach (int g in goals) goal[(g / n - z0) * bw + g % n - x0] = true;
+            float H(int ax, int az)
+            {
+                float best = float.MaxValue;
+                foreach (int g in goals) best = Math.Min(best, Heuristic(ax, az, g % n, g / n));
+                return best;
+            }
             var cost = new float[size];
             var from = new int[size];
             var done = new bool[size];
@@ -826,7 +868,7 @@ namespace Stabby.World
                     if (c < cost[j])
                     {
                         cost[j] = c; from[j] = cur; tun[j] = 1;
-                        HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
+                        HeapPush(heap, (c + H(nx, nz), j));
                     }
                     return;
                 }
@@ -850,20 +892,20 @@ namespace Stabby.World
                     if (c < cost[j])
                     {
                         cost[j] = c; from[j] = cur; tun[j] = 2;
-                        HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
+                        HeapPush(heap, (c + H(nx, nz), j));
                     }
                     return;
                 }
             }
-            int start = (sz - z0) * bw + (sx - x0), goal = (tz - z0) * bw + (tx - x0);
+            int start = (sz - z0) * bw + (sx - x0), end = -1;
             cost[start] = 0;
-            HeapPush(heap, (Heuristic(sx, sz, tx, tz), start));
+            HeapPush(heap, (H(sx, sz), start));
             while (heap.Count > 0)
             {
                 int cur = HeapPop(heap).i;
                 if (done[cur]) continue;
                 done[cur] = true;
-                if (cur == goal) break;
+                if (goal[cur]) { end = cur; break; }
                 int cx = cur % bw + x0, cz = cur / bw + z0;
                 for (int dz = -2; dz <= 2; dz++)
                     for (int dx = -2; dx <= 2; dx++)
@@ -900,13 +942,14 @@ namespace Stabby.World
                         float c = cost[cur] + len * (1 + RoadClimb * slope) * (ford ? FordCost : 1f);
                         if (c >= cost[j]) continue;
                         cost[j] = c; from[j] = cur; tun[j] = 0;
-                        HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
+                        HeapPush(heap, (c + H(nx, nz), j));
                     }
             }
-            if (!done[goal]) return null;
+            if (end < 0) return null;
+            reached = (end / bw + z0) * n + end % bw + x0;
             var path = new List<int>();
             jumps = new List<byte>();
-            for (int k = goal; k >= 0; k = from[k]) { path.Add((k / bw + z0) * n + k % bw + x0); jumps.Add(tun[k]); }
+            for (int k = end; k >= 0; k = from[k]) { path.Add((k / bw + z0) * n + k % bw + x0); jumps.Add(tun[k]); }
             path.Reverse();
             jumps.Reverse();
             return path;
