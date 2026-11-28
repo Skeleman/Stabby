@@ -121,7 +121,7 @@ namespace Stabby.Content
                 MoonCycleDays = root.Float("moonCycleDays", 0), MoonStartPhase = root.Float("moonStartPhase", 0),
                 NewMoonLight = root.Float("newMoonLight", 0), NewMoonAmbient = root.Float("newMoonAmbient", 0),
                 MoonGlow = root.Float("moonGlow", 0), StarBrightness = root.Float("starBrightness", 0),
-                Clouds = Clouds(root.Object("clouds")),
+                Clouds = Clouds(root.Object("clouds")), Weather = Weather(root.Object("weather"), source),
             };
             foreach (var s in root.Objects("stops", true))
             {
@@ -147,6 +147,31 @@ namespace Stabby.Content
             };
             o.End();
             return c;
+        }
+
+        static WeatherDef Weather(Json o, string source)
+        {
+            if (o == null) return null;
+            var w = new WeatherDef
+            {
+                SpellS = o.Float("spellS", 0), CoverMin = o.Float("coverMin", -1), CoverMax = o.Float("coverMax", -1), WetFrom = o.Float("wetFrom", -1),
+                SnowBelowC = o.Float("snowBelowC", -99), SleetBandC = o.Float("sleetBandC", 0), MinPx = o.Float("minPx", 0),
+                Rain = Precip(o.Object("rain"), source), Snow = Precip(o.Object("snow"), source),
+            };
+            o.End();
+            return w;
+        }
+
+        static PrecipLook Precip(Json o, string source)
+        {
+            if (o == null) return null;
+            var p = new PrecipLook
+            {
+                Count = o.Int("count", -1), FallMs = o.Float("fallMs", 0), LengthM = o.Float("lengthM", 0), WidthM = o.Float("widthM", 0),
+                SwayM = o.Float("swayM", -1), Alpha = o.Float("alpha", -1), Color = Color(o, "color", source),
+            };
+            o.End();
+            return p;
         }
 
         static Orbit Orbit(Json o)

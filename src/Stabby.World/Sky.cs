@@ -74,6 +74,7 @@ namespace Stabby.World
         public float MoonCycleDays = 8, MoonStartPhase = 0.5f, NewMoonLight = 0.03f, NewMoonAmbient = 0.2f, MoonGlow = 0.02f, StarBrightness = 0.01f;
         public const float FullMoon = 0.5f;
         public CloudDef Clouds = new CloudDef();
+        public WeatherDef Weather = new WeatherDef();
         public List<SkyStop> Stops = new List<SkyStop>();
 
         public float Hour(double clockS)
@@ -186,6 +187,7 @@ namespace Stabby.World
             CheckOrbit(e, "sky.moon", d.Moon);
             CheckColor(e, "sky.moonColor", d.MoonColor);
             CloudDef.Validate(e, d.Clouds);
+            WeatherDef.Validate(e, d.Weather);
             if (!(d.MoonIntensity >= 0 && d.MoonIntensity <= 2)) e.Add($"sky.moonIntensity {d.MoonIntensity} outside 0..2");
             if (!(d.MoonSwitchHeight >= -0.5f && d.MoonSwitchHeight <= 0)) e.Add($"sky.moonSwitchHeight {d.MoonSwitchHeight} outside -0.5..0");
             if (!(d.MoonFadeHeight > 0 && d.MoonFadeHeight <= 1)) e.Add($"sky.moonFadeHeight {d.MoonFadeHeight} outside 0..1");
@@ -222,7 +224,7 @@ namespace Stabby.World
             if (!(o.HourOffset >= 0 && o.HourOffset < 24)) e.Add($"{name}.hourOffset {o.HourOffset} outside 0..24");
         }
 
-        static void CheckColor(List<string> e, string name, Rgb c)
+        internal static void CheckColor(List<string> e, string name, Rgb c)
         {
             if (!(c.R >= 0 && c.R <= 1 && c.G >= 0 && c.G <= 1 && c.B >= 0 && c.B <= 1)) e.Add($"{name} channels outside 0..1");
         }
