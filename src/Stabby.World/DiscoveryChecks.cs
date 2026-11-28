@@ -147,7 +147,7 @@ namespace Stabby.World
                     float px = s.X + r * ux * len, pz = s.Z + r * uz * len;
                     if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) { e.Add(at + " reaches past the world edge"); return; }
                     int i = Math.Min(n - 1, (int)(pz / cm)) * n + Math.Min(n - 1, (int)(px / cm));
-                    if (w.Sea[i] || w.Water.LakeId[i] >= 0) { e.Add(at + " stands in water"); return; }
+                    if (w.Sea[i] || (w.Water.LakeId[i] >= 0 && (k == 4 || def.Placement.Discovery != ObjectField.SunkenTemple))) { e.Add(at + " stands in water"); return; }
                 }
                 foreach (var l in field.Towns)
                 {
@@ -167,6 +167,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.LoneInn) { var lf = field.LoneInnFault(s); if (lf != null) { e.Add(at + " " + lf); return; } }
                 if (def.Placement.Discovery == ObjectField.Monument) { var mf = field.MonumentFault(s); if (mf != null) { e.Add(at + " " + mf); return; } }
                 if (def.Placement.Discovery == ObjectField.Watchtower) { var wf = field.WatchFault(s); if (wf != null) { e.Add(at + " " + wf); return; } }
+                if (def.Placement.Discovery == ObjectField.SunkenTemple) { var tf = field.TempleFault(s); if (tf != null) { e.Add(at + " " + tf); return; } if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add(at + " lies on a road"); return; } }
                 if (def.Placement.Discovery == ObjectField.Shipwreck) { var sf = field.ShipwreckFault(s); if (sf != null) { e.Add(at + " " + sf); return; } }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
                 if (ObjectField.Pooled(def.Placement.Discovery)) { if (!(field.Hotspots.Heat(s.X, s.Z) > 0)) { e.Add(at + " lies outside every geothermal hotspot"); return; } var fault = field.VentFault(s); if (fault != null) { e.Add(at + " " + fault); return; } if (!field.InVentField(s, found)) { e.Add(at + $" has no other vent within {ObjectField.VentFieldM:F0} m in its hotspot"); return; } }
