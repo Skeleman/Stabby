@@ -4,7 +4,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const int BorderWindow = 12, BorderReach = 120;
+        const int BorderWindow = 12, BorderReach = 400;
         const float BorderFov = 50f;
 
         static System.Collections.IEnumerator BiomeBordersTour(Camera cam, string dir)
@@ -27,15 +27,15 @@ namespace Stabby.Game.Editor
                         for (int x = x0; x < x0 + BorderWindow; x++)
                         {
                             int i = z * n + x, c = map.Biome[i];
-                            if (map.Sea[i] || c < 0 || map.Water.WaterSurface[i] > map.Height[i]) { ok = false; break; }
+                            if (map.Sea[i] || c < 0 || map.Water.WaterSurface[i] > map.Height[i] + 0.05f) { ok = false; break; }
                             if (a < 0) a = c; else if (c != a && b < 0) b = c; else if (c != a && c != b) { ok = false; break; }
                             lo = Mathf.Min(lo, map.Height[i]);
                             hi = Mathf.Max(hi, map.Height[i]);
                             if (x + 1 < x0 + BorderWindow && map.Biome[i + 1] != c) h++;
                             if (z + 1 < z0 + BorderWindow && map.Biome[i + n] != c) v++;
                         }
-                    if (!ok || b < 0 || h < 8 || v < 8 || Mathf.Abs(h - v) > 0.3f * (h + v) || hi - lo > 3f * cm) continue;
-                    float score = Mathf.Min(h, v) - 0.02f * Mathf.Max(Mathf.Abs(x0 - hx), Mathf.Abs(z0 - hz)) - (hi - lo) / cm;
+                    if (!ok || b < 0 || h < 3 || v < 3) continue;
+                    float score = Mathf.Min(h, v) - 0.5f * Mathf.Abs(h - v) - 0.005f * Mathf.Max(Mathf.Abs(x0 - hx), Mathf.Abs(z0 - hz)) - 0.5f * (hi - lo) / cm;
                     if (score > best) { best = score; bx = x0; bz = z0; pickA = a; pickB = b; }
                 }
             if (bx < 0) { GameStatus.Lines["~biomeborders"] = GameStatus.Failure = "biomeborders: no diagonal border near home"; yield break; }
