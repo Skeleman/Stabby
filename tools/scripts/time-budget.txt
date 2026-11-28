@@ -26,7 +26,7 @@ test ObjectTests.BouldersLeaveNoFootGapOnSeed1At2048 25 builds and places seed 1
 test DiscoveryTests.VentPoolsHoldWaterOnSeed2At2048 35 builds seed 2 at 2048 and runs the sites check group, where a vent pool once failed
 test StructureTests.PlacedStructuresSitLevelOnTheirSeats 15 places and levels every structure in the test world
 test ObjectTests.PlaceIntoMatchesCachedAndFreshPlacement 15 places a world fresh and from the cache
-test WorldFileTests.BakedWorldLoadsBackIdentical 14 bakes a world file and loads it back
+test WorldFileTests.BakedWorldLoadsBackStable 14 bakes a world file, loads it back and re-encodes it stable
 test GroundBakeTests.AdoptedCachesPlaceTheSameObjects 10 places every fifth chunk of a world fresh and unpacks it from adopted caches
 test GroundBakeTests.StoredGroundMatchesTheLiveStage 10 runs the ground stage packing every fifth chunk, writes a world file and loads it back
 test GroundBakeTests.CorruptPackedChunkFallsBackToLivePlacement 5 corrupts one packed chunk and places it live from a fresh field

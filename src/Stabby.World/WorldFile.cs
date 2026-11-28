@@ -179,9 +179,9 @@ namespace Stabby.World
             var groundTimes = times == null ? null : new LoadTimes();
             int groundAt = o;
             var ground = groundLen > 0 ? Task.Run(() => GroundBake.Read(data, groundAt, groundLen, groundTimes)) : null;
-            Task<WaterMix[]> tint = null;
-            Hydrology.Relink(w.Config, w.Height, w.Sea, w.Water, times, () => tint = Task.Run(() => WaterTint.Field(w)));
-            WaterTint.Apply(w, tint.GetAwaiter().GetResult());
+            var tint = Task.Run(() => WaterTint.Sums(w));
+            Hydrology.Relink(w.Config, w.Height, w.Sea, w.Water, times);
+            WaterTint.Apply(w, WaterTint.Finish(w, tint.GetAwaiter().GetResult()));
             times?.Mark("tint");
             if (ground != null) bake.Ground = ground.GetAwaiter().GetResult();
             times?.Add("ground", groundTimes);

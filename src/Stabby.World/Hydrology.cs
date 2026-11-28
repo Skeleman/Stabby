@@ -178,7 +178,7 @@ namespace Stabby.World
             }
         }
 
-        public static void Relink(WorldConfig c, float[] h, bool[] sea, Hydrology hy, LoadTimes times = null, Action deltasFound = null)
+        public static void Relink(WorldConfig c, float[] h, bool[] sea, Hydrology hy, LoadTimes times = null)
         {
             int n = c.Size;
             hy.Lakes.Clear();
@@ -194,7 +194,7 @@ namespace Stabby.World
                 if (hy.LakeId[hy.Receiver[i]] != id) { lake.Outlet = i; lake.Below = hy.Receiver[i]; lake.Outflow = hy.DischargeM3s[i]; }
             }
             times?.Mark("lakes");
-            BuildSegments(c, sea, hy, deltasFound);
+            BuildSegments(c, sea, hy);
             times?.Mark("segments");
             Shelves(c, h, sea, hy);
             times?.Mark("shelves");
@@ -202,7 +202,7 @@ namespace Stabby.World
             times?.Mark("cover");
         }
 
-        static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy, Action deltasFound = null)
+        static void BuildSegments(WorldConfig cfg, bool[] sea, Hydrology hy)
         {
             int n = cfg.Size;
             var riverDonors = new int[n * n];
@@ -211,7 +211,6 @@ namespace Stabby.World
 
             var apexOf = new int[n * n];
             RiverDeltas.Find(cfg, sea, hy, apexOf);
-            deltasFound?.Invoke();
             var isApex = new bool[n * n];
             foreach (var d in hy.Deltas) isApex[d.Apex] = true;
             var startOf = new Dictionary<int, int>();
