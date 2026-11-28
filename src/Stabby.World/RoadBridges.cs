@@ -199,13 +199,36 @@ namespace Stabby.World
         {
             float ta = (float)k0 / pieces, tb = (float)k1 / pieces;
             float xa = x0 + dx * ta, za = z0 + dz * ta, xb = x0 + dx * tb, zb = z0 + dz * tb;
-            NearField.Range(detail.Cells, Math.Min(xa, xb), Math.Min(za, zb), Math.Max(xa, xb), Math.Max(za, zb), out _, out float hi);
+            float hi = RangeHi(Math.Min(xa, xb), Math.Min(za, zb), Math.Max(xa, xb), Math.Max(za, zb));
             for (int k = k0; k <= k1; k++)
             {
                 float t = (float)k / pieces, lift = hi - RoadClearM - (h0 + (h1 - h0) * t);
                 if (lift > 0 && lift / (4 * t * (1 - t)) > arch) return true;
             }
             return false;
+        }
+
+        const int RangeBlock = 32;
+        float[][] rangeBlocks;
+
+        float RangeHi(float x0, float z0, float x1, float z1)
+        {
+            var c = detail.Cells;
+            int cn = c.N, across = (cn + RangeBlock - 1) / RangeBlock;
+            NearField.Window(cn, c.CellMeters, x0, z0, x1, z1, out int i0, out int i1, out int k0, out int k1);
+            rangeBlocks ??= new float[across * across][];
+            float hi = float.MinValue, amp = 0, whi = float.MinValue;
+            for (int k = k0; k <= k1; k++)
+                for (int i = i0; i <= i1; i++)
+                {
+                    ref var b = ref rangeBlocks[k / RangeBlock * across + i / RangeBlock];
+                    if (b == null) { b = new float[RangeBlock * RangeBlock * 3]; for (int j = 0; j < b.Length; j += 3) b[j] = float.NaN; }
+                    int o = (k % RangeBlock * RangeBlock + i % RangeBlock) * 3;
+                    if (float.IsNaN(b[o])) NearField.CellRange(c, k * cn + i, out _, out b[o], out b[o + 1], out _, out b[o + 2]);
+                    hi = Math.Max(hi, b[o]); amp = Math.Max(amp, b[o + 1]); whi = Math.Max(whi, b[o + 2]);
+                }
+            hi += NearField.DetailReach * amp;
+            return Math.Max(hi, whi);
         }
 
         static float Deck(float h0, float h1, float arch, float t) => h0 + (h1 - h0) * t + arch * 4 * t * (1 - t);

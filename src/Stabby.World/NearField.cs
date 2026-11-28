@@ -448,27 +448,38 @@ namespace Stabby.World
         public static void Range<T>(T c, float x0, float z0, float x1, float z1, out float lo, out float hi) where T : struct, INearCells
         {
             int n = c.N;
-            float cm = c.CellMeters, amp = 0, wlo = float.MaxValue, whi = float.MinValue;
+            float amp = 0, wlo = float.MaxValue, whi = float.MinValue;
             lo = float.MaxValue; hi = float.MinValue;
-            int i0 = Clamp((int)Math.Floor(x0 / cm) - 1, n), i1 = Clamp((int)Math.Ceiling(x1 / cm) + 1, n);
-            int k0 = Clamp((int)Math.Floor(z0 / cm) - 1, n), k1 = Clamp((int)Math.Ceiling(z1 / cm) + 1, n);
+            Window(n, c.CellMeters, x0, z0, x1, z1, out int i0, out int i1, out int k0, out int k1);
             for (int k = k0; k <= k1; k++)
                 for (int i = i0; i <= i1; i++)
                 {
-                    int cell = k * n + i;
-                    float h = c.Height(cell);
-                    lo = Math.Min(lo, h); hi = Math.Max(hi, h + Dunes.Top(c, cell)); amp = Math.Max(amp, c.Amp(cell));
-                    for (int q = c.PieceStart(cell), e = c.PieceStart(cell + 1); q < e; q++)
-                    {
-                        var p = c.Piece(c.PieceAt(q));
-                        wlo = Math.Min(wlo, Math.Min(Math.Min(p.Sa - p.Da * Deepest - p.Pa, p.Sb - p.Db * Deepest - p.Pb), 0.5f * Math.Min(Math.Min(p.Sa, p.Sb), Erosion.MinLandHeight)));
-                        whi = Math.Max(whi, Math.Max(p.Sa + Rise(p.Wa), p.Sb + Rise(p.Wb)) + 1f);
-                        if (p.Fr > 0) wlo = Math.Min(wlo, p.Fy - FallLowFrac * p.Fd);
-                        if (p.Ja > 0) whi = Math.Max(whi, p.Iy + (IsleRiseM + IsleRisePerHalf * Math.Max(p.Ja, p.Jb)) * (1 + IsleNoise) + 1f);
-                    }
+                    CellRange(c, k * n + i, out float h, out float top, out float a, out float clo, out float chi);
+                    lo = Math.Min(lo, h); hi = Math.Max(hi, top); amp = Math.Max(amp, a);
+                    wlo = Math.Min(wlo, clo); whi = Math.Max(whi, chi);
                 }
             lo -= DetailReach * amp; hi += DetailReach * amp;
             lo = Math.Min(lo, wlo); hi = Math.Max(hi, whi);
+        }
+
+        public static void Window(int n, float cm, float x0, float z0, float x1, float z1, out int i0, out int i1, out int k0, out int k1)
+        {
+            i0 = Clamp((int)Math.Floor(x0 / cm) - 1, n); i1 = Clamp((int)Math.Ceiling(x1 / cm) + 1, n);
+            k0 = Clamp((int)Math.Floor(z0 / cm) - 1, n); k1 = Clamp((int)Math.Ceiling(z1 / cm) + 1, n);
+        }
+
+        public static void CellRange<T>(T c, int cell, out float h, out float top, out float amp, out float wlo, out float whi) where T : struct, INearCells
+        {
+            h = c.Height(cell); top = h + Dunes.Top(c, cell); amp = c.Amp(cell);
+            wlo = float.MaxValue; whi = float.MinValue;
+            for (int q = c.PieceStart(cell), e = c.PieceStart(cell + 1); q < e; q++)
+            {
+                var p = c.Piece(c.PieceAt(q));
+                wlo = Math.Min(wlo, Math.Min(Math.Min(p.Sa - p.Da * Deepest - p.Pa, p.Sb - p.Db * Deepest - p.Pb), 0.5f * Math.Min(Math.Min(p.Sa, p.Sb), Erosion.MinLandHeight)));
+                whi = Math.Max(whi, Math.Max(p.Sa + Rise(p.Wa), p.Sb + Rise(p.Wb)) + 1f);
+                if (p.Fr > 0) wlo = Math.Min(wlo, p.Fy - FallLowFrac * p.Fd);
+                if (p.Ja > 0) whi = Math.Max(whi, p.Iy + (IsleRiseM + IsleRisePerHalf * Math.Max(p.Ja, p.Jb)) * (1 + IsleNoise) + 1f);
+            }
         }
 
         public static float Smooth<T>(T c, float x, float z) where T : struct, INearCells
