@@ -6,7 +6,7 @@ namespace Stabby.World
     public static class Mines
     {
         public const string Class = "mine";
-        public const int Most = 3, Tries = 16;
+        public const int ApproachCells = 2, Most = 3, Tries = 16;
         public const float Radius = 5f, ShaftRadius = 4f, RoofM = 6f, ShaftMostM = 90f, Lumps = 0.03f, MouthDipM = 0.3f;
 
         public static bool IsMine(CaveGraph g) => g.Class == Class;
@@ -73,6 +73,7 @@ namespace Stabby.World
             float cm = w.Config.CellMeters, hx = -Grid.DX[dir], hz = -Grid.DY[dir];
             float back = Math.Max(0.5f, 0.5f * Features.ReferenceCellM / cm);
             float mx = Snap((i % n - back * hx) * cm), mz = Snap((i / n - back * hz) * cm);
+            if (!Approach(w, detail, mx, mz, -hx, -hz)) return false;
             float floor = Ground(detail, cm, mx, mz) - MouthDipM, grain = r.NextFloat();
             var g = new CaveGraph { Class = Class };
             g.Nodes.Add(new CaveNode { X = mx, Y = floor, Z = mz, Hx = hx, Hz = hz, Entrance = true });
@@ -123,6 +124,44 @@ namespace Stabby.World
         public static bool Vertical(FeatureEdit e) => Underground.Same(e.Ax, e.Az, e.Bx, e.Bz);
 
         static float Ground(TerrainDetail detail, float cm, float x, float z) => detail.HeightAt(x / cm, z / cm);
+
+        public static bool Approach(GeneratedWorld w, TerrainDetail detail, float mx, float mz, float ux, float uz)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, worldM = n * cm;
+            for (float d = 0; d <= ObjectField.TrailMouthM; d += 1f)
+            {
+                float px = mx + ux * d, pz = mz + uz * d;
+                if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return false;
+                if (Dry(w, px, pz) && Step(w, detail, px, pz)) return true;
+            }
+            return false;
+        }
+
+        static bool Step(GeneratedWorld w, TerrainDetail detail, float px, float pz)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters, h = Ground(detail, cm, px, pz);
+            int cx = (int)(px / cm + 0.5f), cz = (int)(pz / cm + 0.5f);
+            for (int dz = -ApproachCells; dz <= ApproachCells; dz++)
+                for (int dx = -ApproachCells; dx <= ApproachCells; dx++)
+                {
+                    int qx = cx + dx, qz = cz + dz;
+                    if (qx < 0 || qz < 0 || qx >= n || qz >= n) continue;
+                    float x = qx * cm, z = qz * cm, len = (float)Math.Sqrt((x - px) * (x - px) + (z - pz) * (z - pz));
+                    if (len < 0.5f * cm || !Dry(w, x, z)) continue;
+                    if (Math.Abs(Ground(detail, cm, x, z) - h) <= ObjectField.TrailGrade * len) return true;
+                }
+            return false;
+        }
+
+        static bool Dry(GeneratedWorld w, float x, float z)
+        {
+            int n = w.Config.Size;
+            float cm = w.Config.CellMeters;
+            int i = Math.Min(n - 1, (int)(z / cm + 0.5f)) * n + Math.Min(n - 1, (int)(x / cm + 0.5f));
+            return !w.Sea[i] && w.Water.LakeId[i] < 0;
+        }
 
         static bool Run(GeneratedWorld w, TerrainDetail detail, List<FeatureEdit> list, List<FeatureEdit> edits, CaveGraph g, int ia, int ib, float lead, float open, float mouth, float grain, ref Rng r)
         {

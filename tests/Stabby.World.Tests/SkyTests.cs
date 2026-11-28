@@ -28,6 +28,8 @@ public class SkyTests
         Same(orbit, data.RootElement.GetProperty("moon"));
         var stop = top.GetProperty("properties").GetProperty("stops").GetProperty("items");
         foreach (var s in data.RootElement.GetProperty("stops").EnumerateArray()) Same(stop, s);
+        Same(top.GetProperty("properties").GetProperty("clouds"), data.RootElement.GetProperty("clouds"));
+        Assert.Equal(data.RootElement.GetProperty("clouds").GetProperty("coverage").GetSingle(), Sky.Clouds.Coverage);
         Assert.Equal(data.RootElement.GetProperty("stops").GetArrayLength(), Sky.Stops.Count);
     }
 
@@ -157,8 +159,13 @@ public class SkyTests
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": 0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]")]
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]")]
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}]")]
+    [InlineData("\"clouds\": {\"coverage\": 1.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, " + GoodStops)]
+    [InlineData("\"clouds\": {\"coverage\": 0.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5}, " + GoodStops)]
+    [InlineData("\"noClouds\": 0, " + GoodStops)]
     public void BadSkyIsRejected(string stops)
     {
+        if (!stops.Contains("\"clouds\"") && !stops.Contains("\"noClouds\"")) stops = GoodClouds + stops;
+        stops = stops.Replace("\"noClouds\": 0, ", "");
         var json = "{\"schemaVersion\": 1, \"dayLengthS\": 600, \"startHour\": 9, " +
             "\"sun\": {\"noonElevationDeg\": 38, \"noonAzimuthDeg\": 320, \"hourOffset\": 0}, " +
             "\"moon\": {\"noonElevationDeg\": 50, \"noonAzimuthDeg\": 20, \"hourOffset\": 12}, " +
@@ -166,5 +173,45 @@ public class SkyTests
             "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, \"moonGlow\": 0.02, \"starBrightness\": 0.01, " +
             stops.Replace("\"ambientSky\"", "\"zenith\": [0.3,0.4,0.6], \"glow\": [0,0,0], \"ambientSky\"") + "}";
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseSky(json, "sky.json"));
+    }
+
+    const string GoodClouds = "\"clouds\": {\"coverage\": 0.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, ";
+    const string GoodStops = "\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.06, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]";
+
+    [Fact]
+    public void GoodSkyWithCloudsLoads()
+    {
+        var json = "{\"schemaVersion\": 1, \"dayLengthS\": 600, \"startHour\": 9, " +
+            "\"sun\": {\"noonElevationDeg\": 38, \"noonAzimuthDeg\": 320, \"hourOffset\": 0}, " +
+            "\"moon\": {\"noonElevationDeg\": 50, \"noonAzimuthDeg\": 20, \"hourOffset\": 12}, " +
+            "\"moonColor\": [0.6, 0.7, 1], \"moonIntensity\": 0.2, \"moonSwitchHeight\": -0.06, \"moonFadeHeight\": 0.1, " +
+            "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, \"moonGlow\": 0.02, \"starBrightness\": 0.01, " +
+            GoodClouds + GoodStops.Replace("\"ambientSky\"", "\"zenith\": [0.3,0.4,0.6], \"glow\": [0,0,0], \"ambientSky\"") + "}";
+        Assert.Equal(0.5f, ContentLoader.ParseSky(json, "sky.json").Clouds.Coverage);
+    }
+
+    [Fact]
+    public void CloudsDriftDownwindAndWrapSmoothly()
+    {
+        var c = Sky.Clouds;
+        c.Drift(0, out float x0, out float z0, out _, out _);
+        Assert.Equal(0f, x0);
+        Assert.Equal(0f, z0);
+        float P = CloudDef.NoisePeriod;
+        c.Drift(100, out float x, out float z, out float cx, out _);
+        double a = c.WindDirDeg * Math.PI / 180, d = 100.0 * c.WindSpeedMs / c.ScaleM;
+        Assert.Equal(Math.Sin(a) * d, x > P / 2 ? x - P : x, 4);
+        Assert.Equal(Math.Cos(a) * d, z > P / 2 ? z - P : z, 4);
+        Assert.Equal(Math.Sin(a) * d * c.Churn, cx > P / 2 ? cx - P : cx, 3);
+        c.Drift(1e7, out float px, out float pz, out _, out _);
+        for (double t = 1e7 + 0.5; t < 1e7 + 1000; t += 0.5)
+        {
+            c.Drift(t, out float nx, out float nz, out _, out _);
+            Assert.InRange(nx, 0, P);
+            Assert.InRange(nz, 0, P);
+            float sx = Math.Abs(nx - px), sz = Math.Abs(nz - pz);
+            Assert.True(Math.Min(sx, P - sx) < 0.01f && Math.Min(sz, P - sz) < 0.01f, $"jump at {t}");
+            (px, pz) = (nx, nz);
+        }
     }
 }

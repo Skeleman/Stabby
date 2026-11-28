@@ -121,6 +121,7 @@ namespace Stabby.Content
                 MoonCycleDays = root.Float("moonCycleDays", 0), MoonStartPhase = root.Float("moonStartPhase", 0),
                 NewMoonLight = root.Float("newMoonLight", 0), NewMoonAmbient = root.Float("newMoonAmbient", 0),
                 MoonGlow = root.Float("moonGlow", 0), StarBrightness = root.Float("starBrightness", 0),
+                Clouds = Clouds(root.Object("clouds")),
             };
             foreach (var s in root.Objects("stops", true))
             {
@@ -134,6 +135,18 @@ namespace Stabby.Content
             root.End();
             Check(SkyDef.Validate(d), source);
             return d;
+        }
+
+        static CloudDef Clouds(Json o)
+        {
+            if (o == null) return null;
+            var c = new CloudDef
+            {
+                Coverage = o.Float("coverage", -1), Density = o.Float("density", -1), HeightM = o.Float("heightM", 0), ThicknessM = o.Float("thicknessM", 0),
+                ScaleM = o.Float("scaleM", 0), WindDirDeg = o.Float("windDirDeg", -1), WindSpeedMs = o.Float("windSpeedMs", -1), Churn = o.Float("churn", -1),
+            };
+            o.End();
+            return c;
         }
 
         static Orbit Orbit(Json o)

@@ -31,6 +31,8 @@ namespace Stabby.Game
         static readonly int ZenithId = Shader.PropertyToID("_StabbyZenith"), HorizonId = Shader.PropertyToID("_StabbyHorizon"), GlowId = Shader.PropertyToID("_StabbyGlow");
         static readonly int SunDirId = Shader.PropertyToID("_StabbySunDir"), SunTintId = Shader.PropertyToID("_StabbySunTint");
         static readonly int MoonDirId = Shader.PropertyToID("_StabbyMoonDir"), MoonTintId = Shader.PropertyToID("_StabbyMoonTint"), StarsId = Shader.PropertyToID("_StabbyStars");
+        static readonly int CloudShapeId = Shader.PropertyToID("_StabbyCloudShape"), CloudDriftId = Shader.PropertyToID("_StabbyCloudDrift"), TimePinId = Shader.PropertyToID("_StabbyTimePin");
+        static readonly int CloudLightId = Shader.PropertyToID("_StabbyCloudLight"), CloudLightDirId = Shader.PropertyToID("_StabbyCloudLightDir");
 
         Task<SkyDef> load;
         SkyDef sky;
@@ -66,6 +68,9 @@ namespace Stabby.Game
                 if (shader != null) { skyMaterial = new Material(shader) { hideFlags = HideFlags.DontSave }; RenderSettings.skybox = skyMaterial; }
             }
             Scrub();
+            var pin = Shader.GetGlobalVector(TimePinId);
+            sky.Clouds.Drift(pin.x > 0 ? pin.y : Clock, out float cx, out float cz, out float chx, out float chz);
+            Shader.SetGlobalVector(CloudDriftId, new Vector4(cx, cz, chx, chz));
             if (light == null)
             {
                 light = RenderSettings.sun != null ? RenderSettings.sun : System.Array.Find(Object.FindObjectsByType<Light>(), l => l.type == LightType.Directional);
@@ -112,6 +117,11 @@ namespace Stabby.Game
             Shader.SetGlobalFloat(StarsId, s.Stars);
             Shader.SetGlobalColor(SkyId, new Color(s.AmbientSky.R, s.AmbientSky.G, s.AmbientSky.B).linear);
             Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B).linear);
+            var c = sky.Clouds;
+            var lit = new Color(s.Light.R, s.Light.G, s.Light.B).linear * s.Intensity;
+            Shader.SetGlobalVector(CloudShapeId, new Vector4(c.Coverage, c.HeightM, c.ThicknessM, 1f / c.ScaleM));
+            Shader.SetGlobalVector(CloudLightId, new Vector4(lit.r, lit.g, lit.b, c.Density));
+            Shader.SetGlobalVector(CloudLightDirId, s.Moon ? new Vector4(s.MoonX, s.MoonY, s.MoonZ, 0) : new Vector4(s.SunX, s.SunY, s.SunZ, 0));
             Shown = s;
             ShownHour = s.Hour;
             (linePinnedHour, linePinnedPhase) = (PinnedHour.HasValue, PinnedPhase.HasValue);

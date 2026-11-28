@@ -72,6 +72,17 @@ namespace Stabby.Game.Editor
             lines.Add($"night hour {s.Hour:F2}, new moon: {(s.Moon ? "moon" : "sun")} light {s.Intensity:F4}, lit {s.Illumination:F2}, ambient sky {s.AmbientSky.B:F4}, sky {s.Sky.R:F3},{s.Sky.G:F3},{s.Sky.B:F3}");
             Shot(cam, null, "warmup");
             Shot(cam, dir, "night-newmoon");
+            var peakEye = PeakEye();
+            for (var w = SkyView(cam, dir, lines, peakEye, NightHour, Stabby.World.SkyDef.FullMoon, "night-moon", true, 0f, 0.05f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, NightHour, 0f, "night-newmoon-sky", true, 0f, 0.05f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, DawnHour, Stabby.World.SkyDef.FullMoon, "dawn", false, 25f, -0.12f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, PinnedMidday, Stabby.World.SkyDef.FullMoon, "noon", false, 90f, -0.05f); w.MoveNext();) yield return null;
+            for (var w = SkyView(cam, dir, lines, peakEye, DuskHour, Stabby.World.SkyDef.FullMoon, "dusk", false, -25f, -0.12f); w.MoveNext();) yield return null;
+            for (var w = ShowHour(PinnedMidday); w.MoveNext();) yield return null;
+            GameStatus.Lines["~daynight"] = string.Join("\n", lines);
+        }
+        static Vector3 PeakEye()
+        {
             var peakEye = home;
             float peak = float.MinValue;
             for (int a = 0; a < 32; a++)
@@ -83,14 +94,9 @@ namespace Stabby.Game.Editor
                     if (h > peak) { peak = h; peakEye = new Vector3(home.x + d.x * r, h + 60f, home.z + d.z * r); }
                 }
             }
-            for (var w = SkyView(cam, dir, lines, peakEye, NightHour, Stabby.World.SkyDef.FullMoon, "night-moon", true, 0f, 0.05f); w.MoveNext();) yield return null;
-            for (var w = SkyView(cam, dir, lines, peakEye, NightHour, 0f, "night-newmoon-sky", true, 0f, 0.05f); w.MoveNext();) yield return null;
-            for (var w = SkyView(cam, dir, lines, peakEye, DawnHour, Stabby.World.SkyDef.FullMoon, "dawn", false, 25f, -0.12f); w.MoveNext();) yield return null;
-            for (var w = SkyView(cam, dir, lines, peakEye, PinnedMidday, Stabby.World.SkyDef.FullMoon, "noon", false, 90f, -0.05f); w.MoveNext();) yield return null;
-            for (var w = SkyView(cam, dir, lines, peakEye, DuskHour, Stabby.World.SkyDef.FullMoon, "dusk", false, -25f, -0.12f); w.MoveNext();) yield return null;
-            for (var w = ShowHour(PinnedMidday); w.MoveNext();) yield return null;
-            GameStatus.Lines["~daynight"] = string.Join("\n", lines);
+            return peakEye;
         }
+
         static System.Collections.IEnumerator SkyView(Camera cam, string dir, List<string> lines, Vector3 eye, float hour, float phase, string name, bool moon, float turn, float pitch)
         {
             for (var w = ShowHour(hour, phase); w.MoveNext();) yield return null;

@@ -24,6 +24,37 @@ namespace Stabby.World
         public float NoonElevationDeg, NoonAzimuthDeg, HourOffset;
     }
 
+    public sealed class CloudDef
+    {
+        public const float NoisePeriod = 256;
+        public float Coverage = 0.45f, Density = 1.2f, HeightM = 1800, ThicknessM = 700, ScaleM = 3200, WindDirDeg = 250, WindSpeedMs = 9, Churn = 1.6f;
+
+        public void Drift(double clockS, out float x, out float z, out float churnX, out float churnZ)
+        {
+            double a = WindDirDeg * Math.PI / 180, d = clockS * WindSpeedMs / ScaleM;
+            double dx = Math.Sin(a) * d, dz = Math.Cos(a) * d;
+            x = Wrap(dx);
+            z = Wrap(dz);
+            churnX = Wrap(dx * Churn);
+            churnZ = Wrap(dz * Churn);
+        }
+
+        static float Wrap(double v) => (float)(v - Math.Floor(v / NoisePeriod) * NoisePeriod);
+
+        public static void Validate(List<string> e, CloudDef c)
+        {
+            if (c == null) { e.Add("sky.clouds: required"); return; }
+            if (!(c.Coverage >= 0 && c.Coverage <= 1)) e.Add($"sky.clouds.coverage {c.Coverage} outside 0..1");
+            if (!(c.Density >= 0 && c.Density <= 8)) e.Add($"sky.clouds.density {c.Density} outside 0..8");
+            if (!(c.HeightM >= 200 && c.HeightM <= 12000)) e.Add($"sky.clouds.heightM {c.HeightM} outside 200..12000");
+            if (!(c.ThicknessM >= 50 && c.ThicknessM <= 5000)) e.Add($"sky.clouds.thicknessM {c.ThicknessM} outside 50..5000");
+            if (!(c.ScaleM >= 100 && c.ScaleM <= 50000)) e.Add($"sky.clouds.scaleM {c.ScaleM} outside 100..50000");
+            if (!(c.WindDirDeg >= 0 && c.WindDirDeg < 360)) e.Add($"sky.clouds.windDirDeg {c.WindDirDeg} outside 0..360");
+            if (!(c.WindSpeedMs >= 0 && c.WindSpeedMs <= 60)) e.Add($"sky.clouds.windSpeedMs {c.WindSpeedMs} outside 0..60");
+            if (!(c.Churn >= 0 && c.Churn <= 4)) e.Add($"sky.clouds.churn {c.Churn} outside 0..4");
+        }
+    }
+
     public struct SkyState
     {
         public float Hour, SunHeight, MoonHeight;
@@ -42,6 +73,7 @@ namespace Stabby.World
         public float MoonIntensity = 0.18f, MoonSwitchHeight = -0.06f, MoonFadeHeight = 0.1f;
         public float MoonCycleDays = 8, MoonStartPhase = 0.5f, NewMoonLight = 0.03f, NewMoonAmbient = 0.2f, MoonGlow = 0.02f, StarBrightness = 0.01f;
         public const float FullMoon = 0.5f;
+        public CloudDef Clouds = new CloudDef();
         public List<SkyStop> Stops = new List<SkyStop>();
 
         public float Hour(double clockS)
@@ -153,6 +185,7 @@ namespace Stabby.World
             CheckOrbit(e, "sky.sun", d.Sun);
             CheckOrbit(e, "sky.moon", d.Moon);
             CheckColor(e, "sky.moonColor", d.MoonColor);
+            CloudDef.Validate(e, d.Clouds);
             if (!(d.MoonIntensity >= 0 && d.MoonIntensity <= 2)) e.Add($"sky.moonIntensity {d.MoonIntensity} outside 0..2");
             if (!(d.MoonSwitchHeight >= -0.5f && d.MoonSwitchHeight <= 0)) e.Add($"sky.moonSwitchHeight {d.MoonSwitchHeight} outside -0.5..0");
             if (!(d.MoonFadeHeight > 0 && d.MoonFadeHeight <= 1)) e.Add($"sky.moonFadeHeight {d.MoonFadeHeight} outside 0..1");
