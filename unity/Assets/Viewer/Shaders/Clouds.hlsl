@@ -24,13 +24,16 @@ float CloudNoise(float2 p, uint mask)
     return lerp(lerp(a, b, f.x), lerp(d, e, f.x), f.y);
 }
 
-float CloudBase(float2 p, int octaves)
+// fp is one pixel's footprint in p units; octaves finer than about three pixels fade to their mean so grazing views don't alias into stacked lines.
+float CloudBase(float2 p, int octaves, float fp)
 {
     float s = 0, w = 0.5, n = 0;
     uint mask = 255u;
     for (int k = 0; k < octaves; k++)
     {
-        s += w * CloudNoise(p, mask);
+        float keep = saturate(1.6 - 4 * fp);
+        s += w * (keep > 0 ? lerp(0.5, CloudNoise(p, mask), keep) : 0.5);
+        fp *= 2;
         n += w;
         p = p * 2 + float2(17.3, 41.9);
         mask = mask * 2 + 1;
@@ -44,19 +47,19 @@ float CloudRamp(float x)
     return x <= 0 ? 0 : x < 1 ? 0.5 * x * x : x - 0.5;
 }
 
-float CloudTop(float2 xz, float2 churn, int octaves, bool detail)
+float CloudTop(float2 xz, float2 churn, int octaves, bool detail, float fp)
 {
     float2 p = xz * _StabbyCloudShape.z;
     float2 warp = float2(CloudNoise(p * 0.5 + _StabbyCloudDrift.xy * 0.5 + 91.7, 127u), CloudNoise(p * 0.5 + _StabbyCloudDrift.xy * 0.5 + 13.1, 127u)) - 0.5;
-    float n = CloudBase(p + _StabbyCloudDrift.xy + warp * 0.6, octaves);
+    float n = CloudBase(p + _StabbyCloudDrift.xy + warp * 0.6, octaves, fp);
     float body = saturate((n - lerp(0.68, 0.32, _StabbyWeather.x) + _StabbyWeather.y * 0.06) * 4.5);
-    if (detail) body -= (CloudBase(p * 8 + churn * 8, 2) - 0.5) * 0.45 * (1 - body * 0.6);
+    if (detail) body -= (CloudBase(p * 8 + churn * 8, 2, fp * 8) - 0.5) * 0.45 * (1 - body * 0.6);
     return body * (0.55 + 0.45 * body);
 }
 
-float CloudShape(float2 xz, float h, float2 churn, int octaves, bool detail)
+float CloudShape(float2 xz, float h, float2 churn, int octaves, bool detail, float fp)
 {
-    return saturate((CloudTop(xz, churn, octaves, detail) - h) * 5) * saturate(h * 6 + 0.25);
+    return saturate((CloudTop(xz, churn, octaves, detail, fp) - h) * 5) * saturate(h * 6 + 0.25);
 }
 
 // Integrates saturate((top - h) * 5) along a segment where both top and h vary linearly, so adjacent steps meet without terraces at grazing angles.
@@ -86,15 +89,16 @@ float4 StabbyClouds(float3 d, float2 px, float3 horizon, float3 zenith, float3 g
     float3 over = zenith * 0.75 + horizon * 0.25;
     float3 sun = _StabbyCloudLight.rgb;
     float2 cam = _WorldSpaceCameraPos.xz;
+    float foot = 2 / (abs(UNITY_MATRIX_P[1][1]) * _ScreenParams.y) / d.y * _StabbyCloudShape.z;
     float trans = 1;
     float3 light = 0;
     float3 org = float3(cam.x, 0, cam.y);
-    float topA = CloudTop(org.xz + d.xz * t0, _StabbyCloudDrift.zw, 4, true);
+    float topA = CloudTop(org.xz + d.xz * t0, _StabbyCloudDrift.zw, 4, true, foot * t0);
     for (int k = 0; k < steps; k++)
     {
         float t = t0 + span * (k + 0.5) / steps;
         float3 q = org + d * t;
-        float topB = CloudTop(org.xz + d.xz * (t + dt * 0.5), _StabbyCloudDrift.zw, 4, true);
+        float topB = CloudTop(org.xz + d.xz * (t + dt * 0.5), _StabbyCloudDrift.zw, 4, true, foot * (t + dt * 0.5));
         float hA = saturate(k * dt * d.y / thick);
         float hB = saturate((k + 1) * dt * d.y / thick);
         float h = (hA + hB) * 0.5;
@@ -104,7 +108,7 @@ float4 StabbyClouds(float3 d, float2 px, float3 horizon, float3 zenith, float3 g
         float od = dens * sigma * dt / thick * 3;
         float lh = h + l.y * 0.45;
         float2 lq = q.xz + l.xz / max(abs(l.y), 0.15) * thick * 0.45;
-        float shade = CloudShape(lq, saturate(lh), _StabbyCloudDrift.zw, 3, false) * (lh > 1 ? 0 : 1);
+        float shade = CloudShape(lq, saturate(lh), _StabbyCloudDrift.zw, 3, false, foot * t) * (lh > 1 ? 0 : 1);
         float lod = (shade * 1.4 + dens * 0.6) * sigma;
         float direct = exp(-lod * 1.6) * (1 - exp(-od * 2.2) * 0.35);
         float3 amb = lerp(under, over, h) * (0.65 + 0.35 * (1 - dens)) * (1 - wet * 0.55 * (1 - h));
