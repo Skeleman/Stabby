@@ -58,6 +58,8 @@ LightBudgetSystem.Complete completes each handle once, after IsCompleted or at t
 JobPoll.Complete Done completes each handle once, after IsCompleted; Teardown runs once in OnDestroy, before releasing what the job wrote
 CaveDarkSystem follows Camera.main and uploads a Burst-built cave darkness volume to a managed Texture3D (Texture API, no unmanaged form)
 CaveDarkSystem.Complete completes each handle once, after IsCompleted or at teardown
+ShelterSystem follows Camera.main and uploads a Burst-built sky floor grid to a managed Texture2D (Texture API, no unmanaged form)
+ShelterSystem.Complete completes each handle once, after IsCompleted or at teardown
 DayNightSystem.load yields a managed SkyDef the GC frees; nothing to release
 LightPresenterSystem.capsTask yields a LightBudget.Caps value; nothing to release
 ObjectColumnsSystem.fieldTask yields the managed ObjectField the GC frees; nothing to release

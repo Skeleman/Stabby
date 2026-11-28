@@ -18,7 +18,17 @@ Shader "Stabby/Precip"
 
             float4 _StabbyRainColor, _StabbySnowColor;
             float4 _StabbyRain, _StabbySnow, _StabbyRainShift, _StabbySnowShift, _StabbyRainLook, _StabbySnowLook, _StabbyPrecipBox;
-            float4 _StabbySky, _StabbySunTint;
+            float4 _StabbySky, _StabbySunTint, _StabbyRainNight;
+            TEXTURE2D(_StabbyShelter);
+            SAMPLER(sampler_StabbyShelter);
+            float4 _StabbyShelterMin, _StabbyShelterInv;
+
+            float Open(float3 wp)
+            {
+                float2 uv = (wp.xz - _StabbyShelterMin.xz) * _StabbyShelterInv.xz;
+                [branch] if (_StabbyShelterMin.w <= 0 || any(uv < 0) || any(uv > 1)) return 1;
+                return saturate((wp.y - SAMPLE_TEXTURE2D_LOD(_StabbyShelter, sampler_StabbyShelter, uv, 0).r) * 2 + 0.5);
+            }
             float _StabbyClock, _StabbyPrecipOff;
 
             struct Varyings { float4 positionCS : SV_POSITION; float3 uv : TEXCOORD0; float4 color : TEXCOORD1; float fog : TEXCOORD2; };
@@ -50,6 +60,7 @@ Shader "Stabby/Precip"
                 float phase = Unit(h + 53) * 6.2831853;
                 float sway = _StabbyPrecipBox.y * snow;
                 wp.xz += sway * float2(sin(t * 6.2831853 / period + phase), cos(t * 6.2831853 / (period * 2) + phase * 1.7));
+                float open = Open(wp);
                 float3 toCam = wp - cam;
                 float dist = length(toCam);
                 float pixel = dist * 2 / (UNITY_MATRIX_P[1][1] * _ScreenParams.y);
@@ -77,11 +88,11 @@ Shader "Stabby/Precip"
                 float edge = saturate((1 - length(p) * 2) * 4);
                 float near = saturate((dist - 0.4) * 1.5);
                 float4 tint = snow > 0 ? _StabbySnowColor : _StabbyRainColor;
-                float3 light = _StabbySky.rgb * 2.2 + _StabbySunTint.rgb * 0.45;
+                float3 light = _StabbySky.rgb * (2.2 + 3 * _StabbyRainNight.a) + _StabbySunTint.rgb * 0.45 + _StabbyRainNight.rgb * 2;
                 float cave = CaveSky(wp);
-                o.positionCS = _StabbyPrecipOff > 0.5 ? float4(0, 0, -1, 1) : TransformWorldToHClip(wp);
+                o.positionCS = _StabbyPrecipOff > 0.5 || open <= 0 ? float4(0, 0, -1, 1) : TransformWorldToHClip(wp);
                 o.uv = float3(q, snow);
-                o.color = float4(tint.rgb * light, tint.a * thin * edge * near * cave * cave);
+                o.color = float4(tint.rgb * light, tint.a * thin * edge * near * cave * cave * open);
                 o.fog = ComputeFogFactor(o.positionCS.z);
                 return o;
             }

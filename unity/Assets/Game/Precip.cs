@@ -14,7 +14,7 @@ namespace Stabby.Game
         static readonly int WeatherId = Shader.PropertyToID("_StabbyWeather"), RainId = Shader.PropertyToID("_StabbyRain"), SnowId = Shader.PropertyToID("_StabbySnow");
         static readonly int RainLookId = Shader.PropertyToID("_StabbyRainLook"), SnowLookId = Shader.PropertyToID("_StabbySnowLook"), RainShiftId = Shader.PropertyToID("_StabbyRainShift");
         static readonly int SnowShiftId = Shader.PropertyToID("_StabbySnowShift"), BoxId = Shader.PropertyToID("_StabbyPrecipBox");
-        static readonly int RainColorId = Shader.PropertyToID("_StabbyRainColor"), SnowColorId = Shader.PropertyToID("_StabbySnowColor");
+        static readonly int RainColorId = Shader.PropertyToID("_StabbyRainColor"), SnowColorId = Shader.PropertyToID("_StabbySnowColor"), NightId = Shader.PropertyToID("_StabbyRainNight");
         public static float? PinnedPrecip, PinnedSnow, PinnedCover;
         public static float Cover, Precip, Snow, TemperatureC;
         public static int Drawn;
@@ -71,6 +71,7 @@ namespace Stabby.Game
             Shader.SetGlobalVector(SnowLookId, Look(w.Snow));
             Shader.SetGlobalVector(BoxId, new Vector4(Snow, w.Snow.SwayM, w.MinPx, Mathf.Clamp01(DayNightSystem.Shown.Intensity)));
             Shader.SetGlobalColor(RainColorId, new Color(w.Rain.Color.R, w.Rain.Color.G, w.Rain.Color.B, w.Rain.Alpha).linear);
+            Shader.SetGlobalVector(NightId, Night(sky, DayNightSystem.Shown));
             Shader.SetGlobalColor(SnowColorId, new Color(w.Snow.Color.R, w.Snow.Color.G, w.Snow.Color.B, w.Snow.Alpha).linear);
             var rp = new RenderParams(material)
             {
@@ -81,6 +82,13 @@ namespace Stabby.Game
             };
             Graphics.RenderPrimitives(rp, MeshTopology.Triangles, 6, count);
             Drawn = count;
+        }
+
+        static Vector4 Night(SkyDef sky, SkyState s)
+        {
+            float o = sky.Weather.Overcast(Cover, Precip), dark = Mathf.Clamp01((sky.MoonSwitchHeight - s.SunHeight) / sky.MoonFadeHeight);
+            var moon = s.Moon ? new Color(s.Light.R, s.Light.G, s.Light.B).linear * (s.Intensity * Mathf.Lerp(1, sky.Weather.OvercastSun, o)) : Color.black;
+            return new Vector4(moon.r, moon.g, moon.b, dark);
         }
 
         static Vector4 Look(PrecipLook p) => new Vector4(p.LengthM, p.WidthM, 0, 0);
