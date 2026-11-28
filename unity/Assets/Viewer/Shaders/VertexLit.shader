@@ -97,7 +97,7 @@ Shader "Stabby/VertexLit"
                 {
                     float2 xa = i.xz + OrgOrigin(_WorldSpaceCameraPos);
                     float2 sl = SAMPLE_TEXTURE2D(_StabbySlope, sampler_StabbySlope, xa * _StabbyFieldUV.x + _StabbyFieldUV.y).rg;
-                    float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xa * _StabbyFieldUV.z + _StabbyFieldUV.w, 0);
+                    float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, TmBiomeUV(xa, _StabbyFieldUV), 0);
                     float3 fn = normalize(float3(-sl.x, 1, -sl.y)), fc;
                     float fr = 0;
                     if (h <= 0) fc = ToLinear(_StabbySand.rgb) * lerp(0.62, 0.45, saturate(-h / 30));
