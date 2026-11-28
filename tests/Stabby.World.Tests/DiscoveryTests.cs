@@ -319,6 +319,33 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void PetrifiedForestsLieOnDryOpenGround()
+    {
+        int pf = Objects.Objects.FindIndex(o => o.Id == "petrified-forest");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == pf).ToArray();
+        output.WriteLine($"{found.Length} petrified forests " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:fit {field.PetrifiedFit(c.X, c.Z):F2}")));
+        Assert.NotEmpty(found);
+        foreach (var c in found)
+        {
+            Assert.True(field.Woods(c.X, c.Z) <= ObjectField.PetrifiedWoods);
+            Assert.Null(field.PetrifiedFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            var l = Structures.Layout(ObjectPart.PetrifiedForest, ObjectMeshes.Key("petrified-forest", 0, c.Variant));
+            Assert.NotEmpty(l.Contacts);
+            foreach (var o in all.Where(o => o.Def != pf))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+        for (int v = 0; v < Objects.Objects[pf].Variants; v++)
+        {
+            var l = Structures.Layout(ObjectPart.PetrifiedForest, ObjectMeshes.Key("petrified-forest", 0, v));
+            int logs = l.Pieces.Count(p => p.R == 1 && p.Sx > 0.7f * Structures.PetrifiedU);
+            Assert.InRange(logs, 3, 6);
+        }
+    }
+
+    [Fact]
     public void VolcanoHoldsACraterPoolBelowItsRim()
     {
         var p = TestWorlds.Place(VolcanoSeed);

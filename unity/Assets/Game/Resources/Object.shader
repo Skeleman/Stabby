@@ -51,7 +51,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
-            float4 _StabbyKit[42], _StabbyKitSrgb[42];
+            float4 _StabbyKit[47], _StabbyKitSrgb[47];
             float _StabbyClock;
             static float3 emberGlow;
             static float iceWrap;
@@ -327,6 +327,12 @@ Shader "Stabby/Object"
                 return occ;
             }
 
+            float3 AgateBand(float id, float seed)
+            {
+                float h = frac(sin(id * 12.9898 + seed * 78.233) * 43758.5453);
+                return h < 0.3 ? _StabbyKit[43].rgb : h < 0.55 ? _StabbyKit[44].rgb : h < 0.78 ? _StabbyKit[45].rgb : _StabbyKit[46].rgb;
+            }
+
             float3 Built(float4 tone, float3 g, float3 q, inout float3 n, float fp, float4 th, float3 v, float3 wp, out float occ)
             {
                 int mat = (int)floor(tone.x * 0.5);
@@ -510,6 +516,41 @@ Shader "Stabby/Object"
                     a = lerp(a, cc, 0.12);
                     grad = 0.26 * mid.yzw * fm + 0.16 * lp.yzw * fs + 0.1 * fib.yzw * ff;
                     shade = 0.35 * smoothstep(0.0, -0.6, mid.x) * fm;
+                }
+                else if (side && mat == 12)
+                {
+                    float al = dot(q, g);
+                    float3 sp = (q - g * al) * 15 + g * (al * 3) + sd, sp2 = sp * 2.3 + 5.1;
+                    float4 bn = OrgNoise3(sp, int3(0, 0, 0)), bm = OrgNoise3(sp2, int3(0, 0, 0));
+                    float fb = OrgRungW(2, fp);
+                    float rid = lerp(0.6, 1 - abs(bn.x), fb) * 0.65 + lerp(0.6, 1 - abs(bm.x), fb) * 0.35;
+                    a = _StabbyKit[42].rgb * (0.5 + 0.65 * smoothstep(0.15, 0.85, rid)) * (0.88 + 0.2 * big.x);
+                    float stain = smoothstep(0.3, 0.85, big.x + 0.45 * mid.x * fm);
+                    a = lerp(a, lerp(_StabbyKit[43].rgb, _StabbyKit[44].rgb, 0.5 + 0.5 * mid.x) * 0.85, 0.32 * stain);
+                    float fr = abs(frac(al * 0.9 + 0.3 * big.x + th.w * 3.7) - 0.5);
+                    float crack = smoothstep(0.035, 0.0, fr + 0.02 * mid.x * fm - 0.01);
+                    a *= 1 - 0.6 * crack;
+                    float3 d1 = bn.yzw - g * dot(bn.yzw, g), d2 = bm.yzw - g * dot(bm.yzw, g);
+                    grad = -(sign(bn.x) * 0.15 * fb) * d1 - (sign(bm.x) * 0.06 * fb) * d2 + 0.06 * mid.yzw * fm + 0.04 * fib.yzw * ff;
+                    shade = max(0.3 * (1 - smoothstep(0.2, 0.6, rid)) * fb, 0.7 * crack);
+                }
+                else if (mat == 12)
+                {
+                    bool cut = cap && frac(th.w * 5.37) > 0.3;
+                    float wv = 0.07 * big.x + 0.035 * mid.x * fm + 0.01 * fib.x * ff;
+                    float rr = (cut ? rf : 0.5 + 0.35 * big.x + 0.2 * mid.x) + wv, bands = rr * 6.5;
+                    float id = floor(bands), t = frac(bands);
+                    a = lerp(AgateBand(id, th.w), AgateBand(id + 1, th.w), smoothstep(0.62, 0.98, t + 0.1 * fib.x * ff));
+                    float ring = 0.5 + 0.5 * cos((rf + wv) * rm / 0.024 * 6.2831853), keep = OrgRungW(3, fp);
+                    a *= (1 - 0.14 * ring * keep * (cut ? 1 : 0)) * (0.92 + 0.08 * fib.x * ff);
+                    a = lerp(a, _StabbyKit[46].rgb, 0.5 * smoothstep(0.16, 0.04, rf + 0.03 * mid.x) * (cut ? 1 : 0));
+                    float bark = cut ? smoothstep(0.9, 0.97, rf + 0.03 * fib.x * ff) : 0;
+                    a = lerp(a, _StabbyKit[42].rgb * 0.85, bark);
+                    float chk = smoothstep(0.92, 0.985, 1 - abs(str.x + 0.3 * mid.x)) * fs * (1 - bark);
+                    a *= 1 - 0.55 * chk;
+                    a *= cut ? 1 : 0.82 + 0.12 * big.x;
+                    grad = (cut ? 0.015 : 0.12) * mid.yzw * fm + (cut ? 0.012 : 0.08) * fib.yzw * ff + 0.05 * str.yzw * fs * chk;
+                    shade = 0.5 * chk;
                 }
                 else if (mat == 1 && th.x > 2.5 && th.x < 3.5)
                 {

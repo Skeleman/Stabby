@@ -315,9 +315,9 @@ namespace Stabby.World
         public PeatDef Peat = new PeatDef();
         public List<StratumDef> Strata = new List<StratumDef>();
         public List<LibraryMaterial> Materials = new List<LibraryMaterial>();
-        public static readonly string[] KitNames = { "timber", "plank", "plaster", "thatch", "iron", "cloth", "ash", "fungus", "turf", "ember", "soil" };
-        public static readonly int[] KitSlots = { 6, 1, 3, 4, 2, 4, 5, 10, 2, 2, 3 };
-        public const int KitColors = 42;
+        public static readonly string[] KitNames = { "timber", "plank", "plaster", "thatch", "iron", "cloth", "ash", "fungus", "turf", "ember", "soil", "petrified" };
+        public static readonly int[] KitSlots = { 6, 1, 3, 4, 2, 4, 5, 10, 2, 2, 3, 5 };
+        public const int KitColors = 47;
         public Dictionary<string, List<string>> Kit = new Dictionary<string, List<string>>();
 
         public LibraryMaterial Find(string id)

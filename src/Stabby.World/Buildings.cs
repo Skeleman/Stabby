@@ -15,7 +15,7 @@ namespace Stabby.World
         static readonly float[] HouseSeat = { 0, 0, 0.4f, 0.3f, -0.4f, 0.3f, 0.4f, -0.3f, -0.4f, -0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.FumaroleField ? VentSeats : shape == ObjectPart.SunkenTemple ? TempleSeats : shape == ObjectPart.GreatMushroom ? GreatMushroomSeats : shape == ObjectPart.FallenTree ? TreeSeats : shape == ObjectPart.AncientTree ? AncientSeats : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower || shape == ObjectPart.Monument || shape == ObjectPart.Shipwreck ? YardSeat : shape == ObjectPart.Watchtower ? WatchSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.FumaroleField ? VentSeats : shape == ObjectPart.SunkenTemple ? TempleSeats : shape == ObjectPart.GreatMushroom ? GreatMushroomSeats : shape == ObjectPart.PetrifiedForest ? PetrifiedSeats : shape == ObjectPart.FallenTree ? TreeSeats : shape == ObjectPart.AncientTree ? AncientSeats : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower || shape == ObjectPart.Monument || shape == ObjectPart.Shipwreck ? YardSeat : shape == ObjectPart.Watchtower ? WatchSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -55,6 +55,7 @@ namespace Stabby.World
                 case ObjectPart.SunkenTemple: SunkenTemple(l, key, Frame.Root(TempleU)); break;
                 case ObjectPart.FumaroleField: Fumarole(l, key, Frame.Root(FumaroleU)); break;
                 case ObjectPart.GreatMushroom: GreatMushroom(l, key, Frame.Root(GreatMushroomU)); break;
+                case ObjectPart.PetrifiedForest: PetrifiedForest(l, key, Frame.Root(PetrifiedU)); break;
                 case ObjectPart.Shipwreck: Shipwreck(l, key, Frame.Root(ShipwreckU)); break;
                 case ObjectPart.Bridge: Bridge(l, key, Frame.Root(BridgeU)); break;
                 case ObjectPart.FallenTree: FallenTree(l, key, Frame.Root(TreeU)); break;

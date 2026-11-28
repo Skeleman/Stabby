@@ -243,7 +243,12 @@
     { "id": "rut-dirt",         "name": "Rut dirt",         "color": "#5e5040" },
     { "id": "loam",             "name": "Loam",             "color": "#33271c" },
     { "id": "wet-loam",         "name": "Wet loam",         "color": "#1e1711" },
-    { "id": "loam-grit",        "name": "Loam grit",        "color": "#4e3f2f" }
+    { "id": "loam-grit",        "name": "Loam grit",        "color": "#4e3f2f" },
+    { "id": "petrified-bark",   "name": "Petrified bark",   "color": "#7a766f" },
+    { "id": "agate-rust",       "name": "Agate rust",       "color": "#8c3d25", "keepHue": true },
+    { "id": "agate-ochre",      "name": "Agate ochre",      "color": "#b98436", "keepHue": true },
+    { "id": "agate-violet",     "name": "Agate grey-violet", "color": "#6f6170", "keepHue": true },
+    { "id": "agate-cream",      "name": "Agate cream",      "color": "#dccfb4", "keepHue": true }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],
@@ -256,7 +261,8 @@
     "fungus": ["red-cap", "brown-cap", "tan-cap", "ochre-cap", "cap-rim", "cap-wart", "dark-gill", "pale-gill", "fungus-stem", "stem-base"],
     "turf": ["roof-turf", "turf-sprout"],
     "ember": ["ember-glow", "ember-core"],
-    "soil": ["loam", "wet-loam", "loam-grit"]
+    "soil": ["loam", "wet-loam", "loam-grit"],
+    "petrified": ["petrified-bark", "agate-rust", "agate-ochre", "agate-violet", "agate-cream"]
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },
