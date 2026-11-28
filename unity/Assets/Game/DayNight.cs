@@ -26,6 +26,7 @@ namespace Stabby.Game
         public static float ShownHour = float.NaN;
         public static bool ShownPinned;
         public static SkyState Shown;
+        public static SkyDef Loaded;
 
         static readonly int SkyId = Shader.PropertyToID("_StabbySky"), GroundId = Shader.PropertyToID("_StabbyGround"), ClockId = Shader.PropertyToID("_StabbyClock");
         static readonly int ZenithId = Shader.PropertyToID("_StabbyZenith"), HorizonId = Shader.PropertyToID("_StabbyHorizon"), GlowId = Shader.PropertyToID("_StabbyGlow");
@@ -63,6 +64,7 @@ namespace Stabby.Game
                 if (load == null || !load.IsCompleted) return;
                 if (load.IsFaulted) { GameStatus.Failure = load.Exception.ToString(); load = null; Enabled = false; return; }
                 sky = load.Result;
+                Loaded = sky;
                 load = null;
                 var shader = Shader.Find("Stabby/Sky");
                 if (shader != null) { skyMaterial = new Material(shader) { hideFlags = HideFlags.DontSave }; RenderSettings.skybox = skyMaterial; }
@@ -137,6 +139,7 @@ namespace Stabby.Game
         protected override void OnDestroy()
         {
             if (sky != null && GameStatus.Live.Remove("sky")) GameStatus.Lines["sky"] = Status();
+            if (Loaded == sky) Loaded = null;
         }
 
         void Scrub()

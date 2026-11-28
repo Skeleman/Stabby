@@ -30,6 +30,11 @@ public class SkyTests
         foreach (var s in data.RootElement.GetProperty("stops").EnumerateArray()) Same(stop, s);
         Same(top.GetProperty("properties").GetProperty("clouds"), data.RootElement.GetProperty("clouds"));
         Assert.Equal(data.RootElement.GetProperty("clouds").GetProperty("coverage").GetSingle(), Sky.Clouds.Coverage);
+        var weather = data.RootElement.GetProperty("weather");
+        Same(top.GetProperty("properties").GetProperty("weather"), weather);
+        Same(top.GetProperty("$defs").GetProperty("precip"), weather.GetProperty("rain"));
+        Same(top.GetProperty("$defs").GetProperty("precip"), weather.GetProperty("snow"));
+        Assert.Equal(weather.GetProperty("rain").GetProperty("count").GetInt32(), Sky.Weather.Rain.Count);
         Assert.Equal(data.RootElement.GetProperty("stops").GetArrayLength(), Sky.Stops.Count);
     }
 
@@ -162,8 +167,14 @@ public class SkyTests
     [InlineData("\"clouds\": {\"coverage\": 1.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, " + GoodStops)]
     [InlineData("\"clouds\": {\"coverage\": 0.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5}, " + GoodStops)]
     [InlineData("\"noClouds\": 0, " + GoodStops)]
+    [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.9, \"coverMax\": 0.2, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, " + GoodLooks + "}, " + GoodStops)]
+    [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, " + GoodLooks + "}, " + GoodStops)]
+    [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, \"rain\": {\"count\": 10, \"fallMs\": 8, \"lengthM\": 0.5, \"widthM\": 0.01, \"swayM\": 0, \"alpha\": 2, \"color\": [1,1,1]}, \"snow\": {\"count\": 10, \"fallMs\": 1, \"lengthM\": 0.03, \"widthM\": 0.03, \"swayM\": 0.4, \"alpha\": 0.8, \"color\": [1,1,1]}}, " + GoodStops)]
+    [InlineData("\"noWeather\": 0, " + GoodStops)]
     public void BadSkyIsRejected(string stops)
     {
+        if (!stops.Contains("\"weather\"") && !stops.Contains("\"noWeather\"")) stops = GoodWeather + stops;
+        stops = stops.Replace("\"noWeather\": 0, ", "");
         if (!stops.Contains("\"clouds\"") && !stops.Contains("\"noClouds\"")) stops = GoodClouds + stops;
         stops = stops.Replace("\"noClouds\": 0, ", "");
         var json = "{\"schemaVersion\": 1, \"dayLengthS\": 600, \"startHour\": 9, " +
@@ -176,6 +187,8 @@ public class SkyTests
     }
 
     const string GoodClouds = "\"clouds\": {\"coverage\": 0.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, ";
+    const string GoodLooks = "\"rain\": {\"count\": 10, \"fallMs\": 8, \"lengthM\": 0.5, \"widthM\": 0.01, \"swayM\": 0, \"alpha\": 0.3, \"color\": [1,1,1]}, \"snow\": {\"count\": 10, \"fallMs\": 1, \"lengthM\": 0.03, \"widthM\": 0.03, \"swayM\": 0.4, \"alpha\": 0.8, \"color\": [1,1,1]}";
+    const string GoodWeather = "\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, " + GoodLooks + "}, ";
     const string GoodStops = "\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.06, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]";
 
     [Fact]
@@ -186,8 +199,48 @@ public class SkyTests
             "\"moon\": {\"noonElevationDeg\": 50, \"noonAzimuthDeg\": 20, \"hourOffset\": 12}, " +
             "\"moonColor\": [0.6, 0.7, 1], \"moonIntensity\": 0.2, \"moonSwitchHeight\": -0.06, \"moonFadeHeight\": 0.1, " +
             "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, \"moonGlow\": 0.02, \"starBrightness\": 0.01, " +
-            GoodClouds + GoodStops.Replace("\"ambientSky\"", "\"zenith\": [0.3,0.4,0.6], \"glow\": [0,0,0], \"ambientSky\"") + "}";
+            GoodClouds + GoodWeather + GoodStops.Replace("\"ambientSky\"", "\"zenith\": [0.3,0.4,0.6], \"glow\": [0,0,0], \"ambientSky\"") + "}";
         Assert.Equal(0.5f, ContentLoader.ParseSky(json, "sky.json").Clouds.Coverage);
+    }
+
+    [Fact]
+    public void WeatherIsSharedSmoothAndInRange()
+    {
+        var w = Sky.Weather;
+        int wet = 0, dry = 0;
+        for (double t = 0; t < 200000; t += 37)
+        {
+            w.At(3, t, out float c, out float p);
+            w.At(3, t, out float c2, out float p2);
+            Assert.Equal(c, c2);
+            Assert.Equal(p, p2);
+            Assert.InRange(c, w.CoverMin, w.CoverMax);
+            Assert.InRange(p, 0f, 1f);
+            w.At(3, t + 1, out float c1, out float p1);
+            Assert.True(Math.Abs(c1 - c) < 0.01f && Math.Abs(p1 - p) < 0.02f, $"jump at {t}");
+            if (p > 0.05f) wet++; else dry++;
+        }
+        Assert.True(wet > 100 && dry > wet, $"wet {wet} dry {dry}");
+        int differ = 0;
+        for (double t = 0; t < 20000; t += 450)
+        {
+            w.At(3, t, out float a, out _);
+            w.At(4, t, out float b, out _);
+            if (Math.Abs(a - b) > 0.01f) differ++;
+        }
+        Assert.True(differ > 20);
+    }
+
+    [Fact]
+    public void SnowWhereColdRainWhereWarm()
+    {
+        var w = Sky.Weather;
+        Assert.Equal(1f, w.SnowFraction(w.SnowBelowC - w.SleetBandC - 1));
+        Assert.Equal(0f, w.SnowFraction(w.SnowBelowC + w.SleetBandC + 1));
+        Assert.Equal(0.5f, w.SnowFraction(w.SnowBelowC), 4);
+        var c = new WorldConfig();
+        Assert.Equal(c.SeaLevelTempC, ClimateField.TemperatureAt(c, -5));
+        Assert.True(w.SnowFraction(ClimateField.TemperatureAt(c, 0)) == 0 && w.SnowFraction(ClimateField.TemperatureAt(c, 900)) == 1);
     }
 
     [Fact]
