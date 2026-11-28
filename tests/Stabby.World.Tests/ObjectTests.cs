@@ -152,7 +152,7 @@ public class ObjectTests
         Assert.Equal(ObjectPart.Log, log.Parts[0].Shape);
         Assert.Contains("wetland", log.Placement.Biomes);
         Assert.Empty(ObjectLibrary.Validate(Objects, Biomes.Select(b => b.Id).ToList()));
-        Assert.All(Objects.Kinds, k => Assert.True(Objects.RuleOf(k).Light.Near == 432f && Objects.RuleOf(k).Light.Mid == 108f && Objects.RuleOf(k).Light.Far == 10.8f, k.Id));
+        Assert.All(Objects.Kinds, k => Assert.True(Objects.LightNamed(k.Light).Thresholds().Near == 432f && k.Rule().Light.Near == Detail.Never, k.Id));
         var stone = Objects.Objects.First(o => o.Id == "loose-stone");
         Assert.Equal("take", stone.Verb);
         Assert.True(Objects.IsInteractive(Objects.Objects.IndexOf(stone)) && stone.ReachM > 0);

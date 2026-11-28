@@ -22,7 +22,7 @@ namespace Stabby.Game
     public struct CreatureRig
     {
         public float RunRatio;
-        public float FadePx, ShadowPx, AnimPx, IkPx, LowPx, SkinPx;
+        public float FadePx, AnimPx, IkPx, LowPx, SkinPx;
         public Detail.Rule Rule;
         public BlobArray<CreaturePartRig> Parts;
         public BlobArray<CreatureSegmentRig> Segments;
@@ -47,8 +47,7 @@ namespace Stabby.Game
 
     public static class CreatureTier
     {
-        public static bool NeedHigh(float px, float low, bool built) => px >= (built ? 0.7f : 0.85f) * low;
-        public static bool NeedLow(float px, float low, bool built) => px <= (built ? 1.9f : 1.7f) * low;
+        public static bool Blending(float px, float low, bool built) => !Detail.Holds(px, 2f * low, !built);
     }
 
     public struct CreatureRoot : IComponentData

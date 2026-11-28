@@ -23,6 +23,7 @@ namespace Stabby.World
         {
             public float Pixels, Importance, Shadow, Real, Glow;
             public byte Wanted, Previous, Target, Tier;
+            public Detail.Decision Decision;
 
             public static Slot Fresh => new Slot { Wanted = Detail.LightEmissive, Previous = Detail.LightEmissive, Target = Detail.LightEmissive, Tier = Detail.LightEmissive };
 

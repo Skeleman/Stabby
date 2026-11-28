@@ -345,7 +345,7 @@ namespace Stabby.Game
                     }
                 }
                 kinds[d] = kind;
-                rules[d] = lib.RuleOf(kind);
+                rules[d] = kind.Rule();
                 baseReach[d] = Detail.SimulationReach(2f * field.Footprint(d) * def.Placement.SizeMaxM, kind.FadePixels);
                 reach[d] = baseReach[d] * GameSettings.GraphicsScale;
                 float t = span;

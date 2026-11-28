@@ -282,7 +282,8 @@ namespace Stabby.Game
                     var s = e.Slot;
                     s.Pixels = View.ScreenSize(e.RangeM, e.Position);
                     s.Importance = e.Sky ? e.Importance * Daylight : e.Importance;
-                    s.Wanted = (byte)Detail.Tier(s.Pixels, e.Thresholds.Scaled(View.Quality), s.Wanted);
+                    s.Decision = View.Decide(Detail.Rule.LightOnly(e.Thresholds), e.RangeM, e.Position, s.Decision);
+                    s.Wanted = (byte)s.Decision.Light;
                     if (!Budgeted)
                     {
                         s.Previous = s.Target = s.Tier = Detail.LightShadowed;

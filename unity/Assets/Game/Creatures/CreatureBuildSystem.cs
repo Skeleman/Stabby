@@ -486,10 +486,11 @@ namespace Stabby.Game
             }
             var view = DetailView.Current;
             float y = hasGround ? ground.HeightAt(a.State.Position.x, a.State.Position.y) : cam.y;
-            float px = view.ScreenSize(a.Length, new float3(a.State.Position.x, y, a.State.Position.y));
+            var at = new float3(a.State.Position.x, y, a.State.Position.y);
+            float px = view.ScreenSize(a.Length, at);
             float low = a.Def.LowPixels / math.max(view.Quality, 0.1f);
-            a.High = CreatureTier.NeedHigh(px, low, false);
-            a.Low = CreatureTier.NeedLow(px, low, false) || !a.High;
+            a.High = view.Decide(a.Def.Rule(), a.Length, at, default).Geometry == 0;
+            a.Low = CreatureTier.Blending(px, low, false) || !a.High;
         }
 
         void Arrive(ref FrameBudget budget)
@@ -691,7 +692,6 @@ namespace Stabby.Game
             ref var rig = ref b.ConstructRoot<CreatureRig>();
             rig.RunRatio = def.RunSpeed / def.WalkSpeed;
             rig.FadePx = def.FadePixels;
-            rig.ShadowPx = def.ShadowPixels;
             rig.AnimPx = def.AnimPixels;
             rig.IkPx = def.IkPixels;
             rig.LowPx = def.LowPixels;
