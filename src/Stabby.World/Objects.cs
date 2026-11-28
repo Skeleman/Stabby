@@ -823,6 +823,13 @@ namespace Stabby.World
 
         public const int StampFloor = 1, StampCeiling = 2;
 
+        public static float StampFoot(ObjectLibrary lib, ObjectInstance o)
+        {
+            var def = lib.Objects[o.Def];
+            if (def.Kind != ObjectLibrary.Structure) return 0f;
+            return (def.Placement.StampFoot >= 0 ? def.Placement.StampFoot : Structures.FootReach) * o.Size;
+        }
+
         public static bool Stamps(ObjectLibrary lib, ObjectInstance o, ObjectColumn c) => c.Bottom <= o.Y + (lib.Objects[o.Def].Placement.Sink + ContactReachPerM) * o.Size + ContactReach;
 
         public static int StampNeeds(ObjectLibrary lib, ObjectInstance o)

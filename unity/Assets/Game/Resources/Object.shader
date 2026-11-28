@@ -225,7 +225,7 @@ Shader "Stabby/Object"
                 nOut = Bumped(n, axis, sgn, g, depth);
             }
 
-            TmOut KitStone(float3 p, float3 n, float3 sc, float4 tone, float fp)
+            TmOut KitStone(float3 p, float3 n, float3 sc, float4 tone, float fp, float grey)
             {
                 float3 lw = float3(0.2126, 0.7152, 0.0722);
                 float3 bed = normalize(float3(0.4 * tone.z, 1, 0.4 * tone.y));
@@ -247,7 +247,7 @@ Shader "Stabby/Object"
                 float crack = (1 - t * t * (3 - 2 * t)) * gate * (wc0 / wc);
                 g += 0.002 * gate * (wc0 / wc) * 6 * t * (1 - t) / wc * (cx < 0 ? -1 : 1) * 3.7 * cr.yzw;
                 float pit = f4 * smoothstep(0.55, 0.85, -fine.x - 0.3 * f3 * grain.x);
-                float3 c = lerp(sc, dot(sc, lw) * lerp(float3(0.95, 0.99, 1.04), float3(1.08, 1, 0.88), 0.5 + 0.5 * tone.z), 0.45) * (0.76 + 0.14 * tone.y);
+                float3 c = lerp(sc, dot(sc, lw) * lerp(float3(0.95, 0.99, 1.04), float3(1.08, 1, 0.88), 0.5 + 0.5 * tone.z), grey) * (0.76 + 0.14 * tone.y);
                 c *= 1 + 0.16 * f1 * lump.x + 0.1 * f2 * mot.x + 0.07 * fl * lam.x + 0.09 * f3 * grain.x + 0.07 * f4 * fine.x;
                 float lit = f5 * smoothstep(0.5, 0.85, xtal.x), dk = f5 * smoothstep(0.55, 0.9, -xtal.x);
                 c = lerp(c, dot(c, lw) * 1.5, 0.3 * lit) * (1 - 0.35 * dk) * (1 - 0.22 * pit) * (1 - 0.45 * crack);
@@ -316,11 +316,11 @@ Shader "Stabby/Object"
                 return depth * cf * (dh.x * ta + dh.y * tb);
             }
 
-            float Dressed(inout float3 albedo, float4 tone, float3 wp)
+            float Dressed(inout float3 albedo, float4 tone, float3 wp, float hue)
             {
                 float lum = dot(albedo, float3(0.3, 0.59, 0.11));
                 float3 tint = lerp(float3(1.04, 0.98, 0.9), float3(1.08, 0.95, 0.8), 0.5 + 0.5 * tone.z);
-                albedo = lerp(lum * tint, albedo, 0.25) * (1 + 0.22 * tone.y);
+                albedo = lerp(lum * tint, albedo, hue) * (1 + 0.22 * tone.y);
                 float on = OrgRP3(wp, OrgF(0), 0, 0).x + 0.5 * OrgRP3(wp, OrgF(1), 4.1, 1).x;
                 float occ = saturate((1 - saturate(tone.x * 2 - 1)) * (1.2 + 0.7 * on));
                 albedo = lerp(albedo, albedo * float3(0.5, 0.47, 0.43), occ);
@@ -694,7 +694,7 @@ Shader "Stabby/Object"
                     [unroll] for (int k = 1; k < 6; k++) mean += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(u0 + k * 0.1667, 0.5), 0).rgb;
                     mean = (mean + band) * 0.1667;
                     float3 pull = lerp(1, clamp((mean + 0.02) / (band + 0.02), 0.6, 1.6), 0.6);
-                    bool own = base.a > 0.006;
+                    bool own = base.a > 0.006, keep = base.a > 0.016;
                     float2 dux = float2(ddx(u0), 0), duy = float2(ddy(u0), 0);
                     [branch] if (_StabbyDetailOff > 0)
                         albedo = own ? 1 : SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
@@ -706,7 +706,8 @@ Shader "Stabby/Object"
                         float4 cwn = cw / max(dot(cw, 1), 1e-3);
                         float surf = 1;
                         [branch] if (_StabbyFieldUV.x > 0) surf = smoothstep(6, 2, ContactBed(wp.xz) - wp.y);
-                        cwn *= surf;
+                        cwn *= keep ? 0 : surf;
+                        mossy = mossy && !keep;
                         [branch] if (i.tone.x > 0.25)
                         {
                             bool course = i.tone.w > 1.5;
@@ -728,7 +729,7 @@ Shader "Stabby/Object"
                             float3 sb = SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us, 0.5), 0).rgb, sm = sb;
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
                             float3 sc = own ? base.rgb * clamp((dot(sb, 1) + 0.02) / (dot(sm, 0.1667) + 0.02), 0.88, 1.12) : lerp(sb, sm * 0.1667, 0.5);
-                            TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, sc, tone, fp);
+                            TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, sc, tone, fp, keep ? 0.12 : 0.45);
                             float foot = mossy ? smoothstep(1.8, 0.2, wp.y - fade.z) : 0;
                             TmStoneCover(m, wp - orgO, normalize(n + float3(0, 1.4 * foot, 0)), mossy ? float4(saturate(cwn.x + surf * (0.85 - 0.4 * cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
                             float3 g = m.grad + cg;
@@ -753,7 +754,7 @@ Shader "Stabby/Object"
                         }
                     }
                     albedo *= own && i.tone.x > 0.25 && _StabbyDetailOff <= 0 ? 1 : base.rgb * pull;
-                    [branch] if (i.tone.x > 0.25) occ = Dressed(albedo, i.tone, wp - orgO);
+                    [branch] if (i.tone.x > 0.25) occ = Dressed(albedo, i.tone, wp - orgO, keep ? 0.8 : 0.25);
                 }
                 else
                 {

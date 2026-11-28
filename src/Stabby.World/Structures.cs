@@ -45,6 +45,7 @@ namespace Stabby.World
         static readonly float[] HeadSeat = { 0, 0, 0.065f, 0, -0.065f, 0, 0, 0.085f, 0, -0.085f };
 
         internal static float Cos16(int k) => Dir[k & 15];
+        static Rng ToneRng(ulong key) => new Rng(Rng.Mix(key ^ 0x6A09E667BB67AE85UL));
         internal static float Sin16(int k) => Dir[(k + 12) & 15];
 
         public static float[] Seat(int shape) => shape == ObjectPart.Wall ? WallSeat : shape == ObjectPart.Cairn ? CairnSeat : shape == ObjectPart.WallHead ? HeadSeat : KitSeat(shape);
@@ -82,7 +83,7 @@ namespace Stabby.World
                 if (tier < p.Lo || tier > p.Hi) continue;
                 used.Add(p);
                 starts.Add(b.P.Count / 3);
-                var tr = new Rng(Rng.Mix(p.Key ^ 0x6A09E667BB67AE85UL));
+                var tr = ToneRng(p.Key);
                 float tv = tr.Range(-1f, 1f) * (1 - p.Calm), th = tr.Range(-1f, 1f) * (1 - p.Calm), tl = tr.NextFloat();
                 int before = b.P.Count / 3;
                 bool cut = p.R == 0 && p.Q >= Faceted && p.M == 0 && !p.Coursed;

@@ -17,18 +17,34 @@ namespace Stabby.World
             c *= inv; s *= inv;
         }
 
-        static float Mushroom(StructureLayout l, ulong key, in Frame f, ulong dye)
+        static float Mushroom(StructureLayout l, ulong key, in Frame f, ulong dye, bool giant = false)
         {
-            var rng = Rng.Stream(key, "mushroom");
-            int first = l.Pieces.Count, n = rng.Range(1, 4);
+            var rng = Rng.Stream(key, giant ? "great-mushroom-kit" : "mushroom");
+            int first = l.Pieces.Count, n = giant ? 1 : rng.Range(1, 4);
             float tall = 0;
             for (int i = 0; i < n; i++)
             {
-                float sc = i == 0 ? 1 : rng.Range(0.45f, 0.8f), h = rng.Range(0.1f, 0.16f) * sc, cd = h * rng.Range(0.75f, 1.05f), ch = cd * rng.Range(0.42f, 0.6f), d = cd * rng.Range(0.2f, 0.28f);
+                float sc = i == 0 ? 1 : rng.Range(0.45f, 0.8f), h, cd, ch, d;
+                if (giant)
+                {
+                    h = rng.Range(0.85f, 1.05f); cd = h * rng.Range(1.3f, 1.55f); ch = cd * rng.Range(0.3f, 0.36f); d = cd * rng.Range(0.17f, 0.21f);
+                }
+                else
+                {
+                    h = rng.Range(0.1f, 0.16f) * sc; cd = h * rng.Range(0.75f, 1.05f); ch = cd * rng.Range(0.42f, 0.6f); d = cd * rng.Range(0.2f, 0.28f);
+                }
                 int k = rng.Range(0, 16);
-                float rd = i == 0 ? 0 : rng.Range(0.05f, 0.1f), x = Cos16(k) * rd, z = Sin16(k) * rd;
-                Round(l, rng.NextU64(), f, x, -0.01f, z, d, h + 0.01f, d, Fungus, GV, RoundStem, 0, 1);
-                Touch(l, f, x, -0.01f, z, 0.6f * d);
+                float rd = i == 0 ? 0 : rng.Range(0.05f, 0.1f), x = Cos16(k) * rd, z = Sin16(k) * rd, y0 = giant ? -0.03f : -0.01f;
+                Round(l, rng.NextU64(), f, x, y0, z, d, h - y0, d, Fungus, GV, RoundStem, 0, 1);
+                Touch(l, f, x, y0, z, (giant ? 0.75f : 0.6f) * d);
+                if (giant)
+                {
+                    float fw = d * rng.Range(1.45f, 1.65f);
+                    Round(l, rng.NextU64(), f, x, y0, z, fw, h * rng.Range(0.12f, 0.17f) - y0, fw, Fungus, GV, RoundStem, 0, 1);
+                    Touch(l, f, x, y0, z, 0.6f * fw);
+                    Col(l, f, x, z, 0.56f * fw, y0, h);
+                    Col(l, f, x, z, 0.46f * cd, h - 0.22f * ch, h + 0.78f * ch);
+                }
                 Round(l, rng.NextU64(), f, x, h - 0.22f * ch, z, cd, ch, cd, Fungus, GV, RoundDome, 0, 2);
                 tall = Math.Max(tall, h + 0.78f * ch);
             }
