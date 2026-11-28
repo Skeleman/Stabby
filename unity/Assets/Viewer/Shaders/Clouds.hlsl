@@ -44,13 +44,15 @@ float CloudRamp(float x)
     return x <= 0 ? 0 : x < 1 ? 0.5 * x * x : x - 0.5;
 }
 
-float CloudShape(float2 xz, float h0, float h1, float2 churn, int octaves, bool detail)
+float CloudShape(float2 xz, float h0, float h1, float2 churn, int octaves, bool detail, out float raw)
 {
     float2 p = xz * _StabbyCloudShape.z;
     float2 warp = float2(CloudNoise(p * 0.5 + _StabbyCloudDrift.xy * 0.5 + 91.7, 127u), CloudNoise(p * 0.5 + _StabbyCloudDrift.xy * 0.5 + 13.1, 127u)) - 0.5;
     float n = CloudBase(p + _StabbyCloudDrift.xy + warp * 0.6, octaves);
-    float body = saturate((n - lerp(0.68, 0.32, _StabbyWeather.x) + _StabbyWeather.y * 0.06) * 4.5);
+    raw = (n - lerp(0.68, 0.32, _StabbyWeather.x) + _StabbyWeather.y * 0.06) * 4.5;
+    float body = saturate(raw);
     if (detail) body -= (CloudBase(p * 8 + churn * 8, 2) - 0.5) * 0.45 * (1 - body * 0.6);
+    raw += body - saturate(raw);
     float top = body * (0.55 + 0.45 * body);
     float h = (h0 + h1) * 0.5;
     float w = h1 - h0;
@@ -78,22 +80,37 @@ float4 StabbyClouds(float3 d, float2 px, float3 horizon, float3 zenith, float3 g
     float2 cam = _WorldSpaceCameraPos.xz;
     float trans = 1;
     float3 light = 0;
+    float rawPrev = 1, densPrev = 0, aPrev = 1;
     for (int k = 0; k < steps; k++)
     {
         float t = t0 + span * (k + 0.5) / steps;
         float3 q = float3(cam.x, 0, cam.y) + d * t;
         float h = saturate((t * d.y - bottom) / thick);
         float hs = dt * d.y / thick * 0.5;
-        float dens = CloudShape(q.xz, saturate(h - hs), saturate(h + hs), _StabbyCloudDrift.zw, 4, true);
-        if (dens <= 0.001) continue;
+        float raw;
+        float dens = CloudShape(q.xz, saturate(h - hs), saturate(h + hs), _StabbyCloudDrift.zw, 4, true, raw);
+        float entry = rawPrev >= 0 ? 0 : saturate(-rawPrev / max(raw - rawPrev, 1e-4));
+        float f = max(entry, aPrev);
+        rawPrev = raw;
+        float densStep = densPrev;
+        densPrev = dens;
+        if (dens <= 0.001) { aPrev = 0; continue; }
         float od = dens * sigma * dt / thick * 3;
-        float lh = h + l.y * 0.45;
-        float2 lq = q.xz + l.xz / max(abs(l.y), 0.15) * thick * 0.45;
-        float shade = CloudShape(lq, saturate(lh), saturate(lh), _StabbyCloudDrift.zw, 3, false) * (lh > 1 ? 0 : 1);
-        float lod = (shade * 1.4 + dens * 0.6) * sigma;
-        float direct = exp(-lod * 1.6) * (1 - exp(-od * 2.2) * 0.35);
-        float3 amb = lerp(under, over, h) * (0.65 + 0.35 * (1 - dens)) * (1 - wet * 0.55 * (1 - h));
         float a = 1 - exp(-od);
+        aPrev = a;
+        // Shade at the interpolated cloud entry between this step's point and the last one, so adjacent steps meet in colour.
+        float back = (1 - f) * dt;
+        float hS = saturate(h - back * d.y / thick);
+        float2 qS = q.xz - d.xz * back;
+        float densS = lerp(densStep, dens, f);
+        float odS = densS * sigma * dt / thick * 3;
+        float lh = hS + l.y * 0.45;
+        float2 lq = qS + l.xz / max(abs(l.y), 0.15) * thick * 0.45;
+        float shadeRaw;
+        float shade = CloudShape(lq, saturate(lh), saturate(lh), _StabbyCloudDrift.zw, 3, false, shadeRaw) * (lh > 1 ? 0 : 1);
+        float lod = (shade * 1.4 + densS * 0.6) * sigma;
+        float direct = exp(-lod * 1.6) * (1 - exp(-odS * 2.2) * 0.35);
+        float3 amb = lerp(under, over, hS) * (0.65 + 0.35 * (1 - densS)) * (1 - wet * 0.55 * (1 - hS));
         light += trans * a * (sun * direct * phase + amb);
         trans *= 1 - a;
         if (trans < 0.02) break;
