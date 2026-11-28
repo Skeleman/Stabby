@@ -1,4 +1,5 @@
 src/Stabby.World/Underground.cs src/Stabby.World/Mines.cs src/Stabby.World/MineKit.cs src/Stabby.World/CaveLight.cs src/Stabby.World/CavePools.cs src/Stabby.World/CaveBrooks.cs content/caves.json content/schemas/caves.schema.json -> CaveTests|CarvedMeshTests|FineGridTests|MineTests|ObjectTests|StructureTests|DungeonLinkTests|TestWorldsTests
+src/Stabby.World/Shelter.cs src/Stabby.World/Walk.cs -> ShelterTests
 src/Stabby.World/Features.cs src/Stabby.World/EditGrid.cs -> CaveTests|CarvedMeshTests|EditGridTests|SurfaceNetsTests|FineGridTests|DiscoveryTests|ObjectTests|StructureTests|InnTests|TestWorldsTests|BoulderNormalTests
 src/Stabby.World/SurfaceNets.cs src/Stabby.World/NearField.cs -> WorldTests|SurfaceNetsTests|CarvedMeshTests|ChunkTests|FineGridTests|BoulderNormalTests
 src/Stabby.World/Chunks.cs src/Stabby.World/ChunkCodes.cs src/Stabby.World/WorldFile.cs -> ChunkTests|ChunkZipTests|WorldFileTests|DiscoveryTests|ObjectTests
