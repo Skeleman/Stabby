@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stabby.Viewer;
 using Stabby.World;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Profiling;
@@ -16,6 +17,10 @@ namespace Stabby.Game
     public partial class LightPresenterSystem : SystemBase
     {
         static readonly int GlowsId = Shader.PropertyToID("_Glows");
+        static readonly int PrecipLightsId = Shader.PropertyToID("_StabbyPrecipLights"), PrecipLightColorsId = Shader.PropertyToID("_StabbyPrecipLightColors");
+        public const int PrecipLightCount = 4;
+        readonly Vector4[] precipLights = new Vector4[PrecipLightCount], precipColors = new Vector4[PrecipLightCount];
+        readonly float[] precipNear = new float[PrecipLightCount];
         public static readonly ProfilerMarker GlowUpload = new ProfilerMarker("LightPresenter.GlowUpload");
         Task<LightBudget.Caps> capsTask;
         readonly List<Light> pool = new List<Light>();
@@ -81,6 +86,7 @@ namespace Stabby.Game
                 l.shadowStrength = s.ShadowWeight;
             }
             Release(lit.Length);
+            if (World.Name == GameSettings.ViewClient) PrecipLights(lit, r.Clock);
             int count = b.ShownGlows.Length;
             if (count == 0) return;
             if (!Ready(count)) return;
@@ -99,8 +105,45 @@ namespace Stabby.Game
             Graphics.RenderPrimitives(rp, MeshTopology.Triangles, 6, count);
         }
 
+        void PrecipLights(NativeList<LightEmitter> lit, float clock)
+        {
+            System.Array.Clear(precipColors, 0, PrecipLightCount);
+            for (int k = 0; k < PrecipLightCount; k++) precipNear[k] = float.MaxValue;
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 eye = cam.transform.position;
+                for (int i = 0; i < lit.Length; i++)
+                {
+                    var e = lit[i];
+                    if (e.Sky || e.ConeDeg > 0f || e.RangeM <= 0f) continue;
+                    float d = ((Vector3)e.Position - eye).sqrMagnitude;
+                    int at = PrecipLightCount;
+                    while (at > 0 && precipNear[at - 1] > d) at--;
+                    if (at >= PrecipLightCount) continue;
+                    for (int k = PrecipLightCount - 1; k > at; k--)
+                    {
+                        precipNear[k] = precipNear[k - 1];
+                        precipLights[k] = precipLights[k - 1];
+                        precipColors[k] = precipColors[k - 1];
+                    }
+                    float gain = e.Intensity * e.Gain(clock) * e.Slot.RealWeight;
+                    precipNear[at] = d;
+                    precipLights[at] = new Vector4(e.Position.x, e.Position.y, e.Position.z, 1f / (e.RangeM * e.RangeM));
+                    precipColors[at] = new Vector4(e.Color.x * gain, e.Color.y * gain, e.Color.z * gain, 0);
+                }
+            }
+            Shader.SetGlobalVectorArray(PrecipLightsId, precipLights);
+            Shader.SetGlobalVectorArray(PrecipLightColorsId, precipColors);
+        }
+
         void Hide()
         {
+            if (World.Name == GameSettings.ViewClient)
+            {
+                System.Array.Clear(precipColors, 0, PrecipLightCount);
+                Shader.SetGlobalVectorArray(PrecipLightColorsId, precipColors);
+            }
             Real = Shadowed = Glows = Cores = 0;
             Fading = false;
             Release(0);

@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float WatchtowerHour = 15.5f, WatchtowerMoon = 0.5f, WatchtowerEyeUp = 1.7f, WatchtowerNearM = 15f, WatchtowerAimUp = 4.5f;
+        const float WatchtowerHour = 15.5f, WatchtowerMoon = 0.5f, WatchtowerEyeUp = 1.7f, WatchtowerNearM = 15f, WatchtowerAimUp = 2.5f;
 
         static System.Collections.IEnumerator WatchtowerTour(Camera cam, string dir)
         {
@@ -40,8 +40,10 @@ namespace Stabby.Game.Editor
             var centre = new Vector3(s.X, baseY, s.Z);
             cam.fieldOfView = 60f;
             for (var w = ShowHour(WatchtowerHour, WatchtowerMoon); w.MoveNext();) yield return null;
-            var eye = centre + (fwd * 0.9f + side * 0.45f).normalized * WatchtowerNearM;
+            var eye = centre + (fwd - side * 0.6f).normalized * WatchtowerNearM;
             eye.y = ground.HeightAt(eye.x, eye.z) + WatchtowerEyeUp;
+            var sill = centre + fwd * (Structures.WatchR * Structures.WatchtowerU * s.Size) + Vector3.up * 0.3f;
+            for (int i = 0; i < 40 && !Clear(ground, eye, sill); i++) eye.y += 0.25f;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(centre + Vector3.up * WatchtowerAimUp - eye));
             for (var w = Settle(180); w.MoveNext();) yield return null;
             Shot(cam, null, "warmup");

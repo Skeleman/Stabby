@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Stabby.World;
 using UnityEngine;
 
@@ -22,6 +23,13 @@ namespace Stabby.Game.Editor
             if (ShelterSpot(out var inside, out var outside, out var why)) { for (var w = PrecipView(cam, dir, lines, inside, "rain-shelter", PinnedMidday, outside); w.MoveNext();) yield return null; }
             else GameStatus.Failure = why;
             lines.Add(why);
+            var field = ViewWorld()?.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
+            for (int k = 0; k < 1800 && field == null; k++) { yield return null; field = ViewWorld()?.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field; }
+            if (field != null && TreeSpot(field, out var under, out var outward, out why)) { for (var w = PrecipView(cam, dir, lines, under, "rain-tree", PinnedMidday, outward); w.MoveNext();) yield return null; }
+            else GameStatus.Failure = field == null ? "rain-tree: no object field" : why;
+            lines.Add(why);
+            if (field != null && CampFire(field, out _, out var fire, out var eye, out why)) { for (var w = PrecipView(cam, dir, lines, NearFire(fire, eye), "rain-fire-night", FirelightHour, fire + Vector3.up * 1.5f); w.MoveNext();) yield return null; }
+            else GameStatus.Failure = field == null ? "rain-fire-night: no object field" : why;
             PrecipSystem.PinnedPrecip = null;
             PrecipSystem.PinnedSnow = null;
             GameStatus.Lines["~rain"] = string.Join("\n", lines);
@@ -79,6 +87,38 @@ namespace Stabby.Game.Editor
             return best < float.MaxValue;
         }
 
+        static bool TreeSpot(ObjectField field, out Vector3 under, out Vector3 outward, out string why)
+        {
+            under = outward = default;
+            why = "rain-tree: no broadleaf near home";
+            var list = new List<ObjectInstance>();
+            var chunk = new List<ObjectInstance>();
+            int across = field.ChunksAcross, cx = (int)(home.x / field.ChunkMeters), cz = (int)(home.z / field.ChunkMeters);
+            for (int z = Mathf.Max(0, cz - 1); z <= Mathf.Min(across - 1, cz + 1); z++)
+                for (int x = Mathf.Max(0, cx - 1); x <= Mathf.Min(across - 1, cx + 1); x++) { field.SolidInto(x, z, chunk); list.AddRange(chunk); }
+            float best = float.MaxValue;
+            foreach (var o in list)
+            {
+                var def = field.Library.Objects[o.Def];
+                if (def.Parts[0].Shape != ObjectPart.Broadleaf || o.Size < 10f) continue;
+                float far = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                if (far >= best) continue;
+                for (int a = 0; a < 8; a++)
+                {
+                    var d = Quaternion.Euler(0, a * 45f, 0) * Vector3.forward;
+                    var p = new Vector3(o.X, 0, o.Z) + d * (0.12f * o.Size);
+                    float h = GroundHeight(p.x, p.z), ahead = GroundHeight(p.x + d.x * 20f, p.z + d.z * 20f);
+                    if (Mathf.Abs(h - o.Y) > 1f || ahead > h + 2f) continue;
+                    best = far;
+                    under = new Vector3(p.x, h + 1.6f, p.z);
+                    outward = under + d * 20f + Vector3.up * 11f;
+                    why = $"rain-tree: {def.Id} size {o.Size:F1} at {o.X:F0},{o.Y:F1},{o.Z:F0}, {far:F0} m from home, eye {under.x:F0},{under.y:F1},{under.z:F0}";
+                    break;
+                }
+            }
+            return best < float.MaxValue;
+        }
+
         static System.Collections.IEnumerator PrecipView(Camera cam, string dir, List<string> lines, Vector3 eye, string name, float hour = PinnedMidday, Vector3? aim = null)
         {
             for (var w = ShowHour(hour); w.MoveNext();) yield return null;
@@ -103,8 +143,32 @@ namespace Stabby.Game.Editor
             lines.Add($"{name}: eye {eye.x:F0},{eye.y:F0},{eye.z:F0}, {PrecipSystem.TemperatureC:F1} C, natural snow {natural:F2}, shown snow {PrecipSystem.Snow:F2}, weather cover {PrecipSystem.Cover:F2}, drawn {PrecipSystem.Drawn}");
             Shot(cam, null, "warmup");
             Shot(cam, dir, name);
+            lines.Add($"{name}: {PrecipLit()}; {string.Join("; ", GameStatus.Lines.Where(l => l.Key.EndsWith("~shelter")).Select(l => l.Value))}");
             lines.Add(BenchPrecip(cam, name));
             PrecipSystem.PinnedSnow = null;
+        }
+
+        static Vector3 NearFire(Vector3 fire, Vector3 eye)
+        {
+            var d = Vector3.ProjectOnPlane(eye - fire, Vector3.up).normalized;
+            var p = fire + d * 4.5f;
+            return new Vector3(p.x, GroundHeight(p.x, p.z) + 1.7f, p.z);
+        }
+
+        static string PrecipLit()
+        {
+            var at = Shader.GetGlobalVectorArray("_StabbyPrecipLights");
+            var tint = Shader.GetGlobalVectorArray("_StabbyPrecipLightColors");
+            if (at == null || tint == null) return "precip lights unset";
+            int n = 0;
+            float strongest = 0;
+            for (int k = 0; k < tint.Length; k++)
+            {
+                float g = Mathf.Max(tint[k].x, Mathf.Max(tint[k].y, tint[k].z));
+                if (g > 0) n++;
+                strongest = Mathf.Max(strongest, g);
+            }
+            return $"precip lights {n}, strongest {strongest:F2}";
         }
 
         static string BenchPrecip(Camera cam, string label)

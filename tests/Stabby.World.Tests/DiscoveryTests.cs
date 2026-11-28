@@ -354,6 +354,31 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void WatchtowerDoorsFaceDownhill()
+    {
+        int tower = Objects.Objects.FindIndex(o => o.Id == "watchtower");
+        var (_, _, _, field) = World(TestWorlds.DefaultSeed);
+        var found = field.Discoveries().Where(o => o.Def == tower).ToArray();
+        Assert.NotEmpty(found);
+        foreach (var c in found)
+        {
+            var l = Structures.Layout(ObjectPart.Watchtower, ObjectMeshes.Key("watchtower", 0, c.Variant));
+            float u = Structures.WatchtowerU, r = Structures.WatchR * u, y = 1.2f * u;
+            var open = new List<int>();
+            for (int k = 0; k < 16; k++)
+            {
+                float a = k * MathF.PI / 8, px = MathF.Cos(a) * r, pz = MathF.Sin(a) * r;
+                if (!l.Pieces.Any(p => p.Lo == 0 && y >= p.Y && y <= p.Y + p.Sy && Math.Abs((px - p.X) * p.C + (pz - p.Z) * p.S) <= 0.5f * p.Sx && Math.Abs(-(px - p.X) * p.S + (pz - p.Z) * p.C) <= 0.5f * p.Sz)) open.Add(k);
+            }
+            ObjectField.Rotate(c, 0, 0, 1, out float fx, out _, out float fz);
+            float g = ObjectField.WatchRiseProbeM, gx = field.GroundAt(c.X + g, c.Z) - field.GroundAt(c.X - g, c.Z), gz = field.GroundAt(c.X, c.Z + g) - field.GroundAt(c.X, c.Z - g);
+            output.WriteLine($"{c.X:F0},{c.Z:F0} v{c.Variant} open bins {string.Join(",", open)} front {fx:F2},{fz:F2} downhill {-gx:F2},{-gz:F2}");
+            Assert.Equal("4", string.Join(",", open));
+            Assert.True(-(fx * gx + fz * gz) > 0.7f * MathF.Sqrt(gx * gx + gz * gz), "door faces uphill");
+        }
+    }
+
+    [Fact]
     public void SunkenTemplesStepDownIntoLakes()
     {
         int temple = Objects.Objects.FindIndex(o => o.Id == "sunken-temple");

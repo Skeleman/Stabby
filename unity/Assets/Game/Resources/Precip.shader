@@ -19,6 +19,19 @@ Shader "Stabby/Precip"
             float4 _StabbyRainColor, _StabbySnowColor;
             float4 _StabbyRain, _StabbySnow, _StabbyRainShift, _StabbySnowShift, _StabbyRainLook, _StabbySnowLook, _StabbyPrecipBox;
             float4 _StabbySky, _StabbySunTint, _StabbyRainNight;
+            float4 _StabbyPrecipLights[4], _StabbyPrecipLightColors[4];
+
+            float3 FireLight(float3 wp)
+            {
+                float3 sum = 0;
+                [unroll] for (int k = 0; k < 4; k++)
+                {
+                    float3 d = wp - _StabbyPrecipLights[k].xyz;
+                    float f = saturate(1 - dot(d, d) * _StabbyPrecipLights[k].w);
+                    sum += _StabbyPrecipLightColors[k].rgb * (f * f);
+                }
+                return sum;
+            }
             TEXTURE2D(_StabbyShelter);
             SAMPLER(sampler_StabbyShelter);
             float4 _StabbyShelterMin, _StabbyShelterInv;
@@ -88,7 +101,7 @@ Shader "Stabby/Precip"
                 float edge = saturate((1 - length(p) * 2) * 4);
                 float near = saturate((dist - 0.4) * 1.5);
                 float4 tint = snow > 0 ? _StabbySnowColor : _StabbyRainColor;
-                float3 light = _StabbySky.rgb * (2.2 + 3 * _StabbyRainNight.a) + _StabbySunTint.rgb * 0.45 + _StabbyRainNight.rgb * 2;
+                float3 light = _StabbySky.rgb * (2.2 + 3 * _StabbyRainNight.a) + _StabbySunTint.rgb * 0.45 + _StabbyRainNight.rgb * 2 + FireLight(wp) * 1.5;
                 float cave = CaveSky(wp);
                 o.positionCS = _StabbyPrecipOff > 0.5 || open <= 0 ? float4(0, 0, -1, 1) : TransformWorldToHClip(wp);
                 o.uv = float3(q, snow);
