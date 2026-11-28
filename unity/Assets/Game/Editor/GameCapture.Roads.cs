@@ -78,7 +78,7 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "roads-tunnel");
         }
 
-        const float TrailEyeBack = 70f, TrailEyeUp = 14f, TrailLookUp = 3f;
+        const float TrailChainM = 300f, TrailEyeMin = 90f, TrailEyeUp = 25f, TrailJoinM = 0.5f;
 
         static System.Collections.IEnumerator TrailsTour(Camera cam, string dir)
         {
@@ -106,7 +106,7 @@ namespace Stabby.Game.Editor
             foreach (var d in found)
                 if (ObjectField.TrailLandmark(field.Library.Objects[d.Def].Placement.Discovery)) ends.Add((new Vector3(d.X, 0, d.Z), field.Library.Objects[d.Def].Id, field.TrailHeadM(d) + 0.05f));
             float best = float.MinValue;
-            Vector3 eye = default, look = default;
+            Vector3 high = default, low = default;
             string target = null;
             int mineLinks = 0, landmarkLinks = 0;
             foreach (var (at, what, reach) in ends)
@@ -120,29 +120,64 @@ namespace Stabby.Game.Editor
                     if (!atA && !atB) continue;
                     hit = true;
                     var head = atA ? a : b;
-                    var u = (head - (atA ? b : a)).normalized;
-                    var e = head - u * TrailEyeBack;
-                    float rise = ground.HeightAt(at.x, at.z) - ground.HeightAt(e.x, e.z);
+                    var bottom = Chain(trails, head, ground);
+                    float rise = ground.HeightAt(head.x, head.z) - ground.HeightAt(bottom.x, bottom.z);
                     if (rise <= best) continue;
                     best = rise;
-                    eye = e;
-                    eye.y = ground.HeightAt(e.x, e.z) + TrailEyeUp;
-                    look = at;
-                    look.y = ground.HeightAt(at.x, at.z) + TrailLookUp;
+                    high = head;
+                    low = bottom;
                     target = what;
                 }
                 if (hit && what == "mine") mineLinks++;
                 else if (hit) landmarkLinks++;
             }
             if (target == null) { GameStatus.Lines["~trails"] = GameStatus.Failure = $"trails: {trails.Length} segments but none reach a mine or landmark"; yield break; }
+            high.y = ground.HeightAt(high.x, high.z);
+            low.y = ground.HeightAt(low.x, low.z);
+            var look = (high + low) * 0.5f;
+            var run = new Vector3(high.x - low.x, 0, high.z - low.z);
+            float span = Mathf.Max(TrailEyeMin, run.magnitude);
+            var side = Vector3.Cross(Vector3.up, run.normalized);
+            var e0 = look + side * span - run.normalized * span * 0.3f;
+            var e1 = look - side * span - run.normalized * span * 0.3f;
+            var eye = ground.HeightAt(e0.x, e0.z) <= ground.HeightAt(e1.x, e1.z) ? e0 : e1;
+            eye.y = Mathf.Max(ground.HeightAt(eye.x, eye.z), look.y) + TrailEyeUp;
             float km = trails.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude) / 1000f;
             cam.fieldOfView = 60f;
             for (var w = ShowHour(RoadShotHour, RoadShotMoon); w.MoveNext();) yield return null;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
             for (var w = Settle(180); w.MoveNext();) yield return null;
-            GameStatus.Lines["~trails"] = $"trails: {trails.Length} segments, {km:F1} km, mines linked {mineLinks}/{mines.Length}, landmarks linked {landmarkLinks}/{ends.Count - mines.Length}, GV {WorldConfig.GeneratorVersion}; shot climbs {best:F1} m to {target} at {look.x:F0},{look.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}";
+            GameStatus.Lines["~trails"] = $"trails: {trails.Length} segments, {km:F1} km, mines linked {mineLinks}/{mines.Length}, landmarks linked {landmarkLinks}/{ends.Count - mines.Length}, GV {WorldConfig.GeneratorVersion}; shot climbs {best:F1} m over {run.magnitude:F0} m to {target} at {high.x:F0},{high.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}";
             Shot(cam, null, "warmup");
             Shot(cam, dir, "trails-climb");
+        }
+
+        static Vector3 Chain(RoadSegment[] trails, Vector3 head, Ground ground)
+        {
+            var used = new bool[trails.Length];
+            Vector3 at = head, low = head;
+            float walked = 0, lowY = ground.HeightAt(head.x, head.z);
+            while (walked < TrailChainM)
+            {
+                int next = -1;
+                bool fromA = false;
+                for (int k = 0; k < trails.Length && next < 0; k++)
+                {
+                    if (used[k]) continue;
+                    var s = trails[k];
+                    if ((new Vector3(s.X0, 0, s.Z0) - at).sqrMagnitude <= TrailJoinM * TrailJoinM) { next = k; fromA = true; }
+                    else if ((new Vector3(s.X1, 0, s.Z1) - at).sqrMagnitude <= TrailJoinM * TrailJoinM) next = k;
+                }
+                if (next < 0) break;
+                used[next] = true;
+                var t = trails[next];
+                var to = fromA ? new Vector3(t.X1, 0, t.Z1) : new Vector3(t.X0, 0, t.Z0);
+                walked += (to - at).magnitude;
+                at = to;
+                float y = ground.HeightAt(at.x, at.z);
+                if (y < lowY) { lowY = y; low = at; }
+            }
+            return low;
         }
 
         static float CrossSlope(Ground ground, RoadSegment s)

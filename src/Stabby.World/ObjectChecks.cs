@@ -263,7 +263,7 @@ namespace Stabby.World
                 }
                 else if (s.Kind != RoadSegment.Lane && s.Kind != RoadSegment.Tunnel)
                 {
-                    string f = field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford);
+                    string f = field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford, ObjectField.IsTrail(s) ? ObjectField.TrailGrade : ObjectField.RoadGrade);
                     if (f != null) { e.Add($"{at} {f}"); return; }
                     if (ford != (s.Kind == RoadSegment.Ford)) { e.Add($"{at} fords a river without being marked as a ford"); return; }
                 }
