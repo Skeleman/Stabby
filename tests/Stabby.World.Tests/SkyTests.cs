@@ -29,8 +29,8 @@ public class SkyTests
         var stop = top.GetProperty("properties").GetProperty("stops").GetProperty("items");
         foreach (var s in data.RootElement.GetProperty("stops").EnumerateArray()) Same(stop, s);
         Same(top.GetProperty("properties").GetProperty("clouds"), data.RootElement.GetProperty("clouds"));
-        Assert.Equal(data.RootElement.GetProperty("clouds").GetProperty("coverage").GetSingle(), Sky.Clouds.Coverage);
         var weather = data.RootElement.GetProperty("weather");
+        Assert.Equal(weather.GetProperty("overcastSun").GetSingle(), Sky.Weather.OvercastSun);
         Same(top.GetProperty("properties").GetProperty("weather"), weather);
         Same(top.GetProperty("$defs").GetProperty("precip"), weather.GetProperty("rain"));
         Same(top.GetProperty("$defs").GetProperty("precip"), weather.GetProperty("snow"));
@@ -164,10 +164,10 @@ public class SkyTests
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": 0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]")]
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]")]
     [InlineData("\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.6, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}]")]
-    [InlineData("\"clouds\": {\"coverage\": 1.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, " + GoodStops)]
-    [InlineData("\"clouds\": {\"coverage\": 0.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5}, " + GoodStops)]
+    [InlineData("\"clouds\": {\"density\": 9, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, " + GoodStops)]
+    [InlineData("\"clouds\": {\"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5}, " + GoodStops)]
     [InlineData("\"noClouds\": 0, " + GoodStops)]
-    [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.9, \"coverMax\": 0.2, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, " + GoodLooks + "}, " + GoodStops)]
+    [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.9, \"coverMax\": 0.2, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, \"overcastSun\": 0.3, \"overcastSky\": 0.65, " + GoodLooks + "}, " + GoodStops)]
     [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, " + GoodLooks + "}, " + GoodStops)]
     [InlineData("\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, \"rain\": {\"count\": 10, \"fallMs\": 8, \"lengthM\": 0.5, \"widthM\": 0.01, \"swayM\": 0, \"alpha\": 2, \"color\": [1,1,1]}, \"snow\": {\"count\": 10, \"fallMs\": 1, \"lengthM\": 0.03, \"widthM\": 0.03, \"swayM\": 0.4, \"alpha\": 0.8, \"color\": [1,1,1]}}, " + GoodStops)]
     [InlineData("\"noWeather\": 0, " + GoodStops)]
@@ -186,9 +186,9 @@ public class SkyTests
         Assert.Throws<InvalidDataException>(() => ContentLoader.ParseSky(json, "sky.json"));
     }
 
-    const string GoodClouds = "\"clouds\": {\"coverage\": 0.5, \"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, ";
+    const string GoodClouds = "\"clouds\": {\"density\": 1, \"heightM\": 1800, \"thicknessM\": 700, \"scaleM\": 3000, \"windDirDeg\": 0, \"windSpeedMs\": 5, \"churn\": 1}, ";
     const string GoodLooks = "\"rain\": {\"count\": 10, \"fallMs\": 8, \"lengthM\": 0.5, \"widthM\": 0.01, \"swayM\": 0, \"alpha\": 0.3, \"color\": [1,1,1]}, \"snow\": {\"count\": 10, \"fallMs\": 1, \"lengthM\": 0.03, \"widthM\": 0.03, \"swayM\": 0.4, \"alpha\": 0.8, \"color\": [1,1,1]}";
-    const string GoodWeather = "\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, " + GoodLooks + "}, ";
+    const string GoodWeather = "\"weather\": {\"spellS\": 900, \"coverMin\": 0.2, \"coverMax\": 0.9, \"wetFrom\": 0.6, \"snowBelowC\": 0.5, \"sleetBandC\": 1.5, \"minPx\": 1.5, \"overcastSun\": 0.3, \"overcastSky\": 0.65, " + GoodLooks + "}, ";
     const string GoodStops = "\"stops\": [{\"sunHeight\": 0.5, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 1}, {\"sunHeight\": -0.06, \"sky\": [1,1,1], \"ambientSky\": [1,1,1], \"ambientGround\": [1,1,1], \"sun\": [1,1,1], \"sunIntensity\": 0}]";
 
     [Fact]
@@ -200,7 +200,7 @@ public class SkyTests
             "\"moonColor\": [0.6, 0.7, 1], \"moonIntensity\": 0.2, \"moonSwitchHeight\": -0.06, \"moonFadeHeight\": 0.1, " +
             "\"moonCycleDays\": 8, \"moonStartPhase\": 0.5, \"newMoonLight\": 0.03, \"newMoonAmbient\": 0.2, \"moonGlow\": 0.02, \"starBrightness\": 0.01, " +
             GoodClouds + GoodWeather + GoodStops.Replace("\"ambientSky\"", "\"zenith\": [0.3,0.4,0.6], \"glow\": [0,0,0], \"ambientSky\"") + "}";
-        Assert.Equal(0.5f, ContentLoader.ParseSky(json, "sky.json").Clouds.Coverage);
+        Assert.Equal(0.65f, ContentLoader.ParseSky(json, "sky.json").Weather.OvercastSky);
     }
 
     [Fact]
@@ -229,6 +229,17 @@ public class SkyTests
             if (Math.Abs(a - b) > 0.01f) differ++;
         }
         Assert.True(differ > 20);
+    }
+
+    [Fact]
+    public void OvercastFollowsCoverAndRain()
+    {
+        var w = Sky.Weather;
+        Assert.Equal(0f, w.Overcast(w.CoverMin, 0));
+        Assert.Equal(1f, w.Overcast(w.CoverMax, 1));
+        Assert.Equal(0.5f, w.Overcast(w.CoverMax, 0));
+        Assert.Equal(0.8f, w.Overcast(w.CoverMin, 0.8f));
+        for (float c = w.CoverMin; c < w.CoverMax; c += 0.01f) Assert.True(w.Overcast(c + 0.01f, 0) >= w.Overcast(c, 0));
     }
 
     [Fact]

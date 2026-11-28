@@ -99,8 +99,11 @@ namespace Stabby.Game
             var rotation = LightOverride ?? Quaternion.LookRotation(new Vector3(s.DirX, s.DirY, s.DirZ));
             if (!light.transform.rotation.Equals(rotation)) light.transform.rotation = rotation;
             light.color = new Color(s.Light.R, s.Light.G, s.Light.B);
-            light.intensity = s.Intensity;
-            var skyColor = new Color(s.Sky.R, s.Sky.G, s.Sky.B);
+            var w = sky.Weather;
+            float o = w.Overcast(PrecipSystem.Cover, PrecipSystem.Precip);
+            float sunScale = Mathf.Lerp(1, w.OvercastSun, o), skyScale = Mathf.Lerp(1, w.OvercastSky, o);
+            light.intensity = s.Intensity * sunScale;
+            var skyColor = Grey(s.Sky, o, skyScale);
             var cam = Camera.main;
             if (cam != null)
             {
@@ -109,19 +112,19 @@ namespace Stabby.Game
             }
             if (skyMaterial != null && RenderSettings.skybox != skyMaterial) RenderSettings.skybox = skyMaterial;
             RenderSettings.fogColor = skyColor;
-            Shader.SetGlobalColor(HorizonId, new Color(s.Sky.R, s.Sky.G, s.Sky.B, skyMaterial != null ? 1 : 0).linear);
-            Shader.SetGlobalColor(ZenithId, new Color(s.Zenith.R, s.Zenith.G, s.Zenith.B).linear);
-            Shader.SetGlobalColor(GlowId, new Color(s.Glow.R, s.Glow.G, s.Glow.B).linear);
+            Shader.SetGlobalColor(HorizonId, new Color(skyColor.r, skyColor.g, skyColor.b, skyMaterial != null ? 1 : 0).linear);
+            Shader.SetGlobalColor(ZenithId, Grey(s.Zenith, o, skyScale).linear);
+            Shader.SetGlobalColor(GlowId, (new Color(s.Glow.R, s.Glow.G, s.Glow.B) * sunScale).linear);
             Shader.SetGlobalVector(SunDirId, new Vector4(s.SunX, s.SunY, s.SunZ, 0));
-            Shader.SetGlobalColor(SunTintId, s.Moon ? Color.black : new Color(s.Light.R, s.Light.G, s.Light.B).linear);
+            Shader.SetGlobalColor(SunTintId, s.Moon ? Color.black : (new Color(s.Light.R, s.Light.G, s.Light.B) * sunScale).linear);
             Shader.SetGlobalVector(MoonDirId, new Vector4(s.MoonX, s.MoonY, s.MoonZ, s.MoonGlow));
             Shader.SetGlobalColor(MoonTintId, new Color(sky.MoonColor.R, sky.MoonColor.G, sky.MoonColor.B).linear);
             Shader.SetGlobalFloat(StarsId, s.Stars);
-            Shader.SetGlobalColor(SkyId, new Color(s.AmbientSky.R, s.AmbientSky.G, s.AmbientSky.B).linear);
-            Shader.SetGlobalColor(GroundId, new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B).linear);
+            Shader.SetGlobalColor(SkyId, Grey(s.AmbientSky, o, skyScale).linear);
+            Shader.SetGlobalColor(GroundId, (new Color(s.AmbientGround.R, s.AmbientGround.G, s.AmbientGround.B) * skyScale).linear);
             var c = sky.Clouds;
-            var lit = new Color(s.Light.R, s.Light.G, s.Light.B).linear * s.Intensity;
-            Shader.SetGlobalVector(CloudShapeId, new Vector4(c.Coverage, c.HeightM, c.ThicknessM, 1f / c.ScaleM));
+            var lit = new Color(s.Light.R, s.Light.G, s.Light.B).linear * s.Intensity * sunScale;
+            Shader.SetGlobalVector(CloudShapeId, new Vector4(c.HeightM, c.ThicknessM, 1f / c.ScaleM, 0));
             Shader.SetGlobalVector(CloudLightId, new Vector4(lit.r, lit.g, lit.b, c.Density));
             Shader.SetGlobalVector(CloudLightDirId, s.Moon ? new Vector4(s.MoonX, s.MoonY, s.MoonZ, 0) : new Vector4(s.SunX, s.SunY, s.SunZ, 0));
             Shown = s;
@@ -150,6 +153,12 @@ namespace Stabby.Game
             float dir = (kb.rightBracketKey.isPressed ? 1 : 0) - (kb.leftBracketKey.isPressed ? 1 : 0);
             if (dir == 0) return;
             PinnedHour = Wrap((PinnedHour ?? sky.Hour(Clock)) + dir * ScrubHoursPerSecond * UnityEngine.Time.unscaledDeltaTime);
+        }
+
+        static Color Grey(Rgb c, float overcast, float scale)
+        {
+            var v = new Color(c.R, c.G, c.B);
+            return Color.Lerp(v, Color.white * v.grayscale, overcast * 0.7f) * scale;
         }
 
         static float Wrap(float h) => h - math.floor(h / 24f) * 24f;

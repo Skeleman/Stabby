@@ -14,9 +14,9 @@
   "newMoonAmbient": 0.2,
   "moonGlow": 0.012,
   "starBrightness": 0.012,
-  "clouds": { "coverage": 0.45, "density": 1.2, "heightM": 1800, "thicknessM": 700, "scaleM": 3200, "windDirDeg": 250, "windSpeedMs": 9, "churn": 1.6 },
+  "clouds": { "density": 1.2, "heightM": 1800, "thicknessM": 700, "scaleM": 3200, "windDirDeg": 250, "windSpeedMs": 9, "churn": 1.6 },
   "weather": {
-    "spellS": 900, "coverMin": 0.25, "coverMax": 0.9, "wetFrom": 0.6, "snowBelowC": 0.5, "sleetBandC": 1.5, "minPx": 4,
+    "spellS": 900, "coverMin": 0.25, "coverMax": 0.9, "wetFrom": 0.6, "snowBelowC": 0.5, "sleetBandC": 1.5, "minPx": 4, "overcastSun": 0.3, "overcastSky": 0.65,
     "rain": { "count": 24000, "fallMs": 8, "lengthM": 0.9, "widthM": 0.01, "swayM": 0, "alpha": 0.3, "color": [0.62, 0.66, 0.7] },
     "snow": { "count": 12000, "fallMs": 1, "lengthM": 0.05, "widthM": 0.05, "swayM": 0.4, "alpha": 0.85, "color": [0.9, 0.91, 0.93] }
   },

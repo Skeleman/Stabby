@@ -27,7 +27,7 @@ namespace Stabby.World
     public sealed class CloudDef
     {
         public const float NoisePeriod = 256;
-        public float Coverage = 0.45f, Density = 1.2f, HeightM = 1800, ThicknessM = 700, ScaleM = 3200, WindDirDeg = 250, WindSpeedMs = 9, Churn = 1.6f;
+        public float Density = 1.2f, HeightM = 1800, ThicknessM = 700, ScaleM = 3200, WindDirDeg = 250, WindSpeedMs = 9, Churn = 1.6f;
 
         public void Drift(double clockS, out float x, out float z, out float churnX, out float churnZ)
         {
@@ -44,7 +44,6 @@ namespace Stabby.World
         public static void Validate(List<string> e, CloudDef c)
         {
             if (c == null) { e.Add("sky.clouds: required"); return; }
-            if (!(c.Coverage >= 0 && c.Coverage <= 1)) e.Add($"sky.clouds.coverage {c.Coverage} outside 0..1");
             if (!(c.Density >= 0 && c.Density <= 8)) e.Add($"sky.clouds.density {c.Density} outside 0..8");
             if (!(c.HeightM >= 200 && c.HeightM <= 12000)) e.Add($"sky.clouds.heightM {c.HeightM} outside 200..12000");
             if (!(c.ThicknessM >= 50 && c.ThicknessM <= 5000)) e.Add($"sky.clouds.thicknessM {c.ThicknessM} outside 50..5000");
