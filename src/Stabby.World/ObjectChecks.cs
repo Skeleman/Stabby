@@ -127,12 +127,16 @@ namespace Stabby.World
             readonly ObjectField field;
             readonly Dictionary<int, ObjectInstance[]> seen = new Dictionary<int, ObjectInstance[]>();
 
-            public DecodedChunks(ObjectField field) => this.field = field;
+            readonly bool nearRoads;
+
+            public DecodedChunks(ObjectField field, bool nearRoads = false) { this.field = field; this.nearRoads = nearRoads; }
+
+            ObjectInstance[] Load(int cx, int cz) => nearRoads ? field.ChunkNearRoads(cx, cz) : field.Chunk(cx, cz);
 
             public ObjectInstance[] Get(int cx, int cz)
             {
                 int c = cz * field.ChunksAcross + cx;
-                if (!seen.TryGetValue(c, out var o)) seen[c] = o = field.Chunk(cx, cz);
+                if (!seen.TryGetValue(c, out var o)) seen[c] = o = Load(cx, cz);
                 return o;
             }
 
@@ -140,7 +144,7 @@ namespace Stabby.World
             {
                 int across = field.ChunksAcross;
                 var got = new ObjectInstance[chunks.Count][];
-                Parallel.For(0, chunks.Count, k => got[k] = field.Chunk(chunks[k] % across, chunks[k] / across));
+                Parallel.For(0, chunks.Count, k => got[k] = Load(chunks[k] % across, chunks[k] / across));
                 for (int k = 0; k < chunks.Count; k++) seen[chunks[k]] = got[k];
             }
         }
@@ -280,7 +284,7 @@ namespace Stabby.World
             foreach (var g in bores) bored.Add(g.Tile);
             foreach (var f in grid.Edits)
                 if (f.Link && !bored.Contains(Features.TileOf(f, w.Config.CellMeters)) && field.OnRoad(0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ), 0.5f * (float)Math.Sqrt((f.MaxX - f.MinX) * (f.MaxX - f.MinX) + (f.MaxZ - f.MinZ) * (f.MaxZ - f.MinZ)))) { e.Add($"dungeon link edit at {f.Ax:F0},{f.Az:F0} meets a road"); return; }
-            var decoded = new DecodedChunks(field);
+            var decoded = new DecodedChunks(field, true);
             decoded.Warm(new List<int>(chunks));
             foreach (int c in chunks)
                 foreach (var o in decoded.Get(c % across, c / across))
