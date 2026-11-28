@@ -70,7 +70,9 @@ namespace Stabby.World
 
         public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms) => Run(w, groups, ms, null);
 
-        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms, CreatureLibrary creatures)
+        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms, CreatureLibrary creatures) => Run(w, groups, ms, creatures, null);
+
+        public static List<string> Run(GeneratedWorld w, ICollection<string> groups, IDictionary<string, double> ms, CreatureLibrary creatures, IDictionary<string, int> tally)
         {
             var e = new List<string>();
             var clock = new GroupClock(groups, ms);
@@ -79,7 +81,7 @@ namespace Stabby.World
             if (clock.Start("biomes")) CheckBiomes(w, e);
             if (clock.Start("sketch") && w.Sketch != null) { CheckSketch(w, e); CheckMesas(w, e); CheckVolcanoes(w, e); CheckGlacial(w, e); }
             if (clock.Start("surface")) { CheckDetail(w, e); CheckNearField(w, e); CheckGeometry(w, e); }
-            CheckFeatures(w, e, clock, creatures);
+            CheckFeatures(w, e, clock, creatures, tally);
             clock.Stop();
             return e;
         }
@@ -1006,7 +1008,7 @@ namespace Stabby.World
             return ix >= 0 && iz >= 0 && ix < n && iz < n ? iz * n + ix : -1;
         }
 
-        static void CheckFeatures(GeneratedWorld w, List<string> e, GroupClock clock, CreatureLibrary creatures)
+        static void CheckFeatures(GeneratedWorld w, List<string> e, GroupClock clock, CreatureLibrary creatures, IDictionary<string, int> tally)
         {
             bool surface = clock.Has("surface") || clock.Has("meshing"), caved = clock.Has("caves"), sited = clock.Has("sites"), roaded = clock.Has("roads"), objects = clock.Has("objects"), fed = creatures != null && clock.Has("creatures");
             if (!surface && !caved && !sited && !roaded && !objects && !fed) return;
@@ -1023,7 +1025,7 @@ namespace Stabby.World
             }
             if (clock.Start("roads"))
             {
-                if (field != null) { CheckRoads(w, grid, field, e); CheckTrails(w, field, e); }
+                if (field != null) { CheckRoads(w, grid, field, e); CheckTrails(w, field, e); if (tally != null) TallyMines(w, field, tally); }
             }
             if (clock.Start("objects"))
             {
