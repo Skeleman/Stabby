@@ -49,10 +49,9 @@
     "starBrightness": { "type": "number", "minimum": 0, "maximum": 0.05 },
     "clouds": {
       "type": "object",
-      "required": ["coverage", "density", "heightM", "thicknessM", "scaleM", "windDirDeg", "windSpeedMs", "churn"],
+      "required": ["density", "heightM", "thicknessM", "scaleM", "windDirDeg", "windSpeedMs", "churn"],
       "additionalProperties": false,
       "properties": {
-        "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
         "density": { "type": "number", "minimum": 0, "maximum": 8 },
         "heightM": { "type": "number", "minimum": 200, "maximum": 12000 },
         "thicknessM": { "type": "number", "minimum": 50, "maximum": 5000 },
@@ -64,7 +63,7 @@
     },
     "weather": {
       "type": "object",
-      "required": ["spellS", "coverMin", "coverMax", "wetFrom", "snowBelowC", "sleetBandC", "minPx", "rain", "snow"],
+      "required": ["spellS", "coverMin", "coverMax", "wetFrom", "snowBelowC", "sleetBandC", "minPx", "overcastSun", "overcastSky", "rain", "snow"],
       "additionalProperties": false,
       "properties": {
         "spellS": { "type": "number", "minimum": 10, "maximum": 86400 },
@@ -74,6 +73,8 @@
         "snowBelowC": { "type": "number", "minimum": -30, "maximum": 10 },
         "sleetBandC": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
         "minPx": { "type": "number", "minimum": 0.25, "maximum": 8 },
+        "overcastSun": { "type": "number", "minimum": 0, "maximum": 1 },
+        "overcastSky": { "type": "number", "minimum": 0, "maximum": 1 },
         "rain": { "$ref": "#/$defs/precip" },
         "snow": { "$ref": "#/$defs/precip" }
       }

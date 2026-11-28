@@ -142,7 +142,7 @@ namespace Stabby.Content
             if (o == null) return null;
             var c = new CloudDef
             {
-                Coverage = o.Float("coverage", -1), Density = o.Float("density", -1), HeightM = o.Float("heightM", 0), ThicknessM = o.Float("thicknessM", 0),
+                Density = o.Float("density", -1), HeightM = o.Float("heightM", 0), ThicknessM = o.Float("thicknessM", 0),
                 ScaleM = o.Float("scaleM", 0), WindDirDeg = o.Float("windDirDeg", -1), WindSpeedMs = o.Float("windSpeedMs", -1), Churn = o.Float("churn", -1),
             };
             o.End();
@@ -156,6 +156,7 @@ namespace Stabby.Content
             {
                 SpellS = o.Float("spellS", 0), CoverMin = o.Float("coverMin", -1), CoverMax = o.Float("coverMax", -1), WetFrom = o.Float("wetFrom", -1),
                 SnowBelowC = o.Float("snowBelowC", -99), SleetBandC = o.Float("sleetBandC", 0), MinPx = o.Float("minPx", 0),
+                OvercastSun = o.Float("overcastSun", -1), OvercastSky = o.Float("overcastSky", -1),
                 Rain = Precip(o.Object("rain"), source), Snow = Precip(o.Object("snow"), source),
             };
             o.End();

@@ -24,7 +24,7 @@ namespace Stabby.World
 
     public sealed class WeatherDef
     {
-        public float SpellS = 900, CoverMin = 0.25f, CoverMax = 0.9f, WetFrom = 0.6f, SnowBelowC = 0.5f, SleetBandC = 1.5f, MinPx = 4;
+        public float SpellS = 900, CoverMin = 0.25f, CoverMax = 0.9f, WetFrom = 0.6f, SnowBelowC = 0.5f, SleetBandC = 1.5f, MinPx = 4, OvercastSun = 0.3f, OvercastSky = 0.65f;
         public PrecipLook Rain = new PrecipLook { Count = 24000, FallMs = 8, LengthM = 0.9f, WidthM = 0.01f, Alpha = 0.3f, Color = new Rgb(0.62f, 0.66f, 0.7f) };
         public PrecipLook Snow = new PrecipLook { Count = 12000, FallMs = 1, LengthM = 0.05f, WidthM = 0.05f, SwayM = 0.4f, Alpha = 0.85f, Color = new Rgb(0.9f, 0.91f, 0.93f) };
 
@@ -34,6 +34,12 @@ namespace Stabby.World
             float v = 0.7f * Smooth(key, clockS / SpellS) + 0.3f * Smooth(Rng.Mix(key), clockS * 3 / SpellS);
             cover = CoverMin + (CoverMax - CoverMin) * v;
             precip = Step(WetFrom, 1, v);
+        }
+
+        public float Overcast(float cover, float precip)
+        {
+            float o = 0.5f * Step(CoverMin + (CoverMax - CoverMin) * 0.5f, CoverMax, cover);
+            return o > precip ? o : precip;
         }
 
         public float SnowFraction(float temperatureC) => 1 - Step(SnowBelowC - SleetBandC, SnowBelowC + SleetBandC, temperatureC);
@@ -64,6 +70,8 @@ namespace Stabby.World
             if (!(w.SnowBelowC >= -30 && w.SnowBelowC <= 10)) e.Add($"sky.weather.snowBelowC {w.SnowBelowC} outside -30..10");
             if (!(w.SleetBandC > 0 && w.SleetBandC <= 10)) e.Add($"sky.weather.sleetBandC {w.SleetBandC} outside 0..10");
             if (!(w.MinPx >= 0.25f && w.MinPx <= 8)) e.Add($"sky.weather.minPx {w.MinPx} outside 0.25..8");
+            if (!(w.OvercastSun >= 0 && w.OvercastSun <= 1)) e.Add($"sky.weather.overcastSun {w.OvercastSun} outside 0..1");
+            if (!(w.OvercastSky >= 0 && w.OvercastSky <= 1)) e.Add($"sky.weather.overcastSky {w.OvercastSky} outside 0..1");
             PrecipLook.Validate(e, "sky.weather.rain", w.Rain);
             PrecipLook.Validate(e, "sky.weather.snow", w.Snow);
         }

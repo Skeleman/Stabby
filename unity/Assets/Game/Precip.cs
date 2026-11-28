@@ -15,7 +15,7 @@ namespace Stabby.Game
         static readonly int RainLookId = Shader.PropertyToID("_StabbyRainLook"), SnowLookId = Shader.PropertyToID("_StabbySnowLook"), RainShiftId = Shader.PropertyToID("_StabbyRainShift");
         static readonly int SnowShiftId = Shader.PropertyToID("_StabbySnowShift"), BoxId = Shader.PropertyToID("_StabbyPrecipBox");
         static readonly int RainColorId = Shader.PropertyToID("_StabbyRainColor"), SnowColorId = Shader.PropertyToID("_StabbySnowColor");
-        public static float? PinnedPrecip, PinnedSnow;
+        public static float? PinnedPrecip, PinnedSnow, PinnedCover;
         public static float Cover, Precip, Snow, TemperatureC;
         public static int Drawn;
         Material material;
@@ -42,7 +42,8 @@ namespace Stabby.Game
             var w = sky.Weather;
             double clock = DayNightSystem.Clock;
             w.At(ground.Blob.Value.Seed, clock, out Cover, out Precip);
-            if (PinnedPrecip.HasValue) Precip = PinnedPrecip.Value;
+            if (PinnedPrecip.HasValue) { Precip = PinnedPrecip.Value; Cover = math.max(Cover, math.lerp(Cover, w.CoverMax, Precip)); }
+            if (PinnedCover.HasValue) Cover = PinnedCover.Value;
             Vector3 eye = cam.transform.position;
             TemperatureC = ClimateField.TemperatureAt(config, eye.y);
             Snow = PinnedSnow ?? w.SnowFraction(TemperatureC);

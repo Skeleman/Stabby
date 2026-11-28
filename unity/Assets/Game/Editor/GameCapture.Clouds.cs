@@ -12,6 +12,8 @@ namespace Stabby.Game.Editor
             GameStatus.HoldCamera = true;
             cam.fieldOfView = 60f;
             var lines = new List<string>();
+            PrecipSystem.PinnedPrecip = 0f;
+            PrecipSystem.PinnedCover = 0.45f;
             var eye = PeakEye();
             for (var w = SkyView(cam, dir, lines, eye, PinnedMidday, Stabby.World.SkyDef.FullMoon, "clouds-noon", false, 90f, -0.05f); w.MoveNext();) yield return null;
             lines.Add(BenchClouds(cam, "noon"));
@@ -21,6 +23,8 @@ namespace Stabby.Game.Editor
             for (var w = Settle(30); w.MoveNext();) yield return null;
             lines.Add(BenchClouds(cam, "dusk sky-filled"));
             for (var w = ShowHour(PinnedMidday); w.MoveNext();) yield return null;
+            PrecipSystem.PinnedPrecip = null;
+            PrecipSystem.PinnedCover = null;
             GameStatus.Lines["~clouds"] = string.Join("\n", lines);
         }
 
