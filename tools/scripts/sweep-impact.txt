@@ -31,6 +31,7 @@ src/Stabby.World/LodStitch.cs surface,meshing,caves,sites,objects,roads
 src/Stabby.World/SurfaceNets.cs surface,meshing,caves,sites,objects,roads
 src/Stabby.World/NearField.cs surface,hydrology
 src/Stabby.World/Walk.cs surface,caves
+src/Stabby.World/Shelter.cs caves
 src/Stabby.World/Chunks.cs surface
 src/Stabby.World/Underground.cs caves,surface,meshing
 src/Stabby.World/CaveLight.cs caves
