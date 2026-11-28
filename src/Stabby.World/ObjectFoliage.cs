@@ -3,10 +3,10 @@ using System.Collections.Generic;
 
 namespace Stabby.World
 {
-    public static class ObjectFoliage
+    public static partial class ObjectFoliage
     {
-        public const int CellsAcross = 2;
-        public const int BroadLeaves = 0, Needles = 1, ShrubLeaves = 2, Reeds = 3;
+        public const int CellsAcross = 3;
+        public const int BroadLeaves = 0, Needles = 1, ShrubLeaves = 2, Reeds = 3, Silk = 4;
         public const float TrunkRadius = 0.022f, TipRadius = 0.07f, TipDroop = 0.05f;
         static readonly float[] SideCos = { -0.5f, 0f, 0.30901699f, 0.5f, 0.6234898f, 0.70710678f };
         static readonly float[] SideSin = { 0.8660254f, 1f, 0.95105652f, 0.8660254f, 0.7818315f, 0.70710678f };

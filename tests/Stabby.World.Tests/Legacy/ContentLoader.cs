@@ -573,6 +573,7 @@ public static class ContentLoader
         public float FootRiseM { get; set; }
         public float FootReachM { get; set; } = 12f;
         public float StampFoot { get; set; } = -1f;
+        public float ClearBandM { get; set; } = -1f;
         public float FanM { get; set; }
         public float EditMinSizeM { get; set; }
         public int ChainMin { get; set; } = 1;
@@ -658,7 +659,7 @@ public static class ContentLoader
                 Biomes = pl.Biomes, PerHectare = pl.PerHectare, SlopeMin = pl.SlopeMin, SlopeMax = pl.SlopeMax,
                 HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
-                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, StampFoot = pl.StampFoot, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
+                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, StampFoot = pl.StampFoot, ClearBandM = pl.ClearBandM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
                 ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, ChainHead = pl.ChainHead, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
                 Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), Cave = Array.IndexOf(ObjectField.CaveNames, pl.Cave ?? ""), CaveIce = pl.CaveIce, Liquid = pl.Liquid, Oasis = pl.Oasis, PerCenote = pl.PerCenote, SpacingM = pl.SpacingM, Chance = pl.Chance,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),

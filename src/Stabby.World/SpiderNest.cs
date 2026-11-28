@@ -5,31 +5,62 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const float SpiderU = 1 / 18f, SpiderFootM = 6f, SpiderSilkM = 0.05f;
+        public const float SpiderU = 1 / 18f, SpiderFootM = 6f;
         static readonly float[] SpiderSeats = { 0, 0, 0.2f, 0, -0.2f, 0, 0, 0.2f, 0, -0.2f, 0.14f, 0.14f, -0.14f, 0.14f, 0.14f, -0.14f, -0.14f, -0.14f };
+
+        internal sealed class SpiderFrame
+        {
+            public int Trunks, Rocks;
+            public float[] Ta, Tx, Tz, Girth, Top, Lean, Drift, Bx, By, Bz, Lx, Ly, Lz, RootA, RootL, Rx, Rz, Rw, Rt, Rdep, Tilt;
+            public int[] Roots, Rd;
+        }
+
+        internal static SpiderFrame SpiderBones(ulong key)
+        {
+            var rng = Rng.Stream(key, "spider-nest");
+            var s = new SpiderFrame();
+            int n = s.Trunks = rng.Range(3, 5);
+            s.Ta = new float[n]; s.Tx = new float[n]; s.Tz = new float[n]; s.Girth = new float[n]; s.Top = new float[n]; s.Lean = new float[n]; s.Drift = new float[n];
+            s.Bx = new float[n]; s.By = new float[n]; s.Bz = new float[n]; s.Lx = new float[n]; s.Ly = new float[n]; s.Lz = new float[n];
+            s.Roots = new int[n]; s.RootA = new float[n * 3]; s.RootL = new float[n * 3];
+            float spin = rng.Range(0, 6.2832f);
+            for (int k = 0; k < n; k++)
+            {
+                float a = spin + 6.2832f * (k + rng.Range(-0.12f, 0.12f)) / n, r = rng.Range(4.2f, 5.6f);
+                s.Ta[k] = a; s.Tx[k] = r * TurnCos(a); s.Tz[k] = r * TurnSin(a);
+                s.Girth[k] = rng.Range(0.75f, 1f);
+                s.Top[k] = rng.Range(7.5f, 12f);
+                s.Drift[k] = rng.Range(0, 6.2832f); s.Lean[k] = rng.Range(0.01f, 0.04f);
+                s.Roots[k] = rng.Range(2, 4);
+                for (int j = 0; j < s.Roots[k]; j++) { s.RootA[k * 3 + j] = a + rng.Range(-1.2f, 1.2f); s.RootL[k * 3 + j] = rng.Range(1.2f, 2f); }
+                float h = rng.Range(3.8f, 5.8f), reach = rng.Range(2f, 3.2f), b = a + 3.1416f + rng.Range(-0.4f, 0.4f);
+                s.Bx[k] = s.Tx[k] + 0.2f * s.Girth[k] * TurnCos(b); s.Bz[k] = s.Tz[k] + 0.2f * s.Girth[k] * TurnSin(b); s.By[k] = h;
+                s.Lx[k] = s.Bx[k] + reach * TurnCos(b); s.Lz[k] = s.Bz[k] + reach * TurnSin(b); s.Ly[k] = h + rng.Range(0.3f, 0.9f);
+            }
+            int m = s.Rocks = rng.Range(2, 4);
+            s.Rx = new float[m]; s.Rz = new float[m]; s.Rw = new float[m]; s.Rt = new float[m]; s.Rdep = new float[m]; s.Tilt = new float[m]; s.Rd = new int[m];
+            for (int k = 0; k < m; k++)
+            {
+                float a = spin + 6.2832f * (k + 0.5f + rng.Range(-0.15f, 0.15f)) / m, r = rng.Range(2.6f, 4.2f), w = rng.Range(1.3f, 2.2f);
+                s.Rd[k] = rng.Range(0, 16);
+                s.Rx[k] = r * TurnCos(a); s.Rz[k] = r * TurnSin(a); s.Rw[k] = w;
+                s.Rt[k] = w * rng.Range(0.55f, 0.75f); s.Rdep[k] = w * rng.Range(0.7f, 0.9f); s.Tilt[k] = rng.Range(-0.1f, 0.1f);
+            }
+            return s;
+        }
 
         static void SpiderNest(StructureLayout l, ulong key, in Frame f)
         {
-            var rng = Rng.Stream(key, "spider-nest");
-            int trunks = rng.Range(3, 5);
-            var tx = new float[trunks];
-            var tz = new float[trunks];
-            var top = new float[trunks];
-            var girth = new float[trunks];
-            var lx = new float[trunks];
-            var ly = new float[trunks];
-            var lz = new float[trunks];
+            var sp = SpiderBones(key);
+            var rng = Rng.Stream(key, "spider-nest-parts");
+            int trunks = sp.Trunks, rocks = sp.Rocks;
+            float[] tx = sp.Tx, tz = sp.Tz, top = sp.Top, girth = sp.Girth, lx = sp.Lx, ly = sp.Ly, lz = sp.Lz, rx = sp.Rx, rz = sp.Rz, rt = sp.Rt;
             var feet = new List<float>();
-            float spin = rng.Range(0, 6.2832f);
 
             int bark = l.Pieces.Count;
             for (int k = 0; k < trunks; k++)
             {
-                float a = spin + 6.2832f * (k + rng.Range(-0.12f, 0.12f)) / trunks, c = TurnCos(a), s = TurnSin(a), r = rng.Range(4.6f, 6.2f);
-                tx[k] = r * c; tz[k] = r * s;
-                girth[k] = rng.Range(0.75f, 1f);
-                top[k] = rng.Range(7.5f, 12f);
-                float mid = 0.45f * top[k], drift = rng.Range(0, 6.2832f), lean = rng.Range(0.01f, 0.04f);
+                float mid = 0.45f * top[k], drift = sp.Drift[k], lean = sp.Lean[k];
                 float mx = tx[k] + lean * mid * TurnCos(drift), mz = tz[k] + lean * mid * TurnSin(drift);
                 float ex = tx[k] + lean * top[k] * TurnCos(drift), ez = tz[k] + lean * top[k] * TurnSin(drift);
                 Bone(l, rng.NextU64(), f, tx[k], -0.4f, tz[k], mx, mid, mz, girth[k] * 1.15f, girth[k] * 0.8f, 0, 2, Timber);
@@ -37,76 +68,18 @@ namespace Stabby.World
                 float sa = rng.Range(0, 6.2832f);
                 Bone(l, rng.NextU64(), f, ex, top[k] - 0.3f, ez, ex + 0.35f * TurnCos(sa), top[k] + rng.Range(0.8f, 1.6f), ez + 0.35f * TurnSin(sa), 0.3f * girth[k], 0.1f, 0, 0, Timber);
                 var foot = f.Child(tx[k], 0, tz[k]);
-                int roots = rng.Range(2, 4);
-                for (int j = 0; j < roots; j++)
-                    AncientRoot(l, ref rng, foot, a + rng.Range(-1.2f, 1.2f), 0.35f * girth[k], 0.15f, 0.35f * girth[k], rng.Range(1.2f, 2f), 2, feet);
-                float h = rng.Range(3.8f, 5.8f), reach = rng.Range(2f, 3.2f), b = a + 3.1416f + rng.Range(-0.4f, 0.4f);
-                float bx = tx[k] + 0.2f * girth[k] * TurnCos(b), bz = tz[k] + 0.2f * girth[k] * TurnSin(b);
-                lx[k] = bx + reach * TurnCos(b); lz[k] = bz + reach * TurnSin(b); ly[k] = h + rng.Range(0.3f, 0.9f);
-                Bone(l, rng.NextU64(), f, bx, h, bz, lx[k], ly[k], lz[k], 0.32f, 0.14f, 0, 1, Timber);
+                for (int j = 0; j < sp.Roots[k]; j++)
+                    AncientRoot(l, ref rng, foot, sp.RootA[k * 3 + j], 0.35f * girth[k], 0.15f, 0.35f * girth[k], sp.RootL[k * 3 + j], 2, feet);
+                Bone(l, rng.NextU64(), f, sp.Bx[k], sp.By[k], sp.Bz[k], lx[k], ly[k], lz[k], 0.32f, 0.14f, 0, 1, Timber);
             }
             Mossy(l, bark);
 
-            int stones = l.Pieces.Count, rocks = rng.Range(2, 4);
-            var rx = new float[rocks];
-            var rz = new float[rocks];
-            var rt = new float[rocks];
+            int stones = l.Pieces.Count;
             for (int k = 0; k < rocks; k++)
-            {
-                float a = spin + 6.2832f * (k + 0.5f + rng.Range(-0.15f, 0.15f)) / rocks, r = rng.Range(2.6f, 4.4f), w = rng.Range(1.3f, 2.2f);
-                int d = rng.Range(0, 16);
-                rx[k] = r * TurnCos(a); rz[k] = r * TurnSin(a); rt[k] = w * rng.Range(0.55f, 0.75f);
-                Rock(l, rng.NextU64(), f, rx[k], -0.15f, rz[k], w, rt[k] + 0.15f, w * rng.Range(0.7f, 0.9f), Cos16(d), Sin16(d), 0, 2, rng.Range(-0.1f, 0.1f));
-            }
+                Rock(l, rng.NextU64(), f, rx[k], -0.15f, rz[k], sp.Rw[k], rt[k] + 0.15f, sp.Rdep[k], Cos16(sp.Rd[k]), Sin16(sp.Rd[k]), 0, 2, sp.Tilt[k]);
             Mossy(l, stones);
 
             int silk = l.Pieces.Count;
-            for (int k = 0; k < trunks; k++)
-            {
-                int n = (k + 1) % trunks;
-                if (trunks == 3 && k == 2 && rng.NextFloat() < 0.5f) continue;
-                float dx = tx[n] - tx[k], dz = tz[n] - tz[k], len = (float)Math.Sqrt(dx * dx + dz * dz);
-                float y0 = rng.Range(0.4f, 1.2f), y1 = rng.Range(3.6f, 5.4f), w = 0.8f * (len - 0.5f * (girth[k] + girth[n]));
-                Sheet(l, rng.NextU64(), f, 0.5f * (tx[k] + tx[n]), y0, 0.5f * (tz[k] + tz[n]), dx / len, dz / len, w, y1 - y0, rng.Range(-0.08f, 0.08f), 0.25f, k == 0 ? 2 : 1);
-                if (rng.NextFloat() < 0.7f)
-                {
-                    float hy = rng.Range(4.5f, 6.5f), by = rng.Range(0.3f, 0.9f);
-                    Ribbon(l, rng.NextU64(), f, tx[n] - 0.15f * dx, by, tz[n] - 0.15f * dz, tx[k] + 0.1f * dx, hy, tz[k] + 0.1f * dz, rng.Range(1.2f, 2f), 0.3f, 0, 0);
-                }
-            }
-
-            float cx = rng.Range(-0.8f, 0.8f), cz = rng.Range(-0.8f, 0.8f), cy = rng.Range(1.6f, 2.4f);
-            for (int k = 0; k < trunks; k++)
-            {
-                float hx = 0.7f * tx[k] + 0.3f * lx[k], hz = 0.7f * tz[k] + 0.3f * lz[k], hy = Math.Min(top[k] - 0.5f, rng.Range(5.5f, 7.5f));
-                Ribbon(l, rng.NextU64(), f, cx + 0.25f * (hx - cx), cy, cz + 0.25f * (hz - cz), hx, hy, hz, rng.Range(2.4f, 3.4f), 0.45f, 0, k == 0 ? 2 : 1);
-            }
-            for (int k = 0; k < rocks; k++)
-            {
-                int t = (k + rng.Range(0, trunks)) % trunks;
-                Ribbon(l, rng.NextU64(), f, rx[k], rt[k] - 0.1f, rz[k], lx[t], ly[t], lz[t], rng.Range(1.2f, 1.8f), 0.3f, 0, 1);
-            }
-
-            int funnels = rng.Range(2, 4);
-            for (int k = 0; k < funnels; k++)
-            {
-                bool rock = k < rocks;
-                float ax = rock ? rx[k] : tx[k % trunks], az = rock ? rz[k] : tz[k % trunks], reach = rock ? 0.4f * rt[k] / 0.65f + 0.9f : 0.5f * girth[k % trunks] + 0.7f;
-                float jit = rng.Range(-0.4f, 0.4f);
-                Toward(ax, az, jit, out float c, out float s);
-                float len = rng.Range(1.8f, 2.6f), d = rng.Range(0.75f, 1f);
-                float mx = ax + (reach + 0.5f * len) * c, mz = az + (reach + 0.5f * len) * s;
-                Round(l, rng.NextU64(), f, mx, -0.3f * d, mz, len, d, d, Silk, GX, RoundTube, 0, 1, -c, -s);
-                float ox = ax + (reach + len) * c, oz = az + (reach + len) * s;
-                Round(l, rng.NextU64(), f, ox + 0.5f * c, 0.01f, oz + 0.5f * s, rng.Range(1.8f, 2.6f), 0.04f, rng.Range(1.6f, 2.2f), Silk, GV, RoundDisc, 0, 0, c, s);
-                for (int e = -1; e <= 1; e += 2)
-                {
-                    float sr = rng.Range(1.2f, 1.8f);
-                    Toward(ax, az, jit + e * rng.Range(0.9f, 1.3f), out float sc, out float ss);
-                    Ribbon(l, rng.NextU64(), f, ox, 0.15f, oz, ox + sr * sc, rng.Range(0.9f, 1.5f), oz + sr * ss, rng.Range(0.8f, 1.2f), -0.3f, 0, 0);
-                }
-            }
-
             int hangs = rng.Range(2, 5);
             for (int k = 0; k < hangs; k++)
             {
@@ -153,13 +126,6 @@ namespace Stabby.World
                 Touch(l, f, bx, 0, bz, 1.2f);
             }
 
-            int mats = rng.Range(3, 6);
-            for (int k = 0; k < mats; k++)
-            {
-                float a = rng.Range(0, 6.2832f), r = rng.Range(0, 3.6f);
-                int d = rng.Range(0, 16);
-                Round(l, rng.NextU64(), f, r * TurnCos(a), 0.01f, r * TurnSin(a), rng.Range(2f, 3.6f), 0.03f, rng.Range(1.6f, 3f), Silk, GV, RoundDisc, 0, k == 0 ? 1 : 0, Cos16(d), Sin16(d));
-            }
             Flat(l, silk);
 
             int bones = l.Pieces.Count, longs = rng.Range(4, 8);
@@ -208,24 +174,11 @@ namespace Stabby.World
             c = c0 * tc - s0 * ts;
             s = s0 * tc + c0 * ts;
         }
-
-        static void Sheet(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float dx, float dz, float w, float h, float lean, float flare, int hi)
-        {
-            Box(l, key, f, x, y, z, SpiderSilkM, h, w, Silk, GV, 0, hi, dz, -dx, lean, 0, -flare * w / h);
-        }
-
-        static void Ribbon(StructureLayout l, ulong key, in Frame f, float x0, float y0, float z0, float x1, float y1, float z1, float w, float flare, int lo, int hi)
-        {
-            float dx = x1 - x0, dz = z1 - z0, dy = y1 - y0, run = (float)Math.Sqrt(dx * dx + dz * dz);
-            if (dy <= 0.05f || run <= 1e-3f) return;
-            float lean = run / dy;
-            Box(l, key, f, 0.5f * (x0 + x1), y0, 0.5f * (z0 + z1), SpiderSilkM * (float)Math.Sqrt(1 + lean * lean), dy, w, Silk, GV, lo, hi, dx / run, dz / run, lean, 0, -flare * w / dy);
-        }
     }
 
     public sealed partial class ObjectField
     {
-        public const float SpiderWoods = 0.45f, SpiderReliefM = 5f, SpiderHollow = 0.3f, SpiderFloatM = 0.5f, SpiderBuryM = 1f;
+        public const float SpiderWoods = 1f, SpiderReliefM = 5f, SpiderHollow = 0.3f, SpiderFloatM = 0.5f, SpiderBuryM = 1f, SpiderSeekM = 60f;
 
         public string SpiderFault(ObjectInstance o)
         {

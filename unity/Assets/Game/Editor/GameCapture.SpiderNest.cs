@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float SpiderHour = 13.5f, SpiderMoon = 0.5f, SpiderEyeUp = 1.7f, SpiderNearM = 30f, SpiderDistM = 13f, SpiderLookUp = 1.8f;
+        const float SpiderHour = 13.5f, SpiderMoon = 0.5f, SpiderEyeUp = 1.7f, SpiderNearM = 30f, SpiderDistM = 13f, SpiderLookUp = 1.1f;
         static readonly float[] SpiderYaws = { 0, -15, 15, -30, 30, -45, 45 };
 
         static System.Collections.IEnumerator SpiderNestTour(Camera cam, string dir)

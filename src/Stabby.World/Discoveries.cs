@@ -133,8 +133,9 @@ namespace Stabby.World
             if (pl.Discovery == Watchtower) WatchFace(px, pz, ref qa, ref qb);
             if (pl.Discovery == WolfDen)
             {
-                if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
+                if (!Seek(WolfDen, DenSeekM, ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;
             }
+            if (pl.Discovery == SpiderNest && !Seek(SpiderNest, SpiderSeekM, ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == SaltTower && !SeekSalt(ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == FumaroleField && !SeekFumarole(ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == Shipwreck && !SeekShore(ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
@@ -888,15 +889,15 @@ namespace Stabby.World
                 }
         }
 
-        bool SeekDen(ref float x, ref float z, float x0, float z0, float x1, float z1)
+        bool Seek(int kind, float stepM, ref float x, ref float z, float x0, float z0, float x1, float z1)
         {
-            float best = Fitness(WolfDen, x, z), bx = x, bz = z;
+            float best = Fitness(kind, x, z), bx = x, bz = z;
             for (int ring = 1; ring <= DenSeekRings; ring++)
                 for (int k = 0; k < 8; k++)
                 {
                     FanDir(k, 0.70710678f, out float ux, out float uz);
-                    float px = Math.Min(x1, Math.Max(x0, x + ux * ring * DenSeekM)), pz = Math.Min(z1, Math.Max(z0, z + uz * ring * DenSeekM));
-                    float fit = Fitness(WolfDen, px, pz);
+                    float px = Math.Min(x1, Math.Max(x0, x + ux * ring * stepM)), pz = Math.Min(z1, Math.Max(z0, z + uz * ring * stepM));
+                    float fit = Fitness(kind, px, pz);
                     if (fit > best) { best = fit; bx = px; bz = pz; }
                 }
             x = bx; z = bz;

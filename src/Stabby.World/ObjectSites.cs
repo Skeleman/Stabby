@@ -9,6 +9,7 @@ namespace Stabby.World
         public const float SiteMarginM = 2f, SiteBandM = 6f, SiteNoiseM = 5f, BoulderReach = 1.25f;
 
         float[][] siteBox;
+        float[] siteBand, siteMargin;
         float siteReach;
         int siteChunks;
         uint siteSeed;
@@ -20,6 +21,8 @@ namespace Stabby.World
         {
             int defs = lib.Objects.Count;
             siteBox = new float[defs][];
+            siteBand = new float[defs];
+            siteMargin = new float[defs];
             sites = new ObjectInstance[across * across][];
             siteGates = new object[across * across];
             siteSeed = Rng.Stream(w.Config.Seed, "site-clearing").NextU32();
@@ -27,6 +30,8 @@ namespace Stabby.World
             for (int d = 0; d < defs; d++)
             {
                 var def = lib.Objects[d];
+                siteBand[d] = def.Placement.ClearBandM >= 0 ? def.Placement.ClearBandM : SiteBandM;
+                siteMargin[d] = Math.Min(SiteMarginM, siteBand[d]);
                 if (seats[d] == null)
                 {
                     natural = Math.Max(natural, BoulderReach * footprint[d] * Math.Max(def.Placement.SizeMaxM, 0));
@@ -213,7 +218,7 @@ namespace Stabby.World
         bool Cleared(SiteIndex near, float x, float z, float r)
         {
             if (near == null) return false;
-            float gap = float.MaxValue;
+            float t = float.MaxValue;
             float reach = (r + SiteMarginM + SiteBandM + near.Radius + 1f) * 1.001f;
             int ix0 = (int)Math.Floor((x - reach - near.X0) * near.Inv), ix1 = (int)Math.Floor((x + reach - near.X0) * near.Inv);
             int iz0 = (int)Math.Floor((z - reach - near.Z0) * near.Inv), iz1 = (int)Math.Floor((z + reach - near.Z0) * near.Inv);
@@ -221,10 +226,14 @@ namespace Stabby.World
             ix0 = Math.Max(ix0, 0); iz0 = Math.Max(iz0, 0); ix1 = Math.Min(ix1, near.Nx - 1); iz1 = Math.Min(iz1, near.Nz - 1);
             for (int iz = iz0; iz <= iz1; iz++)
                 for (int k = near.Start[iz * near.Nx + ix0], e = near.Start[iz * near.Nx + ix1 + 1]; k < e; k++)
-                    gap = Math.Min(gap, SiteGap(near.Order[k], x, z) - r);
-            if (gap >= SiteMarginM + SiteBandM) return false;
-            if (gap < SiteMarginM) return true;
-            float t = (gap - SiteMarginM) / SiteBandM + 0.45f * Noise.Fbm(siteSeed, x / SiteNoiseM, z / SiteNoiseM, 2);
+                {
+                    var s = near.Order[k];
+                    float gap = SiteGap(s, x, z) - r - siteMargin[s.Def], band = siteBand[s.Def];
+                    if (gap < 0) return true;
+                    if (gap < band) t = Math.Min(t, gap / Math.Max(band, 1e-3f));
+                }
+            if (t == float.MaxValue) return false;
+            t += 0.45f * Noise.Fbm(siteSeed, x / SiteNoiseM, z / SiteNoiseM, 2);
             float keep = Grid.Smoothstep(0.1f, 0.9f, t);
             float roll = Noise.Hash(siteSeed ^ 0x5bd1e995u, (int)Math.Floor(x * 8), (int)Math.Floor(z * 8)) * (1f / 4294967296f);
             return roll >= keep;

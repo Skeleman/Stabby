@@ -6,7 +6,7 @@ namespace Stabby.Game
 {
     public static class LeafAtlas
     {
-        public const int Size = 1024, Cell = Size / ObjectFoliage.CellsAcross;
+        public const int Size = 1536, Cell = Size / ObjectFoliage.CellsAcross;
         public const float ShadeRange = 1.5f;
 
         public sealed class Pixels
@@ -35,6 +35,22 @@ namespace Stabby.Game
                     float across = r > 0 ? dx * -ly + dy * lx : 0;
                     float lit = shade * (across > 0 ? 1.08f : 0.86f);
                     Put(i, c, lit, 0.5f, 1);
+                });
+            }
+
+            public void Thread(float x0, float y0, float x1, float y1, float r, float shade, float hue)
+            {
+                float lx = x1 - x0, ly = y1 - y0, len2 = Math.Max(lx * lx + ly * ly, 1e-8f);
+                float pad = r + 2f / Cell;
+                Box(Math.Min(x0, x1) - pad, Math.Min(y0, y1) - pad, Math.Max(x0, x1) + pad, Math.Max(y0, y1) + pad, (x, y, i) =>
+                {
+                    float s = Math.Max(0, Math.Min(1, ((x - x0) * lx + (y - y0) * ly) / len2));
+                    float dx = x - x0 - lx * s, dy = y - y0 - ly * s;
+                    float off = (float)Math.Sqrt(dx * dx + dy * dy);
+                    float c = Coverage(off - r);
+                    if (c <= 0) return;
+                    float core = 1f - Math.Min(1f, off / Math.Max(r, 1e-5f));
+                    Put(i, c, shade * (0.86f + 0.32f * core), hue, 0);
                 });
             }
 
@@ -117,7 +133,8 @@ namespace Stabby.Game
                 if (cell == ObjectFoliage.BroadLeaves) Broad(cv, ref rng);
                 else if (cell == ObjectFoliage.Needles) Needles(cv, ref rng);
                 else if (cell == ObjectFoliage.ShrubLeaves) Shrub(cv, ref rng);
-                else Reeds(cv, ref rng);
+                else if (cell == ObjectFoliage.Reeds) Reeds(cv, ref rng);
+                else if (cell == ObjectFoliage.Silk) Silk(cv, ref rng);
             }
             return new Pixels { Mips = Mips(cv) };
         }
@@ -272,6 +289,72 @@ namespace Stabby.Game
                 cv.Leaf(bx, 0f, lean, 1f, top, 0.0045f, 1f, 0.05f, 0, rng.Range(0.7f, 0.9f), Hue(ref rng), 0);
                 cv.Stroke(hx - lean * head, top - head, hx, top - 0.01f, r * 0.85f, r, rng.Range(0.5f, 0.68f));
                 cv.Stroke(hx, top - 0.01f, hx + lean * 0.05f, Math.Min(0.995f, top + 0.05f), 0.003f, 0.0015f, 0.6f);
+            }
+        }
+
+        static void Silk(Canvas cv, ref Rng rng)
+        {
+            float p1 = rng.Range(0, 6.2832f), p2 = rng.Range(0, 6.2832f);
+            for (int k = 0; k < 6; k++)
+            {
+                float a0 = 6.2832f * (k + rng.Range(-0.2f, 0.2f)) / 6f, a1 = a0 + rng.Range(0.9f, 1.4f);
+                Edge(p1, p2, a0, out float x0, out float y0);
+                Edge(p1, p2, a1, out float x1, out float y1);
+                Strand(cv, ref rng, x0, y0, x1, y1, rng.Range(-0.05f, 0.05f), rng.Range(2.2f, 2.8f) / Cell, 8);
+            }
+            for (int k = 0; k < 10; k++)
+            {
+                float a0 = rng.Range(0, 6.2832f), a1 = a0 + rng.Range(1.6f, 4.6f);
+                Edge(p1, p2, a0, out float x0, out float y0);
+                Edge(p1, p2, a1, out float x1, out float y1);
+                Strand(cv, ref rng, x0, y0, x1, y1, rng.Range(-0.08f, 0.08f), rng.Range(1.5f, 2.3f) / Cell, 8);
+            }
+            for (int f = 0; f < 1; f++)
+            {
+                float cx = rng.Range(0.42f, 0.58f), cy = rng.Range(0.42f, 0.58f), spin = rng.Range(0, 6.2832f), step = rng.Range(0.022f, 0.03f);
+                int spokes = rng.Range(14, 20);
+                var len = new float[spokes];
+                for (int i = 0; i < spokes; i++)
+                {
+                    float a = spin + 6.2832f * (i + rng.Range(-0.2f, 0.2f)) / spokes;
+                    len[i] = rng.Range(0.3f, 0.42f);
+                    cv.Thread(cx, cy, cx + len[i] * (float)Math.Cos(a), cy + len[i] * (float)Math.Sin(a), 1.4f / Cell, rng.Range(0.95f, 1.15f), 0.5f);
+                }
+                for (float r = 0.04f; r < 0.42f; r += step)
+                    for (int i = 0; i < spokes; i++)
+                    {
+                        int n = (i + 1) % spokes;
+                        float ra = r + step * i / spokes, rb = r + step * (i + 1) / spokes;
+                        if (ra > len[i] || rb > len[n] || rng.NextFloat() > 0.86f) continue;
+                        float a = spin + 6.2832f * i / spokes, b = spin + 6.2832f * (i + 1) / spokes;
+                        cv.Thread(cx + ra * (float)Math.Cos(a), cy + ra * (float)Math.Sin(a), cx + rb * (float)Math.Cos(b), cy + rb * (float)Math.Sin(b), 1.1f / Cell, rng.Range(0.9f, 1.1f), 0.5f);
+                    }
+            }
+            for (int k = 0; k < 20; k++)
+            {
+                float a = rng.Range(0, 6.2832f), d = 0.38f * (float)Math.Sqrt(rng.NextFloat()), x = 0.5f + d * (float)Math.Cos(a), y = 0.5f + d * (float)Math.Sin(a);
+                float b = rng.Range(0, 6.2832f), l = rng.Range(0.04f, 0.16f);
+                cv.Thread(x, y, x + l * (float)Math.Cos(b), y + l * (float)Math.Sin(b), 1f / Cell, rng.Range(0.8f, 1.05f), rng.Range(0.46f, 0.54f));
+            }
+        }
+
+        static void Edge(float p1, float p2, float a, out float x, out float y)
+        {
+            float r = 0.43f * (1f + 0.1f * (float)Math.Sin(3 * a + p1) + 0.07f * (float)Math.Sin(5 * a + p2));
+            x = Math.Max(0.02f, Math.Min(0.98f, 0.5f + r * (float)Math.Cos(a)));
+            y = Math.Max(0.02f, Math.Min(0.98f, 0.5f + 0.92f * r * (float)Math.Sin(a)));
+        }
+
+        static void Strand(Canvas cv, ref Rng rng, float x0, float y0, float x1, float y1, float bow, float r, int pieces)
+        {
+            float nx = -(y1 - y0), ny = x1 - x0, shade = rng.Range(0.88f, 1.15f), hue = rng.Range(0.45f, 0.55f);
+            float px = x0, py = y0;
+            for (int k = 1; k <= pieces; k++)
+            {
+                float t = k / (float)pieces, b = 4 * t * (1 - t) * bow + (k < pieces ? rng.Range(-0.004f, 0.004f) : 0);
+                float qx = x0 + (x1 - x0) * t + nx * b, qy = y0 + (y1 - y0) * t + ny * b;
+                cv.Thread(px, py, qx, qy, r, shade, hue);
+                px = qx; py = qy;
             }
         }
 
