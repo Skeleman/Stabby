@@ -950,7 +950,7 @@ namespace Stabby.Game
         public float3 Eye;
         public float2 Upsun;
         public float Reach, TanE, Allowed, Quality;
-        public bool HideSunk;
+        public bool HideSunk, OldCasters;
         public const float MorphStart = 0.6f;
         public const int EvictBudget = 32, Version = 0, Sunk = 1, Vertices = 2, Casting = 3, CastVertices = 4, Shadows = 5, Hidden = 6, Levels = 7, StatCount = Levels + TerrainTree.Levels;
 
@@ -1103,6 +1103,7 @@ namespace Stabby.Game
 
         bool CastsNear(MinMaxAABB nb, float floor)
         {
+            if (OldCasters) return math.length(math.max(0, math.max(nb.Min - Eye, Eye - nb.Max))) < Reach;
             float run = (nb.Max.y - math.min(floor, nb.Min.y)) / TanE;
             int steps = (int)math.clamp(math.ceil(run / math.max(math.cmin((nb.Max - nb.Min).xz), 1e-3f)), 1, 16);
             for (int k = 0; k <= steps; k++)
@@ -1115,6 +1116,16 @@ namespace Stabby.Game
         }
     }
 
+    static class BenchSwitch
+    {
+#if UNITY_EDITOR
+        public static readonly bool NoShelf = System.Environment.GetEnvironmentVariable("STABBY_BENCH_NOSHELF") == "1";
+        public static readonly bool OldCasters = System.Environment.GetEnvironmentVariable("STABBY_BENCH_OLDCASTERS") == "1";
+#else
+        public const bool NoShelf = false, OldCasters = false;
+#endif
+    }
+
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     [CreateAfter(typeof(ClientMapSystem))]
@@ -1123,7 +1134,7 @@ namespace Stabby.Game
         TerrainViewDef quads = new TerrainViewDef();
         const int LakeCells = 32;
         const int LakeBatch = 256;
-        const float SunkClarities = 10f;
+        static readonly float SunkClarities = BenchSwitch.NoShelf ? 1f : 10f;
         public int ApplyVertices = 300000;
         public float ApplyMs = 4f;
         public bool SmoothOnly;
@@ -2042,7 +2053,7 @@ namespace Stabby.Game
             var job = new TerrainNodesJob
             {
                 Tree = tree, Nodes = nodes, Drawn = drawNext, Split = split, Fine = fine, Seen = drawnSeen, Writes = nodeWrites, Evicts = nodeEvicts, Stats = nodeStats,
-                Map = ShadowViewSystem.Map, Eye = eye, Upsun = upsun, Reach = reach, TanE = tanE, Allowed = allowed, Quality = viewQuality, HideSunk = HideSunk,
+                Map = ShadowViewSystem.Map, Eye = eye, Upsun = upsun, Reach = reach, TanE = tanE, Allowed = allowed, Quality = viewQuality, HideSunk = HideSunk, OldCasters = BenchSwitch.OldCasters,
             };
             Expect(job);
             nodesHandle = job.Schedule(walked);
