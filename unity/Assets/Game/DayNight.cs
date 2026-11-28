@@ -67,7 +67,7 @@ namespace Stabby.Game
                 Loaded = sky;
                 load = null;
                 var shader = Shader.Find("Stabby/Sky");
-                if (shader != null) { skyMaterial = new Material(shader) { hideFlags = HideFlags.DontSave }; RenderSettings.skybox = skyMaterial; }
+                if (shader != null) { skyMaterial = new Material(shader) { hideFlags = HideFlags.DontSave }; RenderSettings.skybox = skyMaterial; CloudMap.Enable(); }
             }
             Scrub();
             var pin = Shader.GetGlobalVector(TimePinId);
@@ -143,6 +143,7 @@ namespace Stabby.Game
         {
             if (sky != null && GameStatus.Live.Remove("sky")) GameStatus.Lines["sky"] = Status();
             if (Loaded == sky) Loaded = null;
+            CloudMap.Disable();
         }
 
         void Scrub()
