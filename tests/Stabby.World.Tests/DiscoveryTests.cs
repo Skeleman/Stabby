@@ -319,6 +319,28 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void LodestonesCrownDryHighGround()
+    {
+        int ld = Objects.Objects.FindIndex(o => o.Id == "lodestone");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == ld).ToArray();
+        output.WriteLine($"{found.Length} lodestones " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:fit {field.LodestoneFit(c.X, c.Z):F2}")));
+        Assert.NotEmpty(found);
+        foreach (var c in found)
+        {
+            Assert.True(field.Woods(c.X, c.Z) <= ObjectField.LodeWoods);
+            Assert.Null(field.LodestoneFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            var l = Structures.Layout(ObjectPart.Lodestone, ObjectMeshes.Key("lodestone", 0, c.Variant));
+            Assert.NotEmpty(l.Contacts);
+            Assert.InRange(l.Columns.Max(k => k.Top) * c.Size, 2.5f, 6f);
+            foreach (var o in all.Where(o => o.Def != ld))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void BrinePoolsHoldTintedWaterOnDryBasinFloors()
     {
         int bp = Objects.Objects.FindIndex(o => o.Id == "brine-pools");

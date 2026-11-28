@@ -201,7 +201,8 @@
           "glow": { "type": "number", "minimum": 0, "maximum": 1 },
           "translucency": { "type": "number", "minimum": 0, "maximum": 1 },
           "glowPattern": { "enum": ["facet", "cap"] },
-          "keepHue": { "type": "boolean" }
+          "keepHue": { "type": "boolean" },
+          "rust": { "type": "boolean" }
         }
       }
     },
