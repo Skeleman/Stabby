@@ -23,7 +23,9 @@ public class ChunkTests
     [Fact]
     public void SameSeedSameChecksums()
     {
-        Assert.Equal(WorldChunks.Checksums(Gen(42)), WorldChunks.Checksums(Gen(42)));
+        var sums = new ulong[2][];
+        System.Threading.Tasks.Parallel.For(0, 2, k => sums[k] = WorldChunks.Checksums(Gen(42)));
+        Assert.Equal(sums[0], sums[1]);
     }
 
     [Fact]

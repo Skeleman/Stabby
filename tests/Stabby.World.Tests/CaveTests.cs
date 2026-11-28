@@ -33,11 +33,12 @@ public class CaveTests
 
     static readonly Lazy<Sample> Gem = new(() =>
     {
-        var lib = Gems();
-        for (ulong seed = 1; seed <= 8; seed++)
+        for (ulong first = 1; first <= 8; first += 4)
         {
-            var s = Make(seed, lib);
-            if (s.Edits.Any(x => x.Shape == FeatureEdit.CrystalCell)) return s;
+            var batch = new Sample[4];
+            Parallel.For(0, 4, k => batch[k] = Make(first + (ulong)k, Gems()));
+            var hit = batch.FirstOrDefault(s => s.Edits.Any(x => x.Shape == FeatureEdit.CrystalCell));
+            if (hit != null) return hit;
         }
         throw new Xunit.Sdk.XunitException("no crystal cell in seeds 1..8");
     });
@@ -235,7 +236,7 @@ public class CaveTests
         float span = field.ChunkMeters;
         int across = field.ChunksAcross;
         var seen = new HashSet<int>();
-        var found = new List<ObjectInstance>();
+        var order = new List<int>();
         foreach (var x in s.Edits)
         {
             if (!x.CaveCarve) continue;
@@ -243,10 +244,13 @@ public class CaveTests
             {
                 float px = x.Ax + (x.Bx - x.Ax) * t, pz = x.Az + (x.Bz - x.Az) * t;
                 int c = Math.Min(across - 1, Math.Max(0, (int)(pz / span))) * across + Math.Min(across - 1, Math.Max(0, (int)(px / span)));
-                if (!seen.Add(c)) continue;
-                foreach (var o in field.Chunk(c % across, c / across)) if (ObjectField.IsCave(s.W.Objects.Objects[o.Def])) found.Add(o);
+                if (seen.Add(c)) order.Add(c);
             }
         }
+        var chunks = new ObjectInstance[order.Count][];
+        Parallel.For(0, order.Count, k => chunks[k] = field.Chunk(order[k] % across, order[k] / across));
+        var found = new List<ObjectInstance>();
+        foreach (var chunk in chunks) foreach (var o in chunk) if (ObjectField.IsCave(s.W.Objects.Objects[o.Def])) found.Add(o);
         return found;
     }
 
@@ -675,12 +679,12 @@ public class CaveTests
     }
 
     [Fact]
-    public void CrystalCavesCarveFacetedCellsLinedWithCrystals()
+    public async Task CrystalCavesCarveFacetedCellsLinedWithCrystals()
     {
         var s = Gem.Value;
         var cells = s.Edits.Where(x => x.Kind == FeatureEdit.Carve && x.Shape == FeatureEdit.CrystalCell).ToArray();
         Assert.NotEmpty(cells);
-        Assert.Empty(Check(s, s.Edits, s.Graphs));
+        var problems = Task.Run(() => Check(s, s.Edits, s.Graphs));
         var field = s.Field;
         int floor = 0, wall = 0, ceiling = 0;
         var contacts = new List<ObjectColumn>();
@@ -692,6 +696,7 @@ public class CaveTests
             string fault = field.CaveFault(o) ?? field.ContactFault(o, contacts);
             Assert.True(fault == null, fault);
         }
+        Assert.Empty(await problems);
         Assert.True(floor > 0 && wall > 0 && ceiling > 0, $"crystals: {floor} floor, {wall} wall, {ceiling} ceiling");
         Assert.Contains(s.Graphs, x => x.Crystal);
     }
