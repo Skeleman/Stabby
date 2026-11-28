@@ -530,7 +530,10 @@
     },
     {
       "id": "ancient-tree", "name": "Ancient tree", "kind": "structure", "material": "dark-bark", "variants": 6,
-      "parts": [ { "id": "site", "shape": "ancient-tree" } ],
+      "parts": [
+        { "id": "site", "shape": "ancient-tree", "scale": [1.4, 1.4, 1.4] },
+        { "id": "crown", "shape": "broadleaf", "scale": [1.9, 1.4, 1.9], "solid": "off", "leafMaterial": "oak-leaf" }
+      ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain"], "perHectare": 0, "discovery": "ancient-tree", "spacingM": 1000, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
     }
   ],
