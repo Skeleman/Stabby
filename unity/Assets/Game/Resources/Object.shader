@@ -663,7 +663,7 @@ Shader "Stabby/Object"
                 else if (base.a < 0.5 && i.tone.x > 1.75) albedo = Built(i.tone, gn, qo, n, fp, th, normalize(_WorldSpaceCameraPos - wp), wp, occ);
                 else if (base.a < 0.5)
                 {
-                    float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).a;
+                    float off = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, TmBiomeUV(wp.xz, _StabbyFieldUV), 0).a;
                     float period = max(_StabbyStrataPeriod, 1);
                     int3 cell = int3(floor(i.origin * 4.1));
                     float h1 = OrgHash(cell), h2 = OrgHash(cell + int3(7, 3, 5));
@@ -737,7 +737,7 @@ Shader "Stabby/Object"
                 else
                 {
                     float3 gw = _StabbyGround.rgb;
-                    [branch] if (_StabbyFieldUV.z > 0) gw = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
+                    [branch] if (_StabbyFieldUV.z > 0) gw = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, TmBiomeUV(wp.xz, _StabbyFieldUV), 0).rgb);
                     Wood(i.local, n, normalize(i.axisWS), base.rgb, base.a < 1.5, i.tone, fp, wp, gw, albedo, n);
                 }
                 float size = max(abs(fade.w), 0.1), ground = fade.z, surface = 0, bedHere = 0;
@@ -764,7 +764,7 @@ Shader "Stabby/Object"
                 float3 bounce = _StabbyGround.rgb;
                 [branch] if (_StabbyFieldUV.z > 0)
                 {
-                    float3 gc = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, wp.xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
+                    float3 gc = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, TmBiomeUV(wp.xz, _StabbyFieldUV), 0).rgb);
                     gc = lerp(gc, ToLinear(_StabbySand.rgb), smoothstep(6, 2, fade.z));
                     [branch] if (_StabbyFieldUV.x > 0) gc = BounceGround(gc, wp.xz, fade.z);
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);

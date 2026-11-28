@@ -22,6 +22,35 @@ static float4 tmShore;
 
 struct TmOut { float3 albedo; float3 grad; };
 
+float TmBorderLattice(int x, int z, uint salt)
+{
+    uint h = ((uint)x * 0x8da6b343u) ^ ((uint)z * 0xd8163841u) ^ salt;
+    h ^= h >> 16; h *= 0x7feb352du;
+    h ^= h >> 15; h *= 0x846ca68bu;
+    h ^= h >> 16;
+    return (h >> 8) * (2.0 / 16777216.0) - 1;
+}
+
+float TmBorderValue(float2 p, uint salt)
+{
+    float2 f = floor(p), t = p - f;
+    int2 i = (int2)f;
+    t = t * t * (3 - 2 * t);
+    float lo = lerp(TmBorderLattice(i.x, i.y, salt), TmBorderLattice(i.x + 1, i.y, salt), t.x);
+    float hi = lerp(TmBorderLattice(i.x, i.y + 1, salt), TmBorderLattice(i.x + 1, i.y + 1, salt), t.x);
+    return lerp(lo, hi, t.y);
+}
+
+float2 TmBorderUV(float2 xz, float scale, float offset)
+{
+    float2 p = xz * (scale / max(2 * offset, 1e-9)) * (1.0 / 2.5);
+    return xz * scale + offset + 2 * offset * 0.3 * float2(TmBorderValue(p, 0x2f6bu), TmBorderValue(p, 0x9c41u));
+}
+
+float2 TmBiomeUV(float2 xz, float4 fieldUV) { return TmBorderUV(xz, fieldUV.z, fieldUV.w); }
+
+float2 TmCoatUV(float2 xz) { return TmBorderUV(xz, _StabbyCoatUV.x, _StabbyCoatUV.y); }
+
 float TmGroove(float x, float width, out float slope)
 {
     float c = min(x, 1 - x), t = saturate(c / width);
@@ -325,7 +354,7 @@ float TmChroma(float3 c)
 
 float4 TmCoatAt(float2 wa, float fp, int octaves)
 {
-    float2 cq = wa * _StabbyCoatUV.x + _StabbyCoatUV.y, cd = 40 * _StabbyCoatUV.x;
+    float2 cq = TmCoatUV(wa), cd = 40 * _StabbyCoatUV.x;
     float4 cw = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq, 0);
     float near = cw.w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + cd, 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq - cd, 0).w
         + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(cd.x, -cd.y), 0).w + SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + float2(-cd.x, cd.y), 0).w;
@@ -336,7 +365,7 @@ float4 TmCoatAt(float2 wa, float fp, int octaves)
         float2 sw = 0.3 / f6 * OrgLN2(wa, f6, 61.7, 1).yz;
         if (octaves > 1) sw += 0.3 / f5 * OrgFade(f5, fp) * OrgLN2(wa, f5, 63.9, 1).yz;
         if (octaves > 2) sw += 0.3 / f4 * OrgFade(f4, fp) * OrgLN2(wa, f4, 67.1, 1).yz;
-        cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, (wa + sw) * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+        cs = SAMPLE_TEXTURE2D_LOD(_StabbyCoat, sampler_StabbyCoat, cq + sw * _StabbyCoatUV.x, 0);
     }
     return lerp(cw, cs, saturate(4 * (cw.w + cs.w)));
 }
@@ -834,7 +863,7 @@ TmOut TmEvaluate(float3 wp, float3 n, float3 coatColor, float off, float rockMix
     float br = 0.12 * fj * jn.x + 0.35 * fk * jk.x;
     [branch] if (cw.w > 0) br += cw.w * (0.3 * OrgLN2(wa, f6, 71.3, 1).x + 0.25 * OrgFade(f5, fp) * OrgLN2(wa, f5, 73.9, 1).x + 0.2 * OrgFade(f4, fp) * OrgLN2(wa, f4, 77.1, 1).x);
     float sl = n.y;
-    float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, wa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+    float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, TmCoatUV(wa), 0);
     float2 fl2 = saturate(cw.x + cw.y) * TmFloorCover(wp.xz, fo, fp);
     float fb = fl2.y * (1 - stone);
     float bf = br * (1 - 0.85 * fb);

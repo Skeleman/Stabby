@@ -1889,7 +1889,8 @@ namespace Stabby.Game
         {
             ref var look = ref lk.Value;
             int n = look.N;
-            float top = n - 1, gx = math.clamp(x / cm, 0, top), gy = math.clamp(z / cm, 0, top);
+            BiomeBorder.Warp(x / cm, z / cm, out float wx, out float wz);
+            float top = n - 1, gx = math.clamp(x / cm + wx, 0, top), gy = math.clamp(z / cm + wz, 0, top);
             int ax = math.min((int)gx, n - 2), ay = math.min((int)gy, n - 2), a = ay * n + ax;
             var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), h, 1);
             return new Vector3(col.x, col.y, col.z);

@@ -105,7 +105,11 @@ namespace Stabby.World
                         if (pit > 0) Fail(12, $" root pit floats {pit:F2} m past its skirt");
                     }
                     var biomes = def.Placement.Biomes;
-                    if (!seen[6] && biomes.Count > 0 && (w.Biome[i] < 0 || !biomes.Contains(w.BiomeIds[w.Biome[i]]))) Fail(6, " is outside its biomes");
+                    if (!seen[6] && biomes.Count > 0)
+                    {
+                        int ob = BiomeBorder.At(w, o.X, o.Z);
+                        if (ob < 0 || !biomes.Contains(w.BiomeIds[ob])) Fail(6, " is outside its biomes");
+                    }
                 }
                 if (!seen[10])
                 {
