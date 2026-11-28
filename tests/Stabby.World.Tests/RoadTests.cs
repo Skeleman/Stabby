@@ -58,6 +58,21 @@ public class RoadTests
     }
 
     [Fact]
+    public void StairSegmentsNeverExceedTheStairGrade()
+    {
+        var (_, _, _, field) = TestWorlds.Get(12);
+        var stairs = field.Roads().Where(s => s.Kind == RoadSegment.Stairs).ToArray();
+        Assert.NotEmpty(stairs);
+        foreach (var s in stairs)
+        {
+            Assert.True(ObjectField.IsTrail(s));
+            Assert.Null(field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out bool ford, ObjectField.StairGrade));
+            Assert.False(ford);
+            Assert.NotNull(field.RoadFault(s.X0, s.Z0, s.X1, s.Z1, out _, ObjectField.TrailGrade));
+        }
+    }
+
+    [Fact]
     public void RoadTunnelsOnSeed2At1024AreWalkableAndMeetTheirRoads()
     {
         var (w, detail, _, _) = TestWorlds.Get(2, 1024);

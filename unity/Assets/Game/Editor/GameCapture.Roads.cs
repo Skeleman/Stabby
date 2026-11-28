@@ -151,6 +151,52 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "trails-climb");
         }
 
+        const float StairEyeBackM = 9f, StairEyeUp = 2.2f;
+
+        static System.Collections.IEnumerator StairsTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            ObjectField field = null;
+            Ground ground = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var f = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                var q = f == null ? default : w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (f == null || q.CalculateEntityCount() != 1) continue;
+                field = f;
+                ground = q.GetSingleton<Ground>();
+                break;
+            }
+            if (field == null) { GameStatus.Lines["~stairs"] = GameStatus.Failure = "stairs: no object field"; yield break; }
+            var job = System.Threading.Tasks.Task.Run(() => field.Roads());
+            while (!job.IsCompleted) yield return null;
+            if (job.IsFaulted) { GameStatus.Lines["~stairs"] = GameStatus.Failure = "stairs: " + job.Exception; yield break; }
+            var stairs = job.Result.Where(s => s.Kind == RoadSegment.Stairs).ToArray();
+            if (stairs.Length == 0) { GameStatus.Lines["~stairs"] = GameStatus.Failure = "stairs: none in this world"; yield break; }
+            var pick = stairs.OrderByDescending(s => Mathf.Abs(ground.HeightAt(s.X1, s.Z1) - ground.HeightAt(s.X0, s.Z0))).First();
+            var a = new Vector3(pick.X0, ground.HeightAt(pick.X0, pick.Z0), pick.Z0);
+            var b = new Vector3(pick.X1, ground.HeightAt(pick.X1, pick.Z1), pick.Z1);
+            var (low, high) = a.y < b.y ? (a, b) : (b, a);
+            var run = new Vector3(high.x - low.x, 0, high.z - low.z).normalized;
+            var eye = low - run * StairEyeBackM;
+            eye.y = ground.HeightAt(eye.x, eye.z) + StairEyeUp;
+            var look = Vector3.Lerp(low, high, 0.5f) + Vector3.up * 0.3f;
+            for (int i = 1; i < 16; i++)
+            {
+                var p = Vector3.Lerp(eye, look, i / 16f);
+                float clear = ground.HeightAt(p.x, p.z) + 0.8f - p.y;
+                if (clear > 0) eye.y += clear * 16f / (16 - i);
+            }
+            cam.fieldOfView = 55f;
+            for (var w = ShowHour(RoadShotHour, RoadShotMoon); w.MoveNext();) yield return null;
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+            for (var w = Settle(180); w.MoveNext();) yield return null;
+            float m = stairs.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude);
+            GameStatus.Lines["~stairs"] = $"stairs: {stairs.Length} segments, {m:F0} m, GV {WorldConfig.GeneratorVersion}; shot climbs {high.y - low.y:F1} m over {new Vector2(high.x - low.x, high.z - low.z).magnitude:F1} m at {low.x:F0},{low.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}";
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "trails-stairs");
+        }
+
         static Vector3 Chain(RoadSegment[] trails, Vector3 head, Ground ground, float stopM, out Vector3 stop)
         {
             var used = new bool[trails.Length];

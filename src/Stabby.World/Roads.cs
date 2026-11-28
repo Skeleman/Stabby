@@ -6,7 +6,7 @@ namespace Stabby.World
 {
     public struct RoadSegment
     {
-        public const int Dirt = 0, Ford = 1, Lane = 2, Tunnel = 3, Bridge = 4;
+        public const int Dirt = 0, Ford = 1, Lane = 2, Tunnel = 3, Bridge = 4, Stairs = 5;
         public float X0, Z0, X1, Z1, HalfWidth;
         public int Kind;
 
@@ -17,7 +17,7 @@ namespace Stabby.World
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
         public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
-        public const float TrailHalfM = 1.2f, TrailGrade = 0.7f, TrailReachM = 2000f, TrailMineReachM = 9000f, TrailMouthM = 40f;
+        public const float TrailHalfM = 1.2f, TrailGrade = 0.7f, StairGrade = 1.1f, StairCost = 3f, TrailReachM = 2000f, TrailMineReachM = 9000f, TrailMouthM = 40f;
         const int TrailMineTries = 4, TrailMineTargets = 48, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;
@@ -44,7 +44,7 @@ namespace Stabby.World
 
         public static bool IsTunnel(CaveGraph g) => g.Class == TunnelClass;
 
-        public static bool IsTrail(RoadSegment s) => (s.Kind == RoadSegment.Dirt || s.Kind == RoadSegment.Ford) && s.HalfWidth < RoadHalfM;
+        public static bool IsTrail(RoadSegment s) => s.Kind == RoadSegment.Stairs || ((s.Kind == RoadSegment.Dirt || s.Kind == RoadSegment.Ford) && s.HalfWidth < RoadHalfM);
 
         public static bool TrailLandmark(int kind) => kind == Ruin || kind == Monument || kind == Overlook || kind == Hilltop || kind == Hermit || kind == Dungeon || kind == SaltTower;
 
@@ -365,8 +365,10 @@ namespace Stabby.World
         void AddRun(float x0, float z0, float x1, float z1, List<RoadSegment> list, float half = RoadHalfM)
         {
             if ((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0) < 1e-6f) return;
-            RoadFault(x0, z0, x1, z1, out bool ford);
-            list.Add(new RoadSegment { X0 = x0, Z0 = z0, X1 = x1, Z1 = z1, HalfWidth = half, Kind = ford ? RoadSegment.Ford : RoadSegment.Dirt });
+            string f = RoadFault(x0, z0, x1, z1, out bool ford);
+            int kind = ford ? RoadSegment.Ford : RoadSegment.Dirt;
+            if (f != null && stair > 0 && RoadFault(x0, z0, x1, z1, out bool wet, stair) == null && !wet) kind = RoadSegment.Stairs;
+            list.Add(new RoadSegment { X0 = x0, Z0 = z0, X1 = x1, Z1 = z1, HalfWidth = half, Kind = kind });
         }
 
         void Trails(TownPlan[] plans, List<RoadSegment> list)
@@ -384,6 +386,7 @@ namespace Stabby.World
             finally { drafting.Value = false; }
             TrailBlockers(found);
             grade = TrailGrade;
+            stair = StairGrade;
             stepBlocks = null;
             foreach (var (mx, mz, ux, uz) in MineMouths())
             {
@@ -415,7 +418,7 @@ namespace Stabby.World
                 float ux = (tx - o.X) / dist, uz = (tz - o.Z) / dist, r = TrailHeadM(o);
                 Trail(o.X + ux * r, o.Z + uz * r, o.X + ux * (r + 2 * cm), o.Z + uz * (r + 2 * cm), TrailReachM, plans, net, list);
             }
-            trailEdits = null; trailSites = null; trailCells = null; grade = RoadGrade;
+            trailEdits = null; trailSites = null; trailCells = null; grade = RoadGrade; stair = 0;
         }
 
         public float TrailHeadM(ObjectInstance o) => TrailClearM(o) + RoadClearM;
@@ -468,7 +471,7 @@ namespace Stabby.World
             return picked;
         }
 
-        float grade = RoadGrade;
+        float grade = RoadGrade, stair;
         bool Trail(float sx, float sz, float ax, float az, float reach, TownPlan[] plans, RoadSegment[] net, List<RoadSegment> list)
         {
             if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return false;
@@ -653,7 +656,7 @@ namespace Stabby.World
             return null;
         }
 
-        string KnightFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford)
+        string KnightFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford, float most)
         {
             ford = false;
             float dx = x1 - x0, dz = z1 - z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
@@ -663,7 +666,7 @@ namespace Stabby.World
             {
                 float tb = (float)(k + 1) / pieces, xb = x0 + dx * tb, zb = z0 + dz * tb;
                 float hb = xb == x1 && zb == z1 ? h1 : GroundAt(detail, cm, xb, zb);
-                string f = StepFault(xa, za, xb, zb, ha, hb, out bool wet);
+                string f = StepFault(xa, za, xb, zb, ha, hb, out bool wet, most);
                 if (f != null) return f;
                 ford |= wet;
                 xa = xb; za = zb; ha = hb;
@@ -929,25 +932,28 @@ namespace Stabby.World
                         float ha = Lattice(2 * cx, 2 * cz), hb = Lattice(2 * nx, 2 * nz), rise = Math.Abs(hb - ha);
                         if (tunnels && ad < 3 && hb > ha && rise > TunnelRise * RoadGrade * len) Jump(cur, cx, cz, dx, dz, ha);
                         bool spanable = bridges && ad < 3;
-                        if (rise > grade * len) { if (spanable && WideAhead(cx, cz, dx, dz)) Span(cur, cx, cz, dx, dz); continue; }
+                        bool steep = rise > grade * len;
+                        if (steep && rise > stair * len) { if (spanable && WideAhead(cx, cz, dx, dz)) Span(cur, cx, cz, dx, dz); continue; }
+                        float most = steep ? stair : 0;
                         bool ford;
                         string why;
                         ref byte seen = ref StepSeen(cx, cz, (dz + 2) * 5 + dx + 2);
                         if (seen != 0) { why = seen == 3 ? "" : null; ford = seen == 2; }
-                        else if (ad == 3) why = KnightFault(ax, az, bx, bz, ha, hb, out ford);
+                        else if (ad == 3) why = KnightFault(ax, az, bx, bz, ha, hb, out ford, most);
                         else if (dx != 0 && dz != 0)
                         {
                             float hm = Lattice(2 * cx + dx, 2 * cz + dz), mx = (cx + 0.5f * dx) * cm, mz = (cz + 0.5f * dz) * cm;
-                            why = StepFault(ax, az, mx, mz, ha, hm, out bool f0);
+                            why = StepFault(ax, az, mx, mz, ha, hm, out bool f0, most);
                             bool f1 = false;
-                            if (why == null) why = StepFault(mx, mz, bx, bz, hm, hb, out f1);
+                            if (why == null) why = StepFault(mx, mz, bx, bz, hm, hb, out f1, most);
                             ford = why == null && (f0 || f1);
                         }
-                        else why = StepFault(ax, az, bx, bz, ha, hb, out ford);
+                        else why = StepFault(ax, az, bx, bz, ha, hb, out ford, most);
+                        if (why == null && steep && ford) why = "fords on stairs";
                         seen = why != null ? (byte)3 : ford ? (byte)2 : (byte)1;
                         if (why != null) { if (spanable && WideAhead(cx, cz, dx, dz)) Span(cur, cx, cz, dx, dz); continue; }
                         float slope = rise / len;
-                        float c = cost[cur] + len * (1 + RoadClimb * slope) * (ford ? FordCost : 1f);
+                        float c = cost[cur] + len * (1 + RoadClimb * slope) * (ford ? FordCost : 1f) * (steep ? StairCost : 1f);
                         if (c >= cost[j]) continue;
                         cost[j] = c; from[j] = cur; tun[j] = 0;
                         HeapPush(heap, (c + H(nx, nz), j));
@@ -1023,8 +1029,14 @@ namespace Stabby.World
                 sx.Add(0.25f * px[k] + 0.75f * px[k + 1]); sz.Add(0.25f * pz[k] + 0.75f * pz[k + 1]);
             }
             sx.Add(px[px.Count - 1]); sz.Add(pz[pz.Count - 1]);
+            int last = px.Count - 2;
+            var steep = new bool[last + 1];
+            if (stair > 0) for (int k = 0; k <= last; k++) steep[k] = RoadFault(px[k], pz[k], px[k + 1], pz[k + 1], out _) != null;
             for (int k = 0; k + 1 < sx.Count; k++)
-                if (RoadFault(sx[k], sz[k], sx[k + 1], sz[k + 1], out _) != null) return;
+            {
+                bool up = steep[Math.Max(0, (k - 1) / 2)] || steep[Math.Min(last, k / 2)];
+                if (RoadFault(sx[k], sz[k], sx[k + 1], sz[k + 1], out bool ford, up ? stair : 0) != null || (up && ford)) return;
+            }
             px.Clear(); px.AddRange(sx); pz.Clear(); pz.AddRange(sz);
         }
 

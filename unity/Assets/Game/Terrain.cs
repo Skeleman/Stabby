@@ -576,19 +576,24 @@ namespace Stabby.Game
             return g;
         }
 
-        const float RoadFadeM = 0.8f, RoadUp = 0.6f;
+        const float RoadFadeM = 0.8f, RoadUp = 0.6f, StairUp = 0.4f;
 
-        static float Road(NativeList<RoadSegment> roads, float3 p, float up)
+        static float Road(NativeList<RoadSegment> roads, float3 p, float up, out bool stairs)
         {
-            if (roads.Length == 0 || up < RoadUp) return 0;
-            float road = 0, edge = RoadFadeM * (0.5f + 0.5f * noise.snoise(new float2(p.x, p.z) * 0.35f));
+            stairs = false;
+            if (roads.Length == 0 || up < StairUp) return 0;
+            float road = 0, stair = 0, edge = RoadFadeM * (0.5f + 0.5f * noise.snoise(new float2(p.x, p.z) * 0.35f));
             for (int q = 0; q < roads.Length; q++)
             {
                 var s = roads[q];
-                float d = s.Distance(p.x, p.z) - s.HalfWidth + edge;
-                road = math.max(road, 1 - math.smoothstep(-RoadFadeM, RoadFadeM, d));
+                float d = s.Distance(p.x, p.z) - s.HalfWidth + edge, w = 1 - math.smoothstep(-RoadFadeM, RoadFadeM, d);
+                if (s.Kind == RoadSegment.Stairs) stair = math.max(stair, w);
+                else road = math.max(road, w);
             }
-            return road * math.smoothstep(RoadUp, RoadUp + 0.15f, up);
+            road *= math.smoothstep(RoadUp, RoadUp + 0.15f, up);
+            stair *= math.smoothstep(StairUp, StairUp + 0.15f, up);
+            stairs = stair > road;
+            return math.max(road, stair);
         }
 
         static float Ice(NativeEdits edits, NativeList<float2> light, float3 p, float cover, bool glass)
@@ -735,8 +740,9 @@ namespace Stabby.Game
                 var col = TerrainLook.Shade(TerrainLook.Bilinear(look.Colors[a], look.Colors[a + 1], look.Colors[a + n], look.Colors[a + n + 1], gx - ax, gy - ay), p.Pos.y, p.Normal.y);
                 float cover = Cover(edits, columns, p.Pos, out float stone, out float boulderBase, out bool boulder), lift = Lift(cover) * (1 - Sand(edits, p.Pos));
                 p.Color = new float4(col.xyz, 1 - 0.55f * math.smoothstep(6f, 45f, cover) + stone);
-                float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y);
-                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, math.max(lift, stone)), cover, road > 0.01f ? -1 - road : Sinter(edits, crusts, p.Pos));
+                bool stairs = false;
+                float road = cover > 0.5f ? 0 : Road(roads, p.Pos, p.Normal.y, out stairs);
+                p.Strata = new float4(off + stone * (boulderBase - p.Pos.y), math.max(col.w, math.max(lift, stone)), cover, road > 0.01f ? (stairs ? -3 : -1) - road : Sinter(edits, crusts, p.Pos));
                 float peat = Peat(edits, p.Pos), ice = peat > 0 ? 0 : Ice(edits, light, p.Pos, cover, false), glass = peat > 0 || ice > 0.01f ? 0 : Ice(edits, light, p.Pos, cover, true), coat = math.max(ice, glass);
                 float green = peat > 0 || coat > 0.01f ? 0 : Fertile(fertile, p.Pos);
                 p.Stitch.w = math.floor(p.Stitch.w) + (boulder ? TerrainTree.BoulderBit : 0) + (glass > 0.01f || green > 0.01f ? TerrainTree.GlassBit : 0) + (coat > 0.01f ? 0.51f + 0.489f * coat : green > 0.01f ? 0.5f * green : 0.5f * peat);
