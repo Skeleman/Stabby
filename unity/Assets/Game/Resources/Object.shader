@@ -330,7 +330,7 @@ Shader "Stabby/Object"
             float3 AgateBand(float id, float seed)
             {
                 float h = frac(sin(id * 12.9898 + seed * 78.233) * 43758.5453);
-                return h < 0.3 ? _StabbyKit[43].rgb : h < 0.55 ? _StabbyKit[44].rgb : h < 0.78 ? _StabbyKit[45].rgb : _StabbyKit[46].rgb;
+                return h < 0.32 ? _StabbyKit[44].rgb : h < 0.6 ? _StabbyKit[43].rgb : h < 0.88 ? _StabbyKit[46].rgb : _StabbyKit[45].rgb;
             }
 
             float3 Built(float4 tone, float3 g, float3 q, inout float3 n, float fp, float4 th, float3 v, float3 wp, out float occ)
@@ -536,20 +536,20 @@ Shader "Stabby/Object"
                 }
                 else if (mat == 12)
                 {
-                    bool cut = cap && frac(th.w * 5.37) > 0.3;
-                    float wv = 0.07 * big.x + 0.035 * mid.x * fm + 0.01 * fib.x * ff;
-                    float rr = (cut ? rf : 0.5 + 0.35 * big.x + 0.2 * mid.x) + wv, bands = rr * 6.5;
+                    float hsh = frac(th.w * 5.37);
+                    bool cut = cap && hsh > 0.72, gem = cut || (!cap && hsh > 0.62);
+                    float wv = 0.14 * big.x + 0.06 * mid.x * fm + 0.015 * fib.x * ff;
+                    float rr = (cut ? rf : 0.5 + 0.35 * big.x + 0.2 * mid.x) + wv, bands = rr * 4.5;
                     float id = floor(bands), t = frac(bands);
-                    a = lerp(AgateBand(id, th.w), AgateBand(id + 1, th.w), smoothstep(0.62, 0.98, t + 0.1 * fib.x * ff));
-                    float ring = 0.5 + 0.5 * cos((rf + wv) * rm / 0.024 * 6.2831853), keep = OrgRungW(3, fp);
-                    a *= (1 - 0.14 * ring * keep * (cut ? 1 : 0)) * (0.92 + 0.08 * fib.x * ff);
-                    a = lerp(a, _StabbyKit[46].rgb, 0.5 * smoothstep(0.16, 0.04, rf + 0.03 * mid.x) * (cut ? 1 : 0));
-                    float bark = cut ? smoothstep(0.9, 0.97, rf + 0.03 * fib.x * ff) : 0;
-                    a = lerp(a, _StabbyKit[42].rgb * 0.85, bark);
+                    float3 ag = lerp(AgateBand(id, th.w), AgateBand(id + 1, th.w), smoothstep(0.55, 0.98, t + 0.15 * mid.x * fm + 0.1 * fib.x * ff));
+                    ag = lerp(ag, _StabbyKit[46].rgb, 0.4 * smoothstep(0.16, 0.04, rf + 0.05 * mid.x) * (cut ? 1 : 0));
+                    float bark = cut ? smoothstep(0.88, 0.97, rf + 0.05 * mid.x * fm) : 0;
+                    float3 rough = _StabbyKit[42].rgb * (0.72 + 0.3 * big.x + 0.12 * mid.x * fm);
+                    rough = lerp(rough, lerp(_StabbyKit[44].rgb, _StabbyKit[43].rgb, 0.5 + 0.5 * big.x), 0.22 * smoothstep(0.2, 0.8, mid.x * fm + 0.5 * big.x));
+                    a = gem ? lerp(ag, _StabbyKit[42].rgb * 0.85, bark) : rough;
                     float chk = smoothstep(0.92, 0.985, 1 - abs(str.x + 0.3 * mid.x)) * fs * (1 - bark);
-                    a *= 1 - 0.55 * chk;
-                    a *= cut ? 1 : 0.82 + 0.12 * big.x;
-                    grad = (cut ? 0.015 : 0.12) * mid.yzw * fm + (cut ? 0.012 : 0.08) * fib.yzw * ff + 0.05 * str.yzw * fs * chk;
+                    a *= (1 - 0.55 * chk) * (0.92 + 0.08 * fib.x * ff);
+                    grad = (gem ? 0.03 : 0.2) * mid.yzw * fm + (gem ? 0.02 : 0.12) * fib.yzw * ff + 0.05 * str.yzw * fs * chk;
                     shade = 0.5 * chk;
                 }
                 else if (mat == 1 && th.x > 2.5 && th.x < 3.5)
@@ -715,7 +715,7 @@ Shader "Stabby/Object"
                     [unroll] for (int k = 1; k < 6; k++) mean += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(u0 + k * 0.1667, 0.5), 0).rgb;
                     mean = (mean + band) * 0.1667;
                     float3 pull = lerp(1, clamp((mean + 0.02) / (band + 0.02), 0.6, 1.6), 0.6);
-                    bool own = base.a > 0.006, keep = base.a > 0.016;
+                    bool own = base.a > 0.006, keep = base.a > 0.016, rust = base.a > 0.0205;
                     float2 dux = float2(ddx(u0), 0), duy = float2(ddy(u0), 0);
                     [branch] if (_StabbyDetailOff > 0)
                         albedo = own ? 1 : SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
@@ -757,6 +757,18 @@ Shader "Stabby/Object"
                             g -= n * dot(g, n);
                             n = normalize(n - g);
                             albedo = m.albedo * dark;
+                            [branch] if (rust)
+                            {
+                                float3 rp = wp - orgO;
+                                float4 sn = OrgNoise3(float3(rp.x * 1.7, rp.y * 0.22, rp.z * 1.7) + 31.3, int3(0, 0, 0));
+                                float4 fn = OrgRP3(rp, OrgF(1), 41.7, 1);
+                                float4 bn = OrgNoise3(rp * 0.45 + 63.1, int3(0, 0, 0));
+                                float side = 1 - smoothstep(0.45, 0.85, abs(n.y));
+                                float streak = side * smoothstep(0.35, 0.8, sn.x + 0.35 * fn.x);
+                                float blot = smoothstep(0.35, 0.8, n.y) * smoothstep(0.3, 0.75, bn.x + 0.3 * fn.x);
+                                float3 rc = _StabbyKit[15].rgb * lerp(0.8, 1.4, saturate(0.5 + 0.5 * fn.x + 0.4 * sn.x));
+                                albedo = lerp(albedo, rc, saturate(streak + blot) * 0.3);
+                            }
                             pull = 1;
                         }
                         else

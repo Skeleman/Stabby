@@ -6,52 +6,56 @@ namespace Stabby.World
     {
         public const float PetrifiedU = 1 / 20f;
 
-        static readonly float[] PetrifiedSeats = { 0, 0, 0.2f, 0, -0.2f, 0, 0, 0.2f, 0, -0.2f, 0.14f, 0.14f, -0.14f, 0.14f, 0.14f, -0.14f, -0.14f, -0.14f, 0.32f, 0, -0.32f, 0, 0, 0.32f, 0, -0.32f };
+        static readonly float[] PetrifiedSeats = { 0, 0, 0.2f, 0, -0.2f, 0, 0, 0.2f, 0, -0.2f, 0.14f, 0.14f, -0.14f, 0.14f, 0.14f, -0.14f, -0.14f, -0.14f, 0.36f, 0, -0.36f, 0, 0, 0.36f, 0, -0.36f };
 
         static void PetrifiedForest(StructureLayout l, ulong key, in Frame root)
         {
             var rng = Rng.Stream(key, "petrified-forest");
             int d0 = rng.Range(0, 16);
             var f = root.Child(0, 0, 0, Cos16(d0), Sin16(d0));
-            int sections = rng.Range(3, 7), trunks = sections >= 5 && rng.NextFloat() < 0.6f ? 2 : 1, made = 0;
+            int trunks = rng.Range(3, 7);
+            float a0 = rng.NextFloat();
+            var lens = new float[4];
             for (int t = 0; t < trunks; t++)
             {
-                int count = t == trunks - 1 ? sections - made : rng.Range(2, sections - made - 1);
-                float d = rng.Range(0.75f, 1.25f), x = t == 0 ? rng.Range(-4.5f, -2.5f) : rng.Range(-1.5f, 1.5f), z = t == 0 ? rng.Range(-2f, 2f) : rng.Range(2.5f, 4.5f) * (rng.NextFloat() < 0.5f ? -1 : 1);
-                int dir = t == 0 ? rng.Range(-1, 2) : rng.Range(-3, 4);
-                for (int i = 0; i < count; i++)
+                Arc(a0 + (t + rng.Range(-0.3f, 0.3f)) / trunks, out float ac, out float az);
+                float rad = t == 0 ? rng.Range(0f, 2.5f) : rng.Range(5f, 11f), heading = rng.NextFloat(), d = rng.Range(0.7f, 1.25f), total = 0;
+                int segs = rng.Range(2, 5);
+                for (int i = 0; i < segs; i++) { lens[i] = rng.Range(0.7f, 1.9f); total += lens[i] + 0.2f; }
+                Arc(heading, out float hc, out float hs);
+                rad = Math.Min(rad, Math.Max(0f, 8.6f - 0.5f * total - 0.6f * d));
+                float x = rad * ac - 0.5f * total * hc, z = rad * az - 0.5f * total * hs;
+                for (int i = 0; i < segs; i++)
                 {
-                    Arc((dir + rng.Range(-0.35f, 0.35f)) / 16f, out float c, out float s);
-                    float len = rng.Range(0.8f, 2.1f), cx = x + 0.5f * len * c, cz = z + 0.5f * len * s, sz = d * rng.Range(0.9f, 1.04f);
-                    Round(l, rng.NextU64(), f, cx, -0.14f * d, cz, len, d, sz, Petrified, GX, RoundLog, 0, 2, c, s);
-                    for (float a = -0.5f * len + 0.3f; a <= 0.5f * len - 0.2f; a += 0.55f) Col(l, f, cx + a * c, cz + a * s, 0.45f * sz, 0, 0.84f * d);
+                    Arc(heading + rng.Range(-0.025f, 0.025f), out float c, out float s);
+                    float len = lens[i], cx = x + 0.5f * len * c, cz = z + 0.5f * len * s, sz = d * rng.Range(0.9f, 1.05f), bury = rng.Range(0.15f, 0.35f);
+                    Round(l, rng.NextU64(), f, cx, -bury * d, cz, len, d, sz, Petrified, GX, RoundBroken, 0, 2, c, s);
+                    for (float a = -0.5f * len + 0.3f; a <= 0.5f * len - 0.2f; a += 0.55f) Col(l, f, cx + a * c, cz + a * s, 0.45f * sz, 0, (0.95f - bury) * d);
                     Touch(l, f, cx, 0, cz, 0.5f * d);
-                    float gap = rng.Range(0.05f, 0.6f);
-                    x = cx + (0.5f * len + gap) * c - rng.Range(-0.15f, 0.15f) * s;
-                    z = cz + (0.5f * len + gap) * s + rng.Range(-0.15f, 0.15f) * c;
+                    float gap = rng.Range(0.05f, 0.35f), side = rng.Range(-0.2f, 0.2f);
+                    x = cx + (0.5f * len + gap) * c - side * s;
+                    z = cz + (0.5f * len + gap) * s + side * c;
                     d *= rng.Range(0.9f, 0.98f);
-                    made++;
                 }
             }
             int stumps = rng.Range(2, 4);
-            float s0 = rng.NextFloat();
             for (int i = 0; i < stumps; i++)
             {
-                Arc(s0 + (i + rng.Range(-0.2f, 0.2f)) / stumps, out float c, out float s);
-                float r = rng.Range(5.5f, 7f), d = rng.Range(0.8f, 1.3f), h = rng.Range(0.45f, 1.1f);
-                Round(l, rng.NextU64(), f, r * c, -0.15f, r * s, d, h + 0.15f, d * rng.Range(0.9f, 1.05f), Petrified, GV, RoundStem, 0, 2);
+                Arc(a0 + (i + 0.5f + rng.Range(-0.2f, 0.2f)) / stumps, out float c, out float s);
+                float r = rng.Range(2.5f, 9.5f), d = rng.Range(0.8f, 1.4f), h = rng.Range(0.35f, 1.5f);
+                Round(l, rng.NextU64(), f, r * c, -0.2f, r * s, d, h + 0.2f, d * rng.Range(0.9f, 1.05f), Petrified, GV, RoundSnag, 0, 2);
                 Col(l, f, r * c, r * s, 0.5f * d, 0, h);
                 Touch(l, f, r * c, 0, r * s, 0.55f * d);
             }
-            int chips = rng.Range(14, 24), solid = l.Pieces.Count;
+            int chips = rng.Range(32, 56), solid = l.Pieces.Count;
             for (int i = 0; i < chips; i++)
             {
                 var p = l.Pieces[rng.Range(0, solid)];
                 float ox = (p.X - f.X) / f.U, oz = (p.Z - f.Z) / f.U, bx = f.C * ox + f.S * oz, bz = -f.S * ox + f.C * oz;
                 Arc(rng.NextFloat(), out float c, out float s);
-                float r = 0.5f * Math.Max(p.Sx, p.Sz) / f.U + rng.Range(0.2f, 1.6f), cd = rng.Range(0.08f, 0.24f);
+                float r = 0.5f * Math.Max(p.Sx, p.Sz) / f.U + rng.Range(0.1f, 2.2f), cd = rng.Range(0.05f, 0.22f), cx = bx + r * c, cz = bz + r * s, cr = (float)Math.Sqrt(cx * cx + cz * cz), cs = cr > 10f ? 10f / cr : 1f;
                 int k = rng.Range(0, 16);
-                Round(l, rng.NextU64(), f, bx + r * c, -0.35f * cd, bz + r * s, cd * rng.Range(1f, 2.2f), cd, cd * rng.Range(0.8f, 1.2f), Petrified, GX, RoundLog, 0, 0, Cos16(k), Sin16(k));
+                Round(l, rng.NextU64(), f, cx * cs, -0.35f * cd, cz * cs, cd * rng.Range(1f, 3f), cd, cd * rng.Range(0.7f, 1.3f), Petrified, GX, RoundBroken, 0, 0, Cos16(k), Sin16(k));
             }
         }
     }
@@ -79,14 +83,14 @@ namespace Stabby.World
             return Math.Min(rim, 2f) - w.Climate.PrecipitationMm[i] / PetrifiedRainMm;
         }
 
-        bool SeekPetrified(ref float x, ref float z, float x0, float z0, float x1, float z1)
+        bool SeekPetrified(int d, ref float x, ref float z, float x0, float z0, float x1, float z1)
         {
             float best = float.MinValue, bx = x, bz = z;
             for (int i = -PetrifiedSeekSteps; i <= PetrifiedSeekSteps; i++)
                 for (int j = -PetrifiedSeekSteps; j <= PetrifiedSeekSteps; j++)
                 {
                     float px = Math.Min(x1, Math.Max(x0, x + i * PetrifiedSeekM)), pz = Math.Min(z1, Math.Max(z0, z + j * PetrifiedSeekM));
-                    float fit = PetrifiedFit(px, pz);
+                    float fit = Open(d, px, pz) ? PetrifiedFit(px, pz) : float.MinValue;
                     if (fit > best) { best = fit; bx = px; bz = pz; }
                 }
             x = bx; z = bz;

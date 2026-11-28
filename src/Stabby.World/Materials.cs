@@ -277,7 +277,7 @@ namespace Stabby.World
         public uint Color;
         public float Glow, Translucency;
         public int GlowPattern;
-        public bool KeepHue;
+        public bool KeepHue, Rust;
         public static readonly string[] GlowPatterns = { "facet", "cap" };
     }
 
@@ -436,6 +436,7 @@ namespace Stabby.World
                 if (!(m.Glow >= 0f && m.Glow <= 1f)) errors.Add($"materials {m.Id}: glow {m.Glow} outside 0..1");
                 if (!(m.Translucency >= 0f && m.Translucency <= 1f) || (m.Glow > 0f && m.Translucency > 0f)) errors.Add($"materials {m.Id}: translucency {m.Translucency} outside 0..1 or set with glow");
                 if (m.KeepHue && (m.Glow > 0f || m.Translucency > 0f)) errors.Add($"materials {m.Id}: keepHue set with glow or translucency");
+                if (m.Rust && (m.Glow > 0f || m.Translucency > 0f)) errors.Add($"materials {m.Id}: rust set with glow or translucency");
                 if (m.GlowPattern < 0 || m.GlowPattern >= LibraryMaterial.GlowPatterns.Length) errors.Add($"materials {m.Id}: unknown glowPattern");
             }
             for (int i = 0; i < KitNames.Length; i++)

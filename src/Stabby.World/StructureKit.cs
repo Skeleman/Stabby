@@ -6,7 +6,7 @@ namespace Stabby.World
     {
         public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11, Petrified = 12;
         const int GX = 0, GV = 1, GZ = 2;
-        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5;
+        const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5, RoundBroken = 6, RoundSnag = 7;
         static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };
         static readonly float[] DomeLowR = { 1f, 0.8f }, DomeLowY = { -0.8f, 0.3f };
 
@@ -85,13 +85,14 @@ namespace Stabby.World
             var rad = new float[side];
             var cy = new float[rings];
             var cz = new float[rings];
-            float bend = rng.Range(-0.03f, 0.03f), sway = rng.Range(-0.03f, 0.03f);
+            bool stem = shape == RoundStem || shape == RoundSnag, broken = shape >= RoundBroken;
+            float bend = rng.Range(-0.03f, 0.03f), sway = rng.Range(-0.03f, 0.03f), pitch = shape == RoundBroken ? rng.Range(-0.12f, 0.12f) : 0;
             for (int j = 0; j < rings; j++)
             {
                 float t = rings > 1 ? 2f * j / (rings - 1) - 1 : 0, taper = 1 - 0.03f * t * t;
                 var ring = RoundNoise(ref rng, sides, 0.86f, 0.97f);
                 for (int i = 0; i < sides; i++) rad[j * sides + i] = ring[i] * taper;
-                cy[j] = bend * (1 - t * t); cz[j] = sway * (1 - t * t);
+                cy[j] = bend * (1 - t * t) + pitch * t; cz[j] = sway * (1 - t * t);
             }
             var w = new float[3 * (side + 2 * cap)];
             lift = new float[side + 2 * cap];
@@ -107,6 +108,19 @@ namespace Stabby.World
                     lift[v] = 8;
                 }
             }
+            if (broken)
+                for (int e = 0; e < 2; e++)
+                {
+                    if (shape == RoundSnag && e == 0) continue;
+                    int j = e == 0 ? 0 : rings - 1;
+                    float tilt = rng.Range(0.05f, 0.45f), jag = rng.Range(0.06f, 0.24f), sign = e == 0 ? 1 : -1;
+                    RoundDir(rng.Range(0, sides), sides, out float tc, out float ts);
+                    for (int i = 0; i < sides; i++)
+                    {
+                        float plane = 0.5f + 0.5f * (dc[i] * tc + ds[i] * ts), spike = (i & 1) == 0 ? rng.Range(0f, 1f) : rng.Range(0.4f, 1f);
+                        w[3 * (j * sides + i)] += sign * (tilt * plane + jag * spike);
+                    }
+                }
             for (int j = 0; j + 1 < rings; j++)
                 for (int i = 0; i < sides; i++)
                 {
@@ -119,11 +133,16 @@ namespace Stabby.World
                 int j = e == 0 ? 0 : rings - 1, o = side + e * cap;
                 float x = e == 0 ? -1 : 1;
                 w[3 * o] = x; w[3 * o + 1] = cy[j]; w[3 * o + 2] = cz[j];
+                if (broken && !(shape == RoundSnag && e == 0))
+                {
+                    w[3 * o] -= (e == 0 ? -1 : 1) * rng.Range(0f, 0.3f);
+                    w[3 * o + 1] += rng.Range(-0.35f, 0.35f); w[3 * o + 2] += rng.Range(-0.35f, 0.35f);
+                }
                 lift[o] = 4;
                 for (int i = 0; i < sides; i++)
                 {
                     int v = o + 1 + i, src = j * sides + i;
-                    w[3 * v] = x; w[3 * v + 1] = w[3 * src + 1]; w[3 * v + 2] = w[3 * src + 2];
+                    w[3 * v] = w[3 * src]; w[3 * v + 1] = w[3 * src + 1]; w[3 * v + 2] = w[3 * src + 2];
                     lift[v] = 7;
                     int n1 = o + 1 + (i + 1) % sides;
                     id.Add(o);
@@ -132,13 +151,13 @@ namespace Stabby.World
                 }
             }
             idx = id.ToArray();
-            if (shape == RoundStem)
+            if (stem)
                 for (int v = 0; v < w.Length; v += 3)
                 {
                     float y = w[v], k = 1.12f - 0.08f * (y + 1);
                     w[v] = k * w[v + 1]; w[v + 1] = y; w[v + 2] *= k;
                 }
-            if (shape == RoundStem)
+            if (stem)
                 for (int t = 0; t < idx.Length; t += 3) { int a = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = a; }
             return w;
         }

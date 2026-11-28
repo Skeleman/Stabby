@@ -547,9 +547,14 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "tropical-forest", "boreal"], "perHectare": 0, "discovery": "great-mushroom", "spacingM": 900, "chance": 0.8, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
     },
     {
+      "id": "lodestone", "name": "Lodestone outcrop", "kind": "structure", "material": "lodestone", "variants": 6,
+      "parts": [ { "id": "site", "shape": "lodestone", "material": "lodestone" } ],
+      "placement": { "biomes": ["boreal", "tundra", "alpine", "steppe", "shrubland", "cold-desert", "temperate-forest"], "perHectare": 0, "discovery": "lodestone", "spacingM": 1500, "chance": 0.7, "slopeMax": 0.25, "sizeMinM": 13, "sizeMaxM": 15, "sink": 0.01, "stampFoot": 0 }
+      },
+      {
       "id": "petrified-forest", "name": "Petrified forest", "kind": "structure", "material": "petrified-bark", "variants": 6,
       "parts": [ { "id": "site", "shape": "petrified-forest" } ],
-      "placement": { "biomes": ["steppe", "shrubland", "desert", "cold-desert", "savanna"], "perHectare": 0, "discovery": "petrified-forest", "spacingM": 1500, "chance": 0.6, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
+      "placement": { "biomes": ["desert", "savanna", "cold-desert", "steppe", "shrubland"], "perHectare": 0, "discovery": "petrified-forest", "spacingM": 1500, "chance": 0.6, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
