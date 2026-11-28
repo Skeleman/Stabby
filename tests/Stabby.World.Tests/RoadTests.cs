@@ -31,19 +31,21 @@ public class RoadTests
     {
         var (w, detail, edits, full) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var near = new ObjectField(w, detail, edits, TestWorlds.Objects);
-        int all = 0, kept = 0;
-        for (int cz = 0; cz < full.ChunksAcross; cz++)
-            for (int cx = 0; cx < full.ChunksAcross; cx++)
-            {
-                var whole = full.Chunk(cx, cz);
-                var part = near.ChunkNearRoads(cx, cz);
-                var keys = new HashSet<(int, float, float)>(whole.Select(o => (o.Def, o.X, o.Z)));
-                foreach (var o in part) Assert.Contains((o.Def, o.X, o.Z), keys);
-                var have = new HashSet<(int, float, float)>(part.Select(o => (o.Def, o.X, o.Z)));
-                foreach (var o in whole)
-                    if (full.OnRoad(o.X, o.Z, full.Footprint(o.Def) * o.Size)) { Assert.Contains((o.Def, o.X, o.Z), have); }
-                all += whole.Length; kept += part.Length;
-            }
+        int all = 0, kept = 0, across = full.ChunksAcross;
+        var wholes = new ObjectInstance[across * across][];
+        var parts = new ObjectInstance[across * across][];
+        System.Threading.Tasks.Parallel.For(0, across * across, c => { wholes[c] = full.Chunk(c % across, c / across); parts[c] = near.ChunkNearRoads(c % across, c / across); });
+        for (int c = 0; c < across * across; c++)
+        {
+            var whole = wholes[c];
+            var part = parts[c];
+            var keys = new HashSet<(int, float, float)>(whole.Select(o => (o.Def, o.X, o.Z)));
+            foreach (var o in part) Assert.Contains((o.Def, o.X, o.Z), keys);
+            var have = new HashSet<(int, float, float)>(part.Select(o => (o.Def, o.X, o.Z)));
+            foreach (var o in whole)
+                if (full.OnRoad(o.X, o.Z, full.Footprint(o.Def) * o.Size)) { Assert.Contains((o.Def, o.X, o.Z), have); }
+            all += whole.Length; kept += part.Length;
+        }
         Assert.True(kept < all, "the road filter dropped nothing");
     }
 
