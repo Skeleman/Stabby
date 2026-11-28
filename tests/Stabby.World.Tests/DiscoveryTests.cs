@@ -341,6 +341,27 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void BurrowColoniesSitOnOpenGrassland()
+    {
+        int bc = Objects.Objects.FindIndex(o => o.Id == "burrow-colony");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == bc).ToArray();
+        output.WriteLine($"{found.Length} burrow colonies " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:fit {field.BurrowColonyFit(c.X, c.Z):F2}")));
+        Assert.NotEmpty(found);
+        foreach (var c in found)
+        {
+            Assert.True(field.Woods(c.X, c.Z) <= ObjectField.BurrowWoods);
+            Assert.Null(field.BurrowColonyFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            var l = Structures.Layout(ObjectPart.BurrowColony, ObjectMeshes.Key("burrow-colony", 0, c.Variant));
+            Assert.InRange(l.Contacts.Count, 15, 30);
+            foreach (var o in all.Where(o => o.Def != bc))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void VolcanoHoldsACraterPoolBelowItsRim()
     {
         var p = TestWorlds.Place(VolcanoSeed);

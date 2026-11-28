@@ -56,6 +56,7 @@ namespace Stabby.World
                 case ObjectPart.FumaroleField: Fumarole(l, key, Frame.Root(FumaroleU)); break;
                 case ObjectPart.GreatMushroom: GreatMushroom(l, key, Frame.Root(GreatMushroomU)); break;
                 case ObjectPart.Lodestone: Lodestone(l, key, Frame.Root(LodestoneU)); break;
+                case ObjectPart.BurrowColony: BurrowColony(l, key, Frame.Root(BurrowU)); break;
                 case ObjectPart.Shipwreck: Shipwreck(l, key, Frame.Root(ShipwreckU)); break;
                 case ObjectPart.Bridge: Bridge(l, key, Frame.Root(BridgeU)); break;
                 case ObjectPart.FallenTree: FallenTree(l, key, Frame.Root(TreeU)); break;

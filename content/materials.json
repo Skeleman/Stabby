@@ -242,9 +242,9 @@
     { "id": "skylight",         "name": "Skylight",         "color": "#dfe6ee" },
     { "id": "dirt-road",        "name": "Dirt road",        "color": "#8a7860" },
     { "id": "rut-dirt",         "name": "Rut dirt",         "color": "#5e5040" },
-    { "id": "loam",             "name": "Loam",             "color": "#33271c" },
-    { "id": "wet-loam",         "name": "Wet loam",         "color": "#1e1711" },
-    { "id": "loam-grit",        "name": "Loam grit",        "color": "#4e3f2f" }
+    { "id": "loam",             "name": "Loam",             "color": "#5c4f40" },
+    { "id": "wet-loam",         "name": "Wet loam",         "color": "#3b3229" },
+    { "id": "loam-grit",        "name": "Loam grit",        "color": "#7a6c5a" }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],

@@ -36,6 +36,7 @@ test ObjectRegionTests.RegionsHoldTheirChunkColumnsAndCollideOnlyWhileResident 1
 test InnTests.InnsPlaceLevelInTheTestWorld 12 places and levels every inn site in the test world
 test DiscoveryTests.VolcanoHoldsACraterPoolBelowItsRim 12 places seed 16, the default seed has no volcano
 test DiscoveryTests.FallenTreesLieInTheWoods 5 checks fallen-tree sites on the cached default world
+test DiscoveryTests.BurrowColoniesSitOnOpenGrassland 8 checks burrow colony sites on the cached default world
 test DiscoveryTests.MonumentsStandLevelOnHighGround 8 checks monument sites on the cached default world
 test DiscoveryTests.ShipwrecksLieOnSeaShores 8 checks shipwreck sites on the cached default world
 test DiscoveryTests.WatchtowersStandOnHighGround 8 checks watchtower sites on the cached default world
