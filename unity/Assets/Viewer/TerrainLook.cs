@@ -438,12 +438,13 @@ namespace Stabby.Viewer
         static Vector4[] KitLook(MaterialLibrary lib, bool linear)
         {
             var c = lib.KitPalette();
+            var t = lib.KitTranslucency();
             var v = new Vector4[c.Length];
             for (int i = 0; i < c.Length; i++)
             {
                 var u = Unpack(c[i]);
                 var l = linear ? ToLinear(u) : u;
-                v[i] = new Vector4(l.x, l.y, l.z, 1);
+                v[i] = new Vector4(l.x, l.y, l.z, t[i]);
             }
             return v;
         }

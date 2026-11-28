@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11;
+        public const int Stone = 0, Timber = 1, Plank = 2, Plaster = 3, Thatch = 4, Iron = 5, Cloth = 6, Fungus = 8, Turf = 9, Soil = 11, Silk = 12;
         const int GX = 0, GV = 1, GZ = 2;
         const int RoundLog = 1, RoundDisc = 2, RoundStem = 3, RoundDome = 4, RoundTube = 5;
         static readonly float[] DomeR = { 1f, 0.93f, 0.74f, 0.43f }, DomeY = { -0.8f, -0.15f, 0.42f, 0.84f };

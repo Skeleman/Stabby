@@ -51,7 +51,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
-            float4 _StabbyKit[42], _StabbyKitSrgb[42];
+            float4 _StabbyKit[44], _StabbyKitSrgb[44];
             float _StabbyClock;
             static float3 emberGlow;
             static float iceWrap;
@@ -510,6 +510,26 @@ Shader "Stabby/Object"
                     a = lerp(a, cc, 0.12);
                     grad = 0.26 * mid.yzw * fm + 0.16 * lp.yzw * fs + 0.1 * fib.yzw * ff;
                     shade = 0.35 * smoothstep(0.0, -0.6, mid.x) * fm;
+                }
+                else if (mat == 12)
+                {
+                    float3 ac = cross(g, n);
+                    ac *= rsqrt(max(dot(ac, ac), 1e-8));
+                    float su = dot(q, ac), sv = dot(q, g);
+                    float tear = 0.6 * big.x + 0.5 * mid.x * fm;
+                    clip(0.62 - tear);
+                    float w1 = su * 90 + 2.5 * mid.x, w2 = (0.5 * su + 0.87 * sv) * 38 + 1.5 * big.x, w3 = (0.5 * su - 0.87 * sv) * 23 + 2.1 * big.x;
+                    float l1 = smoothstep(0.7, 1, 1 - abs(frac(w1) * 2 - 1)) * OrgFade(90, fp);
+                    float l2 = smoothstep(0.86, 1, 1 - abs(frac(w2) * 2 - 1)) * OrgFade(38, fp);
+                    float l3 = smoothstep(0.9, 1, 1 - abs(frac(w3) * 2 - 1)) * OrgFade(23, fp);
+                    float dust = smoothstep(0.2, 0.9, 0.4 * big.x + 0.3 * mid.x * fm + 0.35 * saturate(n.y) + 0.3 * (1 - open));
+                    a = lerp(_StabbyKit[42].rgb, _StabbyKit[43].rgb, 0.8 * dust);
+                    // thin gaps between threads pass light, so they read dimmer than the strands
+                    a *= 0.7 + 0.3 * max(l1, max(l2, l3)) + 0.06 * fib.x * ff;
+                    a = lerp(a, _StabbyKit[43].rgb, 0.5 * smoothstep(0.48, 0.62, tear));
+                    grad = 0.05 * fib.yzw * ff + 0.03 * mid.yzw * fm;
+                    tmRough = 0.35 * LookRough();
+                    iceWrap = _StabbyKit[42].a;
                 }
                 else if (mat == 1 && th.x > 2.5 && th.x < 3.5)
                 {

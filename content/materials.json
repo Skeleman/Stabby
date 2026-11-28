@@ -242,7 +242,9 @@
     { "id": "rut-dirt",         "name": "Rut dirt",         "color": "#5e5040" },
     { "id": "loam",             "name": "Loam",             "color": "#33271c" },
     { "id": "wet-loam",         "name": "Wet loam",         "color": "#1e1711" },
-    { "id": "loam-grit",        "name": "Loam grit",        "color": "#4e3f2f" }
+    { "id": "loam-grit",        "name": "Loam grit",        "color": "#4e3f2f" },
+    { "id": "spider-silk",      "name": "Spider silk",      "color": "#dddbd3", "translucency": 0.7 },
+    { "id": "old-silk",         "name": "Old silk",         "color": "#9f9a8c" }
   ],
   "kit": {
     "timber": ["dark-bark", "heartwood", "sapwood", "bark-rim", "hewn-timber", "wet-timber"],
@@ -255,7 +257,8 @@
     "fungus": ["red-cap", "brown-cap", "tan-cap", "ochre-cap", "cap-rim", "cap-wart", "dark-gill", "pale-gill", "fungus-stem", "stem-base"],
     "turf": ["roof-turf", "turf-sprout"],
     "ember": ["ember-glow", "ember-core"],
-    "soil": ["loam", "wet-loam", "loam-grit"]
+    "soil": ["loam", "wet-loam", "loam-grit"],
+    "silk": ["spider-silk", "old-silk"]
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },

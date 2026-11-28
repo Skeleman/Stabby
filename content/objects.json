@@ -535,6 +535,11 @@
         { "id": "crown", "shape": "broadleaf", "scale": [1.9, 1.4, 1.9], "solid": "off", "leafMaterial": "oak-leaf" }
       ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain"], "perHectare": 0, "discovery": "ancient-tree", "spacingM": 1000, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
+    },
+    {
+      "id": "spider-nest", "name": "Spider nest", "kind": "structure", "material": "mossy-stone", "variants": 6,
+      "parts": [ { "id": "site", "shape": "spider-nest" } ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal"], "perHectare": 0, "discovery": "spider-nest", "spacingM": 1000, "chance": 0.7, "slopeMax": 0.2, "sizeMinM": 17, "sizeMaxM": 18, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
