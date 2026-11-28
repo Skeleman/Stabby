@@ -784,6 +784,7 @@ Shader "Stabby/Object"
                     float3 lit = gc * (_MainLightColor.rgb * saturate(_MainLightPosition.y) + _StabbySky.rgb);
                     bounce = lerp(_StabbyGround.rgb, lit, smoothstep(2.5 * size + 2, 0, above));
                 }
+                [branch] if (base.a > 0.016 && base.a < 0.025) bounce = dot(bounce, float3(0.2126, 0.7152, 0.0722));
                 float3 ambient = (_StabbySky.a > 0 || _StabbyGround.a > 0 ? lerp(bounce, _StabbySky.rgb, n.y * 0.5 + 0.5) : lerp(float3(0.25, 0.24, 0.22), float3(0.45, 0.5, 0.58), n.y * 0.5 + 0.5)) * sky;
                 float3 c = LookColor(albedo, 1) * (l.color * saturate((dot(n, l.direction) + iceWrap) / (1 + iceWrap)) * l.shadowAttenuation * lerp(1, ao, 0.4) + (ambient + LocalLightsWrap(wp, n, i.positionCS, iceWrap)) * ao) + LookSheen(n, normalize(_WorldSpaceCameraPos - wp), l.direction, l.color * l.shadowAttenuation, saturate(tmRough)) * ao + emberGlow;
                 return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.pof.w), 1);
