@@ -78,6 +78,73 @@ namespace Stabby.Game.Editor
             Shot(cam, dir, "roads-tunnel");
         }
 
+        const float TrailEyeBack = 70f, TrailEyeUp = 14f, TrailLookUp = 3f;
+
+        static System.Collections.IEnumerator TrailsTour(Camera cam, string dir)
+        {
+            GameStatus.HoldCamera = true;
+            ObjectField field = null;
+            Ground ground = default;
+            foreach (var w in Unity.Entities.World.All)
+            {
+                var f = w.Name == GameSettings.ViewClient ? w.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field : null;
+                var q = f == null ? default : w.EntityManager.CreateEntityQuery(typeof(Ground));
+                if (f == null || q.CalculateEntityCount() != 1) continue;
+                field = f;
+                ground = q.GetSingleton<Ground>();
+                break;
+            }
+            if (field == null) { GameStatus.Lines["~trails"] = GameStatus.Failure = "trails: no object field"; yield break; }
+            var job = System.Threading.Tasks.Task.Run(() => (field.Roads(), field.Discoveries(), field.MineMouths().ToArray()));
+            while (!job.IsCompleted) yield return null;
+            if (job.IsFaulted) { GameStatus.Lines["~trails"] = GameStatus.Failure = "trails: " + job.Exception; yield break; }
+            var (roads, found, mines) = job.Result;
+            var trails = roads.Where(ObjectField.IsTrail).ToArray();
+            if (trails.Length == 0) { GameStatus.Lines["~trails"] = GameStatus.Failure = "trails: none in this world"; yield break; }
+            var ends = new System.Collections.Generic.List<(Vector3 at, string what, float reach)>();
+            foreach (var m in mines) ends.Add((new Vector3(m.x, 0, m.z), "mine", ObjectField.TrailMouthM + 0.05f));
+            foreach (var d in found)
+                if (ObjectField.TrailLandmark(field.Library.Objects[d.Def].Placement.Discovery)) ends.Add((new Vector3(d.X, 0, d.Z), field.Library.Objects[d.Def].Id, field.TrailHeadM(d) + 0.05f));
+            float best = float.MinValue;
+            Vector3 eye = default, look = default;
+            string target = null;
+            int mineLinks = 0, landmarkLinks = 0;
+            foreach (var (at, what, reach) in ends)
+            {
+                bool hit = false;
+                foreach (var s in trails)
+                {
+                    var a = new Vector3(s.X0, 0, s.Z0);
+                    var b = new Vector3(s.X1, 0, s.Z1);
+                    bool atA = (a - at).sqrMagnitude <= reach * reach, atB = (b - at).sqrMagnitude <= reach * reach;
+                    if (!atA && !atB) continue;
+                    hit = true;
+                    var head = atA ? a : b;
+                    var u = (head - (atA ? b : a)).normalized;
+                    var e = head - u * TrailEyeBack;
+                    float rise = ground.HeightAt(at.x, at.z) - ground.HeightAt(e.x, e.z);
+                    if (rise <= best) continue;
+                    best = rise;
+                    eye = e;
+                    eye.y = ground.HeightAt(e.x, e.z) + TrailEyeUp;
+                    look = at;
+                    look.y = ground.HeightAt(at.x, at.z) + TrailLookUp;
+                    target = what;
+                }
+                if (hit && what == "mine") mineLinks++;
+                else if (hit) landmarkLinks++;
+            }
+            if (target == null) { GameStatus.Lines["~trails"] = GameStatus.Failure = $"trails: {trails.Length} segments but none reach a mine or landmark"; yield break; }
+            float km = trails.Sum(s => new Vector2(s.X1 - s.X0, s.Z1 - s.Z0).magnitude) / 1000f;
+            cam.fieldOfView = 60f;
+            for (var w = ShowHour(RoadShotHour, RoadShotMoon); w.MoveNext();) yield return null;
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+            for (var w = Settle(180); w.MoveNext();) yield return null;
+            GameStatus.Lines["~trails"] = $"trails: {trails.Length} segments, {km:F1} km, mines linked {mineLinks}/{mines.Length}, landmarks linked {landmarkLinks}/{ends.Count - mines.Length}, GV {WorldConfig.GeneratorVersion}; shot climbs {best:F1} m to {target} at {look.x:F0},{look.z:F0}, eye {eye.x:F0},{eye.y:F1},{eye.z:F0}";
+            Shot(cam, null, "warmup");
+            Shot(cam, dir, "trails-climb");
+        }
+
         static float CrossSlope(Ground ground, RoadSegment s)
         {
             float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, len = Mathf.Max(1e-3f, Mathf.Sqrt(dx * dx + dz * dz));

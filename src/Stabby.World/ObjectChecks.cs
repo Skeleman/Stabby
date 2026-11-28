@@ -191,6 +191,7 @@ namespace Stabby.World
                     var p = segs[trail[a]]; var q = segs[trail[b]];
                     if (Touch(q, p.X0, p.Z0) || Touch(q, p.X1, p.Z1)) up[Root(a)] = Root(b);
                 }
+            var ends = new List<(int k, float x, float z)>();
             foreach (var s in segs)
             {
                 if (s.Kind != RoadSegment.Bridge) continue;
@@ -201,6 +202,7 @@ namespace Stabby.World
                     if (Touch(segs[trail[k]], s.X1, s.Z1)) ib = k;
                 }
                 if (ia >= 0 && ib >= 0) up[Root(ia)] = Root(ib);
+                else if (ia >= 0 || ib >= 0) ends.Add((ia >= 0 ? ia : ib, ia >= 0 ? s.X1 : s.X0, ia >= 0 ? s.Z1 : s.Z0));
             }
             var mouths = field.MineMouths();
             var heads = new List<(float x, float z, float r)>();
@@ -229,6 +231,11 @@ namespace Stabby.World
                 int r = Root(k);
                 if (OnNet(s.X0, s.Z0) || OnNet(s.X1, s.Z1)) net.Add(r);
                 if (AtHead(s.X0, s.Z0) || AtHead(s.X1, s.Z1)) head.Add(r);
+            }
+            foreach (var (k, x, z) in ends)
+            {
+                if (OnNet(x, z)) net.Add(Root(k));
+                if (AtHead(x, z)) head.Add(Root(k));
             }
             for (int k = 0; k < trail.Count; k++)
             {

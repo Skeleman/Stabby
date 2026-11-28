@@ -17,7 +17,8 @@ namespace Stabby.World
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
         public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
-        public const float TrailHalfM = 1.2f, TrailReachM = 2000f, TrailMouthM = 40f;
+        public const float TrailHalfM = 1.2f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
+        const int TrailMineTries = 4, TrailMineCells = 2;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;
         public const float TunnelMinM = 70f, TunnelMostM = 250f, TunnelGrade = 0.12f, TunnelCost = 1f, TunnelRise = 0.5f, TunnelSpanM = 150f, TunnelSocketM = 100f, TunnelCampMin = 14.5f, TunnelCampMax = 18f, TunnelWarp = 0.04f;
@@ -25,6 +26,7 @@ namespace Stabby.World
 
         readonly object roadLock = new object();
         RoadSegment[] roads, roadDraft;
+        readonly AsyncLocal<bool> drafting = new AsyncLocal<bool>();
         int[] roadStart, roadItems;
         ObjectInstance[][] roadSites;
         Dictionary<int, List<int>> siteCells;
@@ -196,6 +198,8 @@ namespace Stabby.World
         {
             var found = roads;
             if (found != null) return found;
+            var draft = roadDraft;
+            if (draft != null && drafting.Value) return draft;
             lock (roadLock)
             {
                 if (roads != null) return roads;
@@ -363,7 +367,16 @@ namespace Stabby.World
         void Trails(TownPlan[] plans, List<RoadSegment> list)
         {
             var net = list.ToArray();
-            var found = Discoveries();
+            var found = new List<ObjectInstance>();
+            drafting.Value = true;
+            try
+            {
+                found.AddRange(Discoveries());
+                for (int z = 0; z < across; z++)
+                    for (int x = 0; x < across; x++)
+                        found.AddRange(Built(x, z));
+            }
+            finally { drafting.Value = false; }
             TrailBlockers(found);
             foreach (var (mx, mz, ux, uz) in MineMouths())
             {
@@ -374,25 +387,39 @@ namespace Stabby.World
                     hx = mx + ux * d; hz = mz + uz * d;
                     clear = hx >= 0 && hz >= 0 && hx < worldM && hz < worldM && StepFault(hx, hz, hx, hz, out _) == null;
                 }
-                if (clear) Trail(hx, hz, hx + ux * cm, hz + uz * cm, plans, net, list);
+                if (!clear) continue;
+                var heads = new List<(float d, float x, float z)>();
+                int cx = Cell(hx), cz = Cell(hz);
+                for (int dz = -TrailMineCells; dz <= TrailMineCells; dz++)
+                    for (int dx = -TrailMineCells; dx <= TrailMineCells; dx++)
+                    {
+                        float x = (cx + dx) * cm, z = (cz + dz) * cm;
+                        if (cx + dx < 0 || cz + dz < 0 || cx + dx >= n || cz + dz >= n || RoadFault(hx, hz, x, z, out _) != null) continue;
+                        heads.Add(((x - hx) * (x - hx) + (z - hz) * (z - hz) - ((x - hx) * ux + (z - hz) * uz) * cm, x, z));
+                    }
+                heads.Sort((a, b) => a.d.CompareTo(b.d));
+                for (int k = 0; k < heads.Count && k < TrailMineTries; k++)
+                    if (Trail(hx, hz, heads[k].x, heads[k].z, TrailMineReachM, plans, net, list)) break;
             }
             foreach (var o in found)
             {
                 if (!TrailLandmark(lib.Objects[o.Def].Placement.Discovery)) continue;
-                if (!TrailTarget(o.X, o.Z, plans, net, out float tx, out float tz, out _, out _, out _)) continue;
+                if (!TrailTarget(o.X, o.Z, TrailReachM, plans, net, out float tx, out float tz, out _, out _, out _)) continue;
                 float dist = (float)Math.Sqrt((tx - o.X) * (tx - o.X) + (tz - o.Z) * (tz - o.Z));
                 if (dist < 1e-3f) continue;
                 float ux = (tx - o.X) / dist, uz = (tz - o.Z) / dist, r = TrailHeadM(o);
-                Trail(o.X + ux * r, o.Z + uz * r, o.X + ux * (r + 2 * cm), o.Z + uz * (r + 2 * cm), plans, net, list);
+                Trail(o.X + ux * r, o.Z + uz * r, o.X + ux * (r + 2 * cm), o.Z + uz * (r + 2 * cm), TrailReachM, plans, net, list);
             }
             trailEdits = null; trailSites = null; trailCells = null;
         }
 
-        public float TrailHeadM(ObjectInstance o) => SiteRadius(o) + RoadHalfM + 2 * RoadClearM;
+        public float TrailHeadM(ObjectInstance o) => TrailClearM(o) + RoadClearM;
 
-        bool TrailTarget(float x, float z, TownPlan[] plans, RoadSegment[] net, out float tx, out float tz, out float ex, out float ez, out bool town)
+        float TrailBodyM(ObjectInstance o) => Math.Max(SiteRadius(o), footprint[o.Def] * o.Size);
+
+        bool TrailTarget(float x, float z, float reach, TownPlan[] plans, RoadSegment[] net, out float tx, out float tz, out float ex, out float ez, out bool town)
         {
-            float best = TrailReachM * TrailReachM;
+            float best = reach * reach;
             tx = tz = ex = ez = 0;
             bool any = false;
             town = false;
@@ -416,23 +443,37 @@ namespace Stabby.World
             return any;
         }
 
-        void Trail(float sx, float sz, float ax, float az, TownPlan[] plans, RoadSegment[] net, List<RoadSegment> list)
+        bool Trail(float sx, float sz, float ax, float az, float reach, TownPlan[] plans, RoadSegment[] net, List<RoadSegment> list)
         {
-            if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return;
-            if (!TrailTarget(sx, sz, plans, net, out float tx, out float tz, out float ex, out float ez, out bool town)) return;
+            if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return false;
+            if (!TrailTarget(sx, sz, reach, plans, net, out float tx, out float tz, out float ex, out float ez, out bool town)) return false;
             var path = Route(Cell(ax), Cell(az), Cell(tx), Cell(tz), false, out var jumps, out var bored);
-            if (path == null) return;
+            if (path == null) return false;
             var runs = Runs(path, jumps, out var joins);
             var (fx, fz) = runs[0];
             var (lx, lz) = runs[runs.Count - 1];
             int end = lx.Count - 1;
-            if (RoadFault(sx, sz, fx[0], fz[0], out _) != null) return;
-            if (!town && RoadFault(lx[end], lz[end], tx, tz, out _) != null) return;
+            if (RoadFault(sx, sz, fx[0], fz[0], out _) != null) return false;
+            if (!town && RoadFault(lx[end], lz[end], tx, tz, out _) != null) return false;
+            if (town && !SitesClear(lx[end], lz[end], ex, ez)) return false;
+            for (int r = 1; r < runs.Count; r++)
+                if (joins[r - 1] == RoadSegment.Bridge && !SitesClear(runs[r - 1].x[runs[r - 1].x.Count - 1], runs[r - 1].z[runs[r - 1].z.Count - 1], runs[r].x[0], runs[r].z[0])) return false;
             AddRun(sx, sz, fx[0], fz[0], list, TrailHalfM);
             EmitRuns(runs, joins, list, true, TrailHalfM);
             if (town) list.Add(new RoadSegment { X0 = lx[end], Z0 = lz[end], X1 = ex, Z1 = ez, HalfWidth = TrailHalfM, Kind = RoadSegment.Lane });
             else AddRun(lx[end], lz[end], tx, tz, list, TrailHalfM);
             Commit(bored);
+            return true;
+        }
+
+        bool SitesClear(float x0, float z0, float x1, float z1)
+        {
+            foreach (var o in trailSites)
+            {
+                float d = TrailClearM(o);
+                if (PointSegment2(o.X, o.Z, x0, z0, x1, z1) < d * d) return false;
+            }
+            return true;
         }
 
         public List<(float x, float z, float ux, float uz)> MineMouths()
@@ -451,10 +492,10 @@ namespace Stabby.World
             return mouths;
         }
 
-        void TrailBlockers(ObjectInstance[] found)
+        void TrailBlockers(List<ObjectInstance> found)
         {
             trailEdits = new List<FeatureEdit>();
-            foreach (var group in new[] { SpringEdits(), DenEdits(), DungeonEdits(), BogEdits(), QuicksandEdits(), OasisEdits() })
+            foreach (var group in new[] { SpringEdits(), DenEdits(), DungeonEdits() })
                 foreach (var f in group)
                     if (f.Shape != FeatureEdit.Boulder && f.Shape != FeatureEdit.Spring && f.Shape != FeatureEdit.Vault && !f.Link) trailEdits.Add(f);
             trailSites = new List<ObjectInstance>(found);
@@ -479,9 +520,10 @@ namespace Stabby.World
         float TrailClearM(ObjectInstance o)
         {
             int kind = lib.Objects[o.Def].Placement.Discovery;
-            float g = SiteRadius(o) + RoadHalfM + RoadClearM;
+            float g = TrailBodyM(o) + RoadHalfM + RoadClearM;
             if (kind == Shrine) g = Math.Max(g, ShrineRoadMinM + RoadClearM);
             if (kind == LoneInn) g = Math.Max(g, LoneInnRoadMinM + RoadClearM);
+            if (kind == Monument) g = Math.Max(g, MonumentRoadMinM + RoadClearM);
             return g;
         }
 
