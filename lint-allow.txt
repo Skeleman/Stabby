@@ -62,3 +62,4 @@ ObjectColumnsSystem.fieldTask yields the managed ObjectField the GC frees; nothi
 ObjectViewSystem.atlasTask yields managed Color32 mips the GC frees; nothing to release
 ShadowViewSystem.spanTask yields a ShadowSpan value and a float; nothing to release
 WakePresenterSystem uploads the Burst-picked wake emitters to a managed GraphicsBuffer for the water shader
+unity/Assets/Viewer/Shaders/Clouds.hlsl:CloudNoise value-noise lattice cell, smoothed by quintic fade and domain-warped by the caller

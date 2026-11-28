@@ -12,6 +12,7 @@ Shader "Stabby/Sky"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Viewer/Shaders/Sky.hlsl"
+            #include "Assets/Viewer/Shaders/Clouds.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings { float4 positionCS : SV_POSITION; float3 dir : TEXCOORD0; UNITY_VERTEX_OUTPUT_STEREO };
@@ -56,6 +57,10 @@ Shader "Stabby/Sky"
                 float r = StarHash((int3)floor(g));
                 float star = step(0.9965, r) * saturate(1 - length(f) * 2.4) * (0.3 + 3 * (r - 0.9965) / 0.0035);
                 c += _StabbyStars * star * saturate(d.y * 5 - 0.1) * float3(0.9, 0.95, 1);
+
+                float toward = StabbySkyToward(d);
+                float4 cl = StabbyClouds(d, i.positionCS.xy, StabbySkyHorizon(d), _StabbyZenith.rgb, _StabbyGlow.rgb, toward);
+                c = c * cl.a + cl.rgb;
 
                 return half4(c, 1);
             }
