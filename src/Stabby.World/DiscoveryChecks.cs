@@ -170,6 +170,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Monument) { var mf = field.MonumentFault(s); if (mf != null) { e.Add(at + " " + mf); return; } }
                 if (def.Placement.Discovery == ObjectField.Watchtower) { var wf = field.WatchFault(s); if (wf != null) { e.Add(at + " " + wf); return; } }
                 if (def.Placement.Discovery == ObjectField.GreatMushroom) { var gf = field.GreatMushroomFault(s); if (gf != null) { e.Add(at + " " + gf); return; } }
+                if (def.Placement.Discovery == ObjectField.Lodestone) { var lf = field.LodestoneFault(s); if (lf != null) { e.Add(at + " " + lf); return; } }
                 if (def.Placement.Discovery == ObjectField.SunkenTemple) { var tf = field.TempleFault(s); if (tf != null) { e.Add(at + " " + tf); return; } if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add(at + " lies on a road"); return; } }
                 if (def.Placement.Discovery == ObjectField.Shipwreck) { var sf = field.ShipwreckFault(s); if (sf != null) { e.Add(at + " " + sf); return; } }
                 if (def.Placement.Discovery == ObjectField.Shrine) { float rd = field.RoadSide(s.X, s.Z, out _, out _); if (!(rd >= ObjectField.ShrineRoadMinM && rd <= ObjectField.ShrineRoadM)) { e.Add(at + " is not beside a road"); return; } if (!field.SeatGrounded(s)) { e.Add(at + " has its seat buried or floating"); return; } }
