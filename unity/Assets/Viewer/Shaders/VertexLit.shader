@@ -45,7 +45,7 @@ Shader "Stabby/VertexLit"
             #include "Contact.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; float4 strata : TEXCOORD0; float4 stitch : TEXCOORD1; float4 stitchNormal : TEXCOORD2; float4 stitchColor : TEXCOORD3; float2 dark : TEXCOORD4; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float2 peat : TEXCOORD6; float3 sky : TEXCOORD7; float2 foot : TEXCOORD8; };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; float4 color : COLOR; float4 fog : TEXCOORD1; float4 strata : TEXCOORD2; float2 xz : TEXCOORD3; float field : TEXCOORD4; float sinter : TEXCOORD5; float2 peat : TEXCOORD6; float4 sky : TEXCOORD7; float2 foot : TEXCOORD8; };
 
             Varyings vert(Attributes i)
             {
@@ -68,7 +68,7 @@ Shader "Stabby/VertexLit"
                 float pf = frac(i.stitch.w) * 2;
                 o.peat = float2(pf <= 1 ? pf : -saturate((pf - 1.02) / 0.978), ((uint)i.stitch.w & 8192u) != 0 ? 1 : 0);
                 float dk = lerp(i.dark.x, i.dark.y, t);
-                o.sky = float3(1 - dk * (1 - _StabbyCaveDarkOff), dk, sw < -1 ? saturate(-sw - 1) : 0);
+                o.sky = float4(1 - dk * (1 - _StabbyCaveDarkOff), dk, sw < -3 ? saturate(-sw - 3) : sw < -1 ? saturate(-sw - 1) : 0, sw < -3 ? 1 : 0);
                 o.fog = float4(StabbyFogColor(p.positionWS), ComputeFogFactor(p.positionCS.z));
                 return o;
             }
@@ -267,8 +267,21 @@ Shader "Stabby/VertexLit"
                     float3 a = lerp(_StabbyRoad.rgb, _StabbyRut.rgb, 0.7 * rut) * (0.9 + 0.08 * mid.x * fm + 0.06 * fine.x * ff) * (1 - 0.12 * pebble);
                     float3 grad = 0.05 * mid.yzw * fm + 0.05 * fine.yzw * ff + 0.04 * big.yzw;
                     grad -= n * dot(grad, n);
+                    float rough = lerp(_StabbyRoad.w, _StabbyRut.w, rut);
+                    [branch] if (i.sky.w > 0.01)
+                    {
+                        float k = h / 0.28 + 0.15 * big.z, fk = max(fwidth(k), 1e-3), s = frac(k);
+                        float riser = 1 - smoothstep(0.2 - fk, 0.2 + fk, s), lip = smoothstep(0.2, 0.24, s) * (1 - smoothstep(0.24, 0.34, s));
+                        float2 down = n.xz / max(length(n.xz), 1e-3);
+                        float3 sn = normalize(lerp(float3(0, 1, 0), float3(down.x, 0.25, down.y), riser));
+                        float3 stone = lerp(_StabbyRoad.rgb * float3(0.85, 0.88, 0.9) + 0.06, _StabbyRut.rgb, 0.25 * rut) * (0.88 + 0.12 * mid.x * fm) * (1 + 0.12 * lip);
+                        float st = i.sky.w * (1 - smoothstep(0.3, 0.8, fk));
+                        a = lerp(a, stone * (1 - 0.45 * riser), st);
+                        n = normalize(lerp(n, sn, st * cover));
+                        rough = lerp(rough, 0.8, st);
+                    }
                     m.albedo = lerp(m.albedo, a, cover);
-                    tmRough = lerp(tmRough, lerp(_StabbyRoad.w, _StabbyRut.w, rut), cover);
+                    tmRough = lerp(tmRough, rough, cover);
                     tmGrass *= 1 - cover;
                     n = normalize(n - grad * cover);
                 }
