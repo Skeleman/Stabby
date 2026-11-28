@@ -51,7 +51,7 @@ namespace Stabby.Viewer
         public const float MistPad = 40f;
         const float SteamRadius = 0.55f, SteamRise = 2.2f, ShoreOvershoot = 0.25f, ColumnRadius = 0.9f;
         public const float ColumnPerRadius = 14f;
-        const int SteamPuffs = 2, JetPuffs = 7, ColumnSteamPuffs = 3;
+        const int SteamPuffs = 2, FumarolePuffs = 6, JetPuffs = 7, ColumnSteamPuffs = 3;
         const int CurtainRowsMin = 7, CurtainRowsMax = 24, MistMax = 6, SprayMax = 12, MistPuffs = 3;
         const int CurtainColsMin = 2, CurtainColsMax = 9;
         const float CurtainRowStep = 2f, CurtainColStep = 4f, HugClear = 0.4f, HugRamp = 2f, HugClearPerM = 0.04f, HugUnder = 0.3f, HugReach = 2f, HugReachPerM = 0.6f, HugStep = 0.5f, HugSteps = 12f, HugGap = 0.3f, HugBank = 0.3f, FootBendPerDrop = 0.25f, FootBendMin = 0.3f, FootBendMax = 1.5f, FootFade = 1f;
@@ -619,7 +619,7 @@ namespace Stabby.Viewer
                 }
             }
 
-            public void Vent(Vector3 c, float phase, float radius, float rise) => Puff(c, Vector3.right, 0, phase, new Vector2(radius, rise), 3);
+            public void Vent(Vector3 c, float phase, float radius, float rise, float strength = 0) => Puff(c, Vector3.right, strength, phase, new Vector2(radius, rise), 3);
 
             public void Column(Vector3 c, float duty, float offset, float steam, float phase, float radius, float height, float interval)
             {
@@ -708,7 +708,7 @@ namespace Stabby.Viewer
                 {
                     var c = new Vector3(vents[k], vents[k + 1], vents[k + 2]);
                     float r = vents[k + 3], seed = Mathf.Repeat(c.x * 0.0137f + c.z * 0.0291f, 1f);
-                    for (int m = 0; m < SteamPuffs; m++) mist.Vent(c, Mathf.Repeat(seed + m * MistPhase, 1f), SteamRadius * r, SteamRise * r);
+                    for (int m = 0; m < FumarolePuffs; m++) mist.Vent(c, Mathf.Repeat(seed + m * MistPhase, 1f), SteamRadius * r, SteamRise * r, 1);
                 }
             }
             if (mist.Verts.Count > 0) mists.Add(mist.Piece($"Spring steam {mists.Count}"));

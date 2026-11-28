@@ -41,7 +41,9 @@ namespace Stabby.Game.Editor
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
             for (var w = Settle(600); w.MoveNext();) yield return null;
             Shot(cam, null, "warmup");
-            GameStatus.Lines["~fumarole"] = $"fumarole: {all.Length} placed, shown {s.X:F0},{s.Z:F0} size {s.Size:F1} variant {s.Variant}, GV {WorldConfig.GeneratorVersion}";
+            var vents = new System.Collections.Generic.List<float>();
+            field.FumaroleVentsAt(s, vents);
+            GameStatus.Lines["~fumarole"] = $"fumarole: {all.Length} placed, {vents.Count / Structures.FumaroleVentStride} vents, shown {s.X:F0},{s.Z:F0} size {s.Size:F1} variant {s.Variant}, GV {WorldConfig.GeneratorVersion}";
             Shot(cam, dir, "fumarole-field");
         }
     }

@@ -36,13 +36,12 @@ namespace Stabby.World
             {
                 int d = rng.Range(0, 16);
                 float r = FumaroleSpreadM * 1.15f * (float)Math.Sqrt(rng.NextFloat()), x = Cos16(d) * r, z = Sin16(d) * r, w = rng.Range(1.8f, 3.4f);
-                Hewn(l, rng.NextU64(), f, x, -0.14f, z, w, rng.Range(0.12f, 0.2f), w * rng.Range(0.55f, 0.85f), Cos16(d + 5), Sin16(d + 5), 0, 1, rng.Range(0.45f, 0.65f), rng.Range(-0.02f, 0.02f), rng.Range(-0.02f, 0.02f));
-                Touch(l, f, x, 0, z, 0.6f * w);
+                Hewn(l, rng.NextU64(), f, x, -0.05f, z, w, rng.Range(0.12f, 0.2f), w * rng.Range(0.55f, 0.85f), Cos16(d + 5), Sin16(d + 5), 0, 1, rng.Range(0.45f, 0.65f), rng.Range(-0.02f, 0.02f), rng.Range(-0.02f, 0.02f));
             }
             for (int k = 0; k < vents.Count; k += FumaroleVentStride)
             {
                 float w = 3.2f * vents[k + 2];
-                Hewn(l, rng.NextU64(), f, vents[k], -0.12f, vents[k + 1], w, 0.16f, w * rng.Range(0.8f, 0.95f), 1, 0, 0, 1, 0.6f);
+                Hewn(l, rng.NextU64(), f, vents[k], -0.04f, vents[k + 1], w, 0.16f, w * rng.Range(0.8f, 0.95f), 1, 0, 0, 1, 0.6f);
             }
             Flat(l, before);
             Drape(l, before);
@@ -58,7 +57,7 @@ namespace Stabby.World
                     float ring = 0.55f * vr, x = vx + Cos16(d) * ring, z = vz + Sin16(d) * ring, s = vr * rng.Range(0.75f, 1.05f), h = vh * rng.Range(0.7f, 1.05f);
                     int q = rng.Range(0, 16);
                     Hewn(l, rng.NextU64(), f, x, -0.22f, z, s, h + 0.22f, s * rng.Range(0.7f, 0.95f), Cos16(q), Sin16(q), 0, 2, rng.Range(0.4f, 0.55f), Cos16(d) * 0.12f, Sin16(d) * 0.12f, 0.15f);
-                    Touch(l, f, x, 0, z, 0.8f * s);
+                    Touch(l, f, x, 0, z, 0.45f * s);
                     Col(l, f, x, z, 0.4f * s, -0.2f, h);
                 }
                 int rocks = rng.Range(2, 5);
