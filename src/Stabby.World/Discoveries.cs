@@ -859,7 +859,7 @@ namespace Stabby.World
             return true;
         }
 
-        ObjectInstance[] Built(int x, int z)
+        public ObjectInstance[] Built(int x, int z)
         {
             var cache = builtSites;
             int c = z * across + x;
