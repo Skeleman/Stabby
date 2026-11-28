@@ -164,6 +164,7 @@ namespace Stabby.World
                 if (def.Placement.Discovery == ObjectField.Overlook) { var of = field.OverlookFault(s); if (of != null) { e.Add(at + " " + of); return; } if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add(at + " lies on a road"); return; } }
                 if (def.Placement.Discovery == ObjectField.Bones) { var bf = field.BonesFault(s); if (bf != null) { e.Add(at + " " + bf); return; } if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add(at + " lies on a road"); return; } }
                 if (def.Placement.Discovery == ObjectField.SaltTower) { var tf = field.SaltFault(s); if (tf != null) { e.Add(at + " " + tf); return; } }
+                if (def.Placement.Discovery == ObjectField.FumaroleField) { var ff = field.FumaroleFault(s); if (ff != null) { e.Add(at + " " + ff); return; } if (field.OnRoad(s.X, s.Z, field.SiteRadius(s))) { e.Add(at + " lies on a road"); return; } }
                 if (def.Placement.Discovery == ObjectField.Dungeon) { if (field.Fitness(ObjectField.Dungeon, s.X, s.Z) == float.MinValue) { e.Add(at + " stands on ground unfit for a dungeon"); return; } var vf = field.DungeonFault(s); if (vf != null) { e.Add(at + " " + vf); return; } }
                 if (def.Placement.Discovery == ObjectField.LoneInn) { var lf = field.LoneInnFault(s); if (lf != null) { e.Add(at + " " + lf); return; } }
                 if (def.Placement.Discovery == ObjectField.Monument) { var mf = field.MonumentFault(s); if (mf != null) { e.Add(at + " " + mf); return; } }

@@ -41,6 +41,7 @@ test DiscoveryTests.ShipwrecksLieOnSeaShores 8 checks shipwreck sites on the cac
 test DiscoveryTests.WatchtowersStandOnHighGround 8 checks watchtower sites on the cached default world
 test DiscoveryTests.SunkenTemplesStepDownIntoLakes 35 builds seed 3 at 2048, the scale where lake banks show the temple steps, and checks sites and tread heights
 test DiscoveryTests.AncientTreesStandInOldWoods 5 checks ancient-tree sites on the cached default world
+test DiscoveryTests.FumaroleFieldsSitOnHotspotGround 35 builds seed 3 at 2048 and checks fumarole sites, vents and gaps
 test RoadTests.RoadsLinkTownsAndPassTheCheck 40 routes and checks roads between towns in three test worlds
 test RoadTests.RoadsAreDeterministicAndMatchThePlacedWorld 40 routes roads twice and reruns feature placement on one test world
 test RoadTests.RoadTunnelsOnSeed2At1024AreWalkableAndMeetTheirRoads 40 builds a 1024 test world with road tunnels and checks them
