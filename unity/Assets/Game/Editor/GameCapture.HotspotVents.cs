@@ -6,7 +6,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float VentFillShare = 0.33f, VentFov = 50f, VentEyeAbove = 1.7f, MudFillShare = 0.5f, MudEyeAbove = 4f;
+        const float VentFillShare = 0.33f, VentFov = 50f, VentEyeAbove = 1.7f, MudFillShare = 0.5f, MudEyeAbove = 8f;
 
         static System.Collections.IEnumerator HotspotVentsTour(Camera cam, string dir)
         {
