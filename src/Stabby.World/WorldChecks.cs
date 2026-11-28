@@ -1628,6 +1628,8 @@ namespace Stabby.World
                 if (!Mines.IsMine(g)) continue;
                 if (++count > Mines.Most) { e.Add($"mines: more than {Mines.Most} mines"); return; }
                 if (g.Nodes.Count == 0 || !g.Nodes[0].Entrance) { e.Add($"mines: mine in tile {g.Tile} has no entrance"); return; }
+                var m = g.Nodes[0];
+                if (!Mines.Approach(w, detail, m.X, m.Z, -m.Hx, -m.Hz)) { e.Add($"mines: mouth at {m.X:F0},{m.Z:F0} has no walkable approach"); return; }
                 var near = new List<FeatureEdit>();
                 foreach (var q in edits) if (Features.TileOf(q, cm) == g.Tile) near.Add(q);
                 var items = near.ToArray();
