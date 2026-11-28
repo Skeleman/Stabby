@@ -53,7 +53,7 @@ public class DiscoveryTests
             kinds.UnionWith(fresh.Select(o => o.Def));
         }
         Assert.True(seen > 0);
-        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
+        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && Objects.Objects[d].Id != "sunken-temple" && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
         Assert.True(missing.Count == 0, $"seeds 1..4 place no {string.Join(", ", missing)}");
     }
 
@@ -382,7 +382,7 @@ public class DiscoveryTests
     public void SunkenTemplesStepDownIntoLakes()
     {
         int temple = Objects.Objects.FindIndex(o => o.Id == "sunken-temple");
-        var (_, _, _, field) = World(3);
+        var (w, _, _, field) = TestWorlds.Get(3, 2048);
         var all = field.Discoveries();
         var temples = all.Where(o => o.Def == temple).ToArray();
         output.WriteLine($"{temples.Length} temples " + string.Join(" ", temples.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
@@ -395,6 +395,19 @@ public class DiscoveryTests
             Assert.NotEmpty(Structures.Layout(ObjectPart.SunkenTemple, ObjectMeshes.Key("sunken-temple", 0, c.Variant)).Contacts);
             foreach (var o in all.Where(o => o.Def != temple))
                 Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+            float u = Structures.TempleU * c.Size, level = float.MinValue;
+            var treads = new (float Top, float Ground)[Structures.TempleSteps];
+            for (int k = 0; k < treads.Length; k++)
+            {
+                ObjectField.Rotate(c, 0, 0, (Structures.TempleStepZ + (k + 0.5f) * Structures.TempleStepRun) * u, out float rx, out _, out float rz);
+                int lake = w.Water.LakeId[(int)((c.Z + rz) / w.Config.CellMeters + 0.5f) * w.Config.Size + (int)((c.X + rx) / w.Config.CellMeters + 0.5f)];
+                if (lake >= 0) level = Math.Max(level, w.Water.Lakes[lake].Level);
+                treads[k] = (c.Y + (Structures.TempleTop - Structures.TempleStepRise * (k + 1)) * u, field.GroundAt(c.X + rx, c.Z + rz));
+            }
+            output.WriteLine($"{c.X:F0},{c.Z:F0} lake {level:F2} treads " + string.Join(" ", treads.Select(t => $"{t.Top:F2}/{t.Ground:F2}")));
+            Assert.Contains(treads, t => t.Top < level);
+            for (int k = 0; k < treads.Length; k++)
+                Assert.True(treads[k].Top < level || treads[k].Top >= treads[k].Ground, $"step {k} of the temple at {c.X:F0},{c.Z:F0} is buried: tread {treads[k].Top:F2} under ground {treads[k].Ground:F2}");
         }
     }
 

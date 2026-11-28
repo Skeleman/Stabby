@@ -4,8 +4,8 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const float TempleU = 1 / 20f, TempleTop = 0.15f, TempleStepZ = 3f, TempleStepRun = 0.8f, TempleStepRise = 0.32f, TempleWaterline = 1.3f;
-        public const int TempleSteps = 8;
+        public const float TempleU = 1 / 20f, TempleTop = 0.15f, TempleStepZ = 3f, TempleStepRun = 0.98f, TempleStepRise = 0.14f, TempleWaterline = 1.3f;
+        public const int TempleSteps = 7;
         const float TempleFoot = -2.7f, TempleDrum = 0.9f;
         public const float TempleHalfX = 4.8f * TempleU, TempleFront = TempleStepZ * TempleU, TempleBack = -5.2f * TempleU;
 
@@ -61,7 +61,6 @@ namespace Stabby.World
                 Touch(l, f, sd * (sw + 0.35f), 0, front + 0.5f * len, 0.9f);
             }
             Flat(l, steps);
-            Drape(l, steps);
 
             float rowF = front - 0.7f, rowB = back + 0.7f, span = 2 * (hx - 0.9f) / 3;
             int broke = rng.Range(0, 4), lean = (broke + rng.Range(1, 4)) % 4, gap = rng.Range(0, 3);
@@ -162,7 +161,7 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float TempleShoreMinM = 5f, TempleShoreM = 11f, TempleShoreAimM = 8f, TempleDropMinM = 0.6f, TempleDropM = 1.9f, TempleDropAimM = 1.2f, TempleDryM = 6f, TempleSeekStepM = 3f, TempleReachM = 14f, TempleCornerGapM = 0.15f;
+        public const float TempleShoreMinM = 5f, TempleShoreM = 11f, TempleShoreAimM = 8f, TempleDropMinM = 0.6f, TempleDropM = 1.9f, TempleDropAimM = 1.2f, TempleDryM = 6f, TempleSeekStepM = 3f, TempleReachM = 14f, TempleCornerGapM = 0.15f, TempleNominalM = 20f;
         public const int TempleSeekRings = 4;
 
         public float TempleFit(float x, float z, out float vx, out float vz)
@@ -178,7 +177,7 @@ namespace Stabby.World
                 float shore = TempleShore(x, z, ux, uz, TempleShoreM, out float level);
                 if (shore < TempleShoreMinM) continue;
                 float drop = y - level;
-                if (drop < TempleDropMinM || drop > TempleDropM || !TempleDry(x, z, -ux, -uz, level) || !TempleDry(x, z, -uz, ux, level) || !TempleDry(x, z, uz, -ux, level)) continue;
+                if (drop < TempleDropMinM || drop > TempleDropM || !TempleDry(x, z, -ux, -uz, level) || !TempleDry(x, z, -uz, ux, level) || !TempleDry(x, z, uz, -ux, level) || TempleBuriedStep(x, y, z, ux, uz, Structures.TempleU * TempleNominalM, level) >= 0) continue;
                 float fit = -0.1f * Math.Abs(shore - TempleShoreAimM) - Math.Abs(drop - TempleDropAimM);
                 if (fit > best) { best = fit; vx = ux; vz = uz; }
             }
@@ -200,6 +199,16 @@ namespace Stabby.World
                 if (GroundAt(detail, cm, px, pz) < level) return r;
             }
             return float.MinValue;
+        }
+
+        int TempleBuriedStep(float x, float y, float z, float ux, float uz, float u, float level)
+        {
+            for (int k = 0; k < Structures.TempleSteps; k++)
+            {
+                float d = (Structures.TempleStepZ + (k + 0.5f) * Structures.TempleStepRun) * u, tread = y + (Structures.TempleTop - Structures.TempleStepRise * (k + 1)) * u;
+                if (tread >= level && tread < GroundAt(detail, cm, x + ux * d, z + uz * d)) return k;
+            }
+            return -1;
         }
 
         bool TempleDry(float x, float z, float ux, float uz, float level)
@@ -257,6 +266,7 @@ namespace Stabby.World
             if (level <= foot) return "has steps that never reach the water";
             float floor = o.Y + Structures.TempleTop * Structures.TempleU * o.Size;
             if (level >= floor) return "is drowned above its floor";
+            if (TempleBuriedStep(o.X, o.Y, o.Z, bx / bl, bz / bl, Structures.TempleU * o.Size, level) >= 0) return "has steps buried in the bank";
             for (int k = 0; k < 9; k++)
             {
                 if (k == 4) continue;
