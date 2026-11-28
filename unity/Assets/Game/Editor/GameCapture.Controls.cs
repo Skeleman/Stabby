@@ -148,7 +148,7 @@ namespace Stabby.Game.Editor
                     {
                         PlayerControls.Yaw = y * 45f;
                         var pivot = new float3(p.x, h + PlayerControls.Lift, p.y);
-                        float b = PlayerControls.BoomClear(ground, pivot, PlayerControls.Back);
+                        float b = PlayerControls.BoomClear(ground, default, pivot, PlayerControls.Back);
                         if (b > 4f && b < slopeBoom) { slopeBoom = b; slope = p; slopeYaw = PlayerControls.Yaw; }
                     }
                 }
@@ -162,6 +162,45 @@ namespace Stabby.Game.Editor
             float before = PlayerControls.BoomNow;
             for (int k = 0; k < 30; k++) yield return null;
             lines.Add($"ease out: boom {before:F2} -> {PlayerControls.BoomNow:F2} m after 30 frames back on flat ground");
+
+            using (var oq = view.EntityManager.CreateEntityQuery(typeof(ObjectColumns)))
+            {
+                var cols = oq.CalculateEntityCount() == 1 ? oq.GetSingleton<ObjectColumns>() : default;
+                bool found = false;
+                float2 rock = default;
+                float rockR = 0;
+                int seen = 0, tall = 0;
+                int hx = (int)math.floor(home.x / cols.RegionM), hz = (int)math.floor(home.z / cols.RegionM);
+                for (int qz = hz - 3; qz <= hz + 3; qz++)
+                    for (int qx = hx - 3; qx <= hx + 3; qx++)
+                    {
+                        int region = qz * cols.Across + qx;
+                        if (cols.Across <= 0 || qx < 0 || qz < 0 || qx >= cols.Across || qz >= cols.Across || !cols.Resident(region) || !cols.Grid(region, out var grid) || grid.W == 0) continue;
+                        for (int k = cols.Start(region, 0), e = cols.Start(region, grid.Cells); k < e; k++)
+                        {
+                            var col = cols.Column(region, k);
+                            seen++;
+                            if (col.Top - col.Bottom >= 3f) tall++;
+                            float gh = ground.HeightAt(col.X, col.Z);
+                            if (Obstacles.IsDead(col) || col.Top - col.Bottom < 3f || col.R < 0.6f || col.Bottom > 3f + gh || gh < 0.5f || col.R <= rockR) continue;
+                            rock = new float2(col.X, col.Z);
+                            rockR = col.R;
+                            found = true;
+                        }
+                    }
+                if (!found) lines.Add($"object boom: no tall column found near home ({seen} columns seen, {tall} tall, across {cols.Across})");
+                else
+                {
+                    var at = rock + new float2(1, 0) * (rockR + 2.5f);
+                    PlayerControls.Yaw = math.degrees(math.atan2(1f, 0f));
+                    PlayerControls.Pitch = 8f;
+                    PlaceServerPlayers(server, (Vector2)at);
+                    PlayerControls.BoomNow = PlayerControls.Boom;
+                    for (var w = Settle(120); w.MoveNext();) yield return null;
+                    lines.Add($"object boom: rock at {rock.x:F0},{rock.y:F0} r {rockR:F1}, player {rockR + 2.5f:F1} m behind it, boom {PlayerControls.BoomNow:F2} m of {PlayerControls.Boom:F0}");
+                    Shot(cam, dir, "controls-object");
+                }
+            }
 
             PlayerControls.Scripted = false;
             GameStatus.HoldCamera = true;

@@ -179,20 +179,10 @@ namespace Stabby.Game
             }
         }
 
-        public static float BoomClear(Ground ground, float3 pivot, float3 back)
+        public static float BoomClear(Ground ground, ObjectColumns cols, float3 pivot, float3 back)
         {
-            float prevT = 0, prevC = pivot.y - ground.HeightAt(pivot.x, pivot.z) - BoomMargin;
-            if (prevC <= 0) return BoomMin;
-            for (int k = 1; k <= BoomSamples; k++)
-            {
-                float t = Boom * k / BoomSamples;
-                var p = pivot + back * t;
-                float c = p.y - ground.HeightAt(p.x, p.z) - BoomMargin;
-                if (c <= 0) return math.max(BoomMin, prevT + (t - prevT) * prevC / (prevC - c));
-                prevT = t;
-                prevC = c;
-            }
-            return Boom;
+            var g = ground;
+            return CameraBoom.Clear(g, (x, z) => g.EditsNear(x, z, BoomMargin), cols, g.WalkStep, pivot.x, pivot.y, pivot.z, back.x, back.y, back.z, Boom, BoomMin, BoomMargin, BoomSamples);
         }
 
         public static float EaseBoom(float want, float dt)
