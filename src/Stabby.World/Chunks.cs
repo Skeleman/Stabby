@@ -51,6 +51,20 @@ namespace Stabby.World
             throw new InvalidOperationException("world heights span too far to store in 16 bits per chunk");
         }
 
+        public static void Quantise(GeneratedWorld w)
+        {
+            FitHeights(w);
+            int a = Across(w.Config.Size);
+            var pool = new ConcurrentBag<byte[]>();
+            Parallel.For(0, a * a, () => pool.TryTake(out var b) ? b : new byte[MaxBytes], (k, _, buf) =>
+            {
+                Pack(w, k % a, k / a, buf, 0);
+                Unpack(w, k % a, k / a, buf, 0);
+                return buf;
+            }, pool.Add);
+            Relink(w);
+        }
+
         public static ulong[] Checksums(GeneratedWorld w)
         {
             FitHeights(w);

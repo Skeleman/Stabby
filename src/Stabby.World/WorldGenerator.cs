@@ -148,14 +148,14 @@ namespace Stabby.World
             stage?.Invoke("hydrology");
 
             var w = new GeneratedWorld { Config = c, Sketch = sketch, Sea = sea, Height = h, Climate = climate, Water = water, Materials = materials, Objects = objects, Caves = caves };
-            if (terrainOnly) return w;
+            if (terrainOnly) { WorldChunks.Quantise(w); return w; }
             var wet = new bool[h.Length];
             for (int i = 0; i < h.Length; i++) wet[i] = sea[i] || water.LakeId[i] >= 0;
             w.Biome = Biomes.Classify(c, biomes, climate, h, sea, water, wet);
             w.BiomeIds = new string[biomes.Count];
             for (int b = 0; b < biomes.Count; b++) w.BiomeIds[b] = biomes[b].Id;
             Biomes.ApplyRegions(c, biomes, sketch, wet, w.Biome);
-            WaterTint.Apply(w);
+            WorldChunks.Quantise(w);
             stage?.Invoke("biomes");
             return w;
         }

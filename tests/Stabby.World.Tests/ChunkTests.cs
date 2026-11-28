@@ -57,25 +57,25 @@ public class ChunkTests
     }
 
     [Fact]
-    public void DecodedLayersStayWithinTheirSteps()
+    public void GeneratedWorldEqualsItsRoundTrip()
     {
         var g = Gen(42);
         var d = Decoded(g);
-        float half = (float)ChunkCodes.Step(d.HeightScale) / 2 + 1e-3f;
-        for (int i = 0; i < g.Height.Length; i++)
-        {
-            Assert.InRange(d.Height[i] - g.Height[i], -half, half);
-            Assert.InRange(d.Water.WaterSurface[i] - g.Water.WaterSurface[i], -half, half);
-            float q = g.Water.DischargeM3s[i];
-            Assert.InRange(d.Water.DischargeM3s[i], q * 0.9996f - 2e-5f, q * 1.0004f + 2e-5f);
-            Assert.InRange(d.Climate.TemperatureC[i] - g.Climate.TemperatureC[i], -0.21f, 0.21f);
-            Assert.Equal(g.Water.Receiver[i], d.Water.Receiver[i]);
-            Assert.Equal(g.Water.LakeId[i], d.Water.LakeId[i]);
-            Assert.Equal(g.Biome[i], d.Biome[i]);
-            Assert.Equal(g.Sea[i], d.Sea[i]);
-            Assert.Equal(g.Water.IsRiver[i], d.Water.IsRiver[i]);
-        }
-        Assert.Equal(WorldChunks.Checksums(d), WorldChunks.Checksums(Decoded(d)));
+        Assert.Equal(g.HeightScale, d.HeightScale);
+        Assert.Equal(g.Height, d.Height);
+        Assert.Equal(g.Water.WaterSurface, d.Water.WaterSurface);
+        Assert.Equal(g.Water.DischargeM3s, d.Water.DischargeM3s);
+        Assert.Equal(g.Climate.TemperatureC, d.Climate.TemperatureC);
+        Assert.Equal(g.Climate.PrecipitationMm, d.Climate.PrecipitationMm);
+        Assert.Equal(g.Water.Receiver, d.Water.Receiver);
+        Assert.Equal(g.Water.LakeId, d.Water.LakeId);
+        Assert.Equal(g.Water.IsRiver, d.Water.IsRiver);
+        Assert.Equal(g.Biome, d.Biome);
+        Assert.Equal(g.Sea, d.Sea);
+        Assert.Equal(g.Water.Lakes.Select(l => (l.Level, l.Outlet, l.Cells.Count)), d.Water.Lakes.Select(l => (l.Level, l.Outlet, l.Cells.Count)));
+        Assert.Equal(g.Water.Deltas.Select(x => (x.Apex, x.Main)), d.Water.Deltas.Select(x => (x.Apex, x.Main)));
+        Assert.Equal(g.Water.Rivers.Count, d.Water.Rivers.Count);
+        Assert.Equal(g.OutputFingerprint(), d.OutputFingerprint());
     }
 
     [Fact]
