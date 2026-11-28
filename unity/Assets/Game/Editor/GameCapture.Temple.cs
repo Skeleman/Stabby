@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float TempleHour = 15.5f, TempleMoon = 0.5f, TempleEyeOut = 17f, TempleEyeSide = 7f, TempleEyeUp = 3.2f, TempleAimOut = 2f, TempleAimUp = 1.8f;
+        const float TempleHour = 15.5f, TempleMoon = 0.5f, TempleEyeBeyondM = 1.5f, TempleEyeSide = 1.5f, TempleEyeAboveFootM = 3.2f, TempleAimRun = 0.3f, TempleAimUp = 0.6f;
 
         static System.Collections.IEnumerator TempleTour(Camera cam, string dir)
         {
@@ -37,8 +37,14 @@ namespace Stabby.Game.Editor
             var centre = new Vector3(s.X, s.Y, s.Z);
             cam.fieldOfView = 60f;
             for (var w = ShowHour(TempleHour, TempleMoon); w.MoveNext();) yield return null;
-            var eye = centre + across * TempleEyeOut + along * TempleEyeSide + Vector3.up * TempleEyeUp;
-            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(centre + across * TempleAimOut + Vector3.up * TempleAimUp - eye));
+            var scale = Structures.TempleU * s.Size;
+            var footZ = (Structures.TempleStepZ + Structures.TempleSteps * Structures.TempleStepRun) * scale;
+            var footY = s.Y + (Structures.TempleTop - Structures.TempleStepRise * Structures.TempleSteps) * scale;
+            var eye = centre + across * (footZ + TempleEyeBeyondM) + along * TempleEyeSide;
+            eye.y = footY + TempleEyeAboveFootM;
+            var aim = centre + across * ((Structures.TempleStepZ + Structures.TempleSteps * Structures.TempleStepRun * TempleAimRun) * scale);
+            aim.y = s.Y + (Structures.TempleTop - Structures.TempleStepRise * Structures.TempleSteps * TempleAimRun) * scale + TempleAimUp;
+            cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
             for (var w = Settle(180); w.MoveNext();) yield return null;
             Shot(cam, null, "warmup");
             var sky = DayNightSystem.Shown;
