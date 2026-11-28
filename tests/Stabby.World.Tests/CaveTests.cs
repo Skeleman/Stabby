@@ -266,7 +266,7 @@ public class CaveTests
     {
         var ends = new int[4];
         int graphs = 0;
-        for (ulong seed = 1; seed <= 8; seed++)
+        for (ulong seed = 1; seed <= 10; seed++)
         {
             var s = At(seed);
             var streams = CaveBrooks.Build(s.W, s.Detail, s.Edits, s.Graphs);

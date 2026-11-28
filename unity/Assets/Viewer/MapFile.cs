@@ -27,7 +27,8 @@ namespace Stabby.Viewer
             try
             {
                 var bytes = File.ReadAllBytes(path);
-                int v = WorldFile.GeneratorVersionOf(bytes);
+                int f = WorldFile.VersionOf(bytes), v = WorldFile.GeneratorVersionOf(bytes);
+                if (f != WorldFile.Version) return $"map file format v{f}, this build reads v{WorldFile.Version}";
                 if (v != WorldConfig.GeneratorVersion) return $"map file from generator {v}, this build runs {WorldConfig.GeneratorVersion}";
                 if (WorldFile.ContentHashOf(bytes) != ContentHash()) return "map file baked from other biomes.json or materials.json";
                 var w = WorldFile.Read(bytes, ContentFiles.Materials(ContentFiles.MaterialsPath));
@@ -52,8 +53,9 @@ namespace Stabby.Viewer
                 {
                     var bytes = File.ReadAllBytes(path);
                     times.Mark("file read");
-                    int v = WorldFile.GeneratorVersionOf(bytes);
-                    if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}, this build runs {WorldConfig.GeneratorVersion}";
+                    int f = WorldFile.VersionOf(bytes), v = WorldFile.GeneratorVersionOf(bytes);
+                    if (f != WorldFile.Version) why = $"map file format v{f}, this build reads v{WorldFile.Version}";
+                    else if (v != WorldConfig.GeneratorVersion) why = $"map file from generator {v}, this build runs {WorldConfig.GeneratorVersion}";
                     else if (WorldFile.ContentHashOf(bytes) != hash) why = "map file baked from other biomes.json or materials.json";
                     else
                     {
@@ -70,11 +72,16 @@ namespace Stabby.Viewer
                 catch (Exception e) when (e is FormatException || e is IOException) { why = $"map file unreadable: {e.Message}"; }
             }
             if (!UnityEngine.Application.isEditor) throw new MapFileException($"{why}: {path}. Bake it with: {BakeCommand(c, path)}");
-            var g = WorldGenerator.Generate(c, defs, materials);
+            var raw = WorldGenerator.Generate(c, defs, materials);
+            var file = WorldFile.Write(raw, hash);
+            var g = WorldFile.Read(file, materials);
+            g.Objects = raw.Objects;
+            g.Caves = raw.Caves;
+            g.SketchInBackground();
             string note = $"generated in {sw.ElapsedMilliseconds} ms ({why})";
             if (!save) return (g, note);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllBytes(path + ".tmp", WorldFile.Write(g, hash));
+            File.WriteAllBytes(path + ".tmp", file);
             if (File.Exists(path)) File.Delete(path);
             File.Move(path + ".tmp", path);
             return (g, note + ", saved map file");

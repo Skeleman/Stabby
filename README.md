@@ -15,8 +15,8 @@ dotnet run --project tools/Stabby.Cli -c Release -- <command>
 | Command | Does |
 |---|---|
 | `gen --seed N [--size 512] [--out dir] [--scale k] [--sketch sketch.json] [--rain mm]` | One world into `out/seed<N>/` |
-| `bake --seed N [--size 512] [--out file]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating |
-| `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings, `--checks 0` times generation alone |
+| `bake --seed N [--size 512] [--out file] [--errors 1]` | Generates once and writes the world file `out/maps/seed<N>-<size>.stabbymap` that the game loads instead of generating; checks the decoded world too, `--errors 1` prints decoded-vs-generated error per layer |
+| `sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--decoded 1]` | Runs `WorldChecks` on many seeds, prints per-stage time and allocation and any violations; `--jobs 1` for clean timings, `--checks 0` times generation alone, `--decoded 1` checks each world after a map file round trip |
 | `scenarios [--out out/scenarios] [--scan 100]` | Generates each named acceptance scenario and writes a review sheet with the witness marked; `--scan` lists which seeds show each one |
 
 - `gen` writes `map.png`, `sketch.png`, `biomes.png`, `precipitation.png`,

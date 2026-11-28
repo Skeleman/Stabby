@@ -81,7 +81,9 @@ namespace Stabby.World
 
         public static void Apply(GeneratedWorld w) => Apply(w, Field(w));
 
-        public static WaterMix[] Field(GeneratedWorld w)
+        public static WaterMix[] Field(GeneratedWorld w) => Finish(w, Sums(w));
+
+        public static WaterMix[] Sums(GeneratedWorld w)
         {
             if (w.Biome == null || w.BiomeIds == null || w.Materials == null || w.Climate == null) return null;
             var slots = w.Materials.TintSlots();
@@ -111,6 +113,14 @@ namespace Stabby.World
                 if (r == i) continue;
                 mix[r].A += mix[i].A; mix[r].B += mix[i].B; mix[r].C += mix[i].C;
             }
+            return mix;
+        }
+
+        public static WaterMix[] Finish(GeneratedWorld w, WaterMix[] mix)
+        {
+            if (mix == null) return null;
+            var hy = w.Water;
+            int n = w.Config.Size;
             foreach (var d in hy.Deltas) SplitDelta(w, d, mix);
             for (int i = 0; i < n * n; i++)
             {

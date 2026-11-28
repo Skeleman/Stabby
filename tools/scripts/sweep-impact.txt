@@ -89,6 +89,7 @@ src/Stabby.World/WaterSwell.cs core
 src/Stabby.World/WorldFile.cs core
 src/Stabby.World/LoadTimes.cs core
 src/Stabby.World/ChunkZip.cs core
+src/Stabby.World/ChunkCodes.cs core
 src/Stabby.World/Mound.cs core
 src/Stabby.World/GroundBake.cs surface,meshing,caves,sites,objects,roads
 src/Stabby.World/FieldCaches.cs objects,sites,roads

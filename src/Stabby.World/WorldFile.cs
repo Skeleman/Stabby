@@ -20,9 +20,8 @@ namespace Stabby.World
 
     public static class WorldFile
     {
-        public const int Version = 3, HeaderBytes = 48, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256, MaxVolcanoes = 64, VolcanoInts = 17;
+        public const int Version = 4, HeaderBytes = 48, MaxSize = 8192, MaxBiomes = 1024, MaxIdBytes = 256, MaxVolcanoes = 64, VolcanoInts = 17;
         static readonly byte[] Magic = { (byte)'S', (byte)'T', (byte)'B', (byte)'W' };
-        static readonly int Full = WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes;
 
         public static byte[] Write(GeneratedWorld w, ulong contentHash = 0) => Write(w, contentHash, WorldBake.NotRaised, null);
 
@@ -30,6 +29,7 @@ namespace Stabby.World
         {
             var c = w.Config;
             int a = WorldChunks.Across(c.Size), count = a * a;
+            WorldChunks.FitHeights(w);
             var head = new List<byte>(Magic);
             Int(head, Version); Int(head, WorldConfig.GeneratorVersion); Int(head, WorldChunks.Version); Long(head, contentHash);
             Long(head, c.Seed); Int(head, c.Size); Int(head, BitConverter.SingleToInt32Bits(c.CellMeters));
@@ -45,12 +45,12 @@ namespace Stabby.World
             foreach (var v in cones) { Int(head, (int)v.Seed); Int(head, v.Breached ? 1 : 0); Int(head, v.Active ? 1 : 0); }
             var sums = new ulong[count];
             var packed = new byte[count][];
-            var pool = new ConcurrentBag<byte[][]>();
-            Parallel.For(0, count, () => pool.TryTake(out var u) ? u : new[] { new byte[Full], new byte[Full] }, (k, _, u) =>
+            var pool = new ConcurrentBag<byte[]>();
+            Parallel.For(0, count, () => pool.TryTake(out var u) ? u : new byte[WorldChunks.MaxBytes], (k, _, u) =>
             {
-                int len = WorldChunks.Pack(w, k % a, k / a, u[0], 0);
-                sums[k] = WorldChunks.Checksum(u[0], len);
-                packed[k] = ChunkZip.Deflate(u[0], len, u[1]);
+                int len = WorldChunks.Pack(w, k % a, k / a, u, 0);
+                sums[k] = WorldChunks.Checksum(u, len);
+                packed[k] = ChunkZip.Deflate(u, len);
                 return u;
             }, pool.Add);
             var g = ground?.Write();
@@ -71,6 +71,11 @@ namespace Stabby.World
         }
 
         public static int GeneratorVersionOf(byte[] data) => data.Length >= 12 && HasMagic(data) ? GetInt(data, 8) : -1;
+
+        public static int VersionOf(byte[] data) => data.Length >= 8 && HasMagic(data) ? GetInt(data, 4) : -1;
+
+        public static string Rebake(byte[] data) =>
+            data.Length >= 36 && HasMagic(data) ? $"stabby bake --seed {(uint)GetInt(data, 24) | (ulong)(uint)GetInt(data, 28) << 32} --size {GetInt(data, 32)}" : "stabby bake --seed N --size N";
 
         public static ulong ContentHashOf(byte[] data) =>
             data.Length >= 24 && HasMagic(data) && GetInt(data, 4) == Version ? (uint)GetInt(data, 16) | (ulong)(uint)GetInt(data, 20) << 32 : 0;
@@ -98,7 +103,7 @@ namespace Stabby.World
             int o = 4;
             int version = Next(data, ref o), gen = Next(data, ref o), chunkVersion = Next(data, ref o);
             if (version != Version || gen != WorldConfig.GeneratorVersion || chunkVersion != WorldChunks.Version)
-                throw new FormatException($"world file v{version} generator {gen} chunks v{chunkVersion}, expected v{Version} generator {WorldConfig.GeneratorVersion} chunks v{WorldChunks.Version}");
+                throw new FormatException($"world file v{version} generator {gen} chunks v{chunkVersion}, expected v{Version} generator {WorldConfig.GeneratorVersion} chunks v{WorldChunks.Version}; rebake it with: {Rebake(data)}");
             o += 8;
             ulong seed = (uint)Next(data, ref o) | (ulong)(uint)Next(data, ref o) << 32;
             var c = new WorldConfig { Seed = seed, Size = Next(data, ref o), CellMeters = BitConverter.Int32BitsToSingle(Next(data, ref o)) };
@@ -153,15 +158,15 @@ namespace Stabby.World
             var w = Empty(c, biomeIds, materials);
             w.Cones = cones;
             times?.Mark("empty");
-            var pool = new ConcurrentBag<byte[][]>();
+            var pool = new ConcurrentBag<byte[]>();
             try
             {
-                Parallel.For(0, count, () => pool.TryTake(out var u) ? u : new[] { new byte[Full], new byte[Full] }, (k, _, u) =>
+                Parallel.For(0, count, () => pool.TryTake(out var u) ? u : new byte[WorldChunks.MaxBytes], (k, _, u) =>
                 {
-                    int cx = k % a, cy = k / a, bytes = WorldChunks.Bytes(c.Size, cx, cy);
-                    ChunkZip.Inflate(data, bake.At[k], bake.Len[k], bytes, u[1], u[0]);
-                    if (WorldChunks.Checksum(u[0], bytes) != bake.Sums[k]) throw new InvalidDataException($"chunk {cx},{cy} fails its checksum");
-                    WorldChunks.Unpack(w, cx, cy, u[0], 0);
+                    int cx = k % a, cy = k / a, bytes = WorldChunks.Bytes(c, cx, cy);
+                    ChunkZip.Inflate(data, bake.At[k], bake.Len[k], bytes, u);
+                    if (WorldChunks.Checksum(u, bytes) != bake.Sums[k]) throw new InvalidDataException($"chunk {cx},{cy} fails its checksum");
+                    WorldChunks.Unpack(w, cx, cy, u, 0);
                     return u;
                 }, pool.Add);
             }
@@ -171,12 +176,12 @@ namespace Stabby.World
                 throw new FormatException("world file chunk is corrupt: " + inner.Message, inner);
             }
             times?.Mark("chunks");
-            var tint = Task.Run(() => WaterTint.Field(w));
             var groundTimes = times == null ? null : new LoadTimes();
             int groundAt = o;
             var ground = groundLen > 0 ? Task.Run(() => GroundBake.Read(data, groundAt, groundLen, groundTimes)) : null;
+            var tint = Task.Run(() => WaterTint.Sums(w));
             Hydrology.Relink(w.Config, w.Height, w.Sea, w.Water, times);
-            WaterTint.Apply(w, tint.GetAwaiter().GetResult());
+            WaterTint.Apply(w, WaterTint.Finish(w, tint.GetAwaiter().GetResult()));
             times?.Mark("tint");
             if (ground != null) bake.Ground = ground.GetAwaiter().GetResult();
             times?.Add("ground", groundTimes);
