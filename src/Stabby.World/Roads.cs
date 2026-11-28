@@ -17,8 +17,8 @@ namespace Stabby.World
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
         public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
-        public const float TrailHalfM = 1.2f, TrailGrade = 0.7f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
-        const int TrailMineTries = 4, TrailMineTargets = 8, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
+        public const float TrailHalfM = 1.2f, TrailGrade = 0.7f, TrailReachM = 2000f, TrailMineReachM = 9000f, TrailMouthM = 40f;
+        const int TrailMineTries = 4, TrailMineTargets = 48, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;
         public const float TunnelMinM = 70f, TunnelMostM = 250f, TunnelGrade = 0.12f, TunnelCost = 1f, TunnelRise = 0.5f, TunnelSpanM = 150f, TunnelSocketM = 100f, TunnelCampMin = 14.5f, TunnelCampMax = 18f, TunnelWarp = 0.04f;
@@ -388,22 +388,20 @@ namespace Stabby.World
             foreach (var (mx, mz, ux, uz) in MineMouths())
             {
                 float hx = mx, hz = mz;
-                bool clear = false;
-                for (float d = 0; d <= TrailMouthM && !clear; d += 1f)
+                var heads = new List<(float d, float x, float z)>();
+                for (float d = 0; d <= TrailMouthM && heads.Count == 0; d += 1f)
                 {
                     hx = mx + ux * d; hz = mz + uz * d;
-                    clear = hx >= 0 && hz >= 0 && hx < worldM && hz < worldM && StepFault(hx, hz, hx, hz, out _) == null;
+                    if (hx < 0 || hz < 0 || hx >= worldM || hz >= worldM || StepFault(hx, hz, hx, hz, out _) != null) continue;
+                    int cx = Cell(hx), cz = Cell(hz);
+                    for (int dz = -TrailMineCells; dz <= TrailMineCells; dz++)
+                        for (int dx = -TrailMineCells; dx <= TrailMineCells; dx++)
+                        {
+                            float x = (cx + dx) * cm, z = (cz + dz) * cm;
+                            if (cx + dx < 0 || cz + dz < 0 || cx + dx >= n || cz + dz >= n || RoadFault(hx, hz, x, z, out _) != null) continue;
+                            heads.Add(((x - hx) * (x - hx) + (z - hz) * (z - hz) - ((x - hx) * ux + (z - hz) * uz) * cm, x, z));
+                        }
                 }
-                if (!clear) continue;
-                var heads = new List<(float d, float x, float z)>();
-                int cx = Cell(hx), cz = Cell(hz);
-                for (int dz = -TrailMineCells; dz <= TrailMineCells; dz++)
-                    for (int dx = -TrailMineCells; dx <= TrailMineCells; dx++)
-                    {
-                        float x = (cx + dx) * cm, z = (cz + dz) * cm;
-                        if (cx + dx < 0 || cz + dz < 0 || cx + dx >= n || cz + dz >= n || RoadFault(hx, hz, x, z, out _) != null) continue;
-                        heads.Add(((x - hx) * (x - hx) + (z - hz) * (z - hz) - ((x - hx) * ux + (z - hz) * uz) * cm, x, z));
-                    }
                 heads.Sort((a, b) => a.d.CompareTo(b.d));
                 for (int k = 0; k < heads.Count && k < TrailMineTries; k++)
                     if (MineTrail(hx, hz, heads[k].x, heads[k].z, plans, net, list)) break;
@@ -829,11 +827,21 @@ namespace Stabby.World
             int bw = x1 - x0 + 1, bh = z1 - z0 + 1, size = bw * bh;
             var goal = new bool[size];
             foreach (int g in goals) goal[(g / n - z0) * bw + g % n - x0] = true;
+            float[] hs = goals.Length > 1 ? new float[size] : null;
             float H(int ax, int az)
             {
-                float best = float.MaxValue;
-                foreach (int g in goals) best = Math.Min(best, Heuristic(ax, az, g % n, g / n));
-                return best;
+                if (hs == null) return Heuristic(ax, az, goals[0] % n, goals[0] / n);
+                int i = (az - z0) * bw + ax - x0;
+                if (hs[i] > 0) return hs[i] - 1;
+                int best = int.MaxValue;
+                foreach (int g in goals)
+                {
+                    int dx = ax - g % n, dz = az - g / n;
+                    best = Math.Min(best, dx * dx + dz * dz);
+                }
+                float h = (float)Math.Sqrt(best) * cm;
+                hs[i] = h + 1;
+                return h;
             }
             var cost = new float[size];
             var from = new int[size];
