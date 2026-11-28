@@ -589,7 +589,7 @@ namespace Stabby.World
         float Density(int d, float x, float z)
         {
             if (x < 0 || z < 0 || x >= worldM || z >= worldM) return 0f;
-            int b = w.Biome[Cell(z) * n + Cell(x)];
+            int b = BiomeBorder.At(w, x, z);
             return b >= 0 ? density[d][b] : 0f;
         }
 
@@ -647,7 +647,7 @@ namespace Stabby.World
         bool Open(int d, float x, float z)
         {
             if (x < 0 || z < 0 || x >= worldM || z >= worldM) return false;
-            int b = w.Biome[Cell(z) * n + Cell(x)];
+            int b = BiomeBorder.At(w, x, z);
             return b >= 0 && density[d][b] > 0;
         }
 

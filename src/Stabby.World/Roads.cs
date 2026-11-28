@@ -17,7 +17,7 @@ namespace Stabby.World
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
         public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
-        public const float TrailHalfM = 1.2f, TrailGrade = 0.6f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
+        public const float TrailHalfM = 1.2f, TrailGrade = 0.7f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
         const int TrailMineTries = 4, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;

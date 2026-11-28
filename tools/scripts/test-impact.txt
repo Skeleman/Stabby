@@ -19,6 +19,7 @@ tests/Stabby.World.Tests/TestWorlds.cs -> RoadTests|DiscoveryTests|InnTests|Town
 tools/Stabby.Lint/* lint-allow.txt -> LintTests
 unity/* -> LintTests|ChunkZipTests|RuntimeParityTests|PoolSizeTests
 tools/scripts/* -> TestImpactTests
+src/Stabby.World/BiomeBorder.cs -> BiomeBorderTests|ObjectTests|DiscoveryTests
 fallback -> Feature|Object|Discover
 src/Stabby.World/DungeonLinks.cs -> DungeonLinkTests|DungeonTests|CaveTests|ObjectTests|DiscoveryTests
 src/Stabby.World/Dune*.cs tests/Stabby.World.Tests/DuneTests.cs -> DuneTests|DetailTests

@@ -712,14 +712,13 @@ public class ObjectTests
         try
         {
             var field = new ObjectField(w, TestWorlds.Default.Detail, TestWorlds.Default.Edits, Objects);
-            int n = w.Config.Size, d = Objects.Objects.IndexOf(c);
+            int d = Objects.Objects.IndexOf(c);
             for (int cz = 0; cz < field.ChunksAcross; cz++)
                 for (int cx = 0; cx < field.ChunksAcross; cx++)
                     foreach (var o in field.Chunk(cx, cz))
                         if (o.Def == d)
                         {
-                            int gx = Math.Min(n - 1, (int)(o.X / w.Config.CellMeters + 0.5f)), gz = Math.Min(n - 1, (int)(o.Z / w.Config.CellMeters + 0.5f));
-                            Assert.Equal("boreal", w.BiomeIds[w.Biome[gz * n + gx]]);
+                            Assert.Equal("boreal", w.BiomeIds[BiomeBorder.At(w, o.X, o.Z)]);
                         }
         }
         finally { c.Placement.Biomes = keep; }
