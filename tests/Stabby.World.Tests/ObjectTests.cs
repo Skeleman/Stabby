@@ -196,16 +196,32 @@ public class ObjectTests
         var (w, detail, edits, _) = TestWorlds.Get(TestWorlds.DefaultSeed);
         var cached = new ObjectField(w, detail, edits, Objects);
         var fresh = new ObjectField(w, detail, edits, Objects);
-        var list = new List<ObjectInstance>();
         int n = fresh.ChunksAcross;
-        foreach (var (cx, cz) in new[] { (0, 0), (n / 2, n / 2), (n / 3, 2 * n / 3), (n - 1, n - 1), (n / 2, n / 2) })
+        var spots = new[] { (0, 0), (n / 2, n / 2), (n / 3, 2 * n / 3), (n - 1, n - 1), (n / 2, n / 2) };
+        var expects = new ObjectInstance[spots.Length][];
+        var viaList = new ObjectInstance[spots.Length][];
+        var viaPlace = new ObjectInstance[spots.Length][];
+        var viaCachedList = new ObjectInstance[spots.Length][];
+        var groups = new[] { new[] { 0 }, new[] { 1, 4 }, new[] { 2 }, new[] { 3 } };
+        System.Threading.Tasks.Parallel.For(0, groups.Length, g =>
         {
-            fresh.PlaceInto(cx, cz, list);
-            var expect = cached.Chunk(cx, cz);
-            Assert.Equal(expect, list.ToArray());
-            Assert.Equal(expect, fresh.Place(cx, cz));
-            cached.PlaceInto(cx, cz, list);
-            Assert.Equal(expect, list.ToArray());
+            var own = new List<ObjectInstance>();
+            foreach (int k in groups[g])
+            {
+                var (cx, cz) = spots[k];
+                fresh.PlaceInto(cx, cz, own);
+                viaList[k] = own.ToArray();
+                expects[k] = cached.Chunk(cx, cz);
+                viaPlace[k] = fresh.Place(cx, cz);
+                cached.PlaceInto(cx, cz, own);
+                viaCachedList[k] = own.ToArray();
+            }
+        });
+        for (int k = 0; k < spots.Length; k++)
+        {
+            Assert.Equal(expects[k], viaList[k]);
+            Assert.Equal(expects[k], viaPlace[k]);
+            Assert.Equal(expects[k], viaCachedList[k]);
         }
     }
 
