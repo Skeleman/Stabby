@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const float BrineRim = 0.9f, BrineReach = 9.2f, BrineGap = 0.3f, BrineSpread = 10.4f, BrineCell = 1.9f;
+        public const float BrineRim = 0.9f, BrineReach = 9.2f, BrineGap = 0.3f;
 
         public static void BrinePools(ulong key, List<float> o)
         {
@@ -32,57 +32,47 @@ namespace Stabby.World
             var pools = new List<float>();
             BrinePools(key, pools);
 
-            int before = l.Pieces.Count, rows = (int)(BrineSpread / (0.866f * BrineCell)) + 1;
-            for (int j = -rows; j <= rows; j++)
-                for (int i = -rows; i <= rows; i++)
-                {
-                    float x = (i + 0.5f * (j & 1)) * BrineCell + rng.Range(-0.2f, 0.2f) * BrineCell, z = 0.866f * j * BrineCell + rng.Range(-0.2f, 0.2f) * BrineCell;
-                    float edge = BrineSpread * rng.Range(0.72f, 1f);
-                    if (x * x + z * z > edge * edge) continue;
-                    bool wet = false;
-                    for (int k = 0; k < pools.Count; k += PoolStride)
-                    {
-                        float dx = pools[k] - x, dz = pools[k + 1] - z, g = pools[k + 3] + 0.4f * BrineCell;
-                        if (dx * dx + dz * dz < g * g) wet = true;
-                    }
-                    if (wet) continue;
-                    float w = BrineCell * rng.Range(0.8f, 0.94f);
-                    int q = rng.Range(0, 16);
-                    Hewn(l, rng.NextU64(), f, x, -0.07f, z, w, rng.Range(0.1f, 0.16f), w * rng.Range(0.78f, 0.95f), Cos16(q), Sin16(q), 0, 1, rng.Range(0.28f, 0.42f), rng.Range(-0.02f, 0.02f), rng.Range(-0.02f, 0.02f));
-                }
-            Flat(l, before);
-            Drape(l, before);
-
             int rims = l.Pieces.Count;
             for (int k = 0; k < pools.Count; k += PoolStride)
             {
                 float px = pools[k], pz = pools[k + 1], r = pools[k + 2];
-                int crystals = (int)(6.2831853f * (r + 0.3f) / 0.42f), a0 = rng.Range(0, 16);
-                for (int m = 0; m < crystals; m++)
+                int arcs = rng.Range(1, 3), a0 = rng.Range(0, 16);
+                for (int g = 0; g < arcs; g++)
                 {
-                    float t = (m + rng.Range(-0.3f, 0.3f)) / crystals * 6.2831853f, ring = r + rng.Range(0.05f, 0.45f), c = TurnCos(t), s = TurnSin(t);
-                    float x = px + c * ring, z = pz + s * ring, w = rng.Range(0.16f, 0.36f);
-                    int q = rng.Range(0, 16);
-                    Hewn(l, rng.NextU64(), f, x, -0.05f, z, w, rng.Range(0.24f, 0.44f), w * rng.Range(0.6f, 0.9f), Cos16(q), Sin16(q), 0, 0, rng.Range(0.18f, 0.3f), c * 0.2f, s * 0.2f, 0.25f);
+                    float t0 = rng.Range(0f, 6.2831853f);
+                    int clusters = rng.Range(1, 4);
+                    for (int c = 0; c < clusters; c++)
+                    {
+                        float t = t0 + rng.Range(-0.6f, 0.6f), ring = r + rng.Range(0.08f, 0.4f);
+                        float cx = px + TurnCos(t) * ring, cz = pz + TurnSin(t) * ring;
+                        int few = rng.Range(2, 5);
+                        for (int m = 0; m < few; m++)
+                        {
+                            float x = cx + rng.Range(-0.16f, 0.16f), z = cz + rng.Range(-0.16f, 0.16f), w = rng.Range(0.05f, 0.15f);
+                            int q = rng.Range(0, 16);
+                            Hewn(l, rng.NextU64(), f, x, -0.04f, z, w, rng.Range(0.08f, 0.24f), w * rng.Range(0.5f, 0.9f), Cos16(q), Sin16(q), 0, m == 0 ? 1 : 0, rng.Range(0.1f, 0.22f), rng.Range(-0.3f, 0.3f), rng.Range(-0.3f, 0.3f), rng.Range(0.25f, 0.55f));
+                        }
+                    }
                 }
-                int lumps = rng.Range(2, 4);
+                int lumps = rng.Range(1, 3);
                 for (int m = 0; m < lumps; m++)
                 {
                     int d = a0 + m * 16 / lumps + rng.Range(-1, 2);
-                    float ring = r + 0.35f, x = px + Cos16(d) * ring, z = pz + Sin16(d) * ring, w = rng.Range(0.5f, 0.8f);
+                    float ring = r + 0.3f, x = px + Cos16(d) * ring, z = pz + Sin16(d) * ring, w = rng.Range(0.35f, 0.6f);
                     int q = rng.Range(0, 16);
-                    Hewn(l, rng.NextU64(), f, x, -0.12f, z, w, rng.Range(0.22f, 0.32f), w * rng.Range(0.55f, 0.8f), Cos16(q), Sin16(q), 0, 2, rng.Range(0.3f, 0.45f), Cos16(d) * 0.15f, Sin16(d) * 0.15f, 0.2f);
+                    Hewn(l, rng.NextU64(), f, x, -0.08f, z, w, rng.Range(0.12f, 0.18f), w * rng.Range(0.55f, 0.8f), Cos16(q), Sin16(q), 0, 2, rng.Range(0.3f, 0.45f), Cos16(d) * 0.1f, Sin16(d) * 0.1f, 0.2f);
                     Touch(l, f, x, 0, z, 0.45f * w);
                 }
             }
+            Flat(l, rims);
             Drape(l, rims);
         }
     }
 
     public sealed partial class ObjectField
     {
-        public const float BrineSinkU = 0.04f, BrineCrestU = 0.26f, BrineFootU = 0.2f, BrineDepthU = 0.7f, BrineRimU = 0.55f, BrineRimSlope = 1.4f, BrineBankU = 0.12f, BrineBank = 0.9f, BrineLobe = 0.15f;
-        public static readonly string[] BrineLiquids = { "brine-teal", "brine-rust", "brine-rose", "brine-jade" };
+        public const float BrineSinkU = 0.04f, BrineFillU = 0.14f, BrineCrestU = 0.26f, BrineFootU = 0.2f, BrineDepthU = 0.7f, BrineRimU = 0.55f, BrineRimSlope = 1.4f, BrineBankU = 0.12f, BrineBank = 0.9f, BrineLobe = 0.15f;
+        public static readonly string[] BrineLiquids = { "brine-teal", "brine-aqua", "brine-rose", "brine-jade" };
 
         public int BrineLiquid(ObjectInstance o, int pool)
         {

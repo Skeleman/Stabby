@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float BrineHour = 10f, BrineMoon = 0.5f, BrineEyeM = 15f, BrineEyeUpM = 5f, BrineAimUpM = 0f;
+        const float BrineHour = 10f, BrineMoon = 0.5f, BrineEyeM = 14f, BrineEyeUpM = 3f, BrineAimUpM = 0f;
 
         static System.Collections.IEnumerator BrinePoolsTour(Camera cam, string dir)
         {
@@ -34,15 +34,19 @@ namespace Stabby.Game.Editor
             var centre = new Vector3(s.X, s.Y, s.Z);
             cam.fieldOfView = 60f;
             for (var w = ShowHour(BrineHour, BrineMoon); w.MoveNext();) yield return null;
-            var eye = centre + new Vector3(0.7f, 0, -0.7f) * BrineEyeM;
+            var pools = new System.Collections.Generic.List<float>();
+            field.SpringPoolsAt(s, pools);
+            var side = centre + new Vector3(0.7f, 0, -0.7f) * 20f;
+            int near = 0;
+            for (int k = 0; k < pools.Count; k += ObjectField.SpringStride)
+                if (new Vector2(pools[k] - side.x, pools[k + 1] - side.z).sqrMagnitude < new Vector2(pools[near] - side.x, pools[near + 1] - side.z).sqrMagnitude) near = k;
+            var aim = new Vector3(pools[near], pools[near + 4] + BrineAimUpM, pools[near + 1]);
+            var away = new Vector3(side.x - aim.x, 0, side.z - aim.z).normalized;
+            var eye = aim + away * BrineEyeM;
             eye.y = ground.HeightAt(eye.x, eye.z) + BrineEyeUpM;
-            var aim = centre;
-            aim.y = s.Y + BrineAimUpM;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
             for (var w = Settle(600); w.MoveNext();) yield return null;
             Shot(cam, null, "warmup");
-            var pools = new System.Collections.Generic.List<float>();
-            field.SpringPoolsAt(s, pools);
             GameStatus.Lines["~brine"] = $"brine-pools: {all.Length} placed, {pools.Count / ObjectField.SpringStride} pools, shown {s.X:F0},{s.Z:F0} size {s.Size:F1} variant {s.Variant}, GV {WorldConfig.GeneratorVersion}";
             Shot(cam, dir, "brine-pools");
         }

@@ -554,6 +554,8 @@ namespace Stabby.World
 
         public bool Crusts => Shape == Spring && Kind == Add && F < 0.5f;
 
+        public bool Salty => Crusts && F < -0.5f;
+
         public float CrustR => R + W + Math.Abs(T) * H;
 
         public float CrustExtent => CrustR * (1f + (CrustReach - 1f) * (1f + CrustWarp));

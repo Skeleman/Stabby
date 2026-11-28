@@ -531,8 +531,12 @@ namespace Stabby.Game
 
         static float Sinter(NativeEdits edits, NativeEdits crusts, float3 p)
         {
-            float w = 0, clay = 0;
-            for (int q = 0; q < crusts.Count; q++) w = math.max(w, crusts.Items[q].Crust(p.x, p.z));
+            float w = 0, salt = 0, clay = 0;
+            for (int q = 0; q < crusts.Count; q++)
+            {
+                float c = crusts.Items[q].Crust(p.x, p.z);
+                if (crusts.Items[q].Salty) salt = math.max(salt, c); else w = math.max(w, c);
+            }
             for (int q = 0; q < edits.Count; q++)
             {
                 var e = edits.Items[q];
@@ -540,6 +544,7 @@ namespace Stabby.Game
                 float d = math.length(new float2(p.x - e.Ax, p.z - e.Az)) - e.W - e.R;
                 clay = math.max(clay, 1 - math.smoothstep(-SinterFadeM, 0, d));
             }
+            if (salt > 0.001f && salt > w && salt > clay) return 1 + salt;
             return w >= clay ? w : -clay;
         }
 

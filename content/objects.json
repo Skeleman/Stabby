@@ -552,8 +552,8 @@
       "placement": { "biomes": ["boreal", "tundra", "alpine", "steppe", "shrubland", "cold-desert", "temperate-forest"], "perHectare": 0, "discovery": "lodestone", "spacingM": 1500, "chance": 0.7, "slopeMax": 0.25, "sizeMinM": 13, "sizeMaxM": 15, "sink": 0.01, "stampFoot": 0 }
     },
     {
-      "id": "brine-pools", "name": "Brine pools", "kind": "structure", "material": "salt-crust", "variants": 6,
-      "parts": [ { "id": "site", "shape": "brine-pools", "material": "salt-crust" } ],
+      "id": "brine-pools", "name": "Brine pools", "kind": "structure", "material": "brine-salt", "variants": 6,
+      "parts": [ { "id": "site", "shape": "brine-pools", "material": "brine-salt" } ],
       "placement": { "biomes": ["steppe", "cold-desert", "desert"], "perHectare": 0, "discovery": "brine-pools", "liquid": "brine-teal", "spacingM": 1200, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 17, "sizeMaxM": 20, "sink": 0.002 }
     }
   ],

@@ -720,7 +720,7 @@ namespace Stabby.World
                     }
                 }
                 else if (kind == MudPot) { level = sum / 8 + (MudFillU - MudSinkU) * u; crest = level + (MudCrestU - MudFillU) * u; floor = level - (MudDepthU + MudFillU) * u; }
-                else if (kind == BrinePools) { level = sum / 8 - BrineSinkU * u; crest = level + BrineCrestU * u; floor = level - BrineDepthU * u; }
+                else if (kind == BrinePools) { level = sum / 8 + (BrineFillU - BrineSinkU) * u; crest = level + (BrineCrestU - BrineFillU) * u; floor = level - (BrineDepthU + BrineFillU) * u; }
                 last = level;
                 world.Add(x); world.Add(z); world.Add(r); world.Add(rout); world.Add(level); world.Add(crest); world.Add(floor);
                 world.Add(Math.Min(low, floor) - SpringFloorU * u); world.Add(Math.Max(high, crest) + SpringTopU * u);
@@ -838,8 +838,8 @@ namespace Stabby.World
                 }
                 if (kind == BrinePools)
                 {
-                    float level = pools[k + 4], bank = BrineBankU * u;
-                    list.Add(Disc(FeatureEdit.Add, x, z, crest, bottom + (SpringFloorU - BrineFootU) * u, r + BrineRimU * u, ra, BrineRimSlope, -BrineLobe, 0.08f * u, seed, 0, 0).Finer());
+                    float level = pools[k + 4] - BrineFillU * u, bank = BrineBankU * u;
+                    list.Add(Disc(FeatureEdit.Add, x, z, crest, bottom + (SpringFloorU - BrineFootU) * u, r + BrineRimU * u, ra, BrineRimSlope, -BrineLobe, 0.08f * u, seed, -1, 0).Finer());
                     carves.Add(Disc(FeatureEdit.Carve, x, z, top, floor, r + BrineBank * (top - bank - level), bank, -BrineBank, -BrineLobe, 0.05f * u, seed, 0, 0).Finer());
                     continue;
                 }
