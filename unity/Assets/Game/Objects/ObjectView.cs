@@ -264,13 +264,13 @@ namespace Stabby.Game
             if (impB != null) { impB.Release(); UnityEngine.Object.Destroy(impB); }
         }
 
-        public const float GlowBase = 0.05f, GlowSpan = 0.2f, GlowPatternStep = 0.22f, IceBase = 0.48f, IceSpan = 0.015f, OwnStone = 0.0125f;
+        public const float GlowBase = 0.05f, GlowSpan = 0.2f, GlowPatternStep = 0.22f, IceBase = 0.48f, IceSpan = 0.015f, OwnStone = 0.0125f, OwnStoneKeepHue = 0.019f;
 
         static float4 ColorBase(ObjectPart part)
         {
             if (part.Translucency > 0f) return new float4(Decode(part.Color), IceBase + IceSpan * part.Translucency);
             if (part.Glow > 0f) return new float4(Decode(part.Color), GlowBase + GlowSpan * part.Glow + GlowPatternStep * part.GlowPattern);
-            if (ObjectPart.IsStone(part.Shape)) return part.HasColor ? new float4(Decode(part.Color), OwnStone) : new float4(1, 1, 1, 0);
+            if (ObjectPart.IsStone(part.Shape)) return part.HasColor ? new float4(Decode(part.Color), part.KeepHue ? OwnStoneKeepHue : OwnStone) : new float4(1, 1, 1, 0);
             return new float4(Decode(part.Color), part.Shape);
         }
 

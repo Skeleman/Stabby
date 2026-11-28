@@ -539,7 +539,7 @@
     {
       "id": "fumarole-field", "name": "Fumarole field", "kind": "structure", "material": "sulphur-crust", "variants": 6,
       "parts": [ { "id": "site", "shape": "fumarole-field", "material": "sulphur-crust" } ],
-      "placement": { "biomes": ["steppe", "shrubland", "boreal", "tundra", "alpine", "cold-desert"], "perHectare": 0, "discovery": "fumarole-field", "spacingM": 2500, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 16, "sizeMaxM": 18, "sink": 0.02 }
+      "placement": { "biomes": ["steppe", "shrubland", "boreal", "tundra", "alpine", "cold-desert"], "perHectare": 0, "discovery": "fumarole-field", "spacingM": 2500, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 16, "sizeMaxM": 18, "sink": 0.02, "stampFoot": 0 }
     },
     {
       "id": "great-mushroom", "name": "Great mushroom", "kind": "structure", "material": "mushroom-cap", "variants": 6,

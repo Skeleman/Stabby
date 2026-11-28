@@ -35,6 +35,7 @@ public static class ContentLoader
         public float Glow { get; set; }
         public float Translucency { get; set; }
         public string GlowPattern { get; set; } = "facet";
+        public bool KeepHue { get; set; }
     }
 
     sealed class LookEntry
@@ -286,7 +287,7 @@ public static class ContentLoader
                 Id = s.Id, Name = s.Name, ThicknessM = s.ThicknessM, Hardness = s.Hardness,
                 Color = uint.Parse(s.Color.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
             }).ToList(),
-            Materials = file.Materials.Select(m => new LibraryMaterial { Id = m.Id, Name = m.Name, Color = Hex(m.Color, path, "materials.color"), Glow = m.Glow, Translucency = m.Translucency, GlowPattern = Array.IndexOf(LibraryMaterial.GlowPatterns, m.GlowPattern) }).ToList(),
+            Materials = file.Materials.Select(m => new LibraryMaterial { Id = m.Id, Name = m.Name, Color = Hex(m.Color, path, "materials.color"), Glow = m.Glow, Translucency = m.Translucency, GlowPattern = Array.IndexOf(LibraryMaterial.GlowPatterns, m.GlowPattern), KeepHue = m.KeepHue }).ToList(),
         };
         foreach (var name in MaterialLibrary.KitNames)
             if (file.Kit.TryGetValue(name, out var ids)) lib.Kit[name] = ids;
@@ -571,6 +572,7 @@ public static class ContentLoader
         public float AlignToSlope { get; set; }
         public float FootRiseM { get; set; }
         public float FootReachM { get; set; } = 12f;
+        public float StampFoot { get; set; } = -1f;
         public float FanM { get; set; }
         public float EditMinSizeM { get; set; }
         public int ChainMin { get; set; } = 1;
@@ -612,6 +614,7 @@ public static class ContentLoader
         uint Mat(string id) => materials.Find(id)?.Color ?? 0;
         float Glow(string id) => materials.Find(id ?? "")?.Glow ?? 0f;
         float Translucency(string id) => materials.Find(id ?? "")?.Translucency ?? 0f;
+        bool KeepHue(string id) => materials.Find(id ?? "")?.KeepHue ?? false;
         int Pattern(string id) => materials.Find(id ?? "")?.GlowPattern ?? 0;
         foreach (var l in file.Lights)
             lib.Lights.Add(new LightKind { Id = l.Id, ShadowedPixels = l.ShadowedPixels, UnshadowedPixels = l.UnshadowedPixels, GlowPixels = l.GlowPixels, Importance = l.Importance });
@@ -627,7 +630,7 @@ public static class ContentLoader
         foreach (var o in file.Objects)
         {
             var style = o.Style == null ? null : lib.Styles.Find(st => st.Id == o.Style);
-            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = style != null ? style.StoneColor : Mat(o.Material), Glow = o.Style == null ? Glow(o.Material) : 0, Translucency = o.Style == null ? Translucency(o.Material) : 0, GlowPattern = o.Style == null ? Pattern(o.Material) : 0, Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0, Style = o.Style };
+            var def = new ObjectDef { Id = o.Id, Name = o.Name, Kind = o.Kind, Color = style != null ? style.StoneColor : Mat(o.Material), Glow = o.Style == null ? Glow(o.Material) : 0, Translucency = o.Style == null ? Translucency(o.Material) : 0, GlowPattern = o.Style == null ? Pattern(o.Material) : 0, KeepHue = o.Style == null && KeepHue(o.Material), Variants = o.Variants, Verb = o.Interact?.Verb, ReachM = o.Interact?.ReachM ?? 0, Style = o.Style };
             int trim = style == null ? 0 : Array.IndexOf(MaterialLibrary.KitNames, style.Trim) + 1;
             if (o.Light != null)
                 def.Light = new ObjectLight { Category = o.Light.Category, Color = Mat(o.Light.Material), Intensity = o.Light.Intensity, RangeM = o.Light.RadiusM, Importance = o.Light.Importance, Flicker = o.Light.Flicker, FlickerHz = o.Light.FlickerHz, LiftM = o.Light.LiftM, ConeDeg = o.Light.ConeDeg, Daylight = o.Light.Daylight, Core = o.Light.Core };
@@ -639,7 +642,7 @@ public static class ContentLoader
                 {
                     Id = p.Id, Shape = ObjectLibrary.ShapeOf(p.Shape),
                     Solid = ObjectLibrary.Tri(p.Solid), Shadows = ObjectLibrary.Tri(p.Shadows),
-                    HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color, Glow = p.Material != null ? Glow(p.Material) : def.Glow, Translucency = p.Material != null ? Translucency(p.Material) : def.Translucency, GlowPattern = p.Material != null ? Pattern(p.Material) : def.GlowPattern,
+                    HasColor = p.Material != null, Color = p.Material != null ? Mat(p.Material) : def.Color, Glow = p.Material != null ? Glow(p.Material) : def.Glow, Translucency = p.Material != null ? Translucency(p.Material) : def.Translucency, GlowPattern = p.Material != null ? Pattern(p.Material) : def.GlowPattern, KeepHue = p.Material != null ? KeepHue(p.Material) : def.KeepHue,
                     HasLeafColor = p.LeafMaterial != null, LeafColor = p.LeafMaterial != null ? Mat(p.LeafMaterial) : 0, Trim = trim,
                 };
                 part.Ends = Array.IndexOf(ObjectPart.EndNames, p.Ends);
@@ -655,7 +658,7 @@ public static class ContentLoader
                 Biomes = pl.Biomes, PerHectare = pl.PerHectare, SlopeMin = pl.SlopeMin, SlopeMax = pl.SlopeMax,
                 HardnessMin = pl.HardnessMin, HardnessMax = pl.HardnessMax, SizeMinM = pl.SizeMinM, SizeMaxM = pl.SizeMaxM,
                 ClusterCount = pl.ClusterCount, ClusterRadiusM = pl.ClusterRadiusM, Sink = pl.Sink, AlignToSlope = pl.AlignToSlope,
-                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
+                FootRiseM = pl.FootRiseM, FootReachM = pl.FootReachM, StampFoot = pl.StampFoot, FanM = pl.FanM, EditMinSizeM = pl.EditMinSizeM,
                 ChainMin = pl.ChainMin, ChainMax = pl.ChainMax, ChainCorner = pl.ChainCorner, ChainGate = pl.ChainGate, ChainHead = pl.ChainHead, Bank = pl.Bank, PerHundredM = pl.PerHundredM,
                 Discovery = Array.IndexOf(ObjectField.DiscoveryNames, pl.Discovery ?? ""), Cave = Array.IndexOf(ObjectField.CaveNames, pl.Cave ?? ""), CaveIce = pl.CaveIce, Liquid = pl.Liquid, Oasis = pl.Oasis, PerCenote = pl.PerCenote, SpacingM = pl.SpacingM, Chance = pl.Chance,
                 BiomeDensity = pl.BiomeDensity.Select(b => new BiomeDensity { Biome = b.Biome, Scale = b.Scale }).ToList(),

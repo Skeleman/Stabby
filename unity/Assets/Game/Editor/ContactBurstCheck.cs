@@ -345,7 +345,7 @@ namespace Stabby.Game.Editor
                         columnList.Clear();
                         field.ContactsOf(o, columnList);
                         bool built = field.Library.Objects[o.Def].Kind == ObjectLibrary.Structure;
-                        float foot = built ? Structures.FootReach * o.Size : 0f;
+                        float foot = ObjectField.StampFoot(field.Library, o);
                         foreach (var c in columnList)
                         {
                             int sides = ObjectField.StampSides(field.Library, o, c);
