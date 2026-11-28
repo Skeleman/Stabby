@@ -40,7 +40,7 @@ namespace Stabby.Game.Editor
             var centre = new Vector3(s.X, baseY, s.Z);
             cam.fieldOfView = 60f;
             for (var w = ShowHour(WatchtowerHour, WatchtowerMoon); w.MoveNext();) yield return null;
-            var eye = centre + (fwd + side * 0.6f).normalized * WatchtowerNearM;
+            var eye = centre + (fwd - side * 0.6f).normalized * WatchtowerNearM;
             eye.y = ground.HeightAt(eye.x, eye.z) + WatchtowerEyeUp;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(centre + Vector3.up * WatchtowerAimUp - eye));
             for (var w = Settle(180); w.MoveNext();) yield return null;

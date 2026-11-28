@@ -130,7 +130,7 @@ namespace Stabby.World
             float px = r.X, pz = r.Z, qa = r.Qa, qb = r.Qb;
             float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
             if (pl.Discovery == Hilltop || pl.Discovery == Watchtower) Climb(ref px, ref pz, x0, z0, x1, z1);
-            if (pl.Discovery == Watchtower) FaceDownhill(px, pz, ref qa, ref qb);
+            if (pl.Discovery == Watchtower) WatchFace(px, pz, ref qa, ref qb);
             if (pl.Discovery == WolfDen)
             {
                 if (!SeekDen(ref px, ref pz, x0, z0, x1, z1) || !ToFace(ref px, ref pz, DenRear(d, r.Variant, r.Size), x0, z0, x1, z1, out qa, out qb)) return;

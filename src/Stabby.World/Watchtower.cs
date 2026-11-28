@@ -161,6 +161,24 @@ namespace Stabby.World
             return 0.3f * Math.Min(rise, WatchRiseCapM) + 0.3f * open - relief;
         }
 
+        void WatchFace(float x, float z, ref float qa, ref float qb)
+        {
+            float y = GroundAt(detail, cm, x, z), vx = 0, vz = 0;
+            for (int k = 0; k < 8; k++)
+            {
+                FanDir(k, 0.70710678f, out float ux, out float uz);
+                float drop = y - GroundAt(detail, cm, x + ux * WatchRiseProbeM, z + uz * WatchRiseProbeM);
+                vx += ux * drop;
+                vz += uz * drop;
+            }
+            float len = (float)Math.Sqrt(vx * vx + vz * vz);
+            if (len < 1e-4f) return;
+            vx /= len;
+            vz /= len;
+            qa = (float)Math.Sqrt(Math.Max(0, 0.5f * (1 + vz)));
+            qb = (vx < 0 ? -1 : 1) * (float)Math.Sqrt(Math.Max(0, 0.5f * (1 - vz)));
+        }
+
         public string WatchFault(ObjectInstance o)
         {
             if (WatchFit(o.X, o.Z) == float.MinValue) return "is not on open high ground";
