@@ -523,13 +523,12 @@ Shader "Stabby/Object"
                     float l2 = smoothstep(0.86, 1, 1 - abs(frac(w2) * 2 - 1)) * OrgFade(38, fp);
                     float l3 = smoothstep(0.9, 1, 1 - abs(frac(w3) * 2 - 1)) * OrgFade(23, fp);
                     float dust = smoothstep(0.2, 0.9, 0.4 * big.x + 0.3 * mid.x * fm + 0.35 * saturate(n.y) + 0.3 * (1 - open));
-                    a = lerp(_StabbyKit[42].rgb, _StabbyKit[43].rgb, 0.8 * dust);
+                    a = lerp(_StabbyKit[42].rgb, _StabbyKit[43].rgb, 0.9 * dust);
                     // thin gaps between threads pass light, so they read dimmer than the strands
                     a *= 0.7 + 0.3 * max(l1, max(l2, l3)) + 0.06 * fib.x * ff;
                     a = lerp(a, _StabbyKit[43].rgb, 0.5 * smoothstep(0.48, 0.62, tear));
                     grad = 0.05 * fib.yzw * ff + 0.03 * mid.yzw * fm;
-                    tmRough = 0.35 * LookRough();
-                    iceWrap = _StabbyKit[42].a;
+                    tmRough = LookRough();
                 }
                 else if (mat == 1 && th.x > 2.5 && th.x < 3.5)
                 {

@@ -206,6 +206,7 @@ Shader "Stabby/Foliage"
                 float3 n = imp ? 0 : normalize(i.normalWS);
                 float3 v = normalize(_WorldSpaceCameraPos - wp);
                 bool leaf = i.uv.w > 0.5;
+                bool silk = leaf && !imp && _Leaf.w > 2.5;
                 float3 albedo;
                 float trans = 0, ao = 1;
                 float alpha = 1;
@@ -234,12 +235,21 @@ Shader "Stabby/Foliage"
                     float j = (i.uv.w - 1) * 3.333;
                     float cut = LeafCut(i.uv.z, j);
                     alpha = a.a;
-                    clip(a.a - cut);
-                    float shade = a.r * 1.5 * (1 + 0.16 * j);
-                    float3 leafColor = LeafTint(a.g - 0.5 + 0.3 * j);
-                    albedo = lerp(leafColor * shade, _BaseColor.rgb * shade * 1.3, a.b);
-                    trans = 1 - a.b;
                     ao = i.uv.z;
+                    [branch] if (silk)
+                    {
+                        clip(a.a * 0.5 - dither);
+                        albedo = _Leaf.rgb * (0.75 + 0.25 * saturate(a.r * 1.5));
+                        trans = 0.3;
+                    }
+                    else
+                    {
+                        clip(a.a - cut);
+                        float shade = a.r * 1.5 * (1 + 0.16 * j);
+                        float3 leafColor = LeafTint(a.g - 0.5 + 0.3 * j);
+                        albedo = lerp(leafColor * shade, _BaseColor.rgb * shade * 1.3, a.b);
+                        trans = 1 - a.b;
+                    }
                 }
                 else
                 {
@@ -282,9 +292,9 @@ Shader "Stabby/Foliage"
                 float self = imp ? lerp(0.45, 1, ao * ao) : 1;
                 float3 direct = l.color * l.shadowAttenuation * self;
                 float3 glow = l.color * lerp(0.25, 1, l.shadowAttenuation) * lerp(0.4, 1, ao) * self * self;
-                float leafy = imp ? trans : leaf ? 1 : 0;
+                float leafy = imp ? trans : leaf && !silk ? 1 : 0;
                 float3 sun = lerp(1, float3(1.1, 1.04, 0.86), leafy * saturate(ndl) * (imp ? 0.35 : 1)), cool = lerp(1, lerp(float3(0.84, 0.93, 1.06), 1, ao * ao), leafy);
-                float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) * sun + (ambient * cool + LocalLights(wp, n, i.positionCS)) * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * float3(1.1, 1.2, 0.55) * 1.35 * glow * back * trans;
+                float3 c = albedo * (direct * diffuse * lerp(0.6, 1, ao) * sun + (ambient * cool + LocalLights(wp, n, i.positionCS)) * (leaf && !imp ? lerp(0.3, 1.15, ao) : ao)) + albedo * (silk ? 1 : float3(1.1, 1.2, 0.55)) * 1.35 * glow * back * trans;
                 return half4(MixFogColor(c, unity_FogColor.rgb * sky, i.fog), alpha);
             }
             ENDHLSL

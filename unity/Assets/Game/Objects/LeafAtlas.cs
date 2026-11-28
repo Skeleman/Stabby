@@ -300,14 +300,14 @@ namespace Stabby.Game
                 float a0 = 6.2832f * (k + rng.Range(-0.2f, 0.2f)) / 6f, a1 = a0 + rng.Range(0.9f, 1.4f);
                 Edge(p1, p2, a0, out float x0, out float y0);
                 Edge(p1, p2, a1, out float x1, out float y1);
-                Strand(cv, ref rng, x0, y0, x1, y1, rng.Range(-0.05f, 0.05f), rng.Range(2.2f, 2.8f) / Cell, 8);
+                Strand(cv, ref rng, x0, y0, x1, y1, rng.Range(-0.05f, 0.05f), rng.Range(1.6f, 2.1f) / Cell, 8);
             }
-            for (int k = 0; k < 10; k++)
+            for (int k = 0; k < 34; k++)
             {
                 float a0 = rng.Range(0, 6.2832f), a1 = a0 + rng.Range(1.6f, 4.6f);
                 Edge(p1, p2, a0, out float x0, out float y0);
                 Edge(p1, p2, a1, out float x1, out float y1);
-                Strand(cv, ref rng, x0, y0, x1, y1, rng.Range(-0.08f, 0.08f), rng.Range(1.5f, 2.3f) / Cell, 8);
+                Strand(cv, ref rng, x0, y0, x1, y1, rng.Range(-0.08f, 0.08f), rng.Range(1f, 1.5f) / Cell, 8);
             }
             for (int f = 0; f < 1; f++)
             {
@@ -318,7 +318,7 @@ namespace Stabby.Game
                 {
                     float a = spin + 6.2832f * (i + rng.Range(-0.2f, 0.2f)) / spokes;
                     len[i] = rng.Range(0.3f, 0.42f);
-                    cv.Thread(cx, cy, cx + len[i] * (float)Math.Cos(a), cy + len[i] * (float)Math.Sin(a), 1.4f / Cell, rng.Range(0.95f, 1.15f), 0.5f);
+                    cv.Thread(cx, cy, cx + len[i] * (float)Math.Cos(a), cy + len[i] * (float)Math.Sin(a), 1f / Cell, rng.Range(0.6f, 0.75f), 0.5f);
                 }
                 for (float r = 0.04f; r < 0.42f; r += step)
                     for (int i = 0; i < spokes; i++)
@@ -327,10 +327,10 @@ namespace Stabby.Game
                         float ra = r + step * i / spokes, rb = r + step * (i + 1) / spokes;
                         if (ra > len[i] || rb > len[n] || rng.NextFloat() > 0.86f) continue;
                         float a = spin + 6.2832f * i / spokes, b = spin + 6.2832f * (i + 1) / spokes;
-                        cv.Thread(cx + ra * (float)Math.Cos(a), cy + ra * (float)Math.Sin(a), cx + rb * (float)Math.Cos(b), cy + rb * (float)Math.Sin(b), 1.1f / Cell, rng.Range(0.9f, 1.1f), 0.5f);
+                        cv.Thread(cx + ra * (float)Math.Cos(a), cy + ra * (float)Math.Sin(a), cx + rb * (float)Math.Cos(b), cy + rb * (float)Math.Sin(b), 0.8f / Cell, rng.Range(0.55f, 0.7f), 0.5f);
                     }
             }
-            for (int k = 0; k < 20; k++)
+            for (int k = 0; k < 70; k++)
             {
                 float a = rng.Range(0, 6.2832f), d = 0.38f * (float)Math.Sqrt(rng.NextFloat()), x = 0.5f + d * (float)Math.Cos(a), y = 0.5f + d * (float)Math.Sin(a);
                 float b = rng.Range(0, 6.2832f), l = rng.Range(0.04f, 0.16f);
@@ -402,11 +402,13 @@ namespace Stabby.Game
                     if (level == 0) target[c] = Covered(a, n, ox, oy, cellN, 1);
                     else
                     {
-                        float lo = 0.25f, hi = 8f;
+                        bool silk = c == ObjectFoliage.Silk;
+                        float goal = silk ? target[c] * (float)Math.Pow(0.6, level) : target[c];
+                        float lo = silk ? 0.02f : 0.25f, hi = 8f;
                         for (int it = 0; it < 18; it++)
                         {
                             float mid = 0.5f * (lo + hi);
-                            if (Covered(a, n, ox, oy, cellN, mid) < target[c]) lo = mid; else hi = mid;
+                            if (Covered(a, n, ox, oy, cellN, mid) < goal) lo = mid; else hi = mid;
                         }
                         scale = 0.5f * (lo + hi);
                     }

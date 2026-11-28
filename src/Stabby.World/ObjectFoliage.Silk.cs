@@ -25,8 +25,8 @@ namespace Stabby.World
                 int skirts = rng.Range(2, 4);
                 for (int j = 0; j < skirts; j++)
                 {
-                    float phi = s.Ta[k] + rng.Range(-3.1416f, 3.1416f), half = rng.Range(0.3f, 0.55f), spread = rng.Range(0.35f, 0.65f);
-                    float h = rng.Range(0.4f, 2.2f), out0 = rng.Range(1.3f, 2.6f), out1 = out0 * rng.Range(0.75f, 1.25f);
+                    float phi = s.Ta[k] + rng.Range(-3.1416f, 3.1416f), half = rng.Range(0.5f, 0.9f), spread = rng.Range(0.6f, 1.05f);
+                    float h = rng.Range(1f, 3.2f), out0 = rng.Range(2.3f, 4.4f), out1 = out0 * rng.Range(0.75f, 1.25f);
                     var a0 = Around(s.Tx[k], s.Tz[k], phi - half, tr, h + rng.Range(-0.25f, 0.25f));
                     var a1 = Around(s.Tx[k], s.Tz[k], phi + half, tr, h + rng.Range(-0.25f, 0.25f));
                     var b0 = Around(s.Tx[k], s.Tz[k], phi - spread, out0, rng.Range(-0.1f, 0.02f));
@@ -39,7 +39,7 @@ namespace Stabby.World
                 float gx = s.Rx[r] - s.Tx[k], gz = s.Rz[r] - s.Tz[k], gap = (float)Math.Sqrt(gx * gx + gz * gz), rr = 0.25f * (s.Rw[r] + s.Rdep[r]);
                 if (gap - tr - rr < 4.5f)
                 {
-                    float toward = Turn(gx, gz), back = toward + 3.1416f, half = rng.Range(0.25f, 0.45f), h = rng.Range(0.9f, 1.8f);
+                    float toward = Turn(gx, gz), back = toward + 3.1416f, half = rng.Range(0.45f, 0.8f), h = rng.Range(1.6f, 3f);
                     var a0 = Around(s.Tx[k], s.Tz[k], toward - half, tr, h);
                     var a1 = Around(s.Tx[k], s.Tz[k], toward + half, tr, h + rng.Range(-0.3f, 0.3f));
                     var b0 = Around(s.Rx[r], s.Rz[r], back + 0.6f, rr * 0.8f, s.Rt[r] * rng.Range(0.6f, 0.9f));
@@ -56,7 +56,7 @@ namespace Stabby.World
                 int drapes = rng.Range(1, 3);
                 for (int j = 0; j < drapes; j++)
                 {
-                    float phi = rng.Range(0, 6.2832f), half = rng.Range(0.3f, 0.5f), spread = rng.Range(0.4f, 0.7f), out0 = rr + rng.Range(1f, 1.8f);
+                    float phi = rng.Range(0, 6.2832f), half = rng.Range(0.5f, 0.85f), spread = rng.Range(0.7f, 1.15f), out0 = rr + rng.Range(1.8f, 3.1f);
                     var a0 = Around(s.Rx[k], s.Rz[k], phi - half, rr * 0.75f, s.Rt[k] * rng.Range(0.75f, 1f));
                     var a1 = Around(s.Rx[k], s.Rz[k], phi + half, rr * 0.75f, s.Rt[k] * rng.Range(0.75f, 1f));
                     var b0 = Around(s.Rx[k], s.Rz[k], phi - spread, out0, rng.Range(-0.1f, 0.02f));
@@ -71,7 +71,7 @@ namespace Stabby.World
                 int n = (k + 1) % s.Trunks;
                 float dx = s.Tx[n] - s.Tx[k], dz = s.Tz[n] - s.Tz[k], len = (float)Math.Sqrt(dx * dx + dz * dz);
                 if (len > 6.5f) { Skip(ref rng); continue; }
-                float t0 = Turn(dx, dz), h0 = rng.Range(0.5f, 1.1f), h1 = rng.Range(0.5f, 1.1f), w = rng.Range(0.35f, 0.6f);
+                float t0 = Turn(dx, dz), h0 = rng.Range(0.9f, 1.9f), h1 = rng.Range(0.9f, 1.9f), w = rng.Range(0.6f, 1.05f);
                 var a0 = Around(s.Tx[k], s.Tz[k], t0 + 1.5708f, 0.55f * s.Girth[k], h0);
                 var a1 = Around(s.Tx[k], s.Tz[k], t0 + 1.5708f, 0.55f * s.Girth[k], h0 + w);
                 var b0 = Around(s.Tx[n], s.Tz[n], t0 + 1.5708f, 0.55f * s.Girth[n], h1);
@@ -87,8 +87,8 @@ namespace Stabby.World
                 int k = j % s.Trunks;
                 float phi = s.Ta[k] + 3.1416f + rng.Range(-1.4f, 1.4f), tr = 0.5f * s.Girth[k];
                 var mouth = Around(s.Tx[k], s.Tz[k], phi, tr, rng.Range(0.2f, 0.45f));
-                var lip = Around(s.Tx[k], s.Tz[k], phi + rng.Range(-0.2f, 0.2f), tr + rng.Range(0.8f, 1.2f), rng.Range(0.18f, 0.3f));
-                float apron = rng.Range(0.9f, 1.4f);
+                var lip = Around(s.Tx[k], s.Tz[k], phi + rng.Range(-0.2f, 0.2f), tr + rng.Range(1.4f, 2.1f), rng.Range(0.18f, 0.3f));
+                float apron = rng.Range(1.6f, 2.4f);
                 if (rng.NextFloat() < keep) Funnel(o, ref rng, mouth, lip, apron, WebTube[lod], Math.Max(2, grid - 1));
                 else Skip(ref rng);
             }
@@ -181,7 +181,7 @@ namespace Stabby.World
             var fwd = new V(axis.X, 0, axis.Z).Norm();
             var side = new V(-fwd.Z, 0, fwd.X);
             int total = 2 * rings, first = o.Count;
-            float r0 = rng.Range(0.05f, 0.08f), r1 = rng.Range(0.28f, 0.4f);
+            float r0 = rng.Range(0.05f, 0.08f), r1 = rng.Range(0.45f, 0.65f);
             for (int j = 0; j <= total; j++)
             {
                 float t = j / (float)total, r, squash;

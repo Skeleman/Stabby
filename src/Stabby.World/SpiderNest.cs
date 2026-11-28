@@ -6,6 +6,7 @@ namespace Stabby.World
     public static partial class Structures
     {
         public const float SpiderU = 1 / 18f, SpiderFootM = 6f;
+        static readonly float[] BundleW = { 0.6f, 1f, 0.9f, 0.55f };
         static readonly float[] SpiderSeats = { 0, 0, 0.2f, 0, -0.2f, 0, 0, 0.2f, 0, -0.2f, 0.14f, 0.14f, -0.14f, 0.14f, 0.14f, -0.14f, -0.14f, -0.14f };
 
         internal sealed class SpiderFrame
@@ -85,9 +86,9 @@ namespace Stabby.World
             {
                 int t = k % trunks;
                 float along = rng.Range(0.55f, 0.95f), bx = tx[t] + along * (lx[t] - tx[t]), bz = tz[t] + along * (lz[t] - tz[t]), by = ly[t] - (1 - along) * 0.6f;
-                float h = rng.Range(0.65f, 0.95f), w = rng.Range(0.28f, 0.4f), y = by - rng.Range(1.1f, 2.2f) - h;
-                Round(l, rng.NextU64(), f, bx, y, bz, w, h, w * rng.Range(0.85f, 1f), Silk, GV, RoundStem, 0, 1);
-                Bone(l, rng.NextU64(), f, bx, y + 0.9f * h, bz, bx + rng.Range(-0.05f, 0.05f), by, bz + rng.Range(-0.05f, 0.05f), 0.025f, 0.02f, 0, 0, Silk);
+                float w = rng.Range(0.3f, 0.42f), y = by - rng.Range(1.1f, 2.2f) - 2.4f * w;
+                float cap = Bundle(l, ref rng, f, bx, y, bz, w);
+                Bone(l, rng.NextU64(), f, bx, cap - 0.1f, bz, bx + rng.Range(-0.05f, 0.05f), by, bz + rng.Range(-0.05f, 0.05f), 0.025f, 0.02f, 0, 0, Silk);
             }
 
             int lying = rng.Range(2, 4);
@@ -156,6 +157,17 @@ namespace Stabby.World
             }
             Drape(l, bones);
 
+            int fallen = l.Pieces.Count, falls = rng.Range(3, 5);
+            for (int i = 0; i < falls; i++)
+            {
+                int d = rng.Range(0, 16), e = (d + (rng.NextFloat() < 0.5f ? 2 : 14)) & 15;
+                float a = rng.Range(0, 6.2832f), r = rng.Range(5.8f, 7f), x = r * TurnCos(a), z = r * TurnSin(a), d0 = rng.Range(0.06f, 0.11f);
+                Log(l, rng.NextU64(), f, x, -0.3f * d0, z, rng.Range(1.4f, 2.4f), d0, Cos16(d), Sin16(d), Timber, 0, 1);
+                Log(l, rng.NextU64(), f, x + rng.Range(-0.4f, 0.4f), -0.2f * d0, z + rng.Range(-0.4f, 0.4f), rng.Range(0.5f, 1f), 0.5f * d0, Cos16(e), Sin16(e), Timber, 0, 0);
+                Touch(l, f, x, 0, z, 0.6f);
+            }
+            Mossy(l, fallen);
+
             for (int k = 0; k < trunks; k++) Col(l, f, tx[k], tz[k], 0.5f * girth[k], 0, top[k]);
             for (int k = 0; k < rocks; k++) Col(l, f, rx[k], rz[k], 0.6f * rt[k] / 0.65f, 0, rt[k]);
             for (int k = 0; k < feet.Count; k += 6) Touch(l, f, feet[k], 0, feet[k + 2], 0.35f);
@@ -166,6 +178,24 @@ namespace Stabby.World
                 Arc(k / 8f, out float c, out float s);
                 Touch(l, f, 3f * c, 0, 3f * s, 1.5f);
             }
+        }
+
+        static float Bundle(StructureLayout l, ref Rng rng, in Frame f, float x, float y, float z, float w)
+        {
+            float cy = y;
+            for (int k = 0; k < 4; k++)
+            {
+                int d = rng.Range(0, 16);
+                float sw = w * BundleW[k] * rng.Range(0.85f, 1.1f);
+                Round(l, rng.NextU64(), f, x + rng.Range(-0.05f, 0.05f), cy, z + rng.Range(-0.05f, 0.05f), sw * rng.Range(1.2f, 1.6f), sw, sw * rng.Range(0.8f, 1f), Silk, GV, RoundLog, 0, k == 1 || k == 2 ? 1 : 0, Cos16(d), Sin16(d));
+                if (k == 1 && rng.NextFloat() < 0.6f)
+                {
+                    float a = rng.Range(0, 6.2832f), mid = cy + 0.5f * sw;
+                    Bone(l, rng.NextU64(), f, x, mid, z, x + 0.4f * TurnCos(a), mid - rng.Range(0.15f, 0.35f), z + 0.4f * TurnSin(a), 0.035f, 0.015f, 0, 0, Silk);
+                }
+                cy += 0.6f * sw;
+            }
+            return cy + 0.3f * w;
         }
 
         static void Toward(float x, float z, float turn, out float c, out float s)

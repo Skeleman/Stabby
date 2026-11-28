@@ -274,7 +274,7 @@ namespace Stabby.Game
             return new float4(Decode(part.Color), part.Shape);
         }
 
-        static float4 LeafBase(ObjectPart part) => ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor), 2) : float4.zero;
+        static float4 LeafBase(ObjectPart part) => ObjectPart.IsFoliage(part.Shape) ? new float4(Decode(part.LeafColor), part.Shape == ObjectPart.SilkWeb ? 3 : 2) : float4.zero;
 
         static float3 Decode(uint rgb)
         {
@@ -1129,7 +1129,7 @@ namespace Stabby.Game
                 {
                     var l = LeafBase[mesh];
                     float leafTint = 0.88f + 0.24f * math.frac(s.Variant * 0.381966f + s.P.z * 0.0171f + s.Size * 1.3f);
-                    float hue = 2f * math.frac(s.Variant * 0.7548777f + s.P.x * 0.0093f + s.P.z * 0.0061f) - 1f;
+                    float hue = l.w > 2.5f ? 0f : 2f * math.frac(s.Variant * 0.7548777f + s.P.x * 0.0093f + s.P.z * 0.0061f) - 1f;
                     Leaf[w.E] = new ObjectLeaf { Value = new float4(l.xyz * leafTint * (1f + hue * new float3(0.16f, 0.06f, -0.13f)), l.w) };
                 }
                 var rule = k.Rule;

@@ -550,7 +550,14 @@
       "id": "spider-nest", "name": "Spider nest", "kind": "structure", "material": "mossy-stone", "variants": 6,
       "parts": [
         { "id": "site", "shape": "spider-nest" },
-        { "id": "webs", "shape": "silk-web", "solid": "off", "leafMaterial": "spider-silk" }
+        { "id": "webs", "shape": "silk-web", "solid": "off", "leafMaterial": "spider-silk" },
+        { "id": "fern-a", "shape": "shrub", "offset": [0.4, 0, 0.1], "scale": [0.09, 0.05, 0.09], "solid": "off", "material": "twig-brown", "leafMaterial": "bush-leaf" },
+        { "id": "fern-b", "shape": "shrub", "offset": [-0.27, 0, 0.3], "scale": [0.08, 0.045, 0.08], "solid": "off", "material": "twig-brown", "leafMaterial": "willow-leaf" },
+        { "id": "fern-c", "shape": "shrub", "offset": [0.06, 0, -0.41], "scale": [0.1, 0.05, 0.1], "solid": "off", "material": "twig-brown", "leafMaterial": "bush-leaf" },
+        { "id": "fern-d", "shape": "shrub", "offset": [-0.4, 0, -0.08], "scale": [0.08, 0.04, 0.08], "solid": "off", "material": "twig-brown", "leafMaterial": "oak-leaf" },
+        { "id": "fern-e", "shape": "shrub", "offset": [0.26, 0, 0.31], "scale": [0.07, 0.04, 0.07], "solid": "off", "material": "twig-brown", "leafMaterial": "willow-leaf" },
+        { "id": "sapling-a", "shape": "broadleaf", "offset": [-0.35, 0, 0.2], "scale": [0.1, 0.2, 0.1], "solid": "off", "material": "oak-bark", "leafMaterial": "oak-leaf" },
+        { "id": "sapling-b", "shape": "broadleaf", "offset": [0.3, 0, -0.29], "scale": [0.09, 0.17, 0.09], "solid": "off", "material": "oak-bark", "leafMaterial": "bush-leaf" }
       ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal"], "perHectare": 0, "discovery": "spider-nest", "spacingM": 1000, "chance": 0.7, "slopeMax": 0.2, "sizeMinM": 17, "sizeMaxM": 18, "sink": 0.002, "clearBandM": 1 }
     }
