@@ -723,10 +723,10 @@ Shader "Stabby/Object"
                                 float4 fn = OrgRP3(rp, OrgF(1), 41.7, 1);
                                 float4 bn = OrgNoise3(rp * 0.45 + 63.1, int3(0, 0, 0));
                                 float side = 1 - smoothstep(0.45, 0.85, abs(n.y));
-                                float streak = side * smoothstep(0.1, 0.55, sn.x + 0.35 * fn.x);
-                                float blot = smoothstep(0.35, 0.8, n.y) * smoothstep(0.05, 0.5, bn.x + 0.3 * fn.x);
-                                float3 rc = _StabbyKit[15].rgb * lerp(1.3, 2.3, saturate(0.5 + 0.5 * fn.x + 0.4 * sn.x));
-                                albedo = lerp(albedo, rc, saturate(streak + blot) * 0.85);
+                                float streak = side * smoothstep(0.35, 0.8, sn.x + 0.35 * fn.x);
+                                float blot = smoothstep(0.35, 0.8, n.y) * smoothstep(0.3, 0.75, bn.x + 0.3 * fn.x);
+                                float3 rc = _StabbyKit[15].rgb * lerp(0.8, 1.4, saturate(0.5 + 0.5 * fn.x + 0.4 * sn.x));
+                                albedo = lerp(albedo, rc, saturate(streak + blot) * 0.3);
                             }
                             pull = 1;
                         }
