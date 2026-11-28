@@ -108,3 +108,4 @@ src/*.meta core
 src/Stabby.World/Volcanoes.cs all
 src/Stabby.World/VolcanoChecks.cs sketch,sites,roads
 src/Stabby.World/VolcanoPools.cs sites,roads
+src/Stabby.World/CameraBoom.cs surface

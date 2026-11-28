@@ -114,12 +114,13 @@ namespace Stabby.Game
             var cam = Camera.main;
             if (cam == null || GameStatus.HoldCamera || !SystemAPI.TryGetSingleton<NetworkId>(out var me)) return;
             bool hasGround = SystemAPI.TryGetSingleton<Ground>(out var ground);
+            var cols = SystemAPI.TryGetSingleton<ObjectColumns>(out var oc) ? oc : default;
             foreach (var (t, owner) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<GhostOwner>>().WithAll<Player>())
             {
                 if (owner.ValueRO.NetworkId != me.Value) continue;
                 var pivot = t.ValueRO.Position + new float3(0, PlayerControls.Lift, 0);
                 var back = PlayerControls.Back;
-                float boom = PlayerControls.EaseBoom(hasGround ? PlayerControls.BoomClear(ground, pivot, back) : PlayerControls.Boom, UnityEngine.Time.unscaledDeltaTime);
+                float boom = PlayerControls.EaseBoom(hasGround ? PlayerControls.BoomClear(ground, cols, pivot, back) : PlayerControls.Boom, UnityEngine.Time.unscaledDeltaTime);
                 var eye = pivot + back * boom;
                 cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(-back));
             }
