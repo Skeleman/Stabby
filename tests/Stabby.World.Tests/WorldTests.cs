@@ -121,6 +121,18 @@ public class WorldTests
     }
 
     [Fact]
+    public void StackedFallPoolsReachingTheLipAboveCount()
+    {
+        var up = new RiverFall { LipX = 0, LipZ = 0, DirX = 0, DirZ = 1, PoolRadius = 15, PoolCentre = 12 };
+        var near = up;
+        near.LipZ = 9;
+        var far = up;
+        far.LipZ = 80;
+        Assert.True(Hydrology.Overlaps(near, up));
+        Assert.False(Hydrology.Overlaps(far, up));
+    }
+
+    [Fact]
     public void DrySeedsRaiseMesasAndButtes()
     {
         int mesas = 0, buttes = 0, lips = 0;
