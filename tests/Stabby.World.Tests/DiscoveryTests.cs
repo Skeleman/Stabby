@@ -354,6 +354,26 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void SunkenTemplesStepDownIntoLakes()
+    {
+        int temple = Objects.Objects.FindIndex(o => o.Id == "sunken-temple");
+        var (_, _, _, field) = World(3);
+        var all = field.Discoveries();
+        var temples = all.Where(o => o.Def == temple).ToArray();
+        output.WriteLine($"{temples.Length} temples " + string.Join(" ", temples.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(temples);
+        foreach (var c in temples)
+        {
+            Assert.True(field.Fitness(ObjectField.SunkenTemple, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.TempleFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            Assert.NotEmpty(Structures.Layout(ObjectPart.SunkenTemple, ObjectMeshes.Key("sunken-temple", 0, c.Variant)).Contacts);
+            foreach (var o in all.Where(o => o.Def != temple))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void SaltTowersStandOnDryBasinFloors()
     {
         int tower = Objects.Objects.FindIndex(o => o.Id == "salt-tower");

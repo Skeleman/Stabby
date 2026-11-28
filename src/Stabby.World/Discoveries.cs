@@ -7,9 +7,9 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn", "monument", "shipwreck", "watchtower" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree", "discoveries-lone-inn", "discoveries-monument", "discoveries-shipwreck", "discoveries-watchtower" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16, LoneInn = 17, Monument = 18, Shipwreck = 19, Watchtower = 20;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn", "monument", "shipwreck", "watchtower", "sunken-temple" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree", "discoveries-lone-inn", "discoveries-monument", "discoveries-shipwreck", "discoveries-watchtower", "discoveries-sunken-temple" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16, LoneInn = 17, Monument = 18, Shipwreck = 19, Watchtower = 20, SunkenTemple = 21;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
@@ -138,6 +138,7 @@ namespace Stabby.World
             if (pl.Discovery == SaltTower && !SeekSalt(ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == Shipwreck && !SeekShore(ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (pl.Discovery == Overlook && !SeekOverlook(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
+            if (pl.Discovery == SunkenTemple && !SeekTemple(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
             if (pl.Discovery == FallenTree) FaceDownhill(px, pz, ref qa, ref qb);
             if (pl.Discovery == Dungeon)
@@ -360,11 +361,11 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o, site: true)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree || kind == LoneInn || kind == Monument || kind == Shipwreck || kind == Watchtower ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree || kind == LoneInn || kind == Monument || kind == Shipwreck || kind == Watchtower || kind == SunkenTemple ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
-                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != Bones || BonesFault(o) == null) && (kind != SaltTower || SaltFault(o) == null) && (kind != FallenTree || TreeFault(o) == null) && (kind != LoneInn || LoneInnFault(o) == null) && (kind != Monument || MonumentFault(o) == null) && (kind != Shipwreck || ShipwreckFault(o) == null) && (kind != Watchtower || WatchFault(o) == null)) break;
+                if (ClearOfBuilt(o) && !OnRoad(o.X, o.Z, SiteRadius(o)) && (!shrine || SeatGrounded(o)) && (!spring || VentFault(o) == null) && (kind != WolfDen || (DenFault(o) == null && DenBackFault(o) == null && DenCoverFault(o) == null)) && (kind != Dungeon || DungeonFault(o) == null) && (kind != Overlook || OverlookFault(o) == null) && (kind != Bones || BonesFault(o) == null) && (kind != SaltTower || SaltFault(o) == null) && (kind != FallenTree || TreeFault(o) == null) && (kind != LoneInn || LoneInnFault(o) == null) && (kind != Monument || MonumentFault(o) == null) && (kind != Shipwreck || ShipwreckFault(o) == null) && (kind != Watchtower || WatchFault(o) == null) && (kind != SunkenTemple || TempleFault(o) == null)) break;
             }
             return k < tries;
         }
@@ -398,13 +399,14 @@ namespace Stabby.World
         {
             float r = SiteRadius(new ObjectInstance { Def = d, Variant = variant, Size = size });
             int n = w.Config.Size;
+            bool shore = lib.Objects[d].Placement.Discovery == SunkenTemple;
             for (int k = 0; k < 9; k++)
             {
                 float ux = k % 3 - 1, uz = k / 3 - 1, len = ux != 0 && uz != 0 ? 0.70710678f : 1f;
                 float px = x + r * ux * len, pz = z + r * uz * len;
                 if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) return false;
                 int i = Math.Min(n - 1, (int)(pz / cm)) * n + Math.Min(n - 1, (int)(px / cm));
-                if (w.Sea[i] || w.Water.LakeId[i] >= 0) return false;
+                if (w.Sea[i] || ((!shore || k == 4) && w.Water.LakeId[i] >= 0)) return false;
             }
             foreach (var l in Towns)
             {
@@ -914,6 +916,7 @@ namespace Stabby.World
             if (kind == Monument) return MonumentFit(x, z);
             if (kind == Shipwreck) return ShipwreckFit(x, z);
             if (kind == Watchtower) return WatchFit(x, z);
+            if (kind == SunkenTemple) return TempleFit(x, z, out _, out _);
             float denWoods = kind == WolfDen ? Woods(x, z) : 0;
             if (kind == WolfDen && denWoods < DenWoods) return float.MinValue;
             float y = GroundAt(detail, cm, x, z), r = kind == Shrine ? ShrineProbeM : kind == LoneInn ? LoneInnProbeM : kind == WolfDen ? DenProbeM : DiscoveryProbeM, rise = 0, relief = 0;
