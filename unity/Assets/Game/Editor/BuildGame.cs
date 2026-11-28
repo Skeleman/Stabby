@@ -9,7 +9,7 @@ namespace Stabby.Game.Editor
         static readonly string[] RuntimeShaders =
         {
             "Universal Render Pipeline/Lit", "Stabby/Creature", "Stabby/Foliage", "Stabby/GrassBlade",
-            "Stabby/Object", "Stabby/FallMist", "Stabby/VertexLit", "Stabby/Water", "Stabby/Sky", "Stabby/Glow"
+            "Stabby/Object", "Stabby/FallMist", "Stabby/VertexLit", "Stabby/Water", "Stabby/Sky", "Stabby/Glow", "Stabby/Precip"
         };
 
         static void KeepRuntimeShaders()

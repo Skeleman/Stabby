@@ -7,12 +7,14 @@ namespace Stabby.World
         public float[] TemperatureC;
         public float[] PrecipitationMm;
 
+        public static float TemperatureAt(WorldConfig c, float heightM) => c.SeaLevelTempC - c.LapseRatePerMeter * Math.Max(0, heightM);
+
         public static ClimateField Compute(WorldConfig c, float[] height, bool[] sea)
         {
             int n = c.Size;
             var f = new ClimateField { TemperatureC = new float[n * n], PrecipitationMm = new float[n * n] };
             for (int i = 0; i < n * n; i++)
-                f.TemperatureC[i] = c.SeaLevelTempC - c.LapseRatePerMeter * Math.Max(0, height[i]);
+                f.TemperatureC[i] = TemperatureAt(c, height[i]);
             f.PrecipitationMm = Sweep(c, height, sea);
             return f;
         }
@@ -22,7 +24,7 @@ namespace Stabby.World
             var f = new ClimateField { TemperatureC = new float[height.Length], PrecipitationMm = new float[height.Length] };
             for (int i = 0; i < height.Length; i++)
             {
-                f.TemperatureC[i] = c.SeaLevelTempC - c.LapseRatePerMeter * Math.Max(0, height[i]);
+                f.TemperatureC[i] = TemperatureAt(c, height[i]);
                 f.PrecipitationMm[i] = rainMm;
             }
             return f;

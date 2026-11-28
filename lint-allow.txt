@@ -40,6 +40,8 @@ unity/Assets/Game/Resources/Object.shader:CourseH course jitter runs in course-l
 unity/Assets/Game/Resources/Object.shader:Built thatch and shingle strands are stretched along the strand direction
 unity/Assets/Game/Resources/Object.shader:frag stone lump is a macro pattern at 0.7 per metre; 13.1 scales a per-instance offset
 unity/Assets/Viewer/Shaders/Bark.hlsl:SpruceBark bark plates are a structural cell lattice on warped bark coordinates
+PrecipSystem reads the managed Camera and issues one procedural precipitation draw with a managed Material through Graphics.RenderPrimitives
+PrecipSystem.linear converts the two precipitation colours on the main thread, because SetGlobalColor passes gamma values through raw
 LightPresenterSystem drives managed UnityEngine.Light objects and an indirect glow draw from the Burst budget's tiers
 ServerMapSystem.CompleteAllTrackedJobs once, in OnDestroy, before releasing the map bakes jobs read
 ClientMapSystem.CompleteAllTrackedJobs once, in OnDestroy, before releasing the ground blob and chunk inbox jobs read
