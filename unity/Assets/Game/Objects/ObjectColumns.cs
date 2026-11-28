@@ -356,6 +356,12 @@ namespace Stabby.Game
         public ObjectField Field { get; private set; }
         public ObjectLibrary Library => lib;
         public float Reach => reach;
+        public bool Objects(int region, out UnsafeList<ObjectInstance> list)
+        {
+            list = instances.IsCreated && region >= 0 && region < instances.Length ? instances[region] : default;
+            return list.IsCreated;
+        }
+
         public bool Settled => Field != null && shapes.IsCreated && baking.Count == 0 && converting.Count == 0;
 
         protected override void OnCreate()
