@@ -34,6 +34,7 @@ unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmFleck fleck cells are a stru
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmSwash swash ripples are wind-aligned waves warped by noise inside the phase
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmWet waterline step is a height threshold softened by noise
 unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmMicro micro streaks are stretched along the slope direction
+unity/Assets/Viewer/Shaders/TerrainMaterials.hlsl:TmBorderValue value-noise lattice floor mirrors BiomeBorder.Warp in C#; its output is the warp itself
 unity/Assets/Game/Resources/Object.shader:Wood rings, rays and fibres run in stretched trunk and grain coordinates
 unity/Assets/Game/Resources/Object.shader:CourseH course jitter runs in course-local coordinates keyed by row
 unity/Assets/Game/Resources/Object.shader:Built thatch and shingle strands are stretched along the strand direction

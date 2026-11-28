@@ -43,6 +43,7 @@ src/Stabby.World/SeaStacks.cs objects,surface,meshing
 src/Stabby.World/SlotCanyons.cs objects,surface,meshing,sites,roads
 src/Stabby.World/Object*.cs objects,sites,surface,roads
 src/Stabby.World/Objects.cs objects,sites,surface,roads
+src/Stabby.World/BiomeBorder.cs objects,sites,surface,roads
 src/Stabby.World/CaveObjects.cs objects,sites,surface,caves,roads
 src/Stabby.World/Towns.cs objects,sites,roads
 src/Stabby.World/Roads.cs objects,sites,roads

@@ -462,7 +462,7 @@ namespace Stabby.World
                     float px = x + ux * ring * DiscoveryProbeM, pz = z + uz * ring * DiscoveryProbeM;
                     probes++;
                     if (px < 0 || pz < 0 || px >= worldM || pz >= worldM) continue;
-                    int b = w.Biome[Cell(pz) * n + Cell(px)];
+                    int b = BiomeBorder.At(w, px, pz);
                     if (b >= 0 && treeCover[b] >= ForestPerHectare) forested++;
                 }
             return forested / (float)probes;
@@ -611,7 +611,7 @@ namespace Stabby.World
         int VentGround(float x, float z, int[] vents)
         {
             if (x < 0 || z < 0 || x >= worldM || z >= worldM) return 0;
-            int b = w.Biome[Cell(z) * n + Cell(x)], mask = 0;
+            int b = BiomeBorder.At(w, x, z), mask = 0;
             if (b < 0) return 0;
             for (int k = 0; k < vents.Length; k++) if (density[vents[k]][b] > 0) mask |= 1 << k;
             if (mask == 0) return 0;

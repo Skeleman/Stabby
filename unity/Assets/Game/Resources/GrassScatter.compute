@@ -99,7 +99,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         if (f > 0)
         {
             float2 sl = SAMPLE_TEXTURE2D_LOD(_StabbySlope, sampler_StabbySlope, xa * _StabbyFieldUV.x + _StabbyFieldUV.y, 0).rg;
-            float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xa * _StabbyFieldUV.z + _StabbyFieldUV.w, 0);
+            float4 bo = SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, TmBiomeUV(xa, _StabbyFieldUV), 0);
             float3 gn = normalize(float3(-sl.x, 1, -sl.y));
             float slope = sqrt(max(0, 1 - gn.y * gn.y)) / max(gn.y, 0.05), shoreF = saturate(1 - p.y / 6);
             color = lerp(color, ToLinear(bo.rgb), f);
@@ -114,7 +114,7 @@ void Scatter(uint3 id : SV_DispatchThreadID)
         cw /= max(dot(cw, 1), 1e-3);
         float m = saturate((mix - 0.5) * 1.6 + 0.5 + 0.12 * jn);
         float up = saturate((min(n.y, fn.y) - 0.35) / 0.35);
-        float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, xa * _StabbyCoatUV.x + _StabbyCoatUV.y, 0);
+        float4 fo = SAMPLE_TEXTURE2D_LOD(_StabbyForest, sampler_StabbyForest, TmCoatUV(xa), 0);
         float3 lp = float3(p.x - orgO.x, p.y, p.z - orgO.z);
         float2 wd = hw < 4.8 ? TmWet(lp, hw, max(d * _Eye.w, 1e-4)) : 0;
         float gw = cw.x * (1 - m) * up * (1 - TmFloorCover(xa - orgO.xz, fo, max(d * _Eye.w, 1e-4)).y) * (1 - 0.85 * smoothstep(0.45, 1, wd.x));

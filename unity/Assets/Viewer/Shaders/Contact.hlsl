@@ -34,7 +34,7 @@ float3 ContactRock()
 
 float3 ContactColor(float2 xz, float h, float ice)
 {
-    float3 g = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, xz * _StabbyFieldUV.z + _StabbyFieldUV.w, 0).rgb);
+    float3 g = ToLinear(SAMPLE_TEXTURE2D_LOD(_StabbyBiome, sampler_StabbyBiome, TmBiomeUV(xz, _StabbyFieldUV), 0).rgb);
     g = lerp(g, ToLinear(_StabbySand.rgb), smoothstep(6, 2, h));
     g = lerp(g, ContactRock(), smoothstep(2, 6, ContactBed(xz) - h));
     return ContactTint(lerp(g, _StabbyIce.rgb * float3(0.86, 0.94, 1.0), ice), ice);

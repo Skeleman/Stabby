@@ -255,7 +255,7 @@ public class DiscoveryTests
     public void LoneInnsStandOnRoadShouldersFarFromTowns()
     {
         int inn = Objects.Objects.FindIndex(o => o.Id == "lone-inn");
-        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var (w, _, _, field) = World(1);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var all = field.Discoveries();
         var inns = all.Where(o => o.Def == inn).ToArray();
