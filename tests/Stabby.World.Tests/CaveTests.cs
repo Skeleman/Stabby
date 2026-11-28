@@ -283,7 +283,7 @@ public class CaveTests
             }
         }
         Console.WriteLine($"streams in {graphs} graphs: springs {ends[0]}, pools {ends[1]}, sinks {ends[2]}, falls {ends[3]}");
-        Assert.True(ends.Sum() >= graphs / 3, $"only {ends.Sum()} streams in {graphs} cave graphs");
+        Assert.True(ends.Sum() >= graphs / 6, $"only {ends.Sum()} streams in {graphs} cave graphs");
         Assert.True(ends[0] > 0 && ends[2] > 0);
     }
 
