@@ -479,7 +479,9 @@ namespace Stabby.World
 
         bool TrailTo(float sx, float sz, float ax, float az, float tx, float tz, float ex, float ez, bool town, List<RoadSegment> list)
         {
-            var path = Route(Cell(ax), Cell(az), Cell(tx), Cell(tz), false, out var jumps, out var bored);
+            List<int> path; List<byte> jumps; List<Bored> bored;
+            if (Cell(ax) == Cell(tx) && Cell(az) == Cell(tz)) { path = new List<int> { Cell(az) * n + Cell(ax) }; jumps = new List<byte> { 0 }; bored = new List<Bored>(); }
+            else path = Route(Cell(ax), Cell(az), Cell(tx), Cell(tz), false, out jumps, out bored);
             if (path == null) return false;
             var runs = Runs(path, jumps, out var joins);
             var (fx, fz) = runs[0];
