@@ -289,6 +289,11 @@
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest"], "perHectare": 0, "discovery": "camp", "spacingM": 750, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 10, "sizeMaxM": 11, "sink": 0.002 }
     },
     {
+      "id": "burnt-camp", "name": "Burnt camp", "kind": "structure", "material": "fieldstone-grey", "variants": 6,
+      "parts": [ { "id": "camp", "shape": "burnt-camp" } ],
+      "placement": { "biomes": ["temperate-forest", "boreal", "steppe", "shrubland", "savanna"], "perHectare": 0, "discovery": "burnt-camp", "spacingM": 1300, "chance": 0.6, "slopeMax": 0.35, "sizeMinM": 10, "sizeMaxM": 11, "sink": 0.002 }
+    },
+    {
       "id": "hermit-hut", "name": "Hermit hut", "kind": "structure", "material": "fieldstone-grey", "variants": 3,
       "parts": [ { "id": "hut", "shape": "hermit-hut" } ],
       "placement": { "perHectare": 0, "sizeMinM": 6.75, "sizeMaxM": 6.75 }

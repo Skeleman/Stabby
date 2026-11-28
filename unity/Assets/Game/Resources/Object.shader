@@ -51,7 +51,7 @@ Shader "Stabby/Object"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             float4 _StabbySky, _StabbyGround, _StabbyFieldUV, _StabbySand, _StabbyIce;
-            float4 _StabbyKit[42], _StabbyKitSrgb[42];
+            float4 _StabbyKit[45], _StabbyKitSrgb[45];
             float _StabbyClock;
             static float3 emberGlow;
             static float iceWrap;
@@ -496,6 +496,16 @@ Shader "Stabby/Object"
                         a *= lerp(0.75, 1.25, yf);
                         grad = 0.1 * str.yzw * fs + 0.08 * fib.yzw * ff;
                     }
+                }
+                else if (mat == 12)
+                {
+                    float dust = smoothstep(0.3, 0.9, 0.1 + 0.55 * n.y + 0.45 * big.x + 0.3 * mid.x * fm);
+                    a = _StabbyKit[42].rgb * (0.8 + 0.3 * fib.x * ff + 0.15 * big.x);
+                    float scale = smoothstep(0.82, 0.96, 1 - abs(mid.x * fm + 0.25 * str.x * fs));
+                    a = lerp(a, _StabbyKit[44].rgb, 0.7 * scale);
+                    a = lerp(a, _StabbyKit[43].rgb * (0.85 + 0.2 * fib.x * ff), dust * saturate(0.4 + n.y));
+                    tmRough = lerp(tmRough * 0.7, tmRough, dust);
+                    grad = 0.14 * mid.yzw * fm + 0.1 * fib.yzw * ff + 0.1 * str.yzw * fs * (1 - dust);
                 }
                 else if (mat == 11)
                 {

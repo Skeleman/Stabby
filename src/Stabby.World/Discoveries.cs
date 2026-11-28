@@ -7,14 +7,14 @@ namespace Stabby.World
 {
     public sealed partial class ObjectField
     {
-        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn", "monument", "shipwreck", "watchtower", "sunken-temple", "ancient-tree", "fumarole-field", "great-mushroom", "lodestone" };
-        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree", "discoveries-lone-inn", "discoveries-monument", "discoveries-shipwreck", "discoveries-watchtower", "discoveries-sunken-temple", "discoveries-ancient-tree", "discoveries-fumarole-field", "discoveries-great-mushroom", "discoveries-lodestone" };
-        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16, LoneInn = 17, Monument = 18, Shipwreck = 19, Watchtower = 20, SunkenTemple = 21, AncientTree = 22, FumaroleField = 23, GreatMushroom = 24, Lodestone = 25;
+        public static readonly string[] DiscoveryNames = { "", "hilltop", "clearing", "camp", "hermit", "shrine", "ruin", "spring", "fairy-ring", "geyser", "mud-pot", "wolf-den", "dungeon", "overlook", "bones", "salt-tower", "fallen-tree", "lone-inn", "monument", "shipwreck", "watchtower", "sunken-temple", "ancient-tree", "fumarole-field", "great-mushroom", "lodestone", "burnt-camp" };
+        static readonly string[] DiscoveryStreams = { "", "discoveries", "discoveries-clearing", "discoveries-camp", "discoveries-hermit", "discoveries-shrine", "discoveries-ruin", "discoveries-spring", "discoveries-fairy-ring", "discoveries-geyser", "discoveries-mud-pot", "discoveries-wolf-den", "discoveries-dungeon", "discoveries-overlook", "discoveries-bones", "discoveries-salt-tower", "discoveries-fallen-tree", "discoveries-lone-inn", "discoveries-monument", "discoveries-shipwreck", "discoveries-watchtower", "discoveries-sunken-temple", "discoveries-ancient-tree", "discoveries-fumarole-field", "discoveries-great-mushroom", "discoveries-lodestone", "discoveries-burnt-camp" };
+        public const int Hilltop = 1, Clearing = 2, Camp = 3, Hermit = 4, Shrine = 5, Ruin = 6, Spring = 7, FairyRing = 8, Geyser = 9, MudPot = 10, WolfDen = 11, Dungeon = 12, Overlook = 13, Bones = 14, SaltTower = 15, FallenTree = 16, LoneInn = 17, Monument = 18, Shipwreck = 19, Watchtower = 20, SunkenTemple = 21, AncientTree = 22, FumaroleField = 23, GreatMushroom = 24, Lodestone = 25, BurntCamp = 26;
         public const int VentsMin = 2, VentsMax = 4, FieldTries = 12, VentSitesMin = 4, VentBatch = 64;
         public const float VentSiteStepM = 30f;
         public const float VentFieldM = 120f, VentFieldRadiusM = 60f, VentGapM = 40f, SpringRiverM = 40f, SpringReliefM = 8f, VentReliefM = 6f, VentSteady = 0.15f;
         public const float DiscoveryInset = 0.2f, TownClearM = 400f, DiscoveryProbeM = 40f, HilltopRiseM = 1f, ClearingReliefM = 1.5f;
-        public const float DiscoveryGapM = 250f, CampReliefM = 3f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 4f, DenProbeM = 6f, DenSeekM = 50f, DenRiverM = 40f, DenWoods = 0.25f;
+        public const float DiscoveryGapM = 250f, CampReliefM = 3f, BurntWoodsMin = 0.08f, BurntWoodsMax = 0.55f, BurntRiverM = 60f, CampRiverM = 40f, ForestPerHectare = 30f, HermitWoods = 0.6f, RuinReliefM = 4f, FairyReliefM = 2f, FairyWoods = 0.35f, DenReliefM = 4f, DenProbeM = 6f, DenSeekM = 50f, DenRiverM = 40f, DenWoods = 0.25f;
         public const float ShrineRoadMinM = 9f, ShrineRoadM = 30f, ShrineRoadAimM = 13f, ShrineProbeM = 12f, ShrineReliefM = 6f, ShrineSeatUp = 0.16f, ShrineSeatDown = 0.08f;
         public const int DenSeekRings = 3, DiscoveryTries = 16, ClimbSteps = 12, FitBatch = 4;
         public const float ClimbStartM = 16f, ClimbEndM = 2f;
@@ -364,7 +364,7 @@ namespace Stabby.World
             if (!Open(d, variant, size, px, pz) || !Accept(d, px, pz, size, qa, qb, out o, site: true)) { o = default; return false; }
             int kind = lib.Objects[d].Placement.Discovery;
             bool shrine = kind == Shrine, spring = Pooled(kind);
-            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree || kind == LoneInn || kind == Monument || kind == Shipwreck || kind == Watchtower || kind == SunkenTemple || kind == AncientTree || kind == FumaroleField || kind == GreatMushroom || kind == Lodestone ? lib.Objects[d].Variants : 1, k = 0;
+            int tries = shrine || spring || kind == Ruin || kind == FairyRing || kind == WolfDen || kind == Dungeon || kind == Overlook || kind == Bones || kind == SaltTower || kind == FallenTree || kind == LoneInn || kind == Monument || kind == Shipwreck || kind == Watchtower || kind == SunkenTemple || kind == AncientTree || kind == FumaroleField || kind == GreatMushroom || kind == Lodestone || kind == BurntCamp ? lib.Objects[d].Variants : 1, k = 0;
             for (; k < tries; k++)
             {
                 o.Variant = (variant + k) % lib.Objects[d].Variants;
@@ -945,6 +945,12 @@ namespace Stabby.World
                 if (relief > CampReliefM) return float.MinValue;
                 float draw = CampDraw(x, z);
                 return draw > 0 ? draw - 0.1f * relief : float.MinValue;
+            }
+            if (kind == BurntCamp)
+            {
+                if (relief > CampReliefM) return float.MinValue;
+                float woods = Woods(x, z);
+                return woods >= BurntWoodsMin && woods <= BurntWoodsMax && RiverGap(x, z) >= BurntRiverM ? ForestEdge(x, z) - 0.1f * relief : float.MinValue;
             }
             if (kind == Hermit)
             {

@@ -4,7 +4,7 @@ namespace Stabby.World
 {
     public static partial class Structures
     {
-        public const int Ash = 7, Ember = 10;
+        public const int Ash = 7, Ember = 10, Char = 12;
         public const float CampU = 1 / 10f;
 
         static void Rock(StructureLayout l, ulong key, in Frame f, float x, float y, float z, float sx, float sy, float sz, float c, float s, int lo, int hi, float lean = 0)

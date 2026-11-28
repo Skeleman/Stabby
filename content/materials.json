@@ -215,6 +215,9 @@
     { "id": "hearth-ash",       "name": "Hearth ash",       "color": "#57544f" },
     { "id": "ember-crack",      "name": "Ember crack",      "color": "#521f0d" },
     { "id": "soot",             "name": "Soot",             "color": "#080707" },
+    { "id": "burnt-wood",       "name": "Burnt wood",       "color": "#17110d" },
+    { "id": "scorch-ash",       "name": "Scorch ash",       "color": "#8a8782" },
+    { "id": "char-crack",       "name": "Char crack",       "color": "#3b2418" },
     { "id": "hearth-ring",      "name": "Hearth ring",      "color": "#0d0b0a" },
     { "id": "red-cap",          "name": "Red cap",          "color": "#9e1f12" },
     { "id": "brown-cap",        "name": "Brown cap",        "color": "#664024" },
@@ -257,7 +260,8 @@
     "fungus": ["red-cap", "brown-cap", "tan-cap", "ochre-cap", "cap-rim", "cap-wart", "dark-gill", "pale-gill", "fungus-stem", "stem-base"],
     "turf": ["roof-turf", "turf-sprout"],
     "ember": ["ember-glow", "ember-core"],
-    "soil": ["loam", "wet-loam", "loam-grit"]
+    "soil": ["loam", "wet-loam", "loam-grit"],
+    "char": ["burnt-wood", "scorch-ash", "char-crack"]
   },
   "strata": [
     { "id": "grey-limestone", "name": "Grey limestone",  "color": "#8f8b82", "thicknessM": 14, "hardness": 0.85 },
