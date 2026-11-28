@@ -11,6 +11,7 @@ public class RoadTests
         int links = field.Roads().Count(s => s.Kind != RoadSegment.Lane);
         var errors = new List<string>();
         WorldChecks.CheckRoads(w, new EditGrid(edits, w.Config.Size * w.Config.CellMeters), field, errors);
+        WorldChecks.CheckTrails(w, field, errors);
         Assert.True(errors.Count == 0, string.Join("; ", errors));
         Assert.True(links > 0, "no road links");
     }
