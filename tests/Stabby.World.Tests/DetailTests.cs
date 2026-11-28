@@ -141,6 +141,23 @@ public class DetailTests
         Assert.Equal(Detail.ShadowCascade, Decide(61f, low).Shadow);
     }
 
+    [Fact]
+    public void CreatureShadowsUseTheObjectHysteresis()
+    {
+        var rule = new CreatureDef().Rule();
+        float on = rule.ShadowPixels, off = on * (1f - Detail.Hysteresis);
+        Detail.Decision Step(float px, Detail.Decision previous) =>
+            Detail.Decide(rule, 2f, At(px), Detail.ReferencePixelsPerMetre, 1f, previous);
+        var d = Step(0.9f * on, default);
+        Assert.False(d.Casts);
+        d = Step(1.02f * on, d);
+        Assert.True(d.Casts);
+        d = Step(0.9f * on, d);
+        Assert.True(d.Casts);
+        Assert.False(Step(0.98f * off, d).Casts);
+        Assert.False(Step(0.9f * on, default).Casts);
+    }
+
     static Detail.ShadowMap Flat(float texelM) => new Detail.ShadowMap
     {
         Count = 1, Range = 1000f, Far0 = 1000f, Far1 = 1000f, Far2 = 1000f,
