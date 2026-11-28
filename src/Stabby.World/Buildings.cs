@@ -14,7 +14,7 @@ namespace Stabby.World
         static readonly float[] HouseSeat = { 0, 0, 0.4f, 0.3f, -0.4f, 0.3f, 0.4f, -0.3f, -0.4f, -0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.FallenTree ? TreeSeats : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower || shape == ObjectPart.Monument || shape == ObjectPart.Shipwreck || shape == ObjectPart.Watchtower ? YardSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.SunkenTemple ? TempleSeats : shape == ObjectPart.FallenTree ? TreeSeats : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower || shape == ObjectPart.Monument || shape == ObjectPart.Shipwreck || shape == ObjectPart.Watchtower ? YardSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {
@@ -51,6 +51,7 @@ namespace Stabby.World
                 case ObjectPart.SaltTower: SaltTower(l, key, Frame.Root(SaltU)); break;
                 case ObjectPart.Monument: Monument(l, key, Frame.Root(MonumentU)); break;
                 case ObjectPart.Watchtower: Watchtower(l, key, Frame.Root(WatchtowerU)); break;
+                case ObjectPart.SunkenTemple: SunkenTemple(l, key, Frame.Root(TempleU)); break;
                 case ObjectPart.Shipwreck: Shipwreck(l, key, Frame.Root(ShipwreckU)); break;
                 case ObjectPart.Bridge: Bridge(l, key, Frame.Root(BridgeU)); break;
                 case ObjectPart.FallenTree: FallenTree(l, key, Frame.Root(TreeU)); break;

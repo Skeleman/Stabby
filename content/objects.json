@@ -522,6 +522,11 @@
       "id": "watchtower", "name": "Watchtower", "kind": "structure", "material": "ruin-stone", "variants": 6,
       "parts": [ { "id": "site", "shape": "watchtower" } ],
       "placement": { "biomes": ["steppe", "temperate-forest", "temperate-rain", "boreal", "shrubland", "savanna", "tundra", "cold-desert", "desert", "alpine"], "perHectare": 0, "discovery": "watchtower", "spacingM": 900, "chance": 0.85, "slopeMax": 0.2, "sizeMinM": 12, "sizeMaxM": 13, "sink": 0.002 }
+    },
+    {
+      "id": "sunken-temple", "name": "Sunken temple", "kind": "structure", "material": "ruin-stone", "variants": 6,
+      "parts": [ { "id": "site", "shape": "sunken-temple" } ],
+      "placement": { "biomes": ["wetland", "temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra"], "perHectare": 0, "discovery": "sunken-temple", "spacingM": 800, "chance": 0.9, "slopeMax": 0.3, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },
