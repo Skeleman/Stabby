@@ -295,6 +295,30 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void GreatMushroomsCrownDampForestMounds()
+    {
+        int gm = Objects.Objects.FindIndex(o => o.Id == "great-mushroom");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == gm).ToArray();
+        output.WriteLine($"{found.Length} great mushrooms " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:fit {field.GreatMushroomFit(c.X, c.Z):F2}")));
+        Assert.NotEmpty(found);
+        foreach (var c in found)
+        {
+            Assert.True(field.Woods(c.X, c.Z) >= ObjectField.GreatWoods);
+            Assert.Null(field.GreatMushroomFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            var l = Structures.Layout(ObjectPart.GreatMushroom, ObjectMeshes.Key("great-mushroom", 0, c.Variant));
+            Assert.NotEmpty(l.Contacts);
+            float top = l.Columns.Max(k => k.Top), cap = l.Columns.Max(k => 2 * k.R);
+            Assert.InRange(cap * c.Size, 12f, 18f);
+            Assert.True(top * c.Size >= 10f);
+            foreach (var o in all.Where(o => o.Def != gm))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void VolcanoHoldsACraterPoolBelowItsRim()
     {
         var p = TestWorlds.Place(VolcanoSeed);
