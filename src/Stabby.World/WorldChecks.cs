@@ -359,10 +359,16 @@ namespace Stabby.World
             float cm = w.Config.CellMeters;
             var d = new TerrainDetail(w);
             var hy = w.Water;
-            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false, centre = false, runOrder = false;
+            bool pool = false, edge = false, lake = false, sheet = false, shelf = false, isle = false, bare = false, centre = false, runOrder = false, stack = false;
             foreach (var s in hy.Rivers)
-                foreach (var f in s.Falls)
+                for (int i = 0; i < s.Falls.Count; i++)
                 {
+                    var f = s.Falls[i];
+                    if (!stack && i > 0 && Hydrology.Overlaps(f, s.Falls[i - 1]))
+                    {
+                        stack = true;
+                        e.Add($"river {s.Id} fall at {f.LipX:F0},{f.LipZ:F0} has a pool reaching back over the fall above at {s.Falls[i - 1].LipX:F0},{s.Falls[i - 1].LipZ:F0}");
+                    }
                     int lip = Cell(n, cm, f.LipX, f.LipZ), bottom = Cell(n, cm, f.BaseX, f.BaseZ);
                     bool wetLip = w.Sea[lip] || hy.LakeId[lip] >= 0, wetBase = w.Sea[bottom] || hy.LakeId[bottom] >= 0;
                     if (!lake && (wetLip || wetBase && f.BaseY < hy.WaterSurface[bottom] - SurfaceTolerance))

@@ -421,21 +421,40 @@ namespace Stabby.World
                     float baseY = stage[e], bx = lx + dx * FallBaseOffsetM, bz = lz + dz * FallBaseOffsetM;
                     if (Wet(c, sea, hy, bx, bz)) baseY = Math.Max(baseY, hy.WaterSurface[CellAt(c, bx, bz)]);
                     if (t < 0 || stage[k] - baseY < FallMinDrop || InJunction(c, seg, hy, lx, lz)) { k = e - 1; continue; }
-                    drop = stage[k] - baseY;
-                    float q = seg.Discharge[big], w = seg.Width[big];
-                    float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
-                    SheetPool(0.5f * SheetWidth(w), drop, ref pool, out float centre);
-                    seg.Falls.Add(new RiverFall
+                    var fall = MakeFall(seg, big, lx, lz, stage[k], bx, bz, baseY, dx, dz);
+                    while (seg.Falls.Count > 0 && Overlaps(fall, seg.Falls[seg.Falls.Count - 1]))
                     {
-                        K = big,
-                        LipX = lx, LipZ = lz, LipY = stage[k],
-                        BaseX = bx, BaseZ = bz, BaseY = baseY,
-                        Width = w, DirX = dx, DirZ = dz,
-                        PoolRadius = pool, PoolCentre = centre, Discharge = q,
-                    });
+                        var a = seg.Falls[seg.Falls.Count - 1];
+                        seg.Falls.RemoveAt(seg.Falls.Count - 1);
+                        float ay = fall.BaseY;
+                        if (Wet(c, sea, hy, a.BaseX, a.BaseZ)) ay = Math.Max(ay, hy.WaterSurface[CellAt(c, a.BaseX, a.BaseZ)]);
+                        fall = MakeFall(seg, a.K, a.LipX, a.LipZ, a.LipY, a.BaseX, a.BaseZ, ay, a.DirX, a.DirZ);
+                    }
+                    seg.Falls.Add(fall);
                 }
                 k = e - 1;
             }
+        }
+
+        static RiverFall MakeFall(RiverSegment seg, int big, float lx, float lz, float lipY, float bx, float bz, float baseY, float dx, float dz)
+        {
+            float drop = lipY - baseY, q = seg.Discharge[big], w = seg.Width[big];
+            float pool = Math.Min(FallPoolMaxM, Math.Max(FallPoolWidths * w, FallPoolBaseM + FallPoolScale * (float)FMath.Pow(Math.Max(q, 0.01f), 0.25) * (float)Math.Sqrt(drop)));
+            SheetPool(0.5f * SheetWidth(w), drop, ref pool, out float centre);
+            return new RiverFall
+            {
+                K = big,
+                LipX = lx, LipZ = lz, LipY = lipY,
+                BaseX = bx, BaseZ = bz, BaseY = baseY,
+                Width = w, DirX = dx, DirZ = dz,
+                PoolRadius = pool, PoolCentre = centre, Discharge = q,
+            };
+        }
+
+        public static bool Overlaps(in RiverFall f, in RiverFall up)
+        {
+            float x = up.LipX - f.LipX - f.DirX * f.PoolCentre, z = up.LipZ - f.LipZ - f.DirZ * f.PoolCentre, r = NearField.PoolReach(f.PoolCentre, f.PoolRadius) - f.PoolCentre;
+            return x * x + z * z < r * r;
         }
 
         public const float ShelfMinDrop = 12f, ShelfChance = 0.35f, ShelfHalfPerDrop = 0.3f, ShelfHalfMinM = 10f, ShelfHalfMaxM = 22f, ShelfBowMin = 0.15f, ShelfBowMax = 0.4f, ShelfStepM = 2f, ShelfFlare = 1.5f, ShelfSureDropM = 10f;
