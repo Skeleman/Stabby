@@ -674,7 +674,7 @@ Shader "Stabby/Object"
                     [unroll] for (int k = 1; k < 6; k++) mean += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(u0 + k * 0.1667, 0.5), 0).rgb;
                     mean = (mean + band) * 0.1667;
                     float3 pull = lerp(1, clamp((mean + 0.02) / (band + 0.02), 0.6, 1.6), 0.6);
-                    bool own = base.a > 0.006, keep = base.a > 0.016;
+                    bool own = base.a > 0.006, keep = base.a > 0.016, rust = base.a > 0.0205;
                     float2 dux = float2(ddx(u0), 0), duy = float2(ddy(u0), 0);
                     [branch] if (_StabbyDetailOff > 0)
                         albedo = own ? 1 : SAMPLE_TEXTURE2D_GRAD(_StabbyStrata, sampler_StabbyStrata, float2(u0, 0.5), dux, duy).rgb;
@@ -716,6 +716,18 @@ Shader "Stabby/Object"
                             g -= n * dot(g, n);
                             n = normalize(n - g);
                             albedo = m.albedo * dark;
+                            [branch] if (rust)
+                            {
+                                float3 rp = wp - orgO;
+                                float4 sn = OrgNoise3(float3(rp.x * 1.7, rp.y * 0.22, rp.z * 1.7) + 31.3, int3(0, 0, 0));
+                                float4 fn = OrgRP3(rp, OrgF(1), 41.7, 1);
+                                float4 bn = OrgNoise3(rp * 0.45 + 63.1, int3(0, 0, 0));
+                                float side = 1 - smoothstep(0.45, 0.85, abs(n.y));
+                                float streak = side * smoothstep(0.1, 0.55, sn.x + 0.35 * fn.x);
+                                float blot = smoothstep(0.35, 0.8, n.y) * smoothstep(0.05, 0.5, bn.x + 0.3 * fn.x);
+                                float3 rc = _StabbyKit[15].rgb * lerp(1.3, 2.3, saturate(0.5 + 0.5 * fn.x + 0.4 * sn.x));
+                                albedo = lerp(albedo, rc, saturate(streak + blot) * 0.85);
+                            }
                             pull = 1;
                         }
                         else

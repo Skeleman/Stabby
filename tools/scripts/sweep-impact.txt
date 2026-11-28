@@ -85,6 +85,7 @@ src/Stabby.World/SunkenTemple.cs sites,surface
 src/Stabby.World/AncientTree.cs sites,surface
 src/Stabby.World/Fumarole.cs sites,surface
 src/Stabby.World/GreatMushroom.cs sites,surface,roads
+src/Stabby.World/Lodestone.cs sites,surface,roads
 src/Stabby.World/MesaChecks.cs sketch
 src/Stabby.World/GlacialChecks.cs sketch
 src/Stabby.World/TintChecks.cs biomes

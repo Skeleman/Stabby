@@ -308,7 +308,7 @@ namespace Stabby.Content
             lib.Strata = strata;
             foreach (var m in root.Objects("materials"))
             {
-                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0), Translucency = m.Float("translucency", 0), GlowPattern = Array.IndexOf(LibraryMaterial.GlowPatterns, m.String("glowPattern", "facet")), KeepHue = m.Bool("keepHue", false) });
+                lib.Materials.Add(new LibraryMaterial { Id = m.String("id", ""), Name = m.String("name", ""), Color = Hex(m.String("color", "#ff00ff")), Glow = m.Float("glow", 0), Translucency = m.Float("translucency", 0), GlowPattern = Array.IndexOf(LibraryMaterial.GlowPatterns, m.String("glowPattern", "facet")), KeepHue = m.Bool("keepHue", false), Rust = m.Bool("rust", false) });
                 m.End();
             }
             var kit = root.Object("kit");
@@ -660,6 +660,8 @@ namespace Stabby.Content
 
         static bool KeepHue(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.KeepHue ?? false;
 
+        static bool Rust(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.Rust ?? false;
+
         static int GlowPattern(Json j, string field, MaterialLibrary materials) => materials?.Find(j.String(field, ""))?.GlowPattern ?? 0;
 
         static void InlineColor(Json j, string field, string where, List<string> errors)
@@ -682,6 +684,7 @@ namespace Stabby.Content
                 def.Translucency = Translucency(o, "material", materials);
                 def.GlowPattern = GlowPattern(o, "material", materials);
                 def.KeepHue = KeepHue(o, "material", materials);
+                def.Rust = Rust(o, "material", materials);
             }
             else if (style != null) def.Color = style.StoneColor;
             int trim = style == null ? 0 : Array.IndexOf(MaterialLibrary.KitNames, style.Trim) + 1;
@@ -722,6 +725,7 @@ namespace Stabby.Content
                     Glow = color ? Glow(p, "material", materials) : def.Glow, GlowPattern = color ? GlowPattern(p, "material", materials) : def.GlowPattern,
                     Translucency = color ? Translucency(p, "material", materials) : def.Translucency,
                     KeepHue = color ? KeepHue(p, "material", materials) : def.KeepHue,
+                    Rust = color ? Rust(p, "material", materials) : def.Rust,
                     HasLeafColor = leaf, LeafColor = leaf ? Material(p, "leafMaterial", id + ".parts." + pid, materials, errors) : 0, Trim = trim,
                 };
                 string ends = p.String("ends", "auto");
