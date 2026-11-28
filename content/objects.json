@@ -539,7 +539,7 @@
     {
       "id": "fumarole-field", "name": "Fumarole field", "kind": "structure", "material": "sulphur-crust", "variants": 6,
       "parts": [ { "id": "site", "shape": "fumarole-field", "material": "sulphur-crust" } ],
-      "placement": { "biomes": ["steppe", "shrubland", "boreal", "tundra", "alpine", "cold-desert"], "perHectare": 0, "discovery": "fumarole-field", "spacingM": 2500, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 16, "sizeMaxM": 18, "sink": 0.02 }
+      "placement": { "biomes": ["steppe", "shrubland", "boreal", "tundra", "alpine", "cold-desert"], "perHectare": 0, "discovery": "fumarole-field", "spacingM": 2500, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 16, "sizeMaxM": 18, "sink": 0.02, "stampFoot": 0 }
     }
   ],
   "terrain": { "quadPixels": 10.8, "contactPixels": 7.3, "contactTexelPixels": 1.8, "mistFadePixels": 4, "mistFullPixels": 16, "steamFadePixels": 3, "steamFullPixels": 12, "columnFadePixels": 2, "columnFullPixels": 8, "shadowTexels": 1 },

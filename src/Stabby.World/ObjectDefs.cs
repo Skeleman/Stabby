@@ -55,6 +55,7 @@ namespace Stabby.World
         public uint Color;
         public float Glow, Translucency;
         public int GlowPattern;
+        public bool KeepHue;
         public bool HasColor;
         public uint LeafColor;
         public bool HasLeafColor;
@@ -80,6 +81,7 @@ namespace Stabby.World
         public float Sink;
         public float AlignToSlope;
         public float FootRiseM, FootReachM = 12f;
+        public float StampFoot = -1f;
         public float FanM;
         public float EditMinSizeM;
         public int ChainMin = 1, ChainMax = 1;
@@ -117,6 +119,7 @@ namespace Stabby.World
         public uint Color;
         public float Glow, Translucency;
         public int GlowPattern;
+        public bool KeepHue;
         public int Variants = 1;
         public string Verb, Style;
         public float ReachM;
@@ -341,6 +344,7 @@ namespace Stabby.World
                     errors.Add(d.Id + ": chainHead must name an unplaced wall-head structure, on a chain");
                 if (pl.FootRiseM < 0 || pl.FootRiseM > 100) errors.Add(d.Id + ": footRiseM must be 0-100");
                 if (pl.FootReachM <= 0 || pl.FootReachM > 60) errors.Add(d.Id + ": footReachM must be above 0, at most 60");
+                if (pl.StampFoot != -1f && (pl.StampFoot < 0 || pl.StampFoot > 0.5f || d.Kind != Structure)) errors.Add(d.Id + ": stampFoot must be 0-0.5 and belongs only to structures");
                 if (pl.FanM < 0 || pl.FanM > 30 || (pl.FanM > 0 && pl.FootRiseM <= 0)) errors.Add(d.Id + ": fanM must be 0-30 and needs footRiseM");
                 if (pl.EditMinSizeM < 0 || pl.EditMinSizeM > 20) errors.Add(d.Id + ": editMinSizeM must be 0-20");
                 if (pl.EditMinSizeM > 0 && (d.Parts.Count != 1 || d.Parts[0].Shape != ObjectPart.Rock || pl.ClusterCount != 1 || pl.FootRiseM > 0))

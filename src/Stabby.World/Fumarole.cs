@@ -67,7 +67,7 @@ namespace Stabby.World
                     float ring = vr * rng.Range(1.5f, 2.2f), x = vx + Cos16(d) * ring, z = vz + Sin16(d) * ring, s = rng.Range(0.3f, 0.65f);
                     int q = rng.Range(0, 16);
                     Hewn(l, rng.NextU64(), f, x, -0.15f, z, s, s * rng.Range(0.5f, 0.8f), s * rng.Range(0.6f, 0.9f), Cos16(q), Sin16(q), 0, 1, rng.Range(0.4f, 0.6f), rng.Range(-0.15f, 0.15f), rng.Range(-0.15f, 0.15f), rng.Range(0f, 0.12f));
-                    Touch(l, f, x, 0, z, 0.6f * s + 0.2f);
+                    Touch(l, f, x, 0, z, 0.45f * s);
                 }
             }
             Drape(l, mounds);
