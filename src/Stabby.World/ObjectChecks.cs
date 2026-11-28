@@ -276,8 +276,10 @@ namespace Stabby.World
             foreach (var g in bores) bored.Add(g.Tile);
             foreach (var f in grid.Edits)
                 if (f.Link && !bored.Contains(Features.TileOf(f, w.Config.CellMeters)) && field.OnRoad(0.5f * (f.MinX + f.MaxX), 0.5f * (f.MinZ + f.MaxZ), 0.5f * (float)Math.Sqrt((f.MaxX - f.MinX) * (f.MaxX - f.MinX) + (f.MaxZ - f.MinZ) * (f.MaxZ - f.MinZ)))) { e.Add($"dungeon link edit at {f.Ax:F0},{f.Az:F0} meets a road"); return; }
+            var decoded = new DecodedChunks(field);
+            decoded.Warm(new List<int>(chunks));
             foreach (int c in chunks)
-                foreach (var o in field.Chunk(c % across, c / across))
+                foreach (var o in decoded.Get(c % across, c / across))
                 {
                     if (field.IsTownMember(o.Def) || defs[o.Def].Placement.Cave > 0 || o.Def == field.BridgeDef()) continue;
                     if (field.OnRoad(o.X, o.Z, defs[o.Def].FootprintRadius() * o.Size)) { e.Add($"{defs[o.Def].Id} at {o.X:F0},{o.Z:F0} sits on a road"); return; }
