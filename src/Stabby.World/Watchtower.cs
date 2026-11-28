@@ -29,7 +29,7 @@ namespace Stabby.World
             var f = root;
             int start = l.Pieces.Count;
             int storeys = rng.Range(2, 5), full = storeys * 4, minC = Math.Max(4, (storeys - 1) * 4);
-            int fall = 4 + rng.Range(-1, 2), door = (fall + (rng.NextFloat() < 0.5f ? 4 : 12)) & 15;
+            int door = 4, fall = 8 + rng.Range(-1, 2);
             var cnt = new int[16];
             for (int k = 0; k < 16; k++)
             {
@@ -41,6 +41,7 @@ namespace Stabby.World
             cnt[notch] = Math.Max(minC, cnt[notch] - 1);
             var slit = new bool[16];
             int want = rng.Range(1, 3), got = 0;
+            if (cnt[door - 2] >= 7) { slit[door - 2] = true; got++; }
             for (int t = 0, k = rng.Range(0, 16); t < 16 && got < want; t++, k = (k + 1) & 15)
             {
                 if (WatchDist(k, door) < 2 || WatchDist(k, fall) < 3 || cnt[k] < 7 || slit[(k + 1) & 15] || slit[(k + 15) & 15]) continue;

@@ -9,12 +9,13 @@ namespace Stabby.World
         const float YardU = 1 / 19f, Plate = 3.3f;
 
         static readonly float[] InnSeat = { 0, 0, 0.4f, 0.25f, -0.4f, 0.25f, 0.4f, -0.25f, -0.4f, -0.25f };
+        static readonly float[] WatchSeat = { 0, 0, 0.3f, 0, -0.3f, 0, 0, 0.3f, 0, -0.3f, 0.21f, 0.21f, -0.21f, 0.21f, 0.21f, -0.21f, -0.21f, -0.21f };
         static readonly float[] YardSeat = { 0, 0, 0.35f, 0.35f, -0.35f, 0.35f, 0.35f, -0.35f, -0.35f, -0.35f };
         static readonly float[] WaysideSeats = { 0, 0, 0.24f, -0.09f, -0.24f, -0.09f, 0, -0.16f, 0.1f, -0.16f, -0.1f, -0.16f, 0, 0.15f, 0, 0.3f };
         static readonly float[] HouseSeat = { 0, 0, 0.4f, 0.3f, -0.4f, 0.3f, 0.4f, -0.3f, -0.4f, -0.3f };
         static readonly float[] KitSeats = { 0, 0, 0.3f, 0.2f, -0.3f, 0.2f, 0.3f, -0.2f, -0.3f, -0.2f };
 
-        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.FallenTree ? TreeSeats : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower || shape == ObjectPart.Monument || shape == ObjectPart.Shipwreck || shape == ObjectPart.Watchtower ? YardSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
+        static float[] KitSeat(int shape) => shape == ObjectPart.Inn ? InnSeat : shape == ObjectPart.FallenTree ? TreeSeats : shape == ObjectPart.House ? HouseSeat : shape == ObjectPart.InnYard ? YardSeat : shape == ObjectPart.StoneRing ? RingSeat : shape == ObjectPart.Campsite || shape == ObjectPart.Hermitage || shape == ObjectPart.Ruin || shape == ObjectPart.FairyRing || shape == ObjectPart.WolfDen || shape == ObjectPart.Overlook || shape == ObjectPart.SaltTower || shape == ObjectPart.Monument || shape == ObjectPart.Shipwreck ? YardSeat : shape == ObjectPart.Watchtower ? WatchSeat : shape == ObjectPart.Bones ? BonesSeat : shape == ObjectPart.Wayside ? WaysideSeats : shape == ObjectPart.HotSpring ? SpringSeats : shape == ObjectPart.Dungeon ? DungeonSeats : shape == ObjectPart.Geyser || shape == ObjectPart.MudPot ? VentSeats : shape == ObjectPart.InnRoadside ? RoadsideSeats : KitSeats;
 
         static void Built(int shape, ulong key, StructureLayout l)
         {

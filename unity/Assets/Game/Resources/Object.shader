@@ -709,7 +709,8 @@ Shader "Stabby/Object"
                             [unroll] for (int k = 1; k < 6; k++) sm += SAMPLE_TEXTURE2D_LOD(_StabbyStrata, sampler_StabbyStrata, float2(us + k * 0.1667, 0.5), 0).rgb;
                             float3 sc = own ? base.rgb * clamp((dot(sb, 1) + 0.02) / (dot(sm, 0.1667) + 0.02), 0.88, 1.12) : lerp(sb, sm * 0.1667, 0.5);
                             TmOut m = KitStone(wp - i.origin + float3(hj, hk, hj * hk) * 37 + cid * float3(5.3, 2.9, 7.1), n, sc, tone, fp);
-                            TmStoneCover(m, wp - orgO, n, mossy ? float4(saturate(cwn.x + 0.55 * surf * (1 - cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
+                            float foot = mossy ? smoothstep(1.8, 0.2, wp.y - fade.z) : 0;
+                            TmStoneCover(m, wp - orgO, normalize(n + float3(0, 1.4 * foot, 0)), mossy ? float4(saturate(cwn.x + surf * (0.85 - 0.4 * cwn.z - cwn.w)), cwn.yzw) : cwn, fp, 1, 1);
                             float3 g = m.grad + cg;
                             g -= n * dot(g, n);
                             n = normalize(n - g);
