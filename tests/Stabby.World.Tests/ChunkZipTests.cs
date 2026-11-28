@@ -19,7 +19,7 @@ public class ChunkZipTests
             var raw = WorldChunks.Pack(w, k % a, k / a);
             var zipped = ChunkZip.Deflate(raw);
             Assert.True(zipped.Length < raw.Length);
-            Assert.Equal(raw, ChunkZip.Inflate(zipped, WorldChunks.Bytes(w.Config.Size, k % a, k / a)));
+            Assert.Equal(raw, ChunkZip.Inflate(zipped, WorldChunks.Bytes(w.Config, k % a, k / a)));
         }
     }
 
@@ -27,7 +27,7 @@ public class ChunkZipTests
     public void MalformedPayloadsAreRejected()
     {
         var w = World();
-        int max = WorldChunks.Bytes(w.Config.Size, 0, 0);
+        int max = WorldChunks.Bytes(w.Config, 0, 0);
         var zipped = ChunkZip.Deflate(WorldChunks.Pack(w, 0, 0));
         Assert.Throws<InvalidDataException>(() => ChunkZip.Inflate(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x13 }, max));
         Assert.Throws<InvalidDataException>(() => ChunkZip.Inflate(zipped, max - 1));

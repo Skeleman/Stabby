@@ -25,6 +25,7 @@ namespace Stabby.World
         public ObjectLibrary Objects;
         public CaveLibrary Caves;
         public WorldBake Bake;
+        public int HeightScale = -1;
         public List<VolcanoSketch> Cones;
 
         public void SketchInBackground()

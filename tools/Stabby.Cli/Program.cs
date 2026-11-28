@@ -20,7 +20,7 @@ switch (args.FirstOrDefault())
     case "bake": return Bake();
     case "scenarios": return opts.ContainsKey("scan") ? ScanScenarios() : RunScenarios();
     default:
-        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--groups a,b] [--low-while file]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
+        Console.WriteLine("usage: stabby gen --seed N [--size 512] [--out dir] [--scale 3/2/1 by size] [--sketch file] [--rain mm]\n       stabby sweep [--from 1] [--count 100] [--size 256] [--rain mm] [--jobs N] [--checks 0] [--groups a,b] [--low-while file] [--decoded 1]\n--rain stops after terrain and hydrology with uniform rainfall (no climate or biomes)");
         return 2;
 }
 
@@ -78,22 +78,31 @@ int Bake()
     var files = ContentBytes();
     ulong hash = WorldFile.ContentHash(files[0], files[1]);
     var raised = WorldFile.Read(WorldFile.Write(w), materials);
+    long decodeMs = sw.ElapsedMilliseconds;
+    if (opts.ContainsKey("errors")) Errors(w, raised);
+    raised.Objects = objects;
+    raised.Caves = caves;
+    raised.SketchInBackground();
+    violations.AddRange(WorldChecks.Run(raised).Select(v => "decoded: " + v));
+    sw.Restart();
     int mound = Mound.Raise(raised);
     var played = WorldFile.Read(WorldFile.Write(raised, hash, mound, null), materials);
     played.Objects = objects;
     played.Caves = caves;
     played.SketchInBackground();
     var ground = GroundBake.Run(played, GroundBake.KeyOf(files, 1f), true, out _);
-    long groundMs = sw.ElapsedMilliseconds;
+    long groundMs = sw.ElapsedMilliseconds + decodeMs;
+    sw.Restart();
     var bytes = WorldFile.Write(played, hash, mound, ground);
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
     File.WriteAllBytes(path, bytes);
+    long saveMs = sw.ElapsedMilliseconds;
     sw.Restart();
     var back = WorldFile.Read(File.ReadAllBytes(path), materials);
     long readMs = sw.ElapsedMilliseconds;
     bool same = back.Bake.Sums.SequenceEqual(WorldChunks.Checksums(played)) && back.Bake.Mound == mound && back.Bake.Ground != null
         && back.Bake.Ground.Edits.Length == ground.Edits.Length && back.Bake.Ground.Field != null;
-    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, mound and ground in {groundMs} ms, {bytes.Length / 1024} KB, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
+    Console.WriteLine($"seed {c.Seed} size {c.Size}: generated in {genMs} ms, mound and ground in {groundMs} ms, {bytes.Length / 1024} KB saved in {saveMs} ms, reads back in {readMs} ms{(same ? "" : " WITH DIFFERENCES")}, {violations.Count} violations -> {path}");
     foreach (var v in violations.Take(10)) Console.WriteLine("  " + v);
     return same && violations.Count == 0 ? 0 : 1;
 }
@@ -172,7 +181,7 @@ int Sweep()
     var checkTimes = new System.Collections.Concurrent.ConcurrentBag<long>();
     var perSeed = new System.Collections.Concurrent.ConcurrentDictionary<ulong, List<string>>();
     var par = new ParallelOptions { MaxDegreeOfParallelism = int.Parse(Opt("jobs", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture) };
-    bool checks = Opt("checks", "1") != "0";
+    bool checks = Opt("checks", "1") != "0", decoded = Opt("decoded", "0") != "0";
     var groupOpt = Opt("groups", "all");
     HashSet<string>? groups = groupOpt == "all" ? null : new HashSet<string>(groupOpt.Split(',', StringSplitOptions.RemoveEmptyEntries));
     if (groups != null)
@@ -210,6 +219,14 @@ int Sweep()
         var w = WorldGenerator.Generate(c, biomes, materials, null, Note, objects, caves);
         long genMs = sw.ElapsedMilliseconds;
         times.Add((genMs, c.Seed, string.Join(" ", mine.Select(m => $"{m.Item1} {m.Item2:F0}"))));
+        if (decoded)
+        {
+            w = WorldFile.Read(WorldFile.Write(w), materials);
+            w.Objects = objects;
+            w.Caves = caves;
+            w.SketchInBackground();
+            genMs = sw.ElapsedMilliseconds;
+        }
         if (!checks) return;
         var spent = new Dictionary<string, double>();
         var found = WorldChecks.Run(w, groups, spent, creatures);
@@ -269,6 +286,39 @@ WorldConfig Config(ulong seed, int size) => new WorldConfig
     Seed = seed, Size = size, CellMeters = WorldConfig.CellMetersFor(size),
     UniformRainMm = float.Parse(Opt("rain", "0"), CultureInfo.InvariantCulture),
 };
+
+void Errors(GeneratedWorld g, GeneratedWorld d)
+{
+    void Field(string name, float[] a, float[] b, bool relative)
+    {
+        double max = 0, sum = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double e = Math.Abs(a[i] - b[i]);
+            if (relative) e /= Math.Max(Math.Abs(a[i]), 1e-4);
+            max = Math.Max(max, e);
+            sum += e;
+        }
+        Console.WriteLine($"  {name,-14} max {max:G4}{(relative ? " (relative)" : "")}, mean {sum / a.Length:G4}");
+    }
+    void Exact<T>(string name, T[] a, T[] b) where T : IEquatable<T>
+    {
+        int bad = 0;
+        for (int i = 0; i < a.Length; i++) if (!a[i].Equals(b[i])) bad++;
+        Console.WriteLine($"  {name,-14} {bad} of {a.Length} cells differ");
+    }
+    Console.WriteLine($"decoded vs generated, scale {d.HeightScale} ({ChunkCodes.Step(d.HeightScale):G3} m height step):");
+    Field("height m", g.Height, d.Height, false);
+    Field("water m", g.Water.WaterSurface, d.Water.WaterSurface, false);
+    Field("discharge", g.Water.DischargeM3s, d.Water.DischargeM3s, true);
+    Field("temperature C", g.Climate.TemperatureC, d.Climate.TemperatureC, false);
+    Field("rain mm", g.Climate.PrecipitationMm, d.Climate.PrecipitationMm, false);
+    Exact("biome", g.Biome, d.Biome);
+    Exact("lake id", g.Water.LakeId, d.Water.LakeId);
+    Exact("receiver", g.Water.Receiver, d.Water.Receiver);
+    Exact("sea", g.Sea, d.Sea);
+    Exact("river", g.Water.IsRiver, d.Water.IsRiver);
+}
 
 string Opt(string key, string fallback) => opts.TryGetValue(key, out var v) ? v : fallback;
 
