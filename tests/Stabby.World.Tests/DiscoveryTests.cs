@@ -53,7 +53,7 @@ public class DiscoveryTests
             kinds.UnionWith(fresh.Select(o => o.Def));
         }
         Assert.True(seen > 0);
-        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && Objects.Objects[d].Id != "sunken-temple" && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
+        var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && Objects.Objects[d].Id != "sunken-temple" && Objects.Objects[d].Id != "fumarole-field" && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
         Assert.True(missing.Count == 0, $"seeds 1..4 place no {string.Join(", ", missing)}");
     }
 
@@ -408,6 +408,29 @@ public class DiscoveryTests
             Assert.Contains(treads, t => t.Top < level);
             for (int k = 0; k < treads.Length; k++)
                 Assert.True(treads[k].Top < level || treads[k].Top >= treads[k].Ground, $"step {k} of the temple at {c.X:F0},{c.Z:F0} is buried: tread {treads[k].Top:F2} under ground {treads[k].Ground:F2}");
+        }
+    }
+
+    [Fact]
+    public void FumaroleFieldsSitOnHotspotGround()
+    {
+        int fum = Objects.Objects.FindIndex(o => o.Id == "fumarole-field");
+        var (_, _, _, field) = TestWorlds.Get(3, 2048);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == fum).ToArray();
+        output.WriteLine($"{found.Length} fumarole fields " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}")));
+        Assert.NotEmpty(found);
+        var vents = new List<float>();
+        foreach (var c in found)
+        {
+            Assert.True(field.Hotspots.Heat(c.X, c.Z) > 0);
+            Assert.Null(field.FumaroleFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            Assert.NotEmpty(Structures.Layout(ObjectPart.FumaroleField, ObjectMeshes.Key("fumarole-field", 0, c.Variant)).Contacts);
+            field.FumaroleVentsAt(c, vents);
+            Assert.True(vents.Count >= 4 * Structures.FumaroleVentStride);
+            foreach (var o in all.Where(o => o.Def != fum))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
         }
     }
 

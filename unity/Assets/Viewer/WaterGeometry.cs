@@ -699,6 +699,18 @@ namespace Stabby.Viewer
                 }
                 if (mist.Verts.Count >= MistPieceVertices) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
             }
+            var vents = new List<float>();
+            foreach (var o in field.Discoveries())
+            {
+                if (field.VentKind(o) != ObjectField.FumaroleField) continue;
+                field.FumaroleVentsAt(o, vents);
+                for (int k = 0; k < vents.Count; k += Structures.FumaroleVentStride)
+                {
+                    var c = new Vector3(vents[k], vents[k + 1], vents[k + 2]);
+                    float r = vents[k + 3], seed = Mathf.Repeat(c.x * 0.0137f + c.z * 0.0291f, 1f);
+                    for (int m = 0; m < SteamPuffs; m++) mist.Vent(c, Mathf.Repeat(seed + m * MistPhase, 1f), SteamRadius * r, SteamRise * r);
+                }
+            }
             if (mist.Verts.Count > 0) mists.Add(mist.Piece($"Spring steam {mists.Count}"));
             var sheet = new SheetBuffers();
             foreach (var p in liquid)
