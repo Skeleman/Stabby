@@ -16,7 +16,6 @@ namespace Stabby.World
         public const float MinDischarge = 0.35f, Chance = 0.7f, ReachMinM = 1200f, ReachMaxM = 3200f, MaxApexRise = 14f, MinApexRise = 0.6f;
         public const float SpreadMin = 0.7f, SpreadMax = 1.1f, RadiusFactor = 1.25f, PlainCapM = 25f, EdgeFade = 0.3f;
         public const float PlainGrade = 0.0012f, IsletRiseM = 1.5f, IsletScaleM = 500f, WobbleM = 900f, Wobble = 0.45f;
-        public const float StoredFlowError = 1e-3f;
         public const float MainShareMin = 0.4f, MainShareMax = 0.55f, ClearWidths = 1f, FreeClears = 3f, TurnCost = 3f;
         public const int MaxBranches = 3;
 
@@ -355,7 +354,7 @@ namespace Stabby.World
             var byApex = new Dictionary<int, RiverDelta>();
             for (int i = 0; i < n * n; i++)
             {
-                if (!hy.IsRiver[i] || q[i] - inflow[i] <= c.RiverMinDischarge + StoredFlowError * inflow[i]) continue;
+                if (!hy.IsRiver[i] || q[i] - inflow[i] <= c.RiverMinDischarge) continue;
                 int x = i % n, y = i / n, apex = -1;
                 for (int k = 0; k < 8; k++)
                 {
