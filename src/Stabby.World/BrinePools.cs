@@ -57,13 +57,13 @@ namespace Stabby.World
             for (int k = 0; k < pools.Count; k += PoolStride)
             {
                 float px = pools[k], pz = pools[k + 1], r = pools[k + 2];
-                int crystals = (int)(6.2831853f * (r + 0.3f) / 0.55f), a0 = rng.Range(0, 16);
+                int crystals = (int)(6.2831853f * (r + 0.3f) / 0.42f), a0 = rng.Range(0, 16);
                 for (int m = 0; m < crystals; m++)
                 {
                     float t = (m + rng.Range(-0.3f, 0.3f)) / crystals * 6.2831853f, ring = r + rng.Range(0.05f, 0.45f), c = TurnCos(t), s = TurnSin(t);
                     float x = px + c * ring, z = pz + s * ring, w = rng.Range(0.16f, 0.36f);
                     int q = rng.Range(0, 16);
-                    Hewn(l, rng.NextU64(), f, x, -0.08f, z, w, rng.Range(0.12f, 0.26f), w * rng.Range(0.6f, 0.9f), Cos16(q), Sin16(q), 0, 0, rng.Range(0.18f, 0.3f), c * 0.2f, s * 0.2f, 0.25f);
+                    Hewn(l, rng.NextU64(), f, x, -0.05f, z, w, rng.Range(0.24f, 0.44f), w * rng.Range(0.6f, 0.9f), Cos16(q), Sin16(q), 0, 0, rng.Range(0.18f, 0.3f), c * 0.2f, s * 0.2f, 0.25f);
                 }
                 int lumps = rng.Range(2, 4);
                 for (int m = 0; m < lumps; m++)
@@ -81,7 +81,7 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float BrineSinkU = 0.08f, BrineCrestU = 0.26f, BrineFootU = 0.2f, BrineDepthU = 0.32f, BrineRimU = 0.55f, BrineRimSlope = 1.4f, BrineBankU = 0.12f, BrineBank = 1.6f, BrineLobe = 0.28f;
+        public const float BrineSinkU = 0.04f, BrineCrestU = 0.26f, BrineFootU = 0.2f, BrineDepthU = 0.7f, BrineRimU = 0.55f, BrineRimSlope = 1.4f, BrineBankU = 0.12f, BrineBank = 0.9f, BrineLobe = 0.15f;
         public static readonly string[] BrineLiquids = { "brine-teal", "brine-rust", "brine-rose", "brine-jade" };
 
         public int BrineLiquid(ObjectInstance o, int pool)
