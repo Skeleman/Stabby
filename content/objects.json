@@ -529,6 +529,19 @@
       "placement": { "biomes": ["wetland", "temperate-forest", "temperate-rain", "boreal", "steppe", "shrubland", "savanna", "tropical-forest", "tundra"], "perHectare": 0, "discovery": "sunken-temple", "spacingM": 800, "chance": 0.9, "slopeMax": 0.3, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
     },
     {
+      "id": "ancient-tree", "name": "Ancient tree", "kind": "structure", "material": "dark-bark", "variants": 6,
+      "parts": [
+        { "id": "site", "shape": "ancient-tree", "scale": [1.4, 1.4, 1.4] },
+        { "id": "crown", "shape": "broadleaf", "scale": [1.9, 1.4, 1.9], "solid": "off", "leafMaterial": "oak-leaf" }
+      ],
+      "placement": { "biomes": ["temperate-forest", "temperate-rain"], "perHectare": 0, "discovery": "ancient-tree", "spacingM": 1000, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }
+    },
+    {
+      "id": "fumarole-field", "name": "Fumarole field", "kind": "structure", "material": "sulphur-crust", "variants": 6,
+      "parts": [ { "id": "site", "shape": "fumarole-field", "material": "sulphur-crust" } ],
+      "placement": { "biomes": ["steppe", "shrubland", "boreal", "tundra", "alpine", "cold-desert"], "perHectare": 0, "discovery": "fumarole-field", "spacingM": 2500, "chance": 0.7, "slopeMax": 0.15, "sizeMinM": 16, "sizeMaxM": 18, "sink": 0.02 }
+    },
+    {
       "id": "great-mushroom", "name": "Great mushroom", "kind": "structure", "material": "mushroom-cap", "variants": 6,
       "parts": [ { "id": "site", "shape": "great-mushroom" } ],
       "placement": { "biomes": ["temperate-forest", "temperate-rain", "tropical-forest", "boreal"], "perHectare": 0, "discovery": "great-mushroom", "spacingM": 900, "chance": 0.8, "slopeMax": 0.15, "sizeMinM": 19, "sizeMaxM": 20, "sink": 0.002 }

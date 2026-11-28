@@ -6,7 +6,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float SlotHour = 12.5f, SlotMoon = 0.5f, SlotEyeM = 1.7f, SlotRimUpM = 12f, SlotRimSegs = 4f, SlotRimBackM = 6f, SlotRimDropM = 3f;
+        const float SlotHour = 12.5f, SlotMoon = 0.5f, SlotEyeM = 1.7f, SlotRimUpM = 12f, SlotRimSegs = 8f, SlotRimBackM = 6f, SlotRimDropM = 3f;
 
         static System.Collections.IEnumerator SlotCanyonTour(Camera cam, string dir)
         {

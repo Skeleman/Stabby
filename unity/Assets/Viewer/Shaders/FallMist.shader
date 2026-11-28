@@ -19,7 +19,7 @@ Shader "Stabby/FallMist"
         float4 _StabbyLiquid[160];
 
         static const float2x2 Turn = float2x2(0.8, -0.6, 0.6, 0.8);
-        static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6, SteamPeriod = 6.5, SteamOpacity = 0.14, JetPeriod = 1.7, ColumnSteamPeriod = 5.5, JetRamp = 1.5, SteamLinger = 9, JetOpacity = 0.75, JetStretch = 3.2, ColumnSteamOpacity = 0.3, JetCover = 0.1, SteamCover = 0.12;
+        static const float SprayPeriod = 2.6, MistPeriod = 8, MistRise = 0.7, MistReach = 2.2, WindDrift = 1.6, SteamPeriod = 6.5, SteamOpacity = 0.14, VentOpacity = 0.4, VentBody = 0.55, JetPeriod = 1.7, ColumnSteamPeriod = 5.5, JetRamp = 1.5, SteamLinger = 9, JetOpacity = 0.75, JetStretch = 3.2, ColumnSteamOpacity = 0.3, JetCover = 0.1, SteamCover = 0.12;
 
         float2 Grad(int2 p)
         {
@@ -134,11 +134,11 @@ Shader "Stabby/FallMist"
             UNITY_BRANCH if (kind < 3.5) n += 0.5 * Noise(mul(Turn, pw) * 2.9 + ph * 13.1 + float2(-tm * 0.37, tm * 0.19)).x;
             UNITY_BRANCH if (kind < 1.5) n += (kind < 0.5 ? 0.3 : 0.4) * Noise(mul(pw, Turn) * 6.3 + float2(ph * 5.3, -tm * 0.9)).x;
             dens = kind > 2.5 && kind < 3.5
-                ? saturate((1.3 * n - 0.2 - 0.9 * dot(pw, pw)) * 2.2) * saturate((1 - e2) * 4)
+                ? saturate((1.3 * n - 0.2 + VentBody * flowQ - 0.9 * dot(pw, pw)) * 2.2) * saturate((1 - e2) * 4)
                 : kind > 0.5 && kind < 1.5 ? saturate((0.55 - 1.1 * dot(pw, pw) + 1.5 * n) * 1.5) * saturate((1 - e2) * 2.5)
                 : saturate((0.7 - dot(pw, pw) + 1.2 * n) * 1.6) * saturate((1 - e2) * 2.5);
             dens *= dens * puff.y;
-            op = kind > 3.5 ? (flowQ < 0.5 ? JetOpacity : ColumnSteamOpacity) : kind > 2.5 ? SteamOpacity : kind < 0.5 ? 0.4 + 0.2 * flowQ : 0.3 + 0.14 * flowQ;
+            op = kind > 3.5 ? (flowQ < 0.5 ? JetOpacity : ColumnSteamOpacity) : kind > 2.5 ? SteamOpacity + VentOpacity * flowQ : kind < 0.5 ? 0.4 + 0.2 * flowQ : 0.3 + 0.14 * flowQ;
             return dens;
         }
 
