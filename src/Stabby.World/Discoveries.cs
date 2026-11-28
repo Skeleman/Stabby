@@ -129,7 +129,7 @@ namespace Stabby.World
             int gx = r.Cell % cells, gz = r.Cell / cells;
             float px = r.X, pz = r.Z, qa = r.Qa, qb = r.Qb;
             float x0 = gx * step + inset, z0 = gz * step + inset, x1 = (gx + 1) * step - inset, z1 = (gz + 1) * step - inset;
-            if (pl.Discovery == Hilltop || pl.Discovery == Watchtower || pl.Discovery == GreatMushroom) Climb(ref px, ref pz, x0, z0, x1, z1);
+            if (pl.Discovery == Hilltop || pl.Discovery == Watchtower) Climb(ref px, ref pz, x0, z0, x1, z1);
             if (pl.Discovery == Watchtower) WatchFace(px, pz, ref qa, ref qb);
             if (pl.Discovery == WolfDen)
             {
@@ -138,6 +138,7 @@ namespace Stabby.World
             if (pl.Discovery == SaltTower && !SeekSalt(ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == Shipwreck && !SeekShore(ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (pl.Discovery == Overlook && !SeekOverlook(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
+            if (pl.Discovery == GreatMushroom && !SeekMound(ref px, ref pz, x0, z0, x1, z1)) return;
             if (pl.Discovery == SunkenTemple && !SeekTemple(d, r.Variant, r.Size, ref px, ref pz, x0, z0, x1, z1, out qa, out qb)) return;
             if (Pooled(pl.Discovery)) FaceDownhill(px, pz, ref qa, ref qb);
             if (pl.Discovery == FallenTree) FaceDownhill(px, pz, ref qa, ref qb);

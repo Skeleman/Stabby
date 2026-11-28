@@ -6,7 +6,7 @@ namespace Stabby.World
     {
         public const float GreatMushroomU = 1 / 19.5f, GreatHueMin = 0.4f;
 
-        static readonly float[] GreatMushroomSeats = { 0, 0, 0.25f, 0, -0.25f, 0, 0, 0.25f, 0, -0.25f, 0.18f, 0.18f, -0.18f, 0.18f, 0.18f, -0.18f, -0.18f, -0.18f };
+        static readonly float[] GreatMushroomSeats = { 0, 0, 0.16f, 0, -0.16f, 0, 0, 0.16f, 0, -0.16f, 0.11f, 0.11f, -0.11f, 0.11f, 0.11f, -0.11f, -0.11f, -0.11f };
 
         static float Hue(ulong key)
         {
@@ -49,7 +49,8 @@ namespace Stabby.World
 
     public sealed partial class ObjectField
     {
-        public const float GreatProbeM = 18f, GreatFlatM = 5f, GreatFlatReliefM = 0.25f, GreatRiseMinM = 0.4f, GreatRiseMaxM = 3f, GreatDipM = 0.3f, GreatRiseAimM = 1.5f, GreatWoods = 0.5f, GreatRiverM = 20f, GreatSeatM = 0.25f;
+        public const float GreatProbeM = 18f, GreatFlatM = 5f, GreatFlatReliefM = 0.8f, GreatRiseMinM = 0.3f, GreatRiseMaxM = 3f, GreatDipM = 1.5f, GreatRiseAimM = 1.5f, GreatWoods = 0.5f, GreatRiverM = 20f, GreatSeatM = 0.45f, GreatSeekM = 40f;
+        public const int GreatSeekSteps = 2;
 
         public float GreatMushroomFit(float x, float z)
         {
@@ -69,6 +70,20 @@ namespace Stabby.World
             }
             if (rise < GreatRiseMinM || rise > GreatRiseMaxM) return float.MinValue;
             return woods - 0.3f * Math.Abs(rise - GreatRiseAimM);
+        }
+
+        bool SeekMound(ref float x, ref float z, float x0, float z0, float x1, float z1)
+        {
+            float best = float.MinValue, bx = x, bz = z;
+            for (int i = -GreatSeekSteps; i <= GreatSeekSteps; i++)
+                for (int j = -GreatSeekSteps; j <= GreatSeekSteps; j++)
+                {
+                    float px = Math.Min(x1, Math.Max(x0, x + i * GreatSeekM)), pz = Math.Min(z1, Math.Max(z0, z + j * GreatSeekM));
+                    float fit = GreatMushroomFit(px, pz);
+                    if (fit > best) { best = fit; bx = px; bz = pz; }
+                }
+            x = bx; z = bz;
+            return best > float.MinValue;
         }
 
         public string GreatMushroomFault(ObjectInstance o)
