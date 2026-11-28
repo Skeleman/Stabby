@@ -14,6 +14,7 @@
   "newMoonAmbient": 0.2,
   "moonGlow": 0.012,
   "starBrightness": 0.012,
+  "clouds": { "coverage": 0.45, "density": 1.2, "heightM": 1800, "thicknessM": 700, "scaleM": 3200, "windDirDeg": 250, "windSpeedMs": 9, "churn": 1.6 },
   "stops": [
     { "sunHeight": 0.35, "sky": [0.62, 0.74, 0.86], "zenith": [0.3, 0.47, 0.74], "glow": [0.05, 0.035, 0.01], "ambientSky": [0.279, 0.333, 0.387], "ambientGround": [0.14, 0.14, 0.13], "sun": [1.0, 0.96, 0.88], "sunIntensity": 0.8 },
     { "sunHeight": 0.12, "sky": [0.74, 0.68, 0.6], "zenith": [0.36, 0.48, 0.68], "glow": [0.2, 0.11, 0.03], "ambientSky": [0.29, 0.28, 0.28], "ambientGround": [0.13, 0.115, 0.1], "sun": [1.0, 0.8, 0.58], "sunIntensity": 0.68 },

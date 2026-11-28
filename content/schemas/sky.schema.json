@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Stabby sky and day/night cycle",
   "type": "object",
-  "required": ["schemaVersion", "dayLengthS", "startHour", "sun", "moon", "moonColor", "moonIntensity", "moonSwitchHeight", "moonFadeHeight", "moonCycleDays", "moonStartPhase", "newMoonLight", "newMoonAmbient", "moonGlow", "starBrightness", "stops"],
+  "required": ["schemaVersion", "dayLengthS", "startHour", "sun", "moon", "moonColor", "moonIntensity", "moonSwitchHeight", "moonFadeHeight", "moonCycleDays", "moonStartPhase", "newMoonLight", "newMoonAmbient", "moonGlow", "starBrightness", "clouds", "stops"],
   "additionalProperties": false,
   "$defs": {
     "rgb": { "type": "array", "items": { "type": "number", "minimum": 0, "maximum": 1 }, "minItems": 3, "maxItems": 3 },
@@ -33,6 +33,21 @@
     "newMoonAmbient": { "type": "number", "minimum": 0, "maximum": 1 },
     "moonGlow": { "type": "number", "minimum": 0, "maximum": 0.2 },
     "starBrightness": { "type": "number", "minimum": 0, "maximum": 0.05 },
+    "clouds": {
+      "type": "object",
+      "required": ["coverage", "density", "heightM", "thicknessM", "scaleM", "windDirDeg", "windSpeedMs", "churn"],
+      "additionalProperties": false,
+      "properties": {
+        "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "density": { "type": "number", "minimum": 0, "maximum": 8 },
+        "heightM": { "type": "number", "minimum": 200, "maximum": 12000 },
+        "thicknessM": { "type": "number", "minimum": 50, "maximum": 5000 },
+        "scaleM": { "type": "number", "minimum": 100, "maximum": 50000 },
+        "windDirDeg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 },
+        "windSpeedMs": { "type": "number", "minimum": 0, "maximum": 60 },
+        "churn": { "type": "number", "minimum": 0, "maximum": 4 }
+      }
+    },
     "stops": {
       "type": "array",
       "minItems": 2,
