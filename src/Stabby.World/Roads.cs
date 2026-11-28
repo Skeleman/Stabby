@@ -681,6 +681,9 @@ namespace Stabby.World
                 float g = p.Radius + RoadHalfM;
                 if (PointSegment2(p.X, p.Z, x0, z0, x1, z1) < g * g) return "crosses a town";
             }
+            if (w.Sketch != null)
+                foreach (var v in w.Sketch.Volcanoes)
+                    if (Volcanoes.SegmentGap(v.X, v.Z, x0, z0, x1, z1) < v.Rc + RoadHalfM) return "enters a volcano crater";
             if (siteCells != null)
             {
                 last = -1;
