@@ -114,8 +114,8 @@ public class DetailTests
     [InlineData(500f, 0, Detail.ShadowCascade, Detail.AnimFull, Detail.LightShadowed)]
     [InlineData(80f, 1, Detail.ShadowCascade, Detail.AnimFull, Detail.LightGlow)]
     [InlineData(45f, 1, Detail.ShadowLow, Detail.AnimSway, Detail.LightGlow)]
-    [InlineData(20f, 2, Detail.ShadowLow, Detail.AnimSway, Detail.LightGlow)]
-    [InlineData(12f, 2, Detail.ShadowLow, Detail.AnimFrozen, Detail.LightGlow)]
+    [InlineData(20f, 2, Detail.ShadowNone, Detail.AnimSway, Detail.LightGlow)]
+    [InlineData(12f, 2, Detail.ShadowNone, Detail.AnimFrozen, Detail.LightGlow)]
     [InlineData(5f, 3, Detail.ShadowNone, Detail.AnimFrozen, Detail.LightEmissive)]
     public void DecideAnswersEachTierBySize(float px, int geometry, int shadow, int anim, int light)
     {
@@ -135,7 +135,9 @@ public class DetailTests
         Assert.Equal(Detail.ShadowCascade, Decide(55f, cascade).Shadow);
         Assert.Equal(Detail.ShadowLow, Decide(50f, cascade).Shadow);
         var low = Decide(31f, default);
-        Assert.Equal(Detail.ShadowLow, Decide(15f, low).Shadow);
+        Assert.Equal(Detail.ShadowLow, Decide(27f, low).Shadow);
+        Assert.Equal(Detail.ShadowNone, Decide(24f, low).Shadow);
+        Assert.Equal(Detail.ShadowNone, Decide(27f, default).Shadow);
         Assert.Equal(Detail.ShadowCascade, Decide(61f, low).Shadow);
     }
 
@@ -157,7 +159,7 @@ public class DetailTests
         Assert.Equal(Detail.ShadowLow, Decide(45f, Flat(2.2f), on).Shadow);
         Assert.Equal(Detail.ShadowNone, Decide(45f, Flat(2.5f), on).Shadow);
         Assert.True(Decide(45f, Flat(2.2f), default, 2f).Casts);
-        Assert.Equal(Detail.ShadowLow, Decide(15f, Flat(1.9f), on).Shadow);
+        Assert.Equal(Detail.ShadowNone, Decide(15f, Flat(1.9f), on).Shadow);
         var never = new Detail.Rule(Tree.Geometry, Detail.Never, Detail.Never, Tree.Animation, Tree.Light);
         Assert.Equal(Detail.ShadowNone, Detail.Decide(never, 2f, 1f, Detail.ReferencePixelsPerMetre, 1f, Flat(0.01f), default).Shadow);
     }
@@ -221,7 +223,8 @@ public class DetailTests
         Assert.Equal(2f * ppm / 30f, far, 2);
         Assert.Equal(2f * ppm / 60f, near, 2);
         Assert.Equal(2f * far, Detail.ShadowReach(2f, Tree, ppm, 2f), 2);
-        Assert.Equal(Detail.ShadowLow, Detail.Decide(Tree, 2f, far * 1.01f, ppm, 1f, default).Shadow);
+        Assert.Equal(Detail.ShadowLow, Detail.Decide(Tree, 2f, far * 0.99f, ppm, 1f, default).Shadow);
+        Assert.Equal(Detail.ShadowNone, Detail.Decide(Tree, 2f, far * 1.01f, ppm, 1f, default).Shadow);
     }
 
     [Fact]
@@ -260,7 +263,7 @@ public class DetailTests
     {
         var kind = new ObjectKind { Id = "animated", Lods = 3, LodPixels = new[] { 108f, 32.4f }, FadePixels = 6.48f, ShadowPixels = 43.2f, ShadowCascadePixels = 86.4f, Wind = true };
         var light = new LightKind { Id = "point" };
-        var r = kind.Rule(light);
+        var r = kind.Rule();
         Assert.Equal(108f, r.Geometry.Near);
         Assert.Equal(32.4f, r.Geometry.Mid);
         Assert.Equal(6.48f, r.Geometry.Far);
@@ -268,12 +271,15 @@ public class DetailTests
         Assert.Equal(43.2f, r.ShadowPixels);
         Assert.Equal(kind.FlutterPixels, r.Animation.Near);
         Assert.Equal(kind.SwayPixels, r.Animation.Far);
-        Assert.Equal(432f, r.Light.Near);
-        Assert.Equal(108f, r.Light.Mid);
-        Assert.Equal(10.8f, r.Light.Far);
-        Assert.Equal(Detail.Never, kind.Rule(null).Light.Near);
+        Assert.Equal(Detail.Never, r.Light.Near);
+        var l = Detail.Rule.LightOnly(light.Thresholds());
+        Assert.Equal(432f, l.Light.Near);
+        Assert.Equal(108f, l.Light.Mid);
+        Assert.Equal(10.8f, l.Light.Far);
+        Assert.Equal(Detail.Never, l.ShadowPixels);
+        Assert.Equal(Detail.Never, l.Geometry.Far);
         kind.Wind = false;
-        Assert.Equal(Detail.Never, kind.Rule(light).Animation.Far);
+        Assert.Equal(Detail.Never, kind.Rule().Animation.Far);
         var c = new CreatureDef().Rule();
         Assert.Equal(64.8f, c.ShadowCascadePixels);
         Assert.Equal(64.8f, c.Animation.Near);
@@ -296,7 +302,7 @@ public class DetailTests
         {
             float size = objects.CasterSize(d);
             if (size <= 0) continue;
-            var rule = objects.RuleOf(objects.KindOf(d));
+            var rule = objects.KindOf(d).Rule();
             float far = Detail.ShadowReach(size, rule, ppm, 1f);
             Assert.True(far / (1f - Detail.Hysteresis) <= span.Range * 1.0001f, d.Id);
             Assert.True(Detail.CascadeReach(size, rule, ppm, 1f) >= span.Near * 0.9999f, d.Id);

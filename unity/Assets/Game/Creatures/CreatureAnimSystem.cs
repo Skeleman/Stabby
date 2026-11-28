@@ -367,14 +367,14 @@ namespace Stabby.Game
                 var d = View.Decide(rig.Rule, sc.Length, centre, c.Decision);
                 c.Decision = d;
                 float far = rig.FadePx / q;
-                bool visible = present && px >= far;
+                bool visible = present && d.Geometry != Detail.GeometryGone;
                 c.Visible = visible;
                 int half = links.Length / 2;
                 float low = rig.LowPx / q;
                 bool hasHigh = Gpu || links[0].Value != Entity.Null, hasLow = Gpu || links[half].Value != Entity.Null;
                 if (!Gpu && present)
                 {
-                    bool wantHigh = d.Geometry == 0 && CreatureTier.NeedHigh(px, low, hasHigh), wantLow = d.Geometry != 0 || CreatureTier.NeedLow(px, low, hasLow);
+                    bool wantHigh = d.Geometry == 0, wantLow = d.Geometry != 0 || CreatureTier.Blending(px, low, hasLow);
                     if (wantHigh != hasHigh || wantLow != hasLow)
                     {
                         c.WantHigh = wantHigh;
@@ -389,7 +389,7 @@ namespace Stabby.Game
                 if (highOn != c.HighOn) { c.HighOn = highOn; Show(links, 0, half, highOn); }
                 if (lowOn != c.LowOn) { c.LowOn = lowOn; Show(links, half, half, lowOn); }
                 if (!visible) return;
-                c.Shadow = d.Casts && Detail.Holds(px, rig.ShadowPx / q, c.Shadow);
+                c.Shadow = d.Casts;
                 if (Gpu)
                 {
                     if (!c.Shadow && Frustum.Outside(centre, sc.Length)) return;

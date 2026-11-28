@@ -17,13 +17,13 @@ namespace Stabby.World
         public string Light = "point";
         public bool Solid = true;
 
-        public Detail.Rule Rule(LightKind light)
+        public Detail.Rule Rule()
         {
             float near = LodPixels != null && LodPixels.Length > 0 ? LodPixels[0] : FadePixels;
             float mid = LodPixels != null && LodPixels.Length > 1 ? LodPixels[1] : FadePixels;
             var never = new Detail.Thresholds(Detail.Never, Detail.Never, Detail.Never);
             return new Detail.Rule(new Detail.Thresholds(near, mid, FadePixels), ShadowCascadePixels, ShadowPixels,
-                Wind ? new Detail.Thresholds(FlutterPixels, FlutterPixels, SwayPixels) : never, light != null ? light.Thresholds() : never);
+                Wind ? new Detail.Thresholds(FlutterPixels, FlutterPixels, SwayPixels) : never, never);
         }
     }
 
@@ -200,14 +200,6 @@ namespace Stabby.World
             return null;
         }
 
-        public LightKind LightOf(ObjectKind k)
-        {
-            foreach (var l in Lights) if (l.Id == k.Light) return l;
-            return null;
-        }
-
-        public Detail.Rule RuleOf(ObjectKind k) => k.Rule(LightOf(k));
-
         public LightKind LightNamed(string id)
         {
             foreach (var l in Lights) if (l.Id == id) return l;
@@ -238,7 +230,7 @@ namespace Stabby.World
             foreach (var d in Objects)
             {
                 float size = CasterSize(d);
-                if (size > 0) span.Add(size, RuleOf(KindOf(d)), pixelsPerMetre, quality);
+                if (size > 0) span.Add(size, KindOf(d).Rule(), pixelsPerMetre, quality);
             }
         }
 

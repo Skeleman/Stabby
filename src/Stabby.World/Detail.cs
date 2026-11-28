@@ -264,6 +264,12 @@ namespace Stabby.World
                 Animation = animation;
                 Light = light;
             }
+
+            public static Rule LightOnly(in Thresholds light)
+            {
+                var never = new Thresholds(Never, Never, Never);
+                return new Rule(never, Never, Never, never, light);
+            }
         }
 
         public struct Decision
@@ -297,8 +303,9 @@ namespace Stabby.World
         static int ShadowTier(float px, float sizeM, float distanceM, in Rule rule, in ShadowMap map, float quality, int previous)
         {
             if (rule.ShadowPixels >= Never) return ShadowNone;
-            if (!map.Holds(sizeM, distanceM, quality, previous == ShadowCascade || previous == ShadowLow)) return ShadowNone;
+            bool cast = previous == ShadowCascade || previous == ShadowLow;
             float q = Math.Max(quality, 0.1f);
+            if (!Holds(px, rule.ShadowPixels / q, cast) || !map.Holds(sizeM, distanceM, quality, cast)) return ShadowNone;
             return rule.ShadowCascadePixels < Never && Holds(px, rule.ShadowCascadePixels / q, previous == ShadowCascade) ? ShadowCascade : ShadowLow;
         }
 
