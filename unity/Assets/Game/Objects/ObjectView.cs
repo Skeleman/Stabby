@@ -270,7 +270,7 @@ namespace Stabby.Game
         {
             if (part.Translucency > 0f) return new float4(Decode(part.Color), IceBase + IceSpan * part.Translucency);
             if (part.Glow > 0f) return new float4(Decode(part.Color), GlowBase + GlowSpan * part.Glow + GlowPatternStep * part.GlowPattern);
-            if (ObjectPart.IsStone(part.Shape)) return part.HasColor ? new float4(Decode(part.Color), part.KeepHue ? OwnStoneKeepHue : OwnStone) : new float4(1, 1, 1, 0);
+            if (ObjectPart.IsStone(part.Shape)) return part.HasColor || part.KeepHue ? new float4(Decode(part.Color), part.KeepHue ? OwnStoneKeepHue : OwnStone) : new float4(1, 1, 1, 0);
             return new float4(Decode(part.Color), part.Shape);
         }
 
