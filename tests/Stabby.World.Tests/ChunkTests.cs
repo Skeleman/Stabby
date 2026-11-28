@@ -88,7 +88,7 @@ public class ChunkTests
         for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
             {
-                w.Climate.TemperatureC[y * n + x] = -20 + 0.4f * x + 0.8f * y;
+                w.Climate.TemperatureC[y * n + x] = -20 + 0.2f * x + 0.3f * y;
                 w.Climate.PrecipitationMm[y * n + x] = 400 + 10 * x;
             }
         var d = WorldFile.Empty(c, null, Materials);

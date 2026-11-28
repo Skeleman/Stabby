@@ -116,7 +116,9 @@ namespace Stabby.World
             for (int y = y0; y < y1; y++)
                 for (int i = y * n + x0, e = y * n + x1; i < e; i++, j++)
                 {
-                    int hc = Code16(ChunkCodes.Height(w.Height[i], step) - low, cx, cy), wc = Code16(ChunkCodes.Height(hy.WaterSurface[i], step) - low, cx, cy);
+                    float g = w.Height[i], s = hy.WaterSurface[i];
+                    int hc = Code16(ChunkCodes.Height(g, step) - low, cx, cy), wc = Code16(ChunkCodes.Height(s, step) - low, cx, cy);
+                    if (wc < hc && s >= g - WorldChecks.SurfaceTolerance) wc = hc;
                     Put16(data, hp, cells, j, hc - ph);
                     Put16(data, wp, cells, j, wc - pw);
                     ph = hc;
