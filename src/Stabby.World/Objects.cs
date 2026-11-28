@@ -301,6 +301,15 @@ namespace Stabby.World
 
         public ObjectInstance[] Chunk(int cx, int cz) => Packed(cx, cz).ToArray();
 
+        public ObjectInstance[] ChunkNearRoads(int cx, int cz)
+        {
+            int c = cz * across + cx;
+            if (Volatile.Read(ref chunks[c]) != null || HasBake(cx, cz)) return Chunk(cx, cz);
+            var list = new List<ObjectInstance>();
+            PlaceInto(cx, cz, false, list, null, nearRoads: true);
+            return list.ToArray();
+        }
+
         PackedObjects Packed(int cx, int cz)
         {
             int c = cz * across + cx;
@@ -364,7 +373,7 @@ namespace Stabby.World
             return list.ToArray();
         }
 
-        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false, bool builtOnly = false, int stageDef = -1)
+        void PlaceInto(int cx, int cz, bool solidOnly, List<ObjectInstance> list, List<FeatureEdit> boulders, bool sitesOnly = false, bool builtOnly = false, int stageDef = -1, bool nearRoads = false)
         {
             float span = WorldChunks.Size * cm;
             float x0 = cx * span, z0 = cz * span;
@@ -442,6 +451,7 @@ namespace Stabby.World
                         if (Density(d, px, pz) < 1f && thin.NextFloat() >= Density(d, px, pz)) continue;
                         float size = (pl.SizeMinM + (pl.SizeMaxM - pl.SizeMinM) * t * t) * grade;
                         if ((pl.EditMinSizeM > 0 && size >= pl.EditMinSizeM) != (boulders != null)) continue;
+                        if (nearRoads && pl.ChainMax <= 1 && !OnRoad(px, pz, footprint[d] * size)) continue;
                         if (!built && Cleared(near, px, pz, footprint[d] * size * (boulders != null ? BoulderReach : 1f))) continue;
                         if (!Accept(d, px, pz, size, qa, qb, out var o, built: builtOnly || sitesOnly || stageDef >= 0, variant: variant)) continue;
                         o.Id = ObjectIds.Make(chunk, d, ordinal++);
