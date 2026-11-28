@@ -165,8 +165,7 @@ namespace Stabby.Game
 
         sealed class Buffers
         {
-            public readonly byte[] Raw = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
-            public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+            public readonly byte[] Raw = new byte[WorldChunks.MaxBytes];
             public readonly MemoryStream Row = new MemoryStream();
         }
 
@@ -203,7 +202,7 @@ namespace Stabby.Game
             Parallel.For(0, a, () => pool.TryTake(out var spare) ? spare : new Buffers(), (cy, _, u) =>
             {
                 u.Row.SetLength(0);
-                for (int cx = 0; cx < a; cx++) lengths[cy * a + cx] = ChunkZip.Deflate(u.Raw, WorldChunks.Pack(w, cx, cy, u.Raw, 0), u.Scratch, u.Row);
+                for (int cx = 0; cx < a; cx++) lengths[cy * a + cx] = ChunkZip.Deflate(u.Raw, WorldChunks.Pack(w, cx, cy, u.Raw, 0), u.Row);
                 rows[cy] = u.Row.ToArray();
                 return u;
             }, pool.Add);
@@ -289,8 +288,7 @@ namespace Stabby.Game
         sealed class Buffers
         {
             public byte[] Packed = new byte[0];
-            public readonly byte[] Raw = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
-            public readonly byte[] Scratch = new byte[WorldChunks.Size * WorldChunks.Size * WorldChunks.CellBytes];
+            public readonly byte[] Raw = new byte[WorldChunks.MaxBytes];
         }
 
         Task<(GeneratedWorld, ulong[], WorldStore.Entry)> gen;
@@ -437,14 +435,14 @@ namespace Stabby.Game
                 if (empty)
                 {
                     source = "started empty";
-                    return (null, WorldChunks.EmptyChecksums(GameSettings.Size, true), null);
+                    return (null, WorldChunks.EmptyChecksums(GameSettings.Size, WorldConfig.CellMetersFor(GameSettings.Size), true), null);
                 }
                 GeneratedWorld w;
                 try { (w, source) = MapFile.LoadOrGenerate(path, MapGen.Config(s), defs, lib, false); }
                 catch (MapFileException e)
                 {
                     source = $"started empty ({e.Message})";
-                    return (null, WorldChunks.EmptyChecksums(GameSettings.Size, true), null);
+                    return (null, WorldChunks.EmptyChecksums(GameSettings.Size, WorldConfig.CellMetersFor(GameSettings.Size), true), null);
                 }
                 w.Objects = objects;
                 w.Caves = ContentFiles.Caves();
@@ -473,10 +471,10 @@ namespace Stabby.Game
                     int differ = 0;
                     Parallel.For(0, got.Count, () => pool.TryTake(out var spare) ? spare : new Buffers(), (j, _, u) =>
                     {
-                        int k = got[j], cx = k % a, cy = k / a, len = ChunkInbox.Length(slots[k]), raw = WorldChunks.Bytes(n, cx, cy);
+                        int k = got[j], cx = k % a, cy = k / a, len = ChunkInbox.Length(slots[k]), raw = WorldChunks.Bytes(n, WorldConfig.CellMetersFor(n), cx, cy);
                         if (u.Packed.Length < len) u.Packed = new byte[len];
                         NativeArray<byte>.Copy(arena, slots[k].Start, u.Packed, 0, len);
-                        ChunkZip.Inflate(u.Packed, 0, len, raw, u.Scratch, u.Raw);
+                        ChunkZip.Inflate(u.Packed, 0, len, raw, u.Raw);
                         if (WorldChunks.Checksum(u.Raw, raw) != host[k]) Interlocked.Increment(ref differ);
                         return u;
                     }, pool.Add);
@@ -494,7 +492,7 @@ namespace Stabby.Game
                     int k = got[j], cx = k % a, cy = k / a, len = ChunkInbox.Length(slots[k]);
                     if (u.Packed.Length < len) u.Packed = new byte[len];
                     NativeArray<byte>.Copy(arena, slots[k].Start, u.Packed, 0, len);
-                    ChunkZip.Inflate(u.Packed, 0, len, WorldChunks.Bytes(n, cx, cy), u.Scratch, u.Raw);
+                    ChunkZip.Inflate(u.Packed, 0, len, WorldChunks.Bytes(n, WorldConfig.CellMetersFor(n), cx, cy), u.Raw);
                     WorldChunks.Unpack(w, cx, cy, u.Raw, 0);
                     return u;
                 }, pool.Add);

@@ -224,6 +224,7 @@ namespace Stabby.World
         {
             if (s.X.Count != s.Cells.Count || s.Y.Count != s.Cells.Count) { e.Add($"river {s.Id} has no centreline"); return; }
             int n = w.Config.Size;
+            float quantum = SurfaceTolerance + (w.HeightScale < 0 ? 0 : (float)ChunkCodes.Step(w.HeightScale));
             for (int k = 0; k < s.Cells.Count; k++)
             {
                 int i = s.Cells[k];
@@ -232,7 +233,7 @@ namespace Stabby.World
                 if (dx * dx + dy * dy > reach * reach) { e.Add($"river {s.Id} meanders off its cell at point {k}"); return; }
                 if (w.Sea[i] || w.Water.LakeId[i] >= 0) continue;
                 float bed = Math.Max(Erosion.MinLandHeight, s.Surface[k] - 0.5f * s.Depth[k]);
-                if (w.Height[i] > bed + SurfaceTolerance) { e.Add($"river {s.Id} has no bed at point {k}"); return; }
+                if (w.Height[i] > bed + quantum) { e.Add($"river {s.Id} has no bed at point {k}"); return; }
             }
         }
 

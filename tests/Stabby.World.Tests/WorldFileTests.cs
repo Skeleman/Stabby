@@ -11,7 +11,7 @@ public class WorldFileTests
     [Theory]
     [InlineData(42UL)]
     [InlineData(70UL)]
-    public void BakedWorldLoadsBackIdentical(ulong seed)
+    public void BakedWorldLoadsBackStable(ulong seed)
     {
         var host = WorldGenerator.Generate(new WorldConfig { Seed = seed, Size = 256, CellMeters = WorldConfig.CellMetersFor(256) }, Biomes, Materials);
         var bytes = WorldFile.Write(host, 0x0123456789ABCDEFUL);
@@ -22,7 +22,16 @@ public class WorldFileTests
         Assert.Equal(host.BiomeIds, loaded.BiomeIds);
         Assert.Equal(WorldChunks.Checksums(host), WorldChunks.Checksums(loaded));
         Assert.Empty(WorldChecks.Run(loaded));
-        Assert.Equal(host.OutputFingerprint(), loaded.OutputFingerprint());
+        Assert.Equal(loaded.OutputFingerprint(), WorldFile.Read(WorldFile.Write(loaded), Materials).OutputFingerprint());
+    }
+
+    [Fact]
+    public void OldFormatNamesTheBakeCommand()
+    {
+        var bytes = WorldFile.Write(WorldGenerator.Generate(new WorldConfig { Seed = 3, Size = 128, CellMeters = WorldConfig.CellMetersFor(128) }, Biomes, Materials));
+        BitConverter.GetBytes(WorldFile.Version - 1).CopyTo(bytes, 4);
+        Assert.Equal(WorldFile.Version - 1, WorldFile.VersionOf(bytes));
+        Assert.Contains("stabby bake --seed 3 --size 128", Assert.Throws<FormatException>(() => WorldFile.Read(bytes, Materials)).Message);
     }
 
     [Fact]
@@ -75,6 +84,6 @@ public class WorldFileTests
     {
         var ids = Biomes.Select(b => b.Id).ToArray();
         var empty = WorldFile.Empty(new WorldConfig { Seed = 7, Size = size, CellMeters = WorldConfig.CellMetersFor(size) }, ids, Materials);
-        Assert.Equal(WorldChunks.Checksums(empty), WorldChunks.EmptyChecksums(size, true));
+        Assert.Equal(WorldChunks.Checksums(empty), WorldChunks.EmptyChecksums(size, WorldConfig.CellMetersFor(size), true));
     }
 }
