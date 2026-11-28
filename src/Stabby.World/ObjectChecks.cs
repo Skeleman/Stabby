@@ -173,6 +173,79 @@ namespace Stabby.World
                 }
         }
 
+        public static void CheckTrails(GeneratedWorld w, ObjectField field, List<string> e)
+        {
+            const float tol = 0.05f;
+            var segs = field.Roads();
+            var trail = new List<int>();
+            for (int k = 0; k < segs.Length; k++) if (ObjectField.IsTrail(segs[k])) trail.Add(k);
+            if (trail.Count == 0) return;
+            var up = new int[trail.Count];
+            for (int k = 0; k < up.Length; k++) up[k] = k;
+            int Root(int k) { while (up[k] != k) k = up[k] = up[up[k]]; return k; }
+            bool Near(float ax, float az, float bx, float bz) => Math.Abs(ax - bx) < tol && Math.Abs(az - bz) < tol;
+            bool Touch(RoadSegment a, float x, float z) => Near(a.X0, a.Z0, x, z) || Near(a.X1, a.Z1, x, z);
+            for (int a = 0; a < trail.Count; a++)
+                for (int b = a + 1; b < trail.Count; b++)
+                {
+                    var p = segs[trail[a]]; var q = segs[trail[b]];
+                    if (Touch(q, p.X0, p.Z0) || Touch(q, p.X1, p.Z1)) up[Root(a)] = Root(b);
+                }
+            var ends = new List<(int k, float x, float z)>();
+            foreach (var s in segs)
+            {
+                if (s.Kind != RoadSegment.Bridge) continue;
+                int ia = -1, ib = -1;
+                for (int k = 0; k < trail.Count; k++)
+                {
+                    if (Touch(segs[trail[k]], s.X0, s.Z0)) ia = k;
+                    if (Touch(segs[trail[k]], s.X1, s.Z1)) ib = k;
+                }
+                if (ia >= 0 && ib >= 0) up[Root(ia)] = Root(ib);
+                else if (ia >= 0 || ib >= 0) ends.Add((ia >= 0 ? ia : ib, ia >= 0 ? s.X1 : s.X0, ia >= 0 ? s.Z1 : s.Z0));
+            }
+            var mouths = field.MineMouths();
+            var heads = new List<(float x, float z, float r)>();
+            foreach (var m in mouths) heads.Add((m.x, m.z, ObjectField.TrailMouthM + tol));
+            foreach (var o in field.Discoveries())
+                if (ObjectField.TrailLandmark(w.Objects.Objects[o.Def].Placement.Discovery)) heads.Add((o.X, o.Z, field.TrailHeadM(o) + tol));
+            bool OnNet(float x, float z)
+            {
+                foreach (var s in segs)
+                {
+                    if ((s.Kind == RoadSegment.Dirt || s.Kind == RoadSegment.Ford) && !ObjectField.IsTrail(s) && ObjectField.PointSegment2(x, z, s.X0, s.Z0, s.X1, s.Z1) < tol * tol) return true;
+                    if (s.Kind == RoadSegment.Lane && Touch(s, x, z)) return true;
+                }
+                return false;
+            }
+            bool AtHead(float x, float z)
+            {
+                foreach (var h in heads) if ((x - h.x) * (x - h.x) + (z - h.z) * (z - h.z) <= h.r * h.r) return true;
+                return false;
+            }
+            var net = new HashSet<int>();
+            var head = new HashSet<int>();
+            for (int k = 0; k < trail.Count; k++)
+            {
+                var s = segs[trail[k]];
+                int r = Root(k);
+                if (OnNet(s.X0, s.Z0) || OnNet(s.X1, s.Z1)) net.Add(r);
+                if (AtHead(s.X0, s.Z0) || AtHead(s.X1, s.Z1)) head.Add(r);
+            }
+            foreach (var (k, x, z) in ends)
+            {
+                if (OnNet(x, z)) net.Add(Root(k));
+                if (AtHead(x, z)) head.Add(Root(k));
+            }
+            for (int k = 0; k < trail.Count; k++)
+            {
+                int r = Root(k);
+                var s = segs[trail[k]];
+                if (!net.Contains(r)) { e.Add($"trail through {s.X0:F0},{s.Z0:F0} never reaches a road or town"); return; }
+                if (!head.Contains(r)) { e.Add($"trail through {s.X0:F0},{s.Z0:F0} starts at no mine or landmark"); return; }
+            }
+        }
+
         public static void CheckRoads(GeneratedWorld w, EditGrid grid, ObjectField field, List<string> e)
         {
             var defs = w.Objects.Objects;

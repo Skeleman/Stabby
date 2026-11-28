@@ -34,6 +34,8 @@ namespace Stabby.World
         {
             var found = discoveries;
             if (found != null) return found;
+            if (roads == null) Roads();
+            if (discoveries != null) return discoveries;
             lock (discoveryLock)
             {
                 if (discoveries != null) return discoveries;

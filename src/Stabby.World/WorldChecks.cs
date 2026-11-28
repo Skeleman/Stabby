@@ -30,7 +30,7 @@ namespace Stabby.World
             return -1;
         }
 
-        public static readonly string[] Groups = { "core", "hydrology", "biomes", "sketch", "surface", "meshing", "caves", "sites", "objects", "creatures" };
+        public static readonly string[] Groups = { "core", "hydrology", "biomes", "sketch", "surface", "meshing", "caves", "sites", "roads", "objects", "creatures" };
 
         sealed class GroupClock
         {
@@ -1007,18 +1007,22 @@ namespace Stabby.World
 
         static void CheckFeatures(GeneratedWorld w, List<string> e, GroupClock clock, CreatureLibrary creatures)
         {
-            bool surface = clock.Has("surface") || clock.Has("meshing"), caved = clock.Has("caves"), sited = clock.Has("sites"), objects = clock.Has("objects"), fed = creatures != null && clock.Has("creatures");
-            if (!surface && !caved && !sited && !objects && !fed) return;
+            bool surface = clock.Has("surface") || clock.Has("meshing"), caved = clock.Has("caves"), sited = clock.Has("sites"), roaded = clock.Has("roads"), objects = clock.Has("objects"), fed = creatures != null && clock.Has("creatures");
+            if (!surface && !caved && !sited && !roaded && !objects && !fed) return;
             clock.Time("features");
             var detail = new TerrainDetail(w);
             var edits = Features.Place(w, detail, out var caves, out var sites, out var roads);
             float cm = w.Config.CellMeters;
             var grid = new EditGrid(edits, w.Config.Size * cm);
-            var field = (sited || objects) && w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects, sites) : null;
+            var field = (sited || roaded || objects) && w.Objects != null && w.Biome != null ? new ObjectField(w, detail, edits, w.Objects, sites) : null;
             if (clock.Start("sites"))
             {
                 if (sites != null) CheckSiteFootprints(w, grid, sites, e);
-                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); CheckRoads(w, grid, field, e); CheckDuneSites(detail, field, e); }
+                if (field != null) { CheckSites(w, detail, grid, field, e); CheckStructures(w, detail, grid, field, e); CheckDiscoveries(w, field, e); CheckTowns(w, grid, field, e); CheckDuneSites(detail, field, e); }
+            }
+            if (clock.Start("roads"))
+            {
+                if (field != null) { CheckRoads(w, grid, field, e); CheckTrails(w, field, e); }
             }
             if (clock.Start("objects"))
             {
