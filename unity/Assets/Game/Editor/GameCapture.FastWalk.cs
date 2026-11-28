@@ -23,6 +23,18 @@ namespace Stabby.Game.Editor
 
         const float FastWalkMps = 30f, FastWalkM = 2000f, NormalWalkM = 360f;
 
+        static int lastLive, lastParts;
+
+        static void ObjectApply(float[] row)
+        {
+            int at = WalkParts.Length + 6;
+            row[at] = ObjectViewSystem.LastMs;
+            row[at + 1] = Mathf.Max(0, ObjectViewSystem.LiveEntities - lastLive);
+            row[at + 2] = Mathf.Max(0, ObjectViewSystem.PartsHeld - lastParts);
+            lastLive = ObjectViewSystem.LiveEntities;
+            lastParts = ObjectViewSystem.PartsHeld;
+        }
+
         static string ColumnsEqual(string label)
         {
             var parts = new List<string>();
@@ -99,11 +111,12 @@ namespace Stabby.Game.Editor
                         if (profile && frames.Count % 1000 == 0) WalkProfile(frames.Count / 1000);
                         if (!first)
                         {
-                            var row = new float[WalkParts.Length + 6];
+                            var row = new float[WalkParts.Length + 9];
                             int runs = System.GC.CollectionCount(0);
                             row[WalkParts.Length + 3] = runs - gcRuns;
                             row[WalkParts.Length + 4] = allocRec.LastValue / 1024f;
                             row[WalkParts.Length + 5] = allocCountRec.LastValue;
+                            ObjectApply(row);
                             gcRuns = runs;
                             row[0] = Time.unscaledDeltaTime * 1000f;
                             row[1] = mainRec.LastValue / 1e6f;
@@ -148,11 +161,12 @@ namespace Stabby.Game.Editor
                 while (settled < 3 && Time.realtimeSinceStartup - t0 < 120f)
                 {
                     yield return null;
-                    var row = new float[WalkParts.Length + 6];
+                    var row = new float[WalkParts.Length + 9];
                     int runs = System.GC.CollectionCount(0);
                     row[WalkParts.Length + 3] = runs - fillRuns;
                     row[WalkParts.Length + 4] = allocRec.LastValue / 1024f;
                     row[WalkParts.Length + 5] = allocCountRec.LastValue;
+                    ObjectApply(row);
                     fillRuns = runs;
                     row[0] = Time.unscaledDeltaTime * 1000f;
                     row[1] = mainRec.LastValue / 1e6f;
@@ -174,11 +188,12 @@ namespace Stabby.Game.Editor
                 for (int k = 0; k < 600; k++)
                 {
                     yield return null;
-                    var row = new float[WalkParts.Length + 6];
+                    var row = new float[WalkParts.Length + 9];
                     int runs = System.GC.CollectionCount(0);
                     row[WalkParts.Length + 3] = runs - stillRuns;
                     row[WalkParts.Length + 4] = allocRec.LastValue / 1024f;
                     row[WalkParts.Length + 5] = allocCountRec.LastValue;
+                    ObjectApply(row);
                     stillRuns = runs;
                     row[0] = Time.unscaledDeltaTime * 1000f;
                     row[1] = mainRec.LastValue / 1e6f;
@@ -348,8 +363,13 @@ namespace Stabby.Game.Editor
             int collections = frames.Count(f => f[gcAt] > 0), slowCollections = frames.Count(f => f[gcAt] > 0 && f[1] > 15f), slowOthers = frames.Count(f => f[gcAt] == 0 && f[1] > 15f);
             var worst = frames.Select((f, i) => (f, i)).OrderByDescending(x => x.f[1]).Take(8)
                 .Select(x => $"#{x.i} {x.f[1]:F0} ms (" + string.Join(", ", Enumerable.Range(2, names.Length - 2).Where(c => x.f[c] >= 0.5f).Select(c => $"{names[c]} {x.f[c]:F1}")) + (x.f[gcAt] > 0 ? ", GC" : "") + $", alloc {x.f[gcAt + 1]:F0} KB)");
+            int oc = WalkParts.Length + 6;
+            string Col(int c, string n) { var xs = frames.Select(f => f[c]).OrderBy(x => x).ToList(); return $"{n} p50 {Pct(xs, 0.5f):F2} p99 {Pct(xs, 0.99f):F2} max {(xs.Count > 0 ? xs[xs.Count - 1] : 0):F2}"; }
+            int withObjects = frames.Count(f => f[oc + 1] > 0 || f[oc + 2] > 0);
+            var viewShare = frames.Sum(f => f[oc]) / System.Math.Max(0.001f, frames.Sum(f => f[1]));
+            var worstView = frames.Select((f, i) => (f, i)).OrderByDescending(x => x.f[1]).Take(8).Count(x => x.f[4] >= 0.5f);
             return $"walk {label} {speed:F0} m/s over {length:F0} m, {frames.Count} frames: {over} of {frames.Count} main-thread frames over 33 ms ({(frames.Count > 0 ? over * 100f / frames.Count : 0):F2}%; {overDt} by dt, {(frames.Count > 0 ? overDt * 100f / frames.Count : 0):F2}%), {streaming} with streaming systems over 33 ms; {collections} GC frames ({slowCollections} over 15 ms, {slowOthers} non-GC over 15 ms), {GcStats(frames.Select(f => f[gcAt + 1]), frames.Select(f => f[gcAt + 2]))}\n  " +
-                   string.Join("\n  ", parts) + "\n  worst: " + string.Join("; ", worst);
+                   string.Join("\n  ", parts) + $"\n  object view update: {Col(oc, "ms")}, {Col(oc + 1, "entities added")}, {Col(oc + 2, "parts added")}, {withObjects} frames adding, {viewShare * 100:F1}% of main thread, in {worstView} of the 8 worst frames" + "\n  worst: " + string.Join("; ", worst);
         }
     }
 }
