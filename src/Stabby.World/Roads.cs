@@ -17,8 +17,8 @@ namespace Stabby.World
     {
         public const int RoadLinks = 2, RoadMarginCells = 12, RoadSpanCells = 6;
         public const float RoadHalfM = 2f, RoadReachM = 9000f, RoadGrade = 0.25f, RoadClimb = 8f, FordHalfM = 10f, FordCost = 4f, RoadEditY = 6f, RoadClearM = 0.5f, RoadMarginM = 600f, RoadOutCells = 1.5f, RoadSiteReachM = 1500f, RoadSideReachM = 120f, BridgeCost = 6f;
-        public const float TrailHalfM = 1.2f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
-        const int TrailMineTries = 4, TrailMineCells = 2;
+        public const float TrailHalfM = 1.2f, TrailGrade = 0.6f, TrailReachM = 2000f, TrailMineReachM = 6000f, TrailMouthM = 40f;
+        const int TrailMineTries = 4, TrailMineCells = 2, TrailTargetTries = 3, TrailTargetGapCells = 4;
         public const string TunnelClass = "road-tunnel";
         public const int TunnelTries = 4;
         public const float TunnelMinM = 70f, TunnelMostM = 250f, TunnelGrade = 0.12f, TunnelCost = 1f, TunnelRise = 0.5f, TunnelSpanM = 150f, TunnelSocketM = 100f, TunnelCampMin = 14.5f, TunnelCampMax = 18f, TunnelWarp = 0.04f;
@@ -378,6 +378,7 @@ namespace Stabby.World
             }
             finally { drafting.Value = false; }
             TrailBlockers(found);
+            grade = TrailGrade;
             foreach (var (mx, mz, ux, uz) in MineMouths())
             {
                 float hx = mx, hz = mz;
@@ -410,7 +411,7 @@ namespace Stabby.World
                 float ux = (tx - o.X) / dist, uz = (tz - o.Z) / dist, r = TrailHeadM(o);
                 Trail(o.X + ux * r, o.Z + uz * r, o.X + ux * (r + 2 * cm), o.Z + uz * (r + 2 * cm), TrailReachM, plans, net, list);
             }
-            trailEdits = null; trailSites = null; trailCells = null;
+            trailEdits = null; trailSites = null; trailCells = null; grade = RoadGrade;
         }
 
         public float TrailHeadM(ObjectInstance o) => TrailClearM(o) + RoadClearM;
@@ -419,17 +420,24 @@ namespace Stabby.World
 
         bool TrailTarget(float x, float z, float reach, TownPlan[] plans, RoadSegment[] net, out float tx, out float tz, out float ex, out float ez, out bool town)
         {
-            float best = reach * reach;
+            var all = TrailTargets(x, z, reach, plans, net);
             tx = tz = ex = ez = 0;
-            bool any = false;
             town = false;
+            if (all.Count == 0) return false;
+            (_, tx, tz, ex, ez, town) = all[0];
+            return true;
+        }
+
+        List<(float d2, float tx, float tz, float ex, float ez, bool town)> TrailTargets(float x, float z, float reach, TownPlan[] plans, RoadSegment[] net)
+        {
+            var all = new List<(float d2, float tx, float tz, float ex, float ez, bool town)>();
+            float best = reach * reach;
             foreach (var p in plans)
                 for (int s = -1; s <= 1; s += 2)
                 {
                     float o2 = p.Radius + RoadHalfM + RoadOutCells * cm, ox = p.X + s * p.Ux * o2, oz = p.Z + s * p.Uz * o2;
                     float d2 = (ox - x) * (ox - x) + (oz - z) * (oz - z);
-                    if (d2 >= best) continue;
-                    best = d2; tx = ox; tz = oz; ex = p.X + s * p.Ux * p.LaneM; ez = p.Z + s * p.Uz * p.LaneM; any = town = true;
+                    if (d2 < best) all.Add((d2, ox, oz, p.X + s * p.Ux * p.LaneM, p.Z + s * p.Uz * p.LaneM, true));
                 }
             foreach (var s in net)
             {
@@ -437,16 +445,36 @@ namespace Stabby.World
                 float dx = s.X1 - s.X0, dz = s.Z1 - s.Z0, l2 = dx * dx + dz * dz;
                 float t = l2 > 1e-9f ? Math.Max(0f, Math.Min(1f, ((x - s.X0) * dx + (z - s.Z0) * dz) / l2)) : 0f;
                 float px = s.X0 + t * dx, pz = s.Z0 + t * dz, d2 = (px - x) * (px - x) + (pz - z) * (pz - z);
-                if (d2 >= best) continue;
-                best = d2; tx = px; tz = pz; any = true; town = false;
+                if (d2 < best) all.Add((d2, px, pz, 0, 0, false));
             }
-            return any;
+            var order = new int[all.Count];
+            for (int k = 0; k < order.Length; k++) order[k] = k;
+            Array.Sort(order, (u, v) => all[u].d2 != all[v].d2 ? all[u].d2.CompareTo(all[v].d2) : u.CompareTo(v));
+            var picked = new List<(float d2, float tx, float tz, float ex, float ez, bool town)>();
+            float gap = TrailTargetGapCells * cm;
+            foreach (int k in order)
+            {
+                var c = all[k];
+                bool near = false;
+                foreach (var q in picked) if ((q.tx - c.tx) * (q.tx - c.tx) + (q.tz - c.tz) * (q.tz - c.tz) < gap * gap) { near = true; break; }
+                if (near) continue;
+                picked.Add(c);
+                if (picked.Count == TrailTargetTries) break;
+            }
+            return picked;
         }
 
+        float grade = RoadGrade;
         bool Trail(float sx, float sz, float ax, float az, float reach, TownPlan[] plans, RoadSegment[] net, List<RoadSegment> list)
         {
             if (ax < 0 || az < 0 || ax >= worldM || az >= worldM) return false;
-            if (!TrailTarget(sx, sz, reach, plans, net, out float tx, out float tz, out float ex, out float ez, out bool town)) return false;
+            foreach (var (_, tx, tz, ex, ez, town) in TrailTargets(sx, sz, reach, plans, net))
+                if (TrailTo(sx, sz, ax, az, tx, tz, ex, ez, town, list)) return true;
+            return false;
+        }
+
+        bool TrailTo(float sx, float sz, float ax, float az, float tx, float tz, float ex, float ez, bool town, List<RoadSegment> list)
+        {
             var path = Route(Cell(ax), Cell(az), Cell(tx), Cell(tz), false, out var jumps, out var bored);
             if (path == null) return false;
             var runs = Runs(path, jumps, out var joins);
@@ -578,7 +606,7 @@ namespace Stabby.World
             return false;
         }
 
-        public string RoadFault(float x0, float z0, float x1, float z1, out bool ford)
+        public string RoadFault(float x0, float z0, float x1, float z1, out bool ford, float most = 0)
         {
             ford = false;
             float dx = x1 - x0, dz = z1 - z0, len = (float)Math.Sqrt(dx * dx + dz * dz);
@@ -586,7 +614,7 @@ namespace Stabby.World
             for (int k = 0; k < pieces; k++)
             {
                 float ta = (float)k / pieces, tb = (float)(k + 1) / pieces;
-                string f = StepFault(x0 + dx * ta, z0 + dz * ta, x0 + dx * tb, z0 + dz * tb, out bool wet);
+                string f = StepFault(x0 + dx * ta, z0 + dz * ta, x0 + dx * tb, z0 + dz * tb, out bool wet, most);
                 if (f != null) return f;
                 ford |= wet;
             }
@@ -611,15 +639,15 @@ namespace Stabby.World
             return null;
         }
 
-        string StepFault(float x0, float z0, float x1, float z1, out bool ford) => StepFault(x0, z0, x1, z1, GroundAt(detail, cm, x0, z0), GroundAt(detail, cm, x1, z1), out ford);
+        string StepFault(float x0, float z0, float x1, float z1, out bool ford, float most = 0) => StepFault(x0, z0, x1, z1, GroundAt(detail, cm, x0, z0), GroundAt(detail, cm, x1, z1), out ford, most);
 
-        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford) => StepFault(x0, z0, x1, z1, h0, h1, h0, h1, out ford, false);
+        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, out bool ford, float most = 0) => StepFault(x0, z0, x1, z1, h0, h1, h0, h1, out ford, false, most);
 
-        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, float u0, float u1, out bool ford, bool bridge)
+        string StepFault(float x0, float z0, float x1, float z1, float h0, float h1, float u0, float u1, out bool ford, bool bridge, float most = 0)
         {
             ford = false;
             float len = (float)Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
-            if (!bridge && Math.Abs(h1 - h0) > RoadGrade * len) return "is too steep";
+            if (!bridge && Math.Abs(h1 - h0) > (most > 0 ? most : grade) * len) return "is too steep";
             if (detail.DuneNear(Math.Min(x0, x1), Math.Min(z0, z1), Math.Max(x0, x1), Math.Max(z0, z1))) return "crosses dunes";
             int last = -1;
             for (int t = 0; t <= 2; t++)
@@ -653,6 +681,9 @@ namespace Stabby.World
                 float g = p.Radius + RoadHalfM;
                 if (PointSegment2(p.X, p.Z, x0, z0, x1, z1) < g * g) return "crosses a town";
             }
+            if (w.Sketch != null)
+                foreach (var v in w.Sketch.Volcanoes)
+                    if (Volcanoes.SegmentGap(v.X, v.Z, x0, z0, x1, z1) < v.Rc + RoadHalfM) return "enters a volcano crater";
             if (siteCells != null)
             {
                 last = -1;
@@ -841,7 +872,7 @@ namespace Stabby.World
                         float ha = Lattice(2 * cx, 2 * cz), hb = Lattice(2 * nx, 2 * nz), rise = Math.Abs(hb - ha);
                         if (tunnels && ad < 3 && hb > ha && rise > TunnelRise * RoadGrade * len) Jump(cur, cx, cz, dx, dz, ha);
                         bool span = bridges && ad < 3 && WideAhead(cx, cz, dx, dz);
-                        if (rise > RoadGrade * len) { if (span) Span(cur, cx, cz, dx, dz); continue; }
+                        if (rise > grade * len) { if (span) Span(cur, cx, cz, dx, dz); continue; }
                         bool ford;
                         string why;
                         long sk = ((long)cz * n + cx) * 25 + (dz + 2) * 5 + dx + 2;
@@ -858,8 +889,8 @@ namespace Stabby.World
                         else why = StepFault(ax, az, bx, bz, ha, hb, out ford);
                         if (stepSeen != null) stepSeen[sk] = why != null ? (byte)2 : ford ? (byte)1 : (byte)0;
                         if (why != null) { if (span) Span(cur, cx, cz, dx, dz); continue; }
-                        float grade = rise / len;
-                        float c = cost[cur] + len * (1 + RoadClimb * grade) * (ford ? FordCost : 1f);
+                        float slope = rise / len;
+                        float c = cost[cur] + len * (1 + RoadClimb * slope) * (ford ? FordCost : 1f);
                         if (c >= cost[j]) continue;
                         cost[j] = c; from[j] = cur; tun[j] = 0;
                         HeapPush(heap, (c + Heuristic(nx, nz, tx, tz), j));
