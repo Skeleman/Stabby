@@ -9,6 +9,36 @@ namespace Stabby.Game.Editor
     {
         const float FirelightHour = 23f, FirelightBack = 8f;
 
+        static bool CampFire(ObjectField field, out ObjectInstance pick, out Vector3 fire, out Vector3 eye, out string why)
+        {
+            pick = default;
+            fire = eye = default;
+            why = null;
+            float best = float.MaxValue;
+            foreach (var o in field.Discoveries())
+            {
+                if (field.Library.Objects[o.Def].Parts[0].Shape != ObjectPart.Campsite) continue;
+                float d = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
+                if (d < best) { best = d; pick = o; }
+            }
+            if (best == float.MaxValue) { why = "firelight: no campsite"; return false; }
+            var anchors = new List<StructureLight>();
+            field.LightsOf(pick, anchors);
+            if (anchors.Count == 0) { why = "firelight: campsite has no fire anchor"; return false; }
+            fire = new Vector3(anchors[0].X, anchors[0].Y, anchors[0].Z);
+            var q = new Quaternion(pick.Qx, pick.Qy, pick.Qz, pick.Qw);
+            float flattest = float.MaxValue;
+            for (int a = 0; a < 16; a++)
+            {
+                var d = Quaternion.Euler(0, a * 22.5f, 0) * (q * Vector3.forward);
+                var p = fire + d * FirelightBack;
+                float h = GroundHeight(p.x, p.z), rough = Mathf.Abs(h - fire.y);
+                for (float r = 2f; r < FirelightBack; r += 2f) rough += Mathf.Max(0f, GroundHeight(fire.x + d.x * r, fire.z + d.z * r) - fire.y - 0.5f) * 4f;
+                if (rough < flattest) { flattest = rough; eye = new Vector3(p.x, h + 1.7f, p.z); }
+            }
+            return true;
+        }
+
         static System.Collections.IEnumerator FirelightTour(Camera cam, string dir)
         {
             GameStatus.HoldCamera = true;
@@ -20,30 +50,7 @@ namespace Stabby.Game.Editor
             var field = world.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field;
             for (int k = 0; k < 1800 && field == null; k++) { yield return null; field = world.GetExistingSystemManaged<ObjectColumnsSystem>()?.Field; }
             if (field == null) { GameStatus.Failure = "firelight: no object field"; yield break; }
-            ObjectInstance pick = default;
-            float best = float.MaxValue;
-            foreach (var o in field.Discoveries())
-            {
-                if (field.Library.Objects[o.Def].Parts[0].Shape != ObjectPart.Campsite) continue;
-                float d = new Vector2(o.X - home.x, o.Z - home.z).magnitude;
-                if (d < best) { best = d; pick = o; }
-            }
-            if (best == float.MaxValue) { GameStatus.Failure = "firelight: no campsite"; yield break; }
-            var anchors = new List<StructureLight>();
-            field.LightsOf(pick, anchors);
-            if (anchors.Count == 0) { GameStatus.Failure = "firelight: campsite has no fire anchor"; yield break; }
-            var fire = new Vector3(anchors[0].X, anchors[0].Y, anchors[0].Z);
-            var q = new Quaternion(pick.Qx, pick.Qy, pick.Qz, pick.Qw);
-            Vector3 eye = default;
-            float flattest = float.MaxValue;
-            for (int a = 0; a < 16; a++)
-            {
-                var d = Quaternion.Euler(0, a * 22.5f, 0) * (q * Vector3.forward);
-                var p = fire + d * FirelightBack;
-                float h = GroundHeight(p.x, p.z), rough = Mathf.Abs(h - fire.y);
-                for (float r = 2f; r < FirelightBack; r += 2f) rough += Mathf.Max(0f, GroundHeight(fire.x + d.x * r, fire.z + d.z * r) - fire.y - 0.5f) * 4f;
-                if (rough < flattest) { flattest = rough; eye = new Vector3(p.x, h + 1.7f, p.z); }
-            }
+            if (!CampFire(field, out var pick, out var fire, out var eye, out var why)) { GameStatus.Failure = why; yield break; }
             var aim = fire + Vector3.up * 0.4f;
             cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(aim - eye));
             for (var w = ShowHour(FirelightHour, 0f); w.MoveNext();) yield return null;
