@@ -53,7 +53,6 @@ public class DiscoveryTests
             kinds.UnionWith(fresh.Select(o => o.Def));
         }
         Assert.True(seen > 0);
-        // 90 m cells smooth lake banks too flat for temple steps; SunkenTemplesStepDownIntoLakes covers them at 2048
         var missing = Enumerable.Range(0, Objects.Objects.Count).Where(d => Objects.Objects[d].Placement.Discovery > 0 && Objects.Objects[d].Id != "sunken-temple" && !kinds.Contains(d)).Select(d => Objects.Objects[d].Id).ToList();
         Assert.True(missing.Count == 0, $"seeds 1..4 place no {string.Join(", ", missing)}");
     }
