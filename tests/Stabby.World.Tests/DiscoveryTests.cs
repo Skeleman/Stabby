@@ -58,6 +58,26 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void BuiltSitesMatchBetweenTheFeaturePassAndTheFinalField()
+    {
+        int wall = Objects.Objects.FindIndex(o => o.Id == "dry-stone-wall"), walls = 0;
+        var p = TestWorlds.Place(1);
+        var pass = p.Pass!;
+        int n = p.Field.ChunksAcross;
+        var diff = new System.Collections.Concurrent.ConcurrentBag<string>();
+        Parallel.For(0, n * n, c =>
+        {
+            var a = pass.Built(c % n, c / n);
+            var b = p.Field.Built(c % n, c / n);
+            Interlocked.Add(ref walls, a.Count(o => o.Def == wall));
+            if (a.Length != b.Length || a.Zip(b).Any(t => t.First.Def != t.Second.Def || t.First.X != t.Second.X || t.First.Z != t.Second.Z || t.First.Size != t.Second.Size))
+                diff.Add($"chunk {c % n},{c / n}: {a.Length} vs {b.Length}");
+        });
+        Assert.True(diff.IsEmpty, string.Join("; ", diff.Take(5)));
+        Assert.True(walls > 0);
+    }
+
+    [Fact]
     public void StoneRingsAppearAndReachTheirChunks()
     {
         int d = Objects.Objects.FindIndex(o => o.Id == "stone-ring"), total = 0, worlds = 0;

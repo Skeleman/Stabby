@@ -24,6 +24,7 @@ static class TestWorlds
         public required ObjectInstance[] Sites;
         public required RoadSegment[] Roads;
         public required ObjectField Field;
+        public ObjectField? Pass;
     }
 
     public static GeneratedWorld Fresh(ulong seed, int size) =>
@@ -39,8 +40,8 @@ static class TestWorlds
         {
             var w = World(k.Item1, k.Item2);
             var detail = new TerrainDetail(w);
-            var edits = Features.Place(w, detail, out var graphs, out var sites, out var roads);
-            return new Placed { W = w, Detail = detail, Edits = edits, Graphs = graphs, Sites = sites, Roads = roads, Field = new ObjectField(w, detail, edits, Objects) };
+            var edits = Features.Place(w, detail, out var graphs, out var sites, out var roads, out var pass);
+            return new Placed { W = w, Detail = detail, Edits = edits, Graphs = graphs, Sites = sites, Roads = roads, Field = new ObjectField(w, detail, edits, Objects), Pass = pass };
         })).Value;
 
     public static (GeneratedWorld, TerrainDetail, FeatureEdit[], ObjectField) Get(ulong seed, int size = 256)
