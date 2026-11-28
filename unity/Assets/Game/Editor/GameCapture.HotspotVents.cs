@@ -6,7 +6,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float VentFillShare = 0.33f, VentFov = 50f, VentEyeAbove = 1.7f;
+        const float VentFillShare = 0.33f, VentFov = 50f, VentEyeAbove = 1.7f, MudFillShare = 0.5f, MudEyeAbove = 4f;
 
         static System.Collections.IEnumerator HotspotVentsTour(Camera cam, string dir)
         {
@@ -48,9 +48,10 @@ namespace Stabby.Game.Editor
                 for (int p = 0; p < pools.Count; p += ObjectField.SpringStride)
                     reach = Mathf.Max(reach, new Vector2(pools[p] - cx, pools[p + 1] - cz).magnitude + pools[p + 3]);
                 var aim = new Vector3(cx, pools[4], cz);
-                float away = reach / (VentFillShare * Mathf.Tan(VentFov * 0.5f * Mathf.Deg2Rad));
+                float share = kinds[k] == ObjectField.MudPot ? MudFillShare : VentFillShare;
+                float away = reach / (share * Mathf.Tan(VentFov * 0.5f * Mathf.Deg2Rad));
                 var eye = ClearEye(ground, aim, away, 0f, out float clear);
-                eye.y = ground.HeightAt(eye.x, eye.z) + VentEyeAbove;
+                eye.y = ground.HeightAt(eye.x, eye.z) + (kinds[k] == ObjectField.MudPot ? MudEyeAbove : VentEyeAbove);
                 if (kinds[k] == ObjectField.Geyser)
                 {
                     Structures.GeyserCycle(field.VentSeed(pick), out float interval, out float duration, out float offset);
