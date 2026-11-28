@@ -332,6 +332,28 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void WatchtowersStandOnHighGround()
+    {
+        int tower = Objects.Objects.FindIndex(o => o.Id == "watchtower");
+        var (w, _, _, field) = World(TestWorlds.DefaultSeed);
+        var all = field.Discoveries();
+        var found = all.Where(o => o.Def == tower).ToArray();
+        output.WriteLine($"{found.Length} watchtowers " + string.Join(" ", found.Select(c => $"{c.X:F0},{c.Z:F0}:v{c.Variant}:fit {field.WatchFit(c.X, c.Z):F2}")));
+        Assert.NotEmpty(found);
+        foreach (var c in found)
+        {
+            Assert.True(field.Fitness(ObjectField.Watchtower, c.X, c.Z) > float.MinValue);
+            Assert.Null(field.WatchFault(c));
+            Assert.False(field.OnRoad(c.X, c.Z, field.SiteRadius(c)));
+            Assert.NotEmpty(Structures.Layout(ObjectPart.Watchtower, ObjectMeshes.Key("watchtower", 0, c.Variant)).Contacts);
+            foreach (var t in field.Towns)
+                Assert.True(Math.Sqrt((t.X * w.Config.CellMeters - c.X) * (t.X * w.Config.CellMeters - c.X) + (t.Y * w.Config.CellMeters - c.Z) * (t.Y * w.Config.CellMeters - c.Z)) >= ObjectField.TownClearM);
+            foreach (var o in all.Where(o => o.Def != tower))
+                Assert.True(Math.Sqrt((o.X - c.X) * (o.X - c.X) + (o.Z - c.Z) * (o.Z - c.Z)) >= ObjectField.DiscoveryGapM);
+        }
+    }
+
+    [Fact]
     public void SaltTowersStandOnDryBasinFloors()
     {
         int tower = Objects.Objects.FindIndex(o => o.Id == "salt-tower");
