@@ -82,6 +82,7 @@ src/Stabby.World/Monument.cs sites,surface,roads
 src/Stabby.World/Shipwreck.cs sites,surface,roads
 src/Stabby.World/Watchtower.cs sites,surface,roads
 src/Stabby.World/SunkenTemple.cs sites,surface
+src/Stabby.World/AncientTree.cs sites,surface
 src/Stabby.World/Fumarole.cs sites,surface
 src/Stabby.World/MesaChecks.cs sketch
 src/Stabby.World/GlacialChecks.cs sketch

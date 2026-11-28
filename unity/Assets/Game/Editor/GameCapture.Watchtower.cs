@@ -7,7 +7,7 @@ namespace Stabby.Game.Editor
 {
     public static partial class GameCapture
     {
-        const float WatchtowerHour = 15.5f, WatchtowerMoon = 0.5f, WatchtowerEyeUp = 1.7f, WatchtowerNearM = 15f, WatchtowerAimUp = 2.5f;
+        const float WatchtowerHour = 15.5f, WatchtowerMoon = 0.5f, WatchtowerEyeUp = 1.7f, WatchtowerNearM = 15f, WatchtowerAimUp = 2.5f, WatchtowerFarM = 20f, WatchtowerHighEyeUp = 3f, WatchtowerHighAimUp = 5f;
 
         static System.Collections.IEnumerator WatchtowerTour(Camera cam, string dir)
         {
@@ -50,6 +50,13 @@ namespace Stabby.Game.Editor
             var sky = DayNightSystem.Shown;
             GameStatus.Lines["~watchtower"] = $"watchtower: {all.Length} placed, shown {s.X:F0},{s.Z:F0} size {s.Size:F1} variant {s.Variant}, ground {baseY:F2} fit {field.WatchFit(s.X, s.Z):F2}, GV {WorldConfig.GeneratorVersion}, pinned hour {sky.Hour:F2}";
             Shot(cam, dir, "watchtower");
+            var back = centre + (-fwd - side * 0.8f).normalized * WatchtowerFarM;
+            back.y = ground.HeightAt(back.x, back.z) + WatchtowerHighEyeUp;
+            var rubble = centre - fwd * (Structures.WatchR * Structures.WatchtowerU * s.Size) + Vector3.up * 0.3f;
+            for (int i = 0; i < 40 && !Clear(ground, back, rubble); i++) back.y += 0.25f;
+            cam.transform.SetPositionAndRotation(back, Quaternion.LookRotation(centre + Vector3.up * WatchtowerHighAimUp - back));
+            for (var w = Settle(60); w.MoveNext();) yield return null;
+            Shot(cam, dir, "watchtower-collapse");
         }
     }
 }
