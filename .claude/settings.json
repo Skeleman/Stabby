@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(source tools/scripts/env.sh)",
+      "Bash(. tools/scripts/env.sh)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
